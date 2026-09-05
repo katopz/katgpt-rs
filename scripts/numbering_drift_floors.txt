@@ -1,0 +1,61 @@
+# Committed expectations for scripts/numbering_drift_sweep.py — the VOCABULARY
+# half of the cross-repo numbering sweep (Issue 725). The population (which
+# repos exist) is DERIVED from BOUNDARY.md + a .git dir and is never typed
+# here; deriving both from one walk is what makes a cross-repo gate permanently
+# green (the Issue 702 lesson, one instrument over).
+#
+# Format:  <repo>  <min_files>  <max_dup>  <max_above>  <max_malformed>
+#
+#   min_files      FLOOR over the ALLOCATOR-SERIAL dirs only
+#                  (.plans/.issues/.research/.proposals). Every other column is
+#                  a ceiling, and a ceiling cannot fail once the instrument
+#                  goes blind — one regex regression takes the population to
+#                  zero and all three pass, indistinguishable from a clean
+#                  workspace. Pinned at ~80% of measured because files are
+#                  legitimately REMOVED here per the noise-reduction rule; a
+#                  floor at the measured value would red on every correct
+#                  removal.
+#   max_dup        tracked duplicate numbers. A RATCHET, not a wall — see below.
+#   max_above      .highwater below its dir max: `value + 1` is already taken,
+#                  so the next allocation is GUARANTEED to collide.
+#   max_malformed  .highwater present but not a bare integer.
+#
+# ── why max_dup is a ratchet at the measured value, not 0 ───────────────────
+#
+# 35 tracked duplicates existed across four repos at the first sweep
+# (2026-09-05). Resolving one is a citation-weight arbitration, not a rename:
+# Issue 724 T2's precedent is that the file with the most inbound mentions
+# KEEPS the number and the other moves to a fresh one, which requires reading
+# the corpus and updating every citation. Three of the four repos are owned by
+# other sessions and seal-game-editor is read-only to this one. A pin of 0
+# would red on landing and be ignored by the next reader — the failure mode
+# docs_gate.sh's preamble records. Pinned at measured, so a NEW collision reds
+# immediately while the standing backlog stays visible in this file instead of
+# silently tolerated.
+#
+# LOWER a repo's pin in the commit that resolves one of its collisions. Never
+# raise one without the reason in the commit message.
+#
+# ── the zeros are load-bearing ─────────────────────────────────────────────
+#
+# max_above and max_malformed are 0 EVERYWHERE because all seven were repaired
+# in the sweep's landing commit (5 malformed + 2 stale). Those are one-line,
+# value-preserving repairs with no arbitration attached, so there is no reason
+# to tolerate a single one. A regression reds.
+
+katgpt-rs           	795	0	0	0	# observed 2026-09-05: 994 files
+katgpt-web          	0	0	0	0	# observed 2026-09-05: 0 files (no .plans/.research yet)
+riir-ai             	493	6	0	0	# observed 2026-09-05: 617 files · dup: .plans 175/182/229/313, .research 020/148
+riir-auth           	0	0	0	0	# observed 2026-09-05: 0 files
+riir-chain          	48	0	0	0	# observed 2026-09-05: 60 files · .proposals allocator repaired 007->008
+riir-clippy         	183	4	0	0	# observed 2026-09-05: 229 files · dup: .plans 015/026, .research 083/086 · .plans allocator repaired 78->80
+riir-dao            	3	0	0	0	# observed 2026-09-05: 4 files
+riir-dapps          	15	0	0	0	# observed 2026-09-05: 19 files
+riir-deployer       	4	0	0	0	# observed 2026-09-05: 5 files
+riir-game-sdk       	6	0	0	0	# observed 2026-09-05: 8 files · 2 malformed allocators repaired
+riir-mmorpg-examples	28	0	0	0	# observed 2026-09-05: 35 files
+riir-neuron-db      	37	0	0	0	# observed 2026-09-05: 47 files
+riir-train          	258	13	0	0	# observed 2026-09-05: 323 files · dup: .plans 186/250/252/253/255/264(×4)/267/363, .research 073/083/084/086(×3)/095 · 2 malformed allocators repaired
+riir-viewbridge     	0	0	0	0	# observed 2026-09-05: 0 files
+seal-game-editor    	175	12	0	0	# observed 2026-09-05: 219 files · READ-ONLY to these sessions — report only
+seal-remake         	1	0	0	0	# observed 2026-09-05: 1 file

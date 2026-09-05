@@ -50,6 +50,17 @@ min_files.proposals = 10       # measured 13
 # its untracked population) — but they fail the moment they are committed.
 max_duplicate_numbers = 0
 
+# A .highwater file that is PRESENT but not a bare integer is worse than a
+# missing one: `scan()` used to swallow the ValueError and return None, which is
+# also what an ABSENT allocator returns — so the ceiling above passed over a
+# corrupted allocator and a clean directory identically. Measured 2026-09-05
+# across all 16 contract repos: FIVE such files, every one of them the same
+# cause — `echo -n <N> > .highwater` under a shell whose builtin `echo` does not
+# implement `-n`, so the flag lands in the file (`-n 872`, `-n 374`, ...).
+# katgpt-rs has none, which is exactly why the blindness survived here.
+# Cross-repo verdict: scripts/numbering_drift_sweep.py.
+max_malformed_highwater = 0
+
 # A .highwater BELOW its directory's max is the precursor to a collision, not a
 # cosmetic mismatch: `value + 1` is already taken, so the next allocation is
 # guaranteed to collide. Found in TWO directories on 2026-09-04 (.plans 585 vs

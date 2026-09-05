@@ -66,12 +66,39 @@ def tracked_paths(repo: Path, dirs: list[str]) -> set[str]:
     return {ln.strip() for ln in out.splitlines() if ln.strip()}
 
 
+def read_highwater(d: Path) -> tuple[int | None, str | None]:
+    """-> (value, malformed_raw). Exactly one of the two is None.
+
+    ABSENT and MALFORMED are deliberately NOT the same verdict, and conflating
+    them is what made the above-highwater ceiling blind. Not every numbered
+    directory carries an allocator, so a missing file is legal; a file that is
+    PRESENT and unparseable disables the `max > highwater` check while looking
+    identical to a clean directory in the output — the exact "instrument goes
+    blind, ceiling passes" shape numbering_floors.txt's floors exist to catch,
+    one field over.
+
+    Measured 2026-09-05 across the 16 contract repos: FIVE such files, all the
+    same cause — `echo -n <N> > .highwater` under a shell whose builtin `echo`
+    does not implement `-n`, so the flag itself lands in the file (`-n 872`).
+    None of them is a bare integer; every one of them silently disarms the
+    check for its directory.
+    """
+    f = d / HIGHWATER
+    if not f.is_file():
+        return None, None
+    raw = f.read_text(errors="replace").strip()
+    try:
+        return int(raw), None
+    except ValueError:
+        return None, raw
+
+
 def scan(repo: Path, dirname: str, tracked: set[str]):
-    """-> (numbers -> [(name, is_tracked)], highwater or None, n_files)."""
+    """-> (numbers -> [(name, is_tracked)], highwater, n_files, malformed_raw)."""
     d = repo / dirname
     by_num: dict[int, list[tuple[str, bool]]] = {}
     if not d.is_dir():
-        return by_num, None, 0
+        return by_num, None, 0, None
     n = 0
     for entry in sorted(d.iterdir()):
         m = NUMBERED.match(entry.name)
@@ -82,14 +109,8 @@ def scan(repo: Path, dirname: str, tracked: set[str]):
         # int(), not the literal prefix: `075` and `75` are the same "Plan 75"
         # to every citation in the corpus, so they must collide here too.
         by_num.setdefault(int(m.group(1)), []).append((entry.name, rel in tracked))
-    hw_file = d / HIGHWATER
-    hw = None
-    if hw_file.is_file():
-        try:
-            hw = int(hw_file.read_text().strip())
-        except ValueError:
-            hw = None
-    return by_num, hw, n
+    hw, hw_bad = read_highwater(d)
+    return by_num, hw, n, hw_bad
 
 
 def selftest() -> list[str]:
@@ -133,7 +154,9 @@ def selftest() -> list[str]:
         for nm in ("001_a.md", "001_b.md", "002_c.md"):
             (repo / ".plans" / nm).write_text("x")
         (repo / ".plans" / HIGHWATER).write_text("2")
-        by_num, hw, n = scan(repo, ".plans", {".plans/001_a.md", ".plans/002_c.md"})
+        by_num, hw, n, hw_bad = scan(repo, ".plans", {".plans/001_a.md", ".plans/002_c.md"})
+        if hw_bad is not None:
+            fails.append(f"clean highwater misread as malformed: {hw_bad!r}")
         if n != 3:
             fails.append(f"scan counted {n}, expected 3")
         if hw != 2:
@@ -146,10 +169,28 @@ def selftest() -> list[str]:
 
         # 5. above-highwater must be DETECTED, not just tolerated
         (repo / ".plans" / "009_over.md").write_text("x")
-        _, hw2, _ = scan(repo, ".plans", set())
-        by2, _, _ = scan(repo, ".plans", set())
+        by2, hw2, _, _ = scan(repo, ".plans", set())
         if max(by2) <= (hw2 or 0):
             fails.append("above-highwater case did not construct")
+
+    # 6. ABSENT vs MALFORMED must not collapse. Both read as `hw is None`, so
+    #    without this pin a corrupted allocator is indistinguishable from a
+    #    directory that never had one — and the above-highwater ceiling passes
+    #    over both. Canaried with the real observed corruption, not a synthetic
+    #    one: `echo -n 872` writing its own flag into the file.
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td)
+        hw, bad = read_highwater(d)
+        if (hw, bad) != (None, None):
+            fails.append(f"absent highwater misclassified: {(hw, bad)}")
+        (d / HIGHWATER).write_text("-n 872\n")
+        hw, bad = read_highwater(d)
+        if hw is not None or bad != "-n 872":
+            fails.append(f"malformed highwater not detected: {(hw, bad)}")
+        (d / HIGHWATER).write_text("  0872  \n")
+        hw, bad = read_highwater(d)
+        if (hw, bad) != (872, None):
+            fails.append(f"padded/zero-padded highwater misread: {(hw, bad)}")
 
     return fails
 
@@ -179,12 +220,18 @@ def main() -> int:
     dup_tracked: list[str] = []
     dup_untracked: list[str] = []
     above: list[str] = []
+    malformed: list[str] = []
     below_floor: list[str] = []
     total = 0
 
     for dirname in dirs:
-        by_num, hw, n = scan(repo, dirname, tracked)
+        by_num, hw, n, hw_bad = scan(repo, dirname, tracked)
         total += n
+        if hw_bad is not None:
+            malformed.append(
+                f"{dirname}/.highwater is not a bare integer: {hw_bad!r} — the "
+                f"above-highwater check is DISARMED for this directory"
+            )
         floor = pins.get(f"min_files{dirname}", 0)
         if n < floor:
             below_floor.append(f"{dirname}: {n} numbered file(s) < floor {floor}")
@@ -202,6 +249,7 @@ def main() -> int:
 
     max_dup = pins.get("max_duplicate_numbers", 0)
     max_above = pins.get("max_above_highwater", 0)
+    max_malformed = pins.get("max_malformed_highwater", 0)
     bad = False
 
     if len(dup_tracked) > max_dup:
@@ -213,6 +261,11 @@ def main() -> int:
         bad = True
         print(f"✗ {len(above)} .highwater below its directory max (pinned ≤ {max_above}):")
         for r in above:
+            print(f"    {r}")
+    if len(malformed) > max_malformed:
+        bad = True
+        print(f"✗ {len(malformed)} malformed .highwater file(s) (pinned ≤ {max_malformed}):")
+        for r in malformed:
             print(f"    {r}")
     if below_floor:
         bad = True
@@ -232,7 +285,7 @@ def main() -> int:
         return 1
     print(
         f"✓ numbering gate PASSED — {total} numbered file(s) over {len(dirs)} dir(s), "
-        f"0 tracked duplicates, 0 stale allocators"
+        f"0 tracked duplicates, 0 stale allocators, 0 malformed allocators"
         + (f", {len(dup_untracked)} untracked warning(s)" if dup_untracked else "")
     )
     return 0

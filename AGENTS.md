@@ -373,8 +373,28 @@ cadences, and none of them subsumes another:
 | `docs_gate.yml` / `docs_gate.sh` | CI + workstation | per-push | katgpt-rs only |
 | `sibling_docs_drift.yml` | sibling CI (reusable) | caller's choice | one caller |
 | `scripts/docs_drift_sweep.py` | workstation | on demand | every contract repo |
+| `scripts/numbering_drift_sweep.py` | workstation | on demand | every contract repo |
 
-The sweep is **deliberately not** in `docs_gate.sh`'s `CHECKS`: CI has a single
+**The same one-repo blindness was measured a second time, on a different
+instrument, 2026-09-05 (`.issues/725`).** `numbering_gate.py` also accepts a
+repo path and had also never been pointed anywhere but here — and katgpt-rs,
+the one gated repo, was the only clean one: **35 tracked duplicate numbers
+across riir-train (13), seal-game-editor (12), riir-ai (6) and riir-clippy
+(4)**, in allocator-serial directories where `Plan N` now resolves to two
+documents. Plus a defect class the local gate could not have: **five
+`.highwater` files that are not integers at all**, every one of them `echo -n
+<N> > .highwater` under a shell whose builtin `echo` ignores `-n`, so the flag
+lands in the file (`-n 872`). `scan()` swallowed the `ValueError` and returned
+`None` — *which is also what an ABSENT allocator returns* — so the
+above-highwater ceiling passed over a corrupted allocator and a clean directory
+identically. Repairing one of them **immediately exposed a stale allocator
+underneath it** (riir-train `.plans` max 375 > 374) that had been invisible for
+as long as the file was corrupt. All 7 allocator defects are repaired and
+pinned at 0; the 35 duplicates are a **ratchet at the measured count**, because
+resolving one is a citation-weight arbitration (Issue 724 T2) across repos this
+session does not own, and a red nobody can clear gets ignored.
+
+Both sweeps are **deliberately not** in `docs_gate.sh`'s `CHECKS`: CI has a single
 checkout, so it would derive an empty population and print a confident green
 over zero repos. Its population is derived (BOUNDARY.md + a `.git` dir); its
 expectations are committed (`scripts/docs_drift_floors.txt`), because deriving
