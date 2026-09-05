@@ -1,6 +1,6 @@
 # Issue 725 — the numbering gate covers ONE repo; 35 duplicates and 7 broken allocators sat in the other fifteen
 
-**Status:** T1–T3 DONE (instrument landed + all 7 allocator defects repaired, 2026-09-05). T4 OPEN — 35 tracked duplicate numbers across 4 sibling repos await citation-weight arbitration, ratcheted so no new one can land.
+**Status:** T1-T3 + T4a DONE (instrument landed, all 7 allocator defects repaired, riir-ai's 6 duplicates arbitrated, 2026-09-05). T4b/T5 OPEN — 35 tracked duplicates across 4 repos are ratcheted so no new one can land; the renames need a per-site citation rewrite.
 
 ## The finding, in one sentence
 
@@ -62,12 +62,45 @@ the instrument reading it was blind.
       `riir-chain/.proposals` 007→008 · `riir-clippy/.plans` 78→80.
       Pinned 0 everywhere — these are one-line repairs with no arbitration
       attached, so there is no reason to tolerate one.
-- [ ] **T4 — arbitrate the 35 duplicates.** Owner-by-owner, by CITATION WEIGHT
+- [x] **T4a — the arbitration instrument + riir-ai's verdicts** (`scripts/citation_weight.py`,
+      2026-09-05). The obvious count is the wrong one: **by-name citations are 0-2 per
+      side and TIED in four of riir-ai's six pairs**, while the `Plan N` form carries
+      33-92 sites each. The weight is entirely in the citations that do not say which
+      document they mean, so they are ATTRIBUTED by token overlap in a context window,
+      on a strict margin, with everything else in an UNRESOLVED bucket that is printed
+      and never folded into a winner.
+
+      | dup | keep (attributed + by-name) | move | unresolved |
+      |---|---|---|---|
+      | `.plans/175` | `civ_engine_emotion_proof` 41+1 | `lattice_calculus_latcal` 3+1 | 23 (34%) |
+      | `.plans/182` | `luce_megakernel_deltanet_inference` 17+0 | `civ_map_2d` 4+0 | 12 (36%) |
+      | `.plans/229` | `vortex_meta_routing_game_ai` 26+0 | `gm_tool_crate_daynight` 0+0 | 10 (28%) |
+      | `.plans/313` | `step_attribution_branch_wiring` 31+2 | `swir_real_model_validation` 15+2 | 46 (50%) |
+      | `.research/020` | `Zone_Expert_Bundles_Living_World` 14+2 | `Orbit_OFT_Adapter_First_RL` 2+3 | 1 (6%) |
+      | `.research/148` | `think_brain_wasm_vessel` 23+10 | `Per_Tick_Emit_Salience_NPC_Guide` 7+5 | 30 (50%) |
+
+      **No rename was executed, and the reason is the finding.** `.plans/229`'s day/night
+      plan scores a clean ZERO, which reads as "nothing cites it, safe to move" — and a
+      hand check found `.docs/01_orientation/overview.md:149` and `.proposals/007:236`
+      both citing it, spelled `riir-gm-tool` and `day/night` against a stem of `gm_tool`
+      and `daynight`. It is in the UNRESOLVED 10, exactly where the design puts it, but
+      a reader skimming the winner column would have moved it. The report now refuses to
+      let a zero pass silently (a warning line), and the attributor is
+      separator-insensitive. **A zero in a bucketed audit is a claim about the
+      vocabulary, not about the world.**
+
+- [ ] **T4b — execute the renames.** Owner-by-owner, by CITATION WEIGHT
       per Issue 724 T2's precedent (the file with the most inbound mentions keeps
       the number; the other moves to a fresh one and its citations are updated).
       Ratcheted at the measured count per repo, so a new collision reds while the
       backlog stays visible. `seal-game-editor` (12) is READ-ONLY to these
       sessions — report only. Lower a repo's pin in the commit that resolves one.
+      Each rename is a file move PLUS a hand rewrite of that document's inbound
+      `Plan N` citations, which is why T4a stopped at the verdict: 28-50% of the
+      sites in every riir-ai pair are UNRESOLVED, and a mis-attributed rewrite
+      silently re-points a reader to the wrong document — strictly worse than the
+      collision it fixes. Run `scripts/citation_weight.py <repo> <dir> <N> --show 20`
+      and read the sites before moving anything.
 - [ ] **T5 — should the siblings run the gate themselves?** The sweep is a
       workstation instrument; the per-push half only exists in katgpt-rs. The
       `sibling_docs_drift.yml` `workflow_call` pattern is the obvious answer and
@@ -87,6 +120,8 @@ rather than silence.**
 - `scripts/numbering_drift_sweep.py` (docstring = the narrative),
   `scripts/numbering_drift_floors.txt` (the per-repo ratchet + the reasoning).
 - `scripts/numbering_gate.py` `read_highwater()` + `selftest()` case 6.
+- `scripts/citation_weight.py` — the T4 arbitration instrument (advisory report,
+  always exit 0), with the zero-is-not-zero guard measured on `.plans/229`.
 - Canaried before landing, four directions: a planted duplicate in a 0-pinned
   repo reds; a pinned-but-absent repo reds; an empty pins file exits 2; a
   regressed `read_highwater` exits 2.
