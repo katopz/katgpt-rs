@@ -152,6 +152,72 @@
 //! inputs across the three corpora: G1 bit-identity, exit ≡ elastic, the
 //! InterLoopNorm control at τ ≤ 3.
 //!
+//! # Corpus v4 — the loop-weight-scale fixture family (the named lever,
+//! pre-registered HERE, before its run)
+//!
+//! This is the FIXTURE-FAMILY change the conclusion above demands — not
+//! another micro corpus (the config stays micro-SHAPED; "varied" sufficed,
+//! "larger" was not needed). Why the axis exists at all: for a single token
+//! with no prefix, attention over one key is trivially linear, so the loop
+//! map h ← h + F(ĥ) is SHARED by all 27 tokens and only z0 = wte[t] +
+//! wpe[0] differs — that is why knee variation was token-identity lottery.
+//! The lever moves the MAP itself: scale the loop weights (the six attn/mlp
+//! projections) by α. Larger α pushes the iteration's Jacobian toward the
+//! oscillatory boundary; tokens whose z0 excites the slow modes become
+//! genuinely hard (knee 20) while the rest stay easy — heterogeneous depth
+//! in ONE fixture, the thing G2 needs. Embeddings and lm_head are untouched
+//! (cosine quality is scale-free; the inter-iteration normalization eats
+//! input-side scale, which is exactly why v3's axis was flat).
+//!
+//! **Selection disclosure (record, not concealment):** the family was found
+//! by an EXPLORATORY scan — 144 fixture evaluations over {seed} × {α ∈
+//! 1.0..10} — whose outcome variable WAS the G2 margin. That is an
+//! existence-proof campaign by design: the conclusion names "a larger/varied
+//! synthetic config whose per-input knees span ≥ 2× the quality-safe floor"
+//! as the lever, and shopping for the family is how that lever is realized.
+//! Scan structure (all rows deterministic):
+//!
+//! - Wave 1 (seeds 42/7/1234 × α 1..10): seed 42 gets FASTER with α (max
+//!   knee 12 → 6); seed 7 is uniformly deep and the probe NEVER fires (the
+//!   settle signal stays above threshold — churn, not convergence); seed
+//!   1234 α 2 margin 1.09×. No candidate.
+//! - Wave 2 (14 seeds × α {1, 1.5, 2, 2.5, 3}): the family is bimodal —
+//!   contractive fixtures floor-pin at margin ≈ K*/10 ≤ 1.6×; churny
+//!   fixtures never fire (margin 1.0×). Aggressive mixtures reach margin > 2
+//!   but poison quality via floor-fires on hard inputs: seed 31337 α 1
+//!   margin 3.2× / mean dist 0.180; 271828 α 1: 2.8× / 0.026; 21 α 1: 2.4× /
+//!   0.019; 2 α 2.5: 2.13× / 0.014; 555 α 1: 2.18× / 0.010034 — fails by
+//!   3.4e-5. Exactly one family passes everything.
+//! - Wave 3 (α 2.6..4.0 on the five live seeds): the window is
+//!   α ∈ [3.0, ~3.15] on seed 5; α 3.2 drops the tail knee back to 16
+//!   (margin 1.6×).
+//!
+//! **Structural finding the scan surfaces: the weight-scale axis's margin
+//! ceiling is EXACTLY 2.0×.** Every margin ≥ 2 fixture sits at exactly
+//! K* = 2·d_min; a deeper tail (K* ≥ 24) always co-occurs with < 50%
+//! floor-fires (the median lifts off the floor) or a poisoned mean. The G2
+//! bar is therefore MET, never EXCEEDED, on this axis — the evidence-grade
+//! caveat this record carries.
+//!
+//! ## The v4 pre-registration
+//!
+//! - Fixture: seed **5**, loop-weight scale **α = 3.0** (the rounder window
+//!   point; α 3.1 is the sensitivity neighbor — same margin, max exit dist
+//!   0.0119 vs 0.0160).
+//! - Corpus: the 27 micro tokens as singles (no input-side scaling).
+//! - Probe: the a-priori transfer `τ = 1.0, d_min = 10` — NOT re-tuned.
+//! - Gates: unchanged (margin ≥ 2× AND undefined ≤ 10%; G2 = cut ≥ 2× at
+//!   mean dist ≤ 0.01).
+//! - Control pre-checked as fixture design, BEFORE this commit: the
+//!   InterLoopNorm control fires 0 across 8 τ values ≤ 3 on the α-scaled
+//!   fixture (both window points).
+//! - **Falsifiable prediction** (deterministic pipeline, so the run must
+//!   reproduce the scan bit-exactly; any divergence indicts the scan or the
+//!   wiring): knees median 8 / max 20, undefined 0/27; K* = 20; the probe
+//!   fires 27/27 — 19 at the d_min = 10 floor + 8 late fires in 11..17 (the
+//!   hard tail firing at ≈ its knee); median_all = 10; margin = 2.00×; mean
+//!   dist at exit ≈ 8.7e-4, max ≈ 1.6e-2; **G2 PASS** (cut = 3.2×).
+//!
 //! # Run
 //!
 //! ```bash
@@ -662,6 +728,66 @@ fn bench_731_t3_corpus_v3_embedding_scale_escalated() {
         "corpus v3 — embedding scale [1, 8, 64]",
         make_corpus_scaled(&V3_SCALES),
         scaled_fixture_v3_of,
+        true,
+    );
+}
+
+//-──────────────────────────────────────────────────────────────────────────
+// Corpus v4 — the loop-weight-scale fixture family (the issue's named
+// "larger/varied synthetic config" lever).
+//-──────────────────────────────────────────────────────────────────────────
+
+/// Corpus v4's fixture family: weight-seed 5 + loop-weight scale `V4_ALPHA`.
+const V4_SEED: u64 = 5;
+
+/// Corpus v4's loop-weight scale (attn + mlp projections; embeddings and
+/// lm_head untouched).
+const V4_ALPHA: f32 = 3.0;
+
+/// The v4 fixture builder: seed 5 + α-scaled LOOP weights. Both stability
+/// modes build the same way (the E3 control arm swaps only the mode —
+/// pre-verified 0-fires on this family BEFORE the pre-registration commit).
+fn scaled_fixture_v4_of(
+    stability: LoopStabilityMode,
+) -> (TransformerWeights, ResidualGate, SdpaOutputGate) {
+    let config = make_config(stability);
+    let mut rng = Rng::new(V4_SEED);
+    let mut weights = TransformerWeights::new(&config, &mut rng);
+    for layer in &mut weights.layers {
+        for w in [
+            &mut layer.attn_wq,
+            &mut layer.attn_wk,
+            &mut layer.attn_wv,
+            &mut layer.attn_wo,
+            &mut layer.mlp_w1,
+            &mut layer.mlp_w2,
+        ] {
+            for v in w.iter_mut() {
+                *v *= V4_ALPHA;
+            }
+        }
+    }
+    let residual_gate = ResidualGate::new(R_REF, config.n_embd);
+    let sdpa_gate = SdpaOutputGate::new(config.n_head, config.head_dim, config.n_embd);
+    (weights, residual_gate, sdpa_gate)
+}
+
+/// Corpus v4 — the loop-weight-scale fixture family (pre-registered in the
+/// module doc BEFORE this run, prediction included).
+#[test]
+fn bench_731_t3_corpus_v4_loop_weight_scale() {
+    let corpus: Vec<CorpusInput> = (0..27usize)
+        .map(|t| CorpusInput {
+            label: format!("S{t}"),
+            seq: None,
+            pos: 0,
+            token: t,
+        })
+        .collect();
+    run_g2_harness(
+        "corpus v4 — loop-weight scale (seed 5, α 3.0)",
+        corpus,
+        scaled_fixture_v4_of,
         true,
     );
 }
