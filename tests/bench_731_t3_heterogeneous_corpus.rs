@@ -15,7 +15,8 @@
 //! run deep for everyone while the probe exits each input at its own settle
 //! point.
 //!
-//! # Common pre-registered protocol (both corpora; the Issue-073-T3 order)
+//! # Common protocol (all corpora; the Issue-073-T3 order — every corpus
+//! pre-registered in a commit BEFORE its run)
 //!
 //! - Weight fixture: the T1/T2 convention — `Config::micro()` + seed-42 +
 //!   `HybridPattern::Uniform` + `HlaMode::Ahla` +
@@ -23,73 +24,106 @@
 //! - **Per-input isolation:** each input is evaluated with its sequence
 //!   prefix (positions < p) run at the NATURAL depth, and only the input's
 //!   own position carries the probe or the fixed-k override. Cross-position
-//!   exit compounding (an early exit at p−1 changing the cache that p attends
-//!   into) is the DEPLOYMENT reality but is excluded here — per-input
-//!   attribution is the thing G2 needs; composition is riir-ai Issue 881's
-//!   territory (recorded non-goal).
+//!   exit compounding is the DEPLOYMENT reality but is excluded here —
+//!   per-input attribution is the thing G2 needs; composition is riir-ai
+//!   Issue 881's territory (recorded non-goal).
 //! - Per-input reference: logits at the full R_REF = 32 depth.
-//! - Per-input quality: cosine distance to the input's OWN reference (T2's
-//!   `cosine_distance`).
-//! - Per-input knee: first k in K_GRID with dist_i(k) ≤ 0.01 (T2's knee
-//!   bound, now per input); `undefined` if no grid k qualifies by 32.
-//! - **Probe config (a-priori transfer — NOT re-tuned on either corpus):**
-//!   `LoopResidualExit::new(tau = 1.0, d_min = 10)` — T2's recorded
-//!   knee-parity lever. The transfer itself is part of the test: a config
-//!   calibrated on the homogeneous fixture must hold on heterogeneous inputs,
-//!   or the finding is recorded as a calibration-transfer failure (a GOAT
-//!   verdict input, not a tuning loop).
-//! - **Sanity bar (pre-registered, decides what the run MEANS):** the corpus
-//!   demonstrates heterogeneous depth iff frac(knee ≥ 12) ≥ 20% AND
-//!   frac(knee ≤ 8) ≥ 40% AND undefined ≤ 10%. On rejection, G2 is NOT
-//!   evaluated — the recorded outcome is "corpus rejected" and the fixture
-//!   search moves to the next pre-declared axis.
-//! - **Invariants (hard asserts, hold regardless of the sanity outcome):**
-//!   G1 — a fed-but-never-firing probe (`d_min = usize::MAX`) is bit-identical
-//!   to `None` on every input; exit ≡ elastic bit-identity for every fired
-//!   input; the InterLoopNorm negative control at the T2-AMENDED boundary —
-//!   every τ ≤ 3 fires ZERO inputs on the same corpus content under
-//!   `LoopStabilityMode::InterLoopNorm`. Any fire = the plateau regime moved
-//!   — loud red, re-read before trusting any τ.
-//! - **G2 verdict (measured, not asserted — the T2 precedent):** `cut =
-//!   32 / median_all` where median_all is the median over ALL inputs of
-//!   iterations-used (fired k, or 32 for ran-to-32). **PASS iff cut ≥ 2× AND
-//!   corpus-mean dist at exit ≤ 0.01.** The adaptivity margin `K* / median_all`
-//!   (K* = the corpus-safe static depth: the smallest grid k with
-//!   max_i dist_i(k) ≤ 0.01; degraded form K* := 32 if the bound is
-//!   unreachable by 32 with ≤ 10% undefined) is recorded as the evidence that
-//!   a static override cannot match the probe on this corpus. p95/p99 fired
-//!   depth reported with tail support (the percentile-index discipline).
+//! - Per-input quality: cosine distance to the input's OWN reference.
+//! - Per-input knee: first k in K_GRID with dist_i(k) ≤ 0.01; `undefined` if
+//!   no grid k qualifies by 32.
+//! - **Probe config (a-priori transfer — NOT re-tuned, ever, across all
+//!   corpora):** `LoopResidualExit::new(tau = 1.0, d_min = 10)` — T2's
+//!   recorded knee-parity lever. The transfer itself is part of the test.
+//! - **Invariants (hard asserts):** G1 — a fed-but-never-firing probe
+//!   (`d_min = usize::MAX`) is bit-identical to `None` on every input;
+//!   exit ≡ elastic bit-identity for every fired input; the InterLoopNorm
+//!   negative control at the T2-AMENDED boundary — every τ ≤ 3 fires ZERO
+//!   inputs on the same corpus content with the stability mode swapped.
+//! - **The G2 verdict (measured, not asserted):** `cut = 32 / median_all`
+//!   (median over ALL inputs of iterations-used: fired k, or 32 for
+//!   ran-to-32). **PASS iff cut ≥ 2× AND corpus-mean dist at exit ≤ 0.01.**
+//!   p95/p99 fired depth with tail support (percentile-index discipline).
+//!
+//! # The sanity-bar record (read before interpreting any verdict here)
+//!
+//! The bar's PURPOSE, stated in the v1 pre-registration: the corpus counts as
+//! heterogeneous-depth when "a per-input-safe static override must run deep
+//! for everyone while the probe exits each input at its own settle point" —
+//! i.e. the ADAPTIVITY MARGIN `K*/median_all ≥ 2` (K* = the corpus-safe
+//! static depth: the smallest grid k with max_i dist_i(k) ≤ 0.01; degraded
+//! form K* := 32 when the bound is unreachable by 32 with ≤ 10% undefined).
+//! The v1/v2 pre-registrations instead encoded a PROXY for that purpose —
+//! frac(knee ≥ 12) ≥ 20% AND frac(knee ≤ 8) ≥ 40% — and the proxy proved
+//! miscalibrated against its own purpose:
+//!
+//! - v1 (sequences axis): REJECTED under the frac bar (1.1% vs 20%); its
+//!   margin is ~1.2× (K* = 12 vs the d_min = 10 floor-pinned probe median
+//!   recorded by T2) — genuinely non-differentiating. Both forms agree.
+//! - v2 (embedding scale [1, 4, 16]): REJECTED under the frac bar (11.1% vs
+//!   20%) — yet its knees (median 5, max 16) would give margin ≈ 16/10 =
+//!   1.6×: also < 2, so both forms AGREE here too, and the run exposes the
+//!   REAL structural finding the frac bar could not name: **the a-priori
+//!   `d_min = 10` floor caps the demonstrable margin at K*/10** — a corpus
+//!   whose hard tail knees below 2·d_min = 20 cannot open the G2 gate under
+//!   the transferred config, no matter how the probe behaves.
+//!
+//! **The correction (recorded, not silent):** from corpus v3 on, the sanity
+//! gate is the margin form — margin ≥ 2× AND undefined ≤ 10% — which IS the
+//! pre-stated purpose; the frac statistics remain in every printout as
+//! context. The correction was committed BEFORE any margin-armed run; the
+//! probe config is untouched; and the correction is falsifiable from this
+//! record: it changes no v1/v2 verdict (both margins < 2), it names the
+//! floor-cap mechanism, and v3 is designed against that mechanism.
 //!
 //! # Corpus v1 — the context/sequence axis (pre-registered `4332b056`)
 //!
 //! 27 singles + 4 seeded random sequences (seeds 4242..4245, token =
 //! `Rng::next() % 27`) × 16 positions = 91 inputs.
 //!
-//! **MEASURED 2026-09-07 (pre-registration committed before the run):**
-//! REJECTED — knees median 3, q1 2, q3 5, min 2, max 12, undefined 0/91;
-//! frac(knee ≥ 12) = 1.1% (bar ≥ 20%), frac(knee ≤ 8) = 96.7%. G1 held on all
-//! 91 inputs; the InterLoopNorm control held at τ ≤ 3 across all 91. The
-//! context axis does NOT produce heterogeneous depth on the micro fixture —
-//! every input (including deep-context positions) converges by k ≤ 12. Kept
-//! as the recorded v1 outcome + a determinism witness (a rerun must print the
-//! same verdict). Fixture search moved to the pre-declared v2 axis.
+//! **MEASURED 2026-09-07:** REJECTED (frac bar) — knees median 3, q1 2,
+//! q3 5, min 2, max 12, undefined 0/91; frac(knee ≥ 12) = 1.1%. G1 held on
+//! all 91 inputs; the InterLoopNorm control held at τ ≤ 3 across all 91. The
+//! context axis does NOT produce heterogeneous depth on the micro fixture.
+//! Kept as a determinism witness (a rerun must print the same knees).
 //!
-//! # Corpus v2 — the embedding-scale difficulty axis (pre-registered HERE,
-//! before its run)
+//! # Corpus v2 — the embedding-scale axis, scale set [1, 4, 16]
+//! (pre-registered `284942d0`)
 //!
 //! The v1 doc's pre-declared next candidate. One model; token `t`'s embedding
-//! row is scaled by `SCALES[t % 3] = [1.0, 4.0, 16.0]` (9 tokens per tier) —
-//! three input magnitudes in ONE weight fixture. Defensible synthetic proxy:
-//! per-input residual scale spans orders of magnitude in real models (outlier
-//! dims / attention sinks); the caveat is declared — this is an
-//! input-magnitude axis, not a semantic one. Singles only (the sequence axis
-//! was measured homogeneous in v1 — the recorded reason for dropping it).
-//! Same sanity bar, same a-priori probe, same invariant asserts; the control
-//! arm runs the SAME scaled fixture with the stability mode swapped.
-//! Pre-declared rejection branch: if the scale-16 tier diverges (undefined
-//! knees > 10%), the corpus is rejected and the issue records that the micro
-//! fixture cannot hold the axis — T3 stays blocked pending a different
-//! fixture family (e.g., a real checkpoint or a larger synthetic config).
+//! row is scaled by `V2_SCALES[t % 3]` (9 tokens per tier) — three input
+//! magnitudes in ONE weight fixture. Declared caveat: an input-magnitude
+//! axis, not a semantic one (per-input residual scale spans orders of
+//! magnitude in real models — outlier dims / attention sinks).
+//!
+//! **MEASURED 2026-09-07:** REJECTED (frac bar) — knees median 5, q1 4,
+//! q3 8, min 3, max 16, undefined 0/27; frac(knee ≥ 12) = 11.1%. The scale
+//! axis moves knees (median 3 → 5, max 12 → 16) but not past the proxy bar.
+//! G1 + control held on all 27.
+//!
+//! # Corpus v3 — the escalated scale axis [1, 8, 64] (pre-registered HERE,
+//! before its run)
+//!
+//! Designed against the floor-cap mechanism above: the demonstrable margin
+//! needs K* ≥ 20, and v2's scale→knee leak was sublinear (16× scale → tail
+//! knee 16). v3 escalates one octave per non-base tier — `V3_SCALES =
+//! [1.0, 8.0, 64.0]` — to push the hard tail toward/past K* = 20–32, with
+//! the SAME single-fixture, three-tier, 27-single structure and the SAME
+//! a-priori probe. Pre-declared branches:
+//!
+//! 1. **Non-finite branch:** if any full-depth reference is non-finite (the
+//!    deep tier overflows), the corpus is REJECTED before the invariants —
+//!    bit-identity asserts are meaningless on NaN (NaN ≠ NaN would false-red
+//!    E1), and the issue records that the axis is stability-bounded at this
+//!    scale.
+//! 2. **Undefined branch:** undefined knees > 10% → REJECTED (the deep tier
+//!    never converges within the budget; quality is not evaluable).
+//! 3. **Margin branch:** margin < 2× → REJECTED with the floor-cap note —
+//!    the recorded next lever is a `d_min` reduction, which requires its own
+//!    pre-registration (it trades away the T2 knee-parity guarantee), or a
+//!    larger fixture family (micro may simply be too easy to demonstrate
+//!    EqR-style adaptivity).
+//! 4. **Gate opens:** margin ≥ 2× AND undefined ≤ 10% → the G2 verdict is
+//!    evaluated and recorded.
 //!
 //! # Run
 //!
@@ -118,15 +152,19 @@ const K_GRID: [usize; 14] = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 28, 32];
 /// The knee bound (T2's), applied PER INPUT.
 const KNEE_BOUND: f32 = 0.01;
 
-/// The a-priori probe config (T2's recorded knee-parity lever — NOT re-tuned).
+/// The a-priori probe config (T2's recorded knee-parity lever — NOT re-tuned,
+/// on any corpus).
 const PROBE_TAU: f32 = 1.0;
 const PROBE_D_MIN: usize = 10;
 
 /// The InterLoopNorm control's τ set — the T2-AMENDED boundary (τ ≤ 3).
 const CONTROL_TAUS: [f32; 8] = [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0];
 
-/// Corpus v2's input-magnitude tiers (see the module doc).
-const SCALES: [f32; 3] = [1.0, 4.0, 16.0];
+/// Corpus v2's input-magnitude tiers (pre-registered `284942d0`).
+const V2_SCALES: [f32; 3] = [1.0, 4.0, 16.0];
+
+/// Corpus v3's escalated tiers (pre-registered in this file, before the run).
+const V3_SCALES: [f32; 3] = [1.0, 8.0, 64.0];
 
 /// One corpus input: an optional sequence context (the prefix tokens run at
 /// natural depth) plus the input's own token at position `pos`.
@@ -155,9 +193,14 @@ fn make_fixture(config: &Config) -> (TransformerWeights, ResidualGate, SdpaOutpu
     (weights, residual_gate, sdpa_gate)
 }
 
-fn scale_token_rows(weights: &mut TransformerWeights, n_embd: usize, vocab: usize) {
+fn scale_token_rows(
+    weights: &mut TransformerWeights,
+    n_embd: usize,
+    vocab: usize,
+    scales: &[f32; 3],
+) {
     for t in 0..vocab {
-        let s = SCALES[t % 3];
+        let s = scales[t % 3];
         if s == 1.0 {
             continue;
         }
@@ -169,19 +212,28 @@ fn scale_token_rows(weights: &mut TransformerWeights, n_embd: usize, vocab: usiz
 
 /// Fixture builders parameterized by stability mode, so the harness's control
 /// arm can swap the mode while keeping the corpus content and the fixture
-/// construction (including v2's scaling) identical.
+/// construction (scaling included) identical. Non-capturing, hence `fn` items.
 fn plain_fixture_of(
     stability: LoopStabilityMode,
 ) -> (TransformerWeights, ResidualGate, SdpaOutputGate) {
     make_fixture(&make_config(stability))
 }
 
-fn scaled_fixture_of(
+fn scaled_fixture_v2_of(
     stability: LoopStabilityMode,
 ) -> (TransformerWeights, ResidualGate, SdpaOutputGate) {
     let config = make_config(stability);
     let (mut weights, residual_gate, sdpa_gate) = make_fixture(&config);
-    scale_token_rows(&mut weights, config.n_embd, config.vocab_size);
+    scale_token_rows(&mut weights, config.n_embd, config.vocab_size, &V2_SCALES);
+    (weights, residual_gate, sdpa_gate)
+}
+
+fn scaled_fixture_v3_of(
+    stability: LoopStabilityMode,
+) -> (TransformerWeights, ResidualGate, SdpaOutputGate) {
+    let config = make_config(stability);
+    let (mut weights, residual_gate, sdpa_gate) = make_fixture(&config);
+    scale_token_rows(&mut weights, config.n_embd, config.vocab_size, &V3_SCALES);
     (weights, residual_gate, sdpa_gate)
 }
 
@@ -211,11 +263,11 @@ fn make_corpus_v1() -> Vec<CorpusInput> {
     corpus
 }
 
-/// Corpus v2: the 27 tokens as singles, one fixture, three input magnitudes.
-fn make_corpus_v2() -> Vec<CorpusInput> {
+/// Corpus v2/v3: the 27 tokens as singles, one fixture, three magnitudes.
+fn make_corpus_scaled(scales: &[f32; 3]) -> Vec<CorpusInput> {
     (0..27usize)
         .map(|t| CorpusInput {
-            label: format!("S{t}s{}", SCALES[t % 3]),
+            label: format!("S{t}s{}", scales[t % 3]),
             seq: None,
             pos: 0,
             token: t,
@@ -354,13 +406,15 @@ fn percentile_report(sorted: &[usize], p: f64) -> (usize, usize) {
     (sorted[idx], sorted.len() - idx)
 }
 
-/// The shared G2 harness: phases A → E in the committed order, ending in the
-/// G2 verdict. Invariants (G1, the InterLoopNorm control) hold regardless of
-/// the corpus-sanity outcome; only the G2 machinery is gated on heterogeneity.
+/// The shared G2 harness: phases in the committed order — refs, A0 (finite
+/// reference gate), A (knees), E1 (G1), E3 (control), B (K*), C (probe) —
+/// then the margin gate, then the G2 verdict. Invariants hold regardless of
+/// the corpus outcome; only the G2 machinery is gated.
 fn run_g2_harness(
     label: &str,
     corpus: Vec<CorpusInput>,
     fixture_of: fn(LoopStabilityMode) -> (TransformerWeights, ResidualGate, SdpaOutputGate),
+    print_inputs: bool,
 ) {
     let config = make_config(LoopStabilityMode::None);
     let (weights, residual_gate, sdpa_gate) = fixture_of(LoopStabilityMode::None);
@@ -378,8 +432,17 @@ fn run_g2_harness(
         })
         .collect();
 
+    // ── Phase A0 — the finite-reference gate (pre-declared; v3 branch 1).
+    // Bit-identity asserts are meaningless on NaN (NaN ≠ NaN would false-red
+    // E1), so a diverging fixture is rejected before any invariant runs. ──
+    if let Some((label, i)) = refs.iter().enumerate().find_map(|(i, r)| {
+        (!r.iter().all(|v| v.is_finite())).then(|| (corpus[i].label.clone(), i))
+    }) {
+        println!("\n[Phase A0] reference logits NON-FINITE for {label} (input {i}) — the fixture diverges at full depth. Corpus REJECTED (pre-declared branch 1); the axis is stability-bounded at this scale. Invariants skipped (nothing finite to verify).");
+        return;
+    }
+
     // ── Phase A — per-input knees ────────────────────────────────────────
-    // knees[i] = first grid k with dist_i(k) ≤ KNEE_BOUND; None = undefined.
     let mut knees: Vec<Option<usize>> = vec![None; n];
     for &k in &K_GRID {
         for (i, c) in corpus.iter().enumerate() {
@@ -400,18 +463,23 @@ fn run_g2_harness(
     let frac_ge12 = defined.iter().filter(|&&k| k >= 12).count() as f32 / n as f32;
     let frac_le8 = defined.iter().filter(|&&k| k <= 8).count() as f32 / n as f32;
     if defined.is_empty() {
-        println!("\n[Phase A] NO input reaches the knee bound by depth 32 (undefined {undefined}/{n}) — the fixture diverges or never converges. Invariants still run below; the corpus is rejected.");
+        println!("\n[Phase A] NO input reaches the knee bound by depth 32 (undefined {undefined}/{n}).");
     } else {
         defined.sort_unstable();
         let (k_med, _) = percentile_report(&defined, 0.50);
         let (k_q1, _) = percentile_report(&defined, 0.25);
         let (k_q3, _) = percentile_report(&defined, 0.75);
-        println!("\n[Phase A] per-input knees (bound {KNEE_BOUND}): median {k_med}, q1 {k_q1}, q3 {k_q3}, min {}, max {}, undefined {undefined}/{n}", defined.first().unwrap_or(&0), defined.last().unwrap_or(&0));
+        println!("\n[Phase A] per-input knees (bound {KNEE_BOUND}): median {k_med}, q1 {k_q1}, q3 {k_q3}, min {}, max {}, undefined {undefined}/{n}", defined.first().unwrap(), defined.last().unwrap());
     }
-    println!("[Phase A] frac(knee ≥ 12) = {:.1}% (bar ≥ 20%), frac(knee ≤ 8) = {:.1}% (bar ≥ 40%)", frac_ge12 * 100.0, frac_le8 * 100.0);
+    println!("[Phase A] frac(knee ≥ 12) = {:.1}%, frac(knee ≤ 8) = {:.1}% (context — the gate is the margin, see the module doc)", frac_ge12 * 100.0, frac_le8 * 100.0);
+    if print_inputs {
+        for (i, c) in corpus.iter().enumerate() {
+            println!("[Phase A]   {} knee = {:?}", c.label, knees[i]);
+        }
+    }
 
-    // ── Phase E1 — G1 on the corpus (hard assert; holds regardless of the
-    // corpus's heterogeneity — it is a probe invariant, not a corpus one) ──
+    // ── Phase E1 — G1 on the corpus (hard assert; a probe invariant, not a
+    // corpus one — holds regardless of heterogeneity) ─────────────────────
     for (i, c) in corpus.iter().enumerate() {
         let mut probe = LoopResidualExit::new(PROBE_TAU, usize::MAX);
         let with_probe = run_on_prefix(
@@ -429,7 +497,7 @@ fn run_g2_harness(
 
     // ── Phase E3 — the InterLoopNorm negative control (hard assert; the
     // T2-amended boundary τ ≤ 3) on the SAME corpus content and the SAME
-    // fixture construction (v2's scaling included), stability mode swapped ──
+    // fixture construction (scaling included), stability mode swapped ──────
     {
         let control_config = make_config(LoopStabilityMode::InterLoopNorm);
         let (c_weights, c_residual_gate, c_sdpa_gate) =
@@ -451,15 +519,6 @@ fn run_g2_harness(
         }
     }
     println!("[Phase E3] InterLoopNorm control: τ ≤ 3 → 0/{n} fired on every τ ✓");
-
-    // Pre-registered corpus sanity — decides what the G2 phases MEAN. The
-    // invariants above hold (and were held) either way; only the G2
-    // machinery is gated on the corpus being heterogeneous-depth.
-    let corpus_heterogeneous = frac_ge12 >= 0.20 && frac_le8 >= 0.40 && undefined * 10 <= n;
-    if !corpus_heterogeneous {
-        println!("\n[VERDICT] corpus REJECTED: knees are not heterogeneous-depth (see the pre-registered sanity bar in the module doc). G2 not evaluated.");
-        return;
-    }
 
     // ── Phase B — the corpus-safe static override K* ─────────────────────
     let mut k_star: Option<usize> = None;
@@ -524,10 +583,16 @@ fn run_g2_harness(
     let (p99, sup99) = if fired_sorted.is_empty() { (0, 0) } else { percentile_report(&fired_sorted, 0.99) };
     let max_fired = fired_sorted.last().copied().unwrap_or(0);
     let cut = R_REF as f32 / median_all as f32;
-    let adaptivity = k_star as f32 / median_all as f32;
+    let margin = k_star as f32 / median_all as f32;
     println!("\n[Phase C] probe (τ = {PROBE_TAU}, d_min = {PROBE_D_MIN}): fired {fired_count}/{n} (median-fired {median_fired}, p95 {p95} [support {sup95}], p99 {p99} [support {sup99}], max {max_fired}), ran-to-32 {ran_to_32}");
-    println!("[Phase C] iterations-used median (all inputs) = {median_all} → cut = {cut:.2}×; mean dist at exit = {mean_exit_dist:.6}; max dist at exit = {max_exit_dist:.6}");
-    println!("[Phase C] adaptivity margin: K* = {k_star} / median_all = {adaptivity:.2}× (what a per-input-safe static override cannot save)");
+    println!("[Phase C] iterations-used median (all inputs) = {median_all} → cut vs default = {cut:.2}×; mean dist at exit = {mean_exit_dist:.6}; max dist at exit = {max_exit_dist:.6}");
+    println!("[Gate] adaptivity margin = K* / median_all = {k_star}/{median_all} = {margin:.2}× (bar ≥ 2×) — the floor-cap: the margin is bounded by K*/{PROBE_D_MIN} under the a-priori d_min");
+
+    // ── The margin gate (the corrected sanity bar — module doc record) ───
+    if !(margin >= 2.0 && undefined * 10 <= n) {
+        println!("\n[VERDICT] corpus REJECTED: adaptivity margin {margin:.2}× < 2× (or undefined {undefined}/{n} > 10%) — the probe cannot demonstrate ≥2× adaptivity over the corpus-safe static on this corpus. G2 not evaluated. Recorded next lever: a d_min reduction (own pre-registration) or a larger fixture family.");
+        return;
+    }
 
     // ── Phase D — the G2 verdict (measured, not asserted) ────────────────
     let g2 = cut >= 2.0 && mean_exit_dist <= KNEE_BOUND;
@@ -535,29 +600,41 @@ fn run_g2_harness(
 }
 
 /// Corpus v1 — the context/sequence axis. MEASURED 2026-09-07 (pre-registration
-/// `4332b056`, committed before the run): REJECTED — knees median 3, q1 2,
-/// q3 5, max 12, 0 undefined; frac(knee ≥ 12) = 1.1% (bar ≥ 20%). The context
-/// axis does not produce heterogeneous depth on the micro fixture. Kept as the
-/// recorded v1 outcome + a determinism witness (the rerun must print the same
-/// verdict).
+/// `4332b056`): REJECTED under the frac bar — knees median 3, q1 2, q3 5,
+/// max 12, 0 undefined; frac(knee ≥ 12) = 1.1%. The context axis does not
+/// produce heterogeneous depth on the micro fixture. Kept as the recorded v1
+/// outcome + a determinism witness (the rerun must print the same knees).
 #[test]
 fn bench_731_t3_corpus_v1_sequences() {
-    run_g2_harness("corpus v1 — sequences", make_corpus_v1(), plain_fixture_of);
+    run_g2_harness("corpus v1 — sequences", make_corpus_v1(), plain_fixture_of, false);
 }
 
-/// Corpus v2 — the embedding-scale difficulty axis (the v1 doc's pre-declared
-/// next candidate, pre-registered in the module doc BEFORE this run). Same
-/// sanity bar, same a-priori probe (τ = 1.0, d_min = 10 — the transfer test),
-/// same invariant asserts; the control arm runs the SAME scaled fixture with
-/// the stability mode swapped. Pre-declared rejection branch: if the scale-16
-/// tier diverges (undefined knees > 10%), the corpus is rejected and the issue
-/// records that the micro fixture cannot hold the axis — T3 stays blocked
-/// pending a different fixture family.
+/// Corpus v2 — the embedding-scale axis [1, 4, 16] (pre-registered
+/// `284942d0`). MEASURED 2026-09-07: REJECTED under the frac bar — knees
+/// median 5, q1 4, q3 8, max 16, 0 undefined; frac(knee ≥ 12) = 11.1%. The
+/// scale axis moves knees (3 → 5 median) but not past the proxy bar; its
+/// margin (≈ 16/10) exposes the floor-cap mechanism the correction records.
 #[test]
 fn bench_731_t3_corpus_v2_embedding_scale() {
     run_g2_harness(
         "corpus v2 — embedding scale [1, 4, 16]",
-        make_corpus_v2(),
-        scaled_fixture_of,
+        make_corpus_scaled(&V2_SCALES),
+        scaled_fixture_v2_of,
+        true,
+    );
+}
+
+/// Corpus v3 — the escalated scale axis [1, 8, 64] (pre-registered in the
+/// module doc BEFORE this run), designed against the floor-cap mechanism:
+/// the G2 gate needs K* ≥ 2·d_min = 20, and v2's 16× tail knee fell short
+/// (16). Same 27-single structure, same a-priori probe (τ = 1.0,
+/// d_min = 10), corrected margin gate; branches 1–4 pre-declared in the doc.
+#[test]
+fn bench_731_t3_corpus_v3_embedding_scale_escalated() {
+    run_g2_harness(
+        "corpus v3 — embedding scale [1, 8, 64]",
+        make_corpus_scaled(&V3_SCALES),
+        scaled_fixture_v3_of,
+        true,
     );
 }
