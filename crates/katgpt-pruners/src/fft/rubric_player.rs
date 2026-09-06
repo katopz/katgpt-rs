@@ -30,7 +30,6 @@
 //! All code behind `#[cfg(feature = "ropd_rubric")]`.
 
 use std::any::Any;
-use std::cmp::Ordering;
 
 use fastrand::Rng;
 

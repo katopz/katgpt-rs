@@ -251,7 +251,7 @@ pub fn fit_codebook_kmeans_into<const K: usize, const D: usize>(
                     .iter()
                     .enumerate()
                     // cmp_for_max: NaN can never win the farthest-code selection.
-                    .max_by(|(_, a), (_, b)| crate::float_order::cmp_for_max(**a, **b))
+                    .max_by(|(_, a), (_, b)| crate::float_order::cmp_for_max_f64(**a, **b))
                     .map_or((0, 0.0), |(i, &d)| (i, d));
                 centroids[kk].copy_from_slice(&patches[far_idx][..D]);
                 // Update d2_nearest: this patch is now at distance 0.

@@ -6,7 +6,6 @@
 //! - **HLFFTPlayer** — bandit Q-learning over 9 action types, adapts across rounds
 
 use std::any::Any;
-use std::cmp::Ordering;
 
 use fastrand::Rng;
 

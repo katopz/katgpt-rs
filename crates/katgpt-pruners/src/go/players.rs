@@ -9,7 +9,6 @@
 //! - **GoMctsPlayer** (T23) — MCTS with GoHeuristic rollout evaluation
 
 use std::any::Any;
-use std::cmp::Ordering;
 
 use fastrand::Rng;
 

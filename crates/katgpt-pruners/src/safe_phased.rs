@@ -703,7 +703,7 @@ mod tests {
                 })
                 .enumerate()
                 .max_by(|(_, a), (_, b)| {
-                    katgpt_core::float_order::cmp_for_max(*a, *b)
+                    katgpt_core::float_order::cmp_for_max(**a, **b)
                 })
                 .map_or(0, |(i, _)| i);
             assert!(best_arm < NUM_ARMS);

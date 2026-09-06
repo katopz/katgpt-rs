@@ -4,7 +4,6 @@
 //! The bandit-weighted proposer selects templates via UCB1, and Hint-δ feeds
 //! back to adjust template selection toward strategies that reveal blind spots.
 
-use std::cmp::Ordering;
 
 // ── BomberTemplate ───────────────────────────────────────────────
 

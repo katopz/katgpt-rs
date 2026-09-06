@@ -9,7 +9,6 @@
 //! proposal constructor.
 
 #[cfg(feature = "tes_loop")]
-use std::cmp::Ordering;
 #[cfg(feature = "tes_loop")]
 use std::collections::HashSet;
 

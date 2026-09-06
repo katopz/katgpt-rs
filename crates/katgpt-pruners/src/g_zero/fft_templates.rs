@@ -3,7 +3,6 @@
 //! Each template represents a priority archetype (heal-first, cure-first, kill-first, etc.)
 //! that modifies action scores. The bandit-weighted proposer selects templates via UCB1.
 
-use std::cmp::Ordering;
 
 use crate::fft::battle::BattleState;
 use crate::fft::types::*;

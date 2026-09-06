@@ -467,7 +467,7 @@ impl OpusRedundantEnv {
         let optimal_arm = means
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b))
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map_or(0, |(i, _)| i);
         let optimal_reward = means[optimal_arm];
 

@@ -31,7 +31,6 @@
 //! Requires `g_zero` feature (implies `bandit` + `fft`).
 
 use std::any::Any;
-use std::cmp::Ordering;
 
 use fastrand::Rng;
 

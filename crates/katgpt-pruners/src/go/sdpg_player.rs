@@ -26,7 +26,6 @@
 #![cfg(all(feature = "sdpg_bandit", feature = "go"))]
 
 use std::any::Any;
-use std::cmp::Ordering;
 
 use fastrand::Rng;
 

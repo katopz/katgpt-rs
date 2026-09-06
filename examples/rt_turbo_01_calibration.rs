@@ -225,10 +225,10 @@ fn main() {
         .map(|c| c.score)
         .collect();
 
-    if let Some(&max_ret) = ret_scores.iter().max_by(|a, b| katgpt_core::float_order::cmp_for_max(*a, *b)) {
+    if let Some(&max_ret) = ret_scores.iter().max_by(|a, b| katgpt_core::float_order::cmp_for_max(**a, **b)) {
         println!("  Max retrieval score:  {max_ret:.4}");
     }
-    if let Some(&min_loc) = loc_scores.iter().min_by(|a, b| katgpt_core::float_order::cmp_for_min(*a, *b)) {
+    if let Some(&min_loc) = loc_scores.iter().min_by(|a, b| katgpt_core::float_order::cmp_for_min(**a, **b)) {
         println!("  Min local score:      {min_loc:.4}");
     }
     let gap = calibration.threshold;

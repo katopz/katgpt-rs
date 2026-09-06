@@ -36,7 +36,6 @@
 //! let blind = pruner.blind_spot_arms(3);
 //! ```
 
-use std::cmp::Ordering;
 
 use crate::bandit::BanditPruner;
 use katgpt_speculative::ScreeningPruner;

@@ -269,7 +269,7 @@ impl FftLoRAPlayer {
         let best_idx = self.logits[ACTION_OFFSET..ACTION_OFFSET + ACTION_COUNT]
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b))
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map_or(0, |(i, _)| i);
 
         // Decode action token → ActionType.

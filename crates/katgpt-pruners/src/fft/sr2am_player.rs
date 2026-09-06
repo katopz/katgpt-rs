@@ -36,7 +36,6 @@
 //! of `ConfiguratorBandit` (4 arms).
 
 use std::any::Any;
-use std::cmp::Ordering;
 
 use fastrand::Rng;
 use katgpt_core::{ConfiguratorContext, PlanningDecision};

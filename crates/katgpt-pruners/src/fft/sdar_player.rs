@@ -30,7 +30,6 @@
 //! All code behind `#[cfg(feature = "sdar_gate")]`.
 
 use std::any::Any;
-use std::cmp::Ordering;
 
 use fastrand::Rng;
 
