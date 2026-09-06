@@ -197,6 +197,11 @@ def selftest() -> list[str]:
 
 
 def main() -> int:
+    # prints carry UTF-8 glyphs (✓ ✗ ·); a Windows piped-stdout locale codec cannot
+    # encode them and dies mid-report (2026-09-06 4090-box catch, twin of the sweep's fix)
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     fails = selftest()
     if fails:
         print("✗ numbering gate SELFTEST FAILED — instrument untrustworthy:")

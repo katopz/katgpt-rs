@@ -1381,6 +1381,21 @@ system that duplicates already-shipped substrate under a different name
   the split. (3) ENVIRONMENTAL: katgpt-web / riir-dao / riir-deployer / seal-game-editor are pinned but not
   cloned on this box — absence rows are box-scoped, not drift; the 12 seal-game-editor duplicates are
   unmeasurable here. riir-mmorpg-examples `-n 97` remains the known 069 left-for-owner row.
+  **Later the same day (second 4090 pass) — the mmorpg row REPAIRED and a second instrument axis caught.**
+  (4) INSTRUMENT AGAIN, print side: with the reads fixed the sweep now died MID-REPORT on Windows — the status
+  glyphs (✓ ✗ ·) cannot encode through a piped stdout using the locale codec (cp874 on this box); `main()` in
+  both `numbering_drift_sweep.py` and `numbering_gate.py` now reconfigures stdout/stderr to UTF-8 — the write-side
+  twin of the read-side fix, same platform-axle lesson, one commit.
+  (5) riir-mmorpg-examples `.issues/.highwater` `-n 97` → `097`: directory max is 97 (`.issues/097_*`), so the
+  intended value was correct and only the encoding was broken; repaired AND now git-tracked (was untracked local
+  state, which is why it persisted per-box). The repair itself was a same-unit collision (Issue-665 class, third+
+  occurrence): this box's commit was written while the M3's active mmorpg session landed the identical repair
+  (`adc8877`); the push was rejected, fetch showed theirs first (push-wins), and the local duplicate was reset —
+  yield cost zero because both repairs are value-identical. Two lessons en route: (a) the stale-fetch trap fired
+  — `git status -sb` shows no behind-count without a fetch, so mmorpg (not in this session's primary four) was
+  repaired against a stale origin view; the standing rule is fetch BEFORE any work on a repo not touched this
+  session; (b) the Windows repair `Path.write_text('097\n')` silently wrote CRLF — the echo-n class in miniature,
+  benign (the parser strips) but byte-noisy; on Windows write bytes or `newline=''` when repairing allocators.
 - **Issue 724 — `.plans/` numbering collisions regrew after a hand-sweep; nothing gated the allocator** RESOLVED
   (T2/T3/T4 2026-09-04 `24e349e9`/`28c353a1`/`322769b2`; **T4b + T1/T5 closeout 2026-09-04 `866df2a7`**;
   file removed per noise-reduction — full narrative in git history). The tracked `449` collision

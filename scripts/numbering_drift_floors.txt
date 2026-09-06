@@ -57,7 +57,7 @@ riir-dao            	3	0	0	0	# observed 2026-09-05: 4 files
 riir-dapps          	15	0	0	0	# observed 2026-09-05: 19 files
 riir-deployer       	4	0	0	0	# observed 2026-09-05: 5 files
 riir-game-sdk       	6	0	0	0	# observed 2026-09-05: 8 files · 2 malformed allocators repaired
-riir-mmorpg-examples	28	0	0	0	# observed 2026-09-05: 35 files
+riir-mmorpg-examples	28	0	0	0	# observed 2026-09-06: 36 files · malformed .issues allocator repaired 097 (adc8877, push-wins after a same-unit collision)
 riir-neuron-db      	37	0	0	0	# observed 2026-09-05: 47 files
 riir-train          	258	0	0	0	# 2026-09-05: all 13 duplicates RESOLVED (Issue 514, citation weight + hand reads + creation-order tie-breaks) — .plans 186 (ldt→377), 250 (d2f→379), 252 (wf→380), 253 (memory_soup→385), 255 (quant_robust→378), 264 (lclm_lora→381, lclm_rim→382, posterior_gpu→383), 267 (manifold_bake→386), 363 (chat_dflash2→384); .research 073 (and_or→448), 083 (code_lora→446), 084 (workflow→447), 086 (rat_plus→444, smt→445), 095 (lclm→443 · pushed 103ed351
 riir-viewbridge     	0	0	0	0	# observed 2026-09-05: 0 files
