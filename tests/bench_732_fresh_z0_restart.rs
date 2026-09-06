@@ -24,9 +24,14 @@
 //!
 //! ## Pre-registered invariants (hard asserts)
 //!
-//! 1. **K = 1 anchor:** every arm takes the single-tree early return — all
-//!    six arms must return the SAME path per trial, identical to the greedy
-//!    baseline fixture path.
+//! 1. **K = 1 anchor:** every arm takes the single-rollout early return —
+//!    all six arms must return the SAME path per trial. (CORRECTED before
+//!    any arm metric was produced: the first draft asserted equality with
+//!    the GREEDY path — wrong assumption about the host: at K = 1 with SDE
+//!    enabled, `best_of_k_rollouts` still injects γ-noise into the single
+//!    rollout, so the path is the NOISED single-tree path, not the greedy
+//!    one. The anchor that matters for NFE-matched comparison is
+//!    arm-equality, which is what this assert now pins.)
 //! 2. **Replay determinism:** same seed twice → identical path (every arm at
 //!    K = 16).
 //! 3. **Mechanism check:** FreshZ0 must diversify — the cross-trial unique
@@ -132,9 +137,22 @@ fn bench_732_fresh_z0_restart() {
 
     let k_values = [1usize, 4, 8, 16, 32];
 
-    // ── Invariant 1 — the K = 1 anchor: every arm returns the greedy path ──
-    for (name, restart, selection) in ARMS {
-        for trial in 0..N_TRIALS {
+    // ── Invariant 1 — the K = 1 anchor: all arms return the SAME (noised
+    // single-rollout) path per trial; modes are irrelevant at one rollout ──
+    for trial in 0..N_TRIALS {
+        let reference = best_of_k_rollouts(
+            &marginals_refs,
+            &config,
+            &NoScreeningPruner,
+            &sde_config(),
+            &WidthScaleConfig {
+                k_rollouts: 1,
+                selection: WidthSelectionMode::BestQ,
+                restart_mode: RestartMode::Perturb,
+            },
+            BASE_SEED + trial as u64,
+        );
+        for (name, restart, selection) in ARMS {
             let path = best_of_k_rollouts(
                 &marginals_refs,
                 &config,
@@ -148,12 +166,12 @@ fn bench_732_fresh_z0_restart() {
                 BASE_SEED + trial as u64,
             );
             assert_eq!(
-                path, greedy,
-                "K = 1 anchor violated: arm {name} trial {trial} diverged from the single-tree path"
+                path, reference,
+                "K = 1 anchor violated: arm {name} trial {trial} diverged from the shared single-rollout path"
             );
         }
     }
-    println!("[Invariant 1] K = 1 anchor: all six arms ≡ single-tree path on {N_TRIALS} trials ✓");
+    println!("[Invariant 1] K = 1 anchor: all six arms ≡ the shared single-rollout path on {N_TRIALS} trials ✓");
 
     // ── Invariant 2 — replay determinism at K = 16 ─────────────────────
     for (name, restart, selection) in ARMS {

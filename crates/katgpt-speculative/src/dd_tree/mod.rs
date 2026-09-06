@@ -1,9 +1,8 @@
 use std::collections::BinaryHeap;
-// HashMap is only constructed inside `best_of_k_rollouts` (MostFrequent mode),
-// which is `elf_sde`-gated; gate the import so it doesn't read as unused when
-// `elf_sde` is off (e.g. downstream consumer with default-features = false).
-#[cfg(any(feature = "elf_sde", test))]
-use std::collections::HashMap;
+// Issue 732: the MostFrequent selector's HashMap was removed — its randomized
+// iteration order broke count ties nondeterministically (replay hazard caught
+// by the bench's determinism invariant); the selector now keeps first-seen
+// order in a Vec.
 
 // NoScreeningPruner is constructed inside feature-gated dd-tree wrappers
 // (speculative_generator / belief_drafter) and in tests; gate the import so
@@ -1039,6 +1038,15 @@ pub fn best_of_k_rollouts(
 
     for k in 0..width_config.k_rollouts {
         let mut rng = Rng::new(base_seed.wrapping_add(k as u64));
+        // Issue 732 T1 — the restart mode selects the start-state draw. The
+        // Perturb path is byte-identical to pre-732 behavior.
+        #[cfg(feature = "eqr_convergence")]
+        if matches!(width_config.restart_mode, RestartMode::FreshZ0) {
+            inject_fresh_z0_into(marginals, &mut rng, &mut noisy);
+        } else {
+            inject_sde_noise_into(marginals, sde_config, &mut rng, &mut noisy);
+        }
+        #[cfg(not(feature = "eqr_convergence"))]
         inject_sde_noise_into(marginals, sde_config, &mut rng, &mut noisy);
         // Build the `&[&[f32]]` view fresh each iteration — references cannot
         // escape the loop body because `noisy` is mutably re-borrowed next.
@@ -1073,16 +1081,28 @@ pub fn best_of_k_rollouts(
             paths.into_iter().nth(best_idx).unwrap_or_default()
         }
         WidthSelectionMode::MostFrequent => {
-            // Select the most common path (mode@K)
-            let mut counts: HashMap<Vec<usize>, usize> = HashMap::new();
+            // Select the most common path (mode@K). Deterministic tie-break:
+            // first-seen wins — Issue 732: the previous HashMap iteration
+            // broke count ties in RANDOMIZED order, so the same seed could
+            // return different paths across runs (caught by the bench's
+            // replay-determinism invariant). K ≤ 64 typical: the linear
+            // scan is trivial and allocation-free in the tie sense.
+            let mut counts: Vec<(Vec<usize>, usize)> = Vec::new();
             for path in &paths {
-                *counts.entry(path.clone()).or_default() += 1;
+                match counts.iter_mut().find(|(p, _)| *p == *path) {
+                    Some((_, c)) => *c += 1,
+                    None => counts.push((path.clone(), 1)),
+                }
             }
-            counts
-                .into_iter()
-                .max_by_key(|(_, count)| *count)
-                .map(|(path, _)| path)
-                .unwrap_or_default()
+            let mut best: Option<(Vec<usize>, usize)> = None;
+            for (path, count) in counts {
+                match &best {
+                    None => best = Some((path, count)),
+                    Some((_, top)) if count > *top => best = Some((path, count)),
+                    _ => {}
+                }
+            }
+            best.map(|(path, _)| path).unwrap_or_default()
         }
         #[cfg(feature = "eqr_convergence")]
         WidthSelectionMode::Top1Converged => {
