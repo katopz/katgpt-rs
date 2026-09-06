@@ -1345,6 +1345,14 @@ name = "issue_731_t1_residual_exit"
 path = "tests/issue_731_t1_residual_exit.rs"
 required-features = ["lt2_looped", "cadence_gate"]
 
+# Issue 731 T2 — τ calibration for the residual exit (pre-registered bench:
+# depth→quality curve + the τ→fired-k table on both stability arms; the
+# InterLoopNorm arm IS the Research-440 magnitude-only negative control).
+[[test]]
+name = "bench_731_t2_residual_calibration"
+path = "tests/bench_731_t2_residual_calibration.rs"
+required-features = ["lt2_looped", "cadence_gate", "loop_stability_fix"]
+
 # Issue 698 T5 — KV mean-across-steps (CacheStrategy::Mean): the loop's own
 # running-mean K/V replaces the dedicated stash window-forward (one window
 # pass per token deleted). Lossy-surface gate: k=1 degenerate bit-identity
