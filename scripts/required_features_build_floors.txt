@@ -55,5 +55,6 @@ riir-neuron-db                45          0           0
 riir-clippy                   39          0           0
 riir-dapps                    22          0           0
 riir-mmorpg-examples          18          0           0
+riir-game-sdk                 34          0           0
 seal-remake                    6          0           0
 riir-viewbridge                0          0           0
