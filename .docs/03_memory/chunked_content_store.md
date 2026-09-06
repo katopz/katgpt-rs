@@ -99,13 +99,15 @@ The canonical consumer is the riir-ai "Executable Asset Vessel + Quorum Gitflow"
 runtime (Plan 319, Phase 3 T3.5). Specifically:
 
 ```rust
-// crates/riir-ffi/src/asset_vessel_sidecar.rs:
+// crates/riir-wasm/src/asset_vessel_sidecar.rs (moved from riir-ffi 2026-09-06):
 impl<S: ChunkedContentStore> AssetStoreAdapter<S> { ... }
 ```
 
 `AssetStoreAdapter<S>` wraps any `katgpt_core::content_store::ChunkedContentStore`
 as an `AssetStore` for the vessel sidecar. Tested in
-[`crates/riir-ffi/tests/e2e_nft_execute_permission.rs`](../../../riir-ai/crates/riir-ffi/tests/e2e_nft_execute_permission.rs).
+[`riir-chain/tests/e2e_nft_execute_permission.rs`](../../../riir-chain/tests/e2e_nft_execute_permission.rs)
+(re-homed from `riir-ffi/tests/` when the ffi dev-edge flipped, then again at
+the 2026-09-06 `riir-ffi` dissolution — the chain root package now owns it).
 The private side (game/chain IP) stays in riir-ai; this open primitive is the
 adoption hook.
 
