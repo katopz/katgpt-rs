@@ -85,6 +85,25 @@ A Salesforce study **refutes the premise behind every scoring KV evictor**: keep
 - **Muennighoff et al., arXiv:2608.26070 "Prefix Sliding"** (concurrent) — prompt + recent window for test-time scaling; also eviction-in-training. **Kontonis et al. "MEMENTO"** (concurrent) — teaching LLMs to manage context / eviction-in-training.
 - Conclusion: the null-evictor METHOD is published prior art; no novelty claim survives for us. Our claims: the null-arm gate discipline applied to Plan 585's bench + the integration/round-cost analysis for OUR serving path.
 
+**Web-search completion (2026-09-06, second pass):** the instrument limitation
+above is CLOSED — an independent web search this date confirms the routing
+verdict with fresh IDs. No standalone score-free random evictor with
+prompt-pinning was published before this paper (Sep 2026). Closest prior art,
+now pinned by ID: **VaSE arXiv:2606.03928** (stochastic eviction FOR reasoning
+but signal-bearing — value-magnitude protection + attention-sampled fill; the
+Random-Attention repo builds on VaSE's harness and benchmarks it directly),
+**NACL arXiv:2408.03675** (per-head diversified random eviction HYBRIDIZED with
+scoring, long-context, 2024 — the earliest random-as-component), **R-KV
+arXiv:2505.24133** (NeurIPS 2025; the text-level-redundancy PRIOR ART — this
+paper's contribution is showing even the redundancy score is unnecessary),
+**StreamingLLM arXiv:2309.17453**. Two PRO-scoring contrarians the result runs
+against: Learning-to-Evict arXiv:2602.10238 (ICML 2026; RL ranker beats random)
+and arXiv:2605.25085 (Wyner–Ziv theory; heavy-hitter provably beats random in
+the general model) — both re-attributed here as protection-confounded. Confirmed
+novel to the paper: the prompt-fragility attribution and the cross-head-
+redundancy mechanism; confirmed NOT novel: text-level redundancy (R-KV). Q1
+unchanged — we claim no method novelty; routing verdict stands.
+
 ## 5. PoC Addendum
 
 **RECORDED 2026-09-06 (Bench 697 addendum, Plan 585 T3.6–T3.9 landed):** the
