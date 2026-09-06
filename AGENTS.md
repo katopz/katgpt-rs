@@ -1382,10 +1382,23 @@ system that duplicates already-shipped substrate under a different name
   cloned on this box — absence rows are box-scoped, not drift; the 12 seal-game-editor duplicates are
   unmeasurable here. riir-mmorpg-examples `-n 97` remains the known 069 left-for-owner row.
   **Later the same day (second 4090 pass) — the mmorpg row REPAIRED and a second instrument axis caught.**
-  (4) INSTRUMENT AGAIN, print side: with the reads fixed the sweep now died MID-REPORT on Windows — the status
-  glyphs (✓ ✗ ·) cannot encode through a piped stdout using the locale codec (cp874 on this box); `main()` in
-  both `numbering_drift_sweep.py` and `numbering_gate.py` now reconfigures stdout/stderr to UTF-8 — the write-side
-  twin of the read-side fix, same platform-axle lesson, one commit.
+  (4) INSTRUMENT AGAIN, print side: with the reads fixed the sweep died MID-REPORT on Windows — the status
+  glyphs (✓ ✗ · →) cannot encode through a piped stdout using this box's locale codec (cp874; measured
+  empirically: ✓ ✗ · → all FAIL to encode, em-dash OK — the staged_set_audit docstring's claim confirmed).
+  (6) FAMILY-WIDE, and the pattern CORRECTED: the first fix pinned `encoding="utf-8"`, which `staged_set_audit`'s
+  own docstring argues against (mojibake on legacy Thai-console runs); the whole family now carries that
+  script's house pattern instead — `reconfigure(errors="backslashreplace")`, locale kept, previously-fatal
+  chars degrade to visible `\u2713` escapes, byte-identical output for everything that rendered before.
+  21 scripts hardened (the 2 numbering + 19 more printing the failing glyphs: the repo-set pair, the
+  cfg/percentile/required-features/docs drift+floor family, citation_weight, count_features, docs_gate_paths_sync,
+  feature_isolation_gate, generate_npc_brain_model, orphaned_attr_gate, population_sync_gate, staged-adjacent);
+  validated natively on this box — percentile_floor_gate PASSED (5 pins held, 41 sites), docs_gate_paths_sync
+  both checks PASS, docs_drift/agents_repo_set/skill_repo_set run to completion. Two pre-existing environment
+  gaps found, NOT fixed here: `count_features`/`population_sync_gate`/`cfg_gated_target_audit` import `tomllib`
+  (Python ≥3.11; this box has 3.10 — the M3-only scripts), and orphaned_attr_gate needs >60s here (timeout,
+  not a crash). Patch-mechanics lessons: a Python heredoc patcher that inserts `9` lines can silently rewrite
+  a file's EOLs — `docs_gate_paths_sync.py` was committed MIXED (155 CRLF + 195 LF) and the first patch pass
+  normalized it (+164/−155); redone byte-preserving per-line EOL (+9/0 final). Commit:
   (5) riir-mmorpg-examples `.issues/.highwater` `-n 97` → `097`: directory max is 97 (`.issues/097_*`), so the
   intended value was correct and only the encoding was broken; repaired AND now git-tracked (was untracked local
   state, which is why it persisted per-box). The repair itself was a same-unit collision (Issue-665 class, third+

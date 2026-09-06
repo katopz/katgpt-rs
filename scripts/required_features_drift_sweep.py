@@ -223,6 +223,15 @@ def selftest() -> list[str]:
 
 
 def main() -> int:
+    # Prints carry glyphs the Windows locale codecs cannot encode (checked
+    # 2026-09-06 on cp874: check/cross/middot/arrow FAIL, em-dash OK); keep the
+    # locale encoding and degrade only the fatal chars to escapes -- the
+    # staged_set_audit house pattern (utf-8 pinning would mojibake legacy consoles).
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass  # not a TextIOWrapper (embedded / detached); keep old behavior
     fails = selftest()
     if fails:
         print("✗ required-features sweep SELFTEST FAILED — instrument untrustworthy:")
