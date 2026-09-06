@@ -328,6 +328,8 @@ fn bench_lt2_ahla_loop() {
                 #[cfg(feature = "gain_cost_halt")]
                 None,
                 None, // Issue 717: deep_run — None = bit-identical baseline
+                #[cfg(feature = "cadence_gate")]
+                None, // Issue 731: residual-exit probe — None = bit-identical baseline
             );
         }
     }
@@ -357,6 +359,8 @@ fn bench_lt2_ahla_loop() {
                 #[cfg(feature = "gain_cost_halt")]
                 None,
                 None, // Issue 717: deep_run — None = bit-identical baseline
+                #[cfg(feature = "cadence_gate")]
+                None, // Issue 731: residual-exit probe — None = bit-identical baseline
             ));
         }
     }
@@ -429,6 +433,8 @@ fn bench_lt2_hybrid() {
                 #[cfg(feature = "gain_cost_halt")]
                 None,
                 None, // Issue 717: deep_run — None = bit-identical baseline
+                #[cfg(feature = "cadence_gate")]
+                None, // Issue 731: residual-exit probe — None = bit-identical baseline
             );
         }
     }
@@ -458,6 +464,8 @@ fn bench_lt2_hybrid() {
                 #[cfg(feature = "gain_cost_halt")]
                 None,
                 None, // Issue 717: deep_run — None = bit-identical baseline
+                #[cfg(feature = "cadence_gate")]
+                None, // Issue 731: residual-exit probe — None = bit-identical baseline
             ));
         }
     }
@@ -573,6 +581,8 @@ fn proof_lt2_hybrid_throughput() {
                 #[cfg(feature = "gain_cost_halt")]
                 None,
                 None, // Issue 717: deep_run — None = bit-identical baseline
+                #[cfg(feature = "cadence_gate")]
+                None, // Issue 731: residual-exit probe — None = bit-identical baseline
             );
         }
     }
@@ -602,6 +612,8 @@ fn proof_lt2_hybrid_throughput() {
                 #[cfg(feature = "gain_cost_halt")]
                 None,
                 None, // Issue 717: deep_run — None = bit-identical baseline
+                #[cfg(feature = "cadence_gate")]
+                None, // Issue 731: residual-exit probe — None = bit-identical baseline
             ));
         }
     }

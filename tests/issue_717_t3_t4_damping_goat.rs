@@ -125,6 +125,8 @@ fn run_deep(
         #[cfg(feature = "gain_cost_halt")]
         None,
         run,
+        #[cfg(feature = "cadence_gate")]
+        None, // Issue 731: residual-exit probe — None = bit-identical baseline
     );
     let logits = logits.to_vec();
     let final_norm = robust_norm(&ctx.x[..config.n_embd]);
@@ -443,6 +445,8 @@ fn g4_alloc_free_stabilization_hot_loop() {
         #[cfg(feature = "gain_cost_halt")]
         None,
         Some(&mut run),
+        #[cfg(feature = "cadence_gate")]
+        None, // Issue 731: residual-exit probe — None = bit-identical baseline
     );
 
     reset_alloc_stats();
@@ -466,6 +470,8 @@ fn g4_alloc_free_stabilization_hot_loop() {
             #[cfg(feature = "gain_cost_halt")]
             None,
             Some(&mut run),
+            #[cfg(feature = "cadence_gate")]
+            None, // Issue 731: residual-exit probe — None = bit-identical baseline
         );
     }
     let (count, bytes) = get_alloc_stats();

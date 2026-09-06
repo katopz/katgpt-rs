@@ -63,6 +63,8 @@ fn run_forward_looped(
         #[cfg(feature = "gain_cost_halt")]
         None,
         None, // Issue 717: deep_run — None = bit-identical baseline
+        #[cfg(feature = "cadence_gate")]
+        None, // Issue 731: residual-exit probe — None = bit-identical baseline
     );
     let elapsed = t0.elapsed().as_micros() as u64;
 

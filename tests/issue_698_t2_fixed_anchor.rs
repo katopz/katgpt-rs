@@ -233,6 +233,8 @@ fn run_once(
         #[cfg(feature = "gain_cost_halt")]
         None,
         None, // Issue 717: deep_run — None = bit-identical baseline
+        #[cfg(feature = "cadence_gate")]
+        None, // Issue 731: residual-exit probe — None = bit-identical baseline
     );
     logits.to_vec()
 }
@@ -405,6 +407,8 @@ fn t698_t2_fixed_anchor_ab_ordering() {
             #[cfg(feature = "gain_cost_halt")]
             None,
             None, // Issue 717: deep_run — None = bit-identical baseline
+            #[cfg(feature = "cadence_gate")]
+            None, // Issue 731: residual-exit probe — None = bit-identical baseline
         );
         assert_eq!(ctx.loop_anchor.len(), cfg_f.n_embd);
         assert_eq!(

@@ -82,6 +82,8 @@ fn run_deep(
         #[cfg(feature = "gain_cost_halt")]
         None,
         run.as_deref_mut(),
+        #[cfg(feature = "cadence_gate")]
+        None, // Issue 731: residual-exit probe — None = bit-identical baseline
     );
     let logits = logits.to_vec();
     // Final carried state: `ctx.x` post-loop (mirrored into
