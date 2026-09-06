@@ -92,6 +92,14 @@ ndb-sigmoid-keep precedent).
    --workspace` does not. A per-crate green pass is NOT a workspace claim (E0433/E0308s
    surfaced only under the workspace pass).
 
-Cross-repo residual for the riir-ai lane (NOT touched here — active sibling WIP): engine
-`sense_bandit_demo` ×2, `karc_bridge/phase_separation_bridge` test ×1 (same legacy idiom,
-found by the same grep).
+Cross-repo residual for the riir-ai lane — **RESOLVED same day** by riir-ai
+`.issues/878_nan_comparator_tail_sweep.md` (riir-ai `1ee35da79`): the 2 recorded sites plus
+~138 more the same catch-all grep found once the surface widened to tests/examples/benches/
+cfg(test) mods — including PRODUCTION civ `map_tick` comparators (guard_ai, predator_fsm,
+predator, eagle, crime, movement, leo_act) and riir-engine `fourier/tuning.rs` that 832's
+production-only pass had also missed (the `std::cmp::Ordering::Equal` spelling + multi-line
+comparator heads evade the single-line grep). That sweep also found and fixed HERE the deref
+depth stragglers this issue's own f2c305dd shipped in feature-gated surfaces (7 sites + 11
+dead imports, `649ce5fe`) — the closure-shape-dependent `&&f32` double-ref (iter-closure vs
+owned-tuple map) is the systematic version of this issue's "5 sites fixed post-compile-gate"
+note, now probed and documented in riir-ai 878.
