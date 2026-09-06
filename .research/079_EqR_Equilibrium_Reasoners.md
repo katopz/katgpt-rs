@@ -355,8 +355,8 @@ EqR independently validates our existing design from the attractor dynamics pers
 
 | Item | Effort | Impact | Priority | Target |
 |---|---|---|---|---|
-| 7.1 `ConvergenceSelector` enum variant | Small | Medium | MEDIUM | `src/speculative/dd_tree.rs` |
-| 7.2 Residual tracking in loop mode | Small | Low-Medium | LOW | looped inference path |
+| 7.1 `ConvergenceSelector` enum variant | Small | Medium | MEDIUM — **LANDED** (Plan 119 ✅, `WidthSelectionMode::Top1Converged` + `ResidualTracker`, opt-in `eqr_convergence`; see §10) | `dd_tree/mod.rs` |
+| 7.2 Residual tracking in loop mode | Small | Low-Medium | LOW — **tracked as Issue 731** (2026-09-06 re-audit; still the open gap: `forward_looped` runs a fixed `loop_count`) | looped inference path |
 
 ### 8.3 What NOT To Do
 
@@ -408,3 +408,44 @@ EqR independently validates our existing design from the attractor dynamics pers
 | `crates/katgpt-pruners/src/g_zero/types.rs` | `HintDelta` — intrinsic reward signal (analogous to EqR residual) |
 | `crates/katgpt-pruners/src/g_zero/delta_absorb.rs` | `DeltaGatedAbsorbCompress` — δ-gated state updates |
 | `crates/katgpt-pruners/src/g_zero/delta_bandit.rs` | `DeltaBanditPruner` — δ-based arm selection |
+
+---
+
+## 10. Re-audit addendum (2026-09-06)
+
+**Trigger:** paper re-invocation (`@research 2605.21488`); full-text re-read (HTML v1) + a 7-repo substrate sweep via 3 grep agents + a two-track adversarial panel (No-GD / model-based) + published-prior-art searches.
+
+**Verdict: UNCHANGED — STRONGLY VALIDATED.** No new research note (this one is canonical); no Super-GOAT upgrade (the mechanism classes have dense in-stack cousins — see §10.2). What changed since this note was written:
+
+### 10.1 Landed since the note
+
+- **Plan 119 ✅ Complete** — action item 7.1 landed as `WidthSelectionMode::Top1Converged` + `ResidualTracker` in `crates/katgpt-speculative/src/dd_tree/mod.rs`, behind opt-in `eqr_convergence` (depends on `elf_sde`); generic `ConvergenceSelector { BestQ, MajorityVote, Top1Converged, BtRank }` in `crates/katgpt-types/src/enums.rs` (default `BestQ`); bench `tests/bench_119_eqr_convergence.rs`. The doc comment correctly carries the paper's reliability precondition: *only reliable after landscape shaping; falls back to BestQ*.
+- **riir-train Plan 387 Phase 1 ✅** — `riir-bench-algo`: HRM/TRM/EqR-lineage benchmark (Sudoku-Extreme + Maze-Unique, EqR-parity maze generator pinned `locuslab/EqR @ e9934826`, K-sweep exact-solve metric, settling classifier: settled-and-stayed / settled-then-wandered / never-settled). Phase 2 (weight-tied trainer with RI=re-corruption, NI=annealed noise, SOT=truncated BPTT L=4, patience halting) is **spec'd, unbuilt**.
+- **riir-train Research 440 (Sotaku) measured negatives** — on looped sudoku checkpoints: DEQ/implicit-FP FAILED (residual RMS plateaus ≈0.63 while state RMS grows 24→706), Q-head learned halt FAILED, spectral radius ≫1; tangential-only ×0.25 state scaling rescued 3 collapsed checkpoints to 94.7–96.2%. These are the standing caveats for any residual-consumer here (carried into Issues 731/732).
+
+### 10.2 Substrate the sweep confirmed (consume, never re-derive)
+
+`katgpt_core::convergence_cadence` (opt-in `cadence_gate`, Issue 720 / Research 529 — windowed ‖Δz‖ Settled/Churning from the same HRM dissection the paper builds on) · `gain_cost_halt` (Plan 304) · `renoise_ce::verify_and_restart` / `best_of_n_stability` (Plan 406, default-on) · `BoMSampler` (Plan 281) · `ManifoldResidual::has_converged` (Plan 085) · LLG velocity-tol exit (`cp_hopfield/llg.rs`) · `ResidualGate` (Issue 698) · riir-neuron-db's freeze gate family (flatness<0.3 / SVCCA ρ̄≥0.995 / renoise-τ downgrade — the consolidation-loop analog of convergence-gated stopping) · riir-ai EVPI gate (decision-flip adaptive compute) + `mcts_collapse_bridge` (spurious-attractor detection + noise-injection recovery).
+
+### 10.3 Remaining gaps → filed issues (2026-09-06)
+
+| Gap | Issue |
+|---|---|
+| Residual-gated early exit on `forward_looped` (note §7.2 — the still-open action item) | **`katgpt-rs` Issue 731** |
+| Fresh-z₀ breadth-restart arm + D-first law + negative control + four-mode taxonomy + Δ_PI | **`katgpt-rs` Issue 732** |
+| Game-runtime consumer: wire cadence early-exit into CGSP/CLR/crowd_batch loops (Research 149's aspirational wiring) + BoM/cadence escape composition | **`riir-ai` Issue 881** |
+| `adam_atan2_step_cpu` dead code — the paper's own optimizer, built (Plan 082b T1, tested) and never wired | **`riir-train` Issue 525** |
+
+### 10.4 Full-text content the original note did not record (now recorded here)
+
+1. **Four landscape modes (Fig. 6)** — (a) no correct attractor → compute scaling never helps; (b) correct+spurious coexist → breadth helps (basin selection); (c) correct-but-narrow-basin → breadth+depth (reachability); (d) aligned → depth reliably refines. A diagnostic taxonomy, not a mechanism; routed to Issue 732 T5 as label-free proxies.
+2. **Selection reliability precondition, stated as a negative control** — on the unshaped baseline, `Top1Converged` can UNDERPERFORM majority vote (residual reduction can mean convergence to a spurious attractor). Plan 119's fallback encodes this; Issue 732 T3 pre-registers the control.
+3. **Depth–breadth interaction law** — breadth ineffective below D ≳ 4; re-measure on our loop (Issue 732 T4).
+4. **Correctness bound** — inside an L-Lipschitz basin with output margin γ(z\*): ‖R‖ < (1−L)·γ/G_gap ⟹ correct decode. Residual is a correctness proxy ONLY under local stability + correct attractor + positive margin — the formal version of the precondition above.
+5. **Maze-1k ill-posedness lesson (App. C.2)** — multiple valid solutions under single-solution supervision DESTROYS test-time scaling (flat or negative); fixing the dataset (Maze-Unique) restores it. Already incorporated by `riir-bench-algo` (uses Maze-Unique via the EqR-parity generator).
+6. **Δ_PI path-independence metric** (App. D.3) and **ACT efficiency anchor** (17.4× avg-NFE cut at D=1024 for −0.8% acc) — the G2 bar references for Issues 731/732.
+7. **Model-based panel top picks** (recorded for riir-train, not actioned here): (1) well-posed/unique-solution supervision audits gate every pass@k scaling claim; (2) wire Adam-atan2 — the rare case of a paper replicating our own built-but-dead primitive.
+
+### 10.5 Published prior-art note (2026-09-06 searches)
+
+Residual-threshold early exit is DEQ-standard practice (implicit-layers tutorial / TorchDEQ solve-to-tolerance); the paper's genuine contribution over it is the *shaping-dependent reliability* of residual-as-correctness and the selection rule under restarts — both already encoded in Plan 119's fallback and Issue 732's negative control. `Path-independent equilibrium models` (Anil et al., NeurIPS 2022) is the closest published prior on path independence; research note 344 already cross-references the implicit-FP convergence-halting family.
