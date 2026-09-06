@@ -217,6 +217,7 @@ Per the fusion protocol, list the 2–3 closest notes and ask: "what novel combi
 
 ## 5. Cross-references
 
+- **Successor (2026-09-06):** `katgpt-rs/.research/536_EBT_Energy_Based_Transformers_Thinking.md` — EBT (arXiv:2507.02092) is this paper's scaled successor (transformer architecture, optimization-training with HVP backprop, landscape-regularization ablations, S1/S2 curriculum) and carries the new empirical content: +35% pretraining scaling vs Transformer++, +29% thinking gains growing linearly with OOD, energy-as-epistemic-uncertainty evidence. The training half landed as `riir-train/.plans/388_ebt_energy_head_dspark_calibration.md` (DSpark confidence recalibration); the modelless half is Pass (this note's audit carries; deltas audited-discarded in 536 §2.2).
 - **Survey gap closed:** `katgpt-rs/.research/325_Survey_Latent_Reasoning_Taxonomy_Unifying_Map.md` §7.2 G4 (IRED) — verdict recorded as Gain.
 - **Closest modelless cousin:** `katgpt-rs/.research/317_Reasoning_As_Attractor_Dynamics_Gibbs_Retrieval.md` — R317 §1.7 quotes the paper's future-work note that IRED delivers; R317's §2 documents that the modelless half ships; this note documents that the substantive half (trained `Eθ`) is → riir-train.
 - **DEC/Hodge substrate:** `katgpt-rs/.research/296_Stokes_Calculus_Dec_Vocabulary_Crosswalk.md` + `katgpt-rs/.research/219_Topological_Neural_Operators_DEC_Inference.md` + Plan 251.
