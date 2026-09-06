@@ -2,7 +2,9 @@
 //!
 //! The receiving side of `riir-chain` Issues 108 (fair-roll verify) and 109
 //! (Merkle verify), filed against this repo as Issue 685. Design:
-//! `riir-chain/.proposals/006_esp32_device_tier_ws_fallback.md` §9.3, §10 Q6/Q7.
+//! the ESP32 device-tier proposal (moved 2026-09-06 to the private POC repo
+//! `riir-esp32`: `gist-rs/riir-esp32`, `.proposals/006_esp32_device_tier_ws_fallback.md`)
+//! §9.3, §10 Q6/Q7.
 //!
 //! ## Why this crate exists
 //!

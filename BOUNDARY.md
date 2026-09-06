@@ -17,7 +17,10 @@
   raw/lora hot-swap, latent-space updates.
 - **`no_std` device-side verification primitives** (`katgpt-device-verify`) —
   fair-roll die verification and binary-Merkle inclusion verification for the
-  `Satellite` tier (`riir-chain` Issues 108/109, this repo's Issue 685).
+  `Satellite` tier (`riir-chain` Issues 108/109, this repo's Issue 685; the
+  device side of that tier moved 2026-09-06 to the private POC repo
+  `riir-esp32`, which consumes this crate by git pin — the chain node and the
+  device still resolve the SAME fair-roll implementation from here).
   Admitted 2026-08-24 on the domain test read as written: *modelless*, *no riir
   dep*, and this repo is upstream of everything. It is a **verification**
   rather than an *inference* primitive, which is a widening of the Owns line
