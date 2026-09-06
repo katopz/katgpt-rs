@@ -51,7 +51,7 @@ A Salesforce study **refutes the premise behind every scoring KV evictor**: keep
 
 **Paper's null × our bench discipline × our canary:** the full GOAT-gate shape for ANY future lossy KV policy on the serving path becomes: {policy, policy+prompt-pin, random+prompt-pin, ring} × {recall/accuracy, RunawayStats canary, round-cost} at matched budget — protection factorial first, signal second. None of the four alone is the gate; the paper supplies the missing arm and the attribution protocol.
 
-**Second fusion (training side):** if the serving path adopts random+pin (the throughput winner), riir-train Plan 367's co-adaptation should target the SAME policy — co-training against a signal-free policy is the cheapest possible recipe (no column-sum kernel, no scorer in the training loop) and the paper's own co-adaptation logic ("same conditions as inference") demands the match. Rider recorded on Plan 367 via note 523 cross-ref.
+**Second fusion (training side):** if the serving path adopts random+pin (the throughput winner), riir-train Plan 367's co-adaptation should target the SAME policy — co-training against a signal-free policy is the cheapest possible recipe (no column-sum kernel, no scorer in the training loop) and the paper's own co-adaptation logic ("same conditions as inference") demands the match. Rider landed on Plan 367 as **T4.3** (2026-09-06; gated on the Issue-882 pull, not on Phase 0).
 
 ### 2.4 Game-runtime reframe (priority #1) + healer reframe (priority #2)
 
