@@ -1393,10 +1393,10 @@ system that duplicates already-shipped substrate under a different name
   cfg/percentile/required-features/docs drift+floor family, citation_weight, count_features, docs_gate_paths_sync,
   feature_isolation_gate, generate_npc_brain_model, orphaned_attr_gate, population_sync_gate, staged-adjacent);
   validated natively on this box — percentile_floor_gate PASSED (5 pins held, 41 sites), docs_gate_paths_sync
-  both checks PASS, docs_drift/agents_repo_set/skill_repo_set run to completion. Two pre-existing environment
-  gaps found, NOT fixed here: `count_features`/`population_sync_gate`/`cfg_gated_target_audit` import `tomllib`
-  (Python ≥3.11; this box has 3.10 — the M3-only scripts), and orphaned_attr_gate needs >60s here (timeout,
-  not a crash). Patch-mechanics lessons: a Python heredoc patcher that inserts `9` lines can silently rewrite
+  both checks PASS, docs_drift/agents_repo_set/skill_repo_set run to completion. One pre-existing environment
+  note: `count_features`/`population_sync_gate`/`cfg_gated_target_audit` import `tomllib` (Python ≥3.11) and the
+  box's `python` resolves to 3.10 — but `py -3.14` IS installed and runs all three natively (population_sync
+  then fails only on the box-scoped repo_set absence rows, the 4 uncloned repos, not on tomllib). Patch-mechanics lessons: a Python heredoc patcher that inserts `9` lines can silently rewrite
   a file's EOLs — `docs_gate_paths_sync.py` was committed MIXED (155 CRLF + 195 LF) and the first patch pass
   normalized it (+164/−155); redone byte-preserving per-line EOL (+9/0 final). Commit:
   (5) riir-mmorpg-examples `.issues/.highwater` `-n 97` → `097`: directory max is 97 (`.issues/097_*`), so the
