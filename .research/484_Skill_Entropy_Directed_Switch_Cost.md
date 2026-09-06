@@ -163,3 +163,5 @@ The table is **latent, local, never synced** — per-NPC or per-archetype derive
 | Quest difficulty dial | F3-adjacent: sequence-entropy rejection sampling in quest_grammar | riir-ai | P2 — needs quest-completion telemetry volume |
 | Training recipe | skill-entropy GRPO reward on civ traces | riir-train Plan 319 Gap 6 | P3 — gated on a triggering consumer + GPU window |
 | LLM benchmark (Skill²-Bench) | — | out of scope | redirect |
+
+> **PASS-Redirects (synthesis):** Vallabhaneni, Cagwin & Wild [arXiv:2609.04159 "SENTINEL-RL: Offloading Topological Reasoning from LLM Agents in the Security Operations Center"] — entropy-threshold human escalation ("decision entropy crosses threshold → mandatory human intervention") is this note's entropy-directed-decision family in SOC clothing; covered by Bench 034 entropy-binned UCB1 arm selection + Research 494 conformal dual-threshold risk exit. Pass — no files.
