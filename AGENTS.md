@@ -1378,7 +1378,13 @@ system that duplicates already-shipped substrate under a different name
   last touched 09-04** — the two boxes are on different branches of riir-train (its AGENTS.md still claims 'no
   develop branch exists'; stale), and a session is active on EACH side. Reconciliation + the main-side corrupt
   highwaters are the owner's; the floors' `dup=0` describes develop's correct state — raising the pin would mask
-  the split. (3) ENVIRONMENTAL: katgpt-web / riir-dao / riir-deployer / seal-game-editor are pinned but not
+  the split. **RESOLVED later the same day (4090 box, owner-directed consolidation):** the split is CLOSED —
+  main's last commits (`1a6d128c` docs(509) + `823d669c` feat(509)) merged into develop at `936977fa`, the box
+  now checks out `develop`, and the sweep re-run from the consolidated tree reads **riir-train files=332 dup=0
+  stale=0 malformed=0** (the `-n 374`/`-n 441` corrupt allocators and the 13 duplicates are gone on develop;
+  all six `.highwater` files are tracked integers). riir-train's AGENTS.md does NOT claim 'no develop branch
+  exists' — that parenthetical was itself stale (the Branch section has documented develop as the default
+  working branch since 09-04); `origin/main` stays frozen at `1a6d128c` as lineage, strictly behind develop. (3) ENVIRONMENTAL: katgpt-web / riir-dao / riir-deployer / seal-game-editor are pinned but not
   cloned on this box — absence rows are box-scoped, not drift; the 12 seal-game-editor duplicates are
   unmeasurable here. riir-mmorpg-examples `-n 97` remains the known 069 left-for-owner row.
   **Later the same day (second 4090 pass) — the mmorpg row REPAIRED and a second instrument axis caught.**
