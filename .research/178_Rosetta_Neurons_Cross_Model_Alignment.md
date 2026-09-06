@@ -504,6 +504,8 @@ The Rosetta method gives us a **training-free way to discover shared structure**
 
 The commercial play is clear: the **Concept Dictionary** is the engine's IP. Once you've mined universal concepts across all your pruners and adapters, you have a meta-layer that no competitor can replicate without doing the same mining.
 
+> **Cross-ref:** Yang et al. [arXiv:2608.11676 "XBridge: Entity-Grounded Latent Bridge for Heterogeneous LLM Communication"] — dual-channel (discrete lexical-anchor + trained latent-enrichment) cross-model communication; its training-free anchor half is the identity-transport complement of 178's marginal-alignment half, and its learned cross-attention (not linear alignment) is the measured counter-shape to Bench 422's Procrustes NO-GO. Verdict Gain; note at `.research/535_XBridge_Entity_Grounded_Latent_Bridge.md`.
+
 ---
 
 ## TL;DR
