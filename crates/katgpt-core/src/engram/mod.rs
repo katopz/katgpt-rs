@@ -233,4 +233,19 @@ pub trait EngramTable: Send + Sync {
 
     /// Dimensionality of each slot vector (the hidden-state dimension D).
     fn dim(&self) -> usize;
+
+    /// Downcast support for consumers that hold the table as `&dyn EngramTable`
+    /// but must operate on the concrete type (e.g. the riir-chaind engram
+    /// ingress, whose `StagingEngramTable::from_table` COW edits read the
+    /// inherent `slots()`/`heads()` accessors that are not on this trait).
+    /// Standard `as_any` pattern (downcast-rs / anyhow style):
+    ///
+    /// ```ignore
+    /// let src = t.as_any().downcast_ref::<InMemoryEngramTable>();
+    /// ```
+    ///
+    /// Soundness note: this exposes the concrete type to any trait-object
+    /// holder — that is its purpose; it adds no new unsoundness over an
+    /// `&InMemoryEngramTable` the caller already had before boxing.
+    fn as_any(&self) -> &dyn std::any::Any;
 }

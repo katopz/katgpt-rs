@@ -173,6 +173,11 @@ impl EngramTable for InMemoryEngramTable {
     fn dim(&self) -> usize {
         self.d
     }
+
+    #[inline]
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 // EngramTable requires Send + Sync. InMemoryEngramTable is Send+Sync if its
@@ -431,6 +436,34 @@ mod tests {
         // Populated rows are visible through the public accessor (slot 2 was
         // written with [2.0, 3.0, 4.0, 5.0] — hash 2 lands at slot 2 mod 16).
         assert_eq!(&t.slot_rows()[2 * 4..3 * 4], &[2.0, 3.0, 4.0, 5.0]);
+    }
+
+    #[test]
+    fn as_any_downcasts_from_dyn_trait_object() {
+        // Plan 047 (riir-chain engram ingress): consumers hold the table as
+        // `&dyn EngramTable` (via `EngramHotSwap::with_table`) but must
+        // recover the concrete `&InMemoryEngramTable` for COW staging edits
+        // (`StagingEngramTable::from_table`). The downcast must preserve
+        // identity (same commitment through both paths) and reject foreign
+        // types.
+        use super::super::{EngramTable, InMemoryEngramTable};
+        let mut b = EngramTableBuilder::new(16, 4);
+        b.add_pattern(EngramHash(1), &[1.0, 2.0, 3.0, 4.0]);
+        let t = b.build();
+        let expected = t.commitment();
+
+        let dyn_t: &dyn EngramTable = &t;
+        let down = dyn_t
+            .as_any()
+            .downcast_ref::<InMemoryEngramTable>()
+            .expect("InMemoryEngramTable downcasts from the trait object");
+        assert_eq!(down.commitment(), expected, "same table through both paths");
+        assert_eq!(down.num_slots(), 16);
+
+        assert!(
+            dyn_t.as_any().downcast_ref::<u64>().is_none(),
+            "foreign types must not downcast"
+        );
     }
 
     #[test]
