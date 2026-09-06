@@ -1250,6 +1250,25 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
 
 ## Issue log (resolved)
 
+- **Issue 730 — 256K prefill KV-offload double-buffer: T0 measured the wall 4× smaller than claimed; the offload premise is refuted for every lane the stack serves** CLOSED-N/A-PREMISE-REFUTED
+  (2026-09-06, T0 verify-first gate; issue file removed at close — instrument kept:
+  `scripts/gguf_header_audit.py`, stdlib GGUF header/tensor introspector; riir-ai Issue 879 T2 is its next consumer).
+  Measured on `Ternary-Bonsai-27B-Q2_0.gguf` (gguf v3, arch `qwen35`, 851 tensors): **16 full-attention blocks of 64**
+  (blk.3,7,11,…,63 — `full_attention_interval=4`, verified against the TENSOR TABLE not just metadata: 16 `attn_output`,
+  48 `ssm_out`), 48 GDN. Full-attn KV geometry: head_count_kv=4 × (key_length 256 + value_length 256) =
+  4 KiB/token/layer @f16 → **64 KiB/token hybrid = 16 GiB @262,144 (f32: 32 GiB)**; the all-64-layer pre-hybrid
+  accounting reproduces R436's ≈67 GB figure (64 GiB) — the wall number never modeled the hybrid. The literal T0
+  subject (`dspark-Q4_1`, arch `dspark`, 6 blocks, **context_length 4096**, KV 12 KiB/token → 48 MiB @4096) has no
+  long-context wall at all; its `target_layers [1,16,31,46,61]` confirms it reads the 27B's full-attn blocks.
+  Verdict: "offload unavoidable at prefill regardless of compression" is refuted for every lane the stack actually
+  serves (≤32K league lanes: 2 GiB f16 / 4 GiB f32); at the aspirational 256K lane f16 fits with ~1.3 GiB headroom
+  (16 + 6.67 weights = 22.7 GiB vs 23.98) and f32's overflow is answered by the already-shipped
+  `QWEN38_KV_DTYPE=f16` lever (riir-ai Issue 753, Bench 756-validated), not a new double-buffer system.
+  Reopen trigger: a production 256K prefill lane materializes AND f16-KV's marginal fit fails in practice →
+  T1 (serialized-offload pricing) is the first step. Bonus for riir-ai 879 T2 (read en route): `ssm_a [48]`,
+  `ssm_dt.bias`, `ssm_conv1d`, `ssm_norm`, and all RMSNorms are **F32** (post-activation gate params unquantized ✓)
+  while `ssm_alpha`/`ssm_beta` gate projections are TYPE_142 ternary weight matrices (the paper's pre-activation
+  shield applies ✓); census: TYPE_142 × 498, F32 × 353.
 - **Issue 729 — the NaN-comparator class never got its katgpt-rs wave: ~160 legacy `partial_cmp` sites + 13 NaN-promoting `total_cmp` positions, in the repo that OWNS `float_order`** RESOLVED
   (T1–T5 2026-09-06, sweep `f2c305dd` + deref stragglers `649ce5fe` + cross-repo close `2bd3e704`; **closeout residue sweep this commit**;
   file removed at close — this row + the `katgpt_core::float_order` module doc are the durable record, riir-ai Issue-878 AGENTS.md row
