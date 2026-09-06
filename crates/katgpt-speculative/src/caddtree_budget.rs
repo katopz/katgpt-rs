@@ -753,7 +753,7 @@ mod tests {
         let peak_idx = throughputs
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max_f64(**a, **b))
             .map(|(i, _)| i)
             .unwrap();
 

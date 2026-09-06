@@ -392,7 +392,7 @@ mod tests {
 
         // Checkpoint 0 should have the highest gamma.
         let best = (0..4)
-            .max_by(|&a, &b| gammas[a].partial_cmp(&gammas[b]).unwrap())
+            .max_by(|&a, &b| crate::float_order::cmp_for_max(gammas[a], gammas[b]))
             .unwrap();
         assert_eq!(best, 0, "domain-0 query should select checkpoint 0");
     }

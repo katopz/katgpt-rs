@@ -586,7 +586,7 @@ cache.advance_pos(pos);
                         .iter()
                         .enumerate()
                         .max_by(|(_, a), (_, b)| {
-                            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                            katgpt_core::float_order::cmp_for_max(**a, **b)
                         }).map_or(0, |(i, _)| i);
                     if !gate.should_recurse(&_gate_prev_logits, &_gate_scratch_logits, candidate) {
                         // Dead compute detected: this iteration did not

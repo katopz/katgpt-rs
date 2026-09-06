@@ -159,9 +159,10 @@ impl RuliologyBandit {
         let mut best_payoff = f64::NEG_INFINITY;
         for (i, arm) in self.arms.iter().enumerate() {
             let p = arm.payoff();
-            // total_cmp is NaN-deterministic and avoids the panic that
-            // partial_cmp(...).unwrap() would trigger on a NaN payoff.
-            if p.total_cmp(&best_payoff).is_gt() {
+            // A NaN payoff must never become the best arm: `p > best_payoff`
+            // is false for NaN (float_order semantics — NaN loses), whereas
+            // total_cmp would rank NaN above +inf and select it.
+            if p > best_payoff {
                 best_payoff = p;
                 best = i;
             }

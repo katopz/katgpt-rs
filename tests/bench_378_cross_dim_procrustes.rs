@@ -680,7 +680,7 @@ fn bench_378_cross_dim_procrustes() {
     let best_trained = [procrustes_result, sgd_cold_result, sgd_warm_result]
         .iter()
         .copied()
-        .min_by(|a, b| a.kl_div.partial_cmp(&b.kl_div).unwrap())
+        .min_by(|a, b| katgpt_core::float_order::cmp_for_min(a.kl_div, b.kl_div))
         .unwrap();
 
     let g1_pass = best_trained.kl_div <= g1_threshold;

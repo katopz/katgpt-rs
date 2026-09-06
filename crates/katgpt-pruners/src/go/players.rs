@@ -415,7 +415,7 @@ impl GoPlayer for GoGreedyPlayer {
             .max_by(|&&a, &&b| {
                 let sa = greedy_score(state, a.0, a.1);
                 let sb = greedy_score(state, b.0, b.1);
-                sa.partial_cmp(&sb).unwrap_or(Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(sa, sb)
             })
             .expect("legal_moves is non-empty");
 
@@ -714,7 +714,7 @@ impl GoPlayer for GoHLPlayer {
             // Exploit: best blended score
             *scored
                 .iter()
-                .max_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(Ordering::Equal))
+                .max_by(|a, b| katgpt_core::float_order::cmp_for_max(a.2, b.2))
                 .expect("scored is non-empty")
         };
 
@@ -804,9 +804,7 @@ impl TemplateStats {
     fn best_ucb1(&self) -> usize {
         (0..NUM_TEMPLATES)
             .max_by(|&a, &b| {
-                self.ucb1(a)
-                    .partial_cmp(&self.ucb1(b))
-                    .unwrap_or(Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(self.ucb1(a), self.ucb1(b))
             })
             .unwrap_or(0)
     }
@@ -1000,7 +998,7 @@ impl GoPlayer for GoGZeroPlayer {
             .max_by(|&&a, &&b| {
                 let sa = greedy_score(state, a.0, a.1);
                 let sb = greedy_score(state, b.0, b.1);
-                sa.partial_cmp(&sb).unwrap_or(Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(sa, sb)
             })
             .copied()
             .unwrap_or(legal_moves[rng.usize(..legal_moves.len())]);

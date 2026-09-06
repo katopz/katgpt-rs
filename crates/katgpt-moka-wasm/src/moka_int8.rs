@@ -753,8 +753,11 @@ mod tests {
             let (p_i8, v_i8) = forward_int8_with_scratch(&weights_i8, &features, &mut scratch_i8);
 
             // Criterion 1: argmax agreement (the move-selection gate)
-            let f32_argmax = p_f32.iter().enumerate().max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).map(|(i, _)| i);
-            let i8_argmax = p_i8.iter().enumerate().max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).map(|(i, _)| i);
+            // total_cmp: this crate ships with NO katgpt-core dep by design
+            // (wasm32-minimal), so float_order is unavailable here; fixtures are
+            // probabilities and NaN-free by construction.
+            let f32_argmax = p_f32.iter().enumerate().max_by(|(_, a), (_, b)| a.total_cmp(b)).map(|(i, _)| i);
+            let i8_argmax = p_i8.iter().enumerate().max_by(|(_, a), (_, b)| a.total_cmp(b)).map(|(i, _)| i);
             if f32_argmax != i8_argmax {
                 argmax_mismatches += 1;
             }

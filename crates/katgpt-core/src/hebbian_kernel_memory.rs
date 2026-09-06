@@ -1316,7 +1316,7 @@ mod tests {
             let argmax = scores
                 .iter()
                 .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .max_by(|(_, a), (_, b)| crate::float_order::cmp_for_max(**a, **b))
                 .map(|(idx, _)| idx)
                 .unwrap();
             if argmax == v_idx {

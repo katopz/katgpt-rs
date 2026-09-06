@@ -1678,16 +1678,12 @@ mod tests {
         //       some event), proving the two signals peak at different places.
         let raw_argmax = (0..TRACE_LEN)
             .max_by(|&a, &b| {
-                raw_norm_trace[a]
-                    .partial_cmp(&raw_norm_trace[b])
-                    .unwrap_or(core::cmp::Ordering::Equal)
+                raw_norm_trace[a].total_cmp(&raw_norm_trace[b])
             })
             .expect("non-empty trace");
         let surprise_argmax = (0..TRACE_LEN)
             .max_by(|&a, &b| {
-                surprise_trace[a]
-                    .partial_cmp(&surprise_trace[b])
-                    .unwrap_or(core::cmp::Ordering::Equal)
+                surprise_trace[a].total_cmp(&surprise_trace[b])
             })
             .expect("non-empty trace");
 

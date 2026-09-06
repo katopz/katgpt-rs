@@ -31,7 +31,7 @@ pub fn detect_catalyst_pattern_with_threshold(
 
     let (best_pattern, best_score) = candidates
         .into_iter()
-        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        .max_by(|a, b| katgpt_core::float_order::cmp_for_max(a.1, b.1))
         .unwrap_or((CatalystPattern::None, 0.0));
 
     if best_score <= 0.0 || best_score < threshold {

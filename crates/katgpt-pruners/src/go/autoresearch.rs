@@ -489,7 +489,7 @@ impl GoPlayer for ResearchPlayer {
             .max_by(|&&a, &&b| {
                 let sa = weighted_greedy_score(state, a.0, a.1, &self.weights);
                 let sb = weighted_greedy_score(state, b.0, b.1, &self.weights);
-                sa.partial_cmp(&sb).unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(sa, sb)
             })
             .expect("legal_moves is non-empty");
 
@@ -772,10 +772,7 @@ pub fn run_autoresearch(config: &AutoResearchConfig, rng: &mut Rng) -> AutoResea
         let arm_idx = active_indices
             .iter()
             .max_by(|&&a, &&b| {
-                arms[a]
-                    .ucb1(total_pulls)
-                    .partial_cmp(&arms[b].ucb1(total_pulls))
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(arms[a].ucb1(total_pulls), arms[b].ucb1(total_pulls))
             })
             .copied()
             .unwrap_or(active_indices[0]);
@@ -833,9 +830,7 @@ pub fn run_autoresearch(config: &AutoResearchConfig, rng: &mut Rng) -> AutoResea
 
     // Find best arm by cumulative mean reward
     let best_arm = arms.iter().filter(|a| a.pulls > 0).max_by(|a, b| {
-        a.mean_reward()
-            .partial_cmp(&b.mean_reward())
-            .unwrap_or(std::cmp::Ordering::Equal)
+        katgpt_core::float_order::cmp_for_max(a.mean_reward(), b.mean_reward())
     });
 
     let (best_config, best_win_rate) = match best_arm {

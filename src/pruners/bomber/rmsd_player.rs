@@ -173,7 +173,7 @@ fn compute_game_delta(
         .iter()
         .enumerate()
         .filter(|(_, s)| **s > f32::NEG_INFINITY)
-        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(Ordering::Equal))
+        .max_by(|a, b| katgpt_core::float_order::cmp_for_max(*a.1, *b.1))
         .map(|(i, _)| i);
 
     match best_idx {
@@ -605,7 +605,7 @@ impl BomberPlayer for RmsdPlayer {
             final_scores
                 .iter()
                 .enumerate()
-                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(Ordering::Equal)).map_or(BomberAction::Wait, |(i, _)| ALL_ACTIONS[i])
+                .max_by(|a, b| katgpt_core::float_order::cmp_for_max(*a.1, *b.1)).map_or(BomberAction::Wait, |(i, _)| ALL_ACTIONS[i])
         };
 
         // Track bomb placement

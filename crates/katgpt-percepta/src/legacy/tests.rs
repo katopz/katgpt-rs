@@ -509,7 +509,7 @@ fn test_hull_dot_products_unimodal() {
         let max_pos = scores
             .iter()
             .enumerate()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .max_by(|a, b| a.1.total_cmp(b.1))
             .unwrap()
             .0;
 

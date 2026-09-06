@@ -73,10 +73,7 @@ fn select_ucb1(stats: &BanditStats) -> usize {
     }
     (0..stats.num_arms())
         .max_by(|&a, &b| {
-            stats
-                .ucb1_score(a)
-                .partial_cmp(&stats.ucb1_score(b))
-                .unwrap_or(std::cmp::Ordering::Equal)
+            katgpt_core::float_order::cmp_for_max(stats.ucb1_score(a), stats.ucb1_score(b))
         })
         .unwrap_or(0)
 }
@@ -153,12 +150,12 @@ fn main() {
         let binary_best = bq
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map_or(0, |(i, _)| i);
         let partial_best = pq
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map_or(0, |(i, _)| i);
         println!("  {ep:>8} | {bq_str:<26} | {pq_str:<26} | {binary_best} / {partial_best}");
     }

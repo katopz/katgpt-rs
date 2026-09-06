@@ -86,8 +86,7 @@ impl Ord for HopTreeNode {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         // BinaryHeap is max-heap → higher score = higher priority
         self.score
-            .partial_cmp(&other.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
+            .total_cmp(&other.score)
             .then_with(|| other.depth.cmp(&self.depth)) // deeper nodes break ties
     }
 }
@@ -206,9 +205,7 @@ pub fn build_hop_dd_tree(marginals: &[HopMarginal], config: &HopTreeConfig) -> V
                 .iter()
                 .filter(|c| c.confidence >= config.confidence_floor)
                 .max_by(|a, b| {
-                    a.confidence
-                        .partial_cmp(&b.confidence)
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                    katgpt_core::float_order::cmp_for_max(a.confidence, b.confidence)
                 });
 
             let Some(candidate) = best else {
@@ -414,9 +411,7 @@ pub fn build_hop_dd_tree_with_schedule(
                 .iter()
                 .filter(|c| c.confidence >= floor)
                 .max_by(|a, b| {
-                    a.confidence
-                        .partial_cmp(&b.confidence)
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                    katgpt_core::float_order::cmp_for_max(a.confidence, b.confidence)
                 });
 
             let Some(candidate) = best else {

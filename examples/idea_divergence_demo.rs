@@ -186,7 +186,7 @@ fn run_with_bandit_pruner(probs: &[f32], seed: u64) -> (Vec<u32>, Vec<f32>) {
             .max_by(|&a, &b| {
                 let sa = pruner.relevance(0, a, &[]);
                 let sb = pruner.relevance(0, b, &[]);
-                sa.partial_cmp(&sb).unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(sa, sb)
             })
             .unwrap_or(0);
         let reward = bernoulli(probs[arm], &mut rng);

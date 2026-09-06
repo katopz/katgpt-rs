@@ -254,12 +254,12 @@ pub fn select_topk_indices_into_buf(
         indexed_buf[i] = (i, s);
     }
 
-    // total_cmp replaces partial_cmp().unwrap_or(Equal): eliminates the
-    // per-element NaN branch (compiled to a predicted branch on x86-64),
-    // giving LLVM a single instruction compare. Cluster scores are
-    // simd_dot products, which never produce NaN for finite weights.
-    indexed_buf.select_nth_unstable_by(k - 1, |a, b| b.1.total_cmp(&a.1));
-    indexed_buf[..k].sort_by(|a, b| b.1.total_cmp(&a.1));
+    // float_order::desc (NaN sorts last in a best-first list — plain
+    // b.total_cmp(&a) in a descending position would promote NaN above +inf);
+    // cluster scores are simd_dot products, which never produce NaN for
+    // finite weights, so ordering is otherwise identical.
+    indexed_buf.select_nth_unstable_by(k - 1, |a, b| katgpt_core::float_order::desc(a.1, b.1));
+    indexed_buf[..k].sort_by(|a, b| katgpt_core::float_order::desc(a.1, b.1));
 
     // Direct index writes replace clear+extend: writes are contiguous and
     // skip Vec::push's length/capacity bookkeeping per element.

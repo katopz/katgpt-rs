@@ -33,6 +33,23 @@ use crate::{
 /// * `scratch_scores` - Caller-allocated scratch `(n, T)` for the score matrix
 ///   (pass `&mut Vec::new()` to have it sized on first call; reuse across calls).
 /// * `scratch_attn` - Caller-allocated scratch `(n, T)` for the softmax matrix.
+/// Descending comparator that can never rank NaN into a top-t selection.
+/// Mirrors `katgpt_core::float_order::desc` (the workspace substrate for this
+/// shape) — duplicated locally ONLY because that crate is an optional dep here.
+#[inline]
+fn desc_nan_last(a: &f32, b: &f32) -> core::cmp::Ordering {
+    let key = |x: &f32| {
+        if x.is_nan() {
+            f32::NEG_INFINITY
+        } else if *x == 0.0 {
+            0.0
+        } else {
+            *x
+        }
+    };
+    key(a).total_cmp(&key(b))
+}
+
 pub fn select_highest_attn_keys(
     keys: &[f32],
     queries: &[f32],
@@ -102,8 +119,12 @@ pub fn select_highest_attn_keys(
 
     // Partial selection: O(T) partition to find the top-t boundary, then
     // O(t log t) sort of just the survivors. For t << T this beats the prior
-    // full O(T log T) argsort. total_cmp replaces partial_cmp().unwrap_or()
-    // (no NaN branch — scores are finite dot products).
+    // full O(T log T) argsort. `desc_nan_last` is the float_order::desc shape
+    // (NaN loses, -0.0 ties +0.0, NaN-free order identical to total_cmp-desc):
+    // a NaN dot product must not be selected as a top-attention key, and plain
+    // `b.total_cmp(&a)` in a descending position would promote NaN above +inf.
+    // Local copy because this crate's katgpt-core dep is optional (maxsim
+    // feature only) and must stay that way.
     //
     // Indirect sort via an index array avoids materializing a `Vec<(usize, f32)>`
     // — the index buffer is 8 bytes/entry vs 16 bytes/entry for the pair form,
@@ -112,10 +133,12 @@ pub fn select_highest_attn_keys(
     let mut indices: Vec<usize> = (0..t_len).collect();
     if t > 0 && t < t_len {
         indices.select_nth_unstable_by(t - 1, |&a, &b| {
-            per_key_score[b].total_cmp(&per_key_score[a])
+            desc_nan_last(&per_key_score[a], &per_key_score[b])
         });
     }
-    indices[..t].sort_by(|&a, &b| per_key_score[b].total_cmp(&per_key_score[a]));
+    indices[..t].sort_by(|&a, &b| {
+        desc_nan_last(&per_key_score[a], &per_key_score[b])
+    });
     indices.truncate(t);
     // No NNLS weights here — caller will fit β separately.
     let weights = vec![1.0f32; t];

@@ -1205,13 +1205,13 @@ fn goat_three_way_matrix() {
         let mse_winner = names[all_mse
             .iter()
             .enumerate()
-            .min_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .min_by(|a, b| katgpt_core::float_order::cmp_for_min(*a.1, *b.1))
             .unwrap()
             .0];
         let _cos_winner = names[all_cos
             .iter()
             .enumerate()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .max_by(|a, b| katgpt_core::float_order::cmp_for_max(*a.1, *b.1))
             .unwrap()
             .0];
         winner_row.push_str(&format!(

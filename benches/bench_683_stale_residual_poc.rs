@@ -395,7 +395,7 @@ fn run() {
             .max_by(|a, b| {
                 let sa = a.accept_rate * a.top1_preserve_given_accept;
                 let sb = b.accept_rate * b.top1_preserve_given_accept;
-                sa.partial_cmp(&sb).unwrap()
+                katgpt_core::float_order::cmp_for_max(sa, sb)
             })
             .expect("cells at 0.05");
         let delay = best.layer;
@@ -566,7 +566,7 @@ fn run() {
             .unwrap_or(f32::NEG_INFINITY);
         }
         let best_delay = (1..n_layer - 1)
-            .max_by(|&a, &b| ho_r2[a].partial_cmp(&ho_r2[b]).unwrap())
+            .max_by(|&a, &b| katgpt_core::float_order::cmp_for_max(ho_r2[a], ho_r2[b]))
             .unwrap_or(1);
         if let Some(pred) = router_preds[best_delay].as_ref().filter(|_| ho_r2[best_delay].is_finite()) {
             println!("  corrected replay @ delay {best_delay} (router predictor):");

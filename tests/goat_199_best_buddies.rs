@@ -271,7 +271,7 @@ fn goat_199_mutual_agreement_filtering() {
     let peak0_pos = filtered[0]
         .iter()
         .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+        .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
         .map(|(i, _)| i)
         .unwrap();
     assert_eq!(

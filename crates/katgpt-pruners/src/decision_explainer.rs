@@ -229,7 +229,7 @@ impl DecisionExplanation {
                 let best_alt_score = alts_at_depth
                     .iter()
                     .map(|a| a.score)
-                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .max_by(|a, b| katgpt_core::float_order::cmp_for_max(*a, *b))
                     .unwrap_or(0.0);
 
                 let delta = attr.score - best_alt_score;
@@ -246,9 +246,7 @@ impl DecisionExplanation {
 
             // Sensitivity insight line
             if let Some(max_attr) = choice.pruner_attributions.iter().max_by(|a, b| {
-                a.sensitivity
-                    .partial_cmp(&b.sensitivity)
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(a.sensitivity, b.sensitivity)
             }) {
                 let second_best = choice
                     .pruner_attributions
@@ -707,9 +705,7 @@ mod tests {
             .pruner_attributions
             .iter()
             .max_by(|a, b| {
-                a.sensitivity
-                    .partial_cmp(&b.sensitivity)
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(a.sensitivity, b.sensitivity)
             })
             .expect("should have at least one attribution");
 

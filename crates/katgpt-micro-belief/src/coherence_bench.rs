@@ -195,7 +195,9 @@ fn run_kernel(
         let (argmax_idx, _argmax_val) = out
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal))
+            // total_cmp (this crate deps katgpt-types only, no float_order);
+            // bench fixtures are NaN-free by construction.
+            .max_by(|(_, a), (_, b)| a.total_cmp(b))
             .unwrap_or((0, &0.0f32));
 
         if let Some(prev) = prev_argmax

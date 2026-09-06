@@ -339,9 +339,11 @@ impl BandConditionerSelector {
         // are O(T/L), e.g. 1024 tokens / L=32 = 32 segments). No heap alloc
         // beyond the result Vec.
         let mut idx: Vec<usize> = (0..n).collect();
-        // Sort descending by score; ties broken by ascending index for stability.
-        // `total_cmp` is branch-free and NaN-deterministic vs `partial_cmp().unwrap_or(Equal)`.
-        idx.sort_unstable_by(|&a, &b| scratch[b].total_cmp(&scratch[a]).then_with(|| a.cmp(&b)));
+        // float_order::desc: NaN must not top the best-first list (total_cmp in a
+        // descending position promotes NaN above +inf).
+        idx.sort_unstable_by(|&a, &b| {
+            katgpt_core::float_order::desc(scratch[a], scratch[b]).then_with(|| a.cmp(&b))
+        });
 
         let take = budget.min(n);
         idx.into_iter()

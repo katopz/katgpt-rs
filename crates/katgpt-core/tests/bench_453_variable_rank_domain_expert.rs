@@ -121,7 +121,7 @@ fn domain_gate(activity: &[f32; 3]) -> usize {
     activity
         .iter()
         .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).map_or(0, |(i, _)| i)
+        .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b)).map_or(0, |(i, _)| i)
 }
 
 // ─── Baseline: uniform CommittedFieldBlend<3, 32> ───────────────────────────
@@ -162,7 +162,7 @@ impl Baseline {
         // Winning archetype = highest gate weight = highest pi (sigmoid monotonic)
         let winner = (0..3)
             .map(|k| (k, pi_override[k]))
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).map_or(0, |(k, _)| k);
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b)).map_or(0, |(k, _)| k);
 
         (out, winner)
     }
@@ -207,7 +207,7 @@ impl MoveCluster {
 
         let winner = (0..12)
             .map(|k| (k, pi_override[k]))
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).map_or(0, |(k, _)| k);
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b)).map_or(0, |(k, _)| k);
 
         (out, winner)
     }
@@ -235,7 +235,7 @@ impl CombatCluster {
 
         let winner = (0..6)
             .map(|k| (k, pi_override[k]))
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).map_or(0, |(k, _)| k);
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b)).map_or(0, |(k, _)| k);
 
         (out, winner)
     }
@@ -264,7 +264,7 @@ impl QuestCluster {
 
         let winner = (0..3)
             .map(|k| (k, pi_override[k]))
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).map_or(0, |(k, _)| k);
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b)).map_or(0, |(k, _)| k);
 
         (out, winner)
     }

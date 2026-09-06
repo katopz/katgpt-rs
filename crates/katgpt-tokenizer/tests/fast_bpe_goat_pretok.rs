@@ -283,7 +283,7 @@ fn build_zipfian_corpus(target_chars: usize, vocab_size: usize) -> String {
     while out.len() < target_chars {
         let u = (next_rand() >> 11) as f64 / (1u64 << 53) as f64;
         // Binary search for the smallest index whose CDF ≥ u.
-        let idx = match cdf.binary_search_by(|p| p.partial_cmp(&u).unwrap_or(std::cmp::Ordering::Equal)) {
+        let idx = match cdf.binary_search_by(|p| p.total_cmp(&u)) {
             Ok(i) => i,
             Err(i) => i.min(vocab_size - 1),
         };

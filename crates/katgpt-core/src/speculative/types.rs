@@ -183,9 +183,7 @@ impl PartialOrd for TreeNode {
 
 impl Ord for TreeNode {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.score
-            .partial_cmp(&other.score)
-            .unwrap_or(Ordering::Equal)
+        self.score.total_cmp(&other.score)
     }
 }
 

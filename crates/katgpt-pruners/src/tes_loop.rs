@@ -111,9 +111,7 @@ pub trait TesLoop: Send + Sync {
                 .enumerate()
                 .filter(|(i, _)| !selected.contains(i) && !excluded.contains(i))
                 .max_by(|(_, a), (_, b)| {
-                    a.propagated_value
-                        .partial_cmp(&b.propagated_value)
-                        .unwrap_or(Ordering::Equal)
+                    katgpt_core::float_order::cmp_for_max(a.propagated_value, b.propagated_value)
                 })
                 .map(|(i, _)| i);
 
@@ -198,7 +196,7 @@ pub trait TesLoop: Send + Sync {
                 .max_by(|(_, a), (_, b)| {
                     let sa = self.rpucg_score(a, total_visits, lambda);
                     let sb = self.rpucg_score(b, total_visits, lambda);
-                    sa.partial_cmp(&sb).unwrap_or(Ordering::Equal)
+                    katgpt_core::float_order::cmp_for_max(sa, sb)
                 })
                 .map(|(i, _)| i);
 

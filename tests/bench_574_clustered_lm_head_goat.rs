@@ -98,7 +98,7 @@ fn probe_vectors(count: usize, seed: u64) -> Vec<Vec<f32>> {
 fn argmax(v: &[f32]) -> usize {
     v.iter()
         .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
         .map_or(0, |(i, _)| i)
 }
 

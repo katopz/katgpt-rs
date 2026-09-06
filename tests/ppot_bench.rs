@@ -41,7 +41,7 @@ fn ppot_profile_components() {
         .map(|m| {
             m.iter()
                 .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                 .map_or(0, |(i, _)| i)
         })
         .collect();
@@ -395,7 +395,7 @@ fn ppot_profile_components() {
             .map(|m| {
                 m.iter()
                     .enumerate()
-                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                    .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                     .map_or(0, |(i, _)| i)
             })
             .collect();
@@ -421,7 +421,7 @@ fn ppot_profile_components() {
             .map(|m| {
                 m.iter()
                     .enumerate()
-                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                    .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                     .map_or(0, |(i, _)| i)
             })
             .collect();
@@ -461,7 +461,7 @@ fn ppot_profile_components() {
             .map(|m| {
                 m.iter()
                     .enumerate()
-                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                    .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                     .map_or(0, |(i, _)| i)
             })
             .collect();
@@ -489,7 +489,7 @@ fn ppot_profile_components() {
             .map(|m| {
                 m.iter()
                     .enumerate()
-                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                    .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                     .map_or(0, |(i, _)| i)
             })
             .collect();

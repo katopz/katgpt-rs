@@ -198,9 +198,7 @@ impl RuleBandit {
             .max_by(|a, b| {
                 let rate_a = a.1.0 as f32 / (a.1.0 + a.1.1) as f32;
                 let rate_b = b.1.0 as f32 / (b.1.0 + b.1.1) as f32;
-                rate_a
-                    .partial_cmp(&rate_b)
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(rate_a, rate_b)
                     .then_with(|| (a.1.0 + a.1.1).cmp(&(b.1.0 + b.1.1)))
             })
             .map(|(name, _)| name.clone())

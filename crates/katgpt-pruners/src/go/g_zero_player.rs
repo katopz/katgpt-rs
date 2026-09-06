@@ -417,10 +417,10 @@ impl GoTemplateProposer {
     pub fn select_template(&mut self) -> GoTemplate {
         let idx = (0..NUM_TEMPLATES)
             .max_by(|&a, &b| {
-                self.stats[a]
-                    .ucb1(self.total_pulls)
-                    .partial_cmp(&self.stats[b].ucb1(self.total_pulls))
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(
+                    self.stats[a].ucb1(self.total_pulls),
+                    self.stats[b].ucb1(self.total_pulls),
+                )
             })
             .unwrap_or(0);
 
@@ -842,9 +842,10 @@ pub fn run_gzero_selfplay(
             let best_move = candidates
                 .iter()
                 .max_by(|&&a, &&b| {
-                    compute_move_score(&state, a.0, a.1)
-                        .partial_cmp(&compute_move_score(&state, b.0, b.1))
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                    katgpt_core::float_order::cmp_for_max(
+                        compute_move_score(&state, a.0, a.1),
+                        compute_move_score(&state, b.0, b.1),
+                    )
                 })
                 .copied()
                 .unwrap_or(legal_moves[0]);
@@ -1081,9 +1082,10 @@ mod tests {
         let best = legal_moves
             .iter()
             .max_by(|&&a, &&b| {
-                compute_move_score(&state, a.0, a.1)
-                    .partial_cmp(&compute_move_score(&state, b.0, b.1))
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(
+                    compute_move_score(&state, a.0, a.1),
+                    compute_move_score(&state, b.0, b.1),
+                )
             })
             .copied()
             .unwrap();

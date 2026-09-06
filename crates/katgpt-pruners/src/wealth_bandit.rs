@@ -172,9 +172,7 @@ impl<P: ScreeningPruner> WealthBanditPruner<P> {
             .iter()
             .enumerate()
             .max_by(|(_, a), (_, b)| {
-                a.q_value
-                    .partial_cmp(&b.q_value)
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max_f64(a.q_value, b.q_value)
             })
             .map_or(0, |(i, _)| i)
     }
@@ -185,9 +183,7 @@ impl<P: ScreeningPruner> WealthBanditPruner<P> {
             .iter()
             .enumerate()
             .max_by(|(_, a), (_, b)| {
-                a.wealth
-                    .partial_cmp(&b.wealth)
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max_f64(a.wealth, b.wealth)
             })
             .map_or(0, |(i, _)| i)
     }

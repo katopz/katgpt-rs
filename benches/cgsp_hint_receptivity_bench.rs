@@ -264,7 +264,7 @@ impl katgpt_core::cgsp::traits::CuriosityConjecturer for PoolConjecturer {
             let r = (self.next_rand() as f32 / u64::MAX as f32) * total;
             // Binary search for the arm.
             let arm = match cdf_scratch[1..].binary_search_by(|probe| {
-                probe.partial_cmp(&r).unwrap_or(std::cmp::Ordering::Equal)
+                probe.total_cmp(&r)
             }) {
                 Ok(i) | Err(i) => i.min(n - 1),
             };

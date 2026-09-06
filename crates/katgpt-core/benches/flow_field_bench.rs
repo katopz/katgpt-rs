@@ -125,7 +125,7 @@ fn bench_individual_leo(c: &mut Criterion) {
                     .iter()
                     .copied()
                     .enumerate()
-                    .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+                    .max_by(|a, b| katgpt_core::float_order::cmp_for_max(a.1, b.1))
                     .map_or(0, |(i, _)| i);
                 results.push(best_action);
             }

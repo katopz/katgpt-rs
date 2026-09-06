@@ -935,7 +935,7 @@ fn main() {
         let best = all_results
             .iter()
             .filter(|r| r.encoder == ek && r.sigma > 0.0)
-            .max_by(|a, b| a.mahalanobis_acc.partial_cmp(&b.mahalanobis_acc).unwrap());
+            .max_by(|a, b| katgpt_core::float_order::cmp_for_max(a.mahalanobis_acc, b.mahalanobis_acc));
 
         if let Some(r) = best {
             let improvement = (r.mahalanobis_acc - r.euclidean_acc) * 100.0;

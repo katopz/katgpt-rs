@@ -166,7 +166,7 @@ fn bench_ppot_resample(
         .map(|m| {
             m.iter()
                 .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                 .map_or(0, |(i, _)| i)
         })
         .collect();
@@ -320,7 +320,7 @@ fn bench_ppot_rescue(
         .map(|m| {
             m.iter()
                 .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                 .map_or(0, |(i, _)| i)
         })
         .collect();

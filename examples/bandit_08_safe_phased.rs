@@ -53,7 +53,7 @@ fn main() {
     let optimal = probs
         .iter()
         .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+        .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
         .unwrap();
     println!("   Optimal:  Arm {} (mean={:.1})", optimal.0, optimal.1);
     println!(

@@ -294,10 +294,7 @@ fn select_ucb1_arm(stats: &BanditStats, num_arms: usize) -> usize {
     // UCB1 selection
     (0..num_arms)
         .max_by(|&a, &b| {
-            stats
-                .ucb1_score(a)
-                .partial_cmp(&stats.ucb1_score(b))
-                .unwrap_or(std::cmp::Ordering::Equal)
+            katgpt_core::float_order::cmp_for_max(stats.ucb1_score(a), stats.ucb1_score(b))
         })
         .unwrap_or(0)
 }
@@ -314,7 +311,7 @@ fn select_thompson_arm(stats: &BanditStats, num_arms: usize, rng: &mut Rng) -> u
     // Thompson sampling
     (0..num_arms)
         .map(|i| (i, stats.thompson_sample(i, rng)))
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b))
         .map_or(0, |(i, _)| i)
 }
 

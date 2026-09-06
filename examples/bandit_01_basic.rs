@@ -104,7 +104,7 @@ fn print_env(probs: &[f32]) {
         probs
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .unwrap()
             .0,
         probs.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
@@ -339,10 +339,10 @@ fn print_constrained_section() {
     for _ in 0..500 {
         let best_arm = (0..probs.len())
             .max_by(|&a, &b| {
-                pruner
-                    .relevance(0, a, &[])
-                    .partial_cmp(&pruner.relevance(0, b, &[]))
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(
+                    pruner.relevance(0, a, &[]),
+                    pruner.relevance(0, b, &[]),
+                )
             })
             .unwrap_or(0);
 

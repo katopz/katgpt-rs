@@ -157,7 +157,7 @@ impl DecEigendecomposition {
             if let Some(min_idx) = eigenvalues
                 .iter()
                 .enumerate()
-                .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .min_by(|(_, a), (_, b)| a.total_cmp(b))
                 .map(|(i, _)| i)
                 && eigenvalues[min_idx] < NULL_SPACE_THRESHOLD
             {

@@ -268,7 +268,7 @@ fn proof_g1_valid_tokens_generated() {
     let max_idx = logits
         .iter()
         .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+        .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
         .map(|(i, _)| i)
         .unwrap();
 

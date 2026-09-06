@@ -294,7 +294,7 @@ fn g2_audit_overhead_ratio_measured() {
         ratios.push(audit / forwards);
     }
 
-    ratios.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    ratios.sort_by(|a, b| katgpt_core::float_order::asc(*a, *b));
     let median = ratios[REPS / 2];
     println!(
         "g2 cond_audit: median audit/forward ratio = {median:.3} (overhead fraction {:.3}) over {REPS} interleaved reps x {INNER} calls",

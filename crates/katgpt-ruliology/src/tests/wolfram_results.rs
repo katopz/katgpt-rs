@@ -388,7 +388,7 @@ fn test_cross_paradigm_fsm_vs_ca_matching_pennies() {
     // The best FSM should have positive average payoff.
     let best_fsm = fsm_avg_payoffs
         .iter()
-        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        .max_by(|a, b| katgpt_core::float_order::cmp_for_max_f64(a.1, b.1))
         .expect("at least one FSM");
 
     // Sanity: at least some FSMs beat random CAs on average.

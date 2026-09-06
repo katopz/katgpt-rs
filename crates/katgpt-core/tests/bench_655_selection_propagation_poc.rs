@@ -612,7 +612,7 @@ fn g1_propagation_beats_bfs_decay_on_multihop() {
                 *m += a;
             }
             cells_h2 += 1;
-            match acc[4].partial_cmp(&acc[2]).unwrap_or(core::cmp::Ordering::Equal) {
+            match acc[4].total_cmp(&acc[2]) {
                 core::cmp::Ordering::Greater => bfs_wins += 1,
                 core::cmp::Ordering::Equal => ties += 1,
                 core::cmp::Ordering::Less => losses += 1,

@@ -66,9 +66,7 @@ impl ScoreResult {
     /// Returns the gap vs the reference with the highest weighted score.
     pub fn scalar_delta(&self) -> f32 {
         let best_ref = self.references.iter().max_by(|a, b| {
-            a.weighted_score()
-                .partial_cmp(&b.weighted_score())
-                .unwrap_or(std::cmp::Ordering::Equal)
+            katgpt_core::float_order::cmp_for_max(a.weighted_score(), b.weighted_score())
         });
 
         match best_ref {

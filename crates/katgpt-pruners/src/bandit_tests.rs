@@ -361,10 +361,10 @@ fn test_constrained_bandit_never_pulls_blocked_arm() {
     for _ in 0..500 {
         let arm = (0..5)
             .max_by(|&a, &b| {
-                pruner
-                    .relevance(0, a, &[])
-                    .partial_cmp(&pruner.relevance(0, b, &[]))
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(
+                    pruner.relevance(0, a, &[]),
+                    pruner.relevance(0, b, &[]),
+                )
             })
             .unwrap_or(0);
 

@@ -198,7 +198,7 @@ fn select_greedy_move(state: &GoState, legal_moves: &[(usize, usize)]) -> GoActi
             let score = caps as f32 * 10.0 + center_score + liberty_count as f32 * 0.5;
             (r, c, score)
         })
-        .max_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
+        .max_by(|a, b| katgpt_core::float_order::cmp_for_max(a.2, b.2));
 
     match best {
         Some((r, c, _)) => GoAction::Place(r, c),

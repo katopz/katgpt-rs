@@ -289,10 +289,7 @@ fn select_ucb1(stats: &katgpt_rs::pruners::BanditStats, num_arms: usize) -> usiz
     }
     (0..num_arms)
         .max_by(|&a, &b| {
-            stats
-                .ucb1_score(a)
-                .partial_cmp(&stats.ucb1_score(b))
-                .unwrap_or(std::cmp::Ordering::Equal)
+            katgpt_core::float_order::cmp_for_max(stats.ucb1_score(a), stats.ucb1_score(b))
         })
         .unwrap_or(0)
 }

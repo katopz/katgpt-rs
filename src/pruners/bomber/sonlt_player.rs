@@ -287,7 +287,7 @@ impl SonltPlayer {
         let best_idx = action_logits
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).map_or(0, |(i, _)| i);
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b)).map_or(0, |(i, _)| i);
 
         // Map GameAction (0-5) → BomberAction. Detonate (6) not in model vocab.
         Some(game_action_to_bomber(best_idx))

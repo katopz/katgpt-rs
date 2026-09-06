@@ -338,7 +338,7 @@ impl HLFFTPlayer {
             .max_by(|a, b| {
                 let qa = self.q_values[a.as_usize()];
                 let qb = self.q_values[b.as_usize()];
-                qa.partial_cmp(&qb).unwrap_or(Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(qa, qb)
             })
             .copied()
             .unwrap_or(ActionType::Wait)

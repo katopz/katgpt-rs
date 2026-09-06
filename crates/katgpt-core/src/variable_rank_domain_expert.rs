@@ -97,7 +97,7 @@ pub fn pick_domain<const N: usize, const A: usize>(
         .map(|d| (d, scores[d]))
         .max_by(|(d1, s1), (d2, s2)| {
             // Strict > so ties pick the lower index (first one wins on equal).
-            s1.partial_cmp(s2).unwrap_or(std::cmp::Ordering::Equal)
+            crate::float_order::cmp_for_max(*s1, *s2)
                 .then(d2.cmp(d1)) // lower d wins on tie → reverse the d comparison
         })
         .unwrap_or((0, scores[0]));

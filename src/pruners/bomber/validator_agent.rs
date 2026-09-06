@@ -1081,9 +1081,7 @@ impl AgentLoop {
 
             // 3. Sort by avg_score descending
             scored.sort_by(|a, b| {
-                b.1.avg_score
-                    .partial_cmp(&a.1.avg_score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::desc(a.1.avg_score, b.1.avg_score)
             });
 
             // 4. Update best

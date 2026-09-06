@@ -1044,8 +1044,7 @@ impl<P> Ord for AstarNode<P> {
         // the smallest f (then smallest depth) bubbles to the top.
         other
             .f
-            .partial_cmp(&self.f)
-            .unwrap_or(Ordering::Equal)
+            .total_cmp(&self.f)
             .then_with(|| other.depth.cmp(&self.depth))
     }
 }

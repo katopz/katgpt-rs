@@ -114,7 +114,7 @@ pub fn validate_bindings(
         }
     }
 
-    residuals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    residuals.sort_by(|a, b| crate::float_order::asc(*a, *b));
     rep.residual_p50 = match residuals.is_empty() {
         true => 0.0,
         false => residuals[(residuals.len() - 1) / 2],

@@ -35,10 +35,10 @@ pub fn vocab_coreset(marginals: &[&[f32]], p: f32, coreset: &mut [bool]) -> usiz
         }
     }
 
-    // Sort by score descending. `total_cmp` is branch-free and NaN-deterministic
-    // vs `partial_cmp().unwrap_or(Equal)`.
+    // Sort by score descending. float_order::desc: a NaN score sorts last,
+    // never first (total_cmp in a descending position promotes NaN above +inf).
     let mut indices: Vec<usize> = (0..vocab_size).collect();
-    indices.sort_by(|&a, &b| max_scores[b].total_cmp(&max_scores[a]));
+    indices.sort_by(|&a, &b| katgpt_core::float_order::desc(max_scores[a], max_scores[b]));
 
     let total: f32 = max_scores.iter().map(|s| s.max(0.0)).sum();
     if total <= 0.0 {

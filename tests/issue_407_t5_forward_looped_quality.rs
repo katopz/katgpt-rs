@@ -251,9 +251,7 @@ fn forward_looped_depth_quality_ksweep() {
 
     // G6-DISC: does any K>1 inter-prompt distance ≥ K=1?
     let disc_best = results.iter().skip(1).max_by(|a, b| {
-        a.disc
-            .partial_cmp(&b.disc)
-            .unwrap_or(std::cmp::Ordering::Equal)
+        katgpt_core::float_order::cmp_for_max(a.disc, b.disc)
     });
     let disc_pass = disc_best.is_some_and(|r| r.disc >= baseline.disc);
     println!("  G6-DISC (logit discrimination):");

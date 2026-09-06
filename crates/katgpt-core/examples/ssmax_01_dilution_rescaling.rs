@@ -94,7 +94,7 @@ fn argmax_index(logits: &[f32]) -> usize {
     logits
         .iter()
         .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).map_or(0, |(i, _)| i)
+        .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b)).map_or(0, |(i, _)| i)
 }
 
 // ─────────────────────────────────────────────────────────────────────────

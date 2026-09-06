@@ -890,7 +890,7 @@ pub fn als_fit(
         Some(&mut per_state),
     );
     let mut sorted = per_state.clone();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    sorted.sort_by(|a, b| crate::float_order::asc(*a, *b));
     let mut mean = vec![0.0f32; dim];
     for s in 0..n {
         for (i, mv) in mean.iter_mut().enumerate() {

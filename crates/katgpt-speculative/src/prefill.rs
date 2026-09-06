@@ -134,9 +134,9 @@ pub fn compress_prompt(
         .map(|i| (i, importance_scores[i]))
         .collect();
 
-    // Sort by score descending, take top middle_budget.
-    // `total_cmp` is branch-free and NaN-deterministic vs `partial_cmp().unwrap_or(Equal)`.
-    middle_indices.sort_by(|a, b| b.1.total_cmp(&a.1));
+    // Sort by score descending, take top middle_budget. float_order::desc:
+    // a NaN importance score sorts last, never first.
+    middle_indices.sort_by(|a, b| katgpt_core::float_order::desc(a.1, b.1));
     middle_indices.truncate(middle_budget);
 
     // Re-sort surviving indices by original position (in-place — avoids a second Vec alloc).

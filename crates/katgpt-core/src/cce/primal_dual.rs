@@ -401,10 +401,11 @@ fn project_onto_simplex(v: &[f32]) -> Vec<f32> {
     if d == 0 {
         return Vec::new();
     }
-    // Sort descending.
-    // `total_cmp` is branch-free and NaN-deterministic vs `partial_cmp().unwrap_or(Equal)`.
+    // Sort descending — float_order::desc so a NaN sorts LAST (plain
+    // b.total_cmp(a) would promote NaN above +inf, corrupting the simplex
+    // projection for a corrupt input).
     let mut sorted: Vec<f32> = v.to_vec();
-    sorted.sort_by(|a, b| b.total_cmp(a));
+    sorted.sort_by(|a, b| crate::float_order::desc(*a, *b));
 
     // Find θ = the last (Σ_{j≤k} v_j - 1) / k for which v_(k) > θ_k.
     let mut cumsum = 0.0_f32;

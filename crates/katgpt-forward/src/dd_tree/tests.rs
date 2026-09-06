@@ -1202,7 +1202,7 @@ fn test_sde_noise_preserve_top1() {
         noisy[0]
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map(|(i, _)| i),
         Some(2),
         "preserve_top1 should keep argmax unchanged"

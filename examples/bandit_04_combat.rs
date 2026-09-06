@@ -327,10 +327,10 @@ fn select_arm(
     match strategy {
         BanditStrategy::Ucb1 => (0..combat_arms)
             .max_by(|&a, &b| {
-                stats
-                    .ucb1_score(a)
-                    .partial_cmp(&stats.ucb1_score(b))
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(
+                        stats.ucb1_score(a),
+                        stats.ucb1_score(b),
+                    )
             })
             .unwrap_or(0),
         BanditStrategy::EpsilonGreedy { .. } => {
@@ -343,7 +343,7 @@ fn select_arm(
         }
         BanditStrategy::ThompsonSampling => (0..combat_arms)
             .map(|i| (i, stats.thompson_sample(i, rng)))
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b))
             .map_or(0, |(i, _)| i),
         BanditStrategy::VarianceEpsilon { epsilon: eps, .. } => {
             if rng.uniform() < *eps {
@@ -364,27 +364,27 @@ fn select_arm(
         #[cfg(feature = "tes_loop")]
         BanditStrategy::Rpucg { .. } => (0..combat_arms)
             .max_by(|&a, &b| {
-                stats
-                    .ucb1_score(a)
-                    .partial_cmp(&stats.ucb1_score(b))
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(
+                        stats.ucb1_score(a),
+                        stats.ucb1_score(b),
+                    )
             })
             .unwrap_or(0),
         BanditStrategy::CurvatureInfluence { .. } => (0..combat_arms)
             .max_by(|&a, &b| {
-                stats
-                    .ucb1_score(a)
-                    .partial_cmp(&stats.ucb1_score(b))
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(
+                        stats.ucb1_score(a),
+                        stats.ucb1_score(b),
+                    )
             })
             .unwrap_or(0),
         #[cfg(feature = "safe_bandit")]
         BanditStrategy::SafePhased { .. } => (0..combat_arms)
             .max_by(|&a, &b| {
-                stats
-                    .ucb1_score(a)
-                    .partial_cmp(&stats.ucb1_score(b))
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(
+                        stats.ucb1_score(a),
+                        stats.ucb1_score(b),
+                    )
             })
             .unwrap_or(0),
     }

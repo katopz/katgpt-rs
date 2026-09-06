@@ -197,10 +197,10 @@ impl Director {
         match &self.strategy {
             BanditStrategy::Ucb1 => (0..Encounter::ALL.len())
                 .max_by(|&a, &b| {
-                    self.stats
-                        .ucb1_score(a)
-                        .partial_cmp(&self.stats.ucb1_score(b))
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                    katgpt_core::float_order::cmp_for_max(
+                        self.stats.ucb1_score(a),
+                        self.stats.ucb1_score(b),
+                    )
                 })
                 .unwrap_or(0),
             BanditStrategy::EpsilonGreedy { epsilon, .. } => {
@@ -212,7 +212,7 @@ impl Director {
             }
             BanditStrategy::ThompsonSampling => (0..Encounter::ALL.len())
                 .map(|i| (i, self.stats.thompson_sample(i, rng)))
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b))
                 .map_or(0, |(i, _)| i),
             BanditStrategy::VarianceEpsilon { epsilon, .. } => {
                 if rng.uniform() < *epsilon {
@@ -233,18 +233,18 @@ impl Director {
             #[cfg(feature = "tes_loop")]
             BanditStrategy::Rpucg { .. } => (0..Encounter::ALL.len())
                 .max_by(|&a, &b| {
-                    self.stats
-                        .ucb1_score(a)
-                        .partial_cmp(&self.stats.ucb1_score(b))
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                    katgpt_core::float_order::cmp_for_max(
+                        self.stats.ucb1_score(a),
+                        self.stats.ucb1_score(b),
+                    )
                 })
                 .unwrap_or(0),
             BanditStrategy::CurvatureInfluence { .. } => (0..Encounter::ALL.len())
                 .max_by(|&a, &b| {
-                    self.stats
-                        .ucb1_score(a)
-                        .partial_cmp(&self.stats.ucb1_score(b))
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                    katgpt_core::float_order::cmp_for_max(
+                        self.stats.ucb1_score(a),
+                        self.stats.ucb1_score(b),
+                    )
                 })
                 .unwrap_or(0),
             #[cfg(feature = "safe_bandit")]

@@ -123,10 +123,10 @@ impl FFTTemplateProposer {
     pub fn select(&mut self) -> (FFTTemplate, usize) {
         let best_id = (0..10)
             .max_by(|a, b| {
-                self.stats[*a]
-                    .ucb1_score(self.total_pulls)
-                    .partial_cmp(&self.stats[*b].ucb1_score(self.total_pulls))
-                    .unwrap_or(Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(
+                    self.stats[*a].ucb1_score(self.total_pulls),
+                    self.stats[*b].ucb1_score(self.total_pulls),
+                )
             })
             .unwrap_or(0);
 
@@ -159,10 +159,10 @@ impl FFTTemplateProposer {
         }
         (0..10)
             .max_by(|a, b| {
-                self.stats[*a]
-                    .mean_delta()
-                    .partial_cmp(&self.stats[*b].mean_delta())
-                    .unwrap_or(Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(
+                    self.stats[*a].mean_delta(),
+                    self.stats[*b].mean_delta(),
+                )
             })
             .map_or(FFTTemplate::HealFirst, |i| FFTTemplate::all()[i])
     }

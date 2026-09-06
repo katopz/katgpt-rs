@@ -245,9 +245,7 @@ impl<P: ScreeningPruner> RubricBanditPruner<P> {
         references: &[RubricVector],
     ) {
         let best_ref = references.iter().max_by(|a, b| {
-            a.weighted_score()
-                .partial_cmp(&b.weighted_score())
-                .unwrap_or(Ordering::Equal)
+            katgpt_core::float_order::cmp_for_max(a.weighted_score(), b.weighted_score())
         });
 
         if let Some(reference) = best_ref {

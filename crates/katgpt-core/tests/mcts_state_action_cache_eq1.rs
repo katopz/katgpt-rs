@@ -161,9 +161,7 @@ fn eq1_switching_picks_different_actions_in_different_regions() {
     for z in 0..N_STATES {
         let best_action = (0..N_ACTIONS)
             .min_by(|&a, &b| {
-                kernel_error(a, z)
-                    .partial_cmp(&kernel_error(b, z))
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                crate::float_order::cmp_for_min(kernel_error(a, z), kernel_error(b, z))
             })
             .unwrap();
         match best_action {

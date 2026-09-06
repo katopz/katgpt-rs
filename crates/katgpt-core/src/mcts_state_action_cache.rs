@@ -633,8 +633,8 @@ where
                     scratch.nodes[b].visits,
                     ln_parent,
                 );
-                // `total_cmp` is branch-free and NaN-deterministic vs `partial_cmp().unwrap_or(Equal)`.
-                sa.total_cmp(&sb)
+                // float_order::cmp_for_max (NaN can never win the selection).
+                crate::float_order::cmp_for_max(sa, sb)
             });
             match best_child {
                 Some(child_idx) => {

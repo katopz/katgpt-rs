@@ -74,7 +74,7 @@ fn expected_argmax_path(marginals: &[Vec<f32>]) -> Vec<usize> {
         .map(|m| {
             m.iter()
                 .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                 .map_or(0, |(idx, _)| idx)
         })
         .collect()
@@ -334,7 +334,7 @@ fn test_goat_5_cache_hit_rate() {
             let top = mref
                 .iter()
                 .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                 .map_or(0, |(idx, _)| idx);
             buf.extend_from_slice(&(top as u64).to_le_bytes());
         }

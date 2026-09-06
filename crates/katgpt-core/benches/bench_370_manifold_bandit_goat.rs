@@ -229,9 +229,7 @@ impl ClusteredDomain {
     fn optimal_arm(&self) -> usize {
         (0..self.arm_means.len())
             .max_by(|&a, &b| {
-                self.arm_means[a]
-                    .partial_cmp(&self.arm_means[b])
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(self.arm_means[a], self.arm_means[b])
             })
             .unwrap()
     }

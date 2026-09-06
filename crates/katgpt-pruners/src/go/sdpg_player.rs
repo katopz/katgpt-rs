@@ -291,7 +291,7 @@ impl GoPlayer for GoSdpgPlayer {
         } else {
             *scored
                 .iter()
-                .max_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(Ordering::Equal))
+                .max_by(|a, b| katgpt_core::float_order::cmp_for_max(a.2, b.2))
                 .expect("scored is non-empty")
         };
 

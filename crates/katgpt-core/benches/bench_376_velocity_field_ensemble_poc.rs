@@ -497,9 +497,7 @@ fn run_regime(regime_name: &'static str, related: bool) -> RegimeResult {
     }
     let best_source_idx = (0..N_SOURCES)
         .min_by(|&a, &b| {
-            per_source_train_mse[a]
-                .partial_cmp(&per_source_train_mse[b])
-                .unwrap_or(std::cmp::Ordering::Equal)
+            katgpt_core::float_order::cmp_for_min_f64(per_source_train_mse[a], per_source_train_mse[b])
         })
         .unwrap();
     let best_src = sources[best_source_idx];

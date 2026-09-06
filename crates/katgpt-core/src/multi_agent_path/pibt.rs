@@ -168,19 +168,13 @@ impl<P: Position + Clone> Candidate<P> {
             .cmp(&other.guidance_mismatch)
             .then_with(|| self.flow_mismatch.cmp(&other.flow_mismatch))
             .then_with(|| {
-                self.goal_dist
-                    .partial_cmp(&other.goal_dist)
-                    .unwrap_or(Ordering::Equal)
+                self.goal_dist.total_cmp(&other.goal_dist)
             })
             .then_with(|| {
-                self.hindrance
-                    .partial_cmp(&other.hindrance)
-                    .unwrap_or(Ordering::Equal)
+                self.hindrance.total_cmp(&other.hindrance)
             })
             .then_with(|| {
-                self.epsilon
-                    .partial_cmp(&other.epsilon)
-                    .unwrap_or(Ordering::Equal)
+                self.epsilon.total_cmp(&other.epsilon)
             })
     }
 }

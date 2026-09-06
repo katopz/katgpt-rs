@@ -562,8 +562,9 @@ pub fn mbr_select(
     let top_k_indices: Vec<usize> = {
         let mut indexed: Vec<(usize, f32)> =
             scores.iter().enumerate().map(|(i, &s)| (i, s)).collect();
-        // `total_cmp` is branch-free and NaN-deterministic vs `partial_cmp().unwrap_or(Equal)`.
-        indexed.select_nth_unstable_by(k - 1, |a, b| b.1.total_cmp(&a.1));
+        // float_order::desc replaces total_cmp-in-desc-position (NaN must not top
+        // the best-first list — IEEE totalOrder ranks NaN above +inf).
+        indexed.select_nth_unstable_by(k - 1, |a, b| crate::float_order::desc(a.1, b.1));
         indexed[..k].iter().map(|&(i, _)| i).collect()
     };
 

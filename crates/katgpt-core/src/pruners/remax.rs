@@ -97,10 +97,10 @@ pub fn expected_max_over_m(pi: &[f32], q: &[f32], m: f32) -> f32 {
         return q[0];
     }
 
-    // Sort (q, pi) pairs by q descending.
-    // `total_cmp` is branch-free and NaN-deterministic vs `partial_cmp().unwrap_or(Equal)`.
+    // Sort (q, pi) pairs by q descending. float_order::desc: a NaN q sorts last
+    // (total_cmp in a descending position would promote NaN to rank 0).
     let mut idx: Vec<usize> = (0..k).collect();
-    idx.sort_unstable_by(|&a, &b| q[b].total_cmp(&q[a]));
+    idx.sort_unstable_by(|&a, &b| crate::float_order::desc(q[a], q[b]));
 
     // q_sorted[0] is the maximum. Accumulate the telescoping sum.
     let mut result = q[idx[0]];
@@ -828,13 +828,13 @@ mod tests {
 
             // Find argmax q (the greedy arm).
             let greedy_arm = (0..k)
-                .max_by(|&a, &b| q[a].partial_cmp(&q[b]).unwrap_or(Ordering::Equal))
+                .max_by(|&a, &b| crate::float_order::cmp_for_max(q[a], q[b]))
                 .unwrap();
 
             for &m in ms {
                 let q_plus = expected_improvement_per_action(&pi, &q, m);
                 let remax_arm = (0..k)
-                    .max_by(|&a, &b| q_plus[a].partial_cmp(&q_plus[b]).unwrap_or(Ordering::Equal))
+                    .max_by(|&a, &b| crate::float_order::cmp_for_max(q_plus[a], q_plus[b]))
                     .unwrap();
 
                 // The theorem allows ties (when q values are equal). Check

@@ -702,7 +702,9 @@ mod tests {
                     q_values[i] + bonus
                 })
                 .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .max_by(|(_, a), (_, b)| {
+                    katgpt_core::float_order::cmp_for_max(*a, *b)
+                })
                 .map_or(0, |(i, _)| i);
             assert!(best_arm < NUM_ARMS);
             // SafePhased selection (same UCB1 + mixture)

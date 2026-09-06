@@ -98,7 +98,7 @@ mod tests {
         let best_rel_idx = relevances
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map(|(i, _)| i)
             .unwrap();
 
@@ -107,7 +107,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, c)| (i, l2.residual(c, &base)))
-            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .min_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_min(*a, *b))
             .map(|(i, _)| i)
             .unwrap();
 
@@ -144,7 +144,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, c)| (i, pure_rel.score(c, &base, relevances[i])))
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b))
             .map(|(i, _)| i)
             .unwrap();
 
@@ -152,7 +152,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, c)| (i, pure_res.score(c, &base, relevances[i])))
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b))
             .map(|(i, _)| i)
             .unwrap();
 
@@ -160,7 +160,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, c)| (i, balanced.score(c, &base, relevances[i])))
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b))
             .map(|(i, _)| i)
             .unwrap();
 
@@ -397,7 +397,7 @@ mod tests {
                 .iter()
                 .enumerate()
                 .map(|(i, c)| (i, scorer.score(c, &base, relevances[i])))
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b))
                 .map(|(i, _)| i)
                 .unwrap();
             best_indices.push(best);

@@ -184,7 +184,7 @@ fn run_experiment(partial: bool, scorer: &BomberPartialScorer, seed: u64) -> Exp
                 let best_q_arm = q_values
                     .iter()
                     .enumerate()
-                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                     .map_or(0, |(i, _)| i);
 
                 if arm0_frac > 0.50 && best_q_arm == 0 {
@@ -250,13 +250,13 @@ fn test_partial_scoring_goat_convergence() {
             .q_values
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map_or(0, |(i, _)| i);
         let partial_best = partial
             .q_values
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map_or(0, |(i, _)| i);
 
         if binary_best == 0 {

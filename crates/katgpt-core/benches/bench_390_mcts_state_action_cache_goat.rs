@@ -198,7 +198,7 @@ fn measure_terminal_reward(space: &DllmSpace, state: &DllmState) -> f32 {
             .max_by(|&a, &b| {
                 let qa = action_quality(a.config_id as u8, current.depth);
                 let qb = action_quality(b.config_id as u8, current.depth);
-                qa.partial_cmp(&qb).unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(qa, qb)
             })
             .unwrap();
         current = space.apply(&current, best);

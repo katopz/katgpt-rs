@@ -638,7 +638,7 @@ impl<F: PointForecaster> ConformalIntervalCalibrator<F> {
 // under `edition = "2024"`. (Not part of the public API.)
 #[allow(dead_code)]
 fn _ordering_shim(a: f32, b: f32) -> Ordering {
-    a.partial_cmp(&b).unwrap_or(Ordering::Equal)
+    a.total_cmp(&b)
 }
 
 // ---------------------------------------------------------------------------

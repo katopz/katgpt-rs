@@ -136,10 +136,10 @@ impl BomberTemplateProposer {
     pub fn select(&mut self) -> (BomberTemplate, usize) {
         let best_id = (0..8)
             .max_by(|a, b| {
-                self.stats[*a]
-                    .ucb1_score(self.total_pulls)
-                    .partial_cmp(&self.stats[*b].ucb1_score(self.total_pulls))
-                    .unwrap_or(Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(
+                    self.stats[*a].ucb1_score(self.total_pulls),
+                    self.stats[*b].ucb1_score(self.total_pulls),
+                )
             })
             .unwrap_or(0);
 
@@ -191,7 +191,7 @@ impl BomberTemplateProposer {
                 } else {
                     self.stats[*b].mean_delta()
                 };
-                a_reward.partial_cmp(&b_reward).unwrap_or(Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(a_reward, b_reward)
             })
             .map_or(BomberTemplate::FleeBlast, |i| BomberTemplate::all()[i])
     }

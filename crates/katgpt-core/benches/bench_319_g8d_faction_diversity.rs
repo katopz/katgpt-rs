@@ -383,7 +383,7 @@ fn main() {
             let dominant = mean
                 .iter()
                 .enumerate()
-                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                 .map_or(0, |(r, _)| r);
             println!(
                 "    Faction {}: {} members, coverage={}/{}, variance={:.4}, dominant={}",

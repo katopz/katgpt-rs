@@ -150,9 +150,7 @@ fn bench_chunk_summary_vs_mean_k() {
         // Score with mean summaries
         let mean_result = score_blocks_entmax(query, &mean_summaries, &config);
         let mean_top = mean_result.active_indices.iter().copied().max_by(|&a, &b| {
-            mean_result.probs[a]
-                .partial_cmp(&mean_result.probs[b])
-                .unwrap_or(std::cmp::Ordering::Equal)
+            katgpt_core::float_order::cmp_for_max(mean_result.probs[a], mean_result.probs[b])
         });
 
         // Score with learned summaries
@@ -162,9 +160,7 @@ fn bench_chunk_summary_vs_mean_k() {
             .iter()
             .copied()
             .max_by(|&a, &b| {
-                learned_result.probs[a]
-                    .partial_cmp(&learned_result.probs[b])
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(learned_result.probs[a], learned_result.probs[b])
             });
 
         match (mean_top, learned_top) {
@@ -451,9 +447,7 @@ fn goat_proof_adaptive_support() {
                 .iter()
                 .copied()
                 .max_by(|&a, &b| {
-                    result.probs[a]
-                        .partial_cmp(&result.probs[b])
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                    katgpt_core::float_order::cmp_for_max(result.probs[a], result.probs[b])
                 })
                 .unwrap_or(0);
             println!(
@@ -477,9 +471,7 @@ fn goat_proof_adaptive_support() {
                 .iter()
                 .copied()
                 .max_by(|&a, &b| {
-                    result.probs[a]
-                        .partial_cmp(&result.probs[b])
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                    katgpt_core::float_order::cmp_for_max(result.probs[a], result.probs[b])
                 })
                 .unwrap_or(0);
             println!(

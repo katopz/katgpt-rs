@@ -661,7 +661,7 @@ fn run_t53b() -> (T53bStrategyResult, T53bStrategyResult) {
                     .iter()
                     .enumerate()
                     .max_by(|(_, a), (_, b)| {
-                        a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal)
+                        katgpt_core::float_order::cmp_for_max(**a, **b)
                     }).map_or(0, |(k, _)| k);
                 let correct = matching_gate > 0.6 && argmax_k == mode_idx;
                 if correct {

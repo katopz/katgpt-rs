@@ -215,7 +215,7 @@ fn section_3_freeze_thaw_scenario() {
         .max_by(|(_, a), (_, b)| {
             let ra = a.0 as f32 / (a.0 + a.1) as f32;
             let rb = b.0 as f32 / (b.0 + b.1) as f32;
-            ra.partial_cmp(&rb).unwrap_or(core::cmp::Ordering::Equal)
+            katgpt_core::float_order::cmp_for_max(ra, rb)
         })
         .map(|(i, _)| i)
         .unwrap();

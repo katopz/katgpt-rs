@@ -831,9 +831,9 @@ pub fn extract_ddtree_paths(tree: &[katgpt_core::speculative::types::TreeNode]) 
         }
     }
 
-    // Sort roots by score descending, keep top 3.
-    // `total_cmp` is branch-free and NaN-deterministic vs `partial_cmp().unwrap_or(Equal)`.
-    roots.sort_by(|a, b| b.score.total_cmp(&a.score));
+    // Sort roots by score descending, keep top 3. float_order::desc: NaN must
+    // not top the best-first list.
+    roots.sort_by(|a, b| katgpt_core::float_order::desc(a.score, b.score));
     roots.truncate(3);
 
     let mut paths = Vec::with_capacity(roots.len());

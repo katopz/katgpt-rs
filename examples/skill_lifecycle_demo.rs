@@ -68,7 +68,7 @@ fn simulate_episodes(
                 .max_by(|(_, a), (_, b)| {
                     let qa = if a.0 > 0 { a.1 / a.0 as f32 } else { 0.0 };
                     let qb = if b.0 > 0 { b.1 / b.0 as f32 } else { 0.0 };
-                    qa.partial_cmp(&qb).unwrap_or(std::cmp::Ordering::Equal)
+                    katgpt_core::float_order::cmp_for_max(qa, qb)
                 })
                 .map_or(0, |(i, _)| i)
         };
@@ -161,7 +161,7 @@ fn main() {
         arm_rewards
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map_or(0, |(i, _)| i)
     };
 
@@ -233,7 +233,7 @@ fn main() {
     let final_best = arm_rewards
         .iter()
         .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
         .map_or(0, |(i, _)| i);
     let final_q = if arm_counts[final_best] > 0 {
         arm_rewards[final_best] / arm_counts[final_best] as f32

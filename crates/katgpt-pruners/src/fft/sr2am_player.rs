@@ -480,9 +480,7 @@ impl FftSr2amPlayer {
         (0..NUM_ACTIONS)
             .filter(|&i| blended[i] > f32::NEG_INFINITY)
             .max_by(|a, b| {
-                blended[*a]
-                    .partial_cmp(&blended[*b])
-                    .unwrap_or(Ordering::Equal)
+                katgpt_core::float_order::cmp_for_max(blended[*a], blended[*b])
             })
             .map_or(ActionType::Wait, ActionType::from)
     }

@@ -48,7 +48,7 @@ fn main() {
         let dense_argmax = dense_scores
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map(|(i, _)| i)
             .unwrap();
         let dense_flops = n_keys * d_hidden;
@@ -84,7 +84,7 @@ fn main() {
         let splat_argmax = splat_scores
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map(|(i, _)| i)
             .unwrap();
         let splat_flops = n_keys * (d_hidden / 2); // half the coords skipped

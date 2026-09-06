@@ -250,8 +250,8 @@ pub fn fit_codebook_kmeans_into<const K: usize, const D: usize>(
                 let (far_idx, _far_d2) = d2_nearest
                     .iter()
                     .enumerate()
-                    // `total_cmp` is branch-free and NaN-deterministic vs `partial_cmp().unwrap_or(Equal)`.
-                    .max_by(|(_, a), (_, b)| a.total_cmp(b))
+                    // cmp_for_max: NaN can never win the farthest-code selection.
+                    .max_by(|(_, a), (_, b)| crate::float_order::cmp_for_max(**a, **b))
                     .map_or((0, 0.0), |(i, &d)| (i, d));
                 centroids[kk].copy_from_slice(&patches[far_idx][..D]);
                 // Update d2_nearest: this patch is now at distance 0.

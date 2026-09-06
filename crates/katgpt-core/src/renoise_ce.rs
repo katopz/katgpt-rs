@@ -255,7 +255,7 @@ where
             let score = renoise_ce_score(operator, &candidate, config, rng);
             (score.drift, candidate)
         })
-        .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+        .min_by(|a, b| crate::float_order::cmp_for_min(a.0, b.0))
         .map(|(_, c)| P::into_output(c))
 }
 

@@ -182,7 +182,7 @@ mod tests {
             let next = chain.transition[current]
                 .iter()
                 .enumerate()
-                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+                .max_by(|a, b| crate::float_order::cmp_for_max(*a.1, *b.1))
                 .unwrap()
                 .0;
             seq.push(next);

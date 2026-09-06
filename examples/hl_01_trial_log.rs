@@ -42,10 +42,7 @@ fn select_arm(stats: &BanditStats, compressed: &[usize], num_arms: usize) -> usi
     (0..num_arms)
         .filter(|arm| !compressed.contains(arm))
         .max_by(|&a, &b| {
-            stats
-                .ucb1_score(a)
-                .partial_cmp(&stats.ucb1_score(b))
-                .unwrap_or(std::cmp::Ordering::Equal)
+            katgpt_core::float_order::cmp_for_max(stats.ucb1_score(a), stats.ucb1_score(b))
         })
         .unwrap_or(0)
 }
@@ -75,7 +72,7 @@ fn print_env() {
         PROBS
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map(|(i, _)| i)
             .unwrap(),
         PROBS.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
