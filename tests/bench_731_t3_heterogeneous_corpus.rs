@@ -218,6 +218,30 @@
 //!   hard tail firing at ≈ its knee); median_all = 10; margin = 2.00×; mean
 //!   dist at exit ≈ 8.7e-4, max ≈ 1.6e-2; **G2 PASS** (cut = 3.2×).
 //!
+//! **MEASURED 2026-09-07 (this run): the prediction reproduced bit-exactly —
+//! G2 PASS.** Knees median 8 / q1 6 / q3 10 / min 4 / max 20, undefined
+//! 0/27 (S14 = 20 the hard tail; S20 = 16; S5/S9 = 12); frac(knee ≥ 12) =
+//! 14.8%. K* = 20. The probe fired 27/27: 19 at the d_min = 10 floor + 8
+//! late fires [11 ×4, 13 ×2, 15, 17] — the hard tail firing at ≈ its knee
+//! (S14: fire 17 vs knee 20, exit dist 0.0160 = the corpus max). median_all
+//! = 10 → cut 3.20×, margin 2.00× (the bar met EXACTLY — the axis ceiling),
+//! mean dist at exit 8.66e-4 ≤ 0.01, max 0.0160. Invariants: G1
+//! fed-but-never-firing ≡ None 27/27; exit ≡ elastic bit-identity per fired
+//! input; the InterLoopNorm control 0/27 at every τ ≤ 3. v1–v3 re-ran
+//! identical (determinism witnesses). p99 fired depth 17 [support 1].
+//!
+//! **Verdict + evidence grade:** G2's pre-registered bar is MET — a ≥2×
+//! median iteration cut at quality parity with per-input adaptivity visible
+//! in the exit-depth distribution (floor-pinned easy majority, knee-tracking
+//! hard tail). It is an EXISTENCE proof on a scan-selected synthetic
+//! fixture, at the axis's measured margin ceiling (exactly 2.0×) — not
+//! robustness evidence. T4 stays blocked: `cadence_gate` remains opt-in and
+//! the probe slot is caller-owned (`None` = bit-identical), so default-on
+//! would not change runtime behavior; promotion waits on real-workload
+//! depth-spread evidence a synthetic micro campaign cannot produce. G1 held
+//! in-harness; G4 is the T1 fixed-ring contract (`[f32; 4]`, no
+//! steady-state allocation); p99 worst-case depth reported above.
+//!
 //! # Run
 //!
 //! ```bash
