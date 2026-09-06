@@ -92,7 +92,8 @@ def contract_repos(workspace: Path) -> list[Path]:
 
 def parse_rows(path: Path) -> dict[str, dict[str, int]]:
     rows: dict[str, dict[str, int]] = {}
-    for raw in path.read_text().splitlines():
+    # pins carry UTF-8 punctuation; the locale codec (cp1252 on Windows) cannot decode it (2026-09-06 4090-box catch)
+    for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue

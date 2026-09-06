@@ -1366,6 +1366,21 @@ system that duplicates already-shipped substrate under a different name
   Sep-04 all-features census held it; citation weight keeps the census — AGENTS.md test-gate row + Issue 513 vs
   zero refs — and the genrm file moved 511→518, highwater bumped — `e938cdc0`). Sweep PASSES at closeout:
   12 tracked duplicates (all seal-game-editor) · 0 stale · 0 malformed.
+  **Next run (2026-09-06, the 4090 box) — one instrument fix + one live divergence, neither a pins change.**
+  (1) INSTRUMENT: the sweep exited 2 on Windows — `parse_rows`/`parse_pins` read their pins files with the locale
+  codec (cp1252) and died on UTF-8 punctuation (byte 0x86); both now read `encoding="utf-8"` explicitly. The M3's
+  UTF-8 default had hidden the class — a gate that only runs green on the author's platform is the platform-axle
+  lesson again, now fixed at the read site. (2) DIVERGENCE (owner-gated, DO NOT re-pin): riir-train measured
+  13 doc duplicates + 2 malformed allocators (`.plans/.highwater = '-n 374'`, `.research/.highwater = '-n 441'` —
+  the PowerShell `echo -n` corruption class, written by `66193bac` 09-03 on this box) — because THIS box has
+  `main` checked out while the Issue-514 repair series (13 → 0, `103ed351`) and all newer doc work live on
+  `origin/develop`: **90 commits ahead / 6 behind, develop's tip `88a7f563` landed 09-06 05:49 +0700, main's side
+  last touched 09-04** — the two boxes are on different branches of riir-train (its AGENTS.md still claims 'no
+  develop branch exists'; stale), and a session is active on EACH side. Reconciliation + the main-side corrupt
+  highwaters are the owner's; the floors' `dup=0` describes develop's correct state — raising the pin would mask
+  the split. (3) ENVIRONMENTAL: katgpt-web / riir-dao / riir-deployer / seal-game-editor are pinned but not
+  cloned on this box — absence rows are box-scoped, not drift; the 12 seal-game-editor duplicates are
+  unmeasurable here. riir-mmorpg-examples `-n 97` remains the known 069 left-for-owner row.
 - **Issue 724 — `.plans/` numbering collisions regrew after a hand-sweep; nothing gated the allocator** RESOLVED
   (T2/T3/T4 2026-09-04 `24e349e9`/`28c353a1`/`322769b2`; **T4b + T1/T5 closeout 2026-09-04 `866df2a7`**;
   file removed per noise-reduction — full narrative in git history). The tracked `449` collision

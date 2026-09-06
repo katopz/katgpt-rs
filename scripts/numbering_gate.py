@@ -40,7 +40,8 @@ HIGHWATER = ".highwater"
 
 def parse_pins(path: Path) -> dict[str, int]:
     pins: dict[str, int] = {}
-    for raw in path.read_text().splitlines():
+    # UTF-8-explicit: the locale codec (cp1252 on Windows) cannot decode pins with non-ASCII prose (2026-09-06 catch)
+    for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line or "=" not in line:
             continue
