@@ -90,7 +90,11 @@ pub struct LoopDeepRun {
     pub check_logits: bool,
     /// Collected stats (read after the call).
     pub stats: LoopDeepStats,
-    /// Scratch for the logit tripwire (grown once, then reused).
+    /// Scratch for the logit tripwire (grown once, then reused). The only
+    /// reader is the `check_logits` branch inside `forward_looped`, so the
+    /// field is dead in every build without `lt2_looped` — allow is scoped
+    /// to exactly that case and stays strict when the feature is on.
+    #[cfg_attr(not(feature = "lt2_looped"), allow(dead_code))]
     pub(crate) logit_scratch: Vec<f32>,
     /// Issue 717 T3 — delayed damping knob (feature `lt2_deep_stability`).
     #[cfg(feature = "lt2_deep_stability")]
