@@ -125,6 +125,33 @@
 //! 4. **Gate opens:** margin ≥ 2× AND undefined ≤ 10% → the G2 verdict is
 //!    evaluated and recorded.
 //!
+//! **MEASURED 2026-09-07 (this run):** REJECTED (margin 1.20× < 2×) — and
+//! the axis is REFUTED as a difficulty axis outright: the s64 tier measured
+//! the EASIEST knees (3–6) while the max knee (12) sat in the s8 tier. The
+//! micro loop's convergence depth is SCALE-INVARIANT — inter-iteration
+//! normalization eats the embedding scale — and the knee variation that
+//! exists (3..16) is token-identity lottery, not magnitude response. The
+//! floor-cap mechanism was measured on all three corpora: median_all pins at
+//! the d_min = 10 floor (everything fires 10–15) while K* ∈ {12, 16} →
+//! margins {v1: 1.20×, v2: 1.60×, v3: 1.20×}, all < 2.
+//!
+//! # Micro-fixture conclusion (the campaign's final record)
+//!
+//! Three pre-registered corpora, three rejections, one mechanism: quality
+//! parity needs `d_min ≥ ~10` (T2: dist at k = 6 = 0.051; knee medians 3–5)
+//! while the margin needs `d_min ≤ K*/2 ≈ 6–8` — unsatisfiable on this
+//! fixture family. G2 requires a FIXTURE-FAMILY change (a real checkpoint or
+//! a larger synthetic config with genuinely heterogeneous convergence
+//! profiles); further micro corpora are pre-committed to rejection by the
+//! floor-cap. Post-hoc, NON-qualified observation (recorded as input to a
+//! future pre-registration, not a pass): on all three corpora the probe's
+//! (median = 10, max exit dist ≈ 1.6e-3) point sat strictly off the static
+//! family's Pareto frontier (static-10: max dist 2.5e-2..3.9e-1; static-12:
+//! median 12, max 1.6e-3..3.5e-3) — per-input adaptivity is visible in the
+//! data but was never pre-registered as a gate. Invariants held on all 145
+//! inputs across the three corpora: G1 bit-identity, exit ≡ elastic, the
+//! InterLoopNorm control at τ ≤ 3.
+//!
 //! # Run
 //!
 //! ```bash
