@@ -13,7 +13,7 @@
 
 Distill the paper's normalized H2O score into a pure, leaf-clean katgpt-core primitive: per-row usage-rate eviction scoring (`mass / max(1, age)`) over caller-supplied attention-mass increments, with pinned-sink exclusion and per-(b,h) selection by construction — plus the **R/p128 generation-runaway canary**, the output-length diagnostic that gates any lossy KV policy's promotion (the generation-side complement of the Issue 750 lossy-surface rule). GOAT gate: at matched KV budget on a planted age-bias fixture, mass/age retains the hot row raw-H2O evicts, with O(1)/row/step updates and zero steady-state allocation. Not UQ-bearing (no distributions claimed) — the conformal-floor rule does not apply.
 
-House pattern: the primitive consumes caller-supplied observational signal (`suspect_indices(attention_mass, …)` precedent) — katgpt-core stays leaf-clean; mass producers are consumer-side (riir-gpu kernel byproduct → riir-ai Issue 836; HLA recurrent-state probe → Phase 4).
+House pattern: the primitive consumes caller-supplied observational signal (`suspect_indices(attention_mass, …)` precedent) — katgpt-core stays leaf-clean; mass producers are consumer-side (riir-gpu kernel byproduct → DECLINED 2026-09-06, see T4.1; HLA recurrent-state probe → Phase 4). Consumer/wiring home: **riir-ai Issue 882** (the eviction pull-gate; riir-ai Issue 836 is the sibling delta-retention primitive from the same parent paper, not this surface).
 
 ## Phase 1 — Primitive (CORE)
 
@@ -41,20 +41,20 @@ House pattern: the primitive consumes caller-supplied observational signal (`sus
 - [x] **T3.2** Micro-GPT long-context recall at matched KV budget (Bench 313 micro-GPT precedent): policies {ring/lastrec β, raw-H2O, mass/age, mass/age+sink-pin, EGA-energy, EGA×usage fusion} — recall/accuracy + `RunawayStats` + eviction-count per policy. *(constructed induction-pair KV, drifted-Zipf workload; 6 policies × 4 caps × 32 seeds — mass_age 50/100/100% vs raw 24/41/51% at caps 32/48/64, miss at cap 16 recorded)*
 - [x] **T3.3** Kendall-τ diagnostic: per-head vs batch-summed top-k disagreement over the streams (decides whether per-(b,h) bookkeeping pays; τ ≈ 1 on our workloads ⇒ keep per-head anyway since it is free here, record τ for the kernel-side decision). *(τ = 0.689–0.748 — rankings DISAGREE materially, per-head bookkeeping matters)*
 - [x] **T3.4** Gates: G1 determinism (bit-identical double-run); G2 O(1)/row update (criterion, update path < 10ns/row target); G3 default-features no-regression (module fully gated); G4 zero steady-state allocs (TrackingAllocator); **G8 mass/age ≥ raw-H2O recall at matched budget on T3.1+T3.2** — if it loses, keep the negative-result artifact (Bench 697 precedent) and demote. *(G1 PASS; G2 1.22 ns/row PASS; G3 PASS; G4 PASS — after the gate caught a live 1 alloc/step; G8 MIXED: PASS at cap ≥ 32, FAIL at the 8%-budget extreme — regime boundary recorded, primitive NOT demoted since opt-in with no consumer is the standing state)*
-- [x] **T3.5** Write `.benchmarks/NNN_usage_rate_eviction_goat.md`; per-stack ledger: slot = KV/eviction; promotion decision (default vs opt-in) per gate outcome + consumer presence. *(Bench 697; decision: OPT-IN — no consumer + regime-bounded G8; promotion re-gate = Issue 836 consumer + real-corpus re-run)*
+- [x] **T3.5** Write `.benchmarks/NNN_usage_rate_eviction_goat.md`; per-stack ledger: slot = KV/eviction; promotion decision (default vs opt-in) per gate outcome + consumer presence. *(Bench 697; decision: OPT-IN — no consumer + regime-bounded G8; promotion re-gate = riir-ai Issue 882 consumer + real-corpus re-run)*
 
 ## Phase 4 — Consumer Probes (pull-gated)
 
 ### Tasks
 
-- [-] **T4.1** GPU byproduct kernel (summed attention weights alongside SDPA, cubecl + cudarc twins) → **riir-ai Issue 836** owns the wiring surface; pull-gated on this plan's GOAT pass.
-- [-] **T4.2** HLA free-mass probe: linear-attention recurrent state may expose cumulative usage directly (no kernel work) — one probe bench before any kernel investment.
+- [-] **T4.1** GPU byproduct kernel (summed attention weights alongside SDPA, cubecl + cudarc twins) → **DECLINED 2026-09-06** (pull-gate decision, riir-ai Issue 882): no attention-KV eviction consumer exists in riir-ai (verified: riir-gpu caches are weight/prefix/segment auxiliary; router truncation is prompt-side; engine runs fixed-size recurrent HLA/GDN), and Bench 697's measured null cell (`rand_keystone` = 100% at every cap, zero scoring work) makes the kernel the expensive path for the first consumer. First policy when pulled = the null; kernel revives only if deep-needle recall is proven load-bearing after the null ships.
+- [-] **T4.2** HLA free-mass probe: linear-attention recurrent state may expose cumulative usage directly (no kernel work) — one probe bench before any kernel investment. *(pull-gated behind T4: only if a consumer pulls mass_age — riir-ai Issue 882 T4; probe-without-consumer is premature)*
 - [-] **T4.3** Replay-log → telemetry → Beta-LCB policy-variant selection (self-adaptive track): substrate exists (katgpt-core `rating`); no serving consumer for policy-variant selection until ≥2 policies run in production — reopen then.
 - [-] **T4.4** Content-derived β (`smart_lastrec` regex-prefix variant): paper's own footnote 11 measured the general variant NO better than fixed prefix — fixed β stands; reopen only with a structure-tagged corpus showing fixed-β failure.
 
 ## Non-goals
 
-- No runtime wiring in this repo (consumers live in riir-ai — Issue 836).
+- No runtime wiring in this repo (consumer home: riir-ai Issue 882).
 - No training anywhere (riir-train Plan 367 owns co-adaptation).
 - Bonsai-GDN: no KV eviction on recurrent state — out of scope by architecture.
 
