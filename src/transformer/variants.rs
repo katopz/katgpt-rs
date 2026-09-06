@@ -201,6 +201,20 @@ pub fn forward_looped<'a>(
     // None"); only the knob FIELDS are feature-gated, so the stabilization
     // path compiles to nothing under `lt2_looped` alone.
     deep_run: Option<&mut super::loop_deep::LoopDeepRun>,
+    // Issue 731 T1: residual-gated early exit (EqR action item 7.2,
+    // arXiv:2605.21488). `None` = bit-identical to pre-Issue-731 behavior
+    // (all `loop_count` iterations run). `Some(probe)` = after each iteration
+    // (τ ≥ 1), feed the probe ‖h_τ − h_{τ−1}‖ and break early when it reports
+    // the loop settled: the magnitude window mean < `tau`, OR the cadence
+    // verdict is `Settled` — never before the probe's `d_min` floor. The
+    // probe is caller-owned (τ / d_min config — the Issue-035 param precedent
+    // instead of a Config field: no constructor ripple). Feature-gated so the
+    // no-probe build carries no parameter at all (the `gain_cost_halt`
+    // precedent).
+    #[cfg(feature = "cadence_gate")]
+    residual_exit: Option<
+        &mut katgpt_core::convergence_cadence::LoopResidualExit,
+    >,
 ) -> &'a mut [f32] {
     use crate::types::HybridPattern;
 
@@ -288,6 +302,10 @@ cache.advance_pos(pos);
         .as_ref()
         .and_then(|r| r.damping.as_ref())
         .is_some_and(|d| d.alpha > 0.0);
+
+    // Issue 731 T1 — the residual-exit probe is reborrowed per use.
+    #[cfg(feature = "cadence_gate")]
+    let mut residual_exit = residual_exit;
 
     // 2. Outer loop: T passes over all layers
     for tau in 0..loop_count {
@@ -670,6 +688,34 @@ cache.advance_pos(pos);
             // at the top of the next evaluation.
             std::mem::swap(&mut curr_step_buf, &mut prev_step_buf);
             h.update_prev_step(gain);
+        }
+
+        // Issue 731 T1 — residual-gated early exit evaluation.
+        //
+        // Only active when `cadence_gate` is on AND the caller passed
+        // `Some(probe)`. Runs for τ > 0 (the first iteration has no previous
+        // state to step against — same precondition as the halter above), and
+        // the probe enforces its own `d_min` completed-iteration floor
+        // internally. Break BEFORE the per-iteration deep-run knobs below:
+        // once the loop is settled, rescaling an update it will never use is
+        // dead work (the same ordering the gain/cost halter uses above).
+        #[cfg(feature = "cadence_gate")]
+        if tau > 0
+            && let Some(exit) = residual_exit.as_deref_mut()
+        {
+            // Step norm = ‖h^(τ) − h^(τ−1)‖₂ — the same gain signal the
+            // Plan-304 halter consumes, computed inline (no gain_cost_halt
+            // feature dependency): sum of squared differences + sqrt, no
+            // allocation. `ctx.prev_h` was saved at the top of this
+            // iteration, so it holds h^(τ−1).
+            let mut acc = 0.0_f32;
+            for (cur, prev) in ctx.x[..n].iter().zip(ctx.prev_h[..n].iter()) {
+                let d = cur - prev;
+                acc += d * d;
+            }
+            if exit.observe(acc.sqrt()) {
+                break;
+            }
         }
 
         // ── Issue 717 T4 — tangential/radial update rescale ─────────────

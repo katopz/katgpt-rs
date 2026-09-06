@@ -289,6 +289,109 @@ impl<const K: usize> Default for ConvergenceCadence<K> {
     }
 }
 
+// ── Issue 731 T1 — the loop residual-exit probe ─────────────────────────
+
+/// Residual-gated early exit for a weight-tied looped forward (Issue 731 T1;
+/// EqR action item 7.2 — arXiv:2605.21488 Equilibrium Reasoners).
+///
+/// The probe consumes the loop's per-iteration step norm ‖h_τ − h_{τ−1}‖ and
+/// decides EXIT when EITHER arm fires (never before [`LoopResidualExit::d_min`]
+/// completed iterations):
+///
+/// 1. **magnitude arm** — the mean of the last `L = 3` step norms drops below
+///    the configured `tau` (EqR's window-L residual exit);
+/// 2. **shape arm** — the underlying [`ConvergenceCadence`] window classifies
+///    [`CadenceVerdict::Settled`] (the Research-529 decay-shape read).
+///
+/// Law 1 guard (the Research-440 growing-denominator trap): the magnitude arm
+/// is an ABSOLUTE threshold, and the shape arm is always evaluated alongside
+/// it — a loop whose state norm grows while its step norm plateaus can never
+/// satisfy arm 1 spuriously, because arm 2's absolute floors gate the verdict.
+/// A magnitude-ONLY arm is the T2 negative control, expected to fail
+/// calibration; it is not what this probe ships.
+///
+/// Zero-alloc contract (G4): fixed `[f32; 3]` + `[f32; 4]` windows, no heap.
+/// Non-finite norms never satisfy arm 1 (NaN comparisons are false) and count
+/// HIGH in the cadence — pathological input can delay an exit, never force
+/// one.
+///
+/// The earliest observable exit is after **2** completed iterations: the first
+/// step norm needs two loop states (τ=0 has no predecessor).
+#[cfg(feature = "cadence_gate")]
+#[derive(Debug, Clone)]
+pub struct LoopResidualExit {
+    tau: f32,
+    d_min: usize,
+    /// Last L = 3 step norms (EqR's magnitude window), ring order — pre-filled
+    /// with INFINITY so a partially-filled window cannot fire.
+    window: [f32; 3],
+    /// The shape classifier (law-2 arm).
+    cadence: ConvergenceCadence<4>,
+    /// Step norms observed so far (= completed iterations − 1).
+    seen: usize,
+    /// Completed-iteration count at the moment the probe fired.
+    fired_at: Option<usize>,
+}
+
+#[cfg(feature = "cadence_gate")]
+impl LoopResidualExit {
+    /// `tau` = the absolute magnitude threshold on the 3-window mean;
+    /// `d_min` = the completed-iteration floor (values < 2 clamp to 2 — the
+    /// earliest observable exit).
+    #[inline]
+    pub fn new(tau: f32, d_min: usize) -> Self {
+        Self {
+            tau,
+            d_min: d_min.max(2),
+            window: [f32::INFINITY; 3],
+            cadence: ConvergenceCadence::new(),
+            seen: 0,
+            fired_at: None,
+        }
+    }
+
+    /// Feed one iteration's step norm ‖h_τ − h_{τ−1}‖; `true` = exit now.
+    /// O(1), zero-alloc. Both windows are fed on EVERY observation (the
+    /// criterion is evaluated over the trailing window including pre-floor
+    /// iterations); only the EXIT is floored by `d_min`.
+    #[inline]
+    pub fn observe(&mut self, step_norm: f32) -> bool {
+        self.seen += 1;
+        // Arm 1 — magnitude: mean of the last L = 3 norms < tau. The window
+        // pre-fills with INFINITY so a partially-filled window cannot fire
+        // (mean stays +∞ until all three slots are real).
+        self.window[self.seen % 3] = step_norm;
+        let mean = self.window.iter().sum::<f32>() / 3.0;
+        let magnitude_exit = mean < self.tau;
+        // Arm 2 — shape: the cadence verdict is Settled (decayed or
+        // absolutely-low; classify needs the full K = 4 window).
+        self.cadence.push(step_norm);
+        let shape_exit = matches!(self.cadence.classify(), Some(CadenceVerdict::Settled { .. }));
+        // The floor: never EXIT before d_min completed iterations (the k-th
+        // observation arrives after k+1 completed iterations).
+        if self.seen + 1 < self.d_min {
+            return false;
+        }
+        let exit = magnitude_exit || shape_exit;
+        if exit {
+            self.fired_at = Some(self.seen + 1);
+        }
+        exit
+    }
+
+    /// The completed-iteration floor.
+    #[inline]
+    pub fn d_min(&self) -> usize {
+        self.d_min
+    }
+
+    /// Completed iterations when the probe fired (None = never fired).
+    #[inline]
+    pub fn fired_at_iteration(&self) -> Option<usize> {
+        self.fired_at
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -534,5 +637,57 @@ mod tests {
             tight_cfg.classify(),
             Some(CadenceVerdict::Churning { .. })
         ));
+    }
+
+    // ── Issue 731 T1 — LoopResidualExit ─────────────────────────────────
+
+    #[cfg(feature = "cadence_gate")]
+    #[test]
+    fn residual_exit_floor_holds_and_magnitude_arm_fires_on_tiny_window() {
+        // d_min = 4: the window is fed from the first observation, but no
+        // EXIT may fire before completed iteration 4. With a trivially-low
+        // tau the magnitude arm fires the moment both are satisfiable: the
+        // 3rd observation (completed 4 = d_min, window just filled).
+        let mut p = LoopResidualExit::new(1e-3, 4);
+        assert_eq!(p.d_min(), 4);
+        assert!(!p.observe(1e-6), "completed 2 < d_min");
+        assert!(!p.observe(1e-6), "completed 3 < d_min");
+        assert!(p.observe(1e-6), "completed 4 = d_min, window full of tiny norms → magnitude arm fires");
+        assert_eq!(p.fired_at_iteration(), Some(4));
+    }
+
+    #[cfg(feature = "cadence_gate")]
+    #[test]
+    fn residual_exit_shape_arm_fires_on_decaying_sequence() {
+        // Research-529 solved shape: decay to ~0.30 — Settled by shape even
+        // with tau = 0 (magnitude arm can never fire on tau = 0; norms ≥ 0).
+        let mut p = LoopResidualExit::new(0.0, 2);
+        let seq = [3.0, 0.4, 0.30, 0.30];
+        let fired: Vec<bool> = seq.iter().map(|n| p.observe(*n)).collect();
+        assert!(!fired[0] && !fired[1], "cadence window not yet full");
+        assert!(fired[2] || fired[3], "shape arm fires once K = 4 fills");
+        assert!(p.fired_at_iteration().is_some());
+    }
+
+    #[cfg(feature = "cadence_gate")]
+    #[test]
+    fn residual_exit_never_fires_on_churning_high_plateau() {
+        // Failed shape: plateau HIGH — neither arm may fire (tau tiny, shape
+        // classifies Churning).
+        let mut p = LoopResidualExit::new(1e-3, 2);
+        for i in 0..64 {
+            assert!(!p.observe(1.46), "iteration {} must not exit", i + 2);
+        }
+        assert!(p.fired_at_iteration().is_none());
+    }
+
+    #[cfg(feature = "cadence_gate")]
+    #[test]
+    fn residual_exit_nonfinite_never_forces_an_exit() {
+        let mut p = LoopResidualExit::new(1e-3, 2);
+        for _ in 0..32 {
+            assert!(!p.observe(f32::NAN), "NaN window mean → arm 1 false; cadence reads HIGH → Churning");
+        }
+        assert!(p.fired_at_iteration().is_none());
     }
 }
