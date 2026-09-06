@@ -5,6 +5,8 @@
 > **Related:** Plan 089 (tri-mode inference prep), Plan 066 (D2F), Research 34 (D2F), Research 26 (MTP), Research 38 (SDAR)
 > **Supersedes:** None — extends D2F + MTP with tri-mode unification
 
+> **PASS-Redirects (synthesis):** Reda et al. [arXiv:2606.26493 "Nemotron-Labs-TwoTower: Diffusion Language Modeling with Pretrained Autoregressive Context"] — the same lab's *decoupled* successor: frozen AR context tower + separate trainable denoiser tower; its Table 2 ablation measures tied-joint AR+diffusion training (this note's D4/D5 family) at −21..−28 rel acc vs −6..−11 for frozen-decoupled — recipe correction filed as riir-train Plan 389; Research 537 has the full cross-reference.
+
 ## Executive Summary
 
 Nemotron-Labs-Diffusion unifies AR, diffusion, and self-speculation decoding in a single model via joint AR-diffusion training. The key insight: **AR and diffusion losses are complementary, not competing** — AR provides left-to-right priors, diffusion enables parallel decoding. Self-speculation (diffusion drafts, AR verifies) outperforms MTP methods like Eagle3 with 2.4-3.3× higher acceptance rates.
