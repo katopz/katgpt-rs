@@ -1,4 +1,5 @@
-# Research: G-Zero — Self-Play for Open-Ended Generation from Zero Data (21)
+# Research: G-Zero — Self-Play for Open-Ended Generation from Zero Data (21) [L1-431]
+> **PASS-Redirects (successor):** Chu, Jeon, Yang [arXiv:2608.26582 "J-Zero: Unified Challenger–Solver–Judge Co-Evolution from Zero Data"] — adds the third co-evolving role (BT-trained Judge on construction-known preference pairs) to this loop; distilled at riir-train `.research/450` (training track → riir-train issue 522; modelless control-plane extraction → riir-clippy issue 072).
 
 > **Note on file paths (2026-07-18):** Some `*.rs` paths in this document
 > reference modules that were renamed, moved, or never landed under the
