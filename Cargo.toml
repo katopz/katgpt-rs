@@ -1353,6 +1353,14 @@ name = "bench_731_t2_residual_calibration"
 path = "tests/bench_731_t2_residual_calibration.rs"
 required-features = ["lt2_looped", "cadence_gate", "loop_stability_fix"]
 
+# Issue 731 T3 — the heterogeneous-depth corpora + the G2 GOAT gate (v1-v4;
+# every corpus pre-registered in a commit before its run; v4 measured G2 PASS
+# at the 2.0× bar).
+[[test]]
+name = "bench_731_t3_heterogeneous_corpus"
+path = "tests/bench_731_t3_heterogeneous_corpus.rs"
+required-features = ["lt2_looped", "cadence_gate", "loop_stability_fix"]
+
 # Issue 698 T5 — KV mean-across-steps (CacheStrategy::Mean): the loop's own
 # running-mean K/V replaces the dedicated stash window-forward (one window
 # pass per token deleted). Lossy-surface gate: k=1 degenerate bit-identity

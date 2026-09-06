@@ -12,6 +12,7 @@ riir-clippy
 riir-dao
 riir-dapps
 riir-deployer
+riir-esp32
 riir-game-sdk
 riir-mmorpg-examples
 riir-neuron-db

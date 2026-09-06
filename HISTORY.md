@@ -142,6 +142,25 @@ target and under-reports. This gate was **red on `develop` from at least
 the block above was green. Treat a green gate as a claim about its literal
 command, not about the code.
 
+It happened AGAIN, 2026-09-07: red from at least `c69e651d` (Issue 731 T1, the
+`forward_looped` `residual_exit` param) until `c571d5b9` — **32 compile
+errors** this time (28 × E0061, a call site missing the new trailing param;
+plus 2 × E0308 and 2 × E0614 from Issue-729 comparator stragglers riding the
+same run, fixed in `26ba3519`). The mechanism is a sharpening of the same
+lesson: T1's landing note recorded "all 27 construction sites aligned", and
+it was TRUE — 27 sites were aligned — while 28 MORE call sites existed in
+`#![cfg]`-gated test targets that compile only under `--all-features`, a set
+no narrower gate names and no grep-for-callers distinguishes (the aligned 27
+and the missed 28 are textually identical call shapes). The sites were found
+by rustc, not by review, exactly as designed. Corollary recorded: an
+alignment pass's completeness claim must state its POPULATION FRAME — "all
+sites in targets compilable at the feature states I ran" — or it is a claim
+about a subset with the grammar of a whole. The T3 bench target itself was
+also auto-discovered with no `[[test]]` row (SILENT-NOW +1, caught by
+`cfg_gated_floor_gate.py` the same day — its row landed with the fix), and
+`docs_gate.sh` had not run on the branch either; both gates were green again
+by `26ba3519`.
+
 Don't run it by hand — `scripts/full_gate.sh` is the assertion (it also refuses
 to report a pass off macOS, where the `target_os = "macos"` device backends
 compile to nothing even with `--all-features`, and checks that this document

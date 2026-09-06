@@ -516,9 +516,11 @@ fn median(v: &mut [usize]) -> usize {
 }
 
 /// Percentile with the tail support returned alongside (the percentile-index
-/// discipline: below the 1/(1-p) boundary the index lands on the max).
+/// discipline: nearest rank `ceil(p·n) − 1`, and below the 1/(1−p) boundary
+/// the reported rank still sits at/near the max — the support column is the
+/// honest statistic).
 fn percentile_report(sorted: &[usize], p: f64) -> (usize, usize) {
-    let idx = ((sorted.len() as f64) * p) as usize;
+    let idx = (((sorted.len() as f64) * p).ceil() as usize).saturating_sub(1);
     let idx = idx.min(sorted.len() - 1);
     (sorted[idx], sorted.len() - idx)
 }

@@ -359,10 +359,10 @@ distillation, novelty + GOAT gates, modelless-unblock protocol §3.5):
 > **Repo count:** the **product/distillation set is 7** — `katgpt-rs` (public) +
 > `riir-ai`, `riir-chain`, `riir-neuron-db`, `riir-train`, `riir-game-sdk`,
 > `riir-dapps` (private). That is NOT the repo total: the
-> workspace is **16 repos**, all of which carry a root `BOUNDARY.md`
+> workspace is **17 repos**, all of which carry a root `BOUNDARY.md`
 > (add `riir-mmorpg-examples`, `riir-clippy`, `riir-viewbridge`,
 > `riir-auth`, `katgpt-web`, `riir-dao`, `riir-deployer`,
-> `seal-game-editor`, `seal-remake`).
+> `riir-esp32`, `seal-game-editor`, `seal-remake`).
 >
 > Read a count in prose as a claim, not a fact — and read a count that
 > MATCHES as a claim too: a count is not a checksum over a set. Drift
