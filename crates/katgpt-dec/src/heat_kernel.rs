@@ -157,6 +157,10 @@ impl DecEigendecomposition {
             if let Some(min_idx) = eigenvalues
                 .iter()
                 .enumerate()
+                // Deliberate total_cmp leaf: a NaN eigenvalue CAN win this min
+                // (total_cmp ranks NaN below -inf) but the `< NULL_SPACE_THRESHOLD`
+                // guard below rejects NaN (comparison is false) — the selection's
+                // output is gated, so NaN falls to the neutral no-null-space arm.
                 .min_by(|(_, a), (_, b)| a.total_cmp(b))
                 .map(|(i, _)| i)
                 && eigenvalues[min_idx] < NULL_SPACE_THRESHOLD

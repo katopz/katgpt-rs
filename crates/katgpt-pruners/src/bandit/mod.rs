@@ -363,7 +363,8 @@ impl BanditStats {
         self.q_values
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.total_cmp(b))
+            // float_order: a NaN q-value must never win best-arm.
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map_or(0, |(i, _)| i)
     }
 

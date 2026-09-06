@@ -95,7 +95,8 @@ impl KvGroupRanking {
             .scores
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.total_cmp(b))?;
+            // float_order: a NaN score must never win the argmax.
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))?;
         Some(i)
     }
 

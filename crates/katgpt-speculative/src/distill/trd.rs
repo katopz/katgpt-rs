@@ -659,7 +659,7 @@ fn find_valid_token<P: ConstraintPruner>(
         let min_idx = top_probs
             .iter()
             .enumerate()
-            .min_by(|(_, a), (_, b)| a.total_cmp(b))
+            .min_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_min(**a, **b))
             .map(|(i, _)| i)
             .unwrap();
         if prob > top_probs[min_idx] {

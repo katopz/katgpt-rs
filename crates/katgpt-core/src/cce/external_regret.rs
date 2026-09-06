@@ -124,10 +124,10 @@ impl ExternalRegret {
         let mut max2 = f32::MIN;
         for k in devs {
             let v = gamma - p.gamma_dev(rho, k);
-            if v.total_cmp(&max1).is_gt() {
+            if v > max1 {
                 max2 = max1;
                 max1 = v;
-            } else if v.total_cmp(&max2).is_gt() {
+            } else if v > max2 {
                 max2 = v;
             }
         }

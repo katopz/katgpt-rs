@@ -459,7 +459,8 @@ fn greedy_sample(logits: &[f32]) -> (usize, f32) {
     let (idx, &val) = logits
         .iter()
         .enumerate()
-        .max_by(|a, b| a.1.total_cmp(b.1))
+        // float_order: a NaN logit must never win greedy sampling.
+        .max_by(|a, b| katgpt_core::float_order::cmp_for_max(*a.1, *b.1))
         .unwrap_or((0, &0.0f32));
     (idx, val)
 }

@@ -597,7 +597,7 @@ pub fn frechet_mean(
     let start_idx = weights
         .iter()
         .enumerate()
-        .max_by(|a, b| a.1.total_cmp(b.1))
+        .max_by(|a, b| crate::float_order::cmp_for_max(*a.1, *b.1))
         .map_or(0, |(i, _)| i);
 
     let mut mu = embeddings[start_idx * dim..(start_idx + 1) * dim].to_vec();

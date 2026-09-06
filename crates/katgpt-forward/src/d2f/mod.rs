@@ -1924,7 +1924,10 @@ pub fn d2f_decode_block_soft(
                 .iter()
                 .copied()
                 .enumerate()
-                .max_by(|a: &(usize, f32), b: &(usize, f32)| a.1.total_cmp(&b.1))
+                // float_order: a NaN logit must never win greedy argmax.
+                .max_by(|a: &(usize, f32), b: &(usize, f32)| {
+                    katgpt_core::float_order::cmp_for_max(a.1, b.1)
+                })
                 .unwrap_or((0, f32::NEG_INFINITY));
 
             current_top1[pos] = best_idx;
@@ -2020,7 +2023,11 @@ pub fn d2f_decode_block_soft(
                 .iter()
                 .copied()
                 .enumerate()
-                .max_by(|a: &(usize, f32), b: &(usize, f32)| a.1.total_cmp(&b.1)).map_or(0, |(i, _)| i);
+                // float_order: a NaN logit must never win greedy argmax.
+                .max_by(|a: &(usize, f32), b: &(usize, f32)| {
+                    katgpt_core::float_order::cmp_for_max(a.1, b.1)
+                })
+                .map_or(0, |(i, _)| i);
             tokens[pos] = best;
         }
     }

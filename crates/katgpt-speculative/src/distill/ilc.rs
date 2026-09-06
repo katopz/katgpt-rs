@@ -532,7 +532,7 @@ pub fn build_dd_tree_screened_synonyms(
             let best_token = marginal
                 .iter()
                 .enumerate()
-                .max_by(|(_, a), (_, b)| a.total_cmp(b))
+                .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                 .map(|(i, _)| i);
 
             let Some(token_idx) = best_token else {

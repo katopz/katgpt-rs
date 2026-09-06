@@ -135,7 +135,7 @@ impl AdaptiveReconciler {
         self.q_values
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.total_cmp(b))
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map_or(1, |(i, _)| i)
     }
 

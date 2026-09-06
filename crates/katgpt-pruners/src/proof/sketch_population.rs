@@ -312,7 +312,8 @@ impl SketchPopulation {
     pub fn best_elo(&self) -> Option<&SketchEntry> {
         self.sketches
             .values()
-            .max_by(|a, b| a.elo_rating.total_cmp(&b.elo_rating))
+            // float_order: a NaN elo must never win best-elo.
+            .max_by(|a, b| katgpt_core::float_order::cmp_for_max_f64(a.elo_rating, b.elo_rating))
     }
 
     /// Pick the entry at the `idx`-th position in HashMap iteration order.

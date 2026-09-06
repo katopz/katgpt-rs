@@ -47,7 +47,8 @@ impl BernoulliEnv {
         let optimal_arm = probs
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.total_cmp(b))
+            // float_order: a NaN prob must never define the optimal arm.
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map_or(0, |(i, _)| i);
         let optimal_reward = probs[optimal_arm];
         Self {
@@ -110,7 +111,8 @@ impl GaussianEnv {
         let optimal_arm = means
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.total_cmp(b))
+            // float_order: a NaN mean must never define the optimal arm.
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map_or(0, |(i, _)| i);
         let optimal_reward = means[optimal_arm];
         Self {

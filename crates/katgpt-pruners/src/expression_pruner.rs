@@ -68,7 +68,8 @@ impl FeatureExtractor for DefaultFeatureExtractor {
         let max_score = inner_scores
             .iter()
             .copied()
-            .max_by(|a, b| a.total_cmp(b))
+            // float_order: a NaN score must never define the max feature.
+            .max_by(|a, b| katgpt_core::float_order::cmp_for_max(*a, *b))
             .unwrap_or(0.0);
 
         vec![

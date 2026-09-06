@@ -647,7 +647,10 @@ mod tests {
         // argmax points elsewhere — a point-mass proposal at this token).
         p.iter()
             .enumerate()
-            .min_by(|(_, a), (_, b)| a.total_cmp(b)).map_or(0, |(i, _)| i)
+            // float_order: a NaN prob must never win the min (total_cmp ranks
+            // NaN below -inf → it would be selected as the least-peaked token).
+            .min_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_min(**a, **b))
+            .map_or(0, |(i, _)| i)
     }
 
     fn tv_distance(counts: &[usize], p: &[f32], n: usize) -> f64 {

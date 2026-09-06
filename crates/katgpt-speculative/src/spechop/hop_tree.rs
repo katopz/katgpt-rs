@@ -205,7 +205,7 @@ pub fn build_hop_dd_tree(marginals: &[HopMarginal], config: &HopTreeConfig) -> V
                 .iter()
                 .filter(|c| c.confidence >= config.confidence_floor)
                 .max_by(|a, b| {
-                    katgpt_core::float_order::cmp_for_max(a.confidence, b.confidence)
+                    katgpt_core::float_order::cmp_for_max_f64(a.confidence, b.confidence)
                 });
 
             let Some(candidate) = best else {
@@ -411,7 +411,7 @@ pub fn build_hop_dd_tree_with_schedule(
                 .iter()
                 .filter(|c| c.confidence >= floor)
                 .max_by(|a, b| {
-                    katgpt_core::float_order::cmp_for_max(a.confidence, b.confidence)
+                    katgpt_core::float_order::cmp_for_max_f64(a.confidence, b.confidence)
                 });
 
             let Some(candidate) = best else {

@@ -264,7 +264,8 @@ impl SketchSampler {
             let best = candidates.iter().max_by(|a, b| {
                 let score_a = a.p_ucb_score(total, elo_min, elo_max, self.config.c);
                 let score_b = b.p_ucb_score(total, elo_min, elo_max, self.config.c);
-                score_a.total_cmp(&score_b)
+                // float_order: a NaN UCB score must never win the sample.
+                katgpt_core::float_order::cmp_for_max_f64(score_a, score_b)
             });
 
             if let Some(entry) = best {
@@ -347,7 +348,8 @@ impl SketchSampler {
             // Basic UCB without Elo normalization
             let score_a = a.elo_rating + c * (total as f64 / (a.visits + 1) as f64).sqrt();
             let score_b = b.elo_rating + c * (total as f64 / (b.visits + 1) as f64).sqrt();
-            score_a.total_cmp(&score_b)
+            // float_order: a NaN UCB score must never win the sample.
+            katgpt_core::float_order::cmp_for_max_f64(score_a, score_b)
         });
 
         // `values_arbitrary` on a non-empty HashMap always yields at least

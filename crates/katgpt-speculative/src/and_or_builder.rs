@@ -390,7 +390,8 @@ fn argmax_or_zero(marginals: &[&[f32]], d: usize) -> usize {
         Some(m) if !m.is_empty() => m
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.total_cmp(b))
+            // float_order: a NaN marginal must never win the argmax.
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map_or(0, |(idx, _)| idx),
         _ => 0,
     }

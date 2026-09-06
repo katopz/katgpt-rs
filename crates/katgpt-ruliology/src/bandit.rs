@@ -179,7 +179,10 @@ impl RuliologyBandit {
                 continue;
             }
             let p = arm.payoff();
-            if p.total_cmp(&best_payoff).is_gt() {
+            // Same float_order semantics as `best_arm`: `>` is false for NaN,
+            // so a NaN payoff can neither win nor poison `best_payoff`
+            // (total_cmp would rank NaN above +inf and select it).
+            if p > best_payoff {
                 best_payoff = p;
                 best = i;
             }
@@ -426,7 +429,9 @@ impl RuliologyAbsorbCompress {
             .max_by(|&&a, &&b| {
                 let pa = self.bandit.arms()[a].payoff();
                 let pb = self.bandit.arms()[b].payoff();
-                pa.total_cmp(&pb)
+                // float_order: a NaN payoff must never win the promotion
+                // (total_cmp ranks NaN above +inf → it would be selected).
+                katgpt_core::float_order::cmp_for_max_f64(pa, pb)
             })
             .copied()
     }

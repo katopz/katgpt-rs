@@ -433,7 +433,7 @@ pub fn inject_sde_noise_into(
             perturbed
                 .iter()
                 .enumerate()
-                .max_by(|(_, a), (_, b)| a.total_cmp(b))
+                .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                 .map(|(i, _)| i)
         } else {
             None
@@ -993,7 +993,7 @@ pub fn best_of_k_rollouts(
             let best_idx = scores
                 .iter()
                 .enumerate()
-                .max_by(|(_, a), (_, b)| a.total_cmp(b))
+                .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                 .map_or(0, |(i, _)| i);
             paths.into_iter().nth(best_idx).unwrap_or_default()
         }
@@ -1018,13 +1018,13 @@ pub fn best_of_k_rollouts(
                     scores
                         .iter()
                         .enumerate()
-                        .max_by(|(_, a), (_, b)| a.total_cmp(b))
+                        .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
                         .map_or(0, |(i, _)| i)
                 } else {
                     final_residuals
                         .iter()
                         .enumerate()
-                        .min_by(|(_, a), (_, b)| a.total_cmp(b))
+                        .min_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_min(**a, **b))
                         .map_or(0, |(i, _)| i)
                 };
             paths.into_iter().nth(best_idx).unwrap_or_default()

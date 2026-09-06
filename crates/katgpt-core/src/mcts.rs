@@ -571,7 +571,8 @@ fn select_inline<S: GameState>(
             .max_by(|&a, &b| {
                 let sa = ucb1_score_cached(nodes[a].total_reward, nodes[a].visits, ln_parent);
                 let sb = ucb1_score_cached(nodes[b].total_reward, nodes[b].visits, ln_parent);
-                sa.total_cmp(&sb)
+                // float_order: a NaN UCB score must never win the descent.
+                crate::float_order::cmp_for_max(sa, sb)
             })
             .expect("children non-empty");
 

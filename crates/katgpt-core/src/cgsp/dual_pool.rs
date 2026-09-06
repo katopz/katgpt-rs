@@ -465,7 +465,10 @@ impl<B: HintDeltaBandit> DualPoolBandit<B> {
                 let evict_idx = e_prios
                     .iter()
                     .enumerate()
-                    .min_by(|(_, a), (_, b)| a.total_cmp(b))
+                    // float_order: a NaN priority must never be the eviction
+                    // target (total_cmp ranks NaN below -inf → it would win
+                    // the min and be evicted first); NaN loses instead.
+                    .min_by(|(_, a), (_, b)| crate::float_order::cmp_for_min(**a, **b))
                     .map(|(i, _)| i);
                 if let Some(idx) = evict_idx {
                     // Replace evicted arm's priority in-place (keep size fixed).

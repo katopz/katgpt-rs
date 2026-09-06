@@ -447,7 +447,9 @@ mod tests {
     fn argmax(v: &[f32]) -> usize {
         v.iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.total_cmp(b)).map_or(0, |(i, _)| i)
+            // float_order: a NaN score must never win the argmax.
+            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
+            .map_or(0, |(i, _)| i)
     }
 
     /// Planted-group LM head, the same geometry Benchmark 657 uses.

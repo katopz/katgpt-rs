@@ -1283,6 +1283,38 @@ system that duplicates already-shipped substrate under a different name
 
 ## Issue log (resolved)
 
+- **Issue 729 — the NaN-comparator class never got its katgpt-rs wave: ~160 legacy `partial_cmp` sites + 13 NaN-promoting `total_cmp` positions, in the repo that OWNS `float_order`** RESOLVED
+  (T1–T5 2026-09-06, sweep `f2c305dd` + deref stragglers `649ce5fe` + cross-repo close `2bd3e704`; **closeout residue sweep this commit**;
+  file removed at close — this row + the `katgpt_core::float_order` module doc are the durable record, riir-ai Issue-878 AGENTS.md row
+  carries the class's other half). The 832 T4 sibling sweep never included katgpt-rs, and the earlier total_cmp wave had fixed only part
+  of src, leaving benches/examples/tests plus a src tail. **Group A** (~150 legacy-idiom sites / ~120 files) swept to the float_order
+  terminals; **Group B** (13 `total_cmp`-in-NaN-promoting-position sites — IEEE-754 totalOrder ranks NaN above `+inf`, so a descending
+  sort/selection promotes the corrupt value to rank 0; sharpest named: ruliology `bandit::best_arm`) swept to `cmp_for_max`/`cmp_for_min`
+  (+`_f64` twins), bit-identical on NaN-free input so no gate re-baselines. No-dep crates keep documented local fallbacks (attn-match
+  `desc_nan_last`, micro-belief's in-source note); `total_cmp` remains correct for sorts (total order — no abort) and binary-search
+  probes/`Ord` chains (direction-neutral determinism is the contract).
+
+  **Closeout residue sweep (this commit) — the tail had its own tail, in three classes.** (1) A wider selection-shaped scan (max_by/min_by
+  closures + `is_gt` accumulators over `total_cmp`, multi-line-window aware — the census's own Lesson-1 class one window deeper) found **~35
+  more production Group B-shaped sites the 13-site census had undercounted**, all now converted: core `external_regret` ×2 (`is_gt` → `>`),
+  `cgsp/dual_pool` (NaN-priority eviction), `mcts` (NaN UCB winning the descent), `slod`; forward `d2f` greedy argmax ×2 + `cluster_head`
+  + `d2f_verifier` min; kv `cs_kv_probe::argmax`; pruners `bandit` best-arm ×3 + `expression_pruner` + proof `sketch_population::best_elo`
+  + `sketch_sampler` ×2 (f64 UCB); speculative `belief_drafter`/`blueprint`/`and_or_builder`/`adaptive`/`ilc`/`trd` + `dd_tree` ×10; and
+  ruliology `bandit::best_unpromoted_arm` — **the sibling method of the issue's own sharpest named site, missed by `f2c305dd` in the same
+  file: the comment was updated but the twin loop's `total_cmp` was not, so a NaN payoff could be selected as best unpromoted arm AND poison
+  `best_payoff`**. All bit-identical on NaN-free input; **all seven touched crates' lib suites count-identical to the T4 baselines** (core
+  1974/0 · speculative 305/0 · pruners 126/0 · dec 225/0 · ruliology 93/0 · forward 125/0 · kv 24/0) + workspace `check --all-targets
+  --keep-going` clean. (2) An 8th deref/f64 twin from `f2c305dd` itself: `spechop/hop_tree` ×2 passed `f64 confidence` to `cmp_for_max`
+  (E0308) — found by the all-features compile, fixed to `cmp_for_max_f64`, the same class `649ce5fe` recorded. (3) The deref-depth lesson
+  applied ONE level deeper than 878 recorded it: the sweep's own first pass wrote `*a` where `.enumerate().max_by(|(_, a), (_, b)| ...)`
+  binds `a: &&f32` (the closure receives a REFERENCE TO THE ITEM, so destructuring adds a second ref) — rustc's E0308 + suggestion caught
+  every one; the compile gate remains the only detector. **Documented leaves (verified remaining, 14 scan hits, all in-class):** test-mod/
+  test-fixture sites (dllm_solver ×2, subspace_phase_gate, bigram_markov, moka_int8 ×2, sense ×2, attn-match score_matrix, percepta
+  legacy/tests), `dec/heat_kernel` (NaN can win the min but the `< NULL_SPACE_THRESHOLD` guard rejects it — gated neutral arm, now commented
+  at the site), `d2f_verifier::argmax_total_cmp` (deliberately named — "branch-free, NaN-deterministic" IS its contract), micro-belief
+  `coherence_bench` (in-source no-float_order note). Cross-repo: the riir-ai lane was RESOLVED same day by riir-ai `.issues/878`
+  (`1ee35da79`, ~140 sites incl. PRODUCTION civ `map_tick`), which also fixed HERE the deref-depth stragglers `f2c305dd` shipped in
+  feature-gated surfaces (`649ce5fe`). Record: this row + the float_order module doc + git history (issue file removed at close).
 - **Issue 728 — `silent_now_load_bearing` was 0 in all 16 repos because the classifier speaks ONE repo's dialect** RESOLVED
   (T1–T5, 2026-09-06; file removed per noise-reduction — durable record in `.docs/10_audits/cfg_gated_silent_zero_pass.md` §T4d/§T4e,
   full narrative in git history). T1 widened `is_load_bearing` (6 tokens + `LOAD_BEARING_BIGRAMS` adjacent-pair matching, every
