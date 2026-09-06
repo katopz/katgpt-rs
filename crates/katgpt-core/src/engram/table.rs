@@ -61,6 +61,20 @@ impl InMemoryEngramTable {
         &self.heads
     }
 
+    /// Read-only view of the flat `N × D` row-major slot array (public).
+    ///
+    /// The freeze/mirror producer (riir-chaind Plan 046) freezes these bytes
+    /// (f32 little-endian, one contiguous block) into a
+    /// `MerkleFrozenEnvelope` so the 3-way integrity check pins the exact
+    /// table contents, and `restore_freeze_from_turso` can reconstruct the
+    /// array. Identity invariant: `build_merkle_root(self.slot_rows(),
+    /// self.dim()) == self.commitment()` (same bytes the cached root was
+    /// computed from — pinned by test).
+    #[inline]
+    pub fn slot_rows(&self) -> &[f32] {
+        &self.slots
+    }
+
     /// Raw slot array access (crate-visible). Used by `StagingEngramTable`
     /// (Plan 360) to copy-on-write the slot array during surgical per-slot
     /// mutations. Returns the flat `N × D` row-major slice.
@@ -393,6 +407,30 @@ mod tests {
             t2.commitment(),
             "same contents → same commitment"
         );
+    }
+
+    #[test]
+    fn slot_rows_reproduces_commitment_and_shape() {
+        // Plan 046 (riir-chain): the freeze/mirror producer freezes
+        // `slot_rows()` bytes into a `MerkleFrozenEnvelope`. The identity
+        // invariant that makes that sound: recomputing the Merkle root from
+        // the public slice reproduces the cached commitment, and the slice
+        // shape is exactly `n_slots × dim`.
+        let mut b = EngramTableBuilder::new(16, 4);
+        for i in 0..4u64 {
+            let pat = [i as f32, (i + 1) as f32, (i + 2) as f32, (i + 3) as f32];
+            b.add_pattern(EngramHash(i), &pat);
+        }
+        let t = b.build();
+        assert_eq!(t.slot_rows().len(), 16 * 4, "slice is n_slots × dim");
+        assert_eq!(
+            super::super::commitment::build_merkle_root(t.slot_rows(), 4),
+            t.commitment(),
+            "recomputed root from the public slice must equal the cached commitment"
+        );
+        // Populated rows are visible through the public accessor (slot 2 was
+        // written with [2.0, 3.0, 4.0, 5.0] — hash 2 lands at slot 2 mod 16).
+        assert_eq!(&t.slot_rows()[2 * 4..3 * 4], &[2.0, 3.0, 4.0, 5.0]);
     }
 
     #[test]
