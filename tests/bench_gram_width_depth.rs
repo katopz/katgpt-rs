@@ -15,6 +15,8 @@
 use katgpt_rs::speculative::dd_tree::{
     WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts, build_dd_tree_sde, extract_best_path,
 };
+#[cfg(feature = "eqr_convergence")]
+use katgpt_rs::speculative::dd_tree::RestartMode;
 use katgpt_rs::speculative::types::{NoScreeningPruner, SdeConfig};
 use katgpt_rs::transformer::TransformerWeights;
 use katgpt_rs::types::{Config, Rng};
@@ -179,6 +181,8 @@ fn run_width_sweep(
         let width_config = WidthScaleConfig {
             k_rollouts: k,
             selection: WidthSelectionMode::BestQ,
+            #[cfg(feature = "eqr_convergence")]
+            restart_mode: RestartMode::Perturb,
         };
 
         let start = std::time::Instant::now();
@@ -235,6 +239,8 @@ fn run_depth_sweep(
     let width_config = WidthScaleConfig {
         k_rollouts: fixed_width,
         selection: WidthSelectionMode::BestQ,
+        #[cfg(feature = "eqr_convergence")]
+        restart_mode: RestartMode::Perturb,
     };
 
     let mut results = Vec::with_capacity(t_values.len());

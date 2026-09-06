@@ -721,6 +721,28 @@ pub enum WidthSelectionMode {
     Top1Converged,
 }
 
+/// How each rollout's starting state is drawn (Issue 732 T1 — the EqR
+/// randomized-initialization axis, Research 079 §10).
+///
+/// - `Perturb` — the pre-732 behavior: per-rollout SDE noise (γ) around the
+///   SAME base marginals — low-variance perturbation inside one basin.
+/// - `FreshZ0` — an independent high-variance draw per rollout (EqR: fresh
+///   random z₀, large σ) probing DIFFERENT basins; the tree builder is the
+///   dynamics that runs from each fresh start. Log-marginals + σ = 4.0
+///   Gaussian on EVERY element — no confidence-floor skip, no top-1
+///   preservation, so nothing anchors the draw to the base ranking. Seeded
+///   per rollout (`base_seed.wrapping_add(k)`), replay-deterministic.
+#[cfg(feature = "eqr_convergence")]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RestartMode {
+    /// SDE perturbation around the base marginals (the pre-732 behavior).
+    #[default]
+    Perturb,
+    /// Fresh independent high-variance draw per rollout (EqR RI axis).
+    FreshZ0,
+}
+
 /// Configuration for width-scaling rollouts (PTRM Plan 083).
 ///
 /// Controls how many independent SDE rollouts to run and how to select
@@ -732,6 +754,11 @@ pub struct WidthScaleConfig {
     pub k_rollouts: usize,
     /// How to select the winning rollout.
     pub selection: WidthSelectionMode,
+    /// How each rollout's starting state is drawn (Issue 732 T1; EqR RI axis,
+    /// Research 079 §10). Default: [`RestartMode::Perturb`] = the pre-732
+    /// behavior (bit-identical — the Perturb path is untouched).
+    #[cfg(feature = "eqr_convergence")]
+    pub restart_mode: RestartMode,
 }
 
 #[cfg(feature = "elf_sde")]
@@ -740,6 +767,8 @@ impl Default for WidthScaleConfig {
         Self {
             k_rollouts: 1,
             selection: WidthSelectionMode::default(),
+            #[cfg(feature = "eqr_convergence")]
+            restart_mode: RestartMode::default(),
         }
     }
 }
@@ -751,6 +780,8 @@ impl WidthScaleConfig {
         Self {
             k_rollouts: 16,
             selection: WidthSelectionMode::BestQ,
+            #[cfg(feature = "eqr_convergence")]
+            restart_mode: RestartMode::default(),
         }
     }
 }
@@ -902,6 +933,50 @@ pub fn branch_velocity_at(depth: usize, marginal_curr: &[f32], marginal_prev: &[
 #[inline]
 pub fn cross_scale_consistent(v1: f32, v2: f32, alpha: f32, threshold: f32) -> bool {
     (v2 - alpha * v1).abs() <= threshold
+}
+
+/// Issue 732 T1 — FreshZ0 restart draw: log-marginals + σ = 4.0 Gaussian on
+/// EVERY element (no confidence-floor skip, no top-1 preservation — nothing
+/// anchors the draw to the base ranking), re-normalized. EqR's
+/// randomized-initialization axis: each rollout starts from an independent
+/// high-variance state so the K rollouts probe DIFFERENT basins, with the
+/// deterministic tree builder as the dynamics. Seeded by the caller's
+/// per-rollout `Rng` — replay-deterministic. Zero-alloc: reuses the caller's
+/// buffer exactly like [`inject_sde_noise_into`].
+#[cfg(all(feature = "elf_sde", feature = "eqr_convergence"))]
+pub fn inject_fresh_z0_into(marginals: &[&[f32]], rng: &mut Rng, out: &mut Vec<Vec<f32>>) {
+    /// σ of the log-space fresh draw. Fixed a-priori (Issue 732 pre-registration):
+    /// large enough to decouple rollout rankings on draft-sized vocabs, where
+    /// log-prob gaps are typically < 3 nats.
+    const Z0_SIGMA: f32 = 4.0;
+
+    out.reserve(marginals.len());
+    use katgpt_core::simd::fast_exp;
+    for (i, marginal) in marginals.iter().enumerate() {
+        if i >= out.len() {
+            out.push(Vec::new());
+        }
+        let slot = &mut out[i];
+        slot.clear();
+        slot.extend_from_slice(marginal);
+        let mut sum = 0.0f32;
+        for prob in slot.iter_mut() {
+            // Fresh draw: EVERY element is distorted — the confidence-floor
+            // and preserve-top1 skips are the Perturb anchors and are
+            // deliberately absent here. ln(0) is -inf → exp stays 0.0; a
+            // zero-prob token stays zero in this draw.
+            let noisy_log_p = prob.ln() + Z0_SIGMA * rng.normal();
+            *prob = fast_exp(noisy_log_p).max(0.0);
+            sum += *prob;
+        }
+        if sum > 0.0 {
+            let inv_sum = 1.0 / sum;
+            for prob in slot.iter_mut() {
+                *prob *= inv_sum;
+            }
+        }
+    }
+    out.truncate(marginals.len());
 }
 
 /// Best-of-K rollouts: run K independent SDE-noised trees, select the best path.

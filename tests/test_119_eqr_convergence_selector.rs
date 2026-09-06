@@ -20,7 +20,7 @@
 use katgpt_core::{Config, ConvergenceSelector, Rng};
 use katgpt_rs::speculative::NoScreeningPruner;
 use katgpt_rs::speculative::dd_tree::{
-    ResidualTracker, WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts, inject_sde_noise,
+    RestartMode, ResidualTracker, WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts, inject_sde_noise,
 };
 use katgpt_rs::speculative::dflash::dflash_predict;
 use katgpt_rs::speculative::types::SdeConfig;
@@ -196,6 +196,7 @@ fn proof_4_top1_converged_produces_valid_paths() {
         &WidthScaleConfig {
             k_rollouts: 16,
             selection: WidthSelectionMode::Top1Converged,
+            restart_mode: RestartMode::Perturb,
         },
         42,
     );
@@ -229,6 +230,7 @@ fn proof_4_top1_converged_produces_valid_paths() {
         &WidthScaleConfig {
             k_rollouts: 16,
             selection: WidthSelectionMode::Top1Converged,
+            restart_mode: RestartMode::Perturb,
         },
         99,
     );
@@ -304,6 +306,7 @@ fn proof_5_top1_converged_selects_low_residual() {
         &WidthScaleConfig {
             k_rollouts: k as usize,
             selection: WidthSelectionMode::Top1Converged,
+            restart_mode: RestartMode::Perturb,
         },
         42,
     );
@@ -361,6 +364,7 @@ fn proof_6_no_regression_existing_modes() {
         &WidthScaleConfig {
             k_rollouts: 1,
             selection: WidthSelectionMode::BestQ,
+            restart_mode: RestartMode::Perturb,
         },
         42,
     );
@@ -374,6 +378,7 @@ fn proof_6_no_regression_existing_modes() {
         &WidthScaleConfig {
             k_rollouts: 1,
             selection: WidthSelectionMode::MostFrequent,
+            restart_mode: RestartMode::Perturb,
         },
         42,
     );
@@ -387,6 +392,7 @@ fn proof_6_no_regression_existing_modes() {
         &WidthScaleConfig {
             k_rollouts: 1,
             selection: WidthSelectionMode::Top1Converged,
+            restart_mode: RestartMode::Perturb,
         },
         42,
     );
@@ -469,6 +475,7 @@ fn proof_7_edge_cases() {
         &WidthScaleConfig {
             k_rollouts: 4,
             selection: WidthSelectionMode::Top1Converged,
+            restart_mode: RestartMode::Perturb,
         },
         42,
     );
@@ -495,6 +502,7 @@ fn proof_7_edge_cases() {
         &WidthScaleConfig {
             k_rollouts: 16,
             selection: WidthSelectionMode::Top1Converged,
+            restart_mode: RestartMode::Perturb,
         },
         42,
     );

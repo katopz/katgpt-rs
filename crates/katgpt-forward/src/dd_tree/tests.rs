@@ -957,6 +957,8 @@ fn test_width_scale_config_defaults() {
 #[test]
 fn test_best_of_k_rollouts_k1_matches_single_tree() {
     use super::{WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts};
+    #[cfg(feature = "eqr_convergence")]
+    use super::RestartMode;
     use katgpt_core::speculative::types::SdeConfig;
 
     let config = Config::draft();
@@ -979,6 +981,8 @@ fn test_best_of_k_rollouts_k1_matches_single_tree() {
         &WidthScaleConfig {
             k_rollouts: 1,
             selection: WidthSelectionMode::BestQ,
+            #[cfg(feature = "eqr_convergence")]
+            restart_mode: RestartMode::Perturb,
         },
         42,
     );
@@ -999,6 +1003,8 @@ fn test_best_of_k_rollouts_k1_matches_single_tree() {
 #[test]
 fn test_best_of_k_rollouts_k16_produces_diverse_paths() {
     use super::{WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts};
+    #[cfg(feature = "eqr_convergence")]
+    use super::RestartMode;
     use katgpt_core::speculative::types::SdeConfig;
 
     let config = Config::draft();
@@ -1023,6 +1029,8 @@ fn test_best_of_k_rollouts_k16_produces_diverse_paths() {
             &WidthScaleConfig {
                 k_rollouts: 16,
                 selection: WidthSelectionMode::BestQ,
+                #[cfg(feature = "eqr_convergence")]
+                restart_mode: RestartMode::Perturb,
             },
             seed,
         );
@@ -1041,6 +1049,8 @@ fn test_best_of_k_rollouts_k16_produces_diverse_paths() {
 #[test]
 fn test_best_of_k_rollouts_no_sde_fallback() {
     use super::{WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts};
+    #[cfg(feature = "eqr_convergence")]
+    use super::RestartMode;
     use katgpt_core::speculative::types::SdeConfig;
 
     let config = Config::draft();
@@ -1063,6 +1073,8 @@ fn test_best_of_k_rollouts_no_sde_fallback() {
         &WidthScaleConfig {
             k_rollouts: 64,
             selection: WidthSelectionMode::BestQ,
+            #[cfg(feature = "eqr_convergence")]
+            restart_mode: RestartMode::Perturb,
         },
         42,
     );
@@ -1074,6 +1086,8 @@ fn test_best_of_k_rollouts_no_sde_fallback() {
         &WidthScaleConfig {
             k_rollouts: 1,
             selection: WidthSelectionMode::BestQ,
+            #[cfg(feature = "eqr_convergence")]
+            restart_mode: RestartMode::Perturb,
         },
         42,
     );
@@ -1089,6 +1103,8 @@ fn test_best_of_k_rollouts_no_sde_fallback() {
 #[test]
 fn test_best_of_k_rollouts_most_frequent_mode() {
     use super::{WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts};
+    #[cfg(feature = "eqr_convergence")]
+    use super::RestartMode;
     use katgpt_core::speculative::types::SdeConfig;
 
     let config = Config::draft();
@@ -1110,6 +1126,8 @@ fn test_best_of_k_rollouts_most_frequent_mode() {
         &WidthScaleConfig {
             k_rollouts: 8,
             selection: WidthSelectionMode::MostFrequent,
+            #[cfg(feature = "eqr_convergence")]
+            restart_mode: RestartMode::Perturb,
         },
         42,
     );
@@ -1124,6 +1142,8 @@ fn test_best_of_k_rollouts_most_frequent_mode() {
 #[test]
 fn test_best_of_k_rollouts_empty_marginals() {
     use super::{WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts};
+    #[cfg(feature = "eqr_convergence")]
+    use super::RestartMode;
     use katgpt_core::speculative::types::SdeConfig;
 
     let config = Config::draft();
@@ -1140,6 +1160,8 @@ fn test_best_of_k_rollouts_empty_marginals() {
         &WidthScaleConfig {
             k_rollouts: 4,
             selection: WidthSelectionMode::BestQ,
+            #[cfg(feature = "eqr_convergence")]
+            restart_mode: RestartMode::Perturb,
         },
         42,
     );

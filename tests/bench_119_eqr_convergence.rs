@@ -19,7 +19,7 @@ use std::time::Instant;
 use katgpt_core::{Config, ConvergenceSelector, Rng};
 use katgpt_rs::speculative::NoScreeningPruner;
 use katgpt_rs::speculative::dd_tree::{
-    ResidualTracker, WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts,
+    ResidualTracker, RestartMode, WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts,
     build_dd_tree_screened, extract_best_path, inject_sde_noise,
 };
 use katgpt_rs::speculative::dflash::dflash_predict;
@@ -126,6 +126,7 @@ fn bench_eqr_convergence_comparison() {
                         &WidthScaleConfig {
                             k_rollouts: k,
                             selection: *mode,
+                            restart_mode: RestartMode::Perturb,
                         },
                         42 + trial as u64,
                     );
@@ -151,6 +152,7 @@ fn bench_eqr_convergence_comparison() {
                             &WidthScaleConfig {
                                 k_rollouts: k,
                                 selection: *mode,
+                                restart_mode: RestartMode::Perturb,
                             },
                             42 + trial as u64,
                         )
@@ -261,6 +263,7 @@ fn bench_selection_latency() {
                     &WidthScaleConfig {
                         k_rollouts: k,
                         selection: *mode,
+                        restart_mode: RestartMode::Perturb,
                     },
                     42,
                 );
@@ -277,6 +280,7 @@ fn bench_selection_latency() {
                     &WidthScaleConfig {
                         k_rollouts: k,
                         selection: *mode,
+                        restart_mode: RestartMode::Perturb,
                     },
                     42 + i as u64,
                 );

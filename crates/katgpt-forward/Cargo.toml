@@ -209,6 +209,13 @@ dflare_progressive_budget = ["katgpt-core/dflare_progressive_budget", "katgpt-sp
 # WidthScaleConfig + best_of_k_rollouts resolve.
 elf_sde = ["katgpt-speculative/elf_sde"]
 
+# EqR convergence selection (Plan 119) — Issue 732: forwarded so the
+# cfg-gated `restart_mode` field on katgpt-speculative's WidthScaleConfig
+# stays visible to this crate's dd_tree integration tests at every feature
+# state (the literal sites carry cfg'd lines that must align with the field's
+# cfg — the Plan 394/396 forwarding precedent).
+eqr_convergence = ["katgpt-speculative/eqr_convergence"]
+
 # Thinking Prune — FrozenBaseGuard schedule (Plan 171). Empty tracking flag —
 # gates build_dd_tree_screened_with_schedule + 2 tests. PrunerSchedule is
 # unconditional in katgpt-pruners, no upstream forward needed.
