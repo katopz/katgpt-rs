@@ -525,6 +525,65 @@ fn percentile_report(sorted: &[usize], p: f64) -> (usize, usize) {
     (sorted[idx], sorted.len() - idx)
 }
 
+/// The harness's machine-readable outcome (Issue 731 T6). A println-only
+/// harness cannot be AGGREGATED across fixtures, which is exactly what the
+/// held-out replication needs — every field below is a quantity the v1-v4
+/// records already print. v1-v4 ignore the return; their printed record and
+/// their asserts are unchanged.
+#[derive(Debug, Clone, Copy)]
+struct G2Report {
+    /// Inputs in the corpus.
+    n: usize,
+    /// `true` = Phase A0 rejected the fixture (non-finite full-depth
+    /// reference). EVERY other field is meaningless when this is set, and no
+    /// invariant ran — a diverged fixture is neither a pass nor a fail.
+    diverged: bool,
+    /// Inputs with no knee by depth `R_REF`.
+    undefined: usize,
+    /// Max per-input knee over the DEFINED ones (0 when none is defined).
+    knee_max: usize,
+    /// The corpus-safe static depth (Phase B); `R_REF` when none qualifies.
+    k_star: usize,
+    /// Median iterations used over ALL inputs (fired k, else `R_REF`).
+    median_all: usize,
+    /// `k_star / median_all` — the adaptivity margin (bar ≥ 2×).
+    margin: f32,
+    /// `R_REF / median_all` — the iteration cut vs the fixed default.
+    cut: f32,
+    /// Mean cosine distance to the full-depth reference at exit.
+    mean_exit_dist: f32,
+    /// Max cosine distance to the full-depth reference at exit.
+    max_exit_dist: f32,
+    /// Probe fire count.
+    fired: usize,
+    /// The margin gate's verdict (`false` = corpus REJECTED, G2 NOT evaluated).
+    margin_gate: bool,
+    /// The G2 verdict. `false` whenever `margin_gate` is false — read the two
+    /// together: `!margin_gate` means NOT EVALUATED, never FAIL.
+    g2: bool,
+}
+
+impl G2Report {
+    /// The Phase-A0 branch: the fixture diverges at full depth.
+    fn diverged(n: usize) -> Self {
+        Self {
+            n,
+            diverged: true,
+            undefined: n,
+            knee_max: 0,
+            k_star: R_REF,
+            median_all: R_REF,
+            margin: 1.0,
+            cut: 1.0,
+            mean_exit_dist: f32::NAN,
+            max_exit_dist: f32::NAN,
+            fired: 0,
+            margin_gate: false,
+            g2: false,
+        }
+    }
+}
+
 /// The shared G2 harness: phases in the committed order — refs, A0 (finite
 /// reference gate), A (knees), E1 (G1), E3 (control), B (K*), C (probe) —
 /// then the margin gate, then the G2 verdict. Invariants hold regardless of
@@ -534,7 +593,7 @@ fn run_g2_harness(
     corpus: Vec<CorpusInput>,
     fixture_of: fn(LoopStabilityMode) -> (TransformerWeights, ResidualGate, SdpaOutputGate),
     print_inputs: bool,
-) {
+) -> G2Report {
     let config = make_config(LoopStabilityMode::None);
     let (weights, residual_gate, sdpa_gate) = fixture_of(LoopStabilityMode::None);
     let n = corpus.len();
@@ -558,7 +617,7 @@ fn run_g2_harness(
         (!r.iter().all(|v| v.is_finite())).then(|| (corpus[i].label.clone(), i))
     }) {
         println!("\n[Phase A0] reference logits NON-FINITE for {label} (input {i}) — the fixture diverges at full depth. Corpus REJECTED (pre-declared branch 1); the axis is stability-bounded at this scale. Invariants skipped (nothing finite to verify).");
-        return;
+        return G2Report::diverged(n);
     }
 
     // ── Phase A — per-input knees ────────────────────────────────────────
@@ -579,6 +638,7 @@ fn run_g2_harness(
     }
     let mut defined: Vec<usize> = knees.iter().filter_map(|k| *k).collect();
     let undefined = n - defined.len();
+    let knee_max = defined.iter().copied().max().unwrap_or(0);
     let frac_ge12 = defined.iter().filter(|&&k| k >= 12).count() as f32 / n as f32;
     let frac_le8 = defined.iter().filter(|&&k| k <= 8).count() as f32 / n as f32;
     if defined.is_empty() {
@@ -708,14 +768,32 @@ fn run_g2_harness(
     println!("[Gate] adaptivity margin = K* / median_all = {k_star}/{median_all} = {margin:.2}× (bar ≥ 2×) — the floor-cap: the margin is bounded by K*/{PROBE_D_MIN} under the a-priori d_min");
 
     // ── The margin gate (the corrected sanity bar — module doc record) ───
-    if !(margin >= 2.0 && undefined * 10 <= n) {
+    let margin_gate = margin >= 2.0 && undefined * 10 <= n;
+    let mut report = G2Report {
+        n,
+        diverged: false,
+        undefined,
+        knee_max,
+        k_star,
+        median_all,
+        margin,
+        cut,
+        mean_exit_dist,
+        max_exit_dist,
+        fired: fired_count,
+        margin_gate,
+        g2: false,
+    };
+    if !margin_gate {
         println!("\n[VERDICT] corpus REJECTED: adaptivity margin {margin:.2}× < 2× (or undefined {undefined}/{n} > 10%) — the probe cannot demonstrate ≥2× adaptivity over the corpus-safe static on this corpus. G2 not evaluated. Recorded next lever: a d_min reduction (own pre-registration) or a larger fixture family.");
-        return;
+        return report;
     }
 
     // ── Phase D — the G2 verdict (measured, not asserted) ────────────────
     let g2 = cut >= 2.0 && mean_exit_dist <= KNEE_BOUND;
     println!("\n[VERDICT] G2 (≥2× median iteration cut at mean dist ≤ {KNEE_BOUND}): {}", if g2 { "PASS" } else { "FAIL" });
+    report.g2 = g2;
+    report
 }
 
 /// Corpus v1 — the context/sequence axis. MEASURED 2026-09-07 (pre-registration
@@ -776,8 +854,20 @@ const V4_ALPHA: f32 = 3.0;
 fn scaled_fixture_v4_of(
     stability: LoopStabilityMode,
 ) -> (TransformerWeights, ResidualGate, SdpaOutputGate) {
+    build_alpha_scaled(V4_SEED, V4_ALPHA, stability)
+}
+
+/// The v4 fixture family's body, parameterized by seed (Issue 731 T6 needs
+/// the SAME construction on held-out seeds — a second copy of it would make
+/// the replication test a different fixture family, which is the one thing a
+/// replication may not be).
+fn build_alpha_scaled(
+    seed: u64,
+    alpha: f32,
+    stability: LoopStabilityMode,
+) -> (TransformerWeights, ResidualGate, SdpaOutputGate) {
     let config = make_config(stability);
-    let mut rng = Rng::new(V4_SEED);
+    let mut rng = Rng::new(seed);
     let mut weights = TransformerWeights::new(&config, &mut rng);
     for layer in &mut weights.layers {
         for w in [
@@ -789,7 +879,7 @@ fn scaled_fixture_v4_of(
             &mut layer.mlp_w2,
         ] {
             for v in w.iter_mut() {
-                *v *= V4_ALPHA;
+                *v *= alpha;
             }
         }
     }
@@ -815,5 +905,208 @@ fn bench_731_t3_corpus_v4_loop_weight_scale() {
         corpus,
         scaled_fixture_v4_of,
         true,
+    );
+}
+
+//-──────────────────────────────────────────────────────────────────────────
+// T6 — the HELD-OUT replication of the v4 loop-weight-scale mechanism
+// (pre-registered HERE, in the commit BEFORE its run)
+//-──────────────────────────────────────────────────────────────────────────
+//
+// # Why this exists
+//
+// v4's G2 PASS is self-disclosed as **existence-proof grade**: the fixture
+// (seed 5, α 3.0) was picked by a 144-evaluation scan whose outcome variable
+// WAS the G2 margin, and the margin landed at EXACTLY the bar (2.00×). That
+// is precisely the evidence-grade caveat T4 defers on. Two claims the v4
+// record makes are testable OUT OF SAMPLE at zero extra design freedom —
+// same builder (`build_alpha_scaled`), same α, same untuned probe
+// (τ = 1.0, d_min = 10), same gates, only the weight seed changes:
+//
+// 1. **the ceiling claim** — "the weight-scale axis's margin ceiling is
+//    EXACTLY 2.0×; every margin ≥ 2 fixture sits at K* = 2·d_min".
+// 2. **the rarity claim** — the caveat's force comes from the pass being
+//    rare (1 family in 144 scan rows).
+//
+// A replication can only strengthen or weaken those; it cannot re-tune
+// anything, because nothing here is tunable.
+//
+// # The held-out seed set
+//
+// **A recorded reproducibility gap:** the scan's full seed list was never
+// committed (it ran out-of-tree; the module doc names 9 of the ~17 seeds it
+// touched — 42, 7, 1234, 5, 2, 21, 555, 31337, 271828). "Held out" is
+// therefore a claim relative to the RECORD, not a proof. It is made
+// structurally as strong as the record permits: the set is defined
+// MECHANICALLY as the contiguous run `1001..=1012` — disjoint from every
+// seed the scan record names, from this file's `SEED`/`SEQ_SEEDS`, and from
+// the memorable-constant style the scan sampled in. `t6_holdout_seeds_are_
+// disjoint_from_the_recorded_scan_seeds` asserts the disjointness so the
+// claim cannot silently rot.
+//
+// # Pre-registered predictions
+//
+// - **P1 (ceiling, the primary):** NO held-out fixture attains
+//   `margin > 2.0×` while `mean_exit_dist ≤ 0.01`. A refutation is GOOD news
+//   for the probe — it would mean the 2.0× ceiling is an artifact of the
+//   scan's coverage and G2 has headroom the v4 record denies it.
+// - **P2 (rarity):** `≤ 2 of 12` held-out seeds produce a full G2 PASS
+//   (margin ≥ 2.0× AND cut ≥ 2× AND mean dist ≤ 0.01). Pre-declared reading
+//   of the outcome, committed before the data:
+//     * `0/12` → v4 confirmed as a lottery draw. The synthetic axis is
+//       CLOSED (as T3's conclusion already suspected) and T4's "needs
+//       real-workload evidence" defer is CORROBORATED, not merely asserted.
+//     * `1..=2 / 12` → consistent with the scan's own base rate; the
+//       existence-proof grade stands, unchanged.
+//     * `≥ 3 / 12` → the "scan-selected, one-in-144" caveat is OVERSTATED:
+//       the mechanism generalizes across the seed lottery at fixed α, and
+//       G2's grade upgrades from existence-proof to **replicated
+//       out-of-sample** on the synthetic axis.
+// - **P3 (the invariants — the part that must hold unconditionally):** on
+//   EVERY held-out fixture that passes the Phase-A0 finite-reference gate,
+//   G1 (fed-but-never-firing ≡ `None`), exit ≡ elastic bit-identity, and the
+//   InterLoopNorm control (0 fires at all 8 τ ≤ 3) hold. These are hard
+//   asserts inside `run_g2_harness`, so the test FAILS on violation — they
+//   are the probe's correctness contract and are seed-independent by
+//   construction. This is the half of T6 that is a gate rather than a
+//   measurement, and the half whose value does not depend on the G2 outcome.
+// - **Admissible non-outcome:** α = 3.0 on an unlucky seed may diverge at
+//   full depth (non-finite reference). Phase A0 rejects those; they are
+//   reported as DIVERGED and excluded from P1/P2's denominator, which is
+//   reported explicitly. A diverged fixture is neither a pass nor a fail.
+//
+// **MEASURED: see the printed table + the `[T6]` verdict lines (recorded
+// into `.issues/731` after the run).**
+
+/// The held-out weight seeds — mechanically defined, disjoint from every
+/// seed the v4 scan record names.
+const T6_HOLDOUT_SEEDS: [u64; 12] = [
+    1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012,
+];
+
+/// Every weight seed the v4 scan record names (module doc, waves 1-3) plus
+/// this file's own fixture seeds — the set T6 must not draw from.
+const T6_RECORDED_SCAN_SEEDS: [u64; 12] = [
+    42, 7, 1234, 5, 2, 21, 555, 31337, 271828, 4242, 4243, 4244,
+];
+
+thread_local! {
+    /// The seed the held-out fixture builder reads. `run_g2_harness` calls
+    /// `fixture_of` twice (main arm + InterLoopNorm control) on the SAME
+    /// thread, so a thread-local cell is sufficient and keeps the builder a
+    /// non-capturing `fn` item (the harness takes a fn pointer by design).
+    static T6_SEED: std::cell::Cell<u64> = const { std::cell::Cell::new(V4_SEED) };
+}
+
+/// The held-out fixture builder: the v4 family body at the seed currently in
+/// `T6_SEED`, α unchanged.
+fn scaled_fixture_holdout_of(
+    stability: LoopStabilityMode,
+) -> (TransformerWeights, ResidualGate, SdpaOutputGate) {
+    build_alpha_scaled(T6_SEED.with(|c| c.get()), V4_ALPHA, stability)
+}
+
+/// The disjointness assert behind the "held-out" claim (see the T6 doc).
+#[test]
+fn t6_holdout_seeds_are_disjoint_from_the_recorded_scan_seeds() {
+    for s in T6_HOLDOUT_SEEDS {
+        assert!(
+            !T6_RECORDED_SCAN_SEEDS.contains(&s),
+            "held-out seed {s} is named in the v4 scan record — the T6 replication would be in-sample"
+        );
+    }
+    assert!(
+        !T6_HOLDOUT_SEEDS.contains(&SEED) && !SEQ_SEEDS.iter().any(|s| T6_HOLDOUT_SEEDS.contains(s)),
+        "held-out set overlaps this file's own fixture seeds"
+    );
+}
+
+/// T6 — the held-out replication (predictions P1-P3 pre-registered above).
+#[test]
+fn bench_731_t6_holdout_replication_of_the_v4_mechanism() {
+    let mut reports: Vec<(u64, G2Report)> = Vec::with_capacity(T6_HOLDOUT_SEEDS.len());
+    for seed in T6_HOLDOUT_SEEDS {
+        T6_SEED.with(|c| c.set(seed));
+        let corpus: Vec<CorpusInput> = (0..27usize)
+            .map(|t| CorpusInput {
+                label: format!("S{t}"),
+                seq: None,
+                pos: 0,
+                token: t,
+            })
+            .collect();
+        let report = run_g2_harness(
+            &format!("T6 held-out — loop-weight scale (seed {seed}, α {V4_ALPHA})"),
+            corpus,
+            scaled_fixture_holdout_of,
+            false,
+        );
+        reports.push((seed, report));
+    }
+    T6_SEED.with(|c| c.set(V4_SEED));
+
+    // ── The table (one row per held-out fixture) ─────────────────────────
+    println!("\n═══ [T6] held-out replication table (α {V4_ALPHA}, τ {PROBE_TAU}, d_min {PROBE_D_MIN} — none re-tuned) ═══");
+    println!("  seed | status   | knee_max | undef | K* | med_all | margin | cut   | mean_dist | max_dist | fired");
+    for (seed, r) in &reports {
+        let status = match (r.diverged, r.margin_gate, r.g2) {
+            (true, _, _) => "DIVERGED",
+            (_, false, _) => "REJECTED",
+            (_, true, true) => "G2 PASS ",
+            (_, true, false) => "G2 FAIL ",
+        };
+        println!(
+            "  {:>4} | {} | {:>8} | {:>2}/{:<2} | {:>2} | {:>7} | {:>5.2}× | {:>4.2}× | {:>9.6} | {:>8.6} | {:>2}/{}",
+            seed, status, r.knee_max, r.undefined, r.n, r.k_star, r.median_all, r.margin, r.cut,
+            r.mean_exit_dist, r.max_exit_dist, r.fired, r.n
+        );
+    }
+
+    // ── P1 — the ceiling claim ───────────────────────────────────────────
+    let live: Vec<&G2Report> = reports.iter().map(|(_, r)| r).filter(|r| !r.diverged).collect();
+    let diverged = reports.len() - live.len();
+    let over_ceiling: Vec<(u64, f32)> = reports
+        .iter()
+        .filter(|(_, r)| !r.diverged && r.margin > 2.0 && r.mean_exit_dist <= KNEE_BOUND)
+        .map(|(s, r)| (*s, r.margin))
+        .collect();
+    let max_margin = live.iter().map(|r| r.margin).fold(0.0f32, f32::max);
+    println!(
+        "\n[T6][P1] ceiling claim (no held-out fixture exceeds margin 2.0× at mean dist ≤ {KNEE_BOUND}): {} — max held-out margin {max_margin:.2}× over {} live fixture(s) ({diverged} diverged, excluded){}",
+        if over_ceiling.is_empty() { "CORROBORATED" } else { "REFUTED" },
+        live.len(),
+        if over_ceiling.is_empty() { String::new() } else { format!("; over-ceiling: {over_ceiling:?}") }
+    );
+
+    // ── P2 — the rarity claim ────────────────────────────────────────────
+    let passes: Vec<u64> = reports
+        .iter()
+        .filter(|(_, r)| r.g2 && r.margin >= 2.0 && r.cut >= 2.0 && r.mean_exit_dist <= KNEE_BOUND)
+        .map(|(s, _)| *s)
+        .collect();
+    let n_pass = passes.len();
+    let reading = match n_pass {
+        0 => "v4 is a LOTTERY DRAW — the synthetic axis is CLOSED and T4's real-workload defer is CORROBORATED by measurement, not merely asserted",
+        1 | 2 => "consistent with the scan's own base rate — the existence-proof grade STANDS, unchanged",
+        _ => "the one-in-144 caveat is OVERSTATED — the mechanism generalizes across the seed lottery at fixed α; G2's grade upgrades to REPLICATED OUT-OF-SAMPLE on the synthetic axis",
+    };
+    println!(
+        "[T6][P2] rarity claim (≤ 2 of {} G2-PASS): {n_pass}/{} pass{} — pre-declared reading: {reading}",
+        T6_HOLDOUT_SEEDS.len(),
+        T6_HOLDOUT_SEEDS.len(),
+        if passes.is_empty() { String::new() } else { format!(" ({passes:?})") }
+    );
+
+    // ── P3 — the invariants (asserted inside the harness on every live
+    // fixture; this line records the population they covered) ────────────
+    let live_inputs: usize = live.iter().map(|r| r.n).sum();
+    println!(
+        "[T6][P3] invariants (G1 ≡ None · exit ≡ elastic · InterLoopNorm control 0 fires at all {} τ ≤ 3): HELD on {} live held-out fixture(s) / {live_inputs} inputs — hard-asserted in run_g2_harness, so this line printing at all IS the pass",
+        CONTROL_TAUS.len(),
+        live.len()
+    );
+    assert!(
+        !live.is_empty(),
+        "every held-out fixture diverged at α {V4_ALPHA} — P1/P2 are unevaluable and P3 covered nothing; the replication is INCONCLUSIVE, not a pass"
     );
 }
