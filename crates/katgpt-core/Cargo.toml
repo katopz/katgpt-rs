@@ -188,6 +188,20 @@ cadence_gate = []
 # total-order lesson). Zero deps, zero-alloc hot path. Opt-in until a
 # consumer promotes (the no-default-consumer rule).
 incidence_algebra = []
+
+# leakage_probe (Issue 736 / Research 540; threat model arXiv:2505.12540
+# vec2vec, NeurIPS 2025): modelless attribute-TRANSFER leak score for stored
+# vector stores — defender-side audit across TWO embedding spaces with no
+# encoder access. GD-free transport (deterministic subspace iteration → PCA
+# whitening → entropic Sinkhorn self-labeling → orthogonal-Procrustes polar
+# factor via `linalg::symmetric_eig`) + kNN attribute-transfer top-1 vs the
+# majority-class chance baseline + neighborhood-hit + alignment diagnostics.
+# Companion to `latent_confounder_audit` (single-space, our-directions);
+# signal-diff and coverage verdict: Research 540 §3/§5. Zero deps,
+# audit-cadence allocation (analytic_lattice::audit precedent). Opt-in —
+# consumer is riir-neuron-db Issue 614 E2; no GOAT bench claim until that
+# consumer lands (the cond_audit precedent).
+leakage_probe = []
 # support_regime (Issue 693 / Research 513, arXiv:2608.22764 — LpWM: A Case
 # for Sparse Representations in World Models, Kuang et al. 2026-08-24): the
 # consecutive-tick TEMPORAL consumer of the iou kernel — support instability

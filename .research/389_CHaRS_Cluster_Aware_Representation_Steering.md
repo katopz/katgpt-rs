@@ -290,6 +290,8 @@ Before any riir-train deferral:
 
 ### Routing
 
+> **Correction (2026-09-07, doc-sync):** the plan slot cited below ("409_chars_cluster_aware_steering_primitive.md") was later allocated to `409_jlens_concept_readout_prefilter_poc.md` — CHaRS was never landed and no `chars_steering` feature ships. References kept as written at the time; see `.research/540` §6 for the original stale-ref flag.
+
 - **`katgpt-rs/.plans/409_chars_cluster_aware_steering_primitive.md`** — open primitive. `CharsAnchorBank<K,D>` + `chars_steering_into` + optional `chars_steering_pct_into`. Feature flag `chars_steering`. GOAT gate G1–G5.
 - **`katgpt-rs/.issues/039_chars_committed_blend_fusion_super_goat_evaluation.md`** — track the F1 fusion (CHaRS × CommittedFieldBlend × latent_functor re-estimation = per-NPC archetype-routing steering) for full Q1–Q4 Super-GOAT evaluation before any guide/plan commitment.
 - **No private guide (riir-ai / riir-chain / riir-neuron-db) at this verdict tier.** GOAT does not trigger the mandatory-guide rule (§1.5).

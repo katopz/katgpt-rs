@@ -1,26 +1,44 @@
-# Issue 736: leakage_probe + cross_space diagnostics — modelless open primitives (fusion idea, novelty TBD)
+# Issue 736: leakage_probe + cross_space diagnostics — modelless open primitives (Super-GOAT: T1–T3 landed)
 
-**Status:** Fusion idea — novelty TBD on the probe's *defense-audit* framing; feasibility verified (Research 540). Source: arXiv:2505.12540 "Harnessing the Universal Geometry of Embeddings" (vec2vec, NeurIPS 2025).
+**Status:** IMPLEMENTED (T4 clean + T1–T3 landed 2026-09-07, opt-in `leakage_probe`, gates G1/G1b/G1c/G2 10/10 PASS). Source: arXiv:2505.12540 "Harnessing the Universal Geometry of Embeddings" (vec2vec, NeurIPS 2025).
 
-## Pinned claim (pre-search, per the TTPO rule)
+## T4 — defense-audit novelty deep-search (DONE 2026-09-07)
 
-"A modelless kNN attribute-transfer **leakage probe** that, given unpaired foreign-space vectors + labeled anchors in OUR space, scores the attribute-transferability of a stored vector store — for surfaces `riir-neuron-db` embedding indexes + `BonsaiEmbedder` outputs, consuming unpaired foreign samples, distinguished from `latent_confounder_audit` (single-space, counterfactual slices over OUR directions) by operating across TWO spaces with no encoder access."
+Searches run: "embedding inversion attack defense detection text embeddings" · "vector database privacy leakage auditing membership inference embeddings" · (attribute-inference-defense search timed out; the two returned cover the landscape).
 
-## What ships today (signal-diff verified, Research 540)
+Landscape verdict — three adjacent classes exist, none is a leak-audit score:
+1. **Attack tools** — vec2text (2310.06816), ALGEN few-shot inversion (2502.11308), Transferable Embedding Inversion (2406.10280). Attacks, not audits.
+2. **Defense mechanisms** — DPPN (perturb privacy-sensitive neurons), Eguard (AAAI 2026, mutual-information embedding shield). *Change* the embeddings to prevent inversion; they do not *measure* transferability.
+3. **Risk taxonomies / membership inference** — FINOS air-governance "Information Leaked to Vector Store", Anderson 2025 retrieval-DB membership inference, industry posts. Describe the risk; no quantitative two-space score.
 
-- `mag::TransferMetric::{CkaLinear, RbfMmd, Wasserstein1d}` — scores a *direction*, not a two-space *map*.
-- `latent_confounder_audit` — audits OUR directions via counterfactual slices in ONE space; not foreign-unpaired-across-two.
-- `FaithfulnessProbe`, `gaussianity_probe`, `effective_rank`/`within_class_effective_rank`, `ica_lens` — all single-space.
-- **Nothing ships unpaired cross-space alignment or a leak audit** (repo-wide grep for `vec2vec|2505.12540|universal geometry` = zero hits; CHaRS R389's unpaired-correspondence design never landed).
+Pinned claim survives: a **modelless cross-space attribute-transfer leak SCORE** (defender-side audit, no encoder access) is unshipped in the literature and in the workspace (Research 540 §3 repo-grep zero hits). Tier: **Super-GOAT** on the 4-question gate (Q1 no prior art in class · Q2 new defensive-audit capability · Q3 "our vector stores ship with a measured attribute-leak score" · Q4 composes MAG × neuron-db security × SipIt × canon transport). Q1 carries the honest adjacency caveat above.
 
-## Proposed modules
+## Landed (T1+T2+T3 as one module family — they share one kNN kernel)
 
-- [ ] T1 — `katgpt-core/src/leakage_probe/` (feature `leakage_probe`, opt-in): kNN attribute-transfer leak score; GOAT gate in the Bench-194 shape (planted-leak recovery, monotone-in-coefficient, G2 latency, G4 alloc)
-- [ ] T2 — `katgpt-core/src/cross_space/`: unpaired alignment diagnostics (kNN-overlap / rank-agreement), reusing MAG `TransferMetric`s
-- [ ] T3 — `katgpt-core/src/unpaired_transport/` (opt-in): whitening → PCA correspondence → Sinkhorn self-labeling → orthogonal Procrustes; **G1c pins ≈random on real cross-backbone pairs as an honest negative** (paper evidence + Bench 426/427 say the modelless ceiling is the OT tier)
-- [ ] T4 — novelty deep-search BEFORE T1 lands: "embedding inversion detection", "vector database leakage audit", "membership inference on embeddings" (the searches run so far covered the alignment landscape, not the defense-audit framing)
-- [ ] T5 — consumer: riir-neuron-db Issue 614 (E2) adopts T1 as its security test
+- [x] T1 — `katgpt-core/src/leakage_probe/` (feature `leakage_probe`, opt-in, zero deps): `probe()` → `LeakReport { attribute_transfer_top1, chance_baseline, lift, alignment_mean_cos, neighborhood_hit_rate, verdict }`; verdict tiers InsufficientAlignment/Low/Elevated/High.
+- [x] T2 — cross-space diagnostics folded into the report: `neighborhood_hit_rate` (label-free transport quality) + `alignment_mean_cos`, sharing the probe's kNN kernel (DRY — no MAG feature implication needed).
+- [x] T3 — unpaired transport inside `leakage_probe::transport`: deterministic subspace iteration → PCA whitening (shared `linalg::symmetric_eig`) → CSLS-corrected entropic Sinkhorn → orthogonal-Procrustes polar factor; deterministic multi-start (k+2 orientations, best mean pair cosine) against wrong-basin ICP lock-in. The G1c control PINS the honest negative (iid foreign labels → chance) in-test.
+- [x] T4 — this search; verdict recorded above.
+
+## Gate results (in-module, `--features leakage_probe`, 10/10 PASS 2026-09-07)
+
+- G1 planted-leak recovery: 4-cluster non-congruent fixture (distinct per-cluster scales — congruent blobs are unpaired-alignment-ambiguous, the same degeneracy that makes the paper's OT baselines fail) → High, top1 ≥ 0.75 vs chance 0.25.
+- G1b monotone-in-noise: transfer accuracy non-increasing in observed noise; clean ≥ 0.7.
+- G1c honest negative: iid foreign labels → lift ≤ 1.3, Low.
+- G2 audit-cadence smoke: n=128/d=32 completes ≪ test budget (release measurement deferred to the E2 adoption bench).
+- Validation: `cargo clippy -p katgpt-core --features leakage_probe --lib --all-targets` 0 warnings; default + `--no-default-features --features leakage_probe` both compile; docs_gate 14/14 (feature-count claims bumped 578→579).
+
+## Follow-ups
+
+- [ ] T5 — riir-neuron-db Issue 614 E2 adopts the probe as its security test (consumer gate; GOAT bench lands there).
+- [ ] T6 — architectural guide for the stolen-DB risk quantifier (probe × Plan 391 frozen translator × SipIt endgame) — filed as `riir-neuron-db/.research/308` (the stored-latent security domain owns it).
+
+## Design lessons (recorded for the heuristic corpus)
+
+1. Congruent clusters are unpaired-alignment-ambiguous — ANY bijection is self-consistent; shape-distinct structure is what makes correspondence identifiable (same mechanism behind vec2vec's OT-baseline failure).
+2. Plain-cosine ICP locks onto hubs in isotropic clouds — CSLS correction (Conneau et al. 2018) is the canonical modelless fix.
+3. LCG consecutive draws correlate in the high bits — fixture streams must be per-column seeded or the sample covariance tilts off the coordinate axes.
 
 ## Refs
 
-`katgpt-rs/.research/540` (full feasibility table) · MAG Plan 418 · SipIt Plan 561 (fusion endgame: probe → translate → invert) · CD-LAM Issue 194 · Bench 194 · arXiv:2505.12540
+`katgpt-rs/.research/540` (feasibility + coverage) · `riir-train/.plans/391` (frozen-translator track) · `riir-neuron-db/.issues/614` (threat + consumer) · MAG Plan 418 · SipIt Plan 561 · CD-LAM Issue 194 · Bench 194 · arXiv:2505.12540

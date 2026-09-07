@@ -970,6 +970,25 @@ pub mod swe_trajectory_freeze;
 #[cfg(feature = "latent_confounder_audit")]
 pub mod latent_confounder_audit;
 
+// Leakage Probe — modelless attribute-transfer leak score for stored vector
+// stores (Issue 736, Research 540; threat model from arXiv:2505.12540 vec2vec,
+// NeurIPS 2025). Defender-side audit: given OUR stored vectors + an
+// adversary-capable sample in a FOREIGN embedding space (shared label
+// ontology), transports ours into the foreign space via a fully GD-free
+// chain — deterministic subspace iteration → PCA whitening → entropic-
+// Sinkhorn self-labeling → orthogonal-Procrustes polar factor (reusing the
+// always-on `linalg::symmetric_eig`) — then scores kNN attribute-transfer
+// top-1 against the majority-class chance baseline + the neighborhood-hit
+// + alignment-quality diagnostics. Distinguishes from
+// `latent_confounder_audit` (single-space, counterfactual slices over OUR
+// directions) by operating ACROSS two spaces with no encoder access. Zero
+// deps; audit-cadence allocation (the analytic_lattice::audit precedent).
+// Opt-in — the consumer is riir-neuron-db Issue 614 E2 (the security-test
+// adoption); no GOAT bench claim until that consumer lands (the cond_audit
+// precedent).
+#[cfg(feature = "leakage_probe")]
+pub mod leakage_probe;
+
 // Interpolation Geometry — iMAUVE + 5-way intervention probe for committed
 // latent substrates (Issue 158, Research 445 — Prabhudesai & Geng, *Latent
 // Thought Flows with Text Compression*, Jun 2026). Generic `LatentSpace`
@@ -2085,7 +2104,11 @@ pub use katgpt_types::depth_invariance::{
     // Issue 707: `tpr::als` consumes `ridge_solve_direct_f32` / `cholesky_f32`
     // / `chol_solve_f32` for its four closed-form ALS blocks and the cached
     // projection factor — same rule, joined at birth rather than late.
-    feature = "tpr"
+    feature = "tpr",
+    // Issue 736: `leakage_probe::transport` consumes `symmetric_eig` (f64
+    // eigenvalues+vectors) for PCA whitening and the orthogonal-Procrustes
+    // polar factor — same rule, joined at birth rather than late.
+    feature = "leakage_probe"
 ))]
 pub mod linalg;
 
