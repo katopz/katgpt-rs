@@ -1,9 +1,10 @@
 # Issue 734 — a shell gate that ABORTS mid-run reports exit 0
 
 **Status:** OPEN 2026-09-07 — T0/T1/T2/T7 done (instrument landed, katgpt-rs's
-own two scripts repaired, shellcheck ruled out as a detector); T3/T4/T5 are 39
-EXPOSED scripts across 9 sibling repos, one wave per repo; T6 is the verdict-half
-call. Found by repairing seal-remake `26a18191`.
+own two scripts repaired, shellcheck ruled out as a detector); T3/T4/T5 are 38
+EXPOSED scripts across 10 sibling repos, one wave per repo; T6 is the
+verdict-half call. Found by repairing seal-remake `26a18191`. The REPLACED
+verdict reported in `70eff640` was a false positive — corrected under T3.
 
 ## The defect
 
@@ -71,30 +72,38 @@ orthogonal REPLACED (2+ EXIT traps — `trap` replaces, it does not
 accumulate, so earlier cleanup is silently dropped). `selftest()` pins all
 three verdicts plus two population controls.
 
-**A tightening that mattered:** the first classifier called any late-assigned,
-handler-read variable a sentinel and so reported 3 SENTINELLED — two of them
-false (`BOOTSTRAP_PID=$!`, `status=$?`). A false SENTINELLED *hides* exposure,
-which is the "a zero ceiling is only as wide as its classifier" failure inside
-the tool built to find it. A completion flag is assigned only **literal**
-constants; that is now the discriminator, and the selftest still fires on a
-real sentinel, so the tightening did not blind it.
+**Two tightenings, both of which the tool got wrong first.** (1) The first
+classifier called any late-assigned, handler-read variable a sentinel and so
+reported 3 SENTINELLED — two of them false (`BOOTSTRAP_PID=$!`, `status=$?`).
+A false SENTINELLED *hides* exposure. A completion flag is assigned only
+**literal** constants; that is the discriminator now, and the selftest still
+fires on a real sentinel, so the tightening did not blind it. (2) `trap -
+EXIT` was counted as a second registration, making the whole REPLACED column
+one false positive out of one finding. Both are the "a zero ceiling is only as
+wide as its classifier" failure occurring *inside* the tool built to find it;
+both are now selftest controls (6/6: 4 verdicts + 2 population controls).
 
 ## Measured population (2026-09-07, tracked files only)
 
-| repo | EXPOSED | SENTINELLED | REPLACED |
-|---|---|---|---|
-| katgpt-rs | 0 (was 2) | 2 | 0 |
-| riir-chain | 11 | 0 | 1 |
-| riir-train | 8 | 0 | 0 |
-| riir-mmorpg-examples | 6 | 0 | 0 |
-| riir-ai | 5 | 0 | 0 |
-| riir-dapps | 2 | 0 | 0 |
-| riir-clippy | 2 | 0 | 0 |
-| riir-auth | 1 | 0 | 0 |
-| riir-deployer | 1 | 0 | 0 |
-| riir-viewbridge | 1 | 0 | 0 |
-| seal-remake | 0 | 1 | 0 |
-| **ALL** | **39** | **3** | **1** |
+Copied from the tool's own tally, not re-typed — the first version of this
+table was hand-entered and got two cells and the total wrong.
+
+| repo | EXPOSED | SENTINELLED |
+|---|---|---|
+| katgpt-rs | 0 (was 2) | 2 |
+| riir-chain | 11 | 0 |
+| riir-train | 8 | 0 |
+| riir-mmorpg-examples | 6 | 0 |
+| riir-ai | 5 | 0 |
+| riir-clippy | 2 | 0 |
+| riir-dapps | 2 | 0 |
+| riir-auth | 1 | 0 |
+| riir-deployer | 1 | 0 |
+| riir-viewbridge | 1 | 0 |
+| seal-remake | 1 (`scripts/fps_matrix.sh`) | 1 (the repaired gate) |
+| **ALL** | **38** | **3** |
+
+LIVE-FORWARD is 0 and REPLACED is 0 workspace-wide.
 
 EXPOSED is **latent** — it needs an abort to bite, and most of these scripts
 have none today. It is still exactly the state seal-remake's gate was in
@@ -111,9 +120,19 @@ before its abort arrived.
       REAL cleanup preamble: unbound abort → 1, `eval` syntax error → 1,
       ordinary verdict failure → 1 with its own message unchanged, clean
       completion → 0, and (full_gate) the `KEEP_LOG` retention path intact.
-- [ ] T3 — riir-chain wave: 11 EXPOSED + the one REPLACED
-      (`scripts/program_rate_gate.sh`, EXIT traps at 447 and 510 — the
-      second silently discards the first, so the line-447 cleanup never runs).
+- [ ] T3 — riir-chain wave: 11 EXPOSED.
+      **Correction to this issue's first version (commit `70eff640`), and it
+      is the interesting kind.** That commit reported one REPLACED finding —
+      `riir-chain/scripts/program_rate_gate.sh`, "EXIT traps at 447 and 510,
+      the second silently discards the first". It does not: line 510 is
+      `trap - EXIT`, a **deregistration** (restore the default), which the
+      script's own self-test does deliberately before re-running the gate
+      clean. The detector counted a teardown as a handler. That was a **1-of-1
+      false-positive rate** in the REPLACED verdict — the one column nobody
+      would have re-derived, inside the tool built to stop exactly this.
+      `trap - EXIT` and `trap "" EXIT` are now classified as deregistrations,
+      the selftest carries a control for it (6/6), and REPLACED is 0
+      workspace-wide.
 - [ ] T4 — riir-train wave (8), riir-mmorpg-examples wave (6), riir-ai wave (5).
 - [ ] T5 — the singles: riir-dapps (2), riir-clippy (2), riir-auth,
       riir-deployer, riir-viewbridge.

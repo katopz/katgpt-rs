@@ -72,9 +72,12 @@ been red for three commits and stopped every run before reaching it.
   script also lacks a sentinel, the abort reads as a pass.
 * **EXPOSED** — `set -u` + an EXIT trap + no completion sentinel. Latent:
   correct today, reports a pass for any abort introduced tomorrow.
-* **REPLACED** — two or more `trap ... EXIT` registrations. `trap` REPLACES;
-  it does not accumulate, so every earlier handler is silently dropped. An
-  orthogonal defect (leaked temp dirs, skipped cleanup) reported alongside.
+* **REPLACED** — two or more `trap ... EXIT` **registrations**. `trap`
+  REPLACES; it does not accumulate, so every earlier handler is silently
+  dropped. An orthogonal defect (leaked temp dirs, skipped cleanup) reported
+  alongside. `trap - EXIT` (restore the default) and `trap "" EXIT` (ignore)
+  are DEREGISTRATIONS and are not counted — the first cut counted them and
+  its only workspace-wide REPLACED finding was that mistake.
 * **SENTINELLED** — a handler-referenced flag whose last assignment follows
   the last trap registration, with a non-zero exit guarded by it. Not a
   finding.
@@ -159,13 +162,26 @@ def analyse(path):
     if not SET_U.search(src):
         return None  # aborts exit 1 correctly; not in the population
 
-    traps = []
+    # A trap line is a REGISTRATION or a DEREGISTRATION, and only the first
+    # kind can launder a status. `trap - EXIT` RESTORES the default (the
+    # laundering stops there) and `trap "" EXIT` IGNORES the signal. Counting
+    # either as a handler is not a rounding error: the first cut of this
+    # audit reported exactly one REPLACED finding workspace-wide
+    # (riir-chain/scripts/program_rate_gate.sh) and it was this — a
+    # registration at line 447 and its own `trap - EXIT` teardown at 510. A
+    # 1-of-1 false positive rate in the verdict nobody would re-derive.
+    traps, dereg = [], []
     for idx, line in enumerate(lines):
         m = TRAP_EXIT.match(line)
-        if m:
-            traps.append((idx + 1, m.group("body").strip()))
+        if not m:
+            continue
+        body = m.group("body").strip()
+        if body in ("-", "''", '""', "-'", ''):
+            dereg.append((idx + 1, body))
+        else:
+            traps.append((idx + 1, body))
     if not traps:
-        return None  # no EXIT trap -> nothing to launder the status
+        return None  # no EXIT HANDLER -> nothing to launder the status
 
     funcs = function_bodies(lines)
 
@@ -231,6 +247,7 @@ def analyse(path):
         "verdict": verdict,
         "traps": traps,
         "replaced": len(traps) > 1,
+        "dereg": dereg,
         "forwards": forwards,
         "sentinel": sentinel_var,
         "lines": len(lines),
@@ -317,6 +334,16 @@ echo ALL GREEN
 DONE_FLAG=1
 """, SENTINELLED),
     ]
+    cases.append(("registration + its own `trap - EXIT` teardown is NOT replaced",
+                  """#!/usr/bin/env bash
+set -euo pipefail
+A="$(mktemp)"
+trap 'rm -f "$A"' EXIT
+echo layer
+trap - EXIT
+rm -f "$A"
+echo ALL GREEN
+""", EXPOSED))
     failures = []
     for name, body, want in cases:
         p = plant(body)
@@ -325,6 +352,8 @@ DONE_FLAG=1
         got_v = got["verdict"] if got else "NOT-IN-POPULATION"
         if got_v != want:
             failures.append(f"    {name}: expected {want}, got {got_v}")
+        if got and name.startswith("registration + its own") and got["replaced"]:
+            failures.append("    dereg control: `trap - EXIT` was counted as a second REGISTRATION")
 
     # negative population control: no `set -u` -> must not be reported at all
     p = plant('#!/usr/bin/env bash\nset -e\nA=x\ntrap \'rm -f "$A"\' EXIT\necho hi\n')
@@ -409,7 +438,7 @@ def main():
             print(f)
         print()
     else:
-        print("── selftest: 5/5 (3 verdicts + 2 population controls) fire as pinned\n")
+        print("── selftest: 6/6 (4 verdicts + 2 population controls) fire as pinned\n")
 
     grand = {}
     all_rows = []
