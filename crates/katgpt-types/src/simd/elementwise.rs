@@ -1440,9 +1440,7 @@ unsafe fn wasm32_simd128_sum_f32(x: &[f32]) -> f32 {
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
 #[inline]
 unsafe fn wasm32_simd128_masked_sum_count_f32(x: &[f32], mask: &[u8]) -> (f32, u32) {
-    use core::arch::wasm32::{
-        f32x4, f32x4_add, f32x4_extract_lane, f32x4_mul, f32x4_splat, v128_load,
-    };
+    use core::arch::wasm32::{f32x4_add, f32x4_extract_lane, f32x4_mul, f32x4_splat, v128_load};
     unsafe {
         let zero = f32x4_splat(0.0);
         let mut acc0 = zero;

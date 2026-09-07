@@ -67,6 +67,7 @@ a green result says nothing about what it compiled to nothing:
 | no `--all-targets` | skips every test / bench / example — which is where gated code lives |
 | dev vs `--release` | `debug_assertions` is always **ON** in dev, so every item behind `#[cfg(debug_assertions)]` — and everything that depends on one — only ever compiles in the configuration where it works. **Neither profile is the safe default — the profile is part of the claim.** |
 | `--all-targets` vs **doc-tests** | `--all-targets` does **not** include doc-tests — only `cargo test --doc` reaches them (`.issues/723` Class F) |
+| host triple vs **`wasm32`** | a `--target` you never pass is a platform you never compile. Worse than the macOS axis because it is gated **twice**: the hot kernels are `all(target_arch = "wasm32", target_feature = "simd128")` and the triple defaults to simd128 **OFF**, so even a wasm32 lane without `RUSTFLAGS='-C target-feature=+simd128'` compiles the SIMD half to nothing. Measured (Issue 737): the simd128-**off** arm was clean and the **on** arm had 14 findings, 11 of them `unsafe_op_in_unsafe_fn` on edition 2024. `full_gate.sh` layer 2b runs both arms |
 | **compile vs EXECUTE** | every axis above is about *compilation*. The scoped core (katgpt-rs + katgpt-core `--lib` at default features, count floors) is EXECUTED weekly (`test.yml` + `scripts/test_gate.sh`); the other 477 integration-test and 176 bench targets are executed by nothing automatic, and `--all-features` is not a supported TEST configuration (fixture RNG streams and GOAT calibrations are per-feature). An uninvoked assertion is *unknown*, not passing |
 
 So before claiming a repo-wide green, run:
@@ -83,6 +84,26 @@ by hand — `scripts/full_gate.sh` is the assertion (it refuses to report a pass
 off macOS, where the `target_os = "macos"` device backends compile to nothing
 even with `--all-features`, and checks that this document still quotes the
 command it runs).
+
+**And `wasm32` is a second platform axis, not a variation on the first.**
+Nothing in this repo compiled it until 2026-09-07 — the only script naming the
+triple was `scripts/build-moka-wasm.sh`, which is a deploy build a human runs,
+not a gate. `full_gate.sh` layer 2b closes it: derived `-p` list (a new
+wasm32-bearing crate joins by existing) **including the root package**, both
+simd128 arms, the two wasm32 GOAT targets by name, and the residue pinned by
+**membership** so the gate reds when that set changes rather than silently
+shrinking. A missing `wasm32-unknown-unknown` target is a PARTIAL gate that
+refuses, exactly as an off-macOS run is.
+
+Selecting the **root package** is what makes that lane wide, and it was not
+why it was added: clippy lints every **workspace path dependency** it pulls
+in (registry crates are `--cap-lints`'d, workspace ones are not), so
+`-p katgpt-rs --lib` puts the whole internal graph under `-D warnings` on
+wasm32. That is how an orphaned doc block on
+`katgpt-attn-match::select_highest_attn_keys` — a crate with no wasm32 code
+of its own — surfaced. `--all-targets` is NOT the way to widen further: it
+dies on dev-deps (`statrs`, `proptest`) that do not resolve for wasm32, so
+extra coverage goes in as **named targets**.
 
 **The inverse holds too:** running **on** macOS silently drops every
 `not(target_os = "macos")` backend, `--all-features` included — **a platform

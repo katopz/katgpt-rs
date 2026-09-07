@@ -10,6 +10,14 @@
 #   before realizing the toolchain had dropped the flag). This script encodes
 #   the requirement so the regression cannot recur silently.
 #
+#   ⛔ THIS SCRIPT IS A BUILD, NOT A GATE (Issue 737). Until 2026-09-07 it was
+#   the ONLY thing in this repo that ever compiled for wasm32, so the browser
+#   crate's lint surface was checked exactly as often as someone happened to
+#   deploy — which turned out to be 15 findings' worth of "not often enough",
+#   11 of them `unsafe_op_in_unsafe_fn` on edition 2024. The gate is
+#   `scripts/full_gate.sh` layer 2b (both simd128 arms, derived package list).
+#   Do not treat a green run of this script as a lint claim.
+#
 #   The matching `wasm-opt --enable-simd` is required at the optimize step:
 #   without it, wasm-opt strips the SIMD instructions it doesn't know about.
 #

@@ -20,19 +20,6 @@ use crate::{
     types::ScoreMethod,
 };
 
-/// Select top-t keys by aggregated attention score.
-///
-/// # Arguments
-/// * `keys` - Original `(T, d)` key matrix, flat row-major.
-/// * `queries` - Reference queries `(n, d)`, flat row-major.
-/// * `t` - Number of keys to select.
-/// * `score_method` - Aggregation method (Mean/Rms/Max).
-/// * `t_len` - Original sequence length `T`.
-/// * `d` - Head dimension.
-/// * `n` - Number of reference queries.
-/// * `scratch_scores` - Caller-allocated scratch `(n, T)` for the score matrix
-///   (pass `&mut Vec::new()` to have it sized on first call; reuse across calls).
-/// * `scratch_attn` - Caller-allocated scratch `(n, T)` for the softmax matrix.
 /// Descending comparator that can never rank NaN into a top-t selection.
 /// Mirrors `katgpt_core::float_order::desc` (the workspace substrate for this
 /// shape) — duplicated locally ONLY because that crate is an optional dep here.
@@ -50,6 +37,19 @@ fn desc_nan_last(a: &f32, b: &f32) -> core::cmp::Ordering {
     key(a).total_cmp(&key(b))
 }
 
+/// Select top-t keys by aggregated attention score.
+///
+/// # Arguments
+/// * `keys` - Original `(T, d)` key matrix, flat row-major.
+/// * `queries` - Reference queries `(n, d)`, flat row-major.
+/// * `t` - Number of keys to select.
+/// * `score_method` - Aggregation method (Mean/Rms/Max).
+/// * `t_len` - Original sequence length `T`.
+/// * `d` - Head dimension.
+/// * `n` - Number of reference queries.
+/// * `scratch_scores` - Caller-allocated scratch `(n, T)` for the score matrix
+///   (pass `&mut Vec::new()` to have it sized on first call; reuse across calls).
+/// * `scratch_attn` - Caller-allocated scratch `(n, T)` for the softmax matrix.
 pub fn select_highest_attn_keys(
     keys: &[f32],
     queries: &[f32],

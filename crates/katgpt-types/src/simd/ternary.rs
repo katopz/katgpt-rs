@@ -457,7 +457,12 @@ unsafe fn wasm32_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
                 }
                 if scalar_acc != 0.0 {
                     let scalar_arr: [f32; 4] = [scalar_acc, 0.0, 0.0, 0.0];
-                    acc0 = f32x4_add(acc0, core::mem::transmute(scalar_arr));
+                    // Annotated (clippy::missing_transmute_annotations): an
+                    // unannotated `transmute` in a SIMD kernel infers its
+                    // destination from the call site, so a later refactor of
+                    // `acc0`'s type silently re-points it. The sibling
+                    // transmute below is annotated by its `let` binding.
+                    acc0 = f32x4_add(acc0, core::mem::transmute::<[f32; 4], v128>(scalar_arr));
                 }
             }
 

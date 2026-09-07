@@ -38,6 +38,12 @@
 #                            gate reproduces the exact vacuous green it exists
 #                            to catch, so off-macOS is a partial gate and says
 #                            so loudly.
+#   2b. wasm32 coverage   → a SECOND platform axis. `wasm32-unknown-unknown`
+#                            is compiled by nothing else in this repo, and its
+#                            hot kernels need `+simd128` on top (the target
+#                            defaults to OFF), so both arms run. Derived
+#                            package list; the sites no `-p … --lib` reaches
+#                            are pinned by membership.
 #   3. the gate itself     → clippy, workspace, all targets, all features
 #   4. zero errors         → any `error` line or unbuildable target is a finding
 #   6. profile axis        → the same tree with debug_assertions OFF; the four
@@ -135,6 +141,122 @@ if [ "$(uname -s)" != "Darwin" ]; then
     fi
 else
     echo "✓ macOS — the $APPLE_GATED target_os-gated file(s) are in scope"
+fi
+
+# ── Layer 2b: wasm32 + simd128 coverage (Issue 737) ─────────────────────────
+# Layer 2 is about ONE platform axis (`target_os = "macos"`). `wasm32` is a
+# second, and until 2026-09-07 nothing in this repo compiled it: the only
+# script that ever built for `wasm32-unknown-unknown` was
+# `scripts/build-moka-wasm.sh`, which a human runs before a deploy.
+#
+# It is doubly invisible, which is why it rotted. The hot kernels are gated on
+# `all(target_arch = "wasm32", target_feature = "simd128")`, and
+# `wasm32-unknown-unknown` defaults to NO simd128 — so a plain
+# `--target wasm32-unknown-unknown` run compiles the SCALAR fallback and the
+# SIMD half to nothing. Both arms are needed; neither implies the other.
+#
+# Measured on the run that produced this layer: 14 findings in
+# `katgpt-moka-wasm` alone, of which ELEVEN were `unsafe_op_in_unsafe_fn`
+# (edition-2024 `warning[E0133]`, on its way to a hard error) — in a crate
+# whose whole reason to exist is to be shipped to a browser.
+WASM_FILES=$(git grep -l 'target_arch = "wasm32"' -- '*.rs' 2>/dev/null || true)
+WASM_SIMD_FILES=$(git grep -l 'target_feature = "simd128"' -- '*.rs' 2>/dev/null || true)
+WASM_N=$(printf '%s\n' "$WASM_FILES" | grep -c . || true)
+WASM_SIMD_N=$(printf '%s\n' "$WASM_SIMD_FILES" | grep -c . || true)
+
+# Same instrument check as layer 2, same reasoning: a zero reads exactly like
+# a working grep over a surface that no longer exists, and both readings need
+# a human. If the wasm32 surface really is gone, delete this layer and
+# `scripts/build-moka-wasm.sh` together.
+if [ "$WASM_N" -eq 0 ] || [ "$WASM_SIMD_N" -eq 0 ]; then
+    echo "✗ wasm32 layer found NO wasm32 ($WASM_N) or NO simd128 ($WASM_SIMD_N) files"
+    echo "  Either the grep drifted from the tree, or the browser surface is gone."
+    exit 1
+fi
+
+# The lane runs `-p <crate>` per crate that has a wasm32 cfg in its `src/`,
+# plus the ROOT package when the root `src/` has one. Deriving it beats typing
+# it — a new wasm32-bearing crate joins the lane by existing. Selecting the
+# root package is what makes this lane wide: clippy lints every WORKSPACE PATH
+# DEPENDENCY it pulls in (registry crates are `--cap-lints`'d, workspace ones
+# are not), which is how the orphaned doc block on
+# `katgpt-attn-match::select_highest_attn_keys` surfaced — a crate with no
+# wasm32 code of its own.
+#
+# What derivation CANNOT do is notice a wasm32 site that no `-p … --lib`
+# reaches, so the residue is pinned by MEMBERSHIP below: a set is gateable
+# where its cardinality is not, and a count that matches is not a checksum
+# over a set.
+ROOT_PKG=$(awk '/^\[package\]/{f=1;next} /^\[/{f=0} f && /^name[ ]*=/{gsub(/^name[ ]*=[ ]*"|"[ ]*$/,""); print; exit}' Cargo.toml)
+WASM_PKGS=$(printf '%s\n' "$WASM_FILES" | sed -n 's|^crates/\([^/]*\)/src/.*|\1|p' | sort -u)
+if printf '%s\n' "$WASM_FILES" | grep -q '^src/'; then
+    WASM_PKGS=$(printf '%s\n%s\n' "$WASM_PKGS" "$ROOT_PKG" | sort -u)
+fi
+
+# Sites no `--lib` lane reaches. Two of the four ARE built, as named targets
+# (WASM_EXTRA_TARGETS); the other two are NOT, for a measured reason:
+#
+#   examples/bomber_*.rs — `requires the features: bomber`, and with that
+#   feature on they fail at `cargo check` with `unresolved import
+#   sys::position` / `cannot find function enable_raw_mode in module sys`:
+#   crossterm has no wasm32 backend. A TUI arena cannot target a browser;
+#   this is a fact about the dependency, not a gap to close.
+WASM_RESIDUE=$(printf '%s\n' "$WASM_FILES" | grep -v '^crates/[^/]*/src/' | grep -v '^src/' | sort)
+WASM_RESIDUE_EXPECTED='crates/katgpt-core/benches/bench_432_simd_lut_dequant_goat.rs
+crates/katgpt-core/examples/simd_wasm32_goat.rs
+examples/bomber_21_sonlt_arena.rs
+examples/bomber_tjs_arena.rs'
+if [ "$WASM_RESIDUE" != "$WASM_RESIDUE_EXPECTED" ]; then
+    echo "✗ the set of wasm32 sites NOT covered by a --lib lane has changed."
+    echo "  Either add the new one to WASM_EXTRA_TARGETS (if it compiles for"
+    echo "  wasm32) or to WASM_RESIDUE_EXPECTED with the measured reason it"
+    echo "  cannot. Do NOT just re-pin the list."
+    echo "  --- expected ---"; printf '%s\n' "$WASM_RESIDUE_EXPECTED"
+    echo "  --- measured ---"; printf '%s\n' "$WASM_RESIDUE"
+    exit 1
+fi
+# pkg|selector|name — the wasm32 GOAT evidence lives in these two targets, so
+# a lane that skipped them would gate everything EXCEPT the thing the docs
+# quote (`.docs/06_game_arenas/go_arena.md`: 0.6 ms/move, 10.7x real Moka).
+WASM_EXTRA_TARGETS='katgpt-core|--example|simd_wasm32_goat
+katgpt-core|--bench|bench_432_simd_lut_dequant_goat'
+
+if ! rustup target list --installed 2>/dev/null | grep -q wasm32-unknown-unknown; then
+    echo "⚠ wasm32-unknown-unknown not installed — $WASM_N wasm32 file(s) and"
+    echo "  $WASM_SIMD_N simd128 file(s) will NOT compile in this run."
+    echo "  This run is a PARTIAL gate (rustup target add wasm32-unknown-unknown)."
+    if [ "$ALLOW_PARTIAL" -eq 0 ]; then
+        echo "✗ refusing to report a partial run as a pass (--allow-partial-platform to override)"
+        exit 1
+    fi
+else
+    WASM_P_ARGS=$(printf -- '-p %s ' $WASM_PKGS)
+    for arm in on off; do
+        if [ "$arm" = on ]; then
+            WASM_RUSTFLAGS='-C target-feature=+simd128'
+        else
+            WASM_RUSTFLAGS=''
+        fi
+        # `--keep-going` for the same reason layer 3 needs it: without it the
+        # run stops at the first failing crate and under-reports the rest.
+        # shellcheck disable=SC2086  # word splitting is the point: one -p per crate
+        if ! RUSTFLAGS="$WASM_RUSTFLAGS" cargo clippy $WASM_P_ARGS --lib \
+                --target wasm32-unknown-unknown --keep-going --quiet -- -D warnings; then
+            echo "✗ wasm32 --lib lane failed (simd128 $arm)" >&2
+            exit 1
+        fi
+        while IFS='|' read -r xpkg xsel xname; do
+            [ -n "$xpkg" ] || continue
+            if ! RUSTFLAGS="$WASM_RUSTFLAGS" cargo clippy -p "$xpkg" "$xsel" "$xname" \
+                    --target wasm32-unknown-unknown --quiet -- -D warnings; then
+                echo "✗ wasm32 target lane failed (simd128 $arm): $xpkg $xsel $xname" >&2
+                exit 1
+            fi
+        done <<EOF
+$WASM_EXTRA_TARGETS
+EOF
+        echo "✓ wasm32 clean (simd128 $arm): $(printf '%s' "$WASM_PKGS" | tr '\n' ' ')+ 2 named targets"
+    done
 fi
 
 # ── Layer 3: the gate ───────────────────────────────────────────────────────

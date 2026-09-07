@@ -850,6 +850,13 @@ unsafe fn wasm_dot_i8(a: &[i8], b: &[i8], len: usize) -> i32 {
 /// Benchmark: run `iters` f32 dot products of length `len` on the data at
 /// `a_ptr` / `b_ptr`. Returns a bit-reinterpreted sink to prevent DCE.
 /// The host times this call with `performance.now()` / `hrtime`.
+///
+/// # Safety
+///
+/// `a_ptr` and `b_ptr` must each point to at least `len` initialised,
+/// properly aligned `f32`s that stay valid and unaliased for the whole call.
+/// The kernel reads them with `get_unchecked` / `v128_load` and never
+/// re-checks `len` against anything.
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn bench_dot_f32(a_ptr: *const f32, b_ptr: *const f32, len: usize, iters: usize) -> u32 {
@@ -866,6 +873,12 @@ pub unsafe extern "C" fn bench_dot_f32(a_ptr: *const f32, b_ptr: *const f32, len
 
 /// Benchmark: run `iters` int8 dot products of length `len` on the data at
 /// `a_ptr` / `b_ptr` (i8 slices reinterpreted from the raw pointers).
+///
+/// # Safety
+///
+/// `a_ptr` and `b_ptr` must each point to at least `len` initialised,
+/// properly aligned `i8`s that stay valid and unaliased for the whole call.
+/// Same unchecked-read contract as `bench_dot_f32`.
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn bench_dot_i8(a_ptr: *const i8, b_ptr: *const i8, len: usize, iters: usize) -> i32 {
