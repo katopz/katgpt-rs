@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-01
 **Source:** arXiv:2608.27763 — "Fast Weight Attention for Continual Learning" (Y. Zhang, Ta, J. Zhang, Feng, Li, Y. Zhang, Liu, Yuan, Wang, Gu, Yao — ByteDance Seed / Princeton / Tsinghua). v1, 2026-08-27. Project: github.com/yifanzhang-pro/fast-weight-attention.
-**Status:** RECORD — note + trigger-gated riir-train Plan 369 filed (digit-OOD harness open; ablation arms gated). Modelless track: PASS (redirects below).
+**Status:** RECORD — note + trigger-gated riir-train Plan 369 filed (digit-OOD harness open; ablation arms gated). Modelless track: PASS (redirects below). **2026-09-07:** Path-0 rows 6–7 corrected — the chunked delta-rule prefill SHIPPED default-on (riir-ai Issue 734, closed 2026-08-26) after the original grep missed it under different vocabulary (Gram / forward substitution, not WY / TriSolve).
 **Verdict:** Per-track split (TTPO lesson). **Tracks a+b (modelless): PASS** — no modelless-adoptable primitive with a consumer. **Track c (model-based): Gain, trigger-gated** — recipe rows → `riir-train/.plans/369_falcon_write_alignment_recipe_backlog.md`.
 
 ---
@@ -38,8 +38,8 @@ Panel: No-GD advocate (9-row extraction) + model-based advocate (6-row recipe ta
 | 3 | Per-column step sizes (Falcon-2) | per-value-channel plasticity | Paper defines, does NOT benchmark. Gate-structure axis (channel-wise erase/write) shipped via R070 `Kda` variant; R447's DPLR `a=b=k` binding = GOAT FAIL on this stack |
 | 4 | Sliding-window mini-batch (Falcon-3) | window Gram λ_max normalizer (≈5 power iters on B×B Gram) | Benchmarks only 3A. Memory-horizon axis covered by R482/R133 cousins; no sliding-window memory consumer in the stack |
 | 5 | **Ridge-as-decay γ = 1−ηλ** | principled forgetting where no learned decay exists; robustness economy (γ∈(0,1) by construction, deletes the learned-decay clamp/saturation path, fewer params) | We have *felt* the decay-clamp bug class (Issue 594: double-exp decay in the GGUF converter → flat logits). Requires retrain to adopt. → **Plan 369 Arm B** |
-| 6 | log1p clamp chunk-local renorm | pure fp recipe, G2 no-regression | Exact numerics; **no consumer** — chunked delta recurrence measured negative on our substrate (0.97×/0.98×, riir-ai Issue 734); `deltanet_chunked_cubecl.rs` ships conv1d only. Recorded for any future chunked-recurrence revival |
-| 7 | Single-TriSolve merge (B = L⁻¹(V−P)) | −1 batched solve per chunk, exact | No WY/TriSolve kernel ships (grep: zero hits in riir-gpu). Recorded alongside #6 |
+| 6 | log1p clamp chunk-local renorm | pure fp recipe, G2 no-regression | **Status 2026-09-07:** a shipped consumer EXISTS — riir-gpu chunked delta-rule prefill: `deltanet_delta_rule_chunked.rs` (Issue 734 T4, 2026-08-20) + `prefill_cuda_gdn_chunked.rs` (Arm 12, owner sign-off 2026-08-23), chunk driver default-on since `3ef764bfa` (2026-08-21). Its log-space cumulative decay (`Σ log α`, floor −60) covers the same underflow axis; the 0.97×/0.98× negative was the CubeCL e2e arm ONLY (`deltanet_chunked_cubecl.rs` — conv1d shipped, recurrence arm lost). Falcon's exact log1p-clamp + η/γ + value-rescale triple remains unshipped as such |
+| 7 | Single-TriSolve merge (B = L⁻¹(V−P)) | −1 batched solve per chunk, exact | **Status 2026-09-07:** the shape ships under other names (vocabulary miss — the original grep for WY/TriSolve returned zero because the shipped kernels say Gram / forward substitution / unit-lower-triangular): `deltanet_delta_rule_chunked.rs` solves (I+X)·U = RHS with the history + value paths MERGED in one RHS (`RHS = β·v − β·γ·(S₀·k)`) — the same single-solve merge — and Arm 12 forms the explicit inverse T = (I+X)⁻¹. Falcon's per-chunk shared-Gram batching (Falcon-2: one Gram, dᵥ channel solves) remains unshipped |
 | 8 | β∈(0,2) descent bound | provable non-divergence interval for adaptive β | One-line debug-assert guard; folded into any implementation of #1/#5 |
 | 9 | **Variable-digit-addition OOD harness** | eval-only, minutes; discriminates within the GDN family where ppl doesn't | **The immediately actionable modelless artifact — NOT covered.** The stack has no standing length-extrapolation gate for the GDN family (our GDN gates are ppl + pinned logits; R070's RULER numbers are paper-reported). → **Plan 369 T1 (open)** |
 
@@ -99,3 +99,4 @@ Inference-time re-pairing (writing v_t under k_{t−1}) on a **served, same-step
 - Longhorn: arXiv:2407.14207; Titans: arXiv:2501.00663; ATLAS: arXiv:2505.23735; MesaNet: arXiv:2506.05233
 - Stack: R070 (GDN2), R447 (Kimi K3/KDA), R516 (TTT-KVB), R288 (KARC ridge), R192 (NextLat)
 - Plan: `riir-train/.plans/369_falcon_write_alignment_recipe_backlog.md`
+- External repo: github.com/yifanzhang-pro/fast-weight-attention @ e4f04b302ee0e669311d59f39093df0d88ba5fb4 (Apache-2.0; project page only — README + paper PDF, no kernel source)
