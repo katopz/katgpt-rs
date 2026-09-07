@@ -2,7 +2,7 @@
 
 > **Paper:** [Nemotron-Labs-TwoTower: Diffusion Language Modeling with Pretrained Autoregressive Context](https://arxiv.org/abs/2606.26493) — Reda, Kamalu, Waleffe, Patwary, Shoeybi, Catanzaro (NVIDIA), June 2026 (v2). Code + weights released (Nemotron-Labs-TwoTower collection, built on Nemotron-3-Nano-30B-A3B).
 > **Date:** distilled 2026-09-06
-> **Status:** RECORD
+> **Status:** RECORD — Phase-0 micro-scale ablation of the training track **measured 2026-09-07: G3 PASS** (riir-train [Bench 581](../riir-train/.benchmarks/581_plan389_phase0_decoupling_ablation_micro.md)) — the preregistered ordering decoupled 0.1764 > continued 0.1692 > tied 0.1573 replicates directionally at 100k params; **tied-is-worst consistent on every seed** (the half indicting our one-weight-set dllm family), decoupled-vs-continued unresolved below 30B. Phase 1 (0.4B) proceeds.
 > **Verdict:** GAIN, split per track (TTPO rule — one verdict per track, not per paper):
 > - **Model-based track → Gain:** `riir-train/.plans/389_twotower_decoupled_denoiser_adaptation.md`. The paper's Table 2 decoupling ablation **contradicts our shipped dllm D2F trainer configuration** (single weight set + adapter toggle = the "tied" family), and the recipe (frozen context tower, block-size curriculum, confidence unmasking) is directly actionable.
 > - **Modelless track → PASS-with-redirects:** the decode orchestration (block-wise denoise loop, confidence unmasking, diffusion-draft/AR-verify composition) already ships. No new modelless files. Two calibration contracts pinned in Plan 389 (§G4). Mandatory redirects below.
