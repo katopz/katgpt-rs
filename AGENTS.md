@@ -411,6 +411,42 @@ assignment DELETED, because the script also has an unrelated
 "exits non-zero" *independently*. The flag must gate the failure branch —
 tie them by block structure or the pin certifies nothing.
 
+## A lane compiles what it NAMES — `scripts/wasm32_surface_audit.py`
+
+Every axis in the wasm32 family (Issue 737) is about *how* a lane compiles
+what it names. The seventh is one level up: **is what it names the whole
+surface?** A row cannot notice a package it does not select, and seal-remake
+had a positive `#[cfg(target_arch = "wasm32")]` block that no row built and
+that had been **uncompilable since it was written** — it called a
+`cfg(not(wasm32))` function (`.issues/010` T2, `.issues/738`).
+
+```bash
+scripts/wasm32_surface_audit.py            # all contract repos (derived)
+scripts/wasm32_surface_audit.py ../riir-ai # or one, by path
+```
+
+- A **report, not a gate** (exit 0). Three buckets: **NAMED** (a row selects
+  it by `-p` or a literal `--manifest-path`), **UNRESOLVED** (a `--workspace`
+  or *derived* row exists — whether it reaches this package is the
+  separate-workspace axis, undecidable statically), **UNCOVERED** (no row
+  could reach it). **UNRESOLVED is not clean** and is never folded into
+  either neighbour.
+- The predicate is the **positive** cfg: `not(target_arch = "wasm32")` is an
+  ordinary native-only guard and counting it inflates everything (riir-ai
+  `.issues/892` T4). **Comment lines are excluded** — prose explaining a cfg
+  is not a cfg, and the comment recording why a file has *no* wasm32 arm
+  otherwise makes that file read as browser code.
+- First measurement (2026-09-07): **9 NAMED · 15 UNRESOLVED · 0 UNCOVERED**
+  over 196 files / 24 positive-cfg packages / 17 repos.
+- ⛔ It produced three confident wrong answers before it produced a right one,
+  all in the classifier: a walk of **0 files** (a Python `\s` handed to
+  `git grep -E`, which is POSIX ERE — caught only because the walk size prints
+  next to the verdict), then **17** false UNCOVERED (a *derived* `-p` list —
+  the better design — read as the worst result), then **2** more (a
+  `--manifest-path "$unit/…"` lane read as a bare row). A classifier's bucket
+  boundaries ARE the finding, and they are only testable against cases whose
+  answer is known independently.
+
 ## Before committing in a shared worktree — `scripts/staged_set_audit.py`
 
 Several agent sessions write into one worktree routinely, and `git add -A`
