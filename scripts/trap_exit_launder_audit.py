@@ -154,6 +154,35 @@ def function_bodies(lines):
     return out
 
 
+def guards_nonzero_exit(handler_lines, name):
+    """Does a conditional TESTING `name` contain a non-zero exit in its body?
+
+    Requiring "the handler tests the flag" and "the handler exits non-zero"
+    *independently* is not enough, and the miss was found by planting one:
+    `full_gate.sh` also has `if [ "$KEEP_LOG" -eq 1 ]; then echo …; else rm
+    -f …; fi`, which satisfies both clauses while gating a log-retention
+    echo. Deleting the real sentinel's last-line assignment then left the
+    script classified SENTINELLED — a FALSE SENTINELLED, the direction that
+    HIDES exposure. The flag must gate the failure, so the two facts have to
+    be tied together by block structure.
+    """
+    for i, line in enumerate(handler_lines):
+        if not re.search(rf'\[\s*[^]]*\$\{{?{re.escape(name)}\b', line):
+            continue
+        depth = 0
+        for j in range(i, len(handler_lines)):
+            stripped = handler_lines[j].strip()
+            if re.match(r"^(if|elif)\b", stripped) or stripped.endswith("; then"):
+                depth += 1
+            if re.match(r"^fi\b", stripped):
+                depth -= 1
+                if depth <= 0:
+                    break
+            if NONZERO_EXIT.search(handler_lines[j]):
+                return True
+    return False
+
+
 def analyse(path):
     lines = read(path)
     if lines is None:
@@ -231,8 +260,10 @@ def analyse(path):
             # anything about whether the script reached its last line.
             if not all(LITERAL_ASSIGN.match(l) for l in assigns_of.get(name, [])):
                 continue
-            # ...and it must be READ in a conditional, not merely cleaned up.
-            if re.search(rf'\[\s*[^]]*\$\{{?{re.escape(name)}\b', handler_src):
+            # ...and the conditional that READS it must be the one that
+            # exits non-zero (see guards_nonzero_exit for the plant that
+            # forced this).
+            if guards_nonzero_exit(handler_src.splitlines(), name):
                 sentinel_var = name
                 break
 
@@ -334,6 +365,28 @@ echo ALL GREEN
 DONE_FLAG=1
 """, SENTINELLED),
     ]
+    cases.append(("a late literal flag gating a NON-failure branch is not a sentinel",
+                  """#!/usr/bin/env bash
+set -euo pipefail
+LOG="$(mktemp)"
+KEEP=0
+cleanup() {
+    st=$?
+    if [ "$KEEP" -eq 1 ]; then
+        echo "log retained: $LOG"
+    else
+        rm -f "$LOG"
+    fi
+    if [ "$st" != "0" ]; then
+        exit 1
+    fi
+    exit "$st"
+}
+trap cleanup EXIT
+echo layer
+KEEP=1
+echo ALL GREEN
+""", EXPOSED))
     cases.append(("registration + its own `trap - EXIT` teardown is NOT replaced",
                   """#!/usr/bin/env bash
 set -euo pipefail
@@ -438,7 +491,7 @@ def main():
             print(f)
         print()
     else:
-        print("── selftest: 6/6 (4 verdicts + 2 population controls) fire as pinned\n")
+        print("── selftest: 7/7 (5 verdicts + 2 population controls) fire as pinned\n")
 
     grand = {}
     all_rows = []

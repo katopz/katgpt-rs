@@ -95,6 +95,7 @@ CHECKS=(
     "scripts/required_features_static_gate.py:a required-features row naming a feature its package cannot enable (Issue 513)"
     "scripts/cfg_row_implication_gate.py:a required-features row that BUILDS and compiles its target to NOTHING (Issue 513)"
     "scripts/population_sync_gate.py:the six independent contract-repo predicates must agree (else an instrument audits a different set and still prints green)"
+    "scripts/trap_sentinel_gate.py:a shell gate whose set -u abort would report exit 0 — this repo's own two, by membership (Issue 734)"
 )
 
 if ! command -v python3 >/dev/null 2>&1; then

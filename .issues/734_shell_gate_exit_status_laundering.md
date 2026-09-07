@@ -1,9 +1,9 @@
 # Issue 734 — a shell gate that ABORTS mid-run reports exit 0
 
-**Status:** OPEN 2026-09-07 — T0/T1/T2/T7 done (instrument landed, katgpt-rs's
+**Status:** OPEN 2026-09-07 — T0/T1/T2/T6/T7 done (instrument landed, katgpt-rs's
 own two scripts repaired, shellcheck ruled out as a detector); T3/T4/T5 are 38
 EXPOSED scripts across 10 sibling repos, one wave per repo; T6 is the
-verdict-half call. Found by repairing seal-remake `26a18191`. The REPLACED
+verdict half landed for this repo (T6). Found by repairing seal-remake `26a18191`. The REPLACED
 verdict reported in `70eff640` was a false positive — corrected under T3.
 
 ## The defect
@@ -136,10 +136,30 @@ before its abort arrived.
 - [ ] T4 — riir-train wave (8), riir-mmorpg-examples wave (6), riir-ai wave (5).
 - [ ] T5 — the singles: riir-dapps (2), riir-clippy (2), riir-auth,
       riir-deployer, riir-viewbridge.
-- [ ] T6 — decide the verdict half. A per-repo gate over LIVE-FORWARD is
-      cheap and can never false-positive (it is a provable abort). A gate
-      over EXPOSED would red 39 scripts on day one and is a ratchet, not a
-      gate — pin a floor per repo as each wave lands, or skip it.
+- [x] T6 — verdict half landed for THIS repo: `scripts/trap_sentinel_gate.py`,
+      in the docs gate (14/14). Scoped, not workspace-wide, because a gate
+      over 38 EXPOSED sibling scripts would be a ratchet, not a gate — each
+      repo adds its own as its wave lands (T3-T5). Four arms: the audit's
+      `selftest()` must pass FIRST (an inert classifier reports a green zero
+      over everything), the population is FLOORED (a classifier going blind
+      must RED rather than report 0 EXPOSED), the two scripts are pinned by
+      MEMBERSHIP (a count is not a checksum over a set), and any NEW script
+      arriving with a cleanup trap and no sentinel reds the commit that adds
+      it.
+
+      **The canary caught a false SENTINELLED in the classifier — the
+      direction that HIDES exposure.** Planting "delete `full_gate.sh`'s
+      last-line `FULL_GATE_COMPLETED=1`" did NOT red the gate: the script
+      also carries `if [ "$KEEP_LOG" -eq 1 ]; then echo …; else rm -f …; fi`,
+      and `KEEP_LOG` is assigned the literal `1` twice after the trap and is
+      read in a `[ … ]` test inside the handler, so it satisfied every clause
+      the rule asked for. The rule asked for "tests the flag" and "the handler
+      exits non-zero" INDEPENDENTLY; a sentinel is the flag that gates *that
+      exit*. Tied together by block structure now
+      (`guards_nonzero_exit`), with the `KEEP_LOG` shape as a pinned selftest
+      case (7/7). Both plants red the gate, the clean tree passes, and the
+      workspace tally is unchanged at 38/3 — so the tightening did not
+      reclassify any real sentinel.
 - [x] T7 — **shellcheck is NOT the missing static half — measured.** Ran
       shellcheck 0.11.0 against the pre-fix guard (`seal-remake cafe9444:
       scripts/ci_feature_guard.sh`), which contains the live defect. Default

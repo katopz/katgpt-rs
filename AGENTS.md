@@ -123,6 +123,7 @@ runs it per-push on **`main` only** — develop pushes do not fire it, so run
 | `required_features_static_gate.py` | a required-features row naming a feature its package cannot enable (Issue 513) |
 | `cfg_row_implication_gate.py` | a required-features row that BUILDS and compiles its target to NOTHING (Issue 513) |
 | `population_sync_gate.py` | the six independent contract-repo predicates must agree |
+| `trap_sentinel_gate.py` | a shell gate whose `set -u` abort would report exit 0 — this repo's own two, by MEMBERSHIP (Issue 734) |
 
 The `CHECKS` count is deliberately not written here — it drifted once, which
 is exactly the drift this gate exists to catch.
@@ -285,6 +286,16 @@ Canonical failure: seal-remake's `ci_feature_guard.sh` — the script its
 layer-13 trap named two variables assigned ~20 and ~45 lines later. It stayed
 hidden because a ratchet ceiling had been red for three commits and stopped
 every run *before* the bad line (seal-remake `26a18191`).
+
+Verdict half: `scripts/trap_sentinel_gate.py` (in the docs gate). It pins this
+repo's two by **membership**, floors the population (a classifier that goes
+blind must RED, not report a green zero), and reds on the commit that adds a
+new unsentinelled gate script. Its canary is two-sided and it earned that:
+the first classifier called `full_gate.sh` SENTINELLED with its sentinel
+assignment DELETED, because the script also has an unrelated
+`if [ "$KEEP_LOG" -eq 1 ]` and the rule only asked for "tests the flag" and
+"exits non-zero" *independently*. The flag must gate the failure branch —
+tie them by block structure or the pin certifies nothing.
 
 ## Before committing in a shared worktree — `scripts/staged_set_audit.py`
 
