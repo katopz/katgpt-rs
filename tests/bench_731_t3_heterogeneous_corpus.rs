@@ -530,7 +530,7 @@ fn percentile_report(sorted: &[usize], p: f64) -> (usize, usize) {
 /// held-out replication needs — every field below is a quantity the v1-v4
 /// records already print. v1-v4 ignore the return; their printed record and
 /// their asserts are unchanged.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct G2Report {
     /// Inputs in the corpus.
     n: usize,
@@ -561,6 +561,12 @@ struct G2Report {
     /// The G2 verdict. `false` whenever `margin_gate` is false — read the two
     /// together: `!margin_gate` means NOT EVALUATED, never FAIL.
     g2: bool,
+    /// Phase E3 — (τ, input, fired-at) for every InterLoopNorm control fire.
+    /// MUST be empty: a fire is the Research-440 trap reading a churning loop
+    /// as converged. Reported rather than asserted in-place (Issue 731 T6) so
+    /// a multi-fixture sweep records its WHOLE table instead of stopping at
+    /// the first violating fixture — every caller asserts it is empty.
+    control_fires: Vec<(f32, String, usize)>,
 }
 
 impl G2Report {
@@ -580,6 +586,7 @@ impl G2Report {
             fired: 0,
             margin_gate: false,
             g2: false,
+            control_fires: Vec::new(),
         }
     }
 }
@@ -677,6 +684,7 @@ fn run_g2_harness(
     // ── Phase E3 — the InterLoopNorm negative control (hard assert; the
     // T2-amended boundary τ ≤ 3) on the SAME corpus content and the SAME
     // fixture construction (scaling included), stability mode swapped ──────
+    let mut control_fires: Vec<(f32, String, usize)> = Vec::new();
     {
         let control_config = make_config(LoopStabilityMode::InterLoopNorm);
         let (c_weights, c_residual_gate, c_sdpa_gate) =
@@ -688,16 +696,22 @@ fn run_g2_harness(
                     &control_config, &c_weights, &c_residual_gate, &c_sdpa_gate,
                     c.seq.as_deref(), c.pos, c.token, None, Some(&mut probe),
                 );
-                assert_eq!(
-                    probe.fired_at_iteration(),
-                    None,
-                    "InterLoopNorm control: tau {tau} fired on {} — the plateau regime moved; re-read the calibration before trusting any τ",
-                    c.label
-                );
+                if let Some(k) = probe.fired_at_iteration() {
+                    control_fires.push((tau, c.label.clone(), k));
+                }
             }
         }
     }
-    println!("[Phase E3] InterLoopNorm control: τ ≤ 3 → 0/{n} fired on every τ ✓");
+    if control_fires.is_empty() {
+        println!("[Phase E3] InterLoopNorm control: τ ≤ 3 → 0/{n} fired on every τ ✓");
+    } else {
+        println!(
+            "[Phase E3] InterLoopNorm control VIOLATED: {} fire(s) over {} τ × {n} inputs — the Research-440 trap read a churning loop as converged. First: {:?}",
+            control_fires.len(),
+            CONTROL_TAUS.len(),
+            control_fires.first().unwrap()
+        );
+    }
 
     // ── Phase B — the corpus-safe static override K* ─────────────────────
     let mut k_star: Option<usize> = None;
@@ -783,6 +797,7 @@ fn run_g2_harness(
         fired: fired_count,
         margin_gate,
         g2: false,
+        control_fires,
     };
     if !margin_gate {
         println!("\n[VERDICT] corpus REJECTED: adaptivity margin {margin:.2}× < 2× (or undefined {undefined}/{n} > 10%) — the probe cannot demonstrate ≥2× adaptivity over the corpus-safe static on this corpus. G2 not evaluated. Recorded next lever: a d_min reduction (own pre-registration) or a larger fixture family.");
@@ -803,7 +818,15 @@ fn run_g2_harness(
 /// outcome + a determinism witness (the rerun must print the same knees).
 #[test]
 fn bench_731_t3_corpus_v1_sequences() {
-    run_g2_harness("corpus v1 — sequences", make_corpus_v1(), plain_fixture_of, false);
+    let report = run_g2_harness("corpus v1 — sequences", make_corpus_v1(), plain_fixture_of, false);
+    // Phase E3 is a GATE, not a measurement (Issue 731 T6 moved the assert
+    // out of the harness so a sweep records its whole table).
+    assert!(
+        report.control_fires.is_empty(),
+        "InterLoopNorm control fired {} time(s) — the plateau regime moved; re-read the calibration before trusting any τ: {:?}",
+        report.control_fires.len(),
+        report.control_fires
+    );
 }
 
 /// Corpus v2 — the embedding-scale axis [1, 4, 16] (pre-registered
@@ -813,11 +836,19 @@ fn bench_731_t3_corpus_v1_sequences() {
 /// margin (≈ 16/10) exposes the floor-cap mechanism the correction records.
 #[test]
 fn bench_731_t3_corpus_v2_embedding_scale() {
-    run_g2_harness(
+    let report = run_g2_harness(
         "corpus v2 — embedding scale [1, 4, 16]",
         make_corpus_scaled(&V2_SCALES),
         scaled_fixture_v2_of,
         true,
+    );
+    // Phase E3 is a GATE, not a measurement (Issue 731 T6 moved the
+    // assert out of the harness so a sweep records its whole table).
+    assert!(
+        report.control_fires.is_empty(),
+        "InterLoopNorm control fired {} time(s) — the plateau regime moved; re-read the calibration before trusting any τ: {:?}",
+        report.control_fires.len(),
+        report.control_fires
     );
 }
 
@@ -828,11 +859,19 @@ fn bench_731_t3_corpus_v2_embedding_scale() {
 /// d_min = 10), corrected margin gate; branches 1–4 pre-declared in the doc.
 #[test]
 fn bench_731_t3_corpus_v3_embedding_scale_escalated() {
-    run_g2_harness(
+    let report = run_g2_harness(
         "corpus v3 — embedding scale [1, 8, 64]",
         make_corpus_scaled(&V3_SCALES),
         scaled_fixture_v3_of,
         true,
+    );
+    // Phase E3 is a GATE, not a measurement (Issue 731 T6 moved the
+    // assert out of the harness so a sweep records its whole table).
+    assert!(
+        report.control_fires.is_empty(),
+        "InterLoopNorm control fired {} time(s) — the plateau regime moved; re-read the calibration before trusting any τ: {:?}",
+        report.control_fires.len(),
+        report.control_fires
     );
 }
 
@@ -900,11 +939,19 @@ fn bench_731_t3_corpus_v4_loop_weight_scale() {
             token: t,
         })
         .collect();
-    run_g2_harness(
+    let report = run_g2_harness(
         "corpus v4 — loop-weight scale (seed 5, α 3.0)",
         corpus,
         scaled_fixture_v4_of,
         true,
+    );
+    // Phase E3 is a GATE, not a measurement (Issue 731 T6 moved the
+    // assert out of the harness so a sweep records its whole table).
+    assert!(
+        report.control_fires.is_empty(),
+        "InterLoopNorm control fired {} time(s) — the plateau regime moved; re-read the calibration before trusting any τ: {:?}",
+        report.control_fires.len(),
+        report.control_fires
     );
 }
 
@@ -975,8 +1022,72 @@ fn bench_731_t3_corpus_v4_loop_weight_scale() {
 //   reported as DIVERGED and excluded from P1/P2's denominator, which is
 //   reported explicitly. A diverged fixture is neither a pass nor a fail.
 //
-// **MEASURED: see the printed table + the `[T6]` verdict lines (recorded
-// into `.issues/731` after the run).**
+// # MEASURED 2026-09-07 — P1 REFUTED · P2 1/12 · P3 VIOLATED then FIXED
+//
+// All 12 held-out fixtures were live (0 diverged at α 3.0), 324 inputs.
+//
+// - **P1 — REFUTED, and that is the good outcome.** Held-out seed **1002**
+//   measured margin **2.40×** (K* 24 / median_all 10) at mean exit dist
+//   5.44e-3 ≤ 0.01 — strictly ABOVE the 2.0× the v4 record called the axis's
+//   exact ceiling. The ceiling was an artifact of the scan's coverage, not a
+//   property of the weight-scale axis, so G2 has headroom the v4 record
+//   denied it. (Post-fix the same fixture measures margin 2.18× / cut 2.91×
+//   at a 2.4× BETTER mean dist — still above the ceiling, still a G2 PASS.)
+// - **P2 — 1/12 G2 PASS (seed 1002).** Pre-declared reading, taken as
+//   written: consistent with the scan's base rate ⇒ **the existence-proof
+//   grade STANDS, unchanged.** Non-qualified note (input to a future
+//   pre-registration, NOT a pass): 1/12 at FIXED α = 3.0 is not comparable to
+//   the scan's 1/144, which ranged over {seed} × {α} — the two denominators
+//   count different things, so no rate claim is made here.
+// - **P3 — VIOLATED on seed 1003: the InterLoopNorm negative control fired
+//   40 times over 8 τ × 27 inputs, first at (τ = 0.001, S2, k = 14).** τ
+//   cannot explain a fire at the SMALLEST τ in the set, and it did not: with
+//   τ = 0.0 (magnitude arm mathematically disabled) the fire is identical, so
+//   it is the SHAPE arm. Localized further — the fire is invariant from
+//   `settle_floor` 0.5 down to 1e-5 and vanishes only at
+//   `decay_ratio_max ≤ 0.3`, i.e. it is `classify`'s **rule-3 decay
+//   fall-through** on a newer/older half-window ratio in [0.3, 0.5): a
+//   transient 2-vs-2 DIP inside a plateau whose newer half stays above 0.5.
+//   5/27 inputs false-positived via the shape arm alone.
+//
+//   **What P3 falsified:** (i) the T1 record's "guarded by construction"
+//   claim — the arms are OR'd and rule 3 has no absolute floor, so arm 2 can
+//   fire alone on a churning loop; (ii) T2's amendment of the control
+//   boundary from τ ≤ 10 to τ ≤ 3, which treated a shape-arm false positive
+//   as if τ bounded it — the τ ≤ 3 boundary was fixture luck; (iii) the
+//   sufficiency of T5's calibration rule, which governs rules 1-2 only.
+//
+//   **Fix-forward (same session):** `LoopResidualExit::with_shape_persistence`
+//   — the shape arm requires `DEFAULT_SHAPE_PERSISTENCE = 2` CONSECUTIVE
+//   `Settled` windows (a `None` or `Churning` resets the run). Orthogonal to
+//   calibration, one `u32` counter, zero-alloc. `with_shape_persistence(1)`
+//   recovers the pre-T6 behavior exactly and is retained as the control arm
+//   (no loser to demote). Pinned both directions by
+//   `t6_seed_1003_control_violation_is_pinned_both_directions` (the defect
+//   must still reproduce at persistence 1) and four katgpt-core unit tests.
+//
+// **The fix is a strict improvement on every corpus measured** — same
+// verdicts, better quality, control clean:
+//
+// | corpus | verdict | margin | cut | mean dist | max dist | E3 control |
+// |---|---|---|---|---|---|---|
+// | v1 / v2 / v3 | REJECTED (unchanged) | 1.20× / 1.60× / 1.20× | — | — | — | clean |
+// | v4 (seed 5) | **G2 PASS** (unchanged) | 2.00× | 3.20× | 8.66e-4 → **1.02e-4** | 1.60e-2 → **1.31e-3** | clean |
+// | T6 seed 1002 | **G2 PASS** | 2.40× → 2.18× | 3.20× → 2.91× | 5.44e-3 → **2.23e-3** | 2.15e-2 → **1.26e-2** | clean |
+// | T6 seed 1003 | REJECTED | 1.00× | — | — | — | **40 fires → 0** |
+// | T6 1004/1005/1010/1011 | REJECTED | <2× | — | 9.2e-2/8.1e-2/8.9e-2/2.4e-2 → **0/0/4.2e-3/1.3e-2** | — | clean |
+//
+// v4's cut and margin are IDENTICAL post-fix while its worst-case exit
+// distance improves 12×; the premature dip-triggered exits that were
+// poisoning quality on four held-out fixtures are gone. So the fix removes a
+// false-convergence class without costing any measured adaptivity.
+//
+// **What this does and does not do for T4.** It repairs a probe defect and
+// refutes a structural claim, and P3's zero-fire control now covers 4 + 12
+// fixtures / 496 inputs instead of 4 / 172. It does NOT change T4's status:
+// P2 came out inside the pre-declared band, so the synthetic G2 evidence is
+// still existence-proof grade, and T4's unblock remains real-workload
+// depth-spread evidence at judgeable quality.
 
 /// The held-out weight seeds — mechanically defined, disjoint from every
 /// seed the v4 scan record names.
@@ -1047,7 +1158,7 @@ fn bench_731_t6_holdout_replication_of_the_v4_mechanism() {
 
     // ── The table (one row per held-out fixture) ─────────────────────────
     println!("\n═══ [T6] held-out replication table (α {V4_ALPHA}, τ {PROBE_TAU}, d_min {PROBE_D_MIN} — none re-tuned) ═══");
-    println!("  seed | status   | knee_max | undef | K* | med_all | margin | cut   | mean_dist | max_dist | fired");
+    println!("  seed | status   | knee_max | undef | K* | med_all | margin | cut   | mean_dist | max_dist | fired | E3 control");
     for (seed, r) in &reports {
         let status = match (r.diverged, r.margin_gate, r.g2) {
             (true, _, _) => "DIVERGED",
@@ -1056,9 +1167,10 @@ fn bench_731_t6_holdout_replication_of_the_v4_mechanism() {
             (_, true, false) => "G2 FAIL ",
         };
         println!(
-            "  {:>4} | {} | {:>8} | {:>2}/{:<2} | {:>2} | {:>7} | {:>5.2}× | {:>4.2}× | {:>9.6} | {:>8.6} | {:>2}/{}",
+            "  {:>4} | {} | {:>8} | {:>2}/{:<2} | {:>2} | {:>7} | {:>5.2}× | {:>4.2}× | {:>9.6} | {:>8.6} | {:>2}/{} | {}",
             seed, status, r.knee_max, r.undefined, r.n, r.k_star, r.median_all, r.margin, r.cut,
-            r.mean_exit_dist, r.max_exit_dist, r.fired, r.n
+            r.mean_exit_dist, r.max_exit_dist, r.fired, r.n,
+            if r.control_fires.is_empty() { "clean".to_string() } else { format!("{} FIRE(S)", r.control_fires.len()) },
         );
     }
 
@@ -1100,13 +1212,101 @@ fn bench_731_t6_holdout_replication_of_the_v4_mechanism() {
     // ── P3 — the invariants (asserted inside the harness on every live
     // fixture; this line records the population they covered) ────────────
     let live_inputs: usize = live.iter().map(|r| r.n).sum();
+    let violators: Vec<(u64, usize, (f32, String, usize))> = reports
+        .iter()
+        .filter(|(_, r)| !r.control_fires.is_empty())
+        .map(|(s, r)| (*s, r.control_fires.len(), r.control_fires[0].clone()))
+        .collect();
     println!(
-        "[T6][P3] invariants (G1 ≡ None · exit ≡ elastic · InterLoopNorm control 0 fires at all {} τ ≤ 3): HELD on {} live held-out fixture(s) / {live_inputs} inputs — hard-asserted in run_g2_harness, so this line printing at all IS the pass",
-        CONTROL_TAUS.len(),
+        "[T6][P3] G1 ≡ None + exit ≡ elastic bit-identity: HELD on {} live held-out fixture(s) / {live_inputs} inputs (hard-asserted in run_g2_harness — reaching this line IS their pass).",
         live.len()
+    );
+    println!(
+        "[T6][P3] InterLoopNorm control (0 fires at all {} τ ≤ 3): {} — {} of {} live fixture(s) violated{}",
+        CONTROL_TAUS.len(),
+        if violators.is_empty() { "HELD" } else { "VIOLATED" },
+        violators.len(),
+        live.len(),
+        if violators.is_empty() { String::new() } else { format!("; (seed, fires, first) = {violators:?}") }
     );
     assert!(
         !live.is_empty(),
         "every held-out fixture diverged at α {V4_ALPHA} — P1/P2 are unevaluable and P3 covered nothing; the replication is INCONCLUSIVE, not a pass"
     );
+    assert!(
+        violators.is_empty(),
+        "P3 VIOLATED on {}/{} live held-out fixture(s): the InterLoopNorm negative control fired, i.e. the Research-440 trap read a churning loop as converged. This is a probe finding, not a corpus one — see the T6 record. {violators:?}",
+        violators.len(),
+        live.len()
+    );
+}
+
+/// The T6 P3 finding, pinned end-to-end on the fixture that produced it
+/// (held-out seed 1003, `LoopStabilityMode::InterLoopNorm` — the Research-440
+/// step-plateau regime). Both directions, so the mirror defect cannot pass:
+/// the pre-T6 single-window shape arm FIRES on this churning loop (that is
+/// the defect), and the shipped persistence default refuses it across all 27
+/// inputs and all 8 control τ.
+///
+/// Mechanism, measured (`decay_ratio_max` sweep below): the fire is the shape
+/// arm's rule-3 decay fall-through, not rule 1 — it is identical from
+/// `settle_floor` 0.5 down to 1e-5 and disappears only at
+/// `decay_ratio_max <= 0.3`, i.e. the newer/older half-window ratio at the
+/// firing window sits in [0.3, 0.5).
+#[test]
+fn t6_seed_1003_control_violation_is_pinned_both_directions() {
+    use katgpt_core::convergence_cadence::CadenceConfig;
+    T6_SEED.with(|c| c.set(1003));
+    let config = make_config(LoopStabilityMode::InterLoopNorm);
+    let (w, rg, sg) = scaled_fixture_holdout_of(LoopStabilityMode::InterLoopNorm);
+
+    // ── Direction 1: the DEFECT reproduces at persistence 1 ─────────────
+    // tau = 0.0 disables the magnitude arm (`mean < 0` is false for any
+    // non-negative norm), so a fire can only be the SHAPE arm.
+    let mut p = LoopResidualExit::new(0.0, PROBE_D_MIN).with_shape_persistence(1);
+    run_on_prefix(&config, &w, &rg, &sg, None, 0, 2, None, Some(&mut p));
+    assert_eq!(
+        p.fired_at_iteration(),
+        Some(14),
+        "the pre-T6 shape arm must still false-positive here — if this stops reproducing, the fixture moved and the T6 record no longer describes it"
+    );
+
+    // The fire is floor-INVARIANT: rule 3 carries no absolute threshold.
+    for sf in [0.5f32, 0.05, 1e-3, 1e-5] {
+        let cfg = CadenceConfig { plateau_floor: sf * 2.0, settle_floor: sf, decay_ratio_max: 0.5 };
+        let mut p = LoopResidualExit::with_cadence_config(0.0, PROBE_D_MIN, cfg)
+            .with_shape_persistence(1);
+        run_on_prefix(&config, &w, &rg, &sg, None, 0, 2, None, Some(&mut p));
+        assert_eq!(
+            p.fired_at_iteration(),
+            Some(14),
+            "settle_floor {sf}: no absolute calibration can gate a ratio (the T5 seam alone is insufficient)"
+        );
+    }
+    // ...and it IS the decay ratio: decay_ratio_max <= 0.3 suppresses it.
+    for (drm, want_fire) in [(0.9f32, true), (0.5, true), (0.3, false), (0.0, false)] {
+        let cfg = CadenceConfig { plateau_floor: 1e-9, settle_floor: 1e-12, decay_ratio_max: drm };
+        let mut p = LoopResidualExit::with_cadence_config(0.0, PROBE_D_MIN, cfg)
+            .with_shape_persistence(1);
+        run_on_prefix(&config, &w, &rg, &sg, None, 0, 2, None, Some(&mut p));
+        assert_eq!(
+            p.fired_at_iteration().is_some(),
+            want_fire,
+            "decay_ratio_max {drm}: the firing window's newer/older ratio is measured to sit in [0.3, 0.5)"
+        );
+    }
+
+    // ── Direction 2: the SHIPPED default refuses the whole control ──────
+    for &tau in &CONTROL_TAUS {
+        for t in 0..27usize {
+            let mut p = LoopResidualExit::new(tau, PROBE_D_MIN);
+            run_on_prefix(&config, &w, &rg, &sg, None, 0, t, None, Some(&mut p));
+            assert_eq!(
+                p.fired_at_iteration(),
+                None,
+                "shipped persistence must refuse the churning loop: tau {tau} fired on S{t}"
+            );
+        }
+    }
+    T6_SEED.with(|c| c.set(V4_SEED));
 }
