@@ -22,7 +22,23 @@ What this gate pins, and why each arm exists:
    the population (someone removes its trap, or the `set -u`) while a new
    script joins keeps the total at 2 and a count-only pin stays green.
 
-4. **Zero EXPOSED and zero LIVE-FORWARD.** A NEW script that arrives with a
+4. **Zero UNPARSED.** UNPARSED means the classifier could not read the
+   handler body at all (it never closed under brace counting). That is the
+   instrument failing, and it is NOT the safe direction: a runaway body
+   swallows unrelated `exit 1`s and a late literal flag and can read as a
+   false SENTINELLED, which HIDES exposure. It reds here rather than being
+   pooled into either column.
+
+5. **Zero PRECAUTIONARY, too — deliberately stricter than the severity.**
+   PRECAUTIONARY is nounset WITHOUT errexit: measured, those aborts exit 1
+   today, so such a script cannot launder anything and the finding is not
+   live. It still reds here, because the distance between PRECAUTIONARY and
+   EXPOSED is one character in a `set` line that nobody re-audits when they
+   add it, and the fix is one line. The report keeps the two apart so it does
+   not over-claim; this gate collapses them because it is a ratchet over two
+   files, not a workspace census.
+
+6. **Zero EXPOSED and zero LIVE-FORWARD.** A NEW script that arrives with a
    cleanup trap and no sentinel reds this gate on the commit that adds it —
    which is the whole point, since the seal-remake defect took months to
    surface precisely because nothing objected at the time.
@@ -87,6 +103,22 @@ def main():
             f"population is not the same as a fixed defect."
         )
 
+    unreadable = sorted(k for k, v in found.items() if v == audit.UNPARSED)
+    if unreadable:
+        problems.append(
+            "UNPARSED (the classifier could not read the handler body — its braces "
+            "never closed, so BOTH verdicts would be guesses, and the runaway-body "
+            "direction manufactures a false SENTINELLED): " + ", ".join(unreadable)
+        )
+
+    precautionary = sorted(k for k, v in found.items() if v == audit.PRECAUTIONARY)
+    if precautionary:
+        problems.append(
+            "PRECAUTIONARY (nounset without errexit and no sentinel — not laundering "
+            "TODAY, but one added `-e` away from it, and nobody re-audits a `set` "
+            "line): " + ", ".join(precautionary)
+        )
+
     exposed = sorted(k for k, v in found.items() if v == audit.EXPOSED)
     forward = sorted(k for k, v in found.items() if v == audit.LIVE_FORWARD)
     if forward:
@@ -127,7 +159,8 @@ def main():
         note = (f"; {len(extra)} sentinelled script(s) not yet pinned "
                 f"({', '.join(extra)}) — add them to PINNED_SENTINELLED")
     print(f"✓ trap sentinel gate PASSED — {len(found)} script(s) in population "
-          f"(floor {POPULATION_FLOOR}), 0 EXPOSED, 0 LIVE-FORWARD, "
+          f"(floor {POPULATION_FLOOR}), 0 EXPOSED, 0 PRECAUTIONARY, "
+          f"0 LIVE-FORWARD, 0 UNPARSED, "
           f"{len(PINNED_SENTINELLED)} pinned name(s) still SENTINELLED{note}")
 
 

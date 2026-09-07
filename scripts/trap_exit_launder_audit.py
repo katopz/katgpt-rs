@@ -21,15 +21,29 @@ stderr says `UNSET: unbound variable`, the script stops there — and `$?`
 is **0**. Everything after the abort silently did not run, and the caller,
 CI included, reads a pass.
 
-Two aborts launder this way, and `selftest()` re-measures both on the box
-the audit runs on rather than trusting this paragraph:
+**`errexit` is the precondition, not `nounset`** — and the first version of
+this audit got that backwards, because its premise harness hard-coded
+`set -euo pipefail` and so never varied the axis it was making a claim about.
+`measure_premise()` is the full (options x arm) matrix now, re-measured on
+the box the audit runs on. Measured, `/bin/bash` 3.2.57(1)-release,
+arm64-apple-darwin25 (**one** bash — an earlier "and 5.x" claim is not
+reproducible here; there is no bash 5 on this box):
 
-| abort                       | bare | `$?` at trap entry | with an EXIT trap |
-|-----------------------------|------|--------------------|-------------------|
-| `set -u` unbound expansion  | 1    | **0**              | **0** ✗           |
-| `eval` with a syntax error  | 2    | **0**              | **0** ✗           |
-| `set -e` command failure    | 1    | 1                  | 1 ✓               |
-| command not found           | 127  | 127                | 127 ✓             |
+| shell options  | unbound expansion            | `eval` syntax error       |
+|----------------|------------------------------|---------------------------|
+| `set -u`       | aborts, **1** — not laundered | does **not abort at all** |
+| `set -e`       | no abort (expands empty)     | 2 bare, **0** trapped ✗   |
+| `set -eu`      | 1 bare, **0** trapped ✗      | 2 bare, **0** trapped ✗   |
+| `set -e` cmd failure -> 1 both; command not found -> 127 both ✓            |
+
+So a script with `set -u` and no `set -e` cannot launder anything today:
+that is PRECAUTIONARY, not EXPOSED. Pooling the two over-claimed on 37% of
+this report's rows (15 of 41).
+
+⛔ And the measurement MODE is part of the claim: the nounset fatal error
+exits **127** from `bash -c` and **1** from a script FILE on this bash. The
+old harness used `bash -c` and never saw it, because at `set -euo pipefail`
+both modes agree. `_run` writes a temp script now — the population is files.
 
 The defensive idiom does **not** fix it. `trap 'rc=$?; cleanup; exit $rc'
 EXIT` saves a status that is *already* 0 — measured, not assumed. The only
@@ -64,14 +78,22 @@ gate is what CI runs (`rust.yml`), so past that line the gate *could not
 fail*. It stayed hidden because a different row (a ratchet ceiling) had
 been red for three commits and stopped every run before reaching it.
 
-# The four verdicts
+# The verdicts
 
 * **LIVE-FORWARD** — a double-quoted `trap "... $VAR ..."` naming a variable
   first assigned LATER in the file (or never). This is not exposure: under
   `set -u` the script *provably* aborts at that line, every run. If the
-  script also lacks a sentinel, the abort reads as a pass.
-* **EXPOSED** — `set -u` + an EXIT trap + no completion sentinel. Latent:
+  script also has `set -e` and lacks a sentinel, the abort reads as a pass.
+* **EXPOSED** — `set -e` + an EXIT trap + no completion sentinel. Latent:
   correct today, reports a pass for any abort introduced tomorrow.
+* **PRECAUTIONARY** — nounset WITHOUT errexit + an EXIT trap + no sentinel.
+  Measured above: those aborts exit 1, so nothing is being laundered today.
+  One added `-e` away from EXPOSED, and nobody re-audits a `set` line when
+  they change it — but reporting it as live would be an over-claim.
+* **UNPARSED** — the trap names a function whose body never closed under
+  brace counting, so the classifier could not read the handler at all.
+  Neither a pass nor a finding: a runaway body swallows the rest of the file
+  and can manufacture a false SENTINELLED, which HIDES exposure.
 * **REPLACED** — two or more `trap ... EXIT` **registrations**. `trap`
   REPLACES; it does not accumulate, so every earlier handler is silently
   dropped. An orthogonal defect (leaked temp dirs, skipped cleanup) reported
@@ -82,26 +104,53 @@ been red for three commits and stopped every run before reaching it.
   the last trap registration, with a non-zero exit guarded by it. Not a
   finding.
 
-A script with `set -u` and NO EXIT trap is not in the population at all:
-its aborts exit 1 correctly. Adding a cleanup trap to such a script is what
-introduces the laundering — which is why "just add a trap" is the wrong
-advice on its own.
+A script with NO EXIT trap is not in the population at all: its aborts exit
+non-zero correctly. Adding a cleanup trap to such a script is what introduces
+the laundering — which is why "just add a trap" is the wrong advice on its
+own. The population predicate is `set -e` **OR** `set -u` (the union): a
+SET_U-only predicate both over-claimed on the nounset-only rows and had a
+mirror blind spot — errexit + trap + `eval`, no nounset, which launders via
+the syntax-error trigger and which `analyse()` skipped before looking.
+Measured with the widened predicate: **0** such scripts workspace-wide, so
+that blind spot was empty — but it is a measurement now, not an assumption.
 """
 
 import os
 import re
 import subprocess
 import sys
+import tempfile
 
 # ── Verdicts ──────────────────────────────────────────────────────────────
 LIVE_FORWARD = "LIVE-FORWARD"
 EXPOSED = "EXPOSED"
 SENTINELLED = "SENTINELLED"
+# `set -u` + an EXIT trap + no sentinel, but NO `set -e`. Measured (see
+# `measure_premise`): **errexit is the precondition for laundering**, for BOTH
+# triggers. With nounset alone an unbound expansion aborts and exits 1 even
+# with a succeeding EXIT trap, and an `eval` syntax error does not abort at
+# all. So these scripts cannot launder anything TODAY — the sentinel is
+# precautionary and becomes load-bearing the moment somebody adds `-e`. Never
+# pooled with EXPOSED: doing so over-claimed on 37% of this report's rows.
+PRECAUTIONARY = "PRECAUTIONARY"
+# The classifier could not read the handler at all — the function body never
+# closed under brace counting. NEVER folded into either real verdict: an
+# unreadable body can just as easily swallow the rest of the file (and with it
+# somebody else's `exit 1` and some late literal flag) and read as a false
+# SENTINELLED, which HIDES exposure. See `function_bodies`.
+UNPARSED = "UNPARSED"
 
 SKIP_DIRS = {".git", "target", "node_modules", ".venv", "venv", "__pycache__"}
 
 # `set -u` / `set -euo pipefail` / `set -o nounset`
 SET_U = re.compile(r"^\s*set\s+(?:-[a-zA-Z]*u[a-zA-Z]*\b|-o\s+nounset\b)", re.M)
+# `set -e` / `set -euo pipefail` / `set -o errexit`. This is the ACTUAL
+# precondition for status laundering — see PRECAUTIONARY. The first version of
+# this audit used SET_U alone as its population predicate, which both
+# over-claimed (nounset-only rows reported as live) and had a mirror blind
+# spot (errexit + trap + `eval`, no nounset — launderable, and `analyse`
+# returned None before looking). The population is the UNION now.
+SET_E = re.compile(r"^\s*set\s+(?:-[a-zA-Z]*e[a-zA-Z]*\b|-o\s+errexit\b)", re.M)
 # a trap registration naming EXIT (also ERR/RETURN are laundering-irrelevant:
 # only EXIT decides the script's status)
 TRAP_EXIT = re.compile(r"^\s*trap\s+(?P<body>.+?)\s+(?P<sigs>[A-Z0-9 ]*\bEXIT\b[A-Z0-9 ]*)\s*$")
@@ -115,6 +164,9 @@ NONZERO_EXIT = re.compile(r"\b(?:exit\s+[1-9]|return\s+[1-9]|exit\s+\"?\$)")
 # command substitution. `PID=$!` and `status=$?` are late-assigned and
 # handler-read too, and neither is a sentinel.
 LITERAL_ASSIGN = re.compile(r'^["\']?(?:[01]|true|false|yes|no|done|complete)["\']?\s*(?:#.*)?$', re.I)
+# `<<EOF` / `<<-'EOF'` / `<<"EOF"` — a heredoc body is DATA, and its braces are
+# not shell braces.
+HEREDOC = re.compile(r"<<-?\s*(?P<q>[\'\"]?)(?P<tag>[A-Za-z_][A-Za-z0-9_]*)(?P=q)")
 
 
 def read(path):
@@ -125,11 +177,61 @@ def read(path):
         return None
 
 
-def function_bodies(lines):
-    """Map function name -> (start_line, end_line, body_lines).
+def scan_braces(line, quote):
+    """Count SHELL braces on one line, carrying an open quote across lines.
 
-    Brace counting, not a parser: enough for the house shell style (one
-    `name() {` per line, closing `}` at column 0 or indented consistently).
+    Returns `(delta, quote)` where `quote` is None / "'" / '"' at end of line.
+
+    Why this is not `line.count("{") - line.count("}")`: riir-chain's
+    `block_pipeline_reachability_gate.sh` embeds a multi-line, single-quoted
+    `awk` program containing `mod[[:space:]]+tests[[:space:]]*\\{` — one
+    unmatched `{` inside DATA. Naive counting therefore never closed that
+    function, its "body" ran to EOF, and the file read as EXPOSED even though
+    it carries a correct sentinel. The same mis-parse in the other direction
+    is worse: a runaway body swallows unrelated `exit 1`s and can manufacture
+    a false SENTINELLED.
+    """
+    delta = 0
+    i, n = 0, len(line)
+    while i < n:
+        c = line[i]
+        if quote == "'":
+            if c == "'":
+                quote = None
+            i += 1
+            continue
+        if quote == '"':
+            if c == "\\":
+                i += 2
+                continue
+            if c == '"':
+                quote = None
+            i += 1
+            continue
+        if c == "\\":
+            i += 2
+            continue
+        if c == "#" and (i == 0 or line[i - 1] in " \t;&|("):
+            break  # a comment runs to end of line
+        if c in "'\"":
+            quote = c
+            i += 1
+            continue
+        if c == "{":
+            delta += 1
+        elif c == "}":
+            delta -= 1
+        i += 1
+    return delta, quote
+
+
+def function_bodies(lines):
+    """Map function name -> (start_line, end_line, body_lines, terminated).
+
+    Brace counting, not a parser — but quote- and heredoc-aware (see
+    `scan_braces`). `terminated` is False when the body ran off the end of the
+    file with depth still open: that is the classifier failing to read, and
+    `analyse` reports it as UNPARSED rather than guessing a verdict.
     """
     out = {}
     i = 0
@@ -137,17 +239,28 @@ def function_bodies(lines):
         m = FUNC_DEF.match(lines[i])
         if m and ("{" in lines[i] or (i + 1 < len(lines) and lines[i + 1].strip() == "{")):
             name = m.group("name")
-            depth = lines[i].count("{") - lines[i].count("}")
+            quote = None
+            depth, quote = scan_braces(lines[i], quote)
             j = i + 1
             if depth == 0 and j < len(lines):  # brace on the next line
-                depth = lines[j].count("{") - lines[j].count("}")
+                depth, quote = scan_braces(lines[j], quote)
                 j += 1
             body = []
+            heredoc = None
             while j < len(lines) and depth > 0:
-                body.append(lines[j])
-                depth += lines[j].count("{") - lines[j].count("}")
+                line = lines[j]
+                body.append(line)
                 j += 1
-            out[name] = (i + 1, j, body)
+                if heredoc is not None:
+                    if line.strip() == heredoc:
+                        heredoc = None
+                    continue  # heredoc body is DATA
+                hm = HEREDOC.search(line) if quote is None else None
+                d, quote = scan_braces(line, quote)
+                depth += d
+                if hm:
+                    heredoc = hm.group("tag")
+            out[name] = (i + 1, j, body, depth == 0)
             i = j
             continue
         i += 1
@@ -188,8 +301,10 @@ def analyse(path):
     if lines is None:
         return None
     src = "\n".join(lines)
-    if not SET_U.search(src):
-        return None  # aborts exit 1 correctly; not in the population
+    nounset = bool(SET_U.search(src))
+    errexit = bool(SET_E.search(src))
+    if not (nounset or errexit):
+        return None  # no abort-on-error at all; nothing to launder
 
     # A trap line is a REGISTRATION or a DEREGISTRATION, and only the first
     # kind can launder a status. `trap - EXIT` RESTORES the default (the
@@ -239,10 +354,14 @@ def analyse(path):
     # ── SENTINELLED: a handler-referenced flag re-assigned after the last trap
     last_trap_line = max(ln for ln, _ in traps)
     handler_bodies = []
+    unparsed = []
     for ln, body in traps:
         bare = body.strip("'\"")
         if bare in funcs:
-            handler_bodies.append("\n".join(funcs[bare][2]))
+            _st, _en, blines, terminated = funcs[bare]
+            if not terminated:
+                unparsed.append((ln, bare))
+            handler_bodies.append("\n".join(blines))
         else:
             handler_bodies.append(body)
     handler_src = "\n".join(handler_bodies)
@@ -267,12 +386,39 @@ def analyse(path):
                 sentinel_var = name
                 break
 
+    # ── the exposure WINDOW: [last trap registration, EOF) ───────────────
+    # Nothing before the handler exists can be laundered by it, so a window
+    # with no abort SITE in it cannot launder regardless of the `set` line.
+    # A triage aid, not a verdict — same standing as tail support in
+    # percentile_index_audit.py: it ORDERS the findings (a 2-line window with
+    # 0 triggers and an 863-line window with 253 are one row each otherwise).
+    window_lines = [l for l in lines[last_trap_line:] if not l.lstrip().startswith("#")]
+    window = len(lines) - last_trap_line
+    win_src = "\n".join(window_lines)
+    triggers = len(VARREF.findall(win_src)) + len(re.findall(r"\beval\b", win_src))
+    # A function DEFINED above the trap line but CALLED inside the window has
+    # its trigger text outside the window — line-based counting under-reports
+    # it. Fold in the body of any function the window actually calls.
+    for fname, (fst, _fen, fbody, _fterm) in funcs.items():
+        if fst > last_trap_line:
+            continue  # defined inside the window; already counted
+        if not re.search(r"(?<![\w.-])" + re.escape(fname) + r"(?![\w.-])", win_src):
+            continue
+        fb = "\n".join(l for l in fbody if not l.lstrip().startswith("#"))
+        triggers += len(VARREF.findall(fb)) + len(re.findall(r"\beval\b", fb))
+
     if forwards:
         verdict = LIVE_FORWARD
+    elif unparsed:
+        # Read NOTHING off an unreadable handler — not a pass, not a finding.
+        verdict = UNPARSED
     elif sentinel_var:
         verdict = SENTINELLED
-    else:
+    elif errexit:
         verdict = EXPOSED
+    else:
+        # nounset only: the abort exits 1 today. Precautionary, not live.
+        verdict = PRECAUTIONARY
 
     return {
         "verdict": verdict,
@@ -280,44 +426,100 @@ def analyse(path):
         "replaced": len(traps) > 1,
         "dereg": dereg,
         "forwards": forwards,
+        "unparsed": unparsed,
+        "errexit": errexit,
+        "nounset": nounset,
+        "window": window,
+        "triggers": triggers,
         "sentinel": sentinel_var,
         "lines": len(lines),
     }
 
 
 # ── The premise, re-measured on THIS box ──────────────────────────────────
+#
+# ⛔ This used to be four arms all measured under a HARD-CODED `set -euo
+# pipefail`, which is how the laundering got attributed to the wrong
+# predicate: the measurement never varied the shell options, so "unbound
+# expansion launders" read as "nounset is the precondition". It is not.
+# errexit is, for BOTH triggers. The matrix is now over (options x arm).
+PREMISE_OPTS = ["set -u", "set -e", "set -eu", "set -euo pipefail"]
 PREMISE_ARMS = [
-    # (name, script body after `set -euo pipefail` + a succeeding EXIT trap,
-    #  expected status WITHOUT the trap, expected status WITH it)
-    ("set -u unbound expansion", 'echo pre; echo "$DEFINITELY_UNSET_XYZ"; echo post', 1, 0),
-    ("eval syntax error", 'echo pre; eval "if ["; echo post', 2, 0),
-    ("set -e command failure", "echo pre; false; echo post", 1, 1),
-    ("command not found", "echo pre; no_such_command_xyz; echo post", 127, 127),
+    # (name, body)
+    ("unbound expansion", 'echo pre; echo "$DEFINITELY_UNSET_XYZ"; echo post'),
+    ("eval syntax error", 'echo pre; eval "if ["; echo post'),
+    ("command failure", "echo pre; false; echo post"),
+    ("command not found", "echo pre; no_such_command_xyz; echo post"),
 ]
+# What the docs (AGENTS.md, .issues/734) claim, as (opts, arm) -> (bare,
+# trapped). Measured on /bin/bash 3.2.57(1)-release, arm64-apple-darwin25,
+# 2026-09-07. A divergence is PRINTED, never silently accepted — the point of
+# re-measuring is that a premise typed into a docstring is not evidence.
+PREMISE_DOCUMENTED = {
+    ("set -u", "unbound expansion"): (1, 1),
+    ("set -u", "eval syntax error"): (0, 0),      # does not abort AT ALL
+    ("set -u", "command failure"): (0, 0),
+    ("set -u", "command not found"): (0, 0),
+    ("set -e", "unbound expansion"): (0, 0),      # unset expands empty
+    ("set -e", "eval syntax error"): (2, 0),      # LAUNDERS
+    ("set -e", "command failure"): (1, 1),
+    ("set -e", "command not found"): (127, 127),
+    ("set -eu", "unbound expansion"): (1, 0),     # LAUNDERS
+    ("set -eu", "eval syntax error"): (2, 0),     # LAUNDERS
+    ("set -eu", "command failure"): (1, 1),
+    ("set -eu", "command not found"): (127, 127),
+    ("set -euo pipefail", "unbound expansion"): (1, 0),
+    ("set -euo pipefail", "eval syntax error"): (2, 0),
+    ("set -euo pipefail", "command failure"): (1, 1),
+    ("set -euo pipefail", "command not found"): (127, 127),
+}
 
 
-def _run(body, with_trap):
-    trap = "trap 'true' EXIT; " if with_trap else ""
-    script = f"set -euo pipefail; {trap}{body}"
+def _run(body, with_trap, opts):
+    """Run one premise arm as a SCRIPT FILE, which is what the population is.
+
+    ⛔ Not `bash -c`. Measured on bash 3.2.57: the nounset fatal error exits
+    **127** from `bash -c` and **1** from a script file — the measurement MODE
+    changes the measured status. The earlier harness used `bash -c` and never
+    saw it, because it only ever measured `set -euo pipefail`, where both
+    modes agree (1 bare / 0 trapped). A premise instrument that does not run
+    the thing it is making claims about is the failure this repo keeps
+    re-finding.
+    """
+    trap = "trap 'true' EXIT\n" if with_trap else ""
+    script = f"#!/usr/bin/env bash\n{opts}\n{trap}{body}\n"
+    fd, path = tempfile.mkstemp(suffix=".sh", prefix="premise_arm_")
     try:
-        p = subprocess.run(["bash", "-c", script], capture_output=True, timeout=20)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(script)
+        p = subprocess.run(["bash", path], capture_output=True, timeout=20)
         return p.returncode
     except (OSError, subprocess.TimeoutExpired):
         return None
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 
 def measure_premise():
     rows = []
-    for name, body, want_bare, want_trapped in PREMISE_ARMS:
-        bare = _run(body, with_trap=False)
-        trapped = _run(body, with_trap=True)
-        rows.append({
-            "name": name,
-            "bare": bare,
-            "trapped": trapped,
-            "launders": bare not in (0, None) and trapped == 0,
-            "as_documented": bare == want_bare and trapped == want_trapped,
-        })
+    for opts in PREMISE_OPTS:
+        for name, body in PREMISE_ARMS:
+            bare = _run(body, False, opts)
+            trapped = _run(body, True, opts)
+            want = PREMISE_DOCUMENTED.get((opts, name))
+            rows.append({
+                "opts": opts,
+                "name": name,
+                "bare": bare,
+                "trapped": trapped,
+                # LAUNDERS = the abort is real (non-zero bare) and the EXIT
+                # trap turns it into a success.
+                "launders": bare not in (0, None) and trapped == 0,
+                "as_documented": want is None or (bare, trapped) == want,
+            })
     return rows
 
 
@@ -397,6 +599,78 @@ trap - EXIT
 rm -f "$A"
 echo ALL GREEN
 """, EXPOSED))
+    # The shape that made the naive brace counter run a function body to EOF:
+    # a multi-line SINGLE-QUOTED awk program with one unmatched `{` in DATA.
+    # Before `scan_braces` this read EXPOSED despite a correct sentinel
+    # (riir-chain/scripts/block_pipeline_reachability_gate.sh).
+    cases.append(("a single-quoted awk program with an unmatched brace is DATA",
+                  """#!/usr/bin/env bash
+set -euo pipefail
+TMP="$(mktemp)"
+DONE_FLAG=0
+scan() {
+    awk -v f="$1" '
+        /^[[:space:]]*mod[[:space:]]+tests[[:space:]]*\\{/ { seen = 1 }
+        END { print seen }
+    ' "$1"
+}
+cleanup() {
+    st=$?
+    rm -f "$TMP"
+    if [ "$DONE_FLAG" != "1" ] && [ "$st" = "0" ]; then
+        echo aborted >&2
+        exit 1
+    fi
+    exit "$st"
+}
+trap cleanup EXIT
+scan "$TMP"
+DONE_FLAG=1
+""", SENTINELLED))
+    # ...and the direction that MATTERS: an unreadable handler must never be
+    # reported as either verdict. Here the trap's function genuinely never
+    # closes, and the runaway body would otherwise swallow the `exit 1` and
+    # the late literal flag below it and read as a false SENTINELLED.
+    cases.append(("an unterminated handler body is UNPARSED, never SENTINELLED",
+                  """#!/usr/bin/env bash
+set -euo pipefail
+TMP="$(mktemp)"
+DONE_FLAG=0
+cleanup() {
+    st=$?
+    rm -f "$TMP"
+    if [ "$DONE_FLAG" != "1" ] && [ "$st" = "0" ]; then
+        exit 1
+    fi
+    exit "$st"
+    if true; then {
+trap cleanup EXIT
+echo layer
+DONE_FLAG=1
+""", UNPARSED))
+    # ── the severity split (measured; see measure_premise) ──────────────
+    # nounset WITHOUT errexit: the abort exits 1 today, so this is not a live
+    # defect. Reporting it as EXPOSED over-claimed on 37% of the rows.
+    cases.append(("nounset without errexit is PRECAUTIONARY, not EXPOSED",
+                  """#!/usr/bin/env bash
+set -uo pipefail
+A="$(mktemp)"
+trap 'rm -f "$A"' EXIT
+echo layer
+echo ALL GREEN
+""", PRECAUTIONARY))
+    # ...and the mirror blind spot the SET_U-only predicate had: errexit with
+    # NO nounset still launders, via the `eval` syntax-error trigger, and the
+    # old population predicate returned None before looking at it.
+    cases.append(("errexit WITHOUT nounset is in the population and EXPOSED",
+                  """#!/usr/bin/env bash
+set -e
+A="$(mktemp)"
+trap 'rm -f "$A"' EXIT
+echo layer
+eval "$SOME_GENERATED_SNIPPET"
+echo ALL GREEN
+""", EXPOSED))
     failures = []
     for name, body, want in cases:
         p = plant(body)
@@ -408,12 +682,51 @@ echo ALL GREEN
         if got and name.startswith("registration + its own") and got["replaced"]:
             failures.append("    dereg control: `trap - EXIT` was counted as a second REGISTRATION")
 
-    # negative population control: no `set -u` -> must not be reported at all
-    p = plant('#!/usr/bin/env bash\nset -e\nA=x\ntrap \'rm -f "$A"\' EXIT\necho hi\n')
+    # ── window/trigger control: the quantity that ORDERS the findings ────
+    # Two arms, because a counter that is always 0 and a counter that is
+    # always large both look plausible on a single row. The second arm also
+    # pins the fold-in: `probe`'s body is ABOVE the trap line, so a
+    # line-based count would report 0 triggers for a window that calls it.
+    p = plant("""#!/usr/bin/env bash
+set -euo pipefail
+A="$(mktemp)"
+trap 'rm -f "$A"' EXIT
+
+wait
+""")
+    got = analyse(p)
+    os.unlink(p)
+    if got is None or got["triggers"] != 0 or got["window"] != 2:
+        failures.append("    window control (empty window): expected window=2 triggers=0, "
+                        f"got {got and (got['window'], got['triggers'])}")
+
+    p = plant("""#!/usr/bin/env bash
+set -euo pipefail
+A="$(mktemp)"
+probe() {
+    echo "$SOME_VAR"
+    eval "$SNIPPET"
+}
+trap 'rm -f "$A"' EXIT
+probe
+""")
+    got = analyse(p)
+    os.unlink(p)
+    if got is None or got["triggers"] < 3:
+        failures.append("    window control (function called in the window): expected the "
+                        "callee's 3 triggers to be folded in, got "
+                        f"{got and got['triggers']}")
+
+    # negative population control: NEITHER errexit nor nounset -> no
+    # abort-on-error at all, so there is no status to launder. (This control
+    # used to plant `set -e`, which the SET_U-only predicate excluded — and
+    # that exclusion was the mirror blind spot, now a positive case above.)
+    p = plant('#!/usr/bin/env bash\nA=x\ntrap \'rm -f "$A"\' EXIT\necho hi\n')
     got = analyse(p)
     os.unlink(p)
     if got is not None:
-        failures.append(f"    no-set-u control: expected NOT-IN-POPULATION, got {got['verdict']}")
+        failures.append("    no-set-e/-u control: expected NOT-IN-POPULATION, "
+                        f"got {got['verdict']}")
 
     # negative population control: set -u but NO EXIT trap -> aborts exit 1
     p = plant('#!/usr/bin/env bash\nset -euo pipefail\necho hi\n')
@@ -474,11 +787,23 @@ def main():
                             capture_output=True, text=True).stdout.strip()
     print(f"  bash {bash_v}")
     launders = 0
+    diverged = 0
+    print(f"  {'shell options':<20} {'abort arm':<20} {'bare':<6} {'+EXIT trap':<11} verdict")
     for row in measure_premise():
         flag = "LAUNDERS -> 0" if row["launders"] else "status preserved"
-        note = "" if row["as_documented"] else "   (DIVERGES from the documented table)"
+        note = "   ⛔ DIVERGES from the documented table" if not row["as_documented"] else ""
         launders += bool(row["launders"])
-        print(f"  {row['name']:<28} bare={row['bare']!s:<4} with EXIT trap={row['trapped']!s:<4} {flag}{note}")
+        diverged += not row["as_documented"]
+        print(f"  {row['opts']:<20} {row['name']:<20} {row['bare']!s:<6} "
+              f"{row['trapped']!s:<11} {flag}{note}")
+    print("\n  errexit is the PRECONDITION, for both triggers: with `set -u` alone an\n"
+          "  unbound expansion aborts and exits 1 even with a succeeding EXIT trap,\n"
+          "  and an `eval` syntax error does not abort at all. Rows whose script has\n"
+          "  nounset WITHOUT errexit are therefore PRECAUTIONARY, not EXPOSED.")
+    if diverged:
+        print(f"\n  ⛔ {diverged} measured cell(s) DIVERGE from what the docs claim. The\n"
+              "  findings below are about a premise that does not hold on this box —\n"
+              "  re-read before acting, and fix the docs, not the measurement.")
     if launders == 0:
         print("\n  This bash does NOT launder any measured abort. The findings below are\n"
               "  then about a premise that no longer holds here — re-read before acting.")
@@ -491,13 +816,14 @@ def main():
             print(f)
         print()
     else:
-        print("── selftest: 7/7 (5 verdicts + 2 population controls) fire as pinned\n")
+        print("── selftest: 13/13 (9 verdicts + 2 window + 2 population controls) fire as pinned\n")
 
     grand = {}
     all_rows = []
     for tgt in targets:
         name = os.path.basename(tgt)
-        tally = {LIVE_FORWARD: 0, EXPOSED: 0, SENTINELLED: 0, "replaced": 0}
+        tally = {LIVE_FORWARD: 0, EXPOSED: 0, PRECAUTIONARY: 0,
+                 SENTINELLED: 0, UNPARSED: 0, "replaced": 0}
         for path in walk_sh(tgt):
             r = analyse(path)
             if r is None:
@@ -512,13 +838,25 @@ def main():
     for label, pred in (
         ("LIVE-FORWARD  (aborts at that line EVERY run; reads as a pass unless sentinelled)",
          lambda r: r["verdict"] == LIVE_FORWARD),
+        ("EXPOSED       (errexit + an EXIT trap + no sentinel — an abort in the window "
+         "reports exit 0)",
+         lambda r: r["verdict"] == EXPOSED),
+        ("PRECAUTIONARY (nounset WITHOUT errexit — the abort exits 1 today; the "
+         "sentinel is inert until somebody adds `-e`)",
+         lambda r: r["verdict"] == PRECAUTIONARY),
+        ("UNPARSED      (the handler body never closed — the classifier could NOT read it; "
+         "neither a pass nor a finding)",
+         lambda r: r["verdict"] == UNPARSED),
         ("REPLACED      (2+ EXIT traps; `trap` replaces, so earlier cleanup is dropped)",
          lambda r: r["replaced"]),
     ):
         rows = [r for r in all_rows if pred(r)]
         print(f"── {label}: {len(rows)}")
-        for r in sorted(rows, key=lambda r: (r["repo"], r["file"])):
-            print(f"     {r['repo']}/{r['file']}")
+        for r in sorted(rows, key=lambda r: (-r["triggers"], r["repo"], r["file"])):
+            inert = "  ⟵ ZERO abort sites in the window: provably cannot launder" \
+                if r["triggers"] == 0 else ""
+            print(f"     {r['repo']}/{r['file']}"
+                  f"  [window {r['window']} line(s), {r['triggers']} trigger(s)]{inert}")
             for ln, var, fa in r["forwards"]:
                 where = f"first assigned line {fa}" if fa else "never assigned"
                 print(f"       line {ln}: ${var} ({where})")
@@ -527,19 +865,36 @@ def main():
         print()
 
     print("── per-repo tally " + "─" * 48)
-    hdr = [LIVE_FORWARD, EXPOSED, SENTINELLED, "replaced"]
+    hdr = [LIVE_FORWARD, EXPOSED, PRECAUTIONARY, SENTINELLED, UNPARSED, "replaced"]
     print(f"  {'repo':<26}" + "".join(f"{h:>14}" for h in hdr) + f"{'total':>8}")
     tot = {h: 0 for h in hdr}
     for name in sorted(grand):
         t = grand[name]
-        if not sum(t[h] for h in (LIVE_FORWARD, EXPOSED, SENTINELLED)):
+        if not sum(t[h] for h in (LIVE_FORWARD, EXPOSED, PRECAUTIONARY, SENTINELLED, UNPARSED)):
             continue
         print(f"  {name:<26}" + "".join(f"{t[h]:>14}" for h in hdr)
-              + f"{sum(t[h] for h in (LIVE_FORWARD, EXPOSED, SENTINELLED)):>8}")
+              + f"{sum(t[h] for h in (LIVE_FORWARD, EXPOSED, PRECAUTIONARY, SENTINELLED, UNPARSED)):>8}")
         for h in hdr:
             tot[h] += t[h]
     print(f"  {'ALL':<26}" + "".join(f"{tot[h]:>14}" for h in hdr)
-          + f"{sum(tot[h] for h in (LIVE_FORWARD, EXPOSED, SENTINELLED)):>8}")
+          + f"{sum(tot[h] for h in (LIVE_FORWARD, EXPOSED, PRECAUTIONARY, SENTINELLED, UNPARSED)):>8}")
+    # ── the severity axis, ACROSS verdicts ────────────────────────────────
+    # SENTINELLED masks the split: a nounset-only script that has been given a
+    # sentinel reads SENTINELLED, and the fact that its sentinel is inert
+    # TODAY is invisible in the verdict column. Print it, because "how many of
+    # these could actually launder" is the question the report is asked.
+    live = [r for r in all_rows if r["errexit"]]
+    prec = [r for r in all_rows if not r["errexit"]]
+    live_unsent = [r for r in live if r["verdict"] in (EXPOSED, LIVE_FORWARD)]
+    # The bottom line: unsentinelled AND with at least one abort site in the
+    # window. Anything else cannot launder, whatever its `set` line says.
+    launderable = [r for r in live_unsent if r["triggers"] > 0]
+    print(f"\n  severity axis (independent of the verdict): {len(live)} script(s) have "
+          f"errexit\n  and could launder an abort ({len(live_unsent)} of them without a "
+          f"sentinel, of which\n  {len(launderable)} has an abort site in its window — "
+          f"that count is the bottom line);\n  {len(prec)} have nounset WITHOUT errexit — "
+          f"their aborts exit 1, so their\n  sentinels are PRECAUTIONARY and become "
+          f"load-bearing only if somebody adds `-e`.")
     print("\n  EXPOSED is LATENT — it needs an abort to bite, and the script may well\n"
           "  have none today. It is still the reason the seal-remake gate could not\n"
           "  fail for months: the abort arrived later, and nothing said so.\n"

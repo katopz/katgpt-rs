@@ -240,18 +240,32 @@ regression takes the population to ~0 and every ceiling passes).
 ## A gate that ABORTS reports exit 0 — `scripts/trap_exit_launder_audit.py`
 
 Every script above is a shell gate with `set -euo pipefail` and a cleanup
-trap. Measured on bash 3.2.57 and 5.x: when bash aborts on an **unbound
-expansion** (`set -u`) or an **`eval` syntax error**, it enters the EXIT trap
-with `$?` **already 0** — so an EXIT trap whose last command succeeds (`rm -f
-"$TMP"` always does) makes the abort exit **0**. Everything after the abort
-silently did not run, and CI reads a pass.
+trap. Measured on `/bin/bash` 3.2.57 (this box — there is no bash 5 here, so
+read any "and 5.x" as unverified): when bash aborts on an **unbound
+expansion** or an **`eval` syntax error**, it enters the EXIT trap with `$?`
+**already 0** — so an EXIT trap whose last command succeeds (`rm -f "$TMP"`
+always does) makes the abort exit **0**. Everything after the abort silently
+did not run, and CI reads a pass.
 
-| abort | bare | `$?` at trap entry | with an EXIT trap |
-|---|---|---|---|
-| `set -u` unbound expansion | 1 | **0** | **0** ✗ |
-| `eval` syntax error | 2 | **0** | **0** ✗ |
-| `set -e` command failure | 1 | 1 | 1 ✓ |
-| command not found | 127 | 127 | 127 ✓ |
+**`errexit` is the precondition, NOT `nounset`** — the first version of this
+section had that backwards, because the premise harness hard-coded `set -euo
+pipefail` and never varied the axis it was claiming about (Issue 734 T10):
+
+| shell options | unbound expansion | `eval` syntax error |
+|---|---|---|
+| `set -u` (no `-e`) | aborts, **1** — *not* laundered | does **not abort at all** |
+| `set -e` (no `-u`) | no abort (expands empty) | 2 bare, **0** trapped ✗ |
+| `set -eu` / `set -euo pipefail` | 1 bare, **0** trapped ✗ | 2 bare, **0** trapped ✗ |
+| (`set -e` command failure → 1 both ✓; command not found → 127 both ✓) | | |
+
+So `set -u` **without** `set -e` cannot launder anything today — that is
+**PRECAUTIONARY**, not EXPOSED, and pooling the two over-claimed on 15 of 41
+rows. Two corollaries: the population predicate is the **union** (`set -e`
+OR `set -u`) because errexit-without-nounset launders via the `eval` trigger
+(measured: 0 such scripts, so that blind spot was empty — but it is a
+measurement now), and the measurement **mode** is part of the claim — the
+nounset fatal error exits **127** from `bash -c` and **1** from a script
+FILE, so the harness writes a temp script.
 
 `trap 'rc=$?; cleanup; exit $rc' EXIT` does **not** repair it — the rc it
 saves is itself 0. Only a **completion sentinel** does: a flag set on the
@@ -266,14 +280,37 @@ scripts/trap_exit_launder_audit.py ../riir-ai # or one, by path
 ```
 
 A **report, not a gate** (exit 0) — EXPOSED is latent, and a report that
-exits 1 on 39 latent rows is a report nobody runs. Population derived
+exits 1 on dozens of latent rows is a report nobody runs. Population derived
 (BOUNDARY.md + `.git`) and restricted to **tracked** `*.sh`: walking the
 filesystem instead reported 25 findings in a **gitignored** vendored drop no
 repo owns. Verdicts: **LIVE-FORWARD** (a double-quoted `trap "… $VAR …"`
 naming a later-assigned variable — a *provable* abort, every run, and how
-this was found), **EXPOSED**, **SENTINELLED**, plus the orthogonal
-**REPLACED** (2+ EXIT traps — `trap` replaces, it does not accumulate, so
-earlier cleanup is silently dropped).
+this was found), **EXPOSED**, **SENTINELLED**, **UNPARSED**, plus the
+orthogonal **REPLACED** (2+ EXIT traps — `trap` replaces, it does not
+accumulate, so earlier cleanup is silently dropped).
+
+Each finding also carries its **exposure window** — `[last trap
+registration, EOF)` — and the count of abort **triggers** (`$VAR` / `eval`,
+with the body of any function the window *calls* folded in). Nothing before
+the handler exists can be laundered by it, so a window with **zero** triggers
+provably cannot launder whatever its `set` line says. A triage aid, not a
+verdict (same standing as tail support in the percentile audit): it ORDERS
+the rows, and a 2-line/0-trigger row and an 863-line/253-trigger row are
+otherwise one row each. It is how the last EXPOSED row in the workspace —
+`riir-ai/scripts/e2e_internet.sh`, trap on line 41 of 43 — is known to be
+inert rather than merely inconvenient to fix.
+
+**UNPARSED is the instrument admitting it cannot read** — the trap names a
+function whose body never closed under brace counting, so *both* verdicts
+would be guesses. It is not the safe direction and must not be pooled: a
+runaway body swallows the rest of the file, and with it somebody else's
+`exit 1` and some late literal flag, and reads as a **false SENTINELLED**,
+which HIDES exposure. Found because riir-chain's
+`block_pipeline_reachability_gate.sh` embeds a multi-line **single-quoted**
+`awk` program containing `mod[[:space:]]*tests[[:space:]]*\{` — one
+unmatched brace in DATA — and read EXPOSED while carrying a correct
+sentinel. `scan_braces` is quote- and heredoc-aware now; UNPARSED covers
+whatever it still cannot parse, and the verdict gate reds on it.
 
 **shellcheck does not find this** (measured, Issue 734 T7): pointed at the
 script carrying the live defect it reports one `SC2001` at default severity,

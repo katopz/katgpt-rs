@@ -1,11 +1,21 @@
 # Issue 734 — a shell gate that ABORTS mid-run reports exit 0
 
-**Status:** OPEN 2026-09-07 — T0/T1/T2/T6/T7 done; the T4/T5 wave landed in
-**7 sibling repos (24 scripts)**, taking the workspace from 38 EXPOSED to
-**14**. What is left is 11 in riir-chain (deferred: 15 dirty files, another
-session is mid-work there) plus 3 deliberate/out-of-scope singles. Found by
-repairing seal-remake `26a18191`. The REPLACED verdict reported in `70eff640`
-was a false positive — corrected under T3.
+**Status:** OPEN 2026-09-07 — T0–T10 done. The wave has landed in **10 repos
+(37 scripts)**; **40 of 41** tracked scripts are SENTINELLED and the single
+remaining EXPOSED row is *provably inert* (see T10's window column). Found by
+repairing seal-remake `26a18191`.
+
+⛔ **Three corrections to this issue's own instrument, all three caught by a
+canary or a peer's independent measurement — the tool built to stop
+over-claiming over-claimed three times:**
+1. the REPLACED verdict in `70eff640` was a 1-of-1 false positive (T3);
+2. the brace counter mis-read one file into a false EXPOSED, and the same
+   mis-parse the other way manufactures a false SENTINELLED — an **UNPARSED**
+   verdict now covers whatever the parser cannot read (T9);
+3. **the premise itself named the wrong shell option.** `errexit` is the
+   precondition, not `nounset`; the harness had hard-coded `set -euo
+   pipefail` and so never varied the axis it was making a claim about, which
+   over-claimed on 15 of 41 rows (T10, found by session `katgpt-rs-b5`).
 
 ## The defect
 
@@ -91,7 +101,7 @@ table was hand-entered and got two cells and the total wrong.
 
 | repo | EXPOSED before | EXPOSED now | SENTINELLED | landed in |
 |---|---|---|---|---|
-| riir-chain | 11 | **11** | 0 | *deferred — see T3* |
+| riir-chain | 11 | 0 | 11 | `e3abbb3d` |
 | riir-train | 8 | 0 | 8 | `4d35aed4` |
 | riir-mmorpg-examples | 6 | 0 | 6 | `3f20650` |
 | riir-ai | 5 | **1** | 4 | `a8260ad23` |
@@ -99,24 +109,36 @@ table was hand-entered and got two cells and the total wrong.
 | riir-dapps | 2 | 0 | 2 | `0148fc8` |
 | riir-auth | 1 | 0 | 1 | `bd50158` |
 | riir-deployer | 1 | 0 | 1 | `a632a4b` |
-| riir-viewbridge | 1 | **1** | 0 | *out of scope — not a working directory* |
-| seal-remake | 1 | **1** | 1 | guard: `26a18191` |
+| riir-viewbridge | 1 | 0 | 1 | `21da73a` (session `katgpt-rs-b5`) |
+| seal-remake | 1 | 0 | 2 | guard `26a18191`; fps_matrix `7efe2a23` |
 | katgpt-rs | 2 | 0 | 2 | `70eff640` |
-| **ALL** | **40** | **14** | **27** | over 41 tracked scripts |
+| **ALL** | **40** | **1** | **40** | over 41 tracked scripts |
 
-LIVE-FORWARD is 0 and REPLACED is 0 workspace-wide.
+LIVE-FORWARD, PRECAUTIONARY, UNPARSED and REPLACED are all 0 workspace-wide.
+Of the 41, **26 have errexit** and could launder an abort; **15 have nounset
+without errexit** and their sentinels are precautionary (T10).
 
-The three non-riir-chain remainders are each a decision, not an oversight:
+The single remainder, and the two that were remainders when this issue was
+first written:
 
-* **`riir-ai/scripts/e2e_internet.sh` — left EXPOSED on purpose.** It is an
-  interactive cluster runner: it prints *"Press Ctrl+C to stop"* and ends in
-  `wait`. Ctrl-C **is** its normal termination, so a completion sentinel would
-  make the documented usage report failure, and nothing reads its exit code.
-* **`riir-viewbridge/scripts/ci_feature_guard.sh`** — that repo is not one of
-  this session's working directories. Same one-line fix when it is.
-* **`seal-remake/scripts/fps_matrix.sh`** — a second session was actively
-  editing that worktree (confirmed: two `GUARD EXIT=0` lines appended to one
-  shared log by two runs). Left to them rather than risk a collision.
+* **`riir-ai/scripts/e2e_internet.sh` — left EXPOSED, and now with a PROOF
+  rather than a usability argument.** The usability half still holds (it is
+  an interactive cluster runner that prints *"Press Ctrl+C to stop"* and ends
+  in `wait`; Ctrl-C **is** its normal termination, so a sentinel would make
+  the documented usage report failure, and nothing reads its exit code). But
+  the stronger fact is T10's window column: its EXIT trap is registered on
+  **line 41 of 43**, and the window — a blank line plus `wait` — contains
+  **zero** abort triggers (no expansion, no `eval`, no call). There is no
+  abort site after the handler exists, so it cannot launder. Verified
+  independently here after `katgpt-rs-b5` reported it. A usability argument
+  was doing load-bearing work it did not have to.
+* **`riir-viewbridge/scripts/ci_feature_guard.sh`** — CLOSED by session
+  `katgpt-rs-b5`, `21da73a` (4 arms verified). It was out of scope here only
+  because that repo is not one of this session's working directories.
+* **`seal-remake/scripts/fps_matrix.sh`** — CLOSED by session `katgpt-rs-b5`,
+  `7efe2a23`. Deferred here because a second session was actively editing
+  that worktree (confirmed: two `GUARD EXIT=0` lines appended to one shared
+  log by two runs) — and that session turned out to be the one that took it.
 
 ## Tasks
 
@@ -129,10 +151,44 @@ The three non-riir-chain remainders are each a decision, not an oversight:
       REAL cleanup preamble: unbound abort → 1, `eval` syntax error → 1,
       ordinary verdict failure → 1 with its own message unchanged, clean
       completion → 0, and (full_gate) the `KEEP_LOG` retention path intact.
-- [ ] T3 — riir-chain wave: 11 EXPOSED. **Deferred deliberately**, not
-      skipped: that worktree had 15 dirty files from another session's
-      in-flight riir-chaind work, and 11 mechanical edits across it is exactly
-      the shared-worktree collision this workspace has a rule about.
+- [x] T3 — riir-chain wave: **11/11 sentinelled**, riir-chain is now 0
+      EXPOSED. Landed after re-checking the collision risk that deferred it:
+      the other session's 15 dirty files are `crates/riir-chaind/*`,
+      `src/consensus/*` and `scripts/test_gate.sh`, and **none of the 11
+      intersects that set** — so the deferral's premise had expired and the
+      wave was safe to land against named paths. `git -C ../riir-chain add
+      <11 paths>`, never `-A`.
+
+      Placement is per-script and a blanket "flag on the last line" would
+      have been wrong in **four** of the eleven:
+        - `action_slot_policy_gate.sh` has **TWO** success exits — a report
+          mode (`[ "$GATE" -eq 0 ] && exit 0`) and the `--gate` verdict — and
+          the flag must go before each, not once between them, or an abort in
+          the verdict computation still launders.
+        - `ci_local.sh` has a `--list` `exit 0` **after** the trap (its
+          `--help`/bad-arg exits are before it and need nothing).
+        - `program_rate_gate.sh`'s only trap lives **inside `--self-test`**
+          and is explicitly deregistered with `trap - EXIT` — so the exposure
+          window is registration..deregistration and the flag goes
+          immediately before the `trap -`, not at EOF. Its normal mode never
+          registers a trap and was never exposed.
+        - `wallet_store_crash_atomicity.sh` ends in process **teardown**
+          (`kill -9` + `wait`), and `wait` on a SIGKILLed child returns 137
+          (measured) — putting an assignment after it would launder that 137
+          into a 0. The flag goes before the teardown, and the script's
+          non-zero exit is a pre-existing property, deliberately preserved.
+          Worth knowing separately: it means this drill can never be wired
+          into anything that reads an exit code.
+
+      Verified against each script's **REAL** extracted handler — 33 arms,
+      all correct: unbound abort → 1 with the new message (×11), deliberate
+      failure → 1 with its own message and no extra output (×11), clean
+      completion → 0 (×11). `bash -n` clean on all eleven. Five gates also
+      run end-to-end unchanged (`block_pipeline_reachability`,
+      `settlement_policy`, `action_slot_policy`, `money_bytes`,
+      `program_rate` incl. `--self-test`; plus `ci_local --list`/`--help`) —
+      every one still PASSES with its own message and zero sentinel output.
+
       **Correction to this issue's first version (commit `70eff640`), and it
       is the interesting kind.** That commit reported one REPLACED finding —
       `riir-chain/scripts/program_rate_gate.sh`, "EXIT traps at 447 and 510,
@@ -220,6 +276,98 @@ The three non-riir-chain remainders are each a decision, not an oversight:
       Fixed in `a8260ad23`. Note the second-order trap: the explanatory comment
       has to be free of apostrophes, backticks and quotes too — the first
       attempt at writing it reintroduced the break.
+
+- [x] T9 — **the classifier's brace counter was wrong, and the wrong
+      direction of that bug manufactures a FALSE SENTINELLED.** Landing T3
+      left one script still EXPOSED —
+      `riir-chain/scripts/block_pipeline_reachability_gate.sh` — with a
+      sentinel visibly correct in the file. Cause: `function_bodies` counted
+      `{`/`}` with `str.count`, and that file embeds a multi-line
+      **single-quoted** `awk` program containing
+      `mod[[:space:]]+tests[[:space:]]*\{` — one unmatched brace in **DATA**.
+      The handler's body therefore never closed, ran to EOF, and
+      `NONZERO_EXIT` was searched against a body the trap does not have.
+
+      A false EXPOSED is the safe direction. The **same mis-parse the other
+      way is not**: a runaway body swallows the rest of the file, and with it
+      an unrelated `exit 1` and any late literal flag, which is exactly the
+      false-SENTINELLED shape T6's canary already caught once. So two
+      changes, not one:
+        1. `scan_braces()` — quote-aware (single/double, carried **across**
+           lines, backslash escapes) and heredoc-aware (a heredoc body is
+           data). Two new selftest arms: the awk shape → SENTINELLED, and an
+           unterminated body → UNPARSED-not-SENTINELLED (9/9).
+        2. a new **UNPARSED** verdict for whatever it still cannot read,
+           never pooled into either real column, reported by name, and a
+           **hard failure** in `trap_sentinel_gate.py`. Gate canary driven
+           three ways in-process: UNPARSED on a pinned script → exit 1,
+           EXPOSED on a pinned script → exit 1, clean control → exit 0.
+
+      Blast radius measured, not assumed: the fix reclassified **exactly one**
+      file workspace-wide (27 + 11 = 38 SENTINELLED, arithmetically closed),
+      so no real sentinel was being read off a mis-parsed body today.
+      Docs gate 14/14 after.
+
+- [x] T10 — **the premise named the wrong shell option, and the harness could
+      not have caught it.** Reported by session `katgpt-rs-b5` and
+      re-measured here independently before acting (`/bin/bash`
+      3.2.57(1)-release, arm64-apple-darwin25), as a full (options x arm)
+      matrix rather than the four hard-coded-`set -euo pipefail` rows the
+      tool shipped with:
+
+      | shell options | unbound expansion | `eval` syntax error |
+      |---|---|---|
+      | `set -u` (no `-e`) | aborts, **1** — NOT laundered | does **not abort at all** |
+      | `set -e` (no `-u`) | no abort (expands empty) | 2 bare, **0** trapped ✗ |
+      | `set -eu` / `-euo pipefail` | 1 bare, **0** trapped ✗ | 2 bare, **0** trapped ✗ |
+
+      **errexit is the precondition, for both triggers.** nounset only
+      supplies one extra trigger. The root cause is instrument design, not a
+      typo: `_run()` prepended `set -euo pipefail` to every arm, so the
+      premise measurement never varied the axis the *population predicate*
+      was built on — it measured laundering and attributed it to `SET_U`.
+      Four changes:
+        1. `PRECAUTIONARY` — nounset without errexit + trap + no sentinel.
+           Not laundering today; one added `-e` away from it. Its own column,
+           never pooled. **15 of 41** rows are in this class, so the old
+           report over-claimed on 37% of what it printed.
+        2. the population predicate becomes the **union** `set -e OR set -u`.
+           The `SET_U`-only predicate had a mirror blind spot — errexit +
+           trap + `eval` and NO nounset launders via the syntax-error
+           trigger, and `analyse()` returned None before looking. Measured
+           with the widened predicate: **0** such scripts workspace-wide (the
+           total stayed at 41), so the blind spot was empty — a measurement
+           now, not an assumption.
+        3. `_run()` writes a **temp script file**. ⛔ The measurement MODE is
+           part of the claim: the nounset fatal error exits **127** from
+           `bash -c` and **1** from a script file on this bash. The old
+           harness never saw it because at `set -euo pipefail` both modes
+           agree (1/0) — the divergence only exists in the configuration the
+           old harness refused to measure. Caught by the new matrix printing
+           a ⛔ DIVERGES cell against the documented table on its first run.
+        4. an **exposure window** per finding — `[last trap registration,
+           EOF)` — plus its abort-trigger count (`$VAR`/`eval`, with the body
+           of any function the window CALLS folded in, which is what the
+           line-based version under-reports). Nothing before the handler
+           exists can be laundered by it, so a **zero-trigger window
+           provably cannot launder**. A triage aid, not a verdict — it ORDERS
+           the rows. Suggested by `katgpt-rs-b5`; two selftest arms pin it
+           (empty window, and the callee fold-in).
+
+      Selftest 13/13 (9 verdicts + 2 window + 2 population controls). The
+      verdict gate takes PRECAUTIONARY as a **failure** deliberately, which
+      is stricter than the severity: the report keeps the classes apart so it
+      does not over-claim, the gate collapses them because it is a ratchet
+      over two files and the fix is one line. Gate canary driven four ways
+      in-process (EXPOSED / PRECAUTIONARY / UNPARSED on a pinned script → 1;
+      clean → 0). Docs gate 14/14.
+
+      ⛔ **A claim this issue can no longer make:** "measured on bash 3.2 and
+      5.x". There is no bash 5 on this box (`/opt/homebrew/bin/bash`,
+      `/usr/local/bin/bash`, Cellar — all absent), so the 5.x half is
+      inherited, not measured. `measure_premise()` re-measures on whatever
+      box runs it, which is the self-correcting version of the claim; the
+      prose now says which bash produced these numbers.
 
 ## Verification standard used for every repaired script
 
