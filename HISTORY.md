@@ -1269,6 +1269,19 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
 
 ## Issue log (resolved)
 
+- **Issue 732 — Fresh-z₀ breadth-restart arm + D-first law for `best_of_k_rollouts` (EqR RI axis): FreshZ0 is a decisive quality NEGATIVE; perturbation breadth pays from K=4 at every measured depth** RESOLVED
+  (2026-09-07, `8777f6fc` T1 + `d8eae02b` T1–T4; issue file removed at close — this row is the durable record.
+  EqR re-audit action item, Research 079 §10). T1 `restart_mode` knob (Perturb default = bit-identical pre-732;
+  FreshZ0 = seeded σ=4.0 Gaussian z₀ per rollout) behind `eqr_convergence`; rider: the `MostFrequent` selector's
+  HashMap count-tie broke replay determinism — deterministic first-seen tie-break (the bench's own invariant
+  caught it). T2 matched-NFE bench (20 trials × K ∈ {1,4,8,16,32}): FreshZ0 collapses quality 0.59 → 0.12–0.37
+  at every K and never beats its own K=1 — the DDTree has no pull-back dynamics, so EqR's restart premise does
+  not transfer (categorical, not scale-marginal). T3 pre-registered negative control VIOLATED (the fixture
+  indicts itself; positive readings void). T4 D-first sweep (D ∈ {2,4,8}; 16/64 unreachable on Config::draft()):
+  Perturb+MostFreq breadth-pays at K=4 for EVERY D, agreement saturates 1.00 by K=8 at D=2; FreshZ0 pays nowhere.
+  T5 (Δ_PI metric + four-mode proxy diagnostics) deferred `[-]` — revisit only with a shaped-landscape corpus
+  (riir-ai Issue 881 composition). Bench: `tests/bench_732_fresh_z0_restart.rs`.
+
 - **Issue 733 — `EngramHotSwap::with_table` did not hold the writer lock: a nested same-thread `swap` dropped the old table under a live borrow** RESOLVED
   (2026-09-07, `31bf0012`; issue file removed at close — this row + the module doc are the durable record.
   Found by riir-chain Plan 046 §2b while forcing an orphan-envelope test through a "locked" hotswap; fix direction 1
