@@ -3174,3 +3174,71 @@ independent features:
   belief-lead dead-reckon read (their Bench 796: 2.5–5× better mean lead
   error than the frozen belief, bits-equal to this fast path). Opt-in POC —
   promotion via the T4 consumer A/Bs.
+
+## 94. convergence_cadence + LoopResidualExit — windowed convergence classification + residual-gated looped exit (Issue 720 substrate; Issue 731 T1/T5/T6)
+
+Two features, one family — cataloged together because the exit is the first
+consumer of the classifier. `cadence_gate` (Issue 720 / Research 529) ships
+`ConvergenceCadence`: a windowed ‖Δz‖ Settled/Churning classifier over
+newer/older half-window means, with damp/deliberate/restart escalation, on a
+fixed `[f32; 4]` ring (the G4 zero-alloc contract). Issue 731 T1 threaded it
+through the weight-tied `forward_looped` as `LoopResidualExit` (EqR action
+item 7.2, arXiv:2605.21488): exit when the L=3 window mean residual < τ
+(magnitude arm) OR the verdict is `Settled` (shape arm), never before a
+`d_min` floor; the probe rides a caller-owned cfg-gated param slot (`None` =
+bit-identical to fixed-D, pinned ×27 tokens e2e).
+
+- **T5 — `with_cadence_config(tau, d_min, CadenceConfig)`** — the consumer
+  floor-calibration seam, motivated by the first real consumer (riir-ai 881
+  T4's CCE crowd-batch exit): the HRM-scale default floors sit far above the
+  primal-dual ‖Δρ‖₁ scale, so rule 1 classified every window `Settled` and
+  the exit degenerated to fire at exactly `d_min` (their Bench 873). `new`
+  delegates with the default config (bit-identical by construction, pinned).
+- **T6 — the falsification + fix** — the arms are OR'd, and the shape arm's
+  rule-3 decay fall-through has NO absolute floor, so a transient 2-vs-2 dip
+  inside a high plateau reads as decay under every calibration: the
+  InterLoopNorm negative control fired 40× on held-out seed 1003, falsifying
+  T1's "guarded by construction" and T2's τ-boundary story. Fix:
+  `with_shape_persistence(2)` (default) — the shape arm requires that many
+  CONSECUTIVE `Settled` windows. Control 40 → 0, every corpus verdict
+  unchanged, v4's max exit dist 12× better; persistence 1 retained as the
+  recorded pre-T6 control arm (no loser to demote).
+- **Evidence grade (honest):** T2 knee k=10 with settle-leads-knee; the
+  synthetic G2 (≥2× iteration cut at quality parity) is an **existence-proof
+  PASS** on the scan-selected v4 loop-weight-scale fixture (margin 2.00×;
+  held-out T6/P1 REFUTED the "exact 2.0× ceiling" — seed 1002 measures 2.40×,
+  so the axis has headroom) with P2 = 1/12 inside its pre-declared band.
+  **Promotion (T4) stays deferred** on real-workload depth-spread evidence at
+  judgeable quality — the unblock flows through riir-ai Proposal 045 (CCE
+  margin-gated commit rule), not more synthetic corpora (pre-committed to the
+  floor-cap rejection).
+
+## 95. leakage_probe — modelless cross-space attribute-leak audit (Issue 736; arXiv:2505.12540)
+
+The defender-side counterpart of vec2vec (NeurIPS 2025): given a sample of
+stored vectors and a foreign-space sample, score how much attribute semantics
+transfers — no encoder access, no paired data, no gradient descent.
+`probe()` → `LeakReport { attribute_transfer_top1, chance_baseline, lift,
+alignment_mean_cos, neighborhood_hit_rate, verdict }` with verdict tiers
+InsufficientAlignment / Low / Elevated / High; `leakage_probe::transport`
+ships the unpaired-alignment machinery it shares a kNN kernel with
+(deterministic subspace iteration → PCA whitening via the shared
+`linalg::symmetric_eig` → CSLS-corrected entropic Sinkhorn →
+orthogonal-Procrustes polar factor; deterministic multi-start against
+wrong-basin ICP lock-in — the CSLS correction is the modelless fix for
+plain-cosine hub lock-in).
+
+Gates (in-module, 10/10): G1 planted-leak recovery on a 4-cluster
+non-congruent fixture (congruent blobs are unpaired-alignment-ambiguous — the
+same degeneracy behind vec2vec's OT-baseline failure); G1b monotone-in-noise;
+G1c honest negative (iid foreign labels → chance) PINNED in-test; G2 audit-
+cadence smoke. Super-GOAT on the 4-question gate (Q1 no prior art in the
+audit-score class — attacks, defense *mechanisms*, and risk taxonomies all
+exist, none measures). Consumer landed: riir-neuron-db Issue 614 E2 (their
+Bench 495: planted recovery through the real steal path top1 0.828 vs chance
+0.086, lift 9.64, High; monotone 0.828 → 0.082 across α 1.0 → 0.05; probe
+380 ms @ n=256 768→384). Architectural guide: `riir-neuron-db/.research/308`
+(the stored-latent security domain owns it). Fixture lessons recorded in
+Issue 736 for the heuristic corpus: paired centers blind the multistart's
+basin criterion; gain-attenuation moves recovery the wrong way on unit-norm
+rows; 12+ generic independent centers is the structural fix.

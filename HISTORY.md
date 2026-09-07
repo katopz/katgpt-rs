@@ -1269,6 +1269,20 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
 
 ## Issue log (resolved)
 
+- **Issue 735 — Issue 734's laundering premise is bash-3.2-ONLY, and "and 5.x" was never measured** RESOLVED
+  (2026-09-07; T0–T5 + T2b landed `a95d2bd6` + peers across 11 repos; T3 answered + T4 resolved same day — issue
+  file removed at close, this row is the durable record; full narrative + per-commit tally in git history,
+  `scripts/trap_launder_premise_matrix.py` is the instrument). The premise: bash aborting under errexit enters the
+  EXIT trap with `$?` already 0 — measured **3.2-only** (4.4/5.0/5.2/5.3/dash/busybox ash all preserve); 41 files
+  of inherited "3.2 and 5.x" wording corrected across 11 repos; errexit (not nounset) is the precondition; the
+  measurement MODE is part of the claim (127 from `bash -c` vs 1 from a script file). T3's runner probe answered
+  EARLY via the 737 layer-2b push run `34137014037`: GitHub's `macos-26-arm64` ships bash **3.2.57 ONLY** (PATH =
+  `/bin` = `env`; no Homebrew bash in PATH) and reproduces all five errexit LAUNDERS cells — the sentinel is
+  load-bearing IN CI, not just on workstations. T4 resolved **do not pin — measure**: both candidate pins resolve
+  to the same interpreter on the current image; a `shell:` pin cannot govern the scripts' `#!/usr/bin/env bash`
+  shebangs anyway; the sentinel is correct under BOTH bashes and the probe re-measures every run, so drift is
+  observed, never silent.
+
 - **Issue 732 — Fresh-z₀ breadth-restart arm + D-first law for `best_of_k_rollouts` (EqR RI axis): FreshZ0 is a decisive quality NEGATIVE; perturbation breadth pays from K=4 at every measured depth** RESOLVED
   (2026-09-07, `8777f6fc` T1 + `d8eae02b` T1–T4; issue file removed at close — this row is the durable record.
   EqR re-audit action item, Research 079 §10). T1 `restart_mode` knob (Perturb default = bit-identical pre-732;
