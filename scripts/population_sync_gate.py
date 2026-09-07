@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""GATE: the SIX independent "which repos are contract repos" predicates must agree.
+"""GATE: the SEVEN independent "which repos are contract repos" predicates must agree.
 
 Every cross-repo instrument in this workspace derives its own population — a
-root `BOUNDARY.md` **and** a `.git` DIRECTORY — and six of them do it with six
-separate implementations:
+root `BOUNDARY.md` **and** a `.git` DIRECTORY — and seven of them do it with
+seven separate implementations:
 
     cfg_gated_target_audit.derive_repos      (also used by the required-features
                                               audit and the cfg-gated sweep)
@@ -12,8 +12,9 @@ separate implementations:
     ci_gate_coverage.derive_repos
     skill_repo_set_gate.derive_repos
     suite_membership_audit.derive_repos
+    trap_exit_launder_audit.repos            (Issue 734; joined 2026-09-07)
 
-They all agree today (measured 2026-09-06: 16 repos, identical, and equal to
+They all agree today (measured 2026-09-07: 17 repos, identical, and equal to
 `scripts/repo_set.txt`). Nothing asserted that, and the failure is silent in
 the worst way: if ONE predicate drifts, that one instrument quietly audits a
 different set of repos and still prints a confident green over it. The
@@ -38,7 +39,7 @@ a temp dir, containing every case the real one distinguishes:
 The last one is not hypothetical and is why the `.git` test must be a
 DIRECTORY test: a throwaway worktree's `.git` is a FILE, and a worktree of a
 repo already in the walk would otherwise be counted twice. That trap is
-documented in `scripts/repo_set.txt`'s own derivation and in three of the six
+documented in `scripts/repo_set.txt`'s own derivation and in three of the seven
 docstrings — which is exactly the kind of invariant that survives in comments
 and dies in code.
 
@@ -63,8 +64,8 @@ REPO_ROOT = HERE.parent
 WORKSPACE = REPO_ROOT.parent
 REPO_SET = HERE / "repo_set.txt"
 
-# (label, module, attribute). Kept as DATA so adding a seventh instrument is a
-# one-line change here rather than a seventh silent divergence.
+# (label, module, attribute). Kept as DATA so adding an eighth instrument is a
+# one-line change here rather than an eighth silent divergence.
 PREDICATES = (
     ("cfg_gated_target_audit.derive_repos", "cfg_gated_target_audit", "derive_repos"),
     ("numbering_drift_sweep.contract_repos", "numbering_drift_sweep", "contract_repos"),
@@ -72,6 +73,10 @@ PREDICATES = (
     ("ci_gate_coverage.derive_repos", "ci_gate_coverage", "derive_repos"),
     ("skill_repo_set_gate.derive_repos", "skill_repo_set_gate", "derive_repos"),
     ("suite_membership_audit.derive_repos", "suite_membership_audit", "derive_repos"),
+    # Issue 734: the trap-launder classifier is a contract-repo instrument too,
+    # and its derivation was unchecked against the other six until its sweep
+    # landed.
+    ("trap_exit_launder_audit.repos", "trap_exit_launder_audit", "repos"),
 )
 
 

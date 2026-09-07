@@ -122,8 +122,8 @@ runs it per-push on **`main` only** — develop pushes do not fire it, so run
 | `docs_gate_paths_sync.py` | docs_gate.yml's two hand-duplicated trigger `paths:` lists stay identical |
 | `required_features_static_gate.py` | a required-features row naming a feature its package cannot enable (Issue 513) |
 | `cfg_row_implication_gate.py` | a required-features row that BUILDS and compiles its target to NOTHING (Issue 513) |
-| `population_sync_gate.py` | the six independent contract-repo predicates must agree |
-| `trap_sentinel_gate.py` | a shell gate whose `set -u` abort would report exit 0 — this repo's own two, by MEMBERSHIP (Issue 734) |
+| `population_sync_gate.py` | the seven independent contract-repo predicates must agree |
+| `trap_sentinel_gate.py` | a shell gate whose abort would report exit 0 — this repo's own two, by MEMBERSHIP (Issue 734) |
 
 The `CHECKS` count is deliberately not written here — it drifted once, which
 is exactly the drift this gate exists to catch.
@@ -131,13 +131,23 @@ is exactly the drift this gate exists to catch.
 Workstation-only cross-repo sweep family — `docs_drift_sweep.py`,
 `numbering_drift_sweep.py`, `required_features_drift_sweep.py`,
 `percentile_drift_sweep.py`, `cfg_gated_drift_sweep.py`,
-`cfg_row_implication_drift_sweep.py` (every contract repo, on demand),
+`cfg_row_implication_drift_sweep.py`, `trap_sentinel_drift_sweep.py`
+(every contract repo, on demand),
 `sibling_docs_drift.yml` (reusable workflow, one caller), and
 `ci_gate_coverage.py` (report, always exit 0: which repos gate their full
 compile+lint surface in CI, and whether anything automatically starts it).
 NOT in docs_gate's CHECKS — CI's single checkout would derive an empty
 population and print a confident green over zero repos. Population derived
 (BOUNDARY.md + `.git`); expectations committed in `scripts/*_floors.txt`.
+
+Each sweep carries **two floors, not one**: a ceiling is green over whatever
+the instrument can SEE, so the finding count needs the *population* that
+produced it, and the population floor is 0 in every repo that has none of the
+thing — so it needs the *walk* size underneath it too (`min_rs_files`,
+`min_manifests`, `min_scripts`). Where a sweep re-states a quantity its
+per-push gate owns, it **asserts** the two agree rather than trusting them
+(`trap_sentinel_drift_sweep.py` vs `trap_sentinel_gate.POPULATION_FLOOR`) —
+`docs_gate_paths_sync.py`, one axis over.
 
 ## cfg-gated targets — the green-zero rule
 

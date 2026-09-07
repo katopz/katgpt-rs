@@ -1,0 +1,87 @@
+# Pins for scripts/trap_sentinel_drift_sweep.py — EVERY contract repo.
+#
+# Format, 8 whitespace-separated fields:
+#
+#   <repo> <min_scripts> <min_population> <max_exposed> <max_precautionary>
+#          <max_live_forward> <max_unparsed> <max_replaced>
+#
+# Re-pin DELIBERATELY, in the commit that changes the measured value, with the
+# reason in the commit message. A pin that drifts behind reality is a pin
+# nobody trusts.
+#
+# ── the ceilings are a WALL, not a ratchet ────────────────────────────────────
+# There is exactly ONE standing finding in the workspace and it is pinned
+# below with its reason. Every other class is 0 in all 17 repos (2026-09-07),
+# and that zero was EARNED: Issue 734 took the population from 38 EXPOSED to 1
+# across ten repos and 37 scripts in one day. Nothing outside katgpt-rs was
+# holding it. Now something does.
+#
+# ⛔ Do not "fix" a red by raising a ceiling. A new EXPOSED row means a gate
+# script can report a PASS on an abort — the repair is one line (see
+# scripts/full_gate.sh's full_gate_cleanup), and Issue 734's whole provenance
+# is that nobody objected at the time.
+#
+# ── the two FLOORS ────────────────────────────────────────────────────────────
+# max_exposed = 0 is green over whatever the classifier can SEE. `walk_sh`
+# shells out to `git ls-files`, so a regression there takes the population to 0
+# and every ceiling passes, indistinguishable from a clean repo.
+#
+# min_population catches that where a population exists. It CANNOT do the job
+# alone: six of the seventeen repos have a population of ZERO (no script with
+# both an abort-on-error option and an EXIT trap), so their floor is 0 and
+# detects nothing — min_scripts, the size of the tracked-*.sh walk, still bites
+# there and is the quantity a git ls-files regression actually moves.
+#
+# Both are ~60% of measured: SLACK against churn (consolidating three ad-hoc
+# gate scripts into one legitimately shrinks the count by a third, and a floor
+# that ratcheted to the last measurement would red that refactor and teach
+# whoever hit it that the sweep is noise), TIGHT against blindness (a walk
+# regression drops these by an order of magnitude, not by a third).
+#
+# katgpt-rs's min_population is NOT free: it must equal
+# trap_sentinel_gate.POPULATION_FLOOR, and the sweep asserts that rather than
+# trusting it — same quantity, two files.
+#
+# ── no membership pin here, deliberately ──────────────────────────────────────
+# trap_sentinel_gate.py pins its two by NAME because a count is not a checksum
+# over a set. That argument does not apply to the 40 sentinels: the verdict is
+# DERIVED, and every way to lose a sentinel lands in a class already covered —
+# delete the flag from an errexit script -> EXPOSED; from a nounset-only one ->
+# PRECAUTIONARY; delete the script, or its `set -e`/`set -u`, or its EXIT trap
+# -> the population floor. A 40-name list would add nothing and would need
+# re-typing on every legitimate rename.
+#
+#                         scripts  pop  exp  prec  live_fwd  unparsed  replaced
+katgpt-rs                       5    2    0     0         0         0         0
+katgpt-web                      0    0    0     0         0         0         0
+riir-ai                        12    3    1     0         0         0         0
+riir-auth                       1    1    0     0         0         0         0
+riir-chain                     18    6    0     0         0         0         0
+riir-clippy                     5    1    0     0         0         0         0
+riir-dao                        1    0    0     0         0         0         0
+riir-dapps                      2    1    0     0         0         0         0
+riir-deployer                   2    1    0     0         0         0         0
+riir-esp32                      1    0    0     0         0         0         0
+riir-game-sdk                   3    0    0     0         0         0         0
+riir-mmorpg-examples            8    3    0     0         0         0         0
+riir-neuron-db                  2    0    0     0         0         0         0
+riir-train                     27    4    0     0         0         0         0
+riir-viewbridge                 1    1    0     0         0         0         0
+seal-game-editor                0    0    0     0         0         0         0
+seal-remake                     3    1    0     0         0         0         0
+
+# ── the one standing finding ──────────────────────────────────────────────────
+# riir-ai max_exposed = 1: scripts/e2e_internet.sh. Left EXPOSED on purpose,
+# and with a PROOF rather than a preference (Issue 734 T10):
+#
+#   * its EXIT trap is registered on line 41 of 43, and the window — a blank
+#     line plus `wait` — contains ZERO abort triggers (no expansion, no `eval`,
+#     no call). There is no abort site after the handler exists, so it cannot
+#     launder. The sweep prints that window next to the row.
+#   * it is an interactive cluster runner that prints "Press Ctrl+C to stop"
+#     and ends in `wait`. Ctrl-C IS its documented termination, so a completion
+#     sentinel would make the documented usage report FAILURE.
+#
+# Drop this to 0 in the commit that sentinels or retires that script. Do not
+# raise it for a different script: two EXPOSED rows here would be one proven
+# inert and one unexamined, under one number.

@@ -1,6 +1,6 @@
 # Issue 734 — a shell gate that ABORTS mid-run reports exit 0
 
-**Status:** OPEN 2026-09-07 — T0–T10 done. The wave has landed in **10 repos
+**Status:** OPEN 2026-09-07 — T0–T11 done. The wave has landed in **10 repos
 (37 scripts)**; **40 of 41** tracked scripts are SENTINELLED and the single
 remaining EXPOSED row is *provably inert* (see T10's window column). Found by
 repairing seal-remake `26a18191`.
@@ -368,6 +368,58 @@ first written:
       inherited, not measured. `measure_premise()` re-measures on whatever
       box runs it, which is the self-correcting version of the claim; the
       prose now says which bash produced these numbers.
+
+- [x] T11 — **the 37 sentinels this issue landed were being held by nothing.**
+      `trap_sentinel_gate.py` (T6) is katgpt-rs-scoped by construction — two
+      names, one checkout — so every one of the other 39 sentinels across nine
+      repos is a single line a future edit can drop with no gate objecting.
+      That is exactly the shape of this issue's provenance: seal-remake's guard
+      could not fail past layer 13 for months because nothing objected at the
+      time.
+
+      `scripts/trap_sentinel_drift_sweep.py` + `trap_sentinel_drift_floors.txt`
+      — the fifth member of the documented workstation-only sweep family, and
+      the same shape as `percentile_drift_sweep.py`. Every contract repo, on
+      demand; NOT in docs_gate's CHECKS because CI's single checkout would
+      derive an empty population and print a confident green over zero repos.
+      Exit 0 clean / 1 on drift / **2 if the instrument is untrustworthy** — an
+      unreliable instrument is not the same finding as drift.
+
+      **No membership pin here, deliberately** — and the reasoning is the
+      interesting part, because copying the stricter thing by reflex would have
+      been wrong. `trap_sentinel_gate.py` and `cfg_gated_floor_gate.py` pin by
+      NAME because a count is not a checksum over a set. Here the verdict is
+      DERIVED from the file, so every way to lose a sentinel already lands in a
+      gated class: drop the flag from an errexit script → EXPOSED; from a
+      nounset-only one → PRECAUTIONARY; delete the script, or its
+      `set -e`/`set -u`, or its EXIT trap → the population floor. A 40-name
+      list would add nothing and would need re-typing on every rename.
+
+      **Two floors, because one cannot do it.** `max_exposed = 0` is green over
+      whatever the classifier can SEE, and `walk_sh` shells out to `git
+      ls-files` — a regression there takes the population to 0 and every
+      ceiling passes. `min_population` catches that where a population exists,
+      but **six of the seventeen repos have a population of ZERO**, so their
+      floor is 0 and detects nothing; `min_scripts` (the tracked-`*.sh` walk)
+      still bites there and is the quantity a `git ls-files` regression
+      actually moves. Both at ~60% of measured: slack against a legitimate
+      consolidation, tight against blindness. katgpt-rs's `min_population`
+      re-states the per-push gate's `POPULATION_FLOOR`, and the sweep
+      **asserts** they agree rather than trusting it.
+
+      Measured: 17 repos · 159 tracked `*.sh` · 41 in population (26 errexit) ·
+      **1 EXPOSED and it is the proven-inert one** · 0 everything else.
+      Canaried 10 ways in-process — clean control → 0; walk-floor breach,
+      population-floor breach, ceiling breach on the real EXPOSED row,
+      unpinned repo, pinned-but-absent repo, and pin-drift-vs-the-gate → 1;
+      empty pin set, 3-field row, non-integer field → 2. ⛔ One arm was
+      initially INERT (a whitespace mismatch made the plant a no-op, so it
+      "passed" as a green 0); the harness asserts the plant applied now.
+
+      Incidental: `trap_exit_launder_audit.repos` was a contract-repo
+      population predicate that `population_sync_gate.py` did not know about.
+      It is the **seventh** predicate now, and it agrees (17 repos, synthetic
+      workspace + real cross-check).
 
 ## Verification standard used for every repaired script
 
