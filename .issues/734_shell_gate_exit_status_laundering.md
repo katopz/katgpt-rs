@@ -366,8 +366,18 @@ first written:
       5.x". There is no bash 5 on this box (`/opt/homebrew/bin/bash`,
       `/usr/local/bin/bash`, Cellar — all absent), so the 5.x half is
       inherited, not measured. `measure_premise()` re-measures on whatever
-      box runs it, which is the self-correcting version of the claim; the
-      prose now says which bash produced these numbers.
+      box runs it, which is the self-correcting version of the claim.
+
+      **⇒ REFUTED, not merely unverified — see `.issues/735`.** Session
+      `katgpt-rs-b5` had docker and measured it: bash 4.4.23 / 5.0.18 /
+      5.2.37 / 5.3.15, dash and busybox ash **all preserve** the status.
+      Confirmed here independently (`docker run --rm bash:5.2`, script file,
+      `set -euo pipefail` + a succeeding EXIT trap, unbound expansion →
+      **exit 1**) before restating it. So this entire class is macOS
+      `/bin/bash` 3.2-specific, every gate workflow in the workspace is
+      ubuntu-latest, and "CI reads a pass" was false. It is a WORKSTATION
+      defect — which is where every verdict quoted in a doc was produced.
+      Nothing is reverted: see 735.
 
 - [x] T11 — **the 37 sentinels this issue landed were being held by nothing.**
       `trap_sentinel_gate.py` (T6) is katgpt-rs-scoped by construction — two

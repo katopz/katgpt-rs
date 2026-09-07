@@ -250,12 +250,32 @@ regression takes the population to ~0 and every ceiling passes).
 ## A gate that ABORTS reports exit 0 — `scripts/trap_exit_launder_audit.py`
 
 Every script above is a shell gate with `set -euo pipefail` and a cleanup
-trap. Measured on `/bin/bash` 3.2.57 (this box — there is no bash 5 here, so
-read any "and 5.x" as unverified): when bash aborts on an **unbound
-expansion** or an **`eval` syntax error**, it enters the EXIT trap with `$?`
-**already 0** — so an EXIT trap whose last command succeeds (`rm -f "$TMP"`
-always does) makes the abort exit **0**. Everything after the abort silently
-did not run, and CI reads a pass.
+trap. On **macOS `/bin/bash` 3.2.57 — and only there** (Issue 735): when bash
+aborts on an **unbound expansion** or an **`eval` syntax error**, it enters
+the EXIT trap with `$?` **already 0** — so an EXIT trap whose last command
+succeeds (`rm -f "$TMP"` always does) makes the abort exit **0**. Everything
+after the abort silently did not run, and the caller reads a pass.
+
+⛔ **This is a WORKSTATION defect, not a CI one — an earlier version of this
+section said "and CI reads a pass" and that was false.** Measured one
+interpreter at a time (`scripts/trap_launder_premise_matrix.py`, 11 of them):
+bash **4.4.23 / 5.0.18 / 5.2.37 / 5.3.15**, dash and busybox ash **all
+preserve** the status; fixed no later than 4.4. Every gate-running workflow in
+the workspace is `runs-on: ubuntu-latest` → bash 5 → an aborting gate exits
+non-zero and the job reds. It bites every **macOS** run, which is where these
+gates are actually run by hand and where every verdict quoted in a doc came
+from. The one place the two meet is `full_gate.yml`, this repo's only
+macos-latest runner of a sentinelled script — what
+`#!/usr/bin/env bash` resolves to on GitHub's macOS image cannot be answered
+from a workstation, so that workflow measures it in its own preamble step
+(Issue 735 T3). There is no `bash:3.2` docker tag, so the premise's own
+interpreter is measurable **only** on macOS.
+
+**Keep the sentinel regardless.** It costs nothing on 5.x, is load-bearing on
+3.2, and "did the script reach its own completion point?" catches every other
+premature death — a SIGTERM, a `set -e` trip in an unguarded spot, a future
+editing slip — on **every** shell. The rescoping changes the class's
+*severity*, not the value of the repair.
 
 **`errexit` is the precondition, NOT `nounset`** — the first version of this
 section had that backwards, because the premise harness hard-coded `set -euo
@@ -285,9 +305,22 @@ with its own message, untouched. `scripts/full_gate.sh` and
 `scripts/proof_negative_test.sh` carry it (Issue 734).
 
 ```bash
-scripts/trap_exit_launder_audit.py            # all contract repos (derived)
+scripts/trap_exit_launder_audit.py            # population + verdict, all repos
 scripts/trap_exit_launder_audit.py ../riir-ai # or one, by path
+scripts/trap_sentinel_drift_sweep.py          # the verdict, every repo, pinned
+scripts/trap_launder_premise_matrix.py        # the PREMISE, 11 interpreters
 ```
+
+Three halves, and they answer different questions — do not read one for
+another. `trap_exit_launder_audit.py` derives the **population** and
+classifies it (report, exit 0). `trap_sentinel_gate.py` is the **verdict** for
+this repo (in the docs gate) and `trap_sentinel_drift_sweep.py` the verdict
+for all 17 (workstation, pinned in `scripts/trap_sentinel_drift_floors.txt`).
+`trap_launder_premise_matrix.py` measures the **premise** — one interpreter at
+a time, via docker, script files not `bash -c`. It always measures the local
+box first and prints **UNSEEN, never a zero**, when docker is absent: a
+premise instrument that silently skips its arms reports "nothing launders" and
+retires the whole class.
 
 A **report, not a gate** (exit 0) — EXPOSED is latent, and a report that
 exits 1 on dozens of latent rows is a report nobody runs. Population derived

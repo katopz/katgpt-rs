@@ -26,13 +26,16 @@ fi
 
 BACKUP_DIR="$(mktemp -d)"
 # `NEG_COMPLETED` is the completion sentinel (Issue 734). Restoring the
-# perturbed sources is only half the job: measured on bash 3.2 and 5.x, a
-# `set -u` abort (or an `eval` syntax error) enters the EXIT trap with `$?`
-# ALREADY 0, so a handler whose last command succeeds makes the abort exit
-# **0** — this script would restore every file and then report "all
-# perturbations caught" by silence, having run none of them. Saving and
-# re-exiting `$?` does not help; the saved value is itself 0. Only "did the
-# script reach its own last line?" catches it.
+# perturbed sources is only half the job: measured on macOS `/bin/bash` 3.2.57
+# and ONLY there (Issue 735 — bash 4.4 through 5.3, dash and busybox ash all
+# PRESERVE the status), a `set -u` abort (or an `eval` syntax error) enters the
+# EXIT trap with `$?` ALREADY 0, so a handler whose last command succeeds makes
+# the abort exit **0** — this script would restore every file and then report
+# "all perturbations caught" by silence, having run none of them. Since this
+# script is only ever run by hand, on a Mac, 3.2 is the interpreter that
+# matters for it. Saving and re-exiting `$?` does not help; the saved value is
+# itself 0. Only "did the script reach its own last line?" catches it — and
+# that catches every other premature death, on every shell.
 NEG_COMPLETED=0
 restore_all() {
     neg_st=$?

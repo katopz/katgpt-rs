@@ -172,16 +172,26 @@ fi
 # ── The completion sentinel (Issue 734) ─────────────────────────────────────
 # Every `exit 1` below is an explicit verdict and passes through untouched.
 # What this arm catches is the OTHER death: bash aborting mid-script while
-# reporting success. Measured on bash 3.2 and 5.x — when `set -u` hits an
-# unbound expansion, or `eval` hits a syntax error, the shell enters the EXIT
-# trap with `$?` **already 0**, so an EXIT trap whose last command succeeds
-# makes the abort exit **0**. The usual `trap 'rc=$?; …; exit $rc'` idiom does
-# not help: the rc it saves is itself 0. Only "did the script reach its own
-# last line?" catches it — and it catches every other premature death too
-# (a `set -e` trip in an unguarded spot, a SIGTERM, a future editing slip).
+# reporting success. Measured on macOS `/bin/bash` 3.2.57, and ONLY there
+# (Issue 735): bash 4.4 through 5.3, dash and busybox ash all PRESERVE the
+# status. On 3.2, when `set -u` hits an unbound expansion or `eval` hits a
+# syntax error, the shell enters the EXIT trap with `$?` **already 0**, so an
+# EXIT trap whose last command succeeds makes the abort exit **0**. The usual
+# `trap 'rc=$?; …; exit $rc'` idiom does not help: the rc it saves is itself 0.
+# Only "did the script reach its own last line?" catches it — and that catches
+# every other premature death too (a `set -e` trip in an unguarded spot, a
+# SIGTERM, a future editing slip), on EVERY shell, which is why this stays even
+# where 3.2 is out of the picture.
+# ⛔ Not academic HERE, unlike most of the repaired scripts: `full_gate.yml`
+# runs this on **macos-latest**, so whether the sentinel is load-bearing in CI
+# depends on what `#!/usr/bin/env bash` resolves to on that image — measured by
+# that workflow's own preamble step (Issue 735 T3), because no workstation can
+# answer it. Every other gate workflow in this repo is ubuntu-latest (bash 5),
+# where an abort exits non-zero and reds the job on its own.
 # This is not hypothetical: seal-remake's ci_feature_guard.sh could not fail
-# past its layer 13 for months for exactly this reason.
-# Population-wide picture: scripts/trap_exit_launder_audit.py.
+# past its layer 13 for months for exactly this reason — on a developer's Mac.
+# Population-wide picture: scripts/trap_exit_launder_audit.py; the premise
+# across 11 interpreters: scripts/trap_launder_premise_matrix.py.
 FULL_GATE_COMPLETED=0
 full_gate_cleanup() {
     gate_st=$?

@@ -143,6 +143,29 @@ jobs:
           echo "▸ re-linting $(printf '%s\n' $members | wc -l | tr -d ' ') workspace member(s)"
           for m in $members; do cargo clean -p "$m" 2>/dev/null || true; done
 
+      # ── Issue 735 T3: does THIS runner launder an aborting gate? ────────
+      #
+      # `scripts/full_gate.sh` carries a completion sentinel because a bash
+      # that aborts on an unbound expansion enters the EXIT trap with `$?`
+      # already 0 and the abort exits 0. That was measured on macOS
+      # /bin/bash 3.2.57 and REFUTED on bash 4.4 through 5.3 — so whether the
+      # sentinel is load-bearing HERE depends on what `#!/usr/bin/env bash`
+      # resolves to on GitHub's macOS image, and no workstation can answer
+      # that. This is the only macOS runner in this repo that runs a
+      # sentinelled script, so the measurement belongs here.
+      #
+      # A step, not a run of its own: the audit re-measures the premise matrix
+      # on the box every time it starts and costs ~1s. `|| true` because this
+      # is EVIDENCE, not a verdict — the gate below owns the verdict, and a
+      # probe that can red a 180-minute gate would get deleted.
+      - name: Which bash is this, and does it launder an abort? (Issue 735 T3)
+        run: |
+          set -uo pipefail
+          echo "PATH bash : $(command -v bash) — $(bash --version | head -1)"
+          echo "/bin/bash : $(/bin/bash --version | head -1)"
+          echo "env bash  : $(/usr/bin/env bash --version | head -1)"
+          python3 scripts/trap_exit_launder_audit.py 2>&1 | sed -n '1,30p' || true
+
       # Strict: no --allow-partial-platform. On a non-macOS runner the script
       # refuses to report a pass, so this step cannot silently degrade into the
       # partial gate the preamble warns about.
