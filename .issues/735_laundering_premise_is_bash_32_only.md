@@ -1,11 +1,12 @@
 # Issue 735 — Issue 734's laundering premise is bash-3.2-ONLY, and "and 5.x" was never measured
 
-**Status:** OPEN 2026-09-07 — measured and instrumented (`scripts/trap_launder_premise_matrix.py`,
-11 interpreters). The premise reproduces on **bash 3.2.57 only**; bash 4.4,
-5.0, 5.2, 5.3, dash and busybox ash all **preserve** the status. What is left
-is the wording sweep across the ~27 repaired scripts in 9 repos (T2) and one
-question nobody can answer from this box (T3: what bash a `macos-latest`
-runner actually resolves).
+**Status:** RESOLVED 2026-09-07 — measured, instrumented, and swept.
+T0/T1/T2/T2b/T5 done, T3 wired (answers itself on the next weekly cron), T4
+gated on T3. The premise reproduces on **bash 3.2.57 only**; 4.4, 5.0, 5.2,
+5.3, dash and busybox ash all **preserve** the status. All 41 files carrying
+the refuted "bash 3.2 and 5.x" sentence are corrected across 11 repos, and
+the 15 nounset-only scripts now say so in-file. Two sessions worked this in
+parallel; the split is recorded per task.
 
 ## The claim, and what it turned out to be
 
@@ -120,39 +121,99 @@ zero.
       precondition in every laundering cell (734 T10 agrees).
 - [x] T1 — `scripts/trap_launder_premise_matrix.py`, with the two
       admissibility shapes above so a zero cannot come from an inert cell.
-- [ ] T2 — wording sweep: ~27 repaired scripts in 9 repos carry
-      "Measured on bash 3.2 and 5.x" in their sentinel comment block. The
-      claim is false as written. Replace with what was measured, per script
-      (they are one-line comment edits, but they are in 9 repos and several
-      are shared worktrees — do it per repo, named paths, never `-A`).
-      **Do NOT amend the pushed commit bodies that carry the same
-      boilerplate** (`21da73a` riir-viewbridge, `7efe2a23` seal-remake, and
-      the T4/T5 wave): they are cited by hash in 734's tally table, and
-      rewriting pushed history to fix a provenance sentence trades a real
-      hazard for a cosmetic gain. Agreed with the peer session that landed
-      the wave.
-- [ ] T3 — **open question, not answerable from this box:** what does
-      `/usr/bin/env bash` resolve to on a `macos-latest` runner? If 3.2.57,
-      then katgpt-rs's `full_gate.yml` *did* launder in CI and the 734
-      narrative is right for this repo specifically; if the image puts a brew
-      bash 5 first in PATH, it did not. One `bash --version` in a workflow
-      step answers it — worth adding to `full_gate.yml`'s log preamble
-      rather than a run of its own.
+- [x] T2 — wording sweep, **41 files, 11 repos, zero occurrences left**.
+      Population derived from `git ls-files` per repo, never a `grep -r` from
+      the workspace root: that walks every repo's `target/` (~1 TB) and does
+      not finish — the first attempt was still running after two minutes and
+      had to be killed. Split with the peer session so no two sessions edited
+      one comment block:
+
+      | repo | files | commit |
+      |---|---|---|
+      | riir-train | 8 | `1a7dc65b` |
+      | riir-mmorpg-examples | 6 | `2eef716` |
+      | riir-ai | 4 | `ca0d1ab44` → pushed as **`c48c82809`** |
+      | riir-clippy | 3 (incl. HISTORY.md) | `da6ba36` → pushed as **`62bc60f`** |
+      | riir-dapps | 2 | `0117488` |
+      | riir-auth | 1 | `6ea9cdc` |
+      | riir-deployer | 1 | `247080b` |
+      | riir-viewbridge | 1 | `4839b25` |
+      | seal-remake | 1 | `b4b3c4cd` |
+      | riir-chain | 11 | `f2d83c71` *(peer)* |
+      | katgpt-rs | 2 + AGENTS.md | `a95d2bd6` *(peer)* |
+
+      Two of those hashes moved: riir-ai and riir-clippy had both advanced on
+      the remote between my commit and my push (a live 4090 benchmark session
+      in one, a distill-queue update in the other), so each was rebased —
+      riir-clippy with `--autostash`, because a sibling session had two dirty
+      `*.rs` files that a plain rebase would have refused and a manual stash
+      could have swept. Both dirty files came back intact; the **local→pushed
+      remap is recorded above** because the pre-push hashes appear in no
+      remote and would resolve for nobody.
+
+      Four of the 41 sites did not match the dominant 2-line boilerplate and
+      were read and reflowed individually (`riir-clippy/HISTORY.md`,
+      `riir-deployer/cloudflare/control-do/test.sh`, and two katgpt-rs sites
+      in the peer's half). A looser regex would have "fixed" them into
+      ungrammatical sentences — UNMATCHED is a per-file read, not a failure.
+
+      **Pushed commit bodies were deliberately NOT amended** (`21da73a`
+      riir-viewbridge, `7efe2a23` seal-remake, and the T4/T5 wave): they are
+      cited by hash in 734's tally table, and rewriting pushed history to fix
+      a provenance sentence trades a real hazard for a cosmetic gain. Agreed
+      with the peer session that landed the wave.
+- [x] T2b — **the wording sweep alone would have left a SECOND over-claim in
+      place.** "3.2 and 5.x" was one error; the other is that the block
+      describes an unbound-expansion abort laundering while **15 of the 41
+      scripts set `set -u` WITHOUT `set -e`** — and every measured laundering
+      cell needs errexit (734 T10), so their own abort already exits 1. Nine
+      of the fifteen were in my half (riir-ai `ci_boundary_contract.sh`,
+      7 riir-train, seal-remake `fps_matrix.sh`) and now carry a per-script
+      PRECAUTIONARY note: `d592b8733`, `5cbb256f`, `6e38b8e0`; the peer's six
+      riir-chain scripts in `f2d83c71`. Membership taken from
+      `trap_exit_launder_audit.analyse()`'s `errexit` field rather than a
+      grep — the classifier decides the severity split, so it should pick the
+      file list. No sentinel was removed: the flag also catches premature
+      deaths that are not version-specific (SIGTERM, a `set -e` trip in an
+      unguarded spot, a future editing slip). Classification re-run after
+      every edit: unchanged, 40/41 SENTINELLED.
+- [x] T3 — **wired, and it answers itself for free** (peer, `a95d2bd6`):
+      a probe in `full_gate.yml` — this repo's only `macos-latest` runner of
+      a sentinelled script — printing PATH bash / `/bin/bash` / `env bash`
+      versions plus the audit's re-measured premise matrix, ~1s, `|| true`
+      (a probe that can red a 180-minute gate gets deleted). GitHub's macOS
+      images ship Apple's 3.2.57 at `/bin/bash` *and* a Homebrew bash 5 on
+      PATH, so `shell: bash` may resolve to either depending on PATH order —
+      the answer is "measure it", not "reason about it". Result arrives on
+      the next weekly cron with no dispatch, hence no spending-limit
+      exposure. **Until it reports, the honest framing is that the sentinel
+      is correct on every shell and only its urgency is 3.2-specific.**
 - [ ] T4 — consider whether the katgpt-rs macOS workflows should pin the
       interpreter explicitly (`shell: /bin/bash` vs `bash`), so the answer to
       T3 stops depending on image drift. Gated on T3.
-- [ ] T5 — AGENTS.md pointer for the new instrument, in the same section that
-      documents the audit and the sentinel gate. **Deferred on purpose:** at
-      the time this landed, AGENTS.md was dirty in a concurrent session
-      finishing 734 T9/T10 and `trap_sentinel_drift_sweep.py`, and a
-      whole-file write would have swept their in-flight text. One paragraph,
-      once that file is clean.
+- [x] T5 — AGENTS.md now names all four instruments and which question each
+      answers, because reading one for another is the live hazard (peer,
+      `a95d2bd6`): population/classification (`trap_exit_launder_audit.py`),
+      verdict for this repo (`trap_sentinel_gate.py`, in the docs gate),
+      verdict for all 17 (`trap_sentinel_drift_sweep.py`, `91e854f3`), and
+      the premise across interpreters (this issue's
+      `trap_launder_premise_matrix.py`). Deferred initially on purpose —
+      AGENTS.md was dirty in the concurrent session at the time, and a
+      whole-file write would have swept their in-flight text.
 
 ## Cross-refs
 
 - `.issues/734_shell_gate_exit_status_laundering.md` — the parent: the defect,
   the sentinel idiom, the population and verdict halves. T10 there is the
   finding that errexit (not nounset) is the precondition; this issue is the
-  interpreter axis of the same premise.
+  interpreter axis of the same premise. 734 T10 now records this refutation
+  as **REFUTED, not merely unverified**, with an independent `bash:5.2`
+  confirmation from the peer session — so the two issues no longer disagree.
+- The refutation was reproduced independently before either of us acted on
+  it: two sessions, two harnesses (in-process `bash -c` matrix vs. a
+  script-file driver in containers), same conclusion. That is also how the
+  measurement-MODE finding surfaced — a `bash -c` nounset abort exits **127**
+  and a script FILE exits **1** on this bash, and the two agree at
+  `set -euo pipefail`, so the old harness could never have seen it (734 T10).
 - Repairs that stand regardless of this issue: riir-viewbridge `21da73a`,
   seal-remake `7efe2a23`, riir-chain `e3abbb3d`, katgpt-rs `70eff640`.
