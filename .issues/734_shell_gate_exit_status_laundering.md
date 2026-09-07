@@ -1,10 +1,11 @@
 # Issue 734 — a shell gate that ABORTS mid-run reports exit 0
 
-**Status:** OPEN 2026-09-07 — T0/T1/T2/T6/T7 done (instrument landed, katgpt-rs's
-own two scripts repaired, shellcheck ruled out as a detector); T3/T4/T5 are 38
-EXPOSED scripts across 10 sibling repos, one wave per repo; T6 is the
-verdict half landed for this repo (T6). Found by repairing seal-remake `26a18191`. The REPLACED
-verdict reported in `70eff640` was a false positive — corrected under T3.
+**Status:** OPEN 2026-09-07 — T0/T1/T2/T6/T7 done; the T4/T5 wave landed in
+**7 sibling repos (24 scripts)**, taking the workspace from 38 EXPOSED to
+**14**. What is left is 11 in riir-chain (deferred: 15 dirty files, another
+session is mid-work there) plus 3 deliberate/out-of-scope singles. Found by
+repairing seal-remake `26a18191`. The REPLACED verdict reported in `70eff640`
+was a false positive — corrected under T3.
 
 ## The defect
 
@@ -83,31 +84,39 @@ one false positive out of one finding. Both are the "a zero ceiling is only as
 wide as its classifier" failure occurring *inside* the tool built to find it;
 both are now selftest controls (6/6: 4 verdicts + 2 population controls).
 
-## Measured population (2026-09-07, tracked files only)
+## Measured population — before / after (tracked files only)
 
 Copied from the tool's own tally, not re-typed — the first version of this
 table was hand-entered and got two cells and the total wrong.
 
-| repo | EXPOSED | SENTINELLED |
-|---|---|---|
-| katgpt-rs | 0 (was 2) | 2 |
-| riir-chain | 11 | 0 |
-| riir-train | 8 | 0 |
-| riir-mmorpg-examples | 6 | 0 |
-| riir-ai | 5 | 0 |
-| riir-clippy | 2 | 0 |
-| riir-dapps | 2 | 0 |
-| riir-auth | 1 | 0 |
-| riir-deployer | 1 | 0 |
-| riir-viewbridge | 1 | 0 |
-| seal-remake | 1 (`scripts/fps_matrix.sh`) | 1 (the repaired gate) |
-| **ALL** | **38** | **3** |
+| repo | EXPOSED before | EXPOSED now | SENTINELLED | landed in |
+|---|---|---|---|---|
+| riir-chain | 11 | **11** | 0 | *deferred — see T3* |
+| riir-train | 8 | 0 | 8 | `4d35aed4` |
+| riir-mmorpg-examples | 6 | 0 | 6 | `3f20650` |
+| riir-ai | 5 | **1** | 4 | `a8260ad23` |
+| riir-clippy | 2 | 0 | 2 | `c152b80` |
+| riir-dapps | 2 | 0 | 2 | `0148fc8` |
+| riir-auth | 1 | 0 | 1 | `bd50158` |
+| riir-deployer | 1 | 0 | 1 | `a632a4b` |
+| riir-viewbridge | 1 | **1** | 0 | *out of scope — not a working directory* |
+| seal-remake | 1 | **1** | 1 | guard: `26a18191` |
+| katgpt-rs | 2 | 0 | 2 | `70eff640` |
+| **ALL** | **40** | **14** | **27** | over 41 tracked scripts |
 
 LIVE-FORWARD is 0 and REPLACED is 0 workspace-wide.
 
-EXPOSED is **latent** — it needs an abort to bite, and most of these scripts
-have none today. It is still exactly the state seal-remake's gate was in
-before its abort arrived.
+The three non-riir-chain remainders are each a decision, not an oversight:
+
+* **`riir-ai/scripts/e2e_internet.sh` — left EXPOSED on purpose.** It is an
+  interactive cluster runner: it prints *"Press Ctrl+C to stop"* and ends in
+  `wait`. Ctrl-C **is** its normal termination, so a completion sentinel would
+  make the documented usage report failure, and nothing reads its exit code.
+* **`riir-viewbridge/scripts/ci_feature_guard.sh`** — that repo is not one of
+  this session's working directories. Same one-line fix when it is.
+* **`seal-remake/scripts/fps_matrix.sh`** — a second session was actively
+  editing that worktree (confirmed: two `GUARD EXIT=0` lines appended to one
+  shared log by two runs). Left to them rather than risk a collision.
 
 ## Tasks
 
@@ -120,7 +129,10 @@ before its abort arrived.
       REAL cleanup preamble: unbound abort → 1, `eval` syntax error → 1,
       ordinary verdict failure → 1 with its own message unchanged, clean
       completion → 0, and (full_gate) the `KEEP_LOG` retention path intact.
-- [ ] T3 — riir-chain wave: 11 EXPOSED.
+- [ ] T3 — riir-chain wave: 11 EXPOSED. **Deferred deliberately**, not
+      skipped: that worktree had 15 dirty files from another session's
+      in-flight riir-chaind work, and 11 mechanical edits across it is exactly
+      the shared-worktree collision this workspace has a rule about.
       **Correction to this issue's first version (commit `70eff640`), and it
       is the interesting kind.** That commit reported one REPLACED finding —
       `riir-chain/scripts/program_rate_gate.sh`, "EXIT traps at 447 and 510,
@@ -133,9 +145,21 @@ before its abort arrived.
       `trap - EXIT` and `trap "" EXIT` are now classified as deregistrations,
       the selftest carries a control for it (6/6), and REPLACED is 0
       workspace-wide.
-- [ ] T4 — riir-train wave (8), riir-mmorpg-examples wave (6), riir-ai wave (5).
-- [ ] T5 — the singles: riir-dapps (2), riir-clippy (2), riir-auth,
-      riir-deployer, riir-viewbridge.
+- [x] T4 — riir-train `4d35aed4` (8/8), riir-mmorpg-examples `3f20650` (6/6),
+      riir-ai `a8260ad23` (4 of 5; the 5th is the deliberate skip above).
+      Placement is per-script and a blanket patch would have been wrong in
+      **six** of the eighteen: a success `exit 0` inside a branch rather than
+      at EOF (`ci_boundary_guard.sh`), TWO completion points with a
+      CONDITIONAL trap (`deploy-static.sh`), a quick mode that exits before any
+      trap exists (`riir-mmorpg-examples/ci_feature_guard.sh`), a final line
+      that IS the verdict (`perf_rematch_detector_selftest.sh`:
+      `[ "$FAIL" -eq 0 ]`), a trailing `exec` that REPLACES the process so the
+      trap never runs (`plan341_t3_chain.sh`), and an EXIT trap registered only
+      inside `--self-test` (`ci_boundary_contract.sh`, the workspace boundary
+      gate — every other mode has no trap and was never exposed).
+- [x] T5 — riir-clippy `c152b80` (2), riir-dapps `0148fc8` (2), riir-auth
+      `bd50158`, riir-deployer `a632a4b`. riir-viewbridge is out of scope
+      (not a working directory this session).
 - [x] T6 — verdict half landed for THIS repo: `scripts/trap_sentinel_gate.py`,
       in the docs gate (14/14). Scoped, not workspace-wide, because a gate
       over 38 EXPOSED sibling scripts would be a ratchet, not a gate — each
@@ -176,3 +200,35 @@ before its abort arrived.
       is the only defence for the general one (an unbound expansion anywhere
       other than a trap body stays invisible to any static pass — `bash -n`
       does not expand).
+
+- [x] T8 — an incidental find, from `bash -n` being part of verifying each
+      edit: **`riir-ai/scripts/quest_manifold_capture.sh` had never parsed on
+      macOS.** An apostrophe inside a heredoc nested in a command substitution
+      breaks bash 3.2's parser — it tracks quoting while scanning for the
+      closing paren, so the lone `'` in a comment reading *the window's "id"*
+      swallowed the rest of the file. It is a macOS-ONLY script (osascript +
+      screencapture) on a box whose `/usr/bin/env bash` is 3.2, so it could
+      not run at all. Repro:
+
+      ```sh
+      X=$(cat <<EOT
+      the window's id
+      EOT
+      )                  # bash 3.2: unexpected EOF.  bash 5: fine
+      ```
+
+      Fixed in `a8260ad23`. Note the second-order trap: the explanatory comment
+      has to be free of apostrophes, backticks and quotes too — the first
+      attempt at writing it reintroduced the break.
+
+## Verification standard used for every repaired script
+
+Not "it looks right": each script's REAL cleanup handler was extracted from
+the file with `awk` and driven on three arms — unbound-variable abort must
+exit **1** and print the new message; the script's own deliberate failure must
+exit with **its own** status (1, or 2 for the boundary self-test and the
+nightly's DEGRADED path) and print **no** extra output; clean completion must
+exit **0**. `deploy-static.sh` got a fourth arm for its `DRY_RUN` early
+`exit 0`, which must stay 0 and not read as incomplete. 27 scripts x 3+ arms.
+Extracting from the tracked file rather than reasoning about a copy is the
+point — `full_gate.sh`'s false SENTINELLED (T6) was found exactly this way.
