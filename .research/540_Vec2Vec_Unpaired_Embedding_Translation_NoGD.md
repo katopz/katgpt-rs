@@ -98,3 +98,15 @@ vec2vec's headline (trained GAN translator between embedding spaces, no paired d
 - Vec2Text inversion numbers are the paper's decoder, not SipIt; a SipIt-based inversion PoC would measure its own (weaker, modelless) leak fraction — expectations must be set at the toy-model regime SipIt validated (|V|=512 max, Plan 561).
 - R389's "Plan 409" routing reference is stale (slot 409 = JLens). Doc-sync candidate; not fixed in this note (another pass owns filing).
 - This note is the No-GD advocate half only: the model-based advocate (GAN/translator training recipe, GPU-hours, riir-train plan) is intentionally absent per panel design.
+
+---
+
+## 7. Coordinator merge — verdict per track (2026-09-07)
+
+Panel synthesis of arXiv:2505.12540. Three-track verdicts, one per track (TTPO rule):
+
+- **Model-based track → Gain, plan filed:** `riir-train/.plans/391_vec2vec_embedding_translator.md` — opens Research 407 §8's NOT-OPENED Recipe E in vec2vec form (unpaired + nonlinear; trigger already fired via Bench 426/427 demotion). Opt-in `embedding_translator` permanently. Coordinator decision: no separate riir-train research note — the recipe lives in the plan.
+- **Modelless track → fusion idea, novelty TBD:** katgpt-rs Issue 736 (`leakage_probe` / `cross_space` / `unpaired_transport` modules; T4 = the defense-audit framing deep-search before landing). §5's candidate-2 verdict is adopted as the claim; the mandatory novelty deep-search has NOT run yet, so this stays an issue, not a plan.
+- **Security track → Gain, issue filed:** riir-neuron-db Issue 614 — stored-latent inversion threat + E1–E4 mitigations (encryption-at-rest mandate extension, leakage-audit security test, provenance refuse path).
+
+Fusion line carried from §5: leakage probe × frozen translator (Plan 391) × SipIt = the *stolen-DB risk quantifier* — the three filed artifacts are its three components. Published landscape note: vec2vec is first-of-kind (NeurIPS 2025, ~59 citations); a 2026 Nature MI follow-up (Li et al., platonic representation of foundation ML models) covers cross-model OT + representational-bias detection — landscape, not a kill on any filed verdict.
