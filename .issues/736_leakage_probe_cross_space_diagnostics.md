@@ -30,7 +30,7 @@ Pinned claim survives: a **modelless cross-space attribute-transfer leak SCORE**
 
 ## Follow-ups
 
-- [ ] T5 — riir-neuron-db Issue 614 E2 adopts the probe as its security test (consumer gate; GOAT bench lands there).
+- [x] T5 — riir-neuron-db Issue 614 E2 adopts the probe as its security test (consumer gate; GOAT bench lands there). **DONE 2026-09-07 (riir-neuron-db `51e2ca1` + `6e14f4d`, [Bench 495](../riir-neuron-db/.benchmarks/495_leakage_audit_goat.md)):** 3/3 gates PASS — planted recovery through the real steal path (top1 0.828 vs chance 0.086, lift 9.64, High), integrity-≠-confidentiality pin, monotone-in-coefficient 0.828 → 0.082 across α 1.0 → 0.05. Release G2 measurement landed there: probe 380 ms @ n=256 768→384 (1.49 ms/row), steal 48 µs, multistart price 2.03×. Probe wired via a TEST-ONLY dev-dep feature (lib closure unchanged). **Fixture lessons fed back (corpus candidates):** (a) ±paired cluster centers make the multistart's best-mean-pair-cosine criterion BLIND between the true and the antipodal basin (both ≈ +1 on their own pseudo-pairs) — measured exact 0.000/0.500 top1 flips across coupling rungs; (b) gain-attenuation against fixed noise only changes cluster TIGHTNESS on unit-norm rows (scale-invariant geometry), so recovery moves the wrong way; (c) the structural fix is 12+ generic independent centers — no permutation re-superimposes the arrangement, margins survive both spaces' whitening, and the ladder is cleanly monotone.
 - [ ] T6 — architectural guide for the stolen-DB risk quantifier (probe × Plan 391 frozen translator × SipIt endgame) — filed as `riir-neuron-db/.research/308` (the stored-latent security domain owns it).
 
 ## Design lessons (recorded for the heuristic corpus)
