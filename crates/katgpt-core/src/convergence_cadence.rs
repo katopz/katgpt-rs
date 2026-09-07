@@ -337,14 +337,36 @@ pub struct LoopResidualExit {
 impl LoopResidualExit {
     /// `tau` = the absolute magnitude threshold on the 3-window mean;
     /// `d_min` = the completed-iteration floor (values < 2 clamp to 2 — the
-    /// earliest observable exit).
+    /// earliest observable exit). Shape arm runs on the default
+    /// [`CadenceConfig`] (HRM-scale floors — Research 529's ‖Δh‖ calibration).
     #[inline]
     pub fn new(tau: f32, d_min: usize) -> Self {
+        Self::with_cadence_config(tau, d_min, CadenceConfig::default())
+    }
+
+    /// Consumer-calibrated constructor (Issue 731 T5; riir-ai Issue 881
+    /// fix-forward): `config` recalibrates the shape arm's ABSOLUTE floors to
+    /// the consuming loop's residual scale. The default floors are the
+    /// Research 529 HRM calibration point (‖Δh‖ plateaus 0.30–1.46) — on a
+    /// loop whose step norms live at a different scale the defaults classify
+    /// every full window `Settled` via rule 1 (`newer ≤ settle_floor`) and
+    /// degenerate the exit to fire at exactly `d_min` (measured on the CCE
+    /// crowd-batch loop, ‖Δρ‖₁ plateau ≈ 2e-2: riir-ai Bench 873).
+    ///
+    /// Calibration rule: put `plateau_floor` AT/BELOW the loop's churn
+    /// plateau and `settle_floor` clearly BELOW it — a window sitting on the
+    /// plateau then reads `Churning` (keep iterating), and only genuine
+    /// decay through the band reaches `Settled`. The Research-440 guard is
+    /// config-invariant: both arms stay ABSOLUTE and ride alongside each
+    /// other, so a loop whose state norm grows while its step norm plateaus
+    /// cannot exit spuriously under ANY calibration.
+    #[inline]
+    pub fn with_cadence_config(tau: f32, d_min: usize, config: CadenceConfig) -> Self {
         Self {
             tau,
             d_min: d_min.max(2),
             window: [f32::INFINITY; 3],
-            cadence: ConvergenceCadence::new(),
+            cadence: ConvergenceCadence::with_config(config),
             seen: 0,
             fired_at: None,
         }
@@ -689,5 +711,96 @@ mod tests {
             assert!(!p.observe(f32::NAN), "NaN window mean → arm 1 false; cadence reads HIGH → Churning");
         }
         assert!(p.fired_at_iteration().is_none());
+    }
+
+    // ── Issue 731 T5 — the floor-calibration seam (`with_cadence_config`) ──
+
+    #[cfg(feature = "cadence_gate")]
+    #[test]
+    fn with_cadence_config_default_matches_new_bit_identical() {
+        // G3-style: the seam with the DEFAULT config is the same probe as
+        // `new` — identical fired results and fired_at over a mixed sequence.
+        let seq = [3.0, 0.4, 0.30, 0.30, 1.2, 1.4, 1.5, 0.2, 0.1, 0.1];
+        let mut a = LoopResidualExit::new(0.05, 3);
+        let mut b = LoopResidualExit::with_cadence_config(0.05, 3, CadenceConfig::default());
+        for (i, &n) in seq.iter().enumerate() {
+            assert_eq!(
+                a.observe(n),
+                b.observe(n),
+                "observation {i}: default-config seam diverged from new",
+            );
+        }
+        assert_eq!(a.fired_at_iteration(), b.fired_at_iteration());
+    }
+
+    #[cfg(feature = "cadence_gate")]
+    #[test]
+    fn calibrated_floors_refuse_low_scale_churning_plateau() {
+        // The Bench 873 mechanism (riir-ai Issue 881): CCE ‖Δρ‖₁ jumps to
+        // ~4e-1 then plateaus at ~2e-2. DEFAULT floors (0.5/1.0) classify
+        // that window Settled via rule 1 → false-positive exit at d_min;
+        // the CALIBRATED floors (settle 1e-3, plateau 1e-2) read Churning
+        // and the probe never fires.
+        let seq = [4e-1, 3e-2, 2e-2, 2.1e-2, 2e-2, 1.9e-2, 2e-2, 2.1e-2];
+        let mut default_probe = LoopResidualExit::new(1e-4, 8);
+        let fired: Vec<bool> = seq.iter().map(|&n| default_probe.observe(n)).collect();
+        // The floor gate holds through completed 7; the first full window
+        // (obs 7 = completed 8) is rule-1 Settled (newer ≈ 1.95e-2 ≤ 0.5)
+        // → false-positive exit at d_min. (fired_at keeps overwriting on
+        // every later Settled window, so assert the FIRST fire.)
+        assert!(fired[..6].iter().all(|&f| !f), "floor gate: no exit before completed 8");
+        assert!(
+            fired[6],
+            "default floors false-positive at the low-scale plateau (the 881 mechanism)"
+        );
+        assert!(default_probe.fired_at_iteration().is_some());
+        let calibrated = CadenceConfig {
+            settle_floor: 1e-3,
+            plateau_floor: 1e-2,
+            decay_ratio_max: 0.5,
+        };
+        let mut p = LoopResidualExit::with_cadence_config(1e-4, 8, calibrated);
+        for (i, &n) in seq.iter().enumerate() {
+            assert!(!p.observe(n), "calibrated probe must not exit at obs {}", i + 1);
+        }
+        // Keep iterating well past the fixture length — still Churning.
+        for i in 0..64 {
+            assert!(!p.observe(2e-2), "calibrated probe must not exit (churn {}) ", i);
+        }
+        assert!(p.fired_at_iteration().is_none());
+    }
+
+    #[cfg(feature = "cadence_gate")]
+    #[test]
+    fn calibrated_floors_admit_high_scale_settling() {
+        // The mirror calibration class: a loop whose settled plateau sits at
+        // norms FAR ABOVE the HRM band (converged, flat, residual ≈ 8).
+        // DEFAULT floors (plateau 1.0) classify the flat window Churning
+        // forever; calibrated floors (settle 5, plateau 15) put the plateau
+        // mid-band → the shipped fall-through reads Settled and the probe
+        // fires. (The decay-ratio arm is scale-invariant by design — law 2 —
+        // so DECAYING high-scale windows settle under both configs; the flat
+        // plateau is the discriminating shape.)
+        let mut default_probe = LoopResidualExit::new(0.0, 4);
+        for i in 0..20 {
+            default_probe.observe(8.0);
+            assert_eq!(
+                default_probe.fired_at_iteration(),
+                None,
+                "default floors must keep refusing a flat high-scale plateau (Churning) at obs {i}"
+            );
+        }
+        let calibrated = CadenceConfig {
+            settle_floor: 5.0,
+            plateau_floor: 15.0,
+            decay_ratio_max: 0.5,
+        };
+        let seq = [40.0, 20.0, 8.0, 8.0];
+        let mut p = LoopResidualExit::with_cadence_config(0.0, 4, calibrated);
+        let fired: Vec<bool> = seq.iter().map(|&n| p.observe(n)).collect();
+        assert!(fired[3], "calibrated shape arm fires once K = 4 fills at the decayed plateau");
+        // fired_at records COMPLETED iterations (seen + 1): the 4th
+        // observation arrives after 5 completed iterations.
+        assert_eq!(p.fired_at_iteration(), Some(5));
     }
 }
