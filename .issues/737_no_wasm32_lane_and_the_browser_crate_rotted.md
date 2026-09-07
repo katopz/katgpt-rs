@@ -1,6 +1,6 @@
 # Issue 737 — nothing in this repo compiles for wasm32, and the browser crate had 15 live findings to prove it
 
-**Status:** OPEN — T0–T3 landed (18 lint lines healed + `full_gate.sh` layer 2b, canaried); T4 (CI cadence) is an owner call.
+**Status:** OPEN — T0–T3 landed (18 lint lines healed + `full_gate.sh` layer 2b, canaried); T4 (CI cadence) is an owner call. Anchor issue for the nine-repo wasm32 audit of 2026-09-07 — see §Cross-repo.
 **Owner:** this repo (`scripts/full_gate.sh`, `crates/katgpt-moka-wasm`, `crates/katgpt-types/src/simd`, `crates/katgpt-attn-match`).
 
 ## The finding
@@ -189,6 +189,48 @@ chain only ran at all because somebody happened to build the leaf.
       Whether that is acceptable is an owner call — the cheap alternative is
       a per-push job, since the two arms are `--lib`-only and fast next to
       layer 3.
+
+## Cross-repo: the whole workspace, audited 2026-09-07
+
+This issue was the first of nine. Every repo in the workspace with a
+`target_arch = "wasm32"` surface was checked, and the class kept producing new
+instances because each fix closed only the axis it was looking at.
+
+| repo | issue | state before | outcome |
+|---|---|---|---|
+| katgpt-rs | `.issues/737` | no lane; only `build-moka-wasm.sh` named the triple | **18 live lint lines**, 11 `unsafe_op_in_unsafe_fn` on edition 2024, + an orphaned doc block; layer 2b |
+| riir-ai | `.issues/892` | no lane over ~74 files / 10 crates | live `dead_code`; layer 1.22; riir-gpu's "4742 findings, a project not a fix" was a **wrong-feature-set** measurement → 4 real errors, fixed |
+| riir-mmorpg-examples | `.issues/101`, `102`, `103` | browser peer, then the `wasm/` modules workspace, then the **default feature arm** | 103: the lane covered one arm *via a dependent* — `unused_imports` on the arm nothing built |
+| riir-dapps | `.issues/022` | only `rustup target add` in a **deploy** job | already clean; L7 added (2 units, standalone workspace) |
+| riir-deployer | `.issues/004` | nothing named the triple at all | `await_holding_lock` in a Durable Object whose `#[allow]` was where the lint could not see it; layer 5/5 |
+| riir-viewbridge | `.issues/006` | L5 ran `cargo check` | 2 live `cast_sign_loss` in a `#![warn(clippy::pedantic)]` crate; L5 promoted to clippy |
+| riir-game-sdk | `.issues/027` | `cargo check` across 7 combos | clean, but the guard's **entire failure-reporting path was dead code** (errexit at `log=$(cargo …)`); promoted + fixed |
+| riir-chain | `.issues/130` | **best of the nine** — 4 clippy arms + an artifact import gate | one soft spot: `riir-wallet-wasm` is `cargo check`-only, output discarded. Filed, not landed (sibling mid-run) |
+| seal-remake | `.issues/010` | 2 arms, `cargo check --quiet` | clean; filed, not landed (sibling WIP in the tree) |
+
+**The axes, in the order they had to be discovered.** Each was invisible until
+the one above it was closed:
+
+1. *no lane exists* — the only script naming the triple is a **deploy** script.
+2. *the lane sets one `target_feature` arm* — simd128 defaults **off**, so the
+   SIMD half compiles to nothing (this issue).
+3. *the lane uses the wrong **feature set*** — a crate whose `default` is
+   native-GPU makes a browser build request CUDA (riir-ai 892 T3).
+4. *the lane covers one feature arm **via a dependent*** — a dependent pulls
+   its dependency in with ITS features, not that crate's defaults
+   (riir-mmorpg-examples 103).
+5. *the lane cannot reach a **separate workspace*** — `--workspace
+   --all-features --all-targets` does not cross a workspace root
+   (riir-dapps 022, riir-deployer 004, riir-mmorpg-examples 102).
+6. *the lane runs **`cargo check`***, which has no lints — and **every single
+   finding in this table was a warning, not an error** (riir-viewbridge 006,
+   riir-game-sdk 027, riir-chain 130, seal-remake 010).
+
+⛔ **Axis 6 is the one that generalises past wasm32.** Six of the nine lanes
+could not fail on a warning. Measured in riir-game-sdk with one planted
+`unused_variables`: `cargo check` prints it and **exits 0**. A lane built to
+catch rot, that cannot fail on the only kind of rot it has ever found, is a
+green light wired to nothing.
 
 ## Verification
 
