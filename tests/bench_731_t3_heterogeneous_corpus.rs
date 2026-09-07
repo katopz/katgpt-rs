@@ -199,6 +199,19 @@
 //! bar is therefore MET, never EXCEEDED, on this axis — the evidence-grade
 //! caveat this record carries.
 //!
+//! > **REFUTED 2026-09-07 by the T6 held-out replication (§T6, P1) — read the
+//! > paragraph above as the scan's claim, not as a fact.** Held-out seed 1002
+//! > measures margin **2.40×** (K* 24 / median_all 10) at mean exit dist
+//! > 5.44e-3 ≤ 0.01 — a K* ≥ 24 tail that does NOT co-occur with a lifted
+//! > median or a poisoned mean, which is exactly the co-occurrence the
+//! > paragraph asserts is universal. The "ceiling" was an artifact of the
+//! > 144-row scan's COVERAGE, not a property of the weight-scale axis: the
+//! > scan simply never drew a seed like 1002. (Post-T6-fix the same fixture
+//! > measures 2.18× at a 2.4× better mean dist — still above 2.0×.) The
+//! > evidence-grade caveat on v4 survives the refutation for a different
+//! > reason: P2 landed inside its pre-declared band (1/12), so v4 remains an
+//! > existence proof — it is no longer an existence proof *at a ceiling*.
+//!
 //! ## The v4 pre-registration
 //!
 //! - Fixture: seed **5**, loop-weight scale **α = 3.0** (the rounder window
