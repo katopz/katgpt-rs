@@ -236,6 +236,56 @@ population derived. Verdict half: `scripts/percentile_floor_gate.py` (pins in
 `scripts/percentile_floors.txt`; `min_sites_scanned` is a FLOOR — a tokenizer
 regression takes the population to ~0 and every ceiling passes).
 
+## A gate that ABORTS reports exit 0 — `scripts/trap_exit_launder_audit.py`
+
+Every script above is a shell gate with `set -euo pipefail` and a cleanup
+trap. Measured on bash 3.2.57 and 5.x: when bash aborts on an **unbound
+expansion** (`set -u`) or an **`eval` syntax error**, it enters the EXIT trap
+with `$?` **already 0** — so an EXIT trap whose last command succeeds (`rm -f
+"$TMP"` always does) makes the abort exit **0**. Everything after the abort
+silently did not run, and CI reads a pass.
+
+| abort | bare | `$?` at trap entry | with an EXIT trap |
+|---|---|---|---|
+| `set -u` unbound expansion | 1 | **0** | **0** ✗ |
+| `eval` syntax error | 2 | **0** | **0** ✗ |
+| `set -e` command failure | 1 | 1 | 1 ✓ |
+| command not found | 127 | 127 | 127 ✓ |
+
+`trap 'rc=$?; cleanup; exit $rc' EXIT` does **not** repair it — the rc it
+saves is itself 0. Only a **completion sentinel** does: a flag set on the
+script's own last line, checked by the handler, forcing exit 1 when the run
+is INCOMPLETE *and* claiming success. An ordinary layer failure still exits 1
+with its own message, untouched. `scripts/full_gate.sh` and
+`scripts/proof_negative_test.sh` carry it (Issue 734).
+
+```bash
+scripts/trap_exit_launder_audit.py            # all contract repos (derived)
+scripts/trap_exit_launder_audit.py ../riir-ai # or one, by path
+```
+
+A **report, not a gate** (exit 0) — EXPOSED is latent, and a report that
+exits 1 on 39 latent rows is a report nobody runs. Population derived
+(BOUNDARY.md + `.git`) and restricted to **tracked** `*.sh`: walking the
+filesystem instead reported 25 findings in a **gitignored** vendored drop no
+repo owns. Verdicts: **LIVE-FORWARD** (a double-quoted `trap "… $VAR …"`
+naming a later-assigned variable — a *provable* abort, every run, and how
+this was found), **EXPOSED**, **SENTINELLED**, plus the orthogonal
+**REPLACED** (2+ EXIT traps — `trap` replaces, it does not accumulate, so
+earlier cleanup is silently dropped).
+
+**shellcheck does not find this** (measured, Issue 734 T7): pointed at the
+script carrying the live defect it reports one `SC2001` at default severity,
+and with `-o all` its only remark on the fatal line is `SC2250` — brace
+style. SC2154 does not fire, because the variables *are* assigned, just too
+late.
+
+Canonical failure: seal-remake's `ci_feature_guard.sh` — the script its
+`rust.yml` runs — could not fail past layer 13 for months, because its
+layer-13 trap named two variables assigned ~20 and ~45 lines later. It stayed
+hidden because a ratchet ceiling had been red for three commits and stopped
+every run *before* the bad line (seal-remake `26a18191`).
+
 ## Before committing in a shared worktree — `scripts/staged_set_audit.py`
 
 Several agent sessions write into one worktree routinely, and `git add -A`

@@ -169,7 +169,36 @@ KEEP_LOG=0
 if [ -n "${FULL_GATE_LOG:-}" ]; then
     KEEP_LOG=1
 fi
-trap '[ "$KEEP_LOG" -eq 1 ] && echo "  full log retained: $LOG" || rm -f "$LOG"' EXIT
+# ── The completion sentinel (Issue 734) ─────────────────────────────────────
+# Every `exit 1` below is an explicit verdict and passes through untouched.
+# What this arm catches is the OTHER death: bash aborting mid-script while
+# reporting success. Measured on bash 3.2 and 5.x — when `set -u` hits an
+# unbound expansion, or `eval` hits a syntax error, the shell enters the EXIT
+# trap with `$?` **already 0**, so an EXIT trap whose last command succeeds
+# makes the abort exit **0**. The usual `trap 'rc=$?; …; exit $rc'` idiom does
+# not help: the rc it saves is itself 0. Only "did the script reach its own
+# last line?" catches it — and it catches every other premature death too
+# (a `set -e` trip in an unguarded spot, a SIGTERM, a future editing slip).
+# This is not hypothetical: seal-remake's ci_feature_guard.sh could not fail
+# past its layer 13 for months for exactly this reason.
+# Population-wide picture: scripts/trap_exit_launder_audit.py.
+FULL_GATE_COMPLETED=0
+full_gate_cleanup() {
+    gate_st=$?
+    if [ "$KEEP_LOG" -eq 1 ]; then
+        echo "  full log retained: $LOG"
+    else
+        rm -f "$LOG"
+    fi
+    if [ "$FULL_GATE_COMPLETED" != "1" ] && [ "$gate_st" = "0" ]; then
+        echo "✗ full gate ABORTED mid-run while reporting success — it did not reach" >&2
+        echo "  its own last line, so it verified NOTHING past the error above." >&2
+        echo "  A premature death must never read as a pass; forcing exit 1." >&2
+        exit 1
+    fi
+    exit "$gate_st"
+}
+trap full_gate_cleanup EXIT
 echo "▸ $GATE_CMD"
 set +e
 "${GATE_ARGS[@]}" >"$LOG" 2>&1
@@ -339,3 +368,4 @@ echo "  ✓ release profile clean ($REL_UNITS compiler-artifact record(s))"
 # UNITS is printed on every pass, not just when it is interesting: the number
 # that would have exposed the vacuous CI green was never on screen.
 echo "✓ full gate PASSED — 0 errors, 0 unbuildable targets ($WARNINGS warning finding(s) across $WARN_TALLIES target(s), not gated; $UNITS unit(s) compiled)"
+FULL_GATE_COMPLETED=1  # the last line — see full_gate_cleanup above

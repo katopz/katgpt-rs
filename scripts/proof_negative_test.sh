@@ -25,7 +25,17 @@ if ! command -v lake >/dev/null 2>&1; then
 fi
 
 BACKUP_DIR="$(mktemp -d)"
+# `NEG_COMPLETED` is the completion sentinel (Issue 734). Restoring the
+# perturbed sources is only half the job: measured on bash 3.2 and 5.x, a
+# `set -u` abort (or an `eval` syntax error) enters the EXIT trap with `$?`
+# ALREADY 0, so a handler whose last command succeeds makes the abort exit
+# **0** — this script would restore every file and then report "all
+# perturbations caught" by silence, having run none of them. Saving and
+# re-exiting `$?` does not help; the saved value is itself 0. Only "did the
+# script reach its own last line?" catches it.
+NEG_COMPLETED=0
 restore_all() {
+    neg_st=$?
     local f
     for f in "$BACKUP_DIR"/*.bak; do
         [ -e "$f" ] || continue
@@ -34,6 +44,12 @@ restore_all() {
         cp "$f" "${name//__//}"
     done
     rm -rf "$BACKUP_DIR"
+    if [ "$NEG_COMPLETED" != "1" ] && [ "$neg_st" = "0" ]; then
+        echo "✗ negative test ABORTED mid-run while reporting success — sources were" >&2
+        echo "  restored, but the perturbations below the abort never ran. Forcing exit 1." >&2
+        exit 1
+    fi
+    exit "$neg_st"
 }
 trap restore_all EXIT
 
@@ -126,3 +142,4 @@ if [ "$fail" -gt 0 ]; then
     exit 1
 fi
 echo "✓ all $pass perturbations caught — the spec tests have teeth"
+NEG_COMPLETED=1  # the last line — see restore_all above
