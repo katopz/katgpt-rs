@@ -1,6 +1,7 @@
 # Issue 737 — nothing in this repo compiles for wasm32, and the browser crate had 15 live findings to prove it
 
 **Status:** OPEN — T0–T3 landed (18 lint lines healed + `full_gate.sh` layer 2b, canaried); T4 (CI cadence) is an owner call. Anchor issue for the nine-repo wasm32 audit of 2026-09-07 — see §Cross-repo.
+**CI catch 2026-09-07:** layer 2b's first runner run (`34137014037`) red the job — `full_gate.yml` never installed `wasm32-unknown-unknown`, and the gate REFUSED the partial run exactly as specified (16 wasm32 / 10 simd128 files named, exit 1, no pass printed). The refusal design worked; the workflow was the missing half — fixed by `targets: wasm32-unknown-unknown` on the dtolnay step (`e0b7c9e0`). The same run's 735-T3 probe printed the runner's bash + premise matrix (see 735: the runner is 3.2.57-only and launders).
 **Owner:** this repo (`scripts/full_gate.sh`, `crates/katgpt-moka-wasm`, `crates/katgpt-types/src/simd`, `crates/katgpt-attn-match`).
 
 ## The finding
@@ -132,6 +133,13 @@ chain only ran at all because somebody happened to build the leaf.
       count FAILS rather than passing vacuously), then a missing
       `wasm32-unknown-unknown` target is a **partial gate** that refuses
       unless `--allow-partial-platform`, then **both** simd128 arms.
+      **CORRECTION 2026-09-07 (first CI execution):** the refusal fired in
+      real CI on its very first runner run (`34137014037`) — the workflow
+      had never installed the target, so the whole gate red in 1m21s
+      instead of reporting a partial pass. That is the layer working as
+      designed; the fix belongs to the workflow (`e0b7c9e0`), not the
+      layer. The runner now compiles both arms; nothing about the layer's
+      logic changed.
 - [x] T2 — **the package list is derived, the residue is pinned.** `-p` args
       come from `git grep -l 'target_arch = "wasm32"' -- '*.rs'` reduced to
       `crates/<name>/src/`, plus the **root package** when the root `src/`
@@ -188,7 +196,11 @@ chain only ran at all because somebody happened to build the leaf.
       else. A wasm32 break would land on `develop` and sit for up to a week.
       Whether that is acceptable is an owner call — the cheap alternative is
       a per-push job, since the two arms are `--lib`-only and fast next to
-      layer 3.
+      layer 3. (Context for the call: the workflow preamble already measured
+      per-push TIME as affordable (~2m17s/run warm); the open question is
+      macOS-minute BILLING across several daily-pushing agents. The 2026-09-07
+      red above is unrelated to cadence — it was the missing-target
+      integration gap, fixed same day.)
 
 ## Cross-repo: the whole workspace, audited 2026-09-07
 

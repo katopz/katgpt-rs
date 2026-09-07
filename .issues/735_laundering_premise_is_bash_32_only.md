@@ -8,6 +8,17 @@ the refuted "bash 3.2 and 5.x" sentence are corrected across 11 repos, and
 the 15 nounset-only scripts now say so in-file. Two sessions worked this in
 parallel; the split is recorded per task.
 
+**T3 ANSWERED EARLY + T4 RESOLVED, same day (run 34137014037, the 737
+layer-2b push — the probe runs in the preamble, so every trigger carries
+it, cron not required):** GitHub's `macos-26-arm64` image ships **bash
+3.2.57(1) ONLY** — PATH bash = `/bin/bash` = `env bash`, and the expected
+Homebrew bash 5 on PATH does not exist there — and the premise matrix
+re-measured on the runner reproduces **all five errexit LAUNDERS cells**.
+The macOS CI lane launders exactly like the workstation: the sentinel is
+load-bearing IN CI, and 735's original "CI reads a pass" sentence was
+accidentally right for this repo's one macOS runner all along. T4 resolved
+below: do not pin — measure.
+
 ## The claim, and what it turned out to be
 
 Issue 734's prose, this repo's AGENTS.md, and the sentinel comment block
@@ -177,20 +188,53 @@ zero.
       deaths that are not version-specific (SIGTERM, a `set -e` trip in an
       unguarded spot, a future editing slip). Classification re-run after
       every edit: unchanged, 40/41 SENTINELLED.
-- [x] T3 — **wired, and it answers itself for free** (peer, `a95d2bd6`):
+- [x] T3 — **wired, and it answered EARLY** (peer, `a95d2bd6`; first answer
+      run `34137014037` the SAME DAY — the probe is a preamble step, so the
+      737 layer-2b push carried it without waiting for the weekly cron):
       a probe in `full_gate.yml` — this repo's only `macos-latest` runner of
       a sentinelled script — printing PATH bash / `/bin/bash` / `env bash`
       versions plus the audit's re-measured premise matrix, ~1s, `|| true`
-      (a probe that can red a 180-minute gate gets deleted). GitHub's macOS
-      images ship Apple's 3.2.57 at `/bin/bash` *and* a Homebrew bash 5 on
-      PATH, so `shell: bash` may resolve to either depending on PATH order —
-      the answer is "measure it", not "reason about it". Result arrives on
-      the next weekly cron with no dispatch, hence no spending-limit
-      exposure. **Until it reports, the honest framing is that the sentinel
-      is correct on every shell and only its urgency is 3.2-specific.**
-- [ ] T4 — consider whether the katgpt-rs macOS workflows should pin the
-      interpreter explicitly (`shell: /bin/bash` vs `bash`), so the answer to
-      T3 stops depending on image drift. Gated on T3.
+      (a probe that can red a 180-minute gate gets deleted).
+
+      **The measured answer (macos-26-arm64, 2026-09-07):** all three
+      resolutions are the SAME bash — `3.2.57(1)-release (arm64-apple-
+darwin25)`. The T3 note's premise that the image "ships Apple's 3.2.57 at
+      `/bin/bash` *and* a Homebrew bash 5 on PATH" measured **one-sided**:
+      there is no Homebrew bash in the runner's PATH at all, so
+      `shell: bash` cannot silently flip to 5.x on this image. The
+      re-measured premise matrix on the runner reproduces the five
+      workstation LAUNDERS cells exactly (`set -e`/`set -eu`/`set -euo
+      pipefail` × unbound/eval → 0 trapped). **Consequence: the macOS CI
+      lane launders an aborting gate exactly like the workstation — the
+      completion sentinel is load-bearing in CI, not merely on dev boxes —
+      and the one shape of run where that mattered (`full_gate.sh` under
+      errexit on this runner) is sentinelled.** Result no longer waits on a
+      cron; the step stays so a future image change re-measures for free.
+- [x] T4 — **RESOLVED 2026-09-07, un-gated by T3's same-day answer: do not
+      pin — measure.** Three legs, all measured rather than argued:
+
+      1. **Nothing to pin apart.** On the runner, `shell: bash` and
+         `shell: /bin/bash` resolve to the SAME interpreter — PATH bash IS
+         `/bin/bash` 3.2.57 (no Homebrew bash exists in the image's PATH).
+         The drift T4 worried about is not real on the current image.
+      2. **A `shell:` pin could not govern the gate scripts anyway.** They
+         carry `#!/usr/bin/env bash` shebangs, so `./scripts/full_gate.sh`
+         resolves its own interpreter at exec time; pinning the STEP shell
+         pins only the run block around it. Truly pinning the script would
+         mean changing shebangs repo-wide (and on every workstation run)
+         — a large, correctness-neutral churn.
+      3. **The verdict is drift-proof without a pin.** The sentinel is
+         correct under BOTH bashes — load-bearing on 3.2 (forces the
+         laundered abort to exit 1), inert and harmless on 5.x (aborts exit
+         non-zero naturally). A future image change in either direction
+         cannot produce a wrong verdict; the probe step re-prints the three
+         version lines + the re-measured premise matrix on every run, so
+         the drift would be OBSERVED, never silent.
+
+      Pinning `/bin/bash` would freeze the laundering interpreter
+      deliberately; pinning a Homebrew bash would chase a PATH entry the
+      image does not have. The probe stays as the drift detector.
+      Recorded in the workflow comment at `e0b7c9e0`.
 - [x] T5 — AGENTS.md now names all four instruments and which question each
       answers, because reading one for another is the live hazard (peer,
       `a95d2bd6`): population/classification (`trap_exit_launder_audit.py`),
