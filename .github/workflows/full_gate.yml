@@ -98,6 +98,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+          # Layer 2b refuses a box without the wasm32 target rather than
+          # report a partial pass — and its first CI run (34137014037,
+          # 2026-09-07) did exactly that to this workflow, which never
+          # installed it. The gate was right; the workflow was the missing
+          # half. The wasm32 std lives in ~/.rustup, outside rust-cache's
+          # scope, so this is a small per-run download — the price of the
+          # lane actually compiling here instead of being skipped.
+          targets: wasm32-unknown-unknown
 
       # Keyed on the lockfile; falls back to any prior cache for this OS so a
       # dep bump warms from the previous build instead of starting cold.
@@ -153,6 +161,14 @@ jobs:
       # resolves to on GitHub's macOS image, and no workstation can answer
       # that. This is the only macOS runner in this repo that runs a
       # sentinelled script, so the measurement belongs here.
+      #
+      # MEASURED 2026-09-07, run 34137014037 (macos-26-arm64): PATH bash =
+      # /bin/bash = env bash = 3.2.57(1) — the image ships NO Homebrew bash
+      # in PATH — and the premise matrix re-measured on the runner reproduces
+      # all five errexit LAUNDERS cells. The macOS CI lane launders exactly
+      # like the workstation: the sentinel is load-bearing here, not just
+      # locally. The step stays because the answer is per-image and this
+      # re-measures it every run.
       #
       # A step, not a run of its own: the audit re-measures the premise matrix
       # on the box every time it starts and costs ~1s. `|| true` because this
