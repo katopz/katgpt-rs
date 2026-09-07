@@ -217,8 +217,8 @@ instances because each fix closed only the axis it was looking at.
 | riir-deployer | `.issues/004` | nothing named the triple at all | `await_holding_lock` in a Durable Object whose `#[allow]` was where the lint could not see it; layer 5/5 |
 | riir-viewbridge | `.issues/006` | L5 ran `cargo check` | 2 live `cast_sign_loss` in a `#![warn(clippy::pedantic)]` crate; L5 promoted to clippy |
 | riir-game-sdk | `.issues/027` | `cargo check` across 7 combos | clean, but the guard's **entire failure-reporting path was dead code** (errexit at `log=$(cargo …)`); promoted + fixed |
-| riir-chain | `.issues/130` | **best of the nine** — 4 clippy arms + an artifact import gate | one soft spot: `riir-wallet-wasm` is `cargo check`-only, output discarded. Filed, not landed (sibling mid-run) |
-| seal-remake | `.issues/010` | 2 arms, `cargo check --quiet` | clean; filed, not landed (sibling WIP in the tree) |
+| riir-chain | `.issues/130` | **best of the nine** — 4 clippy arms + an artifact import gate | one soft spot: `riir-wallet-wasm` was `cargo check`-only with output discarded. **RESOLVED** (`a823ea0f`): promoted per-arm, and the failure path turned out to re-run the *default* arm to print diagnostics, so a `siwr`-only failure printed the banner and nothing else |
+| seal-remake | `.issues/010` | 2 arms, `cargo check --quiet` | **RESOLVED** (`63583a8c`): 4 arms, not 2 (layer 6 had two the write-up missed). T2 found the covered set was not the whole surface — a positive-cfg arm in the ROOT package that **could never compile** (called a `cfg(not(wasm32))` fn), unreachable in every buildable configuration because the bin's dep graph cannot resolve for wasm32 at all |
 
 **The axes, in the order they had to be discovered.** Each was invisible until
 the one above it was closed:
@@ -237,6 +237,20 @@ the one above it was closed:
 6. *the lane runs **`cargo check`***, which has no lints — and **every single
    finding in this table was a warning, not an error** (riir-viewbridge 006,
    riir-game-sdk 027, riir-chain 130, seal-remake 010).
+
+**A seventh axis, found while closing axis 6 (2026-09-07).** *The lane
+covers the right packages — and the **package set itself** is unpinned.* Every
+axis above is about how a lane compiles what it names. seal-remake's 010 T2
+asked the next question — *is what it names the whole surface?* — and the
+answer was no: the root package carried a positive `target_arch = "wasm32"`
+cfg that no row built and, measured, no row **can** build (its
+`required-features` unify a sibling's target-gated-off dep back on). The arm
+had been uncompilable since it was written. The repair is a derived
+membership pin over the packages carrying **positive** cfgs, with the walk
+size floored underneath it — `not(target_arch = "wasm32")` is an ordinary
+native-only guard and must not count (riir-ai 892 T4). riir-game-sdk 027 and
+seal-remake 010 both carry one now; the other seven repos do not, and that is
+the next sweep.
 
 ⛔ **Axis 6 is the one that generalises past wasm32.** Six of the nine lanes
 could not fail on a warning. Measured in riir-game-sdk with one planted
