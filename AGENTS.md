@@ -124,10 +124,23 @@ declared triggers can actually fire, per workflow, per repo.
 
 ## Docs gate + drift sweeps
 
-`scripts/docs_gate.sh` runs the manifest/doc/skill drift assertions (~11s at
-last measure — re-time before quoting); `.github/workflows/docs_gate.yml`
-runs it per-push on **`main` only** — develop pushes do not fire it, so run
-`./scripts/docs_gate.sh` locally for develop work. One line per check:
+`scripts/docs_gate.sh` runs the manifest/doc/skill drift assertions and
+**prints its own timing** — a hand-typed duration drifts exactly like a
+hand-typed count, and it was also the wrong quantity. Measured 2026-09-07:
+three ways: **11.7s wall on a quiet box**, **128.3s wall** with three sibling
+cargo processes live, and **12.7s CPU** (9.03 user + 3.62 sys) in that same
+busy run. CPU agrees with the quiet wall clock, so ~90% of the busy run was
+contention, not work. The inflation lands on the checks that walk the tree —
+`cargo_comment_audit` 54.7s, `bench_doc_audit` 50.4s, `cfg_gated_floor_gate`
+31.2s in that run, everything else under 4s — and **none of those invokes
+cargo**, so it is not the cargo build lock. Which of them dominates is not
+stable either: a second, busier run (308.1s total) put
+`percentile_floor_gate` at 61.3s, which had been fast. Beyond "a busy box
+starves the tree walks" the mechanism is unmeasured. Compare **CPU** across runs; read the per-check `⏱`
+line to see which check is BLOCKING, not to conclude a check got slower.
+`.github/workflows/docs_gate.yml` runs it per-push on **`main` only** —
+develop pushes do not fire it, so run `./scripts/docs_gate.sh` locally for
+develop work. One line per check:
 
 | check | asserts |
 |---|---|

@@ -103,6 +103,20 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 1
 fi
 
+# ── This gate times ITSELF ──────────────────────────────────────────────────
+# The duration used to be hand-typed in AGENTS.md, and a hand-typed duration
+# drifts exactly like a hand-typed count. It was also the wrong quantity: this
+# gate's WALL time is contention-dominated (measured: 11.7s wall on a quiet
+# box, 128.3s wall / 12.7s CPU under three sibling cargo runs), and which
+# check absorbs the wait moves between runs. So print BOTH — the per-check
+# wall time names whichever check is blocking today, and the CPU total is the
+# load-invariant figure to compare across runs. Numbers and the measured
+# non-explanation live in AGENTS.md §Docs gate, not duplicated here.
+# `$EPOCHREALTIME` is bash >= 5.0 and this box is 3.2.57, so the stamp goes
+# through python3 — already a hard dependency three lines above.
+now() { python3 -c 'import time; print("%.2f" % time.time())'; }
+GATE_T0="$(now)"
+
 failed=0
 for entry in "${CHECKS[@]}"; do
     script="${entry%%:*}"
@@ -115,6 +129,7 @@ for entry in "${CHECKS[@]}"; do
         continue
     fi
     echo "▸ $script — $what"
+    check_t0="$(now)"
     if out="$(python3 "$script" 2>&1)"; then
         printf '%s\n' "$out" | tail -1 | sed 's/^/    /'
     else
@@ -122,7 +137,32 @@ for entry in "${CHECKS[@]}"; do
         printf '%s\n' "$out" | sed 's/^/    /'
         echo "  ✗ $script FAILED"
     fi
+    check_dt="$(python3 -c "print('%.1f' % ($(now) - $check_t0))")"
+    case "$check_dt" in
+        # Only the slow ones are worth a line; the rest are noise at 0.0-0.9s.
+        0.*) ;;
+        *) echo "    ⏱  ${check_dt}s wall" ;;
+    esac
 done
+
+# CPU is the load-invariant total (`times` reports this shell + its children);
+# wall is what the operator experiences. A large gap means the box was busy —
+# compare CPU across runs before concluding a check got slower.
+gate_wall="$(python3 -c "print('%.1f' % ($(now) - $GATE_T0))")"
+echo "  ⏱  total ${gate_wall}s wall · CPU (user sys) — row 1 this shell, row 2 the checks:"
+# `times` must run BARE — no `$( )`, no pipe, not even `| sed` for indentation.
+# Measured on bash 3.2.57 with a child that burned 0.167s of user time:
+#     times                 -> 0m0.001s 0m0.002s / 0m0.167s 0m0.015s   correct
+#     times | sed 's/^/ /'  -> 0m0.000s 0m0.000s / 0m0.000s 0m0.000s   ZERO
+#     $(times | tail -1)    -> 0m0.000s 0m0.000s                       ZERO
+# Both a pipeline and a command substitution FORK, and the fork has no
+# children of its own, so it reports zero however much CPU the checks burned.
+# The first two versions of this line did exactly that and printed a confident
+# zero — the same "inert instrument reports a clean number" failure the gates
+# in this directory exist to catch, in the code that measures them.
+times
+echo "     CPU is the load-invariant figure; a large wall/CPU gap is a busy box"
+echo "     (measured: 11.7s wall quiet · 128.3s wall / 12.7s CPU under 3 cargos)."
 
 if [ "$failed" -ne 0 ]; then
     echo "✗ docs gate FAILED — $failed of ${#CHECKS[@]} check(s)"
