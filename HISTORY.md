@@ -1269,6 +1269,21 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
 
 ## Issue log (resolved)
 
+- **Issue 733 — `EngramHotSwap::with_table` did not hold the writer lock: a nested same-thread `swap` dropped the old table under a live borrow** RESOLVED
+  (2026-09-07, `31bf0012`; issue file removed at close — this row + the module doc are the durable record.
+  Found by riir-chain Plan 046 §2b while forcing an orphan-envelope test through a "locked" hotswap; fix direction 1
+  of the three filed). The unlocked pointer load was unsound under TWO interleavings — same-thread nested `swap`
+  (the repro the issue named) AND cross-thread `swap` during the closure (the in-code essay's own "NOT formally
+  safe under all interleavings" admission). Fix: the closure CASes the writer lock and HOLDS it (panic-safe Drop
+  guard releases lock + thread-local depth flag); `swap`'s CAS then fails closed → `Err(new_table)` for both cases,
+  swap's drop-safety argument is literally true, and a nested `with_table` panics loud instead of self-deadlocking.
+  Cost: one uncontended CAS + one Release store per closure (control-plane readers only — the hot lookup path is the
+  cache hierarchy). G5 re-run: 100 swaps / 1.77M lock-holding lookups / 0 torn reads over ~2s. Contract-pinning
+  tests: nested-swap→Err + borrow stays valid; nested-with_table→panic; cross-thread swap→Err + borrow unchanged.
+  riir-chain side (Plan 047's `EngramIngress`) is the first consumer whose soundness story this enforces by
+  construction: dispatch runs INSIDE the `with_table` closure; publish (`swap`) after it now fails closed on any
+  contention instead of racing the borrow.
+
 - **Issue 730 — 256K prefill KV-offload double-buffer: T0 measured the wall 4× smaller than claimed; the offload premise is refuted for every lane the stack serves** CLOSED-N/A-PREMISE-REFUTED
   (2026-09-06, T0 verify-first gate; issue file removed at close — instrument kept:
   `scripts/gguf_header_audit.py`, stdlib GGUF header/tensor introspector; riir-ai Issue 879 T2 is its next consumer).
