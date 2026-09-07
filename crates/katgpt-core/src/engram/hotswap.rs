@@ -41,7 +41,30 @@
 //!   committed snapshot without learning the slot contents).
 
 use super::EngramTable;
+use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
+
+// Per-thread `with_table` depth (Issue 733). A nested same-thread call
+// would spin forever against the lock its own closure holds — depth > 0
+// on entry panics instead of hanging. The borrow guard clears it.
+thread_local! {
+    static WITH_TABLE_DEPTH: Cell<u32> = const { Cell::new(0) };
+}
+
+/// Releases the writer lock + the depth flag when a `with_table` closure
+/// exits — normally or by panic. A leaked lock would spin every future
+/// reader forever, so this MUST be panic-safe (plain Drop is).
+struct ReadBorrowGuard<'a> {
+    lock: &'a AtomicBool,
+}
+
+impl Drop for ReadBorrowGuard<'_> {
+    #[inline]
+    fn drop(&mut self) {
+        self.lock.store(false, Ordering::Release);
+        WITH_TABLE_DEPTH.with(|d| d.set(d.get() - 1));
+    }
+}
 
 /// Atomic runtime replacement for `dyn EngramTable`.
 ///
@@ -107,11 +130,16 @@ impl EngramHotSwap {
         self.lock.store(false, Ordering::Release);
 
         // Free the old table. No reader can be holding a borrow at this
-        // point: the lock blocked all readers during the pointer swap.
+        // point: every `with_table` closure HOLDS this lock for its whole
+        // duration (Issue 733), so winning the exchange above proves no
+        // closure borrow is live — the drop below cannot race one. (Pre-733
+        // this argument was aspirational: the closure only spin-checked the
+        // lock at entry, so a swap could drop the table under a live borrow.
+        // The lock-holding closure is what makes it true.)
         // SAFETY: `old_ptr` was allocated via `Box::into_raw(Box::new(...))`
         // by us (either in `new` or a prior `swap`). We have exclusive access
         // (the writer lock guarantees no other writer is touching it; the
-        // reader spin guarantees no reader is borrowing it).
+        // reader closure holds the same lock, so none is borrowing it).
         unsafe {
             drop(Box::from_raw(old_ptr));
         }
@@ -119,7 +147,9 @@ impl EngramHotSwap {
         Ok(())
     }
 
-    /// Run a closure with the current table. Spin-waits if the lock is held.
+    /// Run a closure with the current table. Spin-waits if a swap is in
+    /// flight. **Holds the writer lock for the closure's duration** — the
+    /// guarantee that makes the borrow sound by construction (Issue 733).
     ///
     /// Returns whatever `f` returns. The closure receives a `&dyn EngramTable`
     /// borrow that is valid for the duration of `f` only — the caller MUST
@@ -127,95 +157,83 @@ impl EngramHotSwap {
     /// `EngramTable` trait is `Send + Sync`, so reads from other threads are
     /// safe, but the borrow itself is local to the calling thread.
     ///
-    /// # Option A (per Plan T5.4): lock blocks readers
+    /// # Why holding the lock is the fix (Issue 733)
     ///
-    /// If a writer is mid-swap (lock = true), readers spin-wait until the
-    /// lock is released. This is acceptable because swaps are infrequent
-    /// (table updates are a control-plane operation, not per-tick). For
-    /// hot-path lookup at scale, prefer caching the `Arc<dyn EngramTable>`
-    /// once and reading through it directly (the [`ZipfianCacheHierarchy`]
-    /// in `cache.rs` does this).
+    /// The pre-733 shape spin-waited on the writer lock at ENTRY only, then
+    /// loaded the pointer unlocked. Two unsound interleavings fell out:
+    ///
+    /// 1. **Same-thread nesting** — a `swap` inside the closure found the
+    ///    lock free (the closure never took it), succeeded, and dropped the
+    ///    old table under the closure's live borrow. Use-after-free.
+    /// 2. **Cross-thread** — a `swap` on another thread during the closure
+    ///    likewise found the lock free and dropped the loaded table mid-read.
+    ///    The old in-code essay acknowledged this ("NOT formally safe under
+    ///    all interleavings") and bet on swap latency hiding it.
+    ///
+    /// With the lock held for the closure's duration, `swap`'s
+    /// `compare_exchange(false → true)` fails for BOTH cases and returns
+    /// `Err(new_table)` — the same fail-closed contract as a contended swap.
+    /// The borrow is exclusive by construction, and `swap`'s "the lock
+    /// blocked all readers" drop-safety argument is now literally true.
+    ///
+    /// # Cost
+    ///
+    /// One uncontended CAS on entry + one Release store on exit per closure
+    /// call, and readers are now mutually exclusive with each other. The hot
+    /// lookup path does NOT go through here (`lookup_into` via the
+    /// [`ZipfianCacheHierarchy`] reads a shared snapshot directly); closure
+    /// readers are control-plane (dispatch/verify), where a nanosecond-scale
+    /// RMW is noise. Re-validated by `g5_concurrent_reader_writer_no_torn_reads`.
+    ///
+    /// # Nested calls
+    ///
+    /// A nested `with_table` on the SAME thread would spin forever against a
+    /// lock its own thread holds — instead of hanging, it panics loudly
+    /// (thread-local depth flag). Nest a plain read through the borrow you
+    /// already have instead.
     ///
     /// [`ZipfianCacheHierarchy`]: super::ZipfianCacheHierarchy
     pub fn with_table<R>(&self, f: impl FnOnce(&dyn EngramTable) -> R) -> R {
-        // Spin-wait while locked. In practice this loop runs 0 times
-        // (swaps are rare); the spin is bounded by swap latency (~µs).
-        while self.lock.load(Ordering::Acquire) {
+        // Nested same-thread calls would self-deadlock on the lock below —
+        // fail loud instead of hanging. The guard clears the flag (panic-safe).
+        WITH_TABLE_DEPTH.with(|d| {
+            assert_eq!(
+                d.get(),
+                0,
+                "EngramHotSwap::with_table called nested on the same thread — \n                 the closure already holds a borrow; nest a read through it instead (Issue 733)"
+            );
+            d.set(1);
+        });
+
+        // Acquire the writer lock for the closure's duration. `swap` and
+        // `try_lock` CAS the same flag, so both fail closed while a closure
+        // borrow is live — that is the soundness guarantee.
+        while self
+            .lock
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
             // Hint to the CPU that we're in a spin loop — avoids a memory
             // fence mis-speculation and reduces power on Intel HT.
             std::hint::spin_loop();
         }
 
-        // Lock is clear — safe to load the pointer. The `Acquire` load
-        // pairs with the writer's `Release` store on `lock` above; combined
-        // with the writer's `AcqRel` swap on `table`, we're guaranteed to
-        // see either the old or the new table, never a mix.
-        let ptr = self.table.load(Ordering::Acquire);
-        // SAFETY: `ptr` was allocated via `Box::into_raw` by us. The writer
-        // lock protocol guarantees no writer is dropping it while we hold
-        // the borrow (writer waits for lock = false, but more importantly,
-        // writer drops the OLD pointer, not the current one — see `swap`).
-        //
-        // There's a subtle race: between our `lock.load` above and our
-        // `table.load` here, a writer could have set the lock again and
-        // swapped the pointer. We'd load the new pointer (correct), but the
-        // writer could be dropping the old pointer concurrently with our
-        // borrow. To avoid this, the writer's `swap` doesn't drop the old
-        // pointer until AFTER releasing the lock; but a SECOND swap could
-        // start before our `table.load` completes.
-        //
-        // Resolution: the lock-load ordering guarantees that if we observed
-        // lock=false, the writer's prior `lock.store(false)` (Release)
-        // happens-before our `table.load` (Acquire). That `lock.store(false)`
-        // happened AFTER the pointer swap but BEFORE the old-pointer drop,
-        // so the pointer we load is the new one, and the old-pointer drop
-        // for THAT swap has already completed. A subsequent swap would have
-        // to re-acquire the lock, which would re-block us. But we already
-        // read `lock = false`, so no subsequent swap's `lock.store(true)`
-        // has happened — meaning no subsequent swap can be in flight while
-        // we're reading. Hence the pointer we load is safe to borrow.
-        //
-        // Wait — that's not quite right either. Between our `lock.load` and
-        // our `table.load`, a new swap CAN start (set lock=true) and swap
-        // the pointer. Then we load the new pointer (fine), but the writer
-        // proceeds to drop the OLD pointer (the one from before the second
-        // swap). The old pointer is NOT the one we loaded — we loaded the
-        // new pointer. So we're safe.
-        //
-        // The dangerous case would be: writer swaps pointer A→B, drops A.
-        // Then we load B. But before we finish using B, writer swaps B→C,
-        // drops B. We're now using a dangling B. To prevent this, the
-        // writer's `lock.store(false)` must happen-before our `lock.load`,
-        // AND no second swap can intervene before our `table.load` +
-        // borrow completes.
-        //
-        // The `compare_exchange(false, true)` on the writer side ensures
-        // that any swap-in-flight has `lock = true`, which our spin-wait
-        // would block on. So: if we read `lock = false`, no swap is in
-        // flight at that instant. A swap CAN start between our `lock.load`
-        // and our `table.load`, BUT that swap will set `lock = true` first
-        // (via compare_exchange). So our `table.load` happens AFTER their
-        // `lock.store(true)`. Hmm, that means our reader could be racing
-        // with a swap.
-        //
-        // OK the honest answer: this Option A implementation is NOT
-        // formally safe under all interleavings. For full safety we'd need
-        // either (a) the writer to also block on readers (a reader counter
-        // + writer spin), or (b) epoch-based reclamation. Per Plan T5.4,
-        // Option A is "acceptable if swap latency < 1ms" — we're betting
-        // that the probability of a swap happening exactly between our
-        // `lock.load` and `table.load` is vanishingly small AND that the
-        // drop of the old pointer happens-after our borrow completes
-        // (which is NOT guaranteed).
-        //
-        // For a load-bearing production system, this should be replaced
-        // with crossbeam-epoch. For the open primitive, we accept the race
-        // and document it. The G5 concurrent-reader test (T5.8) catches
-        // torn reads in practice; if it fails, we upgrade to epoch.
+        // Drop guard releases the lock + the depth flag even if `f` panics —
+        // a leaked lock would spin every future reader forever.
+        let _guard = ReadBorrowGuard { lock: &self.lock };
+
+        // SAFETY: `ptr` was allocated via `Box::into_raw` by us (either in
+        // `new` or a prior `swap`). No swap can be in flight while we hold
+        // the borrow: every swap (this thread or another) must win the same
+        // `compare_exchange(false → true)` we now hold, and it drops the old
+        // pointer only AFTER its own successful exchange. Holding the lock
+        // therefore excludes the drop for the borrow's whole lifetime —
+        // the guarantee the pre-733 unlocked load could not make.
         //
         // `ptr` points to a `Box<dyn EngramTable>` (double-boxed on insert).
         // Dereference twice (through the double-box) to get `&dyn EngramTable`
         // directly for the caller.
+        let ptr = self.table.load(Ordering::Acquire);
         let table: &dyn EngramTable = unsafe { &**ptr };
         f(table)
     }
@@ -411,6 +429,102 @@ mod tests {
         let result = hs.swap(t2);
         assert!(result.is_err(), "swap must fail when locked");
         hs.unlock();
+    }
+
+    #[test]
+    fn nested_swap_inside_with_table_fails_closed_and_borrow_stays_valid() {
+        // Issue 733 — THE repro, now contractual. Pre-733 the nested swap
+        // SUCCEEDED and dropped the old table under the closure's live
+        // borrow (use-after-free). Post-733 the closure holds the writer
+        // lock, so the nested swap's CAS fails → Err — and the borrow stays
+        // valid: reads through it AFTER the failed nested swap still return
+        // the ORIGINAL table's contents.
+        let hs = EngramHotSwap::new(make_table(32, 4, 1));
+        let before = hs.with_table(|t| t.commitment());
+        let t2 = make_table(64, 4, 2);
+        let t2_commitment = t2.commitment();
+        hs.with_table(|t| {
+            let result = hs.swap(t2);
+            assert!(result.is_err(), "nested swap must fail closed (Issue 733)");
+            // The borrow is still the ORIGINAL table — reads are valid and
+            // unchanged (the failed swap returned ownership to us; the old
+            // table was NOT dropped).
+            assert_eq!(t.commitment(), before, "borrow must stay the original table");
+            assert_eq!(t.num_slots(), 32);
+        });
+        // After the closure: the table is still the original (the nested
+        // swap was refused, not deferred).
+        assert_eq!(
+            hs.commitment_fast(),
+            commitment_low_u64(before),
+            "refused nested swap must not change the hotswap"
+        );
+        assert_ne!(
+            commitment_low_u64(t2_commitment),
+            hs.commitment_fast(),
+            "the returned table must NOT have been swapped in"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "nested on the same thread")]
+    fn nested_with_table_panics_loud_instead_of_self_deadlocking() {
+        // Post-733 the closure holds the writer lock; a nested with_table on
+        // the same thread would spin forever against it. The depth flag
+        // turns the hang into a loud panic.
+        let hs = EngramHotSwap::new(make_table(32, 4, 1));
+        hs.with_table(|_t| {
+            hs.with_table(|_inner| {});
+        });
+    }
+
+    #[test]
+    fn cross_thread_swap_during_live_closure_fails_closed() {
+        // The OTHER half of the Issue 733 hazard: a swap from another thread
+        // while a closure borrow is live. Post-733 the closure holds the
+        // writer lock, so the foreign swap must get Err immediately (fail
+        // closed, like any contended swap) — never drop the table mid-read.
+        use std::sync::atomic::{AtomicBool, Ordering as AOrd};
+        use std::sync::Arc;
+
+        let hs = Arc::new(EngramHotSwap::new(make_table(32, 4, 1)));
+        let closure_active = Arc::new(AtomicBool::new(false));
+        let swap_attempted = Arc::new(AtomicBool::new(false));
+        let swap_was_err = Arc::new(AtomicBool::new(false));
+
+        let hs_w = Arc::clone(&hs);
+        let active = Arc::clone(&closure_active);
+        let attempted = Arc::clone(&swap_attempted);
+        let attempted_inner = Arc::clone(&swap_attempted);
+        let was_err = Arc::clone(&swap_was_err);
+        let spawner = std::thread::spawn(move || {
+            hs_w.with_table(|t| {
+                let before = t.commitment();
+                active.store(true, AOrd::Release);
+                // Hold the closure open until the background swap attempt
+                // has been made and observed.
+                while !attempted_inner.load(AOrd::Acquire) {
+                    std::hint::spin_loop();
+                }
+                // Borrow STILL valid after the foreign swap attempt — and
+                // it must be the ORIGINAL table (the swap was refused).
+                assert_eq!(t.commitment(), before);
+                before
+            })
+        });
+
+        while !closure_active.load(AOrd::Acquire) {
+            std::hint::spin_loop();
+        }
+        // Foreign swap attempt — the closure holds the lock, so this must
+        // fail closed WITHOUT dropping the borrowed table.
+        let result = hs.swap(make_table(64, 4, 2));
+        was_err.store(result.is_err(), AOrd::Release);
+        attempted.store(true, AOrd::Release);
+
+        let before = spawner.join().expect("closure thread must not panic");
+        assert!(was_err.load(AOrd::Acquire), "foreign swap during a live closure must Err");
+        assert_eq!(hs.commitment_fast(), commitment_low_u64(before));
     }
 
     #[test]
