@@ -1269,6 +1269,19 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
 
 ## Issue log (resolved)
 
+- **Issue 738 — the wasm32 lanes compile what they NAME; nothing checks that what they name is the whole surface** RESOLVED
+  (2026-09-08; T0–T3 landed — `scripts/wasm32_surface_audit.py` (POSITIVE-cfg predicate, comments excluded, derived
+  population from BOUNDARY.md + a `.git` dir so throwaway worktrees are not double-counted; NAMED/UNRESOLVED/UNCOVERED
+  buckets with the walk size printed under the verdict); T1 resolved 14/15 UNRESOLVED packages on ROW-BEARING static
+  evidence (two resolver shapes, four-way canaried); the 15th — riir-ai `riir-examples` — measured UNCOMPILABLE for
+  wasm32 (uuid missing the `js` randomness feature) and filed as riir-ai `.issues/894`, a finding not a folding, in
+  flight at close; the per-package reads also surfaced mmorpg's standalone `warm-tier-do` lane gap, landed same day
+  `b23dc52`; T3 excluded riir-ai's vendored `wgpu-hal` fork. Standing headline 22 NAMED · 1 UNRESOLVED (→894) ·
+  0 UNCOVERED over 23 packages / 190 files / 17 repos. Three instrument bugs — a confident 0-file walk (Python `\s`
+  into POSIX ERE), 17 false UNCOVERED (a derived `-p` list read as the worst bucket), 2 more (a `--manifest-path
+  "$unit/…"` lane) — recorded in the issue as the classifier-lessons canon. AGENTS.md §"A lane compiles what it
+  NAMES" carries the narrative; issue file removed at close, this row + git history are the durable record.)
+
 - **Issue 737 — nothing in this repo compiled for wasm32; the browser crate had 15 live findings to prove it** RESOLVED
   (2026-09-07; T0–T3 landed earlier the same day — 18 lint lines healed, `full_gate.sh` layer 2b with both simd128
   arms, derived package list incl. the root package, membership-pinned residue, the two wasm32 GOAT targets as
@@ -1278,6 +1291,33 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
   14m04s green. AGENTS.md §trigger health names the lane. Issue file removed at close — the nine-repo audit it
   anchored is COMPLETE (its last open item, riir-chain `.issues/130` T2, landed `d44b240a` same day); this row +
   git history are the durable record.)
+
+- **Issue 734 — a shell gate that ABORTS mid-run reports exit 0** RESOLVED
+  (2026-09-07; T0–T11 landed — `rc=$?; cleanup; exit $rc` cannot repair it (the saved rc is itself 0); the
+  completion-sentinel pattern landed in 37 scripts across 10 repos (`70eff640` + the T2–T5 waves), 40/41 tracked
+  scripts SENTINELLED, the single EXPOSED remainder `riir-ai/scripts/e2e_internet.sh` PROVEN inert (trap registered
+  at line 41 of 43, zero abort triggers in the window); verdict halves `scripts/trap_sentinel_gate.py` (this repo's
+  docs gate, membership-pinned, canaried both directions) + `scripts/trap_sentinel_drift_sweep.py` (17 repos, two
+  floors: max_exposed ceiling + min_scripts walk floor, exit 2 when the instrument is untrustworthy) + the premise
+  instrument `scripts/trap_launder_premise_matrix.py` (11 interpreters via docker). Three self-corrections, all
+  canary-caught: the REPLACED verdict's 1-of-1 false positive (`trap - EXIT` is a deregistration, not a handler),
+  the brace counter mis-reading an awk DATA brace → the UNPARSED verdict (never pooled), and the premise naming
+  errexit — not nounset — as the precondition, which over-claimed on 15/41 rows and spun off Issue 735. AGENTS.md
+  §"A gate that ABORTS reports exit 0" carries the narrative; issue file removed at close, this row + git history
+  are the durable record.)
+
+- **Issue 736 — leakage_probe + cross-space diagnostics: the modelless defender-side attribute-leak audit** RESOLVED
+  (2026-09-07; T1–T6 landed — `katgpt-core/src/leakage_probe/` (opt-in, zero deps): `probe()` → `LeakReport` with
+  verdict tiers InsufficientAlignment/Low/Elevated/High; cross-space diagnostics (`neighborhood_hit_rate`,
+  `alignment_mean_cos`) sharing the probe's kNN kernel; GD-free unpaired transport (deterministic subspace iteration
+  → PCA whitening via the shared `linalg::symmetric_eig` → CSLS-corrected entropic Sinkhorn → orthogonal-Procrustes
+  polar factor, deterministic multi-start against wrong-basin ICP lock-in). Gates G1 planted-leak + G1b
+  monotone-in-noise + G1c honest-negative + G2 smoke 10/10 PASS; T4 novelty deep-search → **Super-GOAT** (a
+  modelless cross-space leak SCORE is unshipped in literature and workspace); T5 consumer GOAT landed in
+  riir-neuron-db (`51e2ca1`+`6e14f4d`, Bench 495: planted top1 0.828 vs chance 0.086, lift 9.64, monotone
+  0.828→0.082 across α 1.0→0.05, probe 380 ms @ n=256); T6 stolen-DB risk-quantifier architecture guide filed as
+  riir-neuron-db `.research/308`. Durable record: README feature table + `.docs/09_feature_catalog` §95 +
+  `.research/540`; issue file removed at close.)
 
 - **Issue 735 — Issue 734's laundering premise is bash-3.2-ONLY, and "and 5.x" was never measured** RESOLVED
   (2026-09-07; T0–T5 + T2b landed `a95d2bd6` + peers across 11 repos; T3 answered + T4 resolved same day — issue
