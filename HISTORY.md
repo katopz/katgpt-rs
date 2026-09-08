@@ -1275,8 +1275,9 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
   named lanes, first CI red caught the workflow's missing `targets:` install and was fixed `e0b7c9e0`; T4 landed
   `091d29cd` — `--wasm32-only` (Layer 2b alone, sentinel armed above Layer 1, skipped-lane refusal) +
   `.github/workflows/wasm32_gate.yml`, the ubuntu per-push lane, measured 4m38s cold, three canaries + a full-mode
-  14m04s green. AGENTS.md §trigger health names the lane. Issue file KEPT: it is the nine-repo audit's anchor
-  (§Cross-repo) and riir-chain `.issues/130` — the audit's last open item — cites it; remove at audit close.)
+  14m04s green. AGENTS.md §trigger health names the lane. Issue file removed at close — the nine-repo audit it
+  anchored is COMPLETE (its last open item, riir-chain `.issues/130` T2, landed `d44b240a` same day); this row +
+  git history are the durable record.)
 
 - **Issue 735 — Issue 734's laundering premise is bash-3.2-ONLY, and "and 5.x" was never measured** RESOLVED
   (2026-09-07; T0–T5 + T2b landed `a95d2bd6` + peers across 11 repos; T3 answered + T4 resolved same day — issue
