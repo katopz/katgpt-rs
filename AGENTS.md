@@ -448,9 +448,12 @@ scripts/wasm32_surface_audit.py ../riir-ai # or one, by path
   (738 T3); the per-package reads surfaced one real lane gap
   (riir-mmorpg-examples' standalone `warm-tier-do`, lane landed same day)
   and one uncompilable surface (riir-ai's `riir-examples` browser examples,
-  filed there as `.issues/894`). Standing: **22 NAMED · 1 UNRESOLVED · 0
-  UNCOVERED** over 190 files / 23 packages — the 1 is the finding in
-  flight, not noise.
+  filed there as `.issues/894`). 894 resolved same day in riir-ai (uuid `js`
+  feature + a real clippy fix the never-linted wasm32 arm was carrying + a
+  LITERAL `-p riir-examples` example row in that repo's guard layer 1.22 —
+  a variable row reads as derived and would have kept the bucket). Standing:
+  **23 NAMED · 0 UNRESOLVED · 0 UNCOVERED** over 191 files / 23 packages
+  (measured 2026-09-08).
 - ⛔ It produced three confident wrong answers before it produced a right one,
   all in the classifier: a walk of **0 files** (a Python `\s` handed to
   `git grep -E`, which is POSIX ERE — caught only because the walk size prints
