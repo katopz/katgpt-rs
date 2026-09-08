@@ -1598,3 +1598,27 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
   4.0 budget. T2–T4 deferred `[-]` — reopen on any semantic
   eviction/windowing PR, riir-train Plan 343 T1.6 (Gemma-4 ring), or
   Research 523 H2O un-defer. Record: `.benchmarks/700_cond_audit_poc.md`.
+
+- **Issue 739 — katgpt-rs carried no rust-toolchain.toml: the box default
+  failed to build HEAD (E0658 on katgpt-percepta `isolate_lowest_one`)**
+  RESOLVED (T1+T2, 2026-09-08, `87dfa778`) — `rust-toolchain.toml` pins
+  channel 1.98.1 (minimal profile + clippy/rustfmt), mirroring the
+  owner-directed 2026-09-04 stack pin; measured: rustup resolves the pin via
+  the file, `cargo check --workspace` green, `cargo test -p katgpt-core
+  --lib` 1979/0, clippy 0.1.98 clean. **The CI interplay was the load-bearing
+  half:** `full_gate.yml` documents a DELIBERATE no-pin rot-gate design (@stable
+  so deny-level clippy lints red the weekly run) and `dtolnay/rust-toolchain`
+  does NOT export `RUSTUP_TOOLCHAIN` — so the bare pin would have silently
+  frozen the rot lane at 1.98.1 forever. full_gate.yml now carries an explicit
+  job-level `RUSTUP_TOOLCHAIN: stable` override (rot design preserved,
+  documented); `test.yml` installs the pinned channel via `rustup show`
+  (measures what consumers build); release-plz + feature-isolation workflows
+  converge to the pin unchanged. Premise update recorded: the M3 box default
+  drifted to stable=1.98.1 on 2026-09-04 (owner `rustup update stable`), so
+  the break reproduces today only on boxes whose default is older — exactly
+  the nondeterminism the pin exists to remove. T3 split: README/AGENTS pin
+  documentation DONE (same commit); the `workspace.package` `rust-version`
+  half deferred `[-]` — this workspace has no `[workspace.package]`
+  inheritance table, so resolution-time enforcement would mean touching ~30
+  member manifests (owner call if ever wanted; the toolchain file already
+  gates every command).
