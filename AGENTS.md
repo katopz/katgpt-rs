@@ -120,7 +120,12 @@ scripts/check_platform_gated_modules.sh --canary ../riir-train riir-train-gpu \
 
 Trigger health: `.github/workflows/full_gate.yml` runs the weekly rot-check
 cron from the default branch; `scripts/ci_gate_coverage.py` reports which
-declared triggers can actually fire, per workflow, per repo.
+declared triggers can actually fire, per workflow, per repo. Layer 2b also
+has its own PER-PUSH lane: `.github/workflows/wasm32_gate.yml` runs
+`full_gate.sh --wasm32-only` on ubuntu-latest (Issue 737 T4) — the lane is
+host-independent and `--lib`-only, so per-push does not reopen the cost the
+full gate's preamble rules out; the Monday macOS run remains the
+whole-surface wasm32 verdict.
 
 ## Docs gate + drift sweeps
 

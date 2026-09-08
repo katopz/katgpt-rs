@@ -1,8 +1,8 @@
 # Issue 737 — nothing in this repo compiles for wasm32, and the browser crate had 15 live findings to prove it
 
-**Status:** OPEN — T0–T3 landed (18 lint lines healed + `full_gate.sh` layer 2b, canaried); T4 (CI cadence) is an owner call. Anchor issue for the nine-repo wasm32 audit of 2026-09-07 — see §Cross-repo.
+**Status:** RESOLVED — T0–T4 landed (18 lint lines healed + `full_gate.sh` layer 2b canaried + the `--wasm32-only` per-push lane, Issue 737 T4). Anchor issue for the nine-repo wasm32 audit of 2026-09-07 — see §Cross-repo; KEEP until the audit's last open item (riir-chain `.issues/130`) lands, then remove per the noise-reduction rule.
 **CI catch 2026-09-07:** layer 2b's first runner run (`34137014037`) red the job — `full_gate.yml` never installed `wasm32-unknown-unknown`, and the gate REFUSED the partial run exactly as specified (16 wasm32 / 10 simd128 files named, exit 1, no pass printed). The refusal design worked; the workflow was the missing half — fixed by `targets: wasm32-unknown-unknown` on the dtolnay step (`e0b7c9e0`). The same run's 735-T3 probe printed the runner's bash + premise matrix (see 735: the runner is 3.2.57-only and launders).
-**Owner:** this repo (`scripts/full_gate.sh`, `crates/katgpt-moka-wasm`, `crates/katgpt-types/src/simd`, `crates/katgpt-attn-match`).
+**Owner:** this repo (`scripts/full_gate.sh`, `.github/workflows/wasm32_gate.yml`, `crates/katgpt-moka-wasm`, `crates/katgpt-types/src/simd`, `crates/katgpt-attn-match`).
 
 ## The finding
 
@@ -191,16 +191,44 @@ chain only ran at all because somebody happened to build the leaf.
       enable_raw_mode in module sys`. crossterm has no wasm32 backend. A TUI
       arena cannot target a browser; that is a fact about the dependency, not
       a gap, and it is recorded at the pin so nobody re-derives it.
-- [ ] T4 — **no CI trigger.** `full_gate.yml` runs weekly from the default
-      branch on `macos-latest`; this layer inherits that cadence and nothing
-      else. A wasm32 break would land on `develop` and sit for up to a week.
-      Whether that is acceptable is an owner call — the cheap alternative is
-      a per-push job, since the two arms are `--lib`-only and fast next to
-      layer 3. (Context for the call: the workflow preamble already measured
-      per-push TIME as affordable (~2m17s/run warm); the open question is
-      macOS-minute BILLING across several daily-pushing agents. The 2026-09-07
-      red above is unrelated to cadence — it was the missing-target
-      integration gap, fixed same day.)
+- [x] T4 — **LANDED: the lane has its own per-push CI trigger, cheap by
+      construction.** `scripts/full_gate.sh` gained `--wasm32-only` (Layer 2b
+      ONLY — the lane makes no macOS claim, and Layers 3-6 are the
+      whole-surface claim this mode must not pay for), and
+      `.github/workflows/wasm32_gate.yml` runs it on **ubuntu-latest** per
+      push to develop/main (paths-filtered to sources, manifests, the
+      lockfile, and the gate definition itself) + dispatch. Linux because the
+      lane is host-INDEPENDENT — which is why this can be per-push when the
+      FULL gate cannot: the full gate's macOS-billing preamble prices a
+      whole-surface run; a `--lib`-only wasm32 lane compiles no native unit
+      and prices at Linux 1×. Measured locally: **4m38s wall on a cold wasm32
+      target dir** (user 2m08 — the rest is parallel dep compilation;
+      rust-cache holds the deps in CI, keyed separately from the full-gate
+      cache because the target triple differs).
+
+      Incremental-lint semantics, stated in the workflow rather than hidden:
+      no `cargo clean` per push — cargo fingerprints re-lint exactly the
+      crates the pushed commit changed (the per-push claim), a toolchain bump
+      changes the rust-cache key and forces a full re-lint, and the Monday
+      macOS run remains the whole-surface wasm32 verdict.
+
+      Three canaries, all measured after the refactor:
+
+      | check | result |
+      |---|---|
+      | planted `unused_variables` inside `quantize_tensor_wasm_simd` (the double-gated kernel) | **exit 1** — `✗ wasm32 --lib lane failed (simd128 on)`, names the finding |
+      | missing target + `--allow-partial-platform` (rustup shim on PATH) | **exit 1** — "PARTIAL pass — the lane was SKIPPED … It verified nothing". ⛔ A skipped lane must NOT read as a pass in a mode that has NO layers behind it: the full gate can absorb a partial Layer 2b because Layers 3-6 still ran; wasm32-only has nothing behind it, so `WASM_LANE_RAN=0` refuses with exit 1 |
+      | unknown argument | **exit 1**, names the supported set |
+
+      Full-mode regression after the refactor: `./scripts/full_gate.sh`
+      end-to-end — **exit 0, 14m04s**, every layer green (macOS ✓, both
+      wasm32 arms ✓, layer 3 clean, release profile 1430 artifacts clean).
+      The completion sentinel moved ABOVE Layer 1 so the new early-exit path
+      is sentinel-protected too (bash-3.2 abort laundering, Issue 734/735);
+      the `trap_sentinel_gate` membership pin is untouched and the docs gate
+      was re-run green. (The preamble's billing question is answered by
+      SCOPE, not by a budget ruling: per-push is paid for the `--lib`-only
+      lane on Linux, and still not paid for the whole-surface macOS run.)
 
 ## Cross-repo: the whole workspace, audited 2026-09-07
 
