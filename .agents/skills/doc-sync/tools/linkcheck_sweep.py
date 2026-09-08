@@ -40,7 +40,7 @@ def tracked_md(repo: Path):
         yield repo / rel
 
 
-def audit_target(raw: str, md_file: Path):
+def audit_target(raw: str, md_file: Path, repo: Path):
     t = raw[1:-1] if raw.startswith("<") and raw.endswith(">") else raw
     t = unquote(t.strip())
     if not t or t.startswith("#"):
@@ -61,6 +61,20 @@ def audit_target(raw: str, md_file: Path):
         resolved = WORKSPACE / candidate.relative_to(candidate.anchor)
     else:
         resolved = md_file.parent / candidate
+        try:
+            resolved = resolved.resolve(strict=False)
+        except OSError:
+            return path_part
+        if not resolved.exists() and candidate.parts and candidate.parts[0] == "..":
+            # Workspace convention: authors write `../sibling/...` from the
+            # REPO ROOT's frame ("escape this repo into the workspace"), not
+            # standard file-relative markdown. From a subdirectory file that
+            # string resolves to <repo>/sibling/... (never exists) and produced
+            # false positives by the dozen (10 of 11 in one game-sdk plan).
+            # Second chance: resolve the SAME string against the repo root,
+            # where `..` genuinely escapes into the workspace. Tier 1 (file-
+            # relative) still wins, so in-repo links are never re-interpreted.
+            resolved = (repo / candidate).resolve(strict=False)
     try:
         resolved = resolved.resolve(strict=False)
     except OSError:
@@ -82,7 +96,7 @@ def main():
             scanned += 1
             for lineno, line in enumerate(text.splitlines(), 1):
                 for m in LINK_RE.finditer(line):
-                    missing = audit_target(m.group(1), md)
+                    missing = audit_target(m.group(1), md, repo)
                     if missing:
                         findings.setdefault(repo.name, []).append(
                             (str(md.relative_to(repo)), lineno, missing)

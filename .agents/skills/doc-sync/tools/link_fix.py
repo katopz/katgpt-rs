@@ -67,7 +67,7 @@ def decide(target: str, md: Path):
     if target.startswith(("~", "/Users/")) or "*" in target:
         return "NA", None
     # a link into a workspace repo ABSENT on this box is UNVERIFIABLE, not broken
-    # (it may resolve fine where that repo is checked out) — skip, never delink
+    # (it may resolve fine where that repo is checked out) - skip, never delink
     m_absent = re.match(r"^(?:\.\./)+(?:[A-Za-z0-9_.-]+/)*([A-Za-z0-9_.-]+?)/", target)
     if m_absent and m_absent.group(1) in KNOWN_REPOS and not (WORKSPACE / m_absent.group(1)).exists():
         return "NA", None
