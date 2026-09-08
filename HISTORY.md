@@ -1274,10 +1274,12 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
   population from BOUNDARY.md + a `.git` dir so throwaway worktrees are not double-counted; NAMED/UNRESOLVED/UNCOVERED
   buckets with the walk size printed under the verdict); T1 resolved 14/15 UNRESOLVED packages on ROW-BEARING static
   evidence (two resolver shapes, four-way canaried); the 15th — riir-ai `riir-examples` — measured UNCOMPILABLE for
-  wasm32 (uuid missing the `js` randomness feature) and filed as riir-ai `.issues/894`, a finding not a folding, in
-  flight at close; the per-package reads also surfaced mmorpg's standalone `warm-tier-do` lane gap, landed same day
-  `b23dc52`; T3 excluded riir-ai's vendored `wgpu-hal` fork. Standing headline 22 NAMED · 1 UNRESOLVED (→894) ·
-  0 UNCOVERED over 23 packages / 190 files / 17 repos. Three instrument bugs — a confident 0-file walk (Python `\s`
+  wasm32 (uuid missing the `js` randomness feature) and filed as riir-ai `.issues/894`, a finding not a folding —
+  894 resolved the SAME DAY in riir-ai (uuid `js` feature + a real clippy fix the never-linted wasm32 arm was
+  carrying + a LITERAL `-p riir-examples` example row in that repo's guard layer 1.22, since a variable row reads
+  as derived); the per-package reads also surfaced mmorpg's standalone `warm-tier-do` lane gap, landed same day
+  `b23dc52`; T3 excluded riir-ai's vendored `wgpu-hal` fork. Standing headline 23 NAMED · 0 UNRESOLVED ·
+  0 UNCOVERED over 23 packages / 191 files / 17 repos (measured 2026-09-08). Three instrument bugs — a confident 0-file walk (Python `\s`
   into POSIX ERE), 17 false UNCOVERED (a derived `-p` list read as the worst bucket), 2 more (a `--manifest-path
   "$unit/…"` lane) — recorded in the issue as the classifier-lessons canon. AGENTS.md §"A lane compiles what it
   NAMES" carries the narrative; issue file removed at close, this row + git history are the durable record.)
