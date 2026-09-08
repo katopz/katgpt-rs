@@ -489,6 +489,8 @@ C++ reference (RTX 3090, BSA): 128K → 2.6K (50× reduction), TTFT 257s → 24.
 
 Both reductions multiply: PFlash reduces tokens, TurboQuant reduces bits per token.
 
+> **PASS-Redirects (synthesis):** Jiang et al. [arXiv:2407.02490 "MInference 1.0: Accelerating Pre-filling for Long-Context LLMs via Dynamic Sparse Attention"] — per-head static patterns (A-shape/Vertical-Slash/Block-Sparse) computed once at calibration = the same offline-calibration shape as RT-Turbo's per-head retrieval scoring; covered by PFlash + rt_turbo (this doc + Bench 035), league-adjacent dense cells exclude approximate prefill by pin. Lai et al. [arXiv:2502.20766 "FlexPrefill: A Context-Aware Sparse Attention Framework for Long-Context LLM Prefilling"] — per-prompt context-aware selection with lower selection-scan overhead; the runtime-selection endpoint's long-P regression is already measured (negative_results #36: KV-outer 2.02× @32K → 0.83× @512K); no product pull below the opt-in bar.
+
 ## Additional Types
 
 ### DraftResult

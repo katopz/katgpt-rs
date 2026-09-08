@@ -756,6 +756,8 @@ Root cause: DashAttention's entmax routing is already a strong sparse-attention 
 
 **Lesson.** Two distinct failure modes: (1) **inference-time adaptations of training-time sparse patterns produce no quality gain** without the trained attention divergence (per-group); (2) **savings/recall criteria in direct tension** (adaptive-k) cannot both pass — the GOAT gate design itself was flawed, not just the implementation. When designing a dual-criterion gate (AND of two metrics), verify the criteria aren't structurally incompatible.
 
+> **PASS-Redirects (synthesis):** Jiang et al. [arXiv:2407.02490 "MInference 1.0: Accelerating Pre-filling for Long-Context LLMs via Dynamic Sparse Attention"] + Lai et al. [arXiv:2502.20766 "FlexPrefill: A Context-Aware Sparse Attention Framework for Long-Context LLM Prefilling"] — both target the KV-outer root cause (selection-scan overhead growing with P): MInference by hoisting patterns to a one-time offline calibration (the RT-Turbo/PFlash shape, `.docs/05_adaptation/lucebox_techniques.md` Technique 8), FlexPrefill by cheaper context-aware per-prompt selection. Neither changes this verdict's endpoints — re-open only if a runtime-selected variant beats the 512K regression under the same gate.
+
 📖 Features: `msa_sparse` + 3 sub-features (all opt-in permanently). Phase 12 (2026-07-04): primitives moved to `katgpt-attn`.
 
 ## 37. Binned Blend Estimator — REAL ARENA STRICTLY HARMFUL (STAYS OPT-IN)
