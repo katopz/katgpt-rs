@@ -2922,12 +2922,12 @@ Default: **Hybrid OCT+PQ** (OCTOPUS triplet encoding + PlanarQuant 2D Givens rot
 
 ### Prerequisites
 
-- Rust 1.85+ (edition 2024, 1.93+ recommended)
+- Rust — pinned by [`rust-toolchain.toml`](rust-toolchain.toml); `cargo` resolves the pinned channel automatically on any machine with `rustup` (a fresh clone auto-installs it, minimal profile + clippy/rustfmt). The pin is authoritative — raising it is a deliberate act in its own reviewed commit.
 
 ### Build & Run
 
 ```sh
-cargo build --release                              # Build with optimizations
+cargo build --release                              # Build with optimizations (uses the rust-toolchain.toml pin)
 cargo check --all-features                         # Check every feature combo compiles
 cargo test --quiet --workspace --all-features       # Run all tests (301 test files)
 cargo run --example sudoku_01_9x9 --features sudoku # Sudoku solver

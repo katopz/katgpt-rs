@@ -40,6 +40,10 @@ concluding "needs gradient descent." Canonical-failure story: HISTORY.md.
 ## Build Commands
 
 ```bash
+# Toolchain: pinned by rust-toolchain.toml (1.98.1, issue 739) — cargo resolves
+# it automatically; full_gate.yml is the deliberate RUSTUP_TOOLCHAIN=stable
+# rot-gate exception.
+
 # Default features (the GOAT-validated, promoted primitives)
 cargo check
 cargo test -p katgpt-core --lib

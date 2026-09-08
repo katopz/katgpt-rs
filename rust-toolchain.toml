@@ -1,0 +1,24 @@
+# Toolchain pin — every `cargo` command in this repo uses this channel.
+#
+# Without this file cargo falls back to the box default, and HEAD uses an API
+# older stable channels reject:
+#
+#   error[E0658]: isolating the lowest set bit is unstable
+#
+# (`u32::isolate_lowest_one`, `crates/katgpt-percepta/src/legacy/mod.rs`,
+# stabilized after 1.93.) Every sibling workspace in the stack pins the same
+# channel (owner-directed 2026-09-04), so this file is what makes a plain
+# clone-and-`cargo check` — the first thing an external consumer does —
+# behave identically everywhere instead of depending on whatever the box
+# happens to have.
+#
+# `profile = "minimal"` keeps a fresh clone's auto-install lean; clippy and
+# rustfmt are still explicit below because the repo's gates need them.
+#
+# Raising this is a deliberate act: bump `channel` in its own reviewed commit
+# and fix the new lints there. (The weekly rot gate deliberately overrides
+# this pin with `RUSTUP_TOOLCHAIN=stable` — see .github/workflows/full_gate.yml.)
+[toolchain]
+channel = "1.98.1"
+profile = "minimal"
+components = ["clippy", "rustfmt"]

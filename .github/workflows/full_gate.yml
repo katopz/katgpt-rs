@@ -81,19 +81,27 @@ jobs:
     # Generous: the local cold run exceeded 13 min on much better hardware, and
     # a cache miss here means a full cold build of every target at every feature.
     timeout-minutes: 180
+    env:
+      # This gate is the repo's ROT detector, so it runs at @stable — NOT at
+      # the rust-toolchain.toml pin (issue 739). The pin makes local/consumer
+      # builds deterministic; the rot property needs the opposite: clippy
+      # gains deny-level lints between releases, and one of the five breaks
+      # this gate first caught was exactly that (`approx_constant`,
+      # deny-by-default). dtolnay/rust-toolchain does NOT export
+      # RUSTUP_TOOLCHAIN, so without this override cargo inside the checkout
+      # would resolve the pin file and the gate would silently freeze at the
+      # pinned channel. A weekly red on a toolchain bump is the gate working,
+      # not flaking — read the diagnostic before assuming the code changed.
+      RUSTUP_TOOLCHAIN: stable
     steps:
       - uses: actions/checkout@v6
 
       # Same action + channel as `release-plz.yml`, the repo's only other Rust
-      # workflow — one way to install a toolchain, not two.
-      #
-      # The repo pins no toolchain (no rust-toolchain.toml, no rust-version), so
-      # `@stable` is what a developer here actually gets. That is deliberate for
-      # a rot gate: clippy gains deny-level lints between releases, and one of
-      # the five breaks this gate first caught was exactly that
-      # (`approx_constant`, deny-by-default). A weekly run that reds on a
-      # toolchain bump is the gate working, not flaking — read the diagnostic
-      # before assuming the code changed.
+      # workflow — one way to install a toolchain, not two. (release-plz and
+      # the other test workflows have no RUSTUP_TOOLCHAIN override, so they
+      # resolve rust-toolchain.toml and run at the pin — what consumers get.
+      # This workflow is the deliberate stable-override exception; see env
+      # above.)
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:

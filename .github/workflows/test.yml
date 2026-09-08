@@ -55,7 +55,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install toolchain
-        run: rustup toolchain install stable --profile minimal
+        # rust-toolchain.toml (issue 739) is authoritative: `rustup show`
+        # resolves the pinned channel from the file and installs it (minimal
+        # profile + clippy/rustfmt per the file) if absent, so the floored
+        # test gate measures what consumers actually build. The stable-channel
+        # rot lane is full_gate.yml's documented override, not this gate's job.
+        run: rustup show active-toolchain
 
       - name: Cache cargo
         uses: actions/cache@v4
