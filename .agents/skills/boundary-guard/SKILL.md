@@ -157,6 +157,7 @@ Rows carried full narratives until this compaction; `git log -p -- .agents/skill
 
 | Date | Run | Verdict | Record |
 |---|---|---|---|
+| 2026-09-09 | 46th — full + S1 + S5 (trigger: Plan 575 landings — ai `1099c9e65`/`8b4c4f80e`/`1a5dfdff4` + seal `f6460477` attack_reasoning forward; box busy with a sibling pipeline, contract script verified not-mid-edit first) | exit 0, 17 repos / 236 edges unchanged; 2 known-drift (expected pair); S1 clean; S5 empty; C8 632-behind/6-security recorded | — |
 | 2026-09-08 | 45th — full-workspace contract (quiet-box window; trigger: landings since the 44th) | exit 0, 17 repos / 236 edges unchanged; 2 known-drift (expected pair) | — (this compaction commit logs it) |
 | 2026-09-08 | 44th — scoped seal-remake + riir-ai + S5 (box saturated by the p335 Bonsai arm) | riir-ai exit 1 = C6 lora ratchet 3082→3088 (888-T2 landing skipped its re-pin; +6 = docs + ctor, zero training semantics) → re-pinned, re-run exit 0 / 80 edges; seal-remake CLEAN 19 edges; S5 empty on the post-014 view code | riir-ai `644f3012a` · kat `2c57a4d0` |
 | 2026-09-08 | 43rd — full + S1 (trigger: sibling docs landings) | CLEAN 17/236 unchanged; C8 620-behind recorded; hygiene: ai 852+891 resolved files removed (15→13 index) | — |
