@@ -59,6 +59,14 @@ MANIFEST_PATH_RE = re.compile(r"--manifest-path[= ]+[\"']?([^\"'\s]+)")
 # up vendored drops no repo owns (the trap `trap_exit_launder_audit` hit).
 LANE_GLOBS = ["scripts/*", ".github/*", ".github/workflows/*", "*.sh"]
 
+# Vendored upstream code is not this workspace's to gate (Issue 738 T3): the
+# lanes themselves exclude `vendor/` (riir-ai's layer 1.22 derives its `-p`
+# list with `grep -v '^vendor/'`), so a vendored fork's wasm32 code would show
+# UNRESOLVED forever while the workspace's own answer — "not ours" — is
+# already encoded in the lane. riir-ai's tracked `wgpu-hal-30.0.0` fork (11
+# positive sites, Plan 536 / Issue 663) is the case that forced the question.
+VENDOR_PARTS = ("vendor/", "/vendor/")
+
 
 def git(repo: Path, *args: str) -> str:
     r = subprocess.run(
@@ -103,10 +111,21 @@ def package_of(repo: Path, rel: str) -> str | None:
         d = d.parent
 
 
-def positive_packages(repo: Path) -> tuple[dict[str, int], int]:
-    """(package -> positive cfg site count, files walked)."""
-    files = [f for f in git(repo, "grep", "-lE", CFG_ERE, "--", "*.rs").splitlines() if f]
+def positive_packages(repo: Path) -> tuple[dict[str, int], list[str], int]:
+    """(package -> positive cfg site count, positive files, files walked).
+
+    The walk size is ALL tracked wasm32-mentioning .rs (minus vendored), not
+    just the positive ones: the floor's job is to catch a BLIND grep, and a
+    grep that silently lost the native-only-guard half of the corpus would
+    still show every positive file. Original-floor semantics (Issue 738's
+    walk-size-next-to-verdict rule)."""
+    files = [
+        f
+        for f in git(repo, "grep", "-lE", CFG_ERE, "--", "*.rs").splitlines()
+        if f and not f.startswith(VENDOR_PARTS) and VENDOR_PARTS[1] not in f"/{f}"
+    ]
     hits: dict[str, int] = {}
+    positive_files: list[str] = []
     for rel in files:
         try:
             lines = (repo / rel).read_text(encoding="utf-8", errors="replace").splitlines()
@@ -120,7 +139,8 @@ def positive_packages(repo: Path) -> tuple[dict[str, int], int]:
         if n:
             pkg = package_of(repo, rel) or "(unattributed)"
             hits[pkg] = hits.get(pkg, 0) + n
-    return hits, len(files)
+            positive_files.append(rel)
+    return hits, positive_files, len(files)
 
 
 def logical_lines(text: str) -> list[str]:
@@ -144,11 +164,16 @@ def logical_lines(text: str) -> list[str]:
     return out
 
 
-def lane_coverage(repo: Path) -> tuple[set[str], int, int, int, int]:
-    """(literally-named pkgs, rows, --workspace rows, derived rows, bare rows)."""
+def lane_coverage(repo: Path) -> tuple[set[str], int, int, int, int, list[str]]:
+    """(literally-named pkgs, rows, --workspace rows, derived rows, bare rows,
+    row-bearing files). The last item feeds the resolver below: an upgrade
+    may only cite a file that already carries a wasm32 cargo row, so a DEPLOY
+    path mentioning a unit can never upgrade a package the audit family's
+    founding lesson says is not gated (737: `build-*.sh` is not a gate)."""
     named: set[str] = set()
     rows = wildcards = derived = 0
     root_only = 0
+    row_files: list[str] = []
     seen: set[str] = set()
     for glob in LANE_GLOBS:
         for rel in git(repo, "ls-files", "--", glob).splitlines():
@@ -159,6 +184,7 @@ def lane_coverage(repo: Path) -> tuple[set[str], int, int, int, int]:
                 text = (repo / rel).read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
+            file_has_row = False
             for ln in logical_lines(text):
                 if "wasm32-unknown-unknown" not in ln or not CARGO_ROW_RE.search(ln):
                     continue
@@ -166,6 +192,7 @@ def lane_coverage(repo: Path) -> tuple[set[str], int, int, int, int]:
                 if re.match(r"\s*(#|//|echo\b|printf\b)", ln):
                     continue
                 rows += 1
+                file_has_row = True
                 if DASH_P_VAR_RE.search(ln):
                     derived += 1
                     continue
@@ -191,7 +218,88 @@ def lane_coverage(repo: Path) -> tuple[set[str], int, int, int, int]:
                     # decidable, so it credits the root package by name
                     # instead of parking it in UNRESOLVED.
                     root_only += 1
-    return named, rows, wildcards, derived, root_only
+            if file_has_row:
+                row_files.append(rel)
+    return named, rows, wildcards, derived, root_only, row_files
+
+
+# The derivation formula shared by every Shape-A lane in the workspace
+# (katgpt-rs full_gate.sh layer 2b, riir-ai layer 1.22, riir-mmorpg-examples
+# layer 2c): map wasm32-bearing files under `crates/<name>/src/` to `-p
+# <name>`. Both sed spellings occur — BRE `\([^/]*\)` (katgpt-rs, riir-ai)
+# and ERE `([^/]*)` (riir-mmorpg-examples' `sed -E`) — so the backslash is
+# optional in the detection pattern. Detection is the literal pattern text,
+# and the resolver RE-DERIVES the set with the same rule rather than trusting
+# the script — a lane whose grep filter drifts stops matching its own
+# formula's scope only if the scope text drifts too, and each repo's own
+# membership pin is the second net.
+DERIVED_SCOPE_RE = re.compile(r"crates/\\?\(\[\^/\]\*\\?\)/src/")
+# A unit-dir token (Shape B): `cloudflare/<dir>` pinned literally in a
+# row-bearing lane (riir-dapps L7, riir-deployer 5/5, riir-mmorpg-examples 2e).
+UNIT_TOKEN_RE = re.compile(r"\b((?:cloudflare|wasm)/[A-Za-z0-9_-]+)")
+
+
+def resolve_unresolved(
+    repo: Path,
+    hits: dict[str, int],
+    positive_files: list[str],
+    row_texts: list[str],
+    named: set[str],
+) -> tuple[set[str], list[str]]:
+    """UNRESOLVED packages the lane provably selects, per Issue 738 T1.
+
+    Two evidence rules, both requiring row-bearing files only (a DEPLOY path
+    mentioning a unit can never upgrade a package — the audit family's
+    founding lesson is that `build-*.sh` is not a gate):
+    A. the repo's lane carries the workspace's standard derivation formula
+       (`crates/([^/]*)/src/` -> `-p <name>`); any package with a positive
+       site under that scope is selected by construction — the derivation
+       enumerates exactly the packages the scope matches. Deliberately NOT
+       extended to root-`src/` sites: katgpt-rs's derivation appends the root
+       package, riir-ai's and riir-mmorpg-examples' do not, and the one repo
+       where it matters already names its root via a bare row.
+    B. a unit-dir token whose manifest names the package: the membership pin
+       lists the unit literally, and the pin reds when the derived set
+       changes, so the lane cannot silently stop selecting it.
+    Packages already literally named by a row skip the resolver. Everything
+    else stays UNRESOLVED — the bucket remains the honest "a human has not
+    answered this yet", never folded into NAMED.
+    Returns (upgraded packages, notes explaining each upgrade).
+    """
+    upgraded: set[str] = set()
+    notes: list[str] = []
+    shape_a = any(DERIVED_SCOPE_RE.search(t) for t in row_texts)
+    all_text = "\n".join(row_texts)
+    if shape_a:
+        scope_pkgs = {
+            package_of(repo, rel)
+            for rel in positive_files
+            if rel.startswith("crates/") and "/src/" in rel
+        }
+        scope_pkgs.discard(None)
+        for pkg in scope_pkgs:
+            if pkg in hits and pkg not in named:
+                upgraded.add(pkg)
+                notes.append(f"{pkg}: derived-scope site under crates/*/src/ (Shape A)")
+    for pkg in hits:
+        if pkg in named or pkg in upgraded:
+            continue
+        # B: unit-dir token whose manifest names this package. The manifest
+        # must EXIST: package_of's walk probes repo/Cargo.toml as a fallback
+        # (correct for site attribution), so a phantom `cloudflare/<x>` token
+        # in a row file would otherwise resolve to the repo ROOT package and
+        # upgrade it on nothing (caught by the canary, not by reading).
+        for m in UNIT_TOKEN_RE.finditer(all_text):
+            unit = m.group(1)
+            unit_manifest = repo / f"{unit}/Cargo.toml"
+            if not unit_manifest.is_file():
+                continue
+            unit_pkg = package_of(repo, f"{unit}/Cargo.toml")
+            if unit_pkg == pkg:
+                upgraded.add(pkg)
+                notes.append(f"{pkg}: membership pin names {unit} (Shape B)")
+                break
+    return upgraded, notes
 
 
 def main() -> int:
@@ -202,25 +310,32 @@ def main() -> int:
     findings: list[tuple[str, str, int]] = []
     unresolved: list[tuple[str, str, int]] = []
     for repo in repos:
-        hits, files_walked = positive_packages(repo)
+        hits, positive_files, files_walked = positive_packages(repo)
         tot_files += files_walked
         if not hits:
             if files_walked:
                 print(f"  {repo.name}: {files_walked} file(s) mention wasm32, "
                       f"0 with POSITIVE cfgs (all native-only guards) — nothing to compile")
             continue
-        named, rows, wildcards, derived, root_only = lane_coverage(repo)
+        named, rows, wildcards, derived, root_only, row_files = lane_coverage(repo)
+        row_texts = []
+        for rel in row_files:
+            try:
+                row_texts.append((repo / rel).read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                pass
         if root_only:
             root_pkg = package_of(repo, "Cargo.toml")
             if root_pkg:
                 named.add(root_pkg)
+        # Issue 738 T1: resolve the derived-row question per package, with
+        # the evidence rule recorded per upgrade. UNRESOLVED stays UNRESOLVED
+        # for anything no rule covers — the bucket remains the honest "a
+        # human has not answered this yet", never folded into NAMED.
+        resolved, res_notes = resolve_unresolved(
+            repo, hits, positive_files, row_texts, named
+        )
         tot_pos_pkgs += len(hits)
-        # Three buckets, and the middle one must not be folded into either
-        # neighbour. A wildcard row (no `-p`) covers its own workspace, and
-        # whether it reaches a given package is the separate-workspace axis
-        # (737 #5) — undecidable here. A derived row enumerates its packages
-        # at run time. Both are UNRESOLVED: a question to answer per package,
-        # never a defect claim and never a pass.
         reachable = wildcards + derived
         print(f"  {repo.name}: {files_walked} file(s) walked · "
               f"{len(hits)} package(s) with positive cfgs · "
@@ -229,6 +344,8 @@ def main() -> int:
         for pkg in sorted(hits):
             if pkg in named:
                 mark = "✓ named"
+            elif pkg in resolved:
+                mark = "✓ derived"
             elif reachable:
                 mark = "? UNRESOLVED"
                 tot_unres += 1
@@ -238,6 +355,8 @@ def main() -> int:
                 tot_uncov += 1
                 findings.append((repo.name, pkg, hits[pkg]))
             print(f"      {mark:<14} {pkg}  ({hits[pkg]} site(s))")
+        for note in res_notes:
+            print(f"        · {note}")
     print()
     print(f"  floors — {tot_files} file(s) walked over {len(repos)} repo(s); "
           f"{tot_pos_pkgs} package(s) with positive wasm32 cfgs")
@@ -257,7 +376,14 @@ def main() -> int:
     print("\n  A report, not a gate — exit 0. Neither bucket is automatically a "
           "defect: a\n  package can be unbuildable for wasm32 by construction "
           "(seal-remake's authority\n  bin), where the repair is deleting the "
-          "dead arm, not adding a row.")
+          "dead arm, not adding a row.\n")
+    print("  Resolution (Issue 738 T1): a derived-row package upgrades to ✓ "
+          "derived only\n  on static evidence from a row-bearing lane file — "
+          "Shape A: the repo carries\n  the workspace's standard derivation "
+          "formula (crates/([^/]*)/src/ -> -p <name>)\n  and the package has a "
+          "site in that scope; Shape B: a membership pin names\n  a unit dir "
+          "whose manifest IS the package. Anything else stays ? UNRESOLVED —\n  "
+          "a human has not answered it, and that is the bucket's job.")
     return 0
 
 

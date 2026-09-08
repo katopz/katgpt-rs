@@ -1,6 +1,6 @@
 # Issue 738 — the wasm32 lanes compile what they NAME; nothing checks that what they name is the whole surface
 
-**Status:** OPEN 2026-09-07 — instrument landed (`scripts/wasm32_surface_audit.py`), first measurement below: **9 NAMED · 15 UNRESOLVED · 0 UNCOVERED** over 17 repos / 196 files / 24 positive-cfg packages. Nothing is provably uncompiled; 15 packages need a per-package read.
+**Status:** RESOLVED 2026-09-08 — T0–T3 landed. T1: 14 of 15 UNRESOLVED packages resolved on static evidence (two resolver shapes, four-way canaried; the 15th — riir-ai `riir-examples` — measured UNCOMPILABLE for wasm32 and filed as riir-ai `.issues/894`, which is a finding, not a folding). T1 also surfaced one real lane gap: riir-mmorpg-examples' `warm-tier-do` (a standalone wasm32 Worker workspace nothing compiled) — lane landed same day (`riir-mmorpg-examples` `b23dc52`, layer 2e, canaried). T3: vendored upstream excluded from the walk (riir-ai's tracked `wgpu-hal` fork lives under `vendor/`, which its own lane already excluded). Standing headline: **22 NAMED · 1 UNRESOLVED (riir-examples → 894) · 0 UNCOVERED** over 23 packages / 190 files / 17 repos.
 **Owner:** this repo (the cross-repo audit family), with per-repo follow-ups.
 
 ## The axis
@@ -84,16 +84,62 @@ known independently.
 
 - [x] T0 — build the instrument; derive the population; classify into three
       buckets with the walk size printed underneath the verdict.
-- [ ] T1 — resolve the 15 UNRESOLVED rows per package: for each, does the
-      repo's derived/wildcard row actually select it? Where it does, the row
-      is fine and the audit can be taught the mapping. Where it does not,
-      either add an arm or record why the package cannot have one.
-- [ ] T2 — decide whether the seal-remake / riir-game-sdk **membership pin**
-      pattern (positive-cfg package set pinned by membership, walk size
-      floored underneath) belongs in every repo, or whether this workspace-wide
-      report supersedes seventeen local copies. One instrument beats seventeen
-      hand-maintained pins if someone runs it; the pins fail closed and this
-      does not. They are not exclusive — the pin is a gate, this is a report.
-- [ ] T3 — `riir-ai`'s tracked `wgpu-hal` (11 positive sites) is a vendored
-      fork. Confirm it is intended to be in the walk at all; a vendored
-      upstream's wasm32 code is not this workspace's to gate.
+- [x] T1 — **RESOLVED 14/15, and the 15th is itself the finding.** The
+      resolver (`resolve_unresolved` in the audit) upgrades a derived-row
+      package to ✓ derived only on static evidence from a ROW-BEARING lane
+      file (a file that already carries a wasm32 cargo row — a DEPLOY path
+      mentioning a unit can never upgrade a package; `build-*.sh` is not a
+      gate is this family's founding lesson):
+
+      - **Shape A** — the lane carries the workspace's standard derivation
+        formula (`crates/([^/]*)/src/` → `-p <name>`, both sed spellings);
+        any package with a positive site in that scope is selected by
+        construction. Root-`src/` sites deliberately NOT extended (katgpt-rs
+        appends the root, riir-ai/mmorpg do not, and katgpt-rs's root is
+        already named by its bare row).
+      - **Shape B** — a membership pin names a unit dir whose manifest IS
+        the package (dapps `kat-service`, deployer `control-do`, mmorpg
+        `warm-tier-do`). The manifest must EXIST: `package_of`'s walk probes
+        `repo/Cargo.toml` as a fallback, so a phantom unit token resolved to
+        the repo ROOT package — caught by canary 3, not by reading.
+
+      Four canaries: both sed spellings detected + non-formula rejected;
+      katgpt-rs resolves exactly {katgpt-core, katgpt-types} with
+      already-named packages untouched; a phantom unit token upgrades
+      nothing; vendored wgpu-hal excluded. An earlier draft had a THIRD rule
+      (package name as a bare token on a non-comment lane line) — deleted:
+      it upgraded riir-ai's `riir-examples` off a NATIVE `-p` row, the exact
+      confident-wrong this issue's bug log warns about.
+
+      **The 15th:** riir-ai `riir-examples` — no `src/` scope site, and the
+      browser examples measured UNCOMPILABLE for wasm32 (`uuid` missing the
+      `js` randomness feature; the same defect 892 fixed for `riir-games`,
+      one crate over). Filed as **riir-ai `.issues/894`** — an unresolved
+      package that cannot compile is a finding, and it stays ? UNRESOLVED
+      here until 894 lands.
+
+      **And one real lane gap fell out of the per-package reads:**
+      riir-mmorpg-examples' `warm-tier-do` — a STANDALONE wasm32 Worker
+      workspace whose 2c/2d lanes provably could not reach it — got its lane
+      that day (`b23dc52`, guard layer 2e, derived + membership-pinned,
+      canaried, measured clean 36.9s cold). The audit finding it as
+      UNRESOLVED is what surfaced the gap; the resolved bucket is how the
+      next one gets noticed.
+- [x] T2 — **DECIDED: both, with the division the issue itself sketched.**
+      The local membership pins stay where they landed (riir-ai 1.22,
+      riir-game-sdk 027, riir-dapps 022, riir-deployer 004, seal-remake 010,
+      riir-mmorpg-examples 2c/2e) — they are GATES: fail-closed, cheap,
+      per-repo, and they red the moment their set changes. This audit stays
+      a REPORT (exit 0): it is the drift net for the repos and surfaces the
+      pins cannot see (standalone workspaces, new packages, new repos), run
+      on demand from katgpt-rs. No seventeenth hand-maintained copy of
+      either — a repo earns a pin when it gains a wasm32 surface, and this
+      report is what notices.
+- [x] T3 — **CONFIRMED: vendored upstream is out of the walk.** riir-ai's
+      `wgpu-hal-30.0.0` (11 positive sites) is the tracked fork under
+      `vendor/` (Plan 536 / Issue 663, exposed for the raw Metal buffer),
+      and riir-ai's OWN lane already excludes `vendor/` from its derivation
+      (`grep -v '^vendor/'`). The audit now excludes it too — a vendored
+      upstream's wasm32 code is not this workspace's to gate, and counting
+      it kept a permanent UNRESOLVED row alive for code nobody here will
+      ever lint. Walk floor 196 → 190 files; package floor 24 → 23.

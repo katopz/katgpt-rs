@@ -442,7 +442,15 @@ scripts/wasm32_surface_audit.py ../riir-ai # or one, by path
   is not a cfg, and the comment recording why a file has *no* wasm32 arm
   otherwise makes that file read as browser code.
 - First measurement (2026-09-07): **9 NAMED · 15 UNRESOLVED · 0 UNCOVERED**
-  over 196 files / 24 positive-cfg packages / 17 repos.
+  over 196 files / 24 positive-cfg packages / 17 repos. Resolved 2026-09-08
+  (738 T1): the two-shape resolver upgrades a derived-row package only on
+  row-bearing static evidence; the vendored `wgpu-hal` fork left the walk
+  (738 T3); the per-package reads surfaced one real lane gap
+  (riir-mmorpg-examples' standalone `warm-tier-do`, lane landed same day)
+  and one uncompilable surface (riir-ai's `riir-examples` browser examples,
+  filed there as `.issues/894`). Standing: **22 NAMED · 1 UNRESOLVED · 0
+  UNCOVERED** over 190 files / 23 packages — the 1 is the finding in
+  flight, not noise.
 - ⛔ It produced three confident wrong answers before it produced a right one,
   all in the classifier: a walk of **0 files** (a Python `\s` handed to
   `git grep -E`, which is POSIX ERE — caught only because the walk size prints
