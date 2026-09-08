@@ -2,7 +2,7 @@
 
 **Status:** Open — POC task, feature-gated
 **Date:** 2026-09-08
-**Research:** [katgpt-rs/.research/541_UDDM_Associative_Memory_Regime_Probes.md](../.research/541_UDDM_Associative_Memory_Regime_Probes.md)
+**Research:** [katgpt-rs/.research/541_UDDM_Associative_Memory_Regime_Probes.md](../.research/541_UDDM_Associative_Memory_Regime_Probes.md) @ katgpt-rs `77169275`
 **Source:** [arXiv:2604.26841](https://arxiv.org/abs/2604.26841) — UDDMs as associative memories; conditional entropy as a training-free memorization↔generalization probe.
 
 ## Ask
