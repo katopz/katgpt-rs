@@ -1,6 +1,6 @@
-# Issue 738 — katgpt-rs carries no rust-toolchain.toml: the box-default toolchain (1.93.0) fails to build HEAD (E0658 on katgpt-percepta `isolate_lowest_one`)
+# Issue 739 — katgpt-rs carries no rust-toolchain.toml: the box-default toolchain (1.93.0) fails to build HEAD (E0658 on katgpt-percepta `isolate_lowest_one`)
 
-**Status:** OPEN — filed 2026-09-08 by the 4090 league session; evidence measured during riir-ai Issue 884 T5 (Bench 885 en-route fix 2); fix is a one-file, owner-reviewed commit (the toolchain pin is "a deliberate act" per the sibling pin's own header).
+**Status:** OPEN — filed 2026-09-08 by the 4090 league session; evidence measured during riir-ai Issue 884 T5 (Bench 885 en-route fix 2); fix is a one-file, owner-reviewed commit (the toolchain pin is "a deliberate act" per the sibling pin's own header). ⚠ RENUMBERED from 738 the same day: the 4090 session and the wasm32-surface session dual-allocated 738 concurrently (`.highwater` read 737 in both); `738_wasm32_surface_the_package_set_itself_is_unpinned.md` keeps the number — it was landed first and is cited by AGENTS.md + the audit script. No other citation existed to rewrite.
 
 ## The defect
 
