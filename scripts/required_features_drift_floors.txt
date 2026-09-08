@@ -49,13 +49,14 @@
 # repo                    manifests  rows  invalid
 katgpt-rs                        32   600        0
 katgpt-web                        3     0        0
-riir-ai                          27   485        0
+riir-ai                          26   485        0
 riir-auth                         1     0        0
-riir-chain                       10   103        0
+riir-chain                        9   103        0
 riir-clippy                       1    41        0
 riir-dao                          2     0        0
 riir-dapps                        1     0        0
 riir-deployer                     3     0        0
+riir-esp32                        1     0        0
 riir-game-sdk                     8    30        0
 riir-mmorpg-examples              4    19        0
 riir-neuron-db                    3    48        0
