@@ -55,6 +55,11 @@
 # Usage:
 #   scripts/full_gate.sh                          # strict
 #   scripts/full_gate.sh --allow-partial-platform # off-macOS: warn, don't fail
+#   scripts/full_gate.sh --wasm32-only            # Layer 2b ONLY (Issue 737 T4):
+#                                                 #   the wasm32 + simd128 lane,
+#                                                 #   which makes no macOS claim,
+#                                                 #   run per-push on ubuntu by
+#                                                 #   .github/workflows/wasm32_gate.yml
 #
 # Honour CARGO_TARGET_DIR to avoid fighting a concurrent build:
 #   CARGO_TARGET_DIR=/tmp/full_gate scripts/full_gate.sh
@@ -65,7 +70,16 @@
 set -euo pipefail
 
 ALLOW_PARTIAL=0
-[ "${1:-}" = "--allow-partial-platform" ] && ALLOW_PARTIAL=1
+WASM32_ONLY=0
+for arg in "$@"; do
+    case "$arg" in
+        --allow-partial-platform) ALLOW_PARTIAL=1 ;;
+        --wasm32-only) WASM32_ONLY=1 ;;
+        *) echo "✗ unknown argument: $arg" >&2
+           echo "  supported: --allow-partial-platform, --wasm32-only" >&2
+           exit 1 ;;
+    esac
+done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -104,11 +118,75 @@ GATE_ARGS=(cargo clippy --workspace --all-targets --all-features --keep-going
     -D unused_parens)
 GATE_CMD="${GATE_ARGS[*]}"
 
+# ── Log retention + the completion sentinel (Issue 734; moved above Layer 1 by
+#    Issue 737 T4 so the --wasm32-only mode is sentinel-protected too) ────────
+# Every `exit 1` below is an explicit verdict and passes through untouched.
+# What this arm catches is the OTHER death: bash aborting mid-script while
+# reporting success. Measured on macOS `/bin/bash` 3.2.57, and ONLY there
+# (Issue 735): bash 4.4 through 5.3, dash and busybox ash all PRESERVE the
+# status. On 3.2, when `set -u` hits an unbound expansion or `eval` hits a
+# syntax error, the shell enters the EXIT trap with `$?` **already 0**, so an
+# EXIT trap whose last command succeeds makes the abort exit **0**. Only "did
+# the script reach its own last line?" catches it — and that catches every
+# other premature death too (a `set -e` trip in an unguarded spot, a SIGTERM,
+# a future editing slip), on EVERY shell, which is why this stays even where
+# 3.2 is out of the picture. It is load-bearing on the macOS CI lane
+# (full_gate.yml measured it in situ, Issue 735 T3) and inert-but-cheap on
+# ubuntu's bash 5, where an abort reds the job on its own.
+#
+# Retention (Issue 701 R3b): a PASS still reports a warning count whose
+# per-lint breakdown exists only in the log, and a warm re-run emits almost
+# nothing (cargo does not replay diagnostics for crates it considers fresh) —
+# so a caller who NAMED a path via FULL_GATE_LOG asked for the file on pass as
+# well as on fail; an unnamed run's temp log is cleaned up on success.
+# Layer 3 creates the log; the --wasm32-only mode never reaches Layer 3, so
+# $LOG stays empty there and the cleanup skips retention entirely.
+LOG="${FULL_GATE_LOG:-}"
+KEEP_LOG=0
+# `if`, not `[ … ] && KEEP_LOG=1`: this script runs under `set -e`, where a
+# trailing AND-list whose test fails takes the whole run down.
+if [ -n "$LOG" ]; then
+    KEEP_LOG=1
+fi
+# Issue 737 T4: the wasm32-only mode REFUSES a skipped lane — with the target
+# missing and --allow-partial-platform given, Layer 2b verifies nothing, and
+# "verified nothing" must not read as a pass there (the full gate can absorb
+# a partial Layer 2b because Layers 3-6 still ran; wasm32-only has nothing
+# behind it).
+WASM_LANE_RAN=0
+FULL_GATE_COMPLETED=0
+full_gate_cleanup() {
+    gate_st=$?
+    if [ -n "$LOG" ]; then
+        if [ "$KEEP_LOG" -eq 1 ]; then
+            echo "  full log retained: $LOG"
+        else
+            rm -f "$LOG"
+        fi
+    fi
+    if [ "$FULL_GATE_COMPLETED" != "1" ] && [ "$gate_st" = "0" ]; then
+        echo "✗ full gate ABORTED mid-run while reporting success — it did not reach" >&2
+        echo "  its own last line, so it verified NOTHING past the error above." >&2
+        echo "  A premature death must never read as a pass; forcing exit 1." >&2
+        exit 1
+    fi
+    exit "$gate_st"
+}
+trap full_gate_cleanup EXIT
+
 # ── Layer 1: cargo present ──────────────────────────────────────────────────
 if ! command -v cargo >/dev/null 2>&1; then
     echo "✗ cargo not installed — full gate cannot run"
     exit 1
 fi
+
+# Everything from here to Layer 2b runs in FULL mode only. The --wasm32-only
+# mode skips it: Layer 2's macOS claim does not hold off macOS, and a wasm32
+# lane that claimed the macOS axis would be a partial gate reporting a pass
+# (Issue 737 T4). The guard closes at the end of Layer 2; Layer 2b runs in
+# BOTH modes; Layers 3-6 open their own guard (they are the expensive
+# whole-surface claim the per-push lane exists to NOT pay for).
+if [ "$WASM32_ONLY" -eq 0 ]; then   # full-mode body — closes at the end of Layer 2
 
 # ── Layer 2: platform coverage ──────────────────────────────────────────────
 # Grep the real cfg rather than trusting this comment to stay true.
@@ -142,6 +220,7 @@ if [ "$(uname -s)" != "Darwin" ]; then
 else
     echo "✓ macOS — the $APPLE_GATED target_os-gated file(s) are in scope"
 fi
+fi   # end the full-mode-only part of Layer 2; Layer 2b below runs in BOTH modes
 
 # ── Layer 2b: wasm32 + simd128 coverage (Issue 737) ─────────────────────────
 # Layer 2 is about ONE platform axis (`target_os = "macos"`). `wasm32` is a
@@ -257,7 +336,11 @@ $WASM_EXTRA_TARGETS
 EOF
         echo "✓ wasm32 clean (simd128 $arm): $(printf '%s' "$WASM_PKGS" | tr '\n' ' ')+ 2 named targets"
     done
+    WASM_LANE_RAN=1
 fi
+
+# Layers 3-6 are the whole-surface claim — FULL mode only (Issue 737 T4).
+if [ "$WASM32_ONLY" -eq 0 ]; then   # full-mode body — closes just before the final summary
 
 # ── Layer 3: the gate ───────────────────────────────────────────────────────
 # `--keep-going` is not optional: without it cargo stops at the first failing
@@ -285,52 +368,8 @@ mkdir -p "$(dirname "$LOG")"
 # So: if the caller NAMED a path via $FULL_GATE_LOG, they asked for the file —
 # honour that on pass as well as on fail. An unnamed run still gets a temp file
 # cleaned up on success.
-# `if`, not `[ … ] && KEEP_LOG=1`: this script runs under `set -e`, where a
-# trailing AND-list whose test fails takes the whole run down.
-KEEP_LOG=0
-if [ -n "${FULL_GATE_LOG:-}" ]; then
-    KEEP_LOG=1
-fi
-# ── The completion sentinel (Issue 734) ─────────────────────────────────────
-# Every `exit 1` below is an explicit verdict and passes through untouched.
-# What this arm catches is the OTHER death: bash aborting mid-script while
-# reporting success. Measured on macOS `/bin/bash` 3.2.57, and ONLY there
-# (Issue 735): bash 4.4 through 5.3, dash and busybox ash all PRESERVE the
-# status. On 3.2, when `set -u` hits an unbound expansion or `eval` hits a
-# syntax error, the shell enters the EXIT trap with `$?` **already 0**, so an
-# EXIT trap whose last command succeeds makes the abort exit **0**. The usual
-# `trap 'rc=$?; …; exit $rc'` idiom does not help: the rc it saves is itself 0.
-# Only "did the script reach its own last line?" catches it — and that catches
-# every other premature death too (a `set -e` trip in an unguarded spot, a
-# SIGTERM, a future editing slip), on EVERY shell, which is why this stays even
-# where 3.2 is out of the picture.
-# ⛔ Not academic HERE, unlike most of the repaired scripts: `full_gate.yml`
-# runs this on **macos-latest**, so whether the sentinel is load-bearing in CI
-# depends on what `#!/usr/bin/env bash` resolves to on that image — measured by
-# that workflow's own preamble step (Issue 735 T3), because no workstation can
-# answer it. Every other gate workflow in this repo is ubuntu-latest (bash 5),
-# where an abort exits non-zero and reds the job on its own.
-# This is not hypothetical: seal-remake's ci_feature_guard.sh could not fail
-# past its layer 13 for months for exactly this reason — on a developer's Mac.
-# Population-wide picture: scripts/trap_exit_launder_audit.py; the premise
-# across 11 interpreters: scripts/trap_launder_premise_matrix.py.
-FULL_GATE_COMPLETED=0
-full_gate_cleanup() {
-    gate_st=$?
-    if [ "$KEEP_LOG" -eq 1 ]; then
-        echo "  full log retained: $LOG"
-    else
-        rm -f "$LOG"
-    fi
-    if [ "$FULL_GATE_COMPLETED" != "1" ] && [ "$gate_st" = "0" ]; then
-        echo "✗ full gate ABORTED mid-run while reporting success — it did not reach" >&2
-        echo "  its own last line, so it verified NOTHING past the error above." >&2
-        echo "  A premature death must never read as a pass; forcing exit 1." >&2
-        exit 1
-    fi
-    exit "$gate_st"
-}
-trap full_gate_cleanup EXIT
+# KEEP_LOG and the completion sentinel (Issue 734) moved above Layer 1
+# (Issue 737 T4) so the --wasm32-only mode is sentinel-protected too.
 echo "▸ $GATE_CMD"
 set +e
 "${GATE_ARGS[@]}" >"$LOG" 2>&1
@@ -499,5 +538,16 @@ echo "  ✓ release profile clean ($REL_UNITS compiler-artifact record(s))"
 
 # UNITS is printed on every pass, not just when it is interesting: the number
 # that would have exposed the vacuous CI green was never on screen.
-echo "✓ full gate PASSED — 0 errors, 0 unbuildable targets ($WARNINGS warning finding(s) across $WARN_TALLIES target(s), not gated; $UNITS unit(s) compiled)"
+fi   # ── end full-mode body (opened before Layer 3, Issue 737 T4) ──
+if [ "$WASM32_ONLY" -eq 1 ]; then
+    if [ "$WASM_LANE_RAN" -eq 0 ]; then
+        echo "✗ wasm32 gate is a PARTIAL pass — the lane was SKIPPED"
+        echo "  (--allow-partial-platform with wasm32-unknown-unknown missing)."
+        echo "  It verified nothing; install the target or drop the flag."
+        exit 1
+    fi
+    echo "✓ wasm32 gate PASSED — Layer 2b only, both simd128 arms (full gate NOT run)"
+else
+    echo "✓ full gate PASSED — 0 errors, 0 unbuildable targets ($WARNINGS warning finding(s) across $WARN_TALLIES target(s), not gated; $UNITS unit(s) compiled)"
+fi
 FULL_GATE_COMPLETED=1  # the last line — see full_gate_cleanup above

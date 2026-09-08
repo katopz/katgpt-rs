@@ -1,0 +1,84 @@
+# The wasm32 lane, per push, on Linux (Issue 737 T4).
+#
+# Before this workflow existed, Layer 2b rode only `full_gate.yml` — weekly,
+# on macos-latest — so a wasm32 break landed on `develop` and sat for up to a
+# week. This closes that window with the cheap alternative the issue itself
+# named: the lane is `--lib`-only and host-INDEPENDENT (wasm32 artifacts do
+# not care whether the host is macOS or Linux), so it can run on
+# ubuntu-latest per push without reopening the cost that keeps the FULL gate
+# off per-push — see full_gate.yml's preamble for why per-push whole-surface
+# runs on macOS runners are a different decision.
+#
+# What `--wasm32-only` runs: full_gate.sh Layer 2b ONLY — both simd128 arms,
+# the derived `-p` package list plus the root package, the two named wasm32
+# GOAT targets, and the membership-pinned residue. What it does NOT claim: the
+# macOS device-backend axis (Layer 2), the whole workspace/all-features
+# surface (Layers 3-5), or the debug_assertions-off profile (Layer 6). Those
+# stay weekly on the macOS runner; a red here is a browser-target regression,
+# not a whole-gate verdict.
+#
+# Cost note (2026-09-07): the workstation measured the wasm32-only mode at
+# 4m38s with a COLD wasm32 target dir (user 2m08s — the rest is parallel dep
+# compilation). With rust-cache warm, per-push runs are faster; the deps are
+# the expensive half and this cache holds them, keyed separately from the
+# full-gate cache because the target triple differs.
+#
+# Incremental-lint semantics, stated rather than hidden: this lane does NOT
+# `cargo clean` the workspace members (the weekly full gate does, so its
+# claim is whole-surface). Per push, cargo's fingerprints re-lint exactly the
+# crates the pushed commit changed — which is the per-push claim — and a
+# rustc-version bump changes the rust-cache key, forcing a full re-lint. The
+# Monday full-gate run remains the whole-surface wasm32 verdict.
+name: wasm32 gate
+
+on:
+  push:
+    branches: [main, develop]
+    # A docs-only push re-lints nothing; don't pay a run for it. Keep every
+    # input that can change what the lane compiles: sources, manifests, the
+    # lockfile, the gate definition itself, and cargo config.
+    paths:
+      - '**/*.rs'
+      - '**/Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/full_gate.sh'
+      - '.cargo/config.toml'
+      - '.cargo/config'
+      - '.github/workflows/wasm32_gate.yml'
+  workflow_dispatch:
+
+# Push-triggered only (no schedule here to protect): a superseded commit's
+# queued run is waste, so cancel. The weekly rot check lives in full_gate.yml,
+# whose concurrency policy deliberately does NOT cancel.
+concurrency:
+  group: wasm32-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wasm32-gate:
+    runs-on: ubuntu-latest
+    # The workstation's cold run took <5 min; a cache-miss runner is slower,
+    # but 30 min covers a full cold dep build for the triple.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      # Same action + install shape as full_gate.yml — one way to install a
+      # toolchain, not two. Strict gate: the target MUST be present, because
+      # `--wasm32-only` (unlike the full gate) has no layers behind a skipped
+      # lane and refuses a partial pass outright.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Own cache: the artifacts are for a different triple than the
+          # full-gate cache, and sharing a key would thrash both.
+          key: wasm32-gate
+          cache-on-failure: true
+
+      - name: wasm32 lane, both simd128 arms (Issue 737 T4)
+        run: ./scripts/full_gate.sh --wasm32-only
