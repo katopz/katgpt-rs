@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-22
 **Research:** [katgpt-rs/.research/281_Per_Tick_Salience_Tri_Gate_Speak_Silent_Delegate.md](../.research/281_Per_Tick_Salience_Tri_Gate_Speak_Silent_Delegate.md)
-**Private guide:** [riir-ai/.research/148_Per_Tick_Emit_Salience_NPC_Guide.md](../../riir-ai/.research/148_Per_Tick_Emit_Salience_NPC_Guide.md)
+**Private guide:** [riir-ai/.research/363_Per_Tick_Emit_Salience_NPC_Guide.md](../../riir-ai/.research/363_Per_Tick_Emit_Salience_NPC_Guide.md) (renumbered from 148)
 **Runtime plan:** [riir-ai/.plans/330_proactive_npc_salience_gate_runtime.md](../../riir-ai/.plans/330_proactive_npc_salience_gate_runtime.md)
 **Source paper:** [arxiv 2606.14777](https://arxiv.org/abs/2606.14777) — JoyAI-VL-Interaction (Yao et al., JD.com, Jun 2026)
 **Target:** `katgpt-rs/src/salience/` (new module) + Cargo feature `salience_tri_gate`

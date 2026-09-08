@@ -3,7 +3,7 @@
 **Date:** 2026-07-06
 **Research:** [katgpt-rs/.research/381_SkillAdaptor_Step_Level_Fault_Attribution_Delta_Qualification.md](../.research/381_SkillAdaptor_Step_Level_Fault_Attribution_Delta_Qualification.md)
 **Private guide:** [riir-ai/.research/313_Step_Level_Fault_Attribution_Commit_Gate_Guide.md](../../riir-ai/.research/313_Step_Level_Fault_Attribution_Commit_Gate_Guide.md)
-**Runtime wiring:** [riir-ai/.plans/313_step_attribution_branch_wiring.md](../../riir-ai/.plans/313_step_attribution_branch_wiring.md)
+**Runtime wiring:** [riir-ai/.plans/569_step_attribution_branch_wiring.md](../../riir-ai/.plans/569_step_attribution_branch_wiring.md) (renumbered from 313)
 **Source paper:** [arXiv:2606.01311](https://arxiv.org/abs/2606.01311) — SkillAdaptor, Yu et al. 2026
 **Target:** `crates/katgpt-pruners/src/step_attribution_qualifier.rs` (new module) + Cargo feature `step_attribution_qualifier`
 **Status:** ✅ COMPLETE (Phases 1-5 done; Phase 4 T4.1 done 2026-07-06; T4.2 deferred per plan)

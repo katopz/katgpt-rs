@@ -2,7 +2,7 @@
 
 **Status:** COMPLETE — T1 landed + validated (GOAT row done); consumers landed in riir-ai (Issue 874 T2) + riir-game-sdk (stealth) the same pass
 
-**Source:** [../riir-ai/.research/364_ThoughtComm_Agreement_Tiered_Thought_Routing.md](../riir-ai/.research/364_ThoughtComm_Agreement_Tiered_Thought_Routing.md) §Fusion item 2 ("the missing algebra") + [../riir-ai/.issues/874_thoughtcomm_agreement_tiered_contagion.md](../riir-ai/.issues/874_thoughtcomm_agreement_tiered_contagion.md) T1.
+**Source:** [../riir-ai/.research/364_ThoughtComm_Agreement_Tiered_Thought_Routing.md](../riir-ai/.research/364_ThoughtComm_Agreement_Tiered_Thought_Routing.md) §Fusion item 2 ("the missing algebra") + riir-ai Issue 874 (resolved + removed — record in [riir-ai/.docs/06_self_learn_npcs/agreement_contagion.md](../riir-ai/.docs/06_self_learn_npcs/agreement_contagion.md)) T1.
 
 ## Why
 
