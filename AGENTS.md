@@ -512,7 +512,8 @@ capacity, `needless_return`, …) are fixed by the riir-clippy healer FIRST,
 manual second:
 
 ```bash
-cargo heal --fix <paths>                                  # dry run (review only)
+cargo heal <paths>                                        # DRY RUN (the bare default — zero edits)
+cargo heal --fix <paths>                                  # REAL fix: writes + compile-gates (fix_verify builds)
 cargo heal --fix --write --verify <paths>                 # compile-gated apply
 cargo heal --fix --write --verify --verify-args "--features <set>" <paths>  # gated code
 ```
