@@ -743,6 +743,7 @@ mod tests {
             out.push((idx, score));
             work[idx] = [0.0; A];
         }
+        out.shrink_to_fit();
         out
     }
 

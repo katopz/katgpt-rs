@@ -470,9 +470,7 @@ impl MedianTopMAvailability {
             // Zero-norm candidate has no direction; cosine is undefined.
             // Treat as availability 0 (neutral) and zero the scratch so the
             // downstream median sees a clean constant pool.
-            for s in &mut cosine_scratch[..n_bank] {
-                *s = 0.0;
-            }
+            cosine_scratch[..n_bank].fill(0.0);
             return 0.0;
         }
         // 1 divide amortized across all n_bank items (vs n_bank divides in

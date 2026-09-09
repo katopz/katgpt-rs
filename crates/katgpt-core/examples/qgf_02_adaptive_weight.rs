@@ -242,9 +242,7 @@ impl QGradientOracle for KnownLandscapeOracle {
     fn q_gradient_into(&self, _state: &Self::State, _action: &Self::Action, out: &mut [f32]) {
         let n = out.len().min(self.q_values.len());
         out[..n].copy_from_slice(&self.q_values[..n]);
-        for slot in &mut out[n..] {
-            *slot = 0.0;
-        }
+        out[n..].fill(0.0);
     }
 
     fn confidence(&self, _state: &Self::State) -> f32 {

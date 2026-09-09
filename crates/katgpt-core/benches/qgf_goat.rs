@@ -96,9 +96,7 @@ impl QGradientOracle for FixedQOracle {
     fn q_gradient_into(&self, _s: &u32, _a: &u32, out: &mut [f32]) {
         let n = out.len().min(self.q.len());
         out[..n].copy_from_slice(&self.q[..n]);
-        for slot in &mut out[n..] {
-            *slot = 0.0;
-        }
+        out[n..].fill(0.0);
     }
 
     fn confidence(&self, _s: &u32) -> f32 {

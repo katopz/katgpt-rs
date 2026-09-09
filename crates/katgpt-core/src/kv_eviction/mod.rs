@@ -575,7 +575,7 @@ mod tests {
             t.reset_row(idx, tick);
             *adm = tick;
         }
-        let mut naive_scores = Vec::new();
+        let mut naive_scores = Vec::with_capacity(2_000);
         let mut table_scores = Vec::new();
         let mut step = 50u64;
         for _ in 0..2_000 {

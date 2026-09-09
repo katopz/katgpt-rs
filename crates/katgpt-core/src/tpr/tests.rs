@@ -92,10 +92,7 @@ fn planted_slots(
         core.fill(0.0);
         let mut b = TprBindings::default();
         for q in 0..slots {
-            let p = match slots == m {
-                true => q,
-                false => rng.below(m),
-            };
+            let p = if slots == m { q } else { rng.below(m) };
             let v = rng.below(n_fillers);
             b.roles.push(p as u16);
             b.fillers.push(v as u16);

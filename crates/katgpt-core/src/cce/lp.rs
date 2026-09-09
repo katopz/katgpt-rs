@@ -81,9 +81,7 @@ impl CceLp {
         let mut rhs = vec![0.0_f64; n_cons];
 
         // Row 0: Σ ρ = 1.
-        for val in &mut mat[0][..na] {
-            *val = 1.0;
-        }
+        mat[0][..na].fill(1.0);
         rhs[0] = 1.0;
 
         // Rows 1..=nd: for each κ, g_κ · ρ + s_κ = 0
@@ -198,9 +196,7 @@ impl CceLp {
         let mut rhs = vec![0.0_f64; n_cons];
 
         // Row 0: Σ ρ = 1.
-        for val in &mut mat[0][..na] {
-            *val = 1.0;
-        }
+        mat[0][..na].fill(1.0);
         rhs[0] = 1.0;
 
         // Rows 1..=nd: for each κ, g_κ · ρ + s_κ = 0.
@@ -298,9 +294,7 @@ impl CceLp {
         let mut rhs = vec![0.0_f64; n_cons];
 
         // Row 0: Σ ρ = 1.
-        for val in &mut mat[0][..na] {
-            *val = 1.0;
-        }
+        mat[0][..na].fill(1.0);
         rhs[0] = 1.0;
 
         // Rows 1..: for each (player, κ) pair, g_{i,κ} · ρ + s_{i,κ} = 0

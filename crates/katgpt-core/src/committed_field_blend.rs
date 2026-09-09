@@ -815,12 +815,8 @@ mod tests {
         // dirs 1 and 2. We craft it so pi[0] is large positive, pi[1]/pi[2]
         // large negative.
         let mut summary = vec![0.0f32; 32];
-        for v in &mut summary[..11] {
-            *v = 100.0;
-        }
-        for v in &mut summary[11..32] {
-            *v = -100.0;
-        }
+        summary[..11].fill(100.0);
+        summary[11..32].fill(-100.0);
 
         let f0 = ConstantField::new([1.0f32; 32], 0);
         let f1 = ConstantField::new([2.0f32; 32], 1);

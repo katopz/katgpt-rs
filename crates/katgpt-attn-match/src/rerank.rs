@@ -360,9 +360,7 @@ pub fn smooth_min_score_into(
     // This gives lq per-position cosines (one per query position).
     // Reuse caller-provided scratch to avoid per-doc allocation.
     debug_assert!(max_cosines.len() >= lq);
-    for c in &mut max_cosines[..lq] {
-        *c = f32::NEG_INFINITY;
-    }
+    max_cosines[..lq].fill(f32::NEG_INFINITY);
 
     for i in 0..lq {
         let q_row = &query[i * dim..(i + 1) * dim];

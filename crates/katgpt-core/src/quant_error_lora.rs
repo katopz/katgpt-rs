@@ -685,9 +685,7 @@ mod tests {
         let mut w_ref = vec![0.0f32; out_dim * in_dim];
         let w_q = vec![0.0f32; out_dim * in_dim];
         w_ref[0] = 10.0; // the big error
-        for v in &mut w_ref[1..] {
-            *v = 0.01;
-        }
+        w_ref[1..].fill(0.01);
         let sparse = SparseErrorBypass::from_error(&w_ref, &w_q, out_dim, in_dim, 0.25);
         // 25% of 16 = 4 elements. The worst-4 by |error| includes the 10.0 outlier.
         assert_eq!(sparse.nnz(), 4);

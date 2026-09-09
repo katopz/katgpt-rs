@@ -321,9 +321,7 @@ pub fn expm_source_term_quadrature(
             let lap = hodge_laplacian(cx, &scratch.r_s);
             let m = lap.data.len().min(len);
             scratch.n_s.data[..m].copy_from_slice(&lap.data[..m]);
-            for v in &mut scratch.n_s.data[m..] {
-                *v = 0.0;
-            }
+            scratch.n_s.data[m..].fill(0.0);
         }
 
         // d) Propagate the source forward: m = exp(tau·L)·n.

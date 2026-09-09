@@ -243,9 +243,7 @@ impl<E: Clone> BranchBank<E> {
         // Zero-pad if the anchor is shorter than `dim` (matches `merge`'s
         // zero-padding semantics).
         if copy_len < dim {
-            for x in &mut dst[copy_len..] {
-                *x = 0.0;
-            }
+            dst[copy_len..].fill(0.0);
         }
     }
 

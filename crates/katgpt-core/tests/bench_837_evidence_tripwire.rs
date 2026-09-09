@@ -229,7 +229,7 @@ fn build_world(arm: Arm, seed: u64, topics: &[Topic]) -> World {
             s
         }
         Arm::AInject => {
-            let mut s = Vec::new();
+            let mut s = Vec::with_capacity(4);
             for _ in 0..4 {
                 s.push(topical_source(tp, rng.range(0.4, 0.75), &mut rng));
             }

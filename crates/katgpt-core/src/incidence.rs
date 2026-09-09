@@ -319,8 +319,9 @@ pub fn hall_max_matching_into(
     let mut matching = 0usize;
     loop {
         // BFS: layer the free agents; label levels for the DFS phase.
-        s.queue.clear();
         const INF: u32 = u32::MAX;
+
+        s.queue.clear();
         for a in 0..n_agents {
             if s.match_agent[a].is_none() {
                 s.dist[a] = 0;

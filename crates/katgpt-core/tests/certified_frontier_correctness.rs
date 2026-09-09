@@ -1221,12 +1221,12 @@ mod t53_dual {
     /// because `n` is not in its type.
     #[test]
     fn t53_regime_rule_and_state_size() {
+        use core::mem::size_of;
+
         assert!(!prefer_dual(0, 32));
         assert!(!prefer_dual(32, 32));
         assert!(prefer_dual(33, 32));
         assert!(prefer_dual(4096, 32));
-
-        use core::mem::size_of;
         // Payload is `4 D (D + 2)` = 4352 B at D = 32 (chol D*D + xty D + weights
         // D), and the type rounds to 4368 with `lambda` + `n` + alignment. That
         // is the figure the consumer's Bench 563 quotes, so pin the whole type.

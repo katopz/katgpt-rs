@@ -91,9 +91,7 @@ fn build_target_p() -> [[f64; N_STATES]; N_STATES] {
 /// Behavior distribution `ν`.
 fn nu() -> [f64; N_STATES] {
     let mut n = [0.0_f64; N_STATES];
-    for slot in &mut n[..N_UPPER] {
-        *slot = 0.95 / 6.0;
-    }
+    n[..N_UPPER].fill(0.95 / 6.0);
     n[N_UPPER] = 0.05;
     n
 }
@@ -101,9 +99,7 @@ fn nu() -> [f64; N_STATES] {
 /// Initial distribution `d_0`.
 fn d0() -> [f64; N_STATES] {
     let mut d = [0.0_f64; N_STATES];
-    for slot in &mut d[..N_UPPER] {
-        *slot = 1.0 / 6.0;
-    }
+    d[..N_UPPER].fill(1.0 / 6.0);
     d[N_UPPER] = 0.0;
     d
 }

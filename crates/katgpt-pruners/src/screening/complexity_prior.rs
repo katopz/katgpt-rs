@@ -476,9 +476,7 @@ pub fn quantize_latent(v: &[f32], scratch: &mut [u8]) {
     let span = max - min;
     if !span.is_finite() || span <= 0.0 {
         // Degenerate: all-equal or non-finite range. Mid-grey sentinel.
-        for b in &mut scratch[..n] {
-            *b = 128;
-        }
+        scratch[..n].fill(128);
         return;
     }
     let scale = 255.0 / span;

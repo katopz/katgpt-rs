@@ -128,9 +128,7 @@ fn mi_padded(
             *v = 0.0; // stale-data guard: reused pad rows may hold old values
         }
         scratch.pad_b[i * dm..i * dm + db].copy_from_slice(&b[i * db..(i + 1) * db]);
-        for v in &mut scratch.pad_b[i * dm + db..(i + 1) * dm] {
-            *v = 0.0;
-        }
+        scratch.pad_b[i * dm + db..(i + 1) * dm].fill(0.0);
     }
     let score_one_draw = |scratch: &mut MiScratch, src: PermSource| -> f32 {
         scratch.score_perm_pads(Critic::Dot, n, dm, src);

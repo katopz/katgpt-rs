@@ -221,30 +221,30 @@ enum Policy {
 }
 
 impl Policy {
-    const ALL: [Policy; 10] = [
-        Policy::Ring,
-        Policy::RawH2o,
-        Policy::MassAge,
-        Policy::MassAgeSink,
-        Policy::EgaEnergy,
-        Policy::EgaUsage,
-        Policy::Rand,
-        Policy::RandKeystone,
-        Policy::MassAgeKeystone,
-        Policy::EgaKeystone,
+    const ALL: [Self; 10] = [
+        Self::Ring,
+        Self::RawH2o,
+        Self::MassAge,
+        Self::MassAgeSink,
+        Self::EgaEnergy,
+        Self::EgaUsage,
+        Self::Rand,
+        Self::RandKeystone,
+        Self::MassAgeKeystone,
+        Self::EgaKeystone,
     ];
     fn name(&self) -> &'static str {
         match self {
-            Policy::Ring => "ring",
-            Policy::RawH2o => "raw_h2o",
-            Policy::MassAge => "mass_age",
-            Policy::MassAgeSink => "mass_age_sink",
-            Policy::EgaEnergy => "ega_energy",
-            Policy::EgaUsage => "ega_x_usage",
-            Policy::Rand => "rand",
-            Policy::RandKeystone => "rand_keystone",
-            Policy::MassAgeKeystone => "mass_age_keystone",
-            Policy::EgaKeystone => "ega_energy_keystone",
+            Self::Ring => "ring",
+            Self::RawH2o => "raw_h2o",
+            Self::MassAge => "mass_age",
+            Self::MassAgeSink => "mass_age_sink",
+            Self::EgaEnergy => "ega_energy",
+            Self::EgaUsage => "ega_x_usage",
+            Self::Rand => "rand",
+            Self::RandKeystone => "rand_keystone",
+            Self::MassAgeKeystone => "mass_age_keystone",
+            Self::EgaKeystone => "ega_energy_keystone",
         }
     }
     /// True for the keystone-pinned arms (the +pin factorial form).
@@ -372,6 +372,7 @@ impl SimState {
                 scores.push(0.5 * zr[k] + 0.5 * ze[k]);
             }
         }
+        scores.shrink_to_fit();
         scores
     }
 
@@ -664,12 +665,10 @@ fn main() {
     let ((tie_ok, tie_raw_indifferent), strict_ok) = age_bias_fixture();
     println!("T3.1 age-bias fixture:");
     println!(
-        "  tie arm    (mass 1.0/1.0): mass/age strictly evicts old-cold={} ; raw-H2O tie-indifferent (index tie-break)={}",
-        tie_ok, tie_raw_indifferent
+        "  tie arm    (mass 1.0/1.0): mass/age strictly evicts old-cold={tie_ok} ; raw-H2O tie-indifferent (index tie-break)={tie_raw_indifferent}"
     );
     println!(
-        "  strict arm (old mass 1.1 > 1.0): raw evicts hot + mass/age evicts old-cold={}",
-        strict_ok
+        "  strict arm (old mass 1.1 > 1.0): raw evicts hot + mass/age evicts old-cold={strict_ok}"
     );
     let t31 = tie_ok && tie_raw_indifferent && strict_ok;
     println!("  T3.1 GATE: {}", pass_fail(t31));
@@ -712,8 +711,7 @@ fn main() {
 
     let total_per_cell = N_SEEDS * N_NEEDLES as u64;
     println!(
-        "\nT3.2 recall at matched budget ({} seeds x {} needles, stream={}):",
-        N_SEEDS, N_NEEDLES, STREAM_LEN
+        "\nT3.2 recall at matched budget ({N_SEEDS} seeds x {N_NEEDLES} needles, stream={STREAM_LEN}):"
     );
     println!(
         "{:<22} {:>18} {:>18} {:>18} {:>18} {:>10}",
@@ -725,7 +723,7 @@ fn main() {
             .iter()
             .map(|&r| {
                 let pct = 100.0 * r as f64 / total_per_cell as f64;
-                format!("{r:>4}/{tpc} {pct:4.1}%", tpc = total_per_cell)
+                format!("{r:>4}/{total_per_cell} {pct:4.1}%")
             })
             .collect();
         let mean_out = run_outlens[0][pi][0] as f64 / N_SEEDS as f64;
@@ -1050,6 +1048,6 @@ fn run_tau_section() {
 
     for (h, hr) in head_rankings.iter().enumerate() {
         let tau = kendall_tau(hr, &summed_idx);
-        println!("  head{} vs summed: tau = {:.3}", h, tau);
+        println!("  head{h} vs summed: tau = {tau:.3}");
     }
 }

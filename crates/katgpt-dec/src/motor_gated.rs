@@ -180,9 +180,7 @@ pub fn evolve_motor_gated_field(
         let m = lap.data.len().min(len);
         scratch_lap.data[..m].copy_from_slice(&lap.data[..m]);
         // Zero any trailing capacity (keeps scratch_lap fully defined).
-        for v in &mut scratch_lap.data[m..] {
-            *v = 0.0;
-        }
+        scratch_lap.data[m..].fill(0.0);
     }
 
     // ── Half-step 1c: blend decay + lateral propagation ──────────────────

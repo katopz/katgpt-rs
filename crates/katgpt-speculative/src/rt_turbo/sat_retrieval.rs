@@ -169,17 +169,13 @@ mod tests {
                 // Head 0: strong retrieval — high attention to needle
                 0 => {
                     for row in &mut matrix[15..20] {
-                        for cell in &mut row[2..5] {
-                            *cell = 0.8;
-                        }
+                        row[2..5].fill(0.8);
                     }
                 }
                 // Head 1: moderate retrieval
                 1 => {
                     for row in &mut matrix[15..20] {
-                        for cell in &mut row[2..5] {
-                            *cell = 0.4;
-                        }
+                        row[2..5].fill(0.4);
                     }
                 }
                 // Head 2: weak / local
@@ -189,9 +185,7 @@ mod tests {
                 // Head 3: moderate retrieval (between heads 1 and 2)
                 3 => {
                     for row in &mut matrix[15..20] {
-                        for cell in &mut row[2..5] {
-                            *cell = 0.2;
-                        }
+                        row[2..5].fill(0.2);
                     }
                 }
                 _ => {}

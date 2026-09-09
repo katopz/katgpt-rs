@@ -567,9 +567,7 @@ mod dual_leo_oracle {
             let n = q_leo.len().min(q_uvfa.len()).min(out.len());
             self.mixer
                 .combine_into(&mut out[..n], &q_leo[..n], &q_uvfa[..n], self.alpha);
-            for slot in &mut out[n..] {
-                *slot = 0.0;
-            }
+            out[n..].fill(0.0);
         }
 
         // Deterministic cached lookup → confidence 1.0 (default).
@@ -1226,9 +1224,7 @@ mod commit_dual_leo_oracle {
             {
                 *o = gate * ql + (1.0 - gate) * qu;
             }
-            for slot in &mut out[n..] {
-                *slot = 0.0;
-            }
+            out[n..].fill(0.0);
         }
 
         // Deterministic cached lookup → confidence 1.0 (default).

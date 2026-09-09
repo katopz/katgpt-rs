@@ -721,7 +721,7 @@ mod tests {
     /// suffix (6,7,8) — cluster reports the LOWEST failing level.
     #[test]
     fn regime_c_multi_level_suffix_reports_earliest_boundary() {
-        let mut apps = Vec::new();
+        let mut apps = Vec::with_capacity(3);
         let mut task = 0u32;
         for lvl in 1..=5u8 {
             for _ in 0..3 {

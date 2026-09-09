@@ -853,7 +853,7 @@ mod tests {
         }
         // Keep iterating well past the fixture length — still Churning.
         for i in 0..64 {
-            assert!(!p.observe(2e-2), "calibrated probe must not exit (churn {}) ", i);
+            assert!(!p.observe(2e-2), "calibrated probe must not exit (churn {i}) ");
         }
         assert!(p.fired_at_iteration().is_none());
     }

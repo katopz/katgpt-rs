@@ -506,10 +506,11 @@ mod tests {
     /// id — the honest fixture for LOCAL attribute structure (topic /
     /// item-category inference). Deterministic.
     fn make_latent(n: usize, d_latent: usize, seed: u64) -> (Vec<f32>, Vec<u32>) {
+        const SCALES: [f32; 4] = [0.15, 0.3, 0.45, 0.6];
+
         let mut lcg = Lcg(seed);
         let u: Vec<f32> = (0..d_latent).map(|_| lcg.next_unit()).collect();
         let v: Vec<f32> = (0..d_latent).map(|_| lcg.next_unit()).collect();
-        const SCALES: [f32; 4] = [0.15, 0.3, 0.45, 0.6];
         let mut z = vec![0.0f32; n * d_latent];
         let mut labels = vec![0u32; n];
         for i in 0..n {
@@ -675,8 +676,7 @@ mod tests {
         let elapsed = started.elapsed();
         assert!(
             elapsed < std::time::Duration::from_secs(30),
-            "probe took {:?} — pathological regression",
-            elapsed
+            "probe took {elapsed:?} — pathological regression"
         );
         assert!(report.lift.is_finite());
     }

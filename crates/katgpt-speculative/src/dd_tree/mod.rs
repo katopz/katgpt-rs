@@ -949,8 +949,9 @@ pub fn inject_fresh_z0_into(marginals: &[&[f32]], rng: &mut Rng, out: &mut Vec<V
     /// log-prob gaps are typically < 3 nats.
     const Z0_SIGMA: f32 = 4.0;
 
-    out.reserve(marginals.len());
     use katgpt_core::simd::fast_exp;
+
+    out.reserve(marginals.len());
     for (i, marginal) in marginals.iter().enumerate() {
         if i >= out.len() {
             out.push(Vec::new());

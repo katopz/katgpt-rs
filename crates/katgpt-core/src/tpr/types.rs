@@ -112,16 +112,16 @@ impl TprScheme {
     /// Core block count / role-vector dimension.
     pub fn arity(&self) -> usize {
         match self {
-            TprScheme::Orthogonal { arity } => *arity,
-            TprScheme::RoleVectors { arity, .. } => *arity,
+            Self::Orthogonal { arity } => *arity,
+            Self::RoleVectors { arity, .. } => *arity,
         }
     }
 
     /// Number of distinct bindable role ids.
     pub fn n_bind_slots(&self) -> usize {
         match self {
-            TprScheme::Orthogonal { arity } => *arity,
-            TprScheme::RoleVectors { arity, roles } => {
+            Self::Orthogonal { arity } => *arity,
+            Self::RoleVectors { arity, roles } => {
                 debug_assert_eq!(roles.len() % (*arity).max(1), 0);
                 roles.len() / (*arity).max(1)
             }
@@ -132,8 +132,8 @@ impl TprScheme {
     /// [`TprScheme::Orthogonal`] (the one-hot is implicit).
     pub fn role_vec(&self, p: u16) -> Option<&[f32]> {
         match self {
-            TprScheme::Orthogonal { .. } => None,
-            TprScheme::RoleVectors { arity, roles } => {
+            Self::Orthogonal { .. } => None,
+            Self::RoleVectors { arity, roles } => {
                 let a = *arity;
                 let start = p as usize * a;
                 roles.get(start..start + a)
@@ -142,7 +142,7 @@ impl TprScheme {
     }
 
     pub(crate) fn set_role_vec(&mut self, p: usize, src: &[f32]) {
-        if let TprScheme::RoleVectors { arity, roles } = self {
+        if let Self::RoleVectors { arity, roles } = self {
             let a = *arity;
             roles[p * a..(p + 1) * a].copy_from_slice(src);
         }

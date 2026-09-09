@@ -368,7 +368,7 @@ fn main() {
     println!();
     println!("═══ G2 — lead monotone in severity ═══");
     for ((name, _), l) in fixtures.iter().zip(&leads) {
-        println!("{name:<9} lead by rate {:?}: {:?}", RATES, l);
+        println!("{name:<9} lead by rate {RATES:?}: {l:?}");
         if !(l[0] >= l[1] && l[1] >= l[2]) {
             failures += 1;
             println!("  FAIL (G2): {name} lead not monotone non-increasing in rate");
@@ -485,24 +485,21 @@ fn main() {
             DegradeMode::ModeCollapse,
             DEGRADE_CYCLES,
         );
-        match det_probe {
-            Some((ti, ta, bits)) => {
-                let same = arm.t_imb == ti && arm.t_abs == ta && arm.last_reading == bits;
-                println!(
-                    "re-run: imb {} abs {} bits-match {}",
-                    fmt_cycle(arm.t_imb),
-                    fmt_cycle(arm.t_abs),
-                    arm.last_reading == bits
-                );
-                if !same {
-                    failures += 1;
-                    println!("  FAIL (G6): re-run diverged");
-                }
-            }
-            None => {
+        if let Some((ti, ta, bits)) = det_probe {
+            let same = arm.t_imb == ti && arm.t_abs == ta && arm.last_reading == bits;
+            println!(
+                "re-run: imb {} abs {} bits-match {}",
+                fmt_cycle(arm.t_imb),
+                fmt_cycle(arm.t_abs),
+                arm.last_reading == bits
+            );
+            if !same {
                 failures += 1;
-                println!("  FAIL (G6): determinism probe arm missing");
+                println!("  FAIL (G6): re-run diverged");
             }
+        } else {
+            failures += 1;
+            println!("  FAIL (G6): determinism probe arm missing");
         }
     }
 

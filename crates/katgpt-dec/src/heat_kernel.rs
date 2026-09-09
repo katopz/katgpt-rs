@@ -475,9 +475,7 @@ pub fn heat_kernel_trajectory_krylov(
             let lap = hodge_laplacian(cx, &v_field);
             let m = lap.data.len().min(len);
             lap_field.data[..m].copy_from_slice(&lap.data[..m]);
-            for slot in &mut lap_field.data[m..] {
-                *slot = 0.0;
-            }
+            lap_field.data[m..].fill(0.0);
         }
 
         // out = lap - v + motor·v  (per channel: A_d = Δ - 1 + motor[d])

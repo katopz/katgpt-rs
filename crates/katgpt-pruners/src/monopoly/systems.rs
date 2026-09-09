@@ -459,7 +459,7 @@ pub fn liquidate_assets(world: &mut World, entity: Entity, target: u32) -> u32 {
     // Step 1: Sell houses (half price) — collect data first
     let sell_list: Vec<(u8, u8, u32)> = {
         let squares = world.resource::<Board>().squares;
-        let mut list = Vec::new();
+        let mut list = Vec::with_capacity(squares.len());
         for &sq_entity in &squares {
             if let Some(owned) = world.get::<Owned>(sq_entity)
                 && owned.owner == entity
@@ -490,7 +490,7 @@ pub fn liquidate_assets(world: &mut World, entity: Entity, target: u32) -> u32 {
     // Step 2: Mortgage unimproved properties — collect data first
     let mortgage_list: Vec<(u8, u32)> = {
         let squares = world.resource::<Board>().squares;
-        let mut list = Vec::new();
+        let mut list = Vec::with_capacity(squares.len());
         for &sq_entity in &squares {
             if let Some(owned) = world.get::<Owned>(sq_entity)
                 && owned.owner == entity
