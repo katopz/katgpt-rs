@@ -92,9 +92,10 @@ riir-clippy                     39            20          0               0
 riir-dao                         0             0          0               0
 riir-dapps                      22            22          0               0
 riir-deployer                    0             0          0               0
+riir-esp32                       0             0          0               0
 riir-game-sdk                   30            15          0               0
 riir-mmorpg-examples            18            17          0               1
-riir-neuron-db                  45            36          0               0
+riir-neuron-db                  45            36          0               1
 riir-train                     391           254          0               1
 riir-viewbridge                  0             0          0               0
 seal-game-editor                 0             0          0               0

@@ -65,6 +65,7 @@ riir-clippy                  190      0    0      0       0     0
 riir-dao                      14      0    0      0       0     0
 riir-dapps                    50      0    0      0       0     0
 riir-deployer                 35      0    0      0       0     0
+riir-esp32                     1      0    0      0       0     0
 riir-game-sdk                160      0    0      0       0     0
 riir-mmorpg-examples          40      0    0      0       0     0
 riir-neuron-db               125      6    0      0       0     0
