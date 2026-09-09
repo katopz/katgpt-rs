@@ -4,7 +4,7 @@
 boundary) · G3 PASS · G4 PASS — feature stays OPT-IN (no-default-consumer
 rule)
 **Date:** 2026-09-09
-**Issue:** [`740_regime_probe_primitives.md`](../.issues/740_regime_probe_primitives.md)
+**Issue:** 740 — regime-probe primitives (RESOLVED + removed 2026-09-09; record in [HISTORY.md](../HISTORY.md) Issue log, fix `781264aa`+`53fc8b90`)
 **Research:** [`541_UDDM_Associative_Memory_Regime_Probes.md`](../.research/541_UDDM_Associative_Memory_Regime_Probes.md)
 **Source:** arXiv:2604.26841 (EMNLP 2026) — UDDMs as associative memories
 **Gate binary:** `crates/katgpt-core/tests/bench_702_regime_probe_goat.rs`
