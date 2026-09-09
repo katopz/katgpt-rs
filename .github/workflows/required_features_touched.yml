@@ -61,7 +61,9 @@ name: required-features touched gate
 
 on:
   push:
-    branches: [main, develop]
+    # Main-only (owner call 2026-09-09): Actions spending limit — no CI fires
+    # on `develop` pushes anywhere in this repo.
+    branches: [main]
     paths:
       - 'Cargo.toml'
       - 'crates/**/Cargo.toml'

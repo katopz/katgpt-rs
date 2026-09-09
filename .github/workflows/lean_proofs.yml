@@ -13,7 +13,9 @@ name: Lean proofs
 
 on:
   push:
-    branches: [main, develop]
+    # Main-only (owner call 2026-09-09): Actions spending limit — no CI fires
+    # on `develop` pushes anywhere in this repo.
+    branches: [main]
     # NOTE: duplicated rather than shared via a YAML anchor — GitHub Actions
     # does not support anchors. Keep the two lists in sync.
     paths:

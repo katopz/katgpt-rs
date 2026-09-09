@@ -42,11 +42,14 @@
 name: tests
 
 on:
-  schedule:
-    # Weekly, Tuesdays 05:03 UTC — staggered from the sibling repos'
-    # Tuesday/Thursday rot checks.
-    - cron: '3 5 * * 2'
   workflow_dispatch:
+  # SCHEDULE SUSPENDED (owner call 2026-09-09): Actions spending limit hit;
+  # schedules always evaluate against the DEFAULT branch (`develop`), which
+  # the owner wants CI-silent. Re-add to re-enable:
+  # schedule:
+  #   # Weekly, Tuesdays 05:03 UTC — staggered from the sibling repos'
+  #   # Tuesday/Thursday rot checks.
+  #   - cron: '3 5 * * 2'
 
 jobs:
   tests:

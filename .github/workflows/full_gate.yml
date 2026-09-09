@@ -51,11 +51,16 @@
 name: Full gate
 
 on:
-  schedule:
-    # Mondays 04:17 UTC. Off-the-hour to avoid the top-of-hour runner queue.
-    - cron: '17 4 * * 1'
+  workflow_dispatch:
+  # SCHEDULE SUSPENDED (owner call 2026-09-09): the Actions spending limit is
+  # hit, and scheduled workflows always evaluate against the DEFAULT branch
+  # (`develop`), which the owner wants CI-silent. Re-add to re-enable:
+  # schedule:
+  #   - cron: '17 4 * * 1'
   push:
-    branches: [main, develop]
+    # Main-only (owner call 2026-09-09) — same budget call as the schedule
+    # suspension above; `develop` pushes no longer fire any katgpt-rs lane.
+    branches: [main]
     # Only the gate's own definition. Broadening this to '**/*.rs' is the
     # per-push cost this file's preamble argues against.
     # NOTE: duplicated rather than shared via a YAML anchor — GitHub Actions

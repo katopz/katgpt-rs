@@ -33,7 +33,11 @@ name: wasm32 gate
 
 on:
   push:
-    branches: [main, develop]
+    # Main-only (owner call 2026-09-09): the Actions spending limit is hit, and
+    # per-push runs on `develop` are the bulk of the burn. workflow_dispatch
+    # covers a manual lane check; the weekly rot-check slot in full_gate.yml
+    # carries the standing verdict when its budget returns.
+    branches: [main]
     # A docs-only push re-lints nothing; don't pay a run for it. Keep every
     # input that can change what the lane compiles: sources, manifests, the
     # lockfile, the gate definition itself, and cargo config.
