@@ -72,7 +72,7 @@ a green result says nothing about what it compiled to nothing:
 | dev vs `--release` | `debug_assertions` is always **ON** in dev, so every item behind `#[cfg(debug_assertions)]` — and everything that depends on one — only ever compiles in the configuration where it works. **Neither profile is the safe default — the profile is part of the claim.** |
 | `--all-targets` vs **doc-tests** | `--all-targets` does **not** include doc-tests — only `cargo test --doc` reaches them (`.issues/723` Class F) |
 | host triple vs **`wasm32`** | a `--target` you never pass is a platform you never compile. Worse than the macOS axis because it is gated **twice**: the hot kernels are `all(target_arch = "wasm32", target_feature = "simd128")` and the triple defaults to simd128 **OFF**, so even a wasm32 lane without `RUSTFLAGS='-C target-feature=+simd128'` compiles the SIMD half to nothing. Measured (Issue 737): the simd128-**off** arm was clean and the **on** arm had 14 findings, 11 of them `unsafe_op_in_unsafe_fn` on edition 2024. `full_gate.sh` layer 2b runs both arms |
-| **compile vs EXECUTE** | every axis above is about *compilation*. The scoped core (katgpt-rs + katgpt-core `--lib` at default features, count floors) is EXECUTED weekly (`test.yml` + `scripts/test_gate.sh`); the other 477 integration-test and 176 bench targets are executed by nothing automatic, and `--all-features` is not a supported TEST configuration (fixture RNG streams and GOAT calibrations are per-feature). An uninvoked assertion is *unknown*, not passing |
+| **compile vs EXECUTE** | every axis above is about *compilation*. The scoped core (katgpt-rs + katgpt-core `--lib` at default features, count floors) was EXECUTED weekly (`test.yml` + `scripts/test_gate.sh` — SCHEDULE SUSPENDED 2026-09-09, Actions spending limit; run `scripts/test_gate.sh` locally); the other 477 integration-test and 176 bench targets are executed by nothing automatic, and `--all-features` is not a supported TEST configuration (fixture RNG streams and GOAT calibrations are per-feature). An uninvoked assertion is *unknown*, not passing |
 
 So before claiming a repo-wide green, run:
 
@@ -122,14 +122,15 @@ scripts/check_platform_gated_modules.sh --canary ../riir-train riir-train-gpu \
     crates/riir-train-gpu/src/numeric_drift_tap.rs numeric_drift_cuda
 ```
 
-Trigger health: `.github/workflows/full_gate.yml` runs the weekly rot-check
-cron from the default branch; `scripts/ci_gate_coverage.py` reports which
-declared triggers can actually fire, per workflow, per repo. Layer 2b also
-has its own PER-PUSH lane: `.github/workflows/wasm32_gate.yml` runs
-`full_gate.sh --wasm32-only` on ubuntu-latest (Issue 737 T4) — the lane is
-host-independent and `--lib`-only, so per-push does not reopen the cost the
-full gate's preamble rules out; the Monday macOS run remains the
-whole-surface wasm32 verdict.
+Trigger health: CI is MAIN-ONLY + dispatch-only since 2026-09-09 (owner call:
+Actions spending limit + no CI on `develop` pushes) — every `push` trigger is
+`branches: [main]` and every `schedule:` block is suspended in-file (commented,
+riir-train 507 precedent). `scripts/ci_gate_coverage.py` reports which declared
+triggers can actually fire, per workflow, per repo. Layer 2b also has its own
+push lane: `.github/workflows/wasm32_gate.yml` runs `full_gate.sh
+--wasm32-only` on ubuntu-latest (Issue 737 T4), now MAIN-ONLY too — the lane is
+host-independent and `--lib`-only; dispatch it manually after a run of develop
+work, since no automatic lane covers develop pushes anymore.
 
 ## Docs gate + drift sweeps
 
@@ -262,9 +263,12 @@ scripts/required_features_build_audit.py ../riir-train --batch  # 1 run per set
 - **Read the USE SITES, not the error:** widen the ROW when the body needs
   the feature unconditionally; narrow the cfg when the use site is already
   gated.
-- Per-push half: `.github/workflows/required_features_touched.yml` checks the
-  rows this push could have broken (a changed file that IS a row's target
+- Push half (MAIN-ONLY since 2026-09-09): `.github/workflows/required_features_touched.yml` checks the
+
+  rows a main push could have broken (a changed file that IS a row's target
+
   source selects the row; a changed `Cargo.toml` selects rows whose
+
   `(kind, name, required-features)` tuple differs base-vs-head; `--max-rows`
   REFUSES rather than truncates).
 
