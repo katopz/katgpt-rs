@@ -342,3 +342,21 @@ harness = false
 name = "bench_136_weaver_f16_latency"
 harness = false
 required-features = ["weaver_runtime"]
+
+# ── katgpt-rs Issue 742: arm the auto-discovered gated targets ───────────────
+# Each target below opens a whole-file `#![cfg(feature = ...)]` and had NO
+# `[[test]]` row, so `cargo test --test <name>` without its features compiled
+# the file to an EMPTY BINARY and printed `test result: ok. 0 passed`, exit 0 —
+# byte-for-byte a real pass. The `#![cfg]` protects the COUNT (an ungated body
+# would not compile); `required-features` protects the READER, and only the
+# second is visible in the output. What changes: naming one WITHOUT its
+# features now ERRORS instead of reporting a green zero.
+#
+# Rows are DERIVED from `scripts/cfg_gated_target_audit.py --json`
+# (`silent_now_rows`), not hand-typed — a hand-typed row is the drift this
+# class is about. None is load-bearing and none carries a platform predicate,
+# so every one is fully expressible as `required-features`.
+
+[[test]]
+name = "weaver_real_checkpoint"
+required-features = ["weaver_runtime"]

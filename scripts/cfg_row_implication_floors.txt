@@ -68,5 +68,12 @@ max_unresolved = 2
 #
 # Slack is deliberate. A row legitimately leaves when a target is deleted, and
 # a ratcheting floor would red the next correct removal.
-min_rows_scanned = 560
-min_with_cfg = 359
+# 2026-09-09 (Issue 742): 560 -> 620 and 359 -> 400. The 42 armed targets add
+# 42 rows (629 -> 671 scanned, 405 -> 447 with a leading #![cfg]), so the old
+# floors sat at 83%/80% of observed — drifting toward decorative. Re-set to
+# ~92%/89%, the same slack they carried before. These two are ASSERTED equal to
+# the corresponding row in scripts/cfg_row_implication_drift_floors.txt by the
+# sweep itself, so they cannot silently diverge: editing one and not the other
+# reds with an explicit "pin desync" (which is how this edit was prompted).
+min_rows_scanned = 620
+min_with_cfg = 400

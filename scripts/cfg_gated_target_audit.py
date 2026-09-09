@@ -980,6 +980,25 @@ def main(argv: list[str]) -> int:
                         "load_bearing_paths": sorted(
                             f.path for f in r.silent_now_load_bearing()
                         ),
+                        # Issue 741 follow-up: the SILENT-NOW findings as DATA,
+                        # not just a count. The text report already prints the
+                        # exact `[[<kind>]]` row to add per finding, but the
+                        # JSON carried only totals plus three unrelated path
+                        # lists — so the machine-readable mode could not drive
+                        # the one action the report exists to prompt, and every
+                        # repo's fix had to be driven by re-parsing the prose.
+                        # Ordered by path so a diff of two runs is readable.
+                        "silent_now_rows": [
+                            {
+                                "path": f.path,
+                                "kind": f.kind,
+                                "name": f.name,
+                                "features": sorted(f.features),
+                                "predicates": sorted(f.predicates),
+                                "load_bearing": f.load_bearing,
+                            }
+                            for f in sorted(r.silent_now(), key=lambda x: x.path)
+                        ],
                         "latent": len(r.silent_latent()),
                         "platform": len(r.unexpressible),
                         "platform_only": len(r.platform_only),

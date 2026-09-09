@@ -82,21 +82,54 @@
 #
 # Measured 2026-09-06 (post multi-line fix).
 #
+#
+# ── 2026-09-09 (katgpt-rs Issues 741 + 742): max_unresolved raised in THREE
+#    repos, and the reason is the same repair in each. The alloc gates that
+#    could only be measured in a profile nobody ships were re-gated from a bare
+#    `debug_assertions` to `any(debug_assertions, feature = "alloc_tracking")`,
+#    so they can now be RUN under `--release`. That shape is genuinely
+#    UNRESOLVED to a static pass: whether the row compiles the target to
+#    nothing is a function of the PROFILE, which a walk over manifests and
+#    sources does not have. Declining to rule is correct — the alternative is a
+#    confident answer that is wrong in one of the two profiles.
+#
+#      katgpt-rs      0 -> 2   kimi_k3_g4_alloc_free, bench_284_clr_goat_g4
+#      riir-neuron-db 1 -> 2   +steering_g5_zero_alloc
+#      riir-train     1 -> 3   +nora_phase2_g4_alloc_probe,
+#                              +probe_684_topology_hotpath_alloc
+#
+#    Each was measured in all three configurations before its pin moved (dev /
+#    release-off / release+feature), and all now PASS in release. Details:
+#    katgpt-rs `.issues/741`, riir-neuron-db `.issues/615`, riir-train
+#    `.issues/530`.
+#
+#    `max_empty` stays a WALL at 0 everywhere — and it HELD through all of it:
+#    the 2026-09-09 sweep measured 0 EMPTY-AT-ROW over 2100 rows / 1437 with a
+#    leading `#![cfg]` in 17 repos, which is what licenses the ~200 rows landed
+#    that day across six repos. That is the pin that matters; UNRESOLVED is the
+#    instrument saying it cannot see, not a defect.
+#
+#    Do NOT raise max_unresolved for another `any(...)` row without the same
+#    three-configuration measurement. These are 5 because 5 were measured.
+#
+# min_rows / min_with_cfg also moved: the ~200 new rows are real population.
+# Floors keep ~75-80% slack below observed so a legitimate target removal does
+# not red them (the argument docs_drift_floors.txt's header makes at length).
 # repo                  min_rows  min_with_cfg  max_empty  max_unresolved
-katgpt-rs                      560           359          0               0
+katgpt-rs                      620           400          0               2
 katgpt-web                       0             0          0               0
 riir-ai                        463           286          0               1
 riir-auth                        0             0          0               0
-riir-chain                     100            77          0               1
+riir-chain                     125            100          0               1
 riir-clippy                     39            20          0               0
 riir-dao                         0             0          0               0
 riir-dapps                      22            22          0               0
 riir-deployer                    0             0          0               0
 riir-esp32                       0             0          0               0
-riir-game-sdk                   30            15          0               0
-riir-mmorpg-examples            18            17          0               1
-riir-neuron-db                  45            36          0               1
-riir-train                     391           254          0               1
+riir-game-sdk                   55            40          0               0
+riir-mmorpg-examples            22            20          0               1
+riir-neuron-db                  52            42          0               2
+riir-train                     400           260          0               3
 riir-viewbridge                  0             0          0               0
 seal-game-editor                 0             0          0               0
 seal-remake                      6             2          0               0

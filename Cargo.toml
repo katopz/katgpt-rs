@@ -3120,3 +3120,145 @@ required-features = ["kimi_k3_backward"]
 [[test]]
 name = "bridge_spec_match"
 required-features = ["action_bridge"]
+
+# ── katgpt-rs Issue 742: arm the auto-discovered gated targets ───────────────
+# Each target below opens a whole-file `#![cfg(feature = ...)]` and had NO
+# `[[test]]` row, so `cargo test --test <name>` without its features compiled
+# the file to an EMPTY BINARY and printed `test result: ok. 0 passed`, exit 0 —
+# byte-for-byte a real pass. The `#![cfg]` protects the COUNT (an ungated body
+# would not compile); `required-features` protects the READER, and only the
+# second is visible in the output. What changes: naming one WITHOUT its
+# features now ERRORS instead of reporting a green zero.
+#
+# Rows are DERIVED from `scripts/cfg_gated_target_audit.py --json`
+# (`silent_now_rows`), not hand-typed — a hand-typed row is the drift this
+# class is about. None is load-bearing and none carries a platform predicate,
+# so every one is fully expressible as `required-features`.
+
+[[test]]
+name = "beckmann_cce_poc"
+required-features = ["cce_moderator", "dec_operators"]
+
+[[test]]
+name = "bench_064_futamura_evaluator"
+required-features = ["percepta_compile"]
+
+[[test]]
+name = "bench_081_t10_t11_greedy_analytics"
+required-features = ["go"]
+
+[[test]]
+name = "bench_120_renyi_efficiency"
+required-features = ["toast_tokenizer"]
+
+[[test]]
+name = "bench_124_event_log_overhead"
+required-features = ["event_log"]
+
+[[test]]
+name = "bench_135_parallax_attn"
+required-features = ["parallax_attn"]
+
+[[test]]
+name = "bench_140_sigmoid_parallax"
+required-features = ["parallax_attn"]
+
+[[test]]
+name = "bench_140_sigmoid_parallax_adamw"
+required-features = ["parallax_attn"]
+
+[[test]]
+name = "bench_225_rat_bridge"
+required-features = ["rat_plus_bridge"]
+
+[[test]]
+name = "bench_delta_mem_modelless"
+required-features = ["delta_mem"]
+
+[[test]]
+name = "bench_maxsim_rerank"
+required-features = ["maxsim"]
+
+[[test]]
+name = "bench_sp_kv"
+required-features = ["sp_kv"]
+
+[[test]]
+name = "bench_sp_kv_octopus_composition"
+required-features = ["octopus", "sp_kv"]
+
+[[test]]
+name = "bench_sp_kv_quant"
+required-features = ["sp_kv", "turboquant"]
+
+[[test]]
+name = "bomber_wasm_ab"
+required-features = ["bomber-wasm"]
+
+[[test]]
+name = "bomber_wasm_bench"
+required-features = ["bomber-wasm"]
+
+[[test]]
+name = "kimi_k3_4b_a3_forward_verify"
+required-features = ["kimi_k3_loader"]
+
+[[test]]
+name = "kimi_k3_layer_diff"
+required-features = ["kimi_k3_loader"]
+
+[[test]]
+name = "kimi_k3_phase6"
+required-features = ["kimi_k3_loader"]
+
+[[test]]
+name = "kimi_k3_phase6_perf"
+required-features = ["kimi_k3_loader"]
+
+[[test]]
+name = "kimi_k3_train_init"
+required-features = ["kimi_k3_backward"]
+
+[[test]]
+name = "questbench_csp"
+required-features = ["questbench"]
+
+[[test]]
+name = "skill_lifecycle_integration"
+required-features = ["skill_lifecycle"]
+
+[[test]]
+name = "test_137_safe_phased_bandit"
+required-features = ["safe_bandit"]
+
+[[test]]
+name = "test_139_ega_attn"
+required-features = ["ega_attn"]
+
+[[test]]
+name = "test_139_ega_examples"
+required-features = ["ega_attn"]
+
+[[test]]
+name = "test_d2f_verifier"
+required-features = ["tri_mode"]
+
+[[test]]
+name = "test_percepta_rust_wasm"
+required-features = ["percepta_compile"]
+
+[[test]]
+name = "test_recfm_ddtree"
+required-features = ["recfm"]
+
+[[test]]
+name = "test_recfm_lt2"
+required-features = ["recfm"]
+
+[[test]]
+name = "test_recfm_spechop"
+required-features = ["recfm", "spechop"]
+
+[[test]]
+name = "verify_tiktoken_fix"
+required-features = ["kimi_k3_loader"]

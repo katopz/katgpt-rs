@@ -141,7 +141,21 @@
 # SILENT-NOW population. It stays a RATCHET (the remaining 42 are a real
 # backlog, not a claim of zero).
 max_load_bearing	0
-max_silent_now	42
+# ── 2026-09-09 (Issue 742): 42 -> 0, and it becomes a WALL ───────────────────
+# The 42 were a real backlog, and this file's header said so: "Arming more
+# targets lowers the real count; the gate then says so and asks to be
+# re-pinned, it does NOT fail." All 42 are armed — rows DERIVED from
+# `cfg_gated_target_audit.py --json` (`silent_now_rows`, added in the same
+# push) rather than hand-typed, because a hand-typed row is the drift this
+# whole class is about. 32 root + 6 katgpt-core + 2 katgpt-types + 1 tokenizer
+# + 1 speculative. `w/ req-f` 405 -> 447 = 405 + 42 exactly, and targets (931),
+# #![cfg] (550), latent (101), cfg(test) (1), any() (1) and PROFILE* (2) are
+# all UNMOVED — repair, not a blinding.
+#
+# Now a WALL, for the same reason max_load_bearing is: a new gated target with
+# no row reds the push that adds it, before its green zero is read as evidence.
+# The fix the report prints is three lines of TOML. Do not raise it.
+max_silent_now	0
 min_targets	700
 min_gated	400
 max_reasonless_ignores	0

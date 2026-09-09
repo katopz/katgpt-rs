@@ -2607,3 +2607,41 @@ required-features = ["regime_probe", "hebbian_kernel_memory"]
 [[test]]
 name = "regime_probe_alloc_check"
 required-features = ["regime_probe"]
+
+# ── katgpt-rs Issue 742: arm the auto-discovered gated targets ───────────────
+# Each target below opens a whole-file `#![cfg(feature = ...)]` and had NO
+# `[[test]]` row, so `cargo test --test <name>` without its features compiled
+# the file to an EMPTY BINARY and printed `test result: ok. 0 passed`, exit 0 —
+# byte-for-byte a real pass. The `#![cfg]` protects the COUNT (an ungated body
+# would not compile); `required-features` protects the READER, and only the
+# second is visible in the output. What changes: naming one WITHOUT its
+# features now ERRORS instead of reporting a green zero.
+#
+# Rows are DERIVED from `scripts/cfg_gated_target_audit.py --json`
+# (`silent_now_rows`), not hand-typed — a hand-typed row is the drift this
+# class is about. None is load-bearing and none carries a platform predicate,
+# so every one is fully expressible as `required-features`.
+
+[[test]]
+name = "data_probe_sink_classify"
+required-features = ["sink_aware_attn"]
+
+[[test]]
+name = "limit_recall"
+required-features = ["limit_fixture"]
+
+[[test]]
+name = "occupancy_baird_mrp"
+required-features = ["occupancy_ratio"]
+
+[[test]]
+name = "plan411_joint_classifier_gold_share"
+required-features = ["gold_share_probe", "sink_aware_attn"]
+
+[[test]]
+name = "smear_classifier_integration_check"
+required-features = ["smear_classifier"]
+
+[[test]]
+name = "switch_cost_663_poc"
+required-features = ["switch_cost"]
