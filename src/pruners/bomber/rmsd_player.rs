@@ -26,7 +26,6 @@
 //! Plan 125: RMSD relevance-masked self-distillation.
 
 use std::any::Any;
-use std::cmp::Ordering;
 
 use fastrand::Rng;
 

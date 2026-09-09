@@ -26,7 +26,6 @@
 //! Tests hypothesis: VPD EM co-evolution ≥ passive SDAR gating in bomber arena.
 
 use std::any::Any;
-use std::cmp::Ordering;
 
 use fastrand::Rng;
 

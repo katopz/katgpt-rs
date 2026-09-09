@@ -24,7 +24,6 @@
 //! 7. Record (action, δ) for outcome update
 
 use std::any::Any;
-use std::cmp::Ordering;
 
 use fastrand::Rng;
 

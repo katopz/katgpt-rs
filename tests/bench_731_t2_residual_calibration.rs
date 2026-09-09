@@ -204,8 +204,8 @@ fn phase_b_calibration(
             .iter()
             .copied()
             .min_by(|a, b| {
-                let da = if a.0 > med { a.0 - med } else { med - a.0 };
-                let db = if b.0 > med { b.0 - med } else { med - b.0 };
+                let da = a.0.abs_diff(med);
+                let db = b.0.abs_diff(med);
                 da.cmp(&db).then(a.0.cmp(&b.0))
             })
             .map(|(_, d)| d)

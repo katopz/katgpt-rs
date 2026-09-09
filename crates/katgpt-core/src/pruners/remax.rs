@@ -280,7 +280,6 @@ pub fn expected_improvement_per_action_inplace(pi: &[f32], q: &[f32], m: f32, ou
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core::cmp::Ordering;
 
     /// Helper: dot product of two slices.
     fn dot(a: &[f32], b: &[f32]) -> f32 {

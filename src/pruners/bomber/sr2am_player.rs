@@ -30,7 +30,6 @@
 //! 9. Track decision for stats
 
 use std::any::Any;
-use std::cmp::Ordering;
 
 use fastrand::Rng;
 use katgpt_core::{ConfiguratorContext, PlanningDecision};

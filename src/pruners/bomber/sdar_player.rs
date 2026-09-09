@@ -26,7 +26,6 @@
 //! quality axis is survival.
 
 use std::any::Any;
-use std::cmp::Ordering;
 
 use fastrand::Rng;
 

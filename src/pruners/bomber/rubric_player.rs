@@ -20,7 +20,6 @@
 //! so rubric gain over scalar δ should be minimal.
 
 use std::any::Any;
-use std::cmp::Ordering;
 
 use fastrand::Rng;
 
