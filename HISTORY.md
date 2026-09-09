@@ -1269,6 +1269,30 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
 
 ## Issue log (resolved)
 
+- **Issue 741-as-filed — `is_load_bearing` cannot name a security gate that is named after its THREAT** RESOLVED
+  (2026-09-09; fix `ba26462b`; issue file removed at close, this row + git history are the durable record —
+  read the filing with `git show d43a0dea:.issues/741_load_bearing_vocabulary_misses_the_threat_dialect.md`).
+  **Numbering note:** the filing and the alloc-gates issue (`741_alloc_gates_only_measurable_in_a_profile_nobody_ships.md`,
+  fix `da498fa6`) DUAL-ALLOCATED 741 within one evening; `numbering_gate.py` caught it on its next docs-gate run.
+  The bare number stays with the alloc-gates issue (blast-radius tiebreaker: landed fix + floors/AGENTS/source
+  citations vs one file); this finding is cited by its file path + the `d43a0dea` hash everywhere durable.
+  Finding: every token in `LOAD_BEARING_TOKENS` named a property the file ASSERTS, while an entire naming
+  convention names the THREAT the file DEFENDS AGAINST — riir-game-sdk's `prod_l<tier>_<threat>` drill suite
+  classified **0/31 load-bearing** while `prod_l4_security_rejections` (same repo/directory/tier/purpose)
+  classified, decided by whether the author wrote "security". Measured over 2,328 target names in 27 repos.
+  Fix: 11 ADMIT tokens (`forgery` ×2, `mitm` ×1, `anticheat` ×1, `chaos` ×4, `crash` ×4, `agreement` ×4,
+  `finiteness` ×2, `partition` ×1, `sigkill` ×1, `overflow` ×1, `fuzz` ×1) + 3 bigrams (`crash_replay`,
+  `divergence_injection`, `front_run`), each with its measured hit count in the source comment; the homonym
+  REJECT table (`replay` 10 perf-probe homonym · `divergence` 9 measured quantity · `injection` 3 bench
+  technique · `rejection` 1 rejection-sampling · `watermark` 2 senses, `agreement` covers the gated one; zero-hit
+  `tamper`/`spoof`/`dos`/`adversar`/`byzantine`/`exploit` RESERVED) recorded in
+  `.docs/10_audits/cfg_gated_silent_zero_pass.md` §T4f. Impact **0 → 0**: `silent_now_load_bearing` stayed 0 in
+  all 17 repos, `scanned`/`gated` unchanged — the counterfactual is the finding: the 31 pre-`2380fc7` names
+  replay **11** load-bearing SILENT-NOW against a `max_load_bearing = 0` wall that never said a word. Floors file
+  carries the caveat: "arming those is churn" and "the classifier cannot read the name" are indistinguishable
+  from inside the report. The third instance of the vocabulary-gap class in this file's history (713 T4c, 728,
+  this).
+
 - **Issue 740 — Regime-Probe Primitives: Entropy Gap, Basin Probe, Gardner LUT (arXiv:2604.26841)** RESOLVED
   (2026-09-09; T1–T9 landed, all `[x]` — issue file removed at close, this row + git history are the durable
   record. Landed behind the opt-in `regime_probe` feature as `crates/katgpt-core/src/regime_probe/` (impl
