@@ -1269,6 +1269,34 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
 
 ## Issue log (resolved)
 
+- **Issue 740 — Regime-Probe Primitives: Entropy Gap, Basin Probe, Gardner LUT (arXiv:2604.26841)** RESOLVED
+  (2026-09-09; T1–T9 landed, all `[x]` — issue file removed at close, this row + git history are the durable
+  record. Landed behind the opt-in `regime_probe` feature as `crates/katgpt-core/src/regime_probe/` (impl
+  `781264aa`, docs `53fc8b90`; bench record [`.benchmarks/702_regime_probe_goat.md`](.benchmarks/702_regime_probe_goat.md)):
+  per-position conditional entropy of a categorical via the SHARED kernel `katgpt-types::simd::logsumexp_parts`
+  (factored from `breakeven/fidelity.rs::cross_entropy`, delegation bit-identical — the reuse mandate held, zero
+  parallel entropy code anywhere); two-sample entropy-gap detector with BLAKE3 artifacts (`KRPG`); corrupt→renovate
+  basin probe over the `FrozenRenovator` trait seam (eq-12, seeded Fisher–Yates, `fastrand::with_seed` — the
+  `data_probe::markov` RNG convention); Gardner capacity LUT (`OnceLock` 4096-pt uniform-log-γ grid + quadratic
+  interpolation, Φ via A&S 7.1.5, golden-vs-bisection worst err 5.2e-10 vs the 1e-6 gate). GOAT: G1 PASS (Fig 1B
+  cross-over — memorizer gap 1.376→−0.006 nats across the capacity crossing, generalizer 0.004 flat, crossover
+  0.375 vs 0.125), G2 PASS WITH CAVEATS (Unwhitened Hebbian-correlator ρ_c ≥ bound at γ=1/4; scope boundary
+  recorded — the Whitened interpolant fails the CLT premise outright, needle basins 64→865, so the bound is a
+  correlator result not a readout-family result), G3 PASS (bit-identical artifacts), G4 PASS (0 bytes steady
+  state). UQ floor (T9): bare detectors, conformal-naive exemption recorded, re-affirm at promotion if calibrated
+  intervals ever appear. FIRST CONSUMER LANDED 2026-09-09: riir-clippy Issue 077 T1+T4 (`1994a8a`+`ffdd7a9` —
+  `score_bench` forwards `katgpt-core/regime_probe`, `src/score_bench/ood.rs`, additive JSONL field, no heal.rs
+  edit, shared-worktree blob-commit for their dirty Cargo.toml); measured run #84: gap **−0.729 nats** / d −1.11
+  → **anomalous_negative** — the OOD-labeled gen6 set shares provenance family with the seed corpus, so corpus
+  proximity, not the held-out label, decided the gap side (both readings in riir-clippy
+  `.docs/08_benchmarks/entropy_gap_ood_axis.md` + the Bench 702 addendum `0a9994fd`). PROMOTION: stays opt-in —
+  the consumer requirement is met but convergent validity is not yet demonstrated; unblock = a provenance-disjoint
+  reference/OOD pairing in score_bench fixtures + re-read of Bench 702 + 077's convergent-validity GOAT (the open
+  thread lives in riir-clippy Issue 077, whose T2/T3 margin-weighted mining also remains). Engine serving-health
+  audit recorded as an OPTIONAL second consumer — T8's "and/or" is satisfied by the score_bench axis alone.
+  Closeout: gates at close — katgpt-core lib 2001 passed @ `regime_probe` / 1979 @ default, clippy `-D warnings`
+  clean both feature sets, docs_gate 14/14 (impl-time); consumer suite 1396/0 at `score_bench` (riir-clippy).
+
 - **Issue 738 — the wasm32 lanes compile what they NAME; nothing checks that what they name is the whole surface** RESOLVED
   (2026-09-08; T0–T3 landed — `scripts/wasm32_surface_audit.py` (POSITIVE-cfg predicate, comments excluded, derived
   population from BOUNDARY.md + a `.git` dir so throwaway worktrees are not double-counted; NAMED/UNRESOLVED/UNCOVERED
