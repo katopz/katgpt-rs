@@ -1269,6 +1269,11 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
 
 ## Issue log (resolved)
 
+- **Issue 742 — the last 42 `#![cfg]`-gated targets in this repo reported a green zero; `SILENT-NOW` is now a WALL at 0** RESOLVED + removed
+  (2026-09-09, `2ae0d20a`; the workspace arming sweep's katgpt-rs slice — ndb 616, chain 138, riir-ai 906 landed the same day).
+  `SILENT-NOW 42 → 0`, `max_silent_now` re-pinned **42 → 0 as a WALL**; rows DERIVED from the instrument, not hand-typed.
+  Issue file removed at close, this row + git history are the durable record (read the filing with
+  `git show 2ae0d20a^:.issues/742_the_last_42_gated_targets_reported_a_green_zero.md`).
 - **Issue 741 — alloc gates were unrunnable in the shipped profile + the auditor read one of N cfgs** RESOLVED
   (2026-09-09; fix `da498fa6`, free_gib crash follow-up `3115f7f4`, floors/auditor records in the same arcs;
   issue file removed at close, this row + git history are the durable record — read the filing with
