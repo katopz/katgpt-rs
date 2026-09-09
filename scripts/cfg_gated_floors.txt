@@ -114,6 +114,29 @@
 # a new load-bearing SILENT-NOW target reds the push that adds it, before its
 # green zero is cited as evidence. Do not raise it.
 #
+# ── 2026-09-09 (the THREAT dialect finding, filed as
+# .issues/741_load_bearing_vocabulary_misses_the_threat_dialect.md — REMOVED on
+# resolution; read it with `git show d43a0dea:...`; the bare 741 number belongs
+# to the alloc-gates issue by the blast-radius tiebreaker): the wall held at 0
+# through a
+# vocabulary gap that would have read 11. riir-game-sdk's `prod_l<tier>_<threat>`
+# drill suite (forgery / mitm / anticheat / partition / crash_replay / …)
+# classified 0/31 load-bearing because every token then in the set names a
+# property the file ASSERTS, and this convention names the THREAT the file
+# DEFENDS AGAINST. The arming commit `2380fc7` emptied the population before
+# the widened classifier ran, so no pin moved — but replaying the 31 pre-arming
+# names through the widened set flags 11, against this very wall. Eleven
+# load-bearing SILENT-NOW targets would have red-ed any push that added them,
+# and none did. The 11 threat tokens + 3 bigrams are in
+# `cfg_gated_target_audit.py` with their measured hit counts; the homonym
+# REJECT table (`replay`/`divergence`/`injection`/`rejection`/`watermark`) is
+# in `.docs/10_audits/cfg_gated_silent_zero_pass.md` §T4f — do not re-measure
+# those and get it wrong. Standing caveat for anyone reading a report that
+# says "churn": whether a green zero is cited as evidence is decided by
+# `is_load_bearing`, so "churn" and "the classifier cannot read the name" are
+# indistinguishable from inside the report. The wall is only as wide as the
+# vocabulary, and a widening that changes no count is still a finding.
+#
 # `max_silent_now` 44 -> 42 in the same commit: the two armed targets leave the
 # SILENT-NOW population. It stays a RATCHET (the remaining 42 are a real
 # backlog, not a claim of zero).

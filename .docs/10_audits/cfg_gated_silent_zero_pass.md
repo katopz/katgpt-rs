@@ -457,3 +457,68 @@ Both mention `required-features` only incidentally; neither asks whether a
 `#![cfg]`-gated target declares one. Related family: `.issues/705` (a gate that
 passed over zero compiled units) and `.issues/706` (a compile surface in a
 workflow nothing started) — **an instrument that cannot fail is not passing.**
+
+## T4f (2026-09-09) — the THREAT dialect: names that say what the file defends AGAINST
+
+Finding file: `.issues/741_load_bearing_vocabulary_misses_the_threat_dialect.md`,
+filed 2026-09-09 and removed on resolution — **read it with
+`git show d43a0dea:.issues/741_load_bearing_vocabulary_misses_the_threat_dialect.md`**
+(the bare number "741" now belongs to the alloc-gates issue
+`741_alloc_gates_only_measurable_in_a_profile_nobody_ships.md`, landed
+`da498fa6`, by the blast-radius tiebreaker — the dual allocation was caught by
+`numbering_gate.py` the same evening).
+
+Every token admitted before this names a **property the file asserts**. An
+entire naming convention names the **threat the file defends against** instead,
+and the classifier read it 0/31: riir-game-sdk's `prod_l<tier>_<threat>` drill
+suite classified as churn while `prod_l4_security_rejections` — same repo,
+same directory, same tier, same purpose — classified because the author
+happened to write "security". Measured over **2,328 test/bench target names in
+27 repos** before anything was admitted. Adopting the ADMIT set moved
+`silent_now_load_bearing` **0 → 0 workspace-wide** (Issue 728 T2 had already
+armed everything visible) — **the counterfactual is the finding**: run the
+widened classifier over riir-game-sdk's 31 names as they stood before `2380fc7`
+and **11** light up load-bearing SILENT-NOW, against a `max_load_bearing = 0`
+wall that stayed green throughout. Green today for a good reason, green
+yesterday for a bad one; the gap reopens with the next `prod_l4_<threat>`
+target.
+
+ADMIT — every hit is a thing the file exists to FAIL on:
+
+| token | hits | where | note |
+|---|---|---|---|
+| `forgery` | 2 | riir-chain `ledger_forgery`, riir-game-sdk `prod_l4_forgery_matrix` | both forgery-rejection |
+| `mitm` | 1 | `prod_l4_cpi_mitm` | unambiguous by definition |
+| `anticheat` | 1 | `game_anticheat` | unambiguous |
+| `chaos` | 4 | riir-dapps ×2, riir-game-sdk ×2 | a chaos suite exists to fail on |
+| `crash` | 4 | riir-chain ×2, riir-game-sdk ×2 | all crash-recovery |
+| `agreement` | 4 | katgpt-rs, riir-ai, riir-clippy, riir-game-sdk | "two things must agree" — same family as the admitted `equivalence`/`parity` |
+| `finiteness` | 2 | riir-chain `wire_finiteness_audit`, `prod_l4_finiteness_channels` | bounds assertions |
+| `partition` | 1 | `prod_l3_partition_heal` | network sense; only hit |
+| `sigkill` | 1 | `prod_l3_sigkill_drills` | already caught via `drill`; admitted for the bare-noun case |
+| `overflow` | 1 | riir-chain `settlement_recipient_overflow` | arithmetic-overflow rejection |
+| `fuzz` | 1 | riir-chain `ledger_conservation_fuzz` | already caught via `conservation` |
+
+Bigrams (neither half admissible alone — the `spec_match` mechanism, three
+more instances): `crash_replay`, `divergence_injection`, `front_run`.
+
+REJECT — the measured homonyms, and the half worth more than the admissions
+(this table is the artefact the next person does not have to re-derive):
+
+| token | hits | why NOT |
+|---|---|---|
+| `replay` | 10 | includes **perf probes** — `bench_618_graph_replay_probe`, `probe_742_graph_replay`. Not gates. (`crash_replay` as a bigram carries the gated sense.) |
+| `divergence` | 9 | usually a **measured quantity**, not a gated one — `k3_pause_logit_divergence_bench`, `bench_337_phase4_g7_persona_divergence`. (The bigram `divergence_injection` is a fault-injection drill.) |
+| `injection` | 3 | also a bench **technique** — `triggered_injection_bench` |
+| `rejection` | 1 | katgpt-rs `rejection_uniformity` is **rejection sampling** — a different word entirely |
+| `watermark` | 2 | two senses: riir-chain `forensic_watermark` (steganographic) vs `prod_l2_watermark_agreement` (stream progress). `agreement` covers the gated one |
+| `tamper`, `spoof`, `dos`, `adversar`, `byzantine`, `exploit` | 0 | a zero-hit token cannot be validated against homonyms. **Reserved, not admitted** — add one when its first real target arrives |
+
+Post-adoption verification: `silent_now_load_bearing = 0` in every contract
+repo, `scanned`/`gated` unchanged everywhere (no new findings — the 11 are
+armed already). And the standing caveat this finding pins to the report's
+reader: whether a green zero is *cited as evidence* is decided by
+`is_load_bearing`, so "arming those is churn" and "the classifier cannot read
+the name" are indistinguishable **from inside the report** — riir-game-sdk's
+31 read as churn and 11 were not. A vocabulary widening is a report-changing
+event even when every count it prints stays still.

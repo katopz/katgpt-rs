@@ -226,6 +226,54 @@ LOAD_BEARING_TOKENS = frozenset(
         # component. `identity` (6) is a genuine homonym: 4 of its 6 are
         # `signer_identity` / `identity_matcher`, a domain NOUN.
         # `liveness`/`conformance`/`idempotence` matched nothing at all.
+        #
+        # ── added 2026-09-09 (the THREAT-dialect finding,
+        # .issues/741_load_bearing_vocabulary_misses_the_threat_dialect.md,
+        # removed on resolution — `git show d43a0dea:...`; the bare 741
+        # number belongs to the alloc-gates issue by the blast-radius
+        # tiebreaker). Every token
+        # above names a property the file asserts; an entire naming convention
+        # names the THREAT the file defends against, and the classifier was
+        # blind to it — riir-game-sdk's `prod_l<tier>_<threat>` drill suite
+        # classified 0/31 load-bearing while `prod_l4_security_rejections`,
+        # same repo, same directory, same purpose, classified because the
+        # author happened to write "security". Measured against 2,328 target
+        # names in 27 repos (see the issue + the doc's token table); each hit
+        # checked per-site, every one a thing the file exists to FAIL on:
+        "forgery",        # 2 — riir-chain `ledger_forgery`,
+                          # riir-game-sdk `prod_l4_forgery_matrix`; both
+                          # forgery-rejection
+        "mitm",           # 1 — `prod_l4_cpi_mitm` (cross-program-invocation
+                          # man-in-the-middle probe); unambiguous
+        "anticheat",      # 1 — `game_anticheat`; unambiguous
+        "chaos",          # 4 — riir-dapps x2, riir-game-sdk x2; a chaos
+                          # suite exists to fail on
+        "crash",          # 4 — riir-chain x2, riir-game-sdk x2; all
+                          # crash-recovery drills
+        "agreement",      # 4 — katgpt-rs, riir-ai, riir-clippy,
+                          # riir-game-sdk; "two things must agree" — the same
+                          # family as the admitted `equivalence`/`parity`
+        "finiteness",     # 2 — riir-chain `wire_finiteness_audit`,
+                          # `prod_l4_finiteness_channels`; bounds assertions
+        "partition",      # 1 — `prod_l3_partition_heal`; the network sense,
+                          # the only hit
+        "sigkill",        # 1 — `prod_l3_sigkill_drills` (already caught via
+                          # `drill`; admitted for the bare-noun case)
+        "overflow",       # 1 — riir-chain `settlement_recipient_overflow`;
+                          # arithmetic-overflow rejection
+        "fuzz",           # 1 — riir-chain `ledger_conservation_fuzz`
+                          # (already caught via `conservation`; admitted for
+                          # the bare case)
+        # DELIBERATELY NOT added, measured the same way (the homonym half —
+        # the reusable work, recorded in the doc's token table):
+        # `replay` (10) admits perf probes (`bench_618_graph_replay_probe`);
+        # `divergence` (9) is usually a MEASURED quantity, not a gated one;
+        # `injection` (3) is also a bench technique; `rejection` (1 here) is
+        # rejection SAMPLING in katgpt-rs; `watermark` (2) splits
+        # steganographic vs stream-progress, and `agreement` covers the
+        # gated one. Zero-hit tokens (`tamper`, `spoof`, `dos`, `adversar`,
+        # `byzantine`, `exploit`) are RESERVED, not admitted — add one when
+        # its first real target arrives.
     }
 )
 
@@ -243,7 +291,23 @@ LOAD_BEARING_TOKENS = frozenset(
 # conformance convention — which katgpt-rs shares. Five of this repo's seven
 # `*_spec_match` targets were only ever visible because they ALSO carry `g1`;
 # `bridge_spec_match` and `pencil_spec_match` do not, and were invisible.
-LOAD_BEARING_BIGRAMS = frozenset({"spec_match"})
+#
+# 2026-09-09 (the THREAT-dialect finding — see the token block above): three
+# more compounds from the threat dialect, same
+# mechanism — neither half admits alone:
+#
+#   `crash` alone is admissible (4 hits, all crash-recovery) but the
+#           `crash_replay` compound is named anyway as a unit: the bigram
+#           documents that `replay` (10, perf-probe homonym) stays OUT while
+#           the crash half carries it.
+#   `divergence` (9) is a measured quantity, `injection` (3) a bench
+#           technique — neither alone; `prod_l3_divergence_injection` is a
+#           fault-injection drill and the pair together is unambiguous (1 hit).
+#   `front_run` (1) — `prod_l4_mev_front_run`, a MEV front-running rejection
+#           gate; `run` alone is a verb, `front` alone an adjective.
+LOAD_BEARING_BIGRAMS = frozenset(
+    {"spec_match", "crash_replay", "divergence_injection", "front_run"}
+)
 
 # `g1`..`g<N>`, optionally with a variant suffix — the GOAT sub-gate naming
 # convention (G1 correctness, G2 perf, G3 no-regression, G4 alloc-free) as it
