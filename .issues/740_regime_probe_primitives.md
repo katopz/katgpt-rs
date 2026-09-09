@@ -27,4 +27,4 @@ Ship the predictor-agnostic regime-probe suite as modelless katgpt-core primitiv
 
 - Do NOT reopen Plan 276's `AttractorKernel` speculatively; Research 541 §3 records why it failed and what would unblock it (Hebbian construction à la R455) if a consumer materializes.
 - Raw-scalar outputs only (entropy nats, gap, ρ bound) — latent read → scalar out, the sanctioned bridge direction.
-- Measured record: [`.benchmarks/702_regime_probe_goat.md`](../.benchmarks/702_regime_probe_goat.md). Commit: (hash recorded at commit time — see the `docs:` follow-up commit if absent).
+- Measured record: [`.benchmarks/702_regime_probe_goat.md`](../.benchmarks/702_regime_probe_goat.md). Implementation commit: `781264aa` (feat: regime-probe primitives).
