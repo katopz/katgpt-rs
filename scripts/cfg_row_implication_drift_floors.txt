@@ -115,10 +115,41 @@
 # min_rows / min_with_cfg also moved: the ~200 new rows are real population.
 # Floors keep ~75-80% slack below observed so a legitimate target removal does
 # not red them (the argument docs_drift_floors.txt's header makes at length).
+#
+# ── 2026-09-09 (riir-ai .issues/906): riir-ai max_unresolved 1 -> 3, min_rows
+#    463 -> 540, min_with_cfg 286 -> 360. 77 targets were armed there, taking
+#    that repo's rows 523 -> 600 (402 with a leading #![cfg]) and SILENT-NOW
+#    77 -> 0, so the floors are real new population.
+#
+#    The two ARRIVING unresolved rows are both LEGITIMATE — the documented
+#    classes this column exists to report rather than to blame, named here so
+#    the next reader does not have to re-derive them:
+#
+#      riir-games-civ:bench:bench_624_cog_branch_cadence
+#        #![cfg(any(feature = "npc_cognitive_branches",
+#                   feature = "npc_cognitive_branches_metamemory"))]
+#        An ANY-OF feature set. Cargo's `required-features` is AND-ONLY, so
+#        this cannot be expressed as a row at all — not a defect, an
+#        inexpressible shape.
+#
+#      riir-gpu:test:bench_663_t5_single_gemm_isolation
+#      riir-gpu:test:bench_663_zero_copy_interop
+#        both carry `not(feature = "cuda_backend")` + `target_os = "macos"`.
+#        A feature under `not(...)` INVERTS the implication, and cargo has no
+#        platform predicate either. Also measured rather than assumed on this
+#        macOS box: `cargo check -p riir-gpu --features
+#        cubecl_runtime,cuda_backend --test bench_663_zero_copy_interop`
+#        exits 0 — `check` never links, so neither cudarc nor cubecl/cuda
+#        refuses at build-script time. The withholding I expected was not
+#        needed.
+#
+#    max_empty stays a WALL at 0, and it HELD: 2149 rows / 1486 with a leading
+#    #![cfg] / 0 EMPTY-AT-ROW across 17 repos after ~200 rows landed in seven
+#    repos on 2026-09-09.
 # repo                  min_rows  min_with_cfg  max_empty  max_unresolved
 katgpt-rs                      620           400          0               2
 katgpt-web                       0             0          0               0
-riir-ai                        463           286          0               1
+riir-ai                        540           360          0               3
 riir-auth                        0             0          0               0
 riir-chain                     125            100          0               1
 riir-clippy                     39            20          0               0
