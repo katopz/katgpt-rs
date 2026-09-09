@@ -1,8 +1,12 @@
 # Issue 740: Regime-Probe Primitives — Entropy Gap, Basin Probe, Gardner LUT (arXiv:2604.26841)
 
-**Status:** Implemented — T1–T7, T9 landed; GOAT G1/G3/G4 PASS, G2 PASS with
-recorded caveats (Bench 702); feature stays opt-in; T8 consumer half
-(riir-clippy score_bench) remains
+**Status:** Implemented — T1–T9 landed; GOAT G1/G3/G4 PASS, G2 PASS with
+recorded caveats (Bench 702); FIRST CONSUMER LANDED 2026-09-09 (riir-clippy
+score_bench OOD axis, its Issue 077 T1+T4 @ `1994a8a`+`ffdd7a9`, measured run
+#84); feature STAYS OPT-IN — the consumer's first real-corpus reading is
+anomalous_negative (provenance-family coupling, see Bench 702 addendum), so
+convergent validity is not yet demonstrated and promotion to default stays
+deferred
 **Date:** 2026-09-08
 **Research:** [katgpt-rs/.research/541_UDDM_Associative_Memory_Regime_Probes.md](../.research/541_UDDM_Associative_Memory_Regime_Probes.md) @ katgpt-rs `77169275`
 **Source:** [arXiv:2604.26841](https://arxiv.org/abs/2604.26841) — UDDMs as associative memories; conditional entropy as a training-free memorization↔generalization probe.
@@ -20,7 +24,7 @@ Ship the predictor-agnostic regime-probe suite as modelless katgpt-core primitiv
 - [x] **T5** GOAT G1 (discriminative validity): probes separate a constructed exact-LUT "memorizer" vs kernel-smoothed "generalizer" across a load sweep — transition must reproduce the paper's Fig 1B cross-over shape. **PASS** — gap 1.376→−0.006 nats across the capacity crossing; train-recovery 0.750→0.125 monotone; generalizer crossover at high load (0.375 vs 0.125); classification labels all three regime points correctly.
 - [x] **T6** GOAT G2 (bound-holds): flip-fraction `ρ_c` at 0.99-overlap on a constructed Hebbian memory (`hebbian_kernel_memory` consumer) sits above the `κ_achieved`-derived bound across loads (Fig 6 shape). **PASS with caveats** on the Unwhitened (Hebbian-correlator) variant: measured median ρ_c 0.094 ≥ bound 0.035 at γ=1; 0.016 ≥ 0.000 at γ=4 (bound degenerate — margins go negative past effective capacity). Recorded scope boundary: the **Whitened interpolant fails the CLT premise outright** (needle basins — one-bit flip drives max_v·MLP 64→865; 0/64 single-bit sites restorable) — the bound is a Hebbian-correlator result, not a readout-family result.
 - [x] **T7** G3/G4: bit-determinism under fixed seed; zero-alloc scratch-buffer protocol; `cargo clippy -D warnings` clean at default + `--features regime_probe`. **PASS** — artifacts bit-identical across fresh reruns; 0 bytes steady-state (1000 entropy batches + 100 gap + 100 basin probes); clippy clean both feature sets.
-- [-] **T8** Consumers wired + measured: `riir-clippy` score_bench OOD axis (its Issue 077) and/or engine serving-health audit; one benchmark doc in `.benchmarks/` with the G1/G2 tables before any promotion talk. *(The `.benchmarks/702_regime_probe_goat.md` half is DONE. The consumer half is other-repos work — riir-clippy Issue 077 + engine serving-health audit — deliberately not touched from this repo; it remains the open half of T8.)*
+- [x] **T8** Consumers wired + measured: `riir-clippy` score_bench OOD axis (its Issue 077) and/or engine serving-health audit; one benchmark doc in `.benchmarks/` with the G1/G2 tables before any promotion talk. *(Bench doc 702: DONE. Consumer half LANDED 2026-09-09: riir-clippy Issue 077 T1+T4 — `score_bench` feature forwards `katgpt-core/regime_probe`, new `src/score_bench/ood.rs` emits the entropy-gap row (reference = v1 frozen 35, OOD = gen6 real-repo 17), additive JSONL field, BLAKE3 artifact; commits `1994a8a`+`ffdd7a9`; measured score-bench run #84: gap −0.729 nats / Cohen's d −1.11 → **anomalous_negative** — the OOD-labeled gen6 set shares provenance family with the seed corpus (carved from the same pre-heal sibling states), so the gap side tracks corpus proximity, not the held-out label; honest reading + both interpretations in riir-clippy `.docs/08_benchmarks/entropy_gap_ood_axis.md` and the Bench 702 addendum. The "and/or" is satisfied — the engine serving-health audit stays an OPTIONAL second consumer. **Promotion consequence:** convergent validity (077's GOAT for the axis) is NOT yet demonstrated on a real corpus — `regime_probe` stays opt-in; unblock = a reference/OOD pairing with disjoint provenance families (record provenance next to frozen labels).)*
 - [x] **T9** UQ floor check (conditional): if the probe ever emits calibrated probabilities/intervals, benchmark against the conformal-naive floor (Research 322 / Plan 340) — bare detectors are exempt but this must be re-affirmed at promotion time. *(Exemption recorded in Bench 702 §"UQ floor (T9)"; re-affirmation note in place.)*
 
 ## Notes

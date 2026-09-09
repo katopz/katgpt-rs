@@ -156,17 +156,41 @@ calibrated probability/interval** (e.g. if a consumer starts treating
 posteriors as UQ outputs); at that point the primitive must beat
 `ConformalIntervalCalibrator<SeasonalNaiveForecaster>` on CRPS/coverage/Winkler.
 
-## Promotion status
+## Consumer addendum (2026-09-09): first real measurement — riir-clippy run #84
 
-`regime_probe` stays **opt-in**. Promotion to default requires: (a) a
-default-path consumer (riir-clippy score_bench OOD axis — its Issue 077 —
-and/or an engine serving-health audit), (b) this GOAT record re-read at that
-time. Nothing in this bench promotes it.
+The first consumer landed: riir-clippy Issue 077 T1+T4 (`1994a8a`+`ffdd7a9`)
+wires `katgpt-core::regime_probe` into its score_bench (`score_bench`
+feature forwards `katgpt-core/regime_probe`; new `src/score_bench/ood.rs`;
+additive JSONL field; no parallel entropy implementation — the boundary
+mandate held). Measured on a real `--score-bench` run (#84, 35 fixtures, heal
+96.2%): reference = v1 frozen (35) vs OOD-labeled = gen6 real-repo (17):
+
+| mean_ref | mean_ood | gap | Cohen's d | classification |
+|---|---|---|---|---|
+| 3.840 nats | 3.110 nats | **−0.729** | −1.11 | **anomalous_negative** |
+
+Artifact `faa021c8…` (id-sorted, bit-deterministic). The honest reading: the
+OOD-labeled set fires MORE sharply than the reference — gen6 is carved from
+the SAME pre-heal sibling states as the seed corpus, so **provenance family,
+not the held-out label, decided the gap side**. This is the axis working
+(d it discriminated, strongly) while the convergent-validity claim (077's
+GOAT: regime boundary agrees with an external oracle inflection) is NOT yet
+demonstrated — the label coupling poisons the pairing. Both interpretations
+are documented in riir-clippy `.docs/08_benchmarks/entropy_gap_ood_axis.md`.
+
+## Promotion status (updated by the addendum)
+
+`regime_probe` stays **opt-in**. Requirement (a) — a consumer — is now MET
+(riir-clippy score_bench), but the consumer's first real-corpus measurement
+is anomalous_negative, so promotion to default is STILL DEFERRED. Unblock: a
+reference/OOD pairing with disjoint provenance families (record provenance
+next to the frozen labels in score_bench fixtures), then re-read this record
+plus 077's convergent-validity GOAT.
 
 ## What remains
 
-- **T8 consumer half (other repos, not this one)**: riir-clippy score_bench
-  OOD axis (riir-clippy Issue 077) + engine serving-health audit wiring.
+- The engine serving-health audit remains an OPTIONAL second consumer (the
+  077 score_bench axis satisfies T8's "and/or").
 - The paper's model-sampled ("self-entropy") arm is recorded as a secondary
   signal (M6); a consumer wanting the paper's exact protocol gates on it.
 - KS statistic for the two-sample detector: skipped (mean gap + Cohen's d
