@@ -133,10 +133,12 @@ pin will not say so.
 
 ## Cross-refs
 
-riir-game-sdk `.issues/028` (`2380fc7`) — the 31 targets, armed and verified
+riir-game-sdk `.issues/028` (`2380fc7`, RESOLVED + removed 2026-09-09 —
+record in that repo's HISTORY.md) — the 31 targets, armed and verified
 both directions, which is what makes the counterfactual measurable.
-riir-clippy `.issues/083` (`2c7be78`) and riir-dao `.issues/003` (`f3a0578`)
-— the same class in two more repos, same day.
+riir-clippy `.issues/083` (`2c7be78`, RESOLVED + removed same day — record
+in its HISTORY.md) and riir-dao `.issues/003` (`f3a0578`, still open) —
+the same class in two more repos, same day.
 `.docs/10_audits/cfg_gated_silent_zero_pass.md` — the doctrine, the token
 table, and the two prior instances of this exact vocabulary failure.
 `scripts/cfg_gated_floors.txt` — the `max_load_bearing = 0` wall and the
