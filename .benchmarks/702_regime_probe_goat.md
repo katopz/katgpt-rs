@@ -187,6 +187,26 @@ reference/OOD pairing with disjoint provenance families (record provenance
 next to the frozen labels in score_bench fixtures), then re-read this record
 plus 077's convergent-validity GOAT.
 
+## Fresh-family disambiguation (2026-09-09): convergent validity DEMONSTRATED
+
+The unblock pairing above ran (riir-clippy Issue 082 @ `b3636b5`,
+`examples/ood_fresh_family.rs`): composition held real-vs-real, provenance
+held disjoint — reference = gen6 (17, recomputed mean 3.1104 nats, reproducing
+run #84 exactly) vs fresh top-level-fn carves from `riir-neuron-db` @ `2f30800`
+and `riir-dapps` @ `c4c6ffe` (24 + 24, clean working-tree HEADs, absent from
+every known set). **gap(ref−ood) = −0.7608 nats, d = −1.026 on BOTH fresh
+families — the pre-registered R1 (convergent validity) fired:** the axis
+tracks corpus-family proximity on composition-matched real code, and run #84's
+anomalous_negative was indeed set composition, as attributed. Honest mechanism:
+0/48 fresh carves fire ANY proposer rule (all-flat at ln 48 = 3.8712 nats), so
+the demonstrated validity is the coarse discriminative form, not a graded
+proximity measure, and gen6's mining-time lint selection remains a confound
+the pairing cannot remove. **Promotion is UNCHANGED: `regime_probe` stays
+opt-in** — 740/HISTORY require a default-path consumer, which still does not
+exist (the score_bench consumer is itself feature-gated); this experiment
+settles convergent validity, not promotion. Full record:
+riir-clippy `.benchmarks/081_ood_fresh_family_convergent_validity.md`.
+
 ## What remains
 
 - The engine serving-health audit remains an OPTIONAL second consumer (the
