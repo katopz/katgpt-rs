@@ -607,7 +607,30 @@ MIN_FREE_GIB = float(os.environ.get("RFBA_MIN_FREE_GIB", "8"))
 
 
 def free_gib(path: str | None = None) -> float:
-    st = os.statvfs(path or os.environ.get("CARGO_TARGET_DIR") or ".")
+    """Free GiB on the filesystem that will hold `path`.
+
+    Walks up to the nearest EXISTING ancestor (Issue 741 follow-up). A target
+    dir cargo has not created yet is the normal case for the very workaround
+    this file's own docs recommend — `--target-dir` / `CARGO_TARGET_DIR` set to
+    a fresh `/tmp/<name>` when a sibling is building. `os.statvfs` raises
+    `FileNotFoundError` on it, which crashed `disk_headroom_ok` before it could
+    answer, so the headroom REFUSE could not fire for the configuration most
+    likely to need it. Measured: `CARGO_TARGET_DIR=/tmp/ndb616` with the dir
+    absent → traceback out of `required_features_touched_gate.py`.
+
+    Walking up is the right answer rather than creating the directory: free
+    space is a property of the FILESYSTEM, an ancestor reports the same number,
+    and an instrument that answers a question must not have the side effect of
+    making the thing it was asked about.
+    """
+    target = path or os.environ.get("CARGO_TARGET_DIR") or "."
+    probe = Path(target).absolute()
+    while not probe.exists():
+        parent = probe.parent
+        if parent == probe:  # reached the root and still nothing: give up
+            break
+        probe = parent
+    st = os.statvfs(probe)
     return st.f_bavail * st.f_frsize / (1024 ** 3)
 
 
