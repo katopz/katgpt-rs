@@ -3242,3 +3242,33 @@ Bench 495: planted recovery through the real steal path top1 0.828 vs chance
 Issue 736 for the heuristic corpus: paired centers blind the multistart's
 basin criterion; gain-attenuation moves recovery the wrong way on unit-norm
 rows; 12+ generic independent centers is the structural fix.
+
+## 96. regime_probe — the predictor-agnostic regime-probe suite (Issue 740)
+
+Entropy-gap / basin / Gardner instrumentation for any frozen predictor's output
+categoricals (Research 541, arXiv:2604.26841 — UDDMs as associative memories).
+Feature-gated behind `regime_probe` (opt-in).
+
+- **Conditional entropy** (`conditional_entropy_nats`): per-position entropy of
+  a categorical via max-shift + logsumexp, sharing ONE kernel
+  (`simd::logsumexp_parts`, factored from `breakeven/fidelity::cross_entropy`)
+  — zero-alloc, one pass.
+- **Entropy-gap detector** (`entropy_gap`): two-sample mean-gap + Cohen's-d
+  statistic, reference corpus vs deployment inputs, BLAKE3 artifact.
+- **Basin probe** (`basin_probe`): corrupt fraction ρ → renovate via a frozen
+  `FrozenRenovator` (trait seam shaped like `UgcDenoiser`) → recovery rate +
+  overlap (paper eq 12). Deterministic corruption via seeded fastrand.
+- **Gardner capacity LUT** (`basin_radius_bound(γ)`): `1/γ_c(κ) = (1+κ²)Φ(κ) +
+  κφ(κ)` inverted once (A&S 7.1.5 Φ, uniform-log-γ grid, quadratic
+  interpolation, OnceLock); worst LUT-vs-bisection error 5.2e-10 (golden-gated
+  < 1e-6).
+
+GOAT (Bench 702): G1 discriminative validity PASS (constructed memorizer vs
+generalizer, gap 1.38 nats at low load → converged at capacity; train-recovery
+crossover 0.75→0.125 vs the generalizer's flat 0.375); G2 bound-holds PASS with
+caveats on the Hebbian-correlator variant (measured ρ_c 0.094 ≥ bound 0.035 at
+γ=1) and a recorded scope boundary: the Whitened interpolant's needle basins
+violate the CLT premise (one-bit flip → max score ×13); G3 bit-determinism +
+BLAKE3 artifacts PASS; G4 zero-alloc steady state PASS. Raw scalars out only
+(latent read → scalar out). Opt-in pending consumers: riir-clippy score_bench
+OOD axis (its Issue 077), engine serving-health audit.

@@ -248,6 +248,44 @@ pub fn fast_exp(x: f32) -> f32 {
     cephes_exp_scalar(x)
 }
 
+/// Max-shifted log-sum-exp parts: returns `(max, ln_z, mean_shift)` where
+/// `ln_z = ln Σᵢ e^{xᵢ − max}` and `mean_shift = Σᵢ pᵢ·(xᵢ − max)` with
+/// `p = softmax(x)` — i.e. `E_p[x − max]`.
+///
+/// The numerically-stable normalization half of every softmax-family
+/// reduction, factored so the two consumers share ONE kernel shape instead of
+/// diverging copies:
+/// - cross-entropy at `katgpt-core/src/breakeven/fidelity.rs::cross_entropy`
+///   (uses `max` + `ln_z`; `mean_shift` is computed but ignored — one fused
+///   mul-add per element, outputs bit-identical to the pre-factor inline pass),
+/// - per-position conditional entropy at
+///   `katgpt-core/src/regime_probe::entropy` (Issue 740 T1) — for a softmax
+///   categorical, `H = ln_z − mean_shift` exactly (since
+///   `ln pᵢ = xᵢ − max − ln_z`, so `H = −Σ p ln p = ln_z − Σ p·(xᵢ − max)`).
+///
+/// One pass, zero allocation, same `fast_exp` Cephes kernel as every other
+/// exp consumer here. Non-finite inputs propagate honestly (`max = NaN` →
+/// everything `NaN`; an all-`-inf` row gives `ln_z = -inf`, `mean_shift = 0`).
+#[inline]
+pub fn logsumexp_parts(logits: &[f32]) -> (f32, f32, f32) {
+    let max_val = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let mut sum_exp = 0.0f32;
+    let mut sum_shift = 0.0f32;
+    for &val in logits {
+        let e = fast_exp(val - max_val);
+        sum_exp += e;
+        // `e == 0` contributes exactly zero to the mean shift in exact
+        // arithmetic; multiplying anyway would give `0 · (−inf) = NaN` for
+        // −inf logits (zero-probability tokens), so guard instead.
+        if e > 0.0 {
+            sum_shift += e * (val - max_val);
+        }
+    }
+    let ln_z = sum_exp.ln();
+    let mean_shift = if sum_exp > 0.0 { sum_shift / sum_exp } else { 0.0 };
+    (max_val, ln_z, mean_shift)
+}
+
 /// Bounded sigmoid: σ(x) = 1/(1 + e^{-x}), output in (0, 1).
 ///
 /// Uses the Cephes 6th-order polynomial for `exp` (the same kernel backing

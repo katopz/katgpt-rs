@@ -176,6 +176,25 @@ cond_audit = ["stale_residual"]
 # mmorpg `8c99624`) LANDED; promotion per the no-default-consumer rule.
 cadence_gate = []
 
+# regime_probe (Issue 740 / Research 541, arXiv:2604.26841 — UDDMs as
+# associative memories): the predictor-agnostic regime-probe suite — T1
+# per-position conditional entropy of a categorical (max-shift + logsumexp
+# via the shared `simd::logsumexp_parts` kernel factored from
+# breakeven/fidelity::cross_entropy, zero-alloc), T2 two-sample entropy-gap
+# detector (reference vs generated; BLAKE3 artifact), T3 corrupt→renovate→
+# recover basin probe (paper eq 12; `FrozenRenovator` seam shaped like
+# `ugc_schedule::UgcDenoiser`), T4 Gardner capacity LUT (1/γ_c = (1+κ²)Φ(κ)
+# + κφ(κ) inverted once into a OnceLock grid; `basin_radius_bound(γ)` via
+# κ > 2√ρ). Raw-scalar outputs only — latent read → scalar out, the
+# sanctioned bridge direction. Zero new deps (blake3 already non-optional;
+# RNG rides the data_probe-markov `fastrand::with_seed` convention).
+# Opt-in — G1 discriminative validity + G2 bound-holds measured on the
+# constructed memorizer/generalizer pair and a hebbian_kernel_memory
+# consumer (zero training, modelless mandate), G3 bit-determinism, G4
+# zero-alloc scratch protocol: .benchmarks/702_regime_probe_goat.md.
+# Promotion needs the GOAT gates AND a default consumer — not this change.
+regime_probe = []
+
 # incidence_algebra (riir-ai Issue 874 T1 / Research 364 — ThoughtComm,
 # arXiv:2510.20733): generic thought × agent incidence-mask algebra over
 # masks the stack already builds by construction — per-thought agreement
@@ -2545,3 +2564,33 @@ required-features = ["cond_audit"]
 [[test]]
 name = "pencil_spec_match"
 required-features = ["spectral_pencil"]
+
+# Issue 740 T4 golden vectors — Gardner LUT vs direct bisection inversion
+# (rel err < 1e-6), Φ known answers, T1 entropy known answers (uniform → ln V,
+# one-hot → 0, kernel vs direct Σp·ln p), T2/T3 bit-determinism ×2. Gated so
+# default features compile cleanly.
+[[test]]
+name = "regime_probe_golden"
+required-features = ["regime_probe"]
+
+# Issue 740 GOAT gate (T5–T7) — G1 discriminative validity (constructed
+# exact-LUT memorizer vs kernel-smoothed generalizer across a load sweep;
+# entropy-gap separates at low load, train-recovery crossover reproduces the
+# paper's Fig 1B shape), G2 bound-holds (measured ρ_c at 0.99 overlap on a
+# constructed Hebbian memory sits above the κ_achieved-derived bound across
+# loads, Fig 6 shape), G3 bit-determinism + BLAKE3 artifact equality. NOTE:
+# bench number 702, not 740 — the .benchmarks counter is monotonic and 702 is
+# the allocated number (Issue numbering ≠ bench numbering). G2 needs the
+# hebbian_kernel_memory consumer (default-on, still listed explicitly so the
+# required-features row names exactly what the file imports).
+[[test]]
+name = "bench_702_regime_probe_goat"
+required-features = ["regime_probe", "hebbian_kernel_memory"]
+
+# Issue 740 G4 — zero-alloc steady state (entropy batch + gap + basin probe
+# on warmed scratch/report). Separate single-fn binary (the karc_alloc_check /
+# sleep_time_alloc_check convention: parallel tests share the global counting
+# allocator).
+[[test]]
+name = "regime_probe_alloc_check"
+required-features = ["regime_probe"]

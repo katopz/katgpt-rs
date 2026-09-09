@@ -246,14 +246,14 @@ impl CompressionSweep {
 
 /// Numerically-stable cross-entropy computation.
 /// logits = raw logit scores, target = index of ground-truth token.
+/// Delegates the max-shift + logsumexp pass to the shared kernel
+/// `simd::logsumexp_parts` (Issue 740 T1 factoring — one kernel shape shared
+/// with the regime-probe conditional entropy). Arithmetic order is identical
+/// to the former inline pass, so outputs are bit-identical (the kernel's third
+/// return value, the softmax mean shift, is unused here).
 fn cross_entropy(logits: &[f32], target: usize) -> f32 {
-    use crate::simd::fast_exp;
-    let max_val = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    let mut sum_exp = 0.0f32;
-    for &val in logits {
-        sum_exp += fast_exp(val - max_val);
-    }
-    -(logits[target] - max_val) + sum_exp.ln()
+    let (max_val, ln_sum_exp, _) = crate::simd::logsumexp_parts(logits);
+    -(logits[target] - max_val) + ln_sum_exp
 }
 
 impl Default for FidelityMatcher {
