@@ -91,6 +91,50 @@ FEATURE_IN_CFG = re.compile(r'feature\s*=\s*"([^"]+)"')
 # bare `debug_assertions` elsewhere in the same cfg cannot be confused.
 NOT_DEBUG_ASSERTIONS = re.compile(r"not\s*\(\s*debug_assertions\s*\)")
 
+# An ESCAPABLE profile gate (Issue 741): `any(debug_assertions, feature = "x")`.
+# The profile is one arm of a disjunction, so a RELEASE configuration that
+# compiles the target exists — `--release --features x`. That is categorically
+# different from a bare `debug_assertions`, where no flag anyone can type will
+# make the target compile in release, and it must not be pooled with it:
+#
+#   bare `debug_assertions`             UNFIXABLE by the reader. The gate can
+#                                       only ever be observed in a profile
+#                                       nobody ships.
+#   `any(debug_assertions, feature=…)`  FIXED. The reader enables the feature
+#                                       and measures the optimised binary.
+#
+# Pooling them would report the repair as if it had changed nothing, which is
+# the same error this file documents for positive-vs-negated platform gates and
+# for the two profile DIRECTIONS — one axis over, for the third time.
+#
+# Matched structurally (the `any(` must contain BOTH the profile term and a
+# `feature =`), because `any(debug_assertions, miri)` offers the reader no
+# escape and must stay in the unfixable column.
+_ANY_BODY = re.compile(r"any\s*\(")
+
+
+def escapable_profile(body: str) -> bool:
+    """Is `debug_assertions` inside an `any(...)` that also offers a feature?"""
+    for m in _ANY_BODY.finditer(body):
+        i = body.index("(", m.start())
+        depth = 0
+        for j in range(i, len(body)):
+            if body[j] == "(":
+                depth += 1
+            elif body[j] == ")":
+                depth -= 1
+                if depth == 0:
+                    inner = body[i + 1 : j]
+                    # `not(debug_assertions)` inside an any() is the OTHER
+                    # direction and is not an escape from a debug-only gate.
+                    stripped = NOT_DEBUG_ASSERTIONS.sub("", inner)
+                    if re.search(r"\bdebug_assertions\b", stripped) and FEATURE_IN_CFG.search(
+                        inner
+                    ):
+                        return True
+                    break
+    return False
+
 # A target whose filename says its green IS the evidence for a promotion or a
 # claim. This vocabulary is COMMITTED here rather than derived from the corpus:
 # deriving "which names look load-bearing" from the files present is the
@@ -280,6 +324,9 @@ class Finding:
     # `--release`, which is the profile the perf rule mandates for gates. One
     # number over both says nothing, same as for platform gates.
     release_only: bool = False
+    # Issue 741: the profile term sits in an `any(...)` beside a feature, so a
+    # release configuration exists. Reported apart from the unfixable column.
+    profile_escapable: bool = False
 
 
 @dataclass
@@ -318,25 +365,63 @@ class RepoReport:
 
 
 def cfg_body(text: str) -> str | None:
-    """The balanced body of the FIRST whole-file `#![cfg(...)]`, or None.
+    """The balanced body of EVERY whole-file `#![cfg(...)]`, ANDed, or None.
 
     Balanced-paren scan rather than a regex: `cfg(all(feature = "a",
     feature = "b"))` is the common shape and a non-greedy `\\)` stops at the
     first inner paren, silently reporting one feature where there are two.
+
+    **Why every attribute and not just the first (Issue 741).** It used to
+    return the first one only, and rustc **ANDs** all of a file's inner
+    attributes — so a target opening
+
+        #![cfg(feature = "clr")]
+        #![cfg(debug_assertions)]
+
+    read as feature-gated with NO profile term, and its whole PROFILE column
+    was a confident blank. That is `tests/bench_284_clr_goat_g4.rs`, a G4 alloc
+    gate: whole-file DEBUG-only, and this instrument called it release-safe.
+    Measured population when the bug was found: **56** of 1634 gated targets
+    carry 2+ whole-file `#![cfg]` (up to 5 in one file), across 8 repos.
+
+    Both directions of the error are real and they differ in severity:
+
+    - a `debug_assertions` term in a non-first attribute made the PROFILE
+      dimension under-report — the class whose whole point is that it is
+      silent in the DEFAULT invocation;
+    - a *feature* in a non-first attribute made the required-features check
+      under-report, so a row covering only the first cfg reads as `w/ req-f`
+      (protected) while cargo silently SKIPS the target — the
+      "row exists and is wrong" class, which is strictly worse than a missing
+      row.
+
+    The conjunction is returned as an `all(...)` wrapper when there is more
+    than one, so every downstream predicate (feature extraction, the profile
+    split, `any()` detection) sees one well-formed cfg body and none of them
+    needed to change.
     """
-    m = INNER_CFG.search(text)
-    if not m:
+    bodies: list[str] = []
+    for m in INNER_CFG.finditer(text):
+        i = text.index("(", m.start())
+        depth = 0
+        for j in range(i, len(text)):
+            if text[j] == "(":
+                depth += 1
+            elif text[j] == ")":
+                depth -= 1
+                if depth == 0:
+                    bodies.append(text[i + 1 : j])
+                    break
+        else:
+            # Unbalanced tail: the file cannot be read past here. Returning the
+            # bodies found so far would silently under-report exactly as the
+            # first-only bug did, so refuse the file instead.
+            return None
+    if not bodies:
         return None
-    i = text.index("(", m.start())
-    depth = 0
-    for j in range(i, len(text)):
-        if text[j] == "(":
-            depth += 1
-        elif text[j] == ")":
-            depth -= 1
-            if depth == 0:
-                return text[i + 1 : j]
-    return None
+    if len(bodies) == 1:
+        return bodies[0]
+    return "all(" + ", ".join(bodies) + ")"
 
 
 def default_closure(features: dict) -> set[str]:
@@ -441,6 +526,7 @@ def scan_manifest(repo: Path, manifest: Path, rep: RepoReport) -> None:
 
             base.profile_gated = "debug_assertions" in preds
             base.release_only = bool(NOT_DEBUG_ASSERTIONS.search(body))
+            base.profile_escapable = base.profile_gated and escapable_profile(body)
             if base.profile_gated:
                 # Recorded BEFORE the `has_rf` continue, on purpose: a covered
                 # target with a profile gate is exactly the case this axis
@@ -562,6 +648,78 @@ def selftest() -> None:
     # A mixed gate IS a finding: the feature half is expressible.
     body = cfg_body('#![cfg(all(target_os = "macos", feature = "gpu"))]\n')
     assert FEATURE_IN_CFG.findall(body) == ["gpu"], "mixed gate lost its feature"
+
+    # ESCAPABLE vs UNFIXABLE profile gate (Issue 741). The bucket boundary IS
+    # the finding here, so it is pinned from both sides — a false ESCAPABLE
+    # retires a gate that genuinely cannot be run in release, and a false
+    # UNFIXABLE reports a completed repair as if it had changed nothing.
+    assert escapable_profile('any(debug_assertions, feature = "alloc_tracking")'), (
+        "the repaired shape read as unfixable — reports the fix as a no-op"
+    )
+    assert escapable_profile(
+        'all(feature = "clr", any(debug_assertions, feature = "alloc_tracking"))'
+    ), "escape not found when nested under an all()"
+    # A bare profile term is UNFIXABLE: no flag compiles it in release.
+    assert not escapable_profile('all(feature = "clr", debug_assertions)'), (
+        "a bare debug_assertions read as escapable — the pin worth having "
+        "would go green over the one class it exists to catch"
+    )
+    # An `any()` with no feature in it offers the reader NO escape.
+    assert not escapable_profile("any(debug_assertions, miri)"), (
+        "any(debug_assertions, miri) read as escapable — miri is not a flag "
+        "that makes a release build compile the target"
+    )
+    # A feature-only `any()` has no profile term at all and must not be claimed.
+    assert not escapable_profile('any(feature = "a", feature = "b")'), (
+        "feature-only any() claimed by the profile-escape matcher"
+    )
+    # The OTHER direction inside an any(): `not(debug_assertions)` is
+    # release-only, and pairing it with a feature is not an escape FROM a
+    # debug-only gate — it is a different class entirely.
+    assert not escapable_profile('any(not(debug_assertions), feature = "a")'), (
+        "not(debug_assertions) inside an any() read as a debug-only escape — "
+        "opposite direction"
+    )
+    # ...and the conjunction path must feed it: the real files carry the
+    # profile term in a SEPARATE inner attribute from the feature.
+    assert escapable_profile(
+        cfg_body(
+            '#![cfg(feature = "clr")]\n'
+            '#![cfg(any(debug_assertions, feature = "alloc_tracking"))]\n'
+        )
+    ), "escape lost when the two attributes are separate (the real file shape)"
+
+    # MULTIPLE whole-file inner attributes (Issue 741). rustc ANDs them, so
+    # reading only the first is a silent under-report in BOTH downstream
+    # dimensions. Pinned with the real shape that exposed it —
+    # `tests/bench_284_clr_goat_g4.rs`, a G4 alloc gate whose profile term is
+    # in the SECOND attribute and which this instrument called release-safe.
+    multi = cfg_body('#![cfg(feature = "clr")]\n#![cfg(debug_assertions)]\n')
+    assert multi is not None, "multi-attribute file read as ungated"
+    multi_preds = {p for p in NON_FEATURE_PREDICATES if re.search(rf"\b{p}\b", multi)}
+    assert "debug_assertions" in multi_preds, (
+        "profile term in a NON-FIRST inner attribute was dropped — the exact "
+        "bug Issue 741 found (bench_284_clr_goat_g4 read as release-safe)"
+    )
+    assert not NOT_DEBUG_ASSERTIONS.search(multi), (
+        "a bare debug_assertions in the 2nd attribute read as release-only"
+    )
+    # ...and the OTHER direction: a feature in a non-first attribute must not
+    # be lost, or a required-features row covering only the first cfg reads as
+    # protected while cargo silently SKIPS the target.
+    assert sorted(set(FEATURE_IN_CFG.findall(
+        cfg_body('#![cfg(feature = "a")]\n#![cfg(all(feature = "b", feature = "c"))]\n')
+    ))) == ["a", "b", "c"], "feature in a non-first inner attribute was dropped"
+    # A single attribute must NOT gain a spurious `all()` wrapper — the
+    # downstream `any()` classifier reads this body verbatim.
+    assert cfg_body('#![cfg(feature = "solo")]\n') == 'feature = "solo"', (
+        "single-attribute body was rewritten"
+    )
+    # An UNBALANCED tail refuses the file rather than returning a partial
+    # conjunction, which would under-report exactly as the first-only bug did.
+    assert cfg_body('#![cfg(feature = "a")]\n#![cfg(all(feature = "b"\n') is None, (
+        "unbalanced trailing attribute returned a partial conjunction"
+    )
 
     # The PROFILE dimension (riir-ai `.issues/855` Class 2). Pinned in both
     # directions because both failure modes are silent: a matcher that stops
@@ -772,6 +930,21 @@ def main(argv: list[str]) -> int:
                         "profile_gated_release_only": sum(
                             1 for f in r.profile if f.release_only
                         ),
+                        # Issue 741: the DEBUG-only half split by whether a
+                        # release configuration EXISTS. `..._debug_only` stays
+                        # the pooled total for backward compatibility with any
+                        # existing consumer; the gate pins the `_unfixable`
+                        # half, which is the one no reader can work around.
+                        "profile_gated_debug_only_escapable": sum(
+                            1
+                            for f in r.profile
+                            if not f.release_only and f.profile_escapable
+                        ),
+                        "profile_gated_debug_only_unfixable": sum(
+                            1
+                            for f in r.profile
+                            if not f.release_only and not f.profile_escapable
+                        ),
                         "profile_gated_debug_only": sum(
                             1 for f in r.profile if not f.release_only
                         ),
@@ -837,14 +1010,31 @@ def main(argv: list[str]) -> int:
         f"three riir-gpu targets, 0 errors in dev and 6/8/4 in release, with a planted\n"
         f"`compile_error!` failing to fire in dev.\n"
     )
+    esc = [f for f in dbg_only if f.profile_escapable]
+    esc_lb = sum(1 for f in esc if f.load_bearing)
+    hard = [f for f in dbg_only if not f.profile_escapable]
+    hard_lb = sum(1 for f in hard if f.load_bearing)
     print(
-        f"  Read the DIRECTION, never the pooled {profile_total} — the two halves are\n"
+        f"  Read the DIRECTION, never the pooled {profile_total} — the halves are\n"
         f"  opposite, and differ by the single token `not(`:\n"
         f"    not(debug_assertions)  {len(rel_only):>4} ({rel_lb} load-bearing)  RELEASE-only:\n"
         f"        a green zero on plain `cargo test`, the default invocation.\n"
-        f"    debug_assertions       {len(dbg_only):>4} ({dbg_lb} load-bearing)  DEBUG-only:\n"
-        f"        runs by default, green zero under `--release` — the profile the perf\n"
-        f"        rule mandates for gates, so these vanish exactly when someone follows it.\n"
+        f"    debug_assertions       {len(dbg_only):>4} ({dbg_lb} load-bearing)  DEBUG-only,\n"
+        f"        and this half SPLITS AGAIN by whether the reader has an escape\n"
+        f"        (Issue 741) — do not pool these two either:\n"
+        f"      unfixable            {len(hard):>4} ({hard_lb} load-bearing)  bare `debug_assertions`.\n"
+        f"        No flag anyone can type compiles this in release. The gate can only\n"
+        f"        ever be observed in a profile nobody ships, and `required-features`\n"
+        f"        cannot express a profile — so a row moves it to `w/ req-f` (which\n"
+        f"        reads as protected) while changing nothing. THIS is the pin worth\n"
+        f"        having; a repair means rewriting the predicate, not adding a row.\n"
+        f"      escapable            {len(esc):>4} ({esc_lb} load-bearing)  `any(debug_assertions, feature = …)`.\n"
+        f"        Already repaired: `--release --features <it>` compiles and RUNS the\n"
+        f"        gate against the OPTIMISED code that ships. Still listed, because\n"
+        f"        plain `--release` remains a green zero and the reader has to know\n"
+        f"        the feature exists — but it is a documentation gap, not a gate that\n"
+        f"        cannot be run. Counting these as DEBUG-only would report the repair\n"
+        f"        as if it had changed nothing.\n"
     )
     for rep in reports:
         if not rep.profile:
@@ -853,7 +1043,12 @@ def main(argv: list[str]) -> int:
         for f in sorted(rep.profile, key=lambda x: (not x.release_only, x.path)):
             mark = "  [LOAD-BEARING]" if f.load_bearing else ""
             rf = "has req-f" if f.declared else "no [[%s]] row" % f.kind
-            direction = "release-only" if f.release_only else "DEBUG-only"
+            if f.release_only:
+                direction = "release-only"
+            elif f.profile_escapable:
+                direction = "DEBUG-or-feature"
+            else:
+                direction = "DEBUG-only"
             print(f"    [{direction}] {f.path}{mark}  ({rf})")
         print()
     if profile_total == 0:

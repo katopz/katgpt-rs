@@ -207,6 +207,27 @@ plain `cargo test`, and it **survives the fix** — adding a
 `required-features` row moves the target into "w/ req-f", which reads as
 protected and does not make it compile.
 
+**Two traps in the profile dimension (Issue 741).** First: a file may carry
+**more than one** whole-file `#![cfg]`, and rustc **ANDs** them — reading only
+the first under-reports the profile term AND the feature set (56 of 1634 gated
+targets workspace-wide carry 2+, up to 5 in one file). Second, and the one to
+internalise: **gating a MEASUREMENT on `debug_assertions` makes it impossible
+in the configuration that ships.** Every alloc gate here was unrunnable under
+`--release` — the profile this document mandates for gates — because
+`katgpt_core::alloc` itself was `cfg(debug_assertions)`, so the whole target
+compiled to an empty binary and printed `ok. 0 passed`, exit 0. A profile is
+not a knob; a feature is. Ask of any `debug_assertions` gate whether the thing
+behind it is a **capability** (→ give it a feature, `any(debug_assertions,
+feature = "x")`, and gate the machinery on `x` too — including any in-body
+liveness sentinel, or the release binary runs the gate and asserts NOTHING) or
+genuinely a **profile property** (an assertion about `debug_assert!`). It was a
+capability the whole time, and "debug-only by design" had been written into the
+guarding pin's own header as if it were a constraint. Read the split the
+auditor prints — `unfixable` (bare term, no flag compiles it in release; the
+pin worth having) vs `escapable` (`any(…, feature = …)`, already runnable in
+release) — never the pooled DEBUG-only count, which reports the repair as if it
+changed nothing.
+
 Do not answer "how much of this is affected" by reading manifests. Run:
 
 ```bash

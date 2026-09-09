@@ -141,13 +141,22 @@ min_ignore_targets	400
 #                             while changing nothing. katgpt-rs has ZERO today,
 #                             so the correct value is 0. A release-only bench
 #                             is legitimate — raise the pin and say WHY.
-#   max_profile_debug_only    the ratchet. `#![cfg(..., debug_assertions)]`
+#   max_profile_debug_only    the ratchet, and since Issue 741 it reads the
+#                             UNFIXABLE half only (see the 2026-09-09 block at
+#                             the bottom). `#![cfg(..., debug_assertions)]`
 #                             vanishes under `--release`, the profile AGENTS.md
-#                             tells everyone to run gates in. katgpt-rs has
-#                             exactly ONE: tests/kimi_k3_g4_alloc_free.rs,
-#                             load-bearing, and CORRECT — the alloc counters
-#                             are debug-only by design and that file asserts
-#                             nothing else. What would not be correct is the
+#                             tells everyone to run gates in. This block used to
+#                             say katgpt-rs "has exactly ONE:
+#                             tests/kimi_k3_g4_alloc_free.rs ... and CORRECT —
+#                             the alloc counters are debug-only by design".
+#                             BOTH halves of that were wrong: there were TWO
+#                             (the auditor read only the first of a file's
+#                             `#![cfg]` attributes), and "by design" was a
+#                             choice of AXIS, not a constraint — the counters
+#                             work fine in release, they were merely gated on
+#                             the profile instead of on a feature. 741 gave
+#                             them one. What remains true is the next
+#                             sentence: what would not be correct is the
 #                             same file also carrying a wall-clock budget: no
 #                             single profile can observe both. riir-ai
 #                             `.issues/855` Class 3 is the worked split (an
@@ -159,5 +168,64 @@ min_ignore_targets	400
 # 19 repos, 130 release-only and 3 debug-only — and ALL THREE debug-only ones
 # are load-bearing alloc gates. 130 of the 133 are riir-ai.
 
+# ── 2026-09-09 (Issue 741): max_profile_debug_only 1 -> 0, and the pin now
+# reads a DIFFERENT metric — `profile_gated_debug_only_unfixable`, not the
+# pooled `profile_gated_debug_only`. Two things happened, in this order.
+#
+# 1. The AUDITOR was wrong. `cfg_gated_target_audit.py` read only the FIRST
+#    whole-file `#![cfg(...)]`, and rustc ANDs all of them. So
+#    `tests/bench_284_clr_goat_g4.rs` — which opens `#![cfg(feature = "clr")]`
+#    then `#![cfg(debug_assertions)]` — reported as feature-gated with NO
+#    profile term, and this pin's value of 1 was green over TWO instances while
+#    its own header said "katgpt-rs has exactly ONE". That header was not
+#    sloppy; it was the honest output of a blind instrument. Population when
+#    found: 56 of 1634 gated targets in the workspace carry 2+ whole-file
+#    `#![cfg]` (up to 5 in one file), across 8 repos. Fixing it also moved
+#    SILENT-NOW 177 -> 181 workspace-wide and surfaced the first TWO
+#    load-bearing SILENT-NOW targets outside this repo (riir-mmorpg-examples
+#    `join_sync_goat`, riir-train `goat_300_tjs_lora_gpu`). This is the third
+#    time in this file that a ceiling of zero turned out to be as wide as its
+#    classifier and no wider.
+#
+# 2. The CLASS was wrong. Both of this repo's debug-only targets are alloc
+#    gates, and they were unrunnable in release for one reason: the whole
+#    `katgpt_core::alloc` module (TrackingAllocator + counters) was gated on
+#    `debug_assertions`, so the symbols did not exist in a release build.
+#    `debug_assertions` is not a knob — it is ON in dev, OFF in release, and no
+#    flag changes that. Measured before the fix: kimi_k3_g4_alloc_free = 1
+#    passed in dev, `ok. 0 passed` exit 0 in release. The file's own recorded
+#    mitigation was "the zero-alloc claim in release builds is verified by code
+#    review", which is honest and is not a gate.
+#
+#    741 moved the axis to a FEATURE — `alloc_tracking`, opt-in, declared in
+#    katgpt-core and passed through from the root — and re-gated both targets
+#    (and the in-body liveness sentinel, or the release binary would have run
+#    the gate and asserted nothing, which is worse than the empty binary it
+#    replaced). Both now RUN and PASS in the profile that ships:
+#      cargo test --release --features kimi_k3_loader,alloc_tracking --test kimi_k3_g4_alloc_free   -> 1 passed
+#      cargo test --release --features clr,alloc_tracking           --test bench_284_clr_goat_g4    -> 1 passed
+#    They were silently UNVERIFIED, not silently broken — the same finding as
+# `.issues/714` T3 and Issue 728 T2, which is exactly why nobody noticed.
+#
+#    So the auditor now splits the debug-only half by whether the reader has an
+#    ESCAPE, and this pin takes the unfixable side:
+#      unfixable  bare `debug_assertions`. No flag compiles it in release, and
+#                 `required-features` cannot express a profile, so a row moves
+#                 it to `w/ req-f` (reading as protected) while changing
+#                 nothing. A repair means rewriting the PREDICATE. 0 here, and
+#                 it is a WALL — do not raise it; do what 741 did.
+#      escapable  `any(debug_assertions, feature = …)`. Already repaired and
+#                 verified in release; still listed, because plain `--release`
+#                 is still a green zero and the reader must know the feature
+#                 exists. Pinning the POOLED count would have reported the only
+#                 available fix as if it had changed nothing, and left this pin
+#                 raised forever.
+#
+# Workspace context, for whoever raises these: the 3 remaining UNFIXABLE
+# debug-only targets are all load-bearing alloc gates in siblings —
+# riir-neuron-db `steering_g5_zero_alloc`, riir-train
+# `nora_phase2_g4_alloc_probe` + `probe_684_topology_hotpath_alloc`. Each is
+# fixable the same way once its own allocator module takes a feature.
+
 max_profile_release_only	0
-max_profile_debug_only	1
+max_profile_debug_only	0

@@ -1,4 +1,4 @@
-//! Debug-only allocation tracking.
+//! Allocation tracking for the alloc gates (G4 / G5 / G7).
 //!
 //! Counters are **per-thread** (thread-local `Cell`), not process-global. This
 //! lets parallel tests measure allocation-free hot paths without bleeding
@@ -11,50 +11,64 @@
 //! `const` initialization in `thread_local!` avoids lazy-init allocation on
 //! the fast path — the TLS slot holds the `Cell` directly.
 //!
-//! **Whole-module `debug_assertions` gate:** every item below — the
-//! `TrackingAllocator`, the `THREAD_ALLOC` slot, the `AllocStats` record, and
-//! the `reset`/`get` accessors — exists *only* under `debug_assertions`. In a
-//! release build the entire tracking machinery compiles away to nothing: the
-//! binary installs the plain `System` allocator (see `lib.rs`'s
-//! `#[cfg(all(test, debug_assertions))]` `TEST_GLOBAL_ALLOC`), there are no
-//! counters, and there is nothing to test. The `tests` module is therefore
-//! gated on `cfg(all(test, debug_assertions))` so a `--release` test build
-//! (where `cfg(test)` is on but `debug_assertions` is off) does not reference
-//! absent symbols.
+//! **Whole-module gate, carried ONCE on the `pub mod alloc;` declaration in
+//! `lib.rs`** (Issue 741) — `any(debug_assertions, feature = "alloc_tracking")`.
+//! Every item below exists exactly when that predicate holds, so no item
+//! repeats it; a per-item `#[cfg]` here could drift out of agreement with the
+//! module gate and with the `#[global_allocator]` registrations that depend on
+//! it, which is why there is one gate and not ten.
+//!
+//! **Why the predicate is not just `debug_assertions` (Issue 741).** It was,
+//! and the cost was that every alloc gate in the workspace could only ever run
+//! in a profile nobody ships. `debug_assertions` is not a knob: it is ON in dev
+//! and OFF in release, so a `--release` run of an alloc gate compiled the whole
+//! target to an **empty binary** and printed `test result: ok. 0 passed`, exit
+//! 0 — indistinguishable from a pass, and `--release` is the profile
+//! `AGENTS.md` mandates for gates. Measured on `kimi_k3_g4_alloc_free`: 1
+//! passed in dev, `0 passed` in release.
+//!
+//! The `alloc_tracking` feature makes the axis **opt-in and profile-free**:
+//!
+//! - dev, feature off — unchanged from before, tracking on, zero cost to add.
+//! - `--release --features alloc_tracking` — the gates compile and RUN, so the
+//!   zero-alloc claim is verified against the **optimised** code that actually
+//!   ships. This is the configuration the alloc gates are meant to be read in.
+//! - shipped release, feature off — the module does not exist, `System` is the
+//!   allocator, and there is no TLS read on the allocation path. Byte-identical
+//!   to the pre-741 release build.
+//!
+//! A profile is not a capability; a feature is. Gating a *measurement* on
+//! `debug_assertions` couples "can I measure this?" to "am I optimised?", and
+//! those are independent questions.
 
-#[cfg(debug_assertions)]
 use std::alloc::{GlobalAlloc, Layout, System};
-#[cfg(debug_assertions)]
 use std::cell::Cell;
 
 /// Aggregate per-thread allocation stats (count + bytes). `Copy` so it can
 /// live in a `Cell` (single load + store per `alloc`, no `RefCell` overhead).
-#[cfg(debug_assertions)]
 #[derive(Clone, Copy)]
 struct AllocStats {
     count: usize,
     bytes: usize,
 }
 
-#[cfg(debug_assertions)]
 impl AllocStats {
     /// `const` constructor so the `thread_local!` initializer is const-evaluable.
     const ZERO: Self = Self { count: 0, bytes: 0 };
 }
 
-#[cfg(debug_assertions)]
 thread_local! {
     /// Single TLS key for both counters — one TLS address computation per
     /// `alloc`, not two.
     static THREAD_ALLOC: Cell<AllocStats> = const { Cell::new(AllocStats::ZERO) };
 }
 
-/// Debug-only allocator wrapper that tracks allocation count and bytes on the
-/// **calling thread**. Install via `#[global_allocator]` in the binary crate.
-#[cfg(debug_assertions)]
+/// Allocator wrapper that tracks allocation count and bytes on the **calling
+/// thread**. Install via `#[global_allocator]` in the binary crate. Present
+/// under `debug_assertions` OR the `alloc_tracking` feature — see module docs
+/// for why the profile alone was the wrong axis (Issue 741).
 pub struct TrackingAllocator;
 
-#[cfg(debug_assertions)]
 unsafe impl GlobalAlloc for TrackingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         THREAD_ALLOC.with(|cell| {
@@ -75,7 +89,6 @@ unsafe impl GlobalAlloc for TrackingAllocator {
 
 /// Reset the **calling thread's** allocation counters to zero. Does not affect
 /// other threads' counters — each thread's `Cell` is independent.
-#[cfg(debug_assertions)]
 pub fn reset_alloc_stats() {
     THREAD_ALLOC.with(|cell| cell.set(AllocStats::ZERO));
 }
@@ -83,7 +96,6 @@ pub fn reset_alloc_stats() {
 /// Get the **calling thread's** allocation stats as `(count, total_bytes)`.
 /// Returns only allocations performed on the current thread since the last
 /// [`reset_alloc_stats`] on this thread.
-#[cfg(debug_assertions)]
 pub fn get_alloc_stats() -> (usize, usize) {
     THREAD_ALLOC.with(|cell| {
         let s = cell.get();
@@ -91,11 +103,11 @@ pub fn get_alloc_stats() -> (usize, usize) {
     })
 }
 
-// See module docs: the tests exercise accessors that only exist under
-// `debug_assertions`, so the module must be gated to match. A `--release`
-// test build has `cfg(test)` on but `debug_assertions` off — without this
-// gate the tests would reference absent symbols and fail to compile.
-#[cfg(all(test, debug_assertions))]
+// Plain `cfg(test)`: the enclosing module already carries the
+// `any(debug_assertions, feature = "alloc_tracking")` gate (see module docs),
+// so these tests exist exactly when the accessors they call do. Re-stating the
+// predicate here is what made it possible for the two to disagree.
+#[cfg(test)]
 mod tests {
     use super::*;
 

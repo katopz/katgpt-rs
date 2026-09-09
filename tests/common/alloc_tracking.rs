@@ -1,5 +1,5 @@
 //! Per-target tracking allocator for alloc-gate test binaries (katgpt-rs
-//! Issue 721 T3).
+//! Issue 721 T3; profile axis widened to a feature in Issue 741).
 //!
 //! The root crate used to register `TrackingAllocator` behind a bare
 //! `#[cfg(debug_assertions)]` **as a library**, which chose the process
@@ -22,6 +22,13 @@
 //! katgpt_rs;`), which existed only to keep the root's library-level shim
 //! from being dropped by the linker — there is no library-level shim anymore.
 
-#[cfg(debug_assertions)]
+// Issue 741: `any(debug_assertions, feature = "alloc_tracking")`, matching the
+// gate on katgpt-core's `alloc` module. It was `debug_assertions` alone, which
+// meant an alloc gate could only ever be measured in a profile nobody ships:
+// under `--release` the target compiled to an empty binary and printed
+// `ok. 0 passed`, exit 0. A consumer of this module opts into release
+// measurement by enabling `alloc_tracking` and widening its own `#![cfg]` to
+// the same predicate.
+#[cfg(any(debug_assertions, feature = "alloc_tracking"))]
 #[global_allocator]
 static GLOBAL_ALLOC: katgpt_core::alloc::TrackingAllocator = katgpt_core::alloc::TrackingAllocator;

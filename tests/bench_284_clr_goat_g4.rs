@@ -86,7 +86,15 @@
 //! raw "0 alloc" assertion (since a one-time warmup hides everything).
 
 #![cfg(feature = "clr")]
-#![cfg(debug_assertions)]
+// Issue 741: was a bare `#![cfg(debug_assertions)]`, which made this G4 alloc
+// gate compile to an EMPTY BINARY under `--release` — the profile AGENTS.md
+// mandates for gates — and print `test result: ok. 0 passed`, exit 0. It also
+// hid from the auditor: `cfg_gated_target_audit.py` read only the FIRST
+// whole-file `#![cfg]`, so this target reported as feature-gated with no
+// profile term and `max_profile_debug_only = 1` was green over it. Run the
+// release configuration, which measures the OPTIMISED code that ships:
+//   cargo test --release --features clr,alloc_tracking --test bench_284_clr_goat_g4
+#![cfg(any(debug_assertions, feature = "alloc_tracking"))]
 
 // Issue 721 T3: install the tracking allocator in THIS test binary. The root
 // lib no longer registers a `#[global_allocator]` as a library (that chose
@@ -97,8 +105,11 @@
 mod alloc_tracking;
 
 /// Liveness sentinel (Issue 682): FAIL the audit if the TrackingAllocator
-/// is not actually installed (debug builds only).
-#[cfg(debug_assertions)]
+/// is not actually installed. Issue 741: the predicate matches the file gate,
+/// so the sentinel is LIVE in the release configuration too — without that,
+/// widening the file gate would have produced a release binary that runs the
+/// gate and asserts nothing, which is worse than the empty binary it replaced.
+#[cfg(any(debug_assertions, feature = "alloc_tracking"))]
 fn assert_alloc_tracking_live() {
     katgpt_core::alloc::reset_alloc_stats();
     let _probe: Vec<u8> = vec![0u8; 64];
@@ -110,7 +121,7 @@ fn assert_alloc_tracking_live() {
     katgpt_core::alloc::reset_alloc_stats();
 }
 
-#[cfg(not(debug_assertions))]
+#[cfg(not(any(debug_assertions, feature = "alloc_tracking")))]
 fn assert_alloc_tracking_live() {}
 
 use fastrand::Rng;

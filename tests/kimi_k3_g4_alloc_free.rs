@@ -29,21 +29,44 @@
 //!   4. Runs N decode tokens
 //!   5. Asserts the counter delta is zero
 //!
-//! # Why debug-only
+//! # Why this is gated, and why NOT on the profile alone (Issue 741)
 //!
-//! The `TrackingAllocator` is a debug-only global allocator. Release builds
-//! skip this test (it would compile-fail on the missing symbols, so we
-//! `#[cfg(debug_assertions)]` the whole module). The zero-alloc claim in
+//! This target needs a `#[global_allocator]` that counts, so it can only
+//! compile where `katgpt_core::alloc` exists. That used to be
+//! `debug_assertions` alone — and the cost was that this gate could only ever
+//! run in a profile nobody ships. Under `--release` (the profile `AGENTS.md`
+//! mandates for gates) the whole file compiled to an **empty binary** and
+//! cargo printed `test result: ok. 0 passed`, exit 0 — byte-for-byte a pass.
+//! Measured 2026-09-09, before the fix: **1 passed** in dev, **0 passed** in
+//! release.
+//!
+//! The previous mitigation, recorded here, was that "the zero-alloc claim in
 //! release builds is verified by code review: there are no `to_vec()`,
-//! `Vec::new()`, or `Vec::with_capacity()` calls inside the forward hot path
-//! (the per-token loop body of `kimi_k3_forward_token`).
+//! `Vec::new()`, or `Vec::with_capacity()` calls inside the forward hot path."
+//! That is an honest statement and it is not a gate: it was true when written
+//! (2026-08-02) and nothing re-checked it afterwards.
+//!
+//! So the gate is now `any(debug_assertions, feature = "alloc_tracking")` and
+//! the release configuration is the one to READ:
+//!
+//! ```bash
+//! cargo test --release --features kimi_k3_loader,alloc_tracking \
+//!     --test kimi_k3_g4_alloc_free
+//! ```
+//!
+//! That measures the **optimised** code that actually ships. The dev run still
+//! works unchanged, and a shipped release build with the feature off has no
+//! tracking allocator at all.
 //!
 //! Run:
 //! ```sh
 //! cargo test --features kimi_k3_loader --test kimi_k3_g4_alloc_free -- --nocapture --ignored
 //! ```
 
-#![cfg(all(feature = "kimi_k3_loader", debug_assertions))]
+#![cfg(all(
+    feature = "kimi_k3_loader",
+    any(debug_assertions, feature = "alloc_tracking")
+))]
 
 use std::path::Path;
 

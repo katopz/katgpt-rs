@@ -186,17 +186,30 @@ def check(m: dict[str, int], pins: dict[str, int]) -> list[str]:
             "predicate). A release-only bench is legitimate; raise the pin and "
             "say WHY, so the next reader knows the green zero is intended."
         )
-    pdo = m["profile_gated_debug_only"]
+    # Issue 741: pin the UNFIXABLE half, not the pooled total. A target gated
+    # `any(debug_assertions, feature = "alloc_tracking")` HAS a release
+    # configuration (`--release --features alloc_tracking`) and is verified in
+    # it; a bare `debug_assertions` has none. Pinning the pooled number reported
+    # the repair as if it had changed nothing, which would have made the only
+    # available fix look worthless and left the pin permanently raised.
+    pdo = m["profile_gated_debug_only_unfixable"]
     if pdo > pins["max_profile_debug_only"]:
         fail.append(
-            f"profile-gated (debug-only) {pdo} > pinned "
-            f"{pins['max_profile_debug_only']} — a `#![cfg(..., "
+            f"profile-gated (debug-only, UNFIXABLE) {pdo} > pinned "
+            f"{pins['max_profile_debug_only']} — a bare `#![cfg(..., "
             "debug_assertions)]` target vanishes under `--release`, which is "
-            "the profile AGENTS.md tells everyone to run gates in. Legitimate "
-            "for an alloc gate (the counters are debug-only); NOT legitimate "
-            "if the same file also asserts a wall-clock budget — no single "
-            "profile can observe both, so split it (riir-ai `.issues/855` "
-            "Class 3 is the worked example)."
+            "the profile AGENTS.md tells everyone to run gates in, and NO flag "
+            "the reader can type brings it back. `required-features` cannot "
+            "express a profile, so a row moves it to `w/ req-f` (reading as "
+            "protected) while changing nothing. The fix is to rewrite the "
+            "predicate as `any(debug_assertions, feature = \"<x>\")` and gate "
+            "the measurement machinery on `<x>` too, so the gate can be RUN "
+            "in release — that is what Issue 741 did for this repo's two "
+            "(kimi_k3_g4_alloc_free, bench_284_clr_goat_g4), both of which now "
+            "pass at `--release --features …,alloc_tracking`. NOT legitimate "
+            "either way if the same file also asserts a wall-clock budget — no "
+            "single profile can observe both, so split it (riir-ai "
+            "`.issues/855` Class 3 is the worked example)."
         )
 
     # Issue 713 T6's axis. `#[ignore]` itself is NOT gated — it is the correct
@@ -284,7 +297,7 @@ def selftest() -> None:
     pins["max_reasonless_ignores"] = 0
     pins["min_ignore_targets"] = 400
     pins["max_profile_release_only"] = 0
-    pins["max_profile_debug_only"] = 1
+    pins["max_profile_debug_only"] = 0
     ok = {
         "scanned": 921,
         "gated": 541,
@@ -293,7 +306,15 @@ def selftest() -> None:
         "reasonless_targets": 0,
         "ignore_scanned": 653,
         "profile_gated_release_only": 0,
-        "profile_gated_debug_only": 1,
+        # Issue 741: POOLED 2 (kimi_k3_g4_alloc_free + bench_284_clr_goat_g4),
+        # UNFIXABLE 0 — both carry `any(debug_assertions, feature =
+        # "alloc_tracking")` and both PASS at `--release --features
+        # …,alloc_tracking`. The gate reads the unfixable key, so the fixture
+        # deliberately sets the pooled one NON-zero: a gate that read the
+        # pooled number would pass this fixture only by luck of the pin value,
+        # and the assertion below pins that it reads the right key.
+        "profile_gated_debug_only": 2,
+        "profile_gated_debug_only_unfixable": 0,
     }
     assert check(ok, pins) == [], "the observed measurement must pass"
 
@@ -314,13 +335,19 @@ def selftest() -> None:
         "a new release-only gated target passed — it is a green zero on the "
         "DEFAULT `cargo test`"
     )
-    assert check({**ok, "profile_gated_debug_only": 2}, pins), (
-        "a new debug-only gated target passed"
+    assert check({**ok, "profile_gated_debug_only_unfixable": 1}, pins), (
+        "a new UNFIXABLE debug-only gated target passed — a bare "
+        "`debug_assertions` gate can never be run in release"
     )
-    assert check({**ok, "profile_gated_debug_only": 1}, pins) == [], (
-        "the existing debug-only alloc gate must not red the push"
+    # The key discrimination (Issue 741): moving the POOLED count must NOT red,
+    # because an escapable gate is a completed repair. A gate that still read
+    # `profile_gated_debug_only` would fail this, which is the point — it is
+    # the only assertion that distinguishes the two keys.
+    assert check({**ok, "profile_gated_debug_only": 99}, pins) == [], (
+        "the pooled debug-only count reds the push — the gate is reading the "
+        "wrong key and reports the Issue 741 repair as if it changed nothing"
     )
-    assert check({**ok, "profile_gated_debug_only": 0}, pins) == [], (
+    assert check({**ok, "profile_gated_debug_only_unfixable": 0}, pins) == [], (
         "an IMPROVEMENT on the profile axis failed"
     )
 
@@ -336,6 +363,7 @@ def selftest() -> None:
         # this gate, and why adding two more ceilings does not change the 3.
         "profile_gated_release_only": 0,
         "profile_gated_debug_only": 0,
+        "profile_gated_debug_only_unfixable": 0,
     }
     assert len(check(blind, pins)) == 3, "a blind auditor passed the gate"
 
@@ -390,7 +418,11 @@ def main() -> int:
         f"{m['reasonless_targets']} of them reasonless "
         f"({len(m['_lb_paths'])} load-bearing, allowlisted); "
         f"profile-gated {m['profile_gated_release_only']} release-only / "
-        f"{m['profile_gated_debug_only']} debug-only"
+        f"{m['profile_gated_debug_only']} debug-only "
+        f"({m['profile_gated_debug_only_unfixable']} UNFIXABLE — the pinned "
+        f"quantity, Issue 741 — + "
+        f"{m['profile_gated_debug_only'] - m['profile_gated_debug_only_unfixable']} "
+        f"escapable via a feature, runnable in release)"
     )
 
     fail = check(m, pins) + check_membership(m["_lb_paths"], read_lb_allow())

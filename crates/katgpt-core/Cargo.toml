@@ -121,6 +121,19 @@ statrs = "0.17"
 
 [features]
 
+# alloc_tracking (Issue 741, 2026-09-09): compile the `alloc` module (the
+# `TrackingAllocator` + per-thread counters) in a RELEASE build so the G4/G5/G7
+# alloc gates can be run under `--release`, the profile AGENTS.md mandates for
+# gates. Before 741 the module was gated on `debug_assertions` alone, so every
+# alloc gate compiled to an EMPTY BINARY in release and printed
+# `test result: ok. 0 passed`, exit 0 — a green zero indistinguishable from a
+# pass (measured: kimi_k3_g4_alloc_free, 1 passed dev / 0 passed release).
+# OPT-IN and it must stay opt-in: turning it on installs a `#[global_allocator]`
+# that does a TLS read + two adds per allocation. Not a perf primitive — a
+# MEASUREMENT capability, so it is not a GOAT-promotion candidate. Zero cost
+# when off (the module does not exist).
+alloc_tracking = []
+
 # kinematic_rollout (Plan 578 / Research 506, 2026-08-25): the modelless
 # core of LDR (arXiv:2608.09926) — finite-difference kinematic state (order
 # ladder 0→3), O(1) Newton-backward closed-form rollout EXACT on degree ≤ 3

@@ -19,7 +19,45 @@ max_empty_at_row = 0
 # a feature under `not(...)` (where the implication INVERTS). Siblings
 # legitimately have them; this repo happens not to. If a legitimate one lands
 # here, raise this pin and say which row and why — do not delete the key.
-max_unresolved = 0
+#
+# ── 2026-09-09 (Issue 741): 0 -> 2, and both rows are named, because a bare
+#    count would let a third one in silently. The two:
+#
+#      katgpt-rs:test:kimi_k3_g4_alloc_free
+#        #![cfg(all(feature = "kimi_k3_loader",
+#                   any(debug_assertions, feature = "alloc_tracking")))]
+#      katgpt-rs:test:bench_284_clr_goat_g4
+#        #![cfg(feature = "clr")]
+#        #![cfg(any(debug_assertions, feature = "alloc_tracking"))]
+#
+#    Both are G4 zero-alloc gates and both are UNRESOLVED for a reason this
+#    report cannot fix: the predicate contains `debug_assertions`, so whether
+#    the row compiles the target to nothing is a function of the PROFILE, which
+#    a static pass over manifests + sources does not have. Declining to rule is
+#    the correct behaviour — the alternative is a confident answer that is
+#    wrong in one of the two profiles.
+#
+#    What the report cannot decide, measurement can, and it was measured in
+#    every configuration rather than pinned on an argument:
+#
+#      row features only (clr / kimi_k3_loader), DEV      -> BUILDS, 1 passed
+#      row features only, RELEASE                         -> empty binary, `ok. 0 passed`
+#      row features + alloc_tracking, RELEASE             -> BUILDS, 1 passed
+#
+#    So the row is NOT the "row builds and compiles to nothing" defect this
+#    gate hunts (`max_empty_at_row`, still a WALL at 0): at the row's own
+#    feature set the target really does compile and really does assert, in the
+#    profile the row is exercised in. The release green zero is the separate
+#    PROFILE axis, and it is owned by a pin that CAN see it —
+#    `cfg_gated_floors.txt`'s `max_profile_debug_only`, which reads the
+#    UNFIXABLE half and is a WALL at 0. Issue 741 is what moved these two out
+#    of the unfixable column by giving the allocator module a feature
+#    (`alloc_tracking`) instead of gating it on the profile.
+#
+#    Do NOT raise this pin for a third `any(...)` row without the same
+#    three-configuration measurement. The pin is 2 because two rows were
+#    measured, not because `any()` is generically acceptable.
+max_unresolved = 2
 
 # FLOORS, with slack below the measured value. Both ceilings above are green
 # over whatever the instrument can NAME, so a manifest-walk or source-scanner

@@ -2585,7 +2585,15 @@ pub use velocity_field_disagreement::{VfdScore, VfdScratch, VfdVarianceSignal, v
 
 // ── Phase 10 absorption (Proposal 003, 2026-07-04): modules moved from katgpt-rs/src/.
 // Always-on (no feature gate):
-pub mod alloc; // Debug-only TrackingAllocator (consumer gates via #[cfg(debug_assertions)])
+// Issue 741: the gate for the WHOLE alloc-tracking module lives here, once.
+// It used to be `debug_assertions`, repeated on all 9 items inside alloc.rs,
+// which made every alloc gate (G4/G5/G7) in the workspace compile to an empty
+// binary under `--release` — the profile AGENTS.md mandates for gates — and
+// print `ok. 0 passed`, exit 0. `alloc_tracking` decouples "can I measure
+// allocations?" from "am I optimised?". Shipped release without the feature is
+// byte-identical to before: no module, no TLS read on the alloc path.
+#[cfg(any(debug_assertions, feature = "alloc_tracking"))]
+pub mod alloc;
 pub mod cumprodsum; // Cumprodsum primitive (Plan 263) — always-on
 pub mod trigger_gate; // Compute-tier trigger gate — always-on
 // ── Phase 12 absorption (Proposal 003, 2026-07-04): more modules moved from katgpt-rs/src/.
@@ -2934,6 +2942,6 @@ pub mod tpr;
 // `cfg(test)` so it does not exist when katgpt-core is consumed as a library
 // dep — no double-declare conflict. Mirrors the root crate's
 // `static GLOBAL_ALLOC: TrackingAllocator` (src/lib.rs:356).
-#[cfg(all(test, debug_assertions))]
+#[cfg(all(test, any(debug_assertions, feature = "alloc_tracking")))]
 #[global_allocator]
 static TEST_GLOBAL_ALLOC: alloc::TrackingAllocator = alloc::TrackingAllocator;
