@@ -1269,6 +1269,14 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
 
 ## Issue log (resolved)
 
+- **Issue 741 — alloc gates were unrunnable in the shipped profile + the auditor read one of N cfgs** RESOLVED
+  (2026-09-09; fix `da498fa6`, free_gib crash follow-up `3115f7f4`, floors/auditor records in the same arcs;
+  issue file removed at close, this row + git history are the durable record — read the filing with
+  `git show d43a0dea:.issues/741_alloc_gates_only_measurable_in_a_profile_nobody_ships.md`). This repo's two
+  `#![cfg(debug_assertions)]`-gated alloc targets now RUN and PASS under `--release`; the auditor reads every
+  whole-file `#![cfg]` (rustc ANDs them). Narrative: `AGENTS.md` §"cfg-gated targets — the green-zero rule"
+  (both traps, the capability-vs-profile-property test). Three sibling instances filed in their own repos:
+  riir-game-sdk `.issues/028` (`2380fc7`), riir-clippy `.issues/083`, riir-dao `.issues/003` (open, owner-gated).
 - **Issue 741-as-filed — `is_load_bearing` cannot name a security gate that is named after its THREAT** RESOLVED
   (2026-09-09; fix `ba26462b`; issue file removed at close, this row + git history are the durable record —
   read the filing with `git show d43a0dea:.issues/741_load_bearing_vocabulary_misses_the_threat_dialect.md`).
