@@ -220,7 +220,11 @@ pub fn generate_training_pairs_from_replays(
     target_weights: &TransformerWeights,
     replay_sequences: &[Vec<usize>],
 ) -> Vec<TrainingPair> {
-    let mut pairs = Vec::new();
+    let total_pairs: usize = replay_sequences
+        .iter()
+        .map(|s| s.len().saturating_sub(1))
+        .sum();
+    let mut pairs = Vec::with_capacity(total_pairs);
 
     for sequence in replay_sequences {
         if sequence.len() < 2 {
