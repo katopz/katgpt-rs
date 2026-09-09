@@ -1297,7 +1297,11 @@ fn t6_seed_1003_control_violation_is_pinned_both_directions() {
         );
     }
     // ...and it IS the decay ratio: decay_ratio_max <= 0.3 suppresses it.
-    for (drm, want_fire) in [(0.9f32, true), (0.5, true), (0.3, false), (0.0, false)] {
+    // (0.0 is deliberately NOT swept: it is an ILLEGAL config — the Issue-720
+    // constructor debug_asserts decay_ratio_max > 0.0 — and would panic this
+    // test under debug_assertions. A legal drm below the measured [0.3, 0.5)
+    // band pins the same mechanism: rule 3 fully suppressed.)
+    for (drm, want_fire) in [(0.9f32, true), (0.5, true), (0.3, false), (0.1, false)] {
         let cfg = CadenceConfig { plateau_floor: 1e-9, settle_floor: 1e-12, decay_ratio_max: drm };
         let mut p = LoopResidualExit::with_cadence_config(0.0, PROBE_D_MIN, cfg)
             .with_shape_persistence(1);
