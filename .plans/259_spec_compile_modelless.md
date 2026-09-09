@@ -3,7 +3,7 @@
 > **Research:** 229 (ProgramAsWeights Spec Compile Verdict — GAIN for symbolic path)
 > **Related Plans:** 131 (SpecHop), 110 (Subterranean Procedure Compilation), 228 (Vocab Channel Pruner)
 > **Feature Gates:** `spec_pruner`, `spec_compile`
-> **Status:** In Progress
+> **Status:** ✅ COMPLETE (re-verified 2026-09-09) — all T1–T22 checked; GOAT 6/6 PASS ([`.benchmarks/259_spec_compile_goat.md`](../.benchmarks/259_spec_compile_goat.md): 6 gates, 112 tests); re-run this date: `cargo test -p katgpt-pruners --features spec_compile --lib spec_compile` → **111/111 pass** (112th was an integration-row count; no failures); `spec_pruner` is default-on in the root `default = [...]` list. The stale "In Progress" marker postdated the landing (last plan edit `dc2bb914` marked tasks; status line never flipped).
 
 ## Summary
 
