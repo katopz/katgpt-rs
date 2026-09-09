@@ -1348,6 +1348,39 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
   T5 (Δ_PI metric + four-mode proxy diagnostics) deferred `[-]` — revisit only with a shaped-landscape corpus
   (riir-ai Issue 881 composition). Bench: `tests/bench_732_fresh_z0_restart.rs`.
 
+- **Issue 731 — Residual-gated early exit for the weight-tied looped forward (EqR action item 7.2): `LoopResidualExit`** RESOLVED
+  (2026-09-09; T1/T2/T3/T5/T6 landed, T4 deferred `[-]` — issue file removed at close, this row + git history are
+  the durable record. The loop-EXIT half of the EqR pair (732 was the selection half; lineage Plan 119
+  `eqr_convergence`, Research 079 §10). Landed behind the opt-in `cadence_gate` feature as `LoopResidualExit`
+  (katgpt-core `convergence_cadence.rs`, T1 `c69e651d`; the all-features-only `forward_looped` call-site alignment
+  caught by the first full-gate run on the branch is `c571d5b9`): exit when the L=3 step-norm window mean < τ OR
+  the cadence verdict is `Settled`, never before d_min, `None` probe = bit-identical (caller-owned slot, the
+  Issue-035 precedent). T2 calibration `a5edd8e6` (pre-reg `c5f45402`): knee k=10, the settle signal LEADS the
+  knee (~5-6 vs 10), no τ qualifies at d_min=4, and the Research-440 magnitude-only control false-fired at τ=10
+  (boundary amended τ ≤ 3, recorded, not silently). T3 micro-fixture campaign closed REJECTED: v1–v3 (pre-regs
+  `4332b056`/`284942d0`/`9c3b6d60`, closed `0fca1390`) with the floor-cap mechanism (quality parity needs
+  d_min ≥ ~10, the ≥2× margin needs d_min ≤ K*/2 — unsatisfiable on micro); the named v4 lever (loop-weight scale
+  α=3.0, pre-reg `f7a12f5d`, measured `e05dc0c1`) G2 PASS at exactly the 2.0× bar — existence-proof grade by
+  scan-selection disclosure. T6 held-out replication (pre-reg `ab59b9a0`, fix `14177e00`, ceiling-refutation
+  pointer `30124225`): P1 REFUTED the "exact 2.0× ceiling" (held-out seed 1002 margin 2.40× — the ceiling was the
+  scan's coverage, not the axis); P2 = 1/12 inside its pre-declared band ⇒ the existence-proof grade STANDS; P3
+  CAUGHT A REAL PROBE DEFECT — the OR'd shape arm's rule-3 decay fall-through false-converged a churning loop
+  (the InterLoopNorm control fired 40× on held-out seed 1003), falsifying T1's "guarded by construction" — fixed
+  by `with_shape_persistence` (default 2 consecutive Settled windows; `persistence=1` retained as the recorded
+  control arm, no loser to demote), a STRICT improvement on every corpus (v4 mean exit dist 8.66e-4 → 1.02e-4,
+  max 12× better; control 40 fires → 0) and confirmed on a real workload (riir-ai Bench 887, `dd80296d`: +1
+  iteration cost, better max|Δer|, G4 allocs unchanged). T5 consumer seam `with_cadence_config` `e562195d`
+  (motivated by riir-ai Issue 881's measured GOAT FAIL on CCE-scale residuals; first-consumer unblock evidence
+  Bench 875 `3e328368`). T4 promotion DEFERRED — the synthetic evidence is existence-proof grade and the decision
+  flows through riir-ai [Proposal 045](../riir-ai/.proposals/045_cce_margin_gated_commit_rule.md) (CCE
+  margin-gated commit rule, owner verdict pending) — the pointer this record must keep alive. Closeout
+  2026-09-09 `6010a558`: the T6 ratio-sweep had pinned `decay_ratio_max = 0.0`, an ILLEGAL config under the
+  Issue-720 constructor debug_assert, so the pin test panicked under debug_assertions and could only ever have
+  passed release-measured; swept to a legal (0.1, false) instead (same mechanism pinned). Gates re-certified at
+  the closeout HEAD: cadence lib 2002/0 at `cadence_gate`, `issue_731_t1_residual_exit` 3/3,
+  `bench_731_t3_heterogeneous_corpus` 7/7 in BOTH profiles; campaign instruments live at
+  `tests/bench_731_t2_residual_calibration.rs` + `tests/bench_731_t3_heterogeneous_corpus.rs`.)
+
 - **Issue 733 — `EngramHotSwap::with_table` did not hold the writer lock: a nested same-thread `swap` dropped the old table under a live borrow** RESOLVED
   (2026-09-07, `31bf0012`; issue file removed at close — this row + the module doc are the durable record.
   Found by riir-chain Plan 046 §2b while forcing an orphan-envelope test through a "locked" hotswap; fix direction 1
