@@ -21,7 +21,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 WORKSPACE = Path(os.environ.get("LINKCHECK_WORKSPACE", "/Users/katopz/git"))  # cross-box: set to the local workspace root
-REPO = WORKSPACE / sys.argv[1]
+REPO = (WORKSPACE / sys.argv[1]).resolve()  # resolve() kills any .. segments — an unresolved path can fail exists() downstream
 FINDINGS = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("/tmp/linkcheck_full.txt")
 
 REPO_NAMES = sorted(
@@ -80,7 +80,11 @@ def decide(target: str, md: Path):
     cleaned = target
     while cleaned.startswith("../"):
         cleaned = cleaned[3:]
-    cleaned = cleaned.lstrip("./")
+    if cleaned.startswith("./"):
+        cleaned = cleaned[2:]
+    # lstrip("./") would eat the dot of dot-dirs (.benchmarks/ -> benchmarks/)
+    # and make repo-relative links into dot-dirs unfixable; strip only a
+    # literal leading "./"
     if cleaned and (REPO / cleaned).exists():
         return "R2", relpath_from(md_dir, REPO / cleaned, target.endswith("/"))
     return "R3", None
