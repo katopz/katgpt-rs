@@ -72,7 +72,6 @@ on:
     paths:
       - 'scripts/full_gate.sh'
       - '.github/workflows/full_gate.yml'
-  workflow_dispatch:
 
 # A queued rerun of a slow gate on the same ref is waste, but never cancel a
 # scheduled run mid-flight in favour of a push — the schedule is the rot check.
