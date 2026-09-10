@@ -365,6 +365,8 @@ EqR independently validates our existing design from the attractor dynamics pers
 - Do NOT replace `BanditPruner` selection — add `ConvergenceSelector` as an option
 - Do NOT compute Lyapunov exponents or basin volumes — zero practical ROI
 - Do NOT add residual as training loss for modelless path
+
+> **Addendum (2026-09-11, Research 546):** arXiv:2609.04963 ("Fractal basins trap latent reasoning") supplies the operational evidence this rejection predated — the O(1) proxies (neighbor-divergence λF, decode-per-loop solution-switch frequency) need no exponent computation, the saddles they mark decode to nearly-correct answers, and trap-vs-converged halt semantics become actionable (Plan 593 `saddle_escape`). The rejection stands for full Lyapunov spectra / basin volumes; the O(1) flip-rate/λF-proxy lane is the sanctioned exception.
 - Do NOT create a new feature flag — compose with existing `elf_sde` + `bandit`
 - Do NOT redesign `inject_sde_noise` — EqR validates it's already correct
 
