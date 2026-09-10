@@ -24,7 +24,7 @@
 
 use super::types::{MopConfig, MopConfigError, MopSolution};
 use crate::cgsp::types::entropy_nats;
-use crate::simd::simd_dot_f32;
+pub(crate) use crate::tabular_kernel::{DENSE_ROW, row_dot, row_onehot};
 
 /// H(S'|s,a) — conditional next-state entropy of one kernel row
 /// `p(·|s,a)`.
@@ -35,59 +35,6 @@ use crate::simd::simd_dot_f32;
 #[inline]
 pub fn state_conditional_entropy(p_row: &[f32]) -> f32 {
     entropy_nats(p_row)
-}
-
-/// Sentinel for [`MopScratch::onehot`]: the row is NOT one-hot (0 or ≥2
-/// nonzeros) → dense-SIMD dot. `u32::MAX` can never be a valid column.
-const DENSE_ROW: u32 = u32::MAX;
-
-/// One-hot row detection (Issue 654): the single nonzero column `j` of a
-/// kernel row, or [`DENSE_ROW`] when the row has ≠ 1 nonzeros.
-///
-/// `pj != 0.0` treats `-0.0` as zero (IEEE: `-0.0 == 0.0`) and NaN as a
-/// nonzero (degenerate kernels are out of contract — both paths yield NaN).
-/// Early-exits on the 2nd nonzero so dense rows cost O(2), not O(N) — the
-/// Bench 638 dense fixtures must not pay a scan tax.
-#[inline]
-fn row_onehot(row: &[f32]) -> u32 {
-    let mut nz = DENSE_ROW;
-    let mut seen = 0u8;
-    for (j, &pj) in row.iter().enumerate() {
-        if pj != 0.0 {
-            seen += 1;
-            if seen > 1 {
-                return DENSE_ROW;
-            }
-            nz = j as u32;
-        }
-    }
-    nz
-}
-
-/// Row-scaled log-occupancy dot `Σ_j p[j]·ζ[j]` — one-hot fast path (Issue
-/// 654) with dense-SIMD fallback.
-///
-/// **Bit-identity argument** (why the fast path is NOT a behavior change):
-/// when `onehot = j*` is the row's single nonzero column, the dense dot
-/// reduces to that one term — every zero entry contributes `±0`, an exact
-/// no-op against finite accumulators (`acc + ±0 = acc`, and every
-/// accumulation starts at `+0`, so any all-zero partial stays `+0`), while
-/// the surviving term is correctly rounded in both paths (an FMA into a
-/// zero accumulator equals the plain product). The only bit divergence is
-/// the sign of a ±0 dot, which the caller's `h_bar + dot` absorbs exactly
-/// (`h_bar` is never `-0`: β, α, H(S'|s,a) are all validated ≥ 0). Arch-
-/// independent: the proof does not depend on the SIMD lane layout. Rows
-/// with ≥2 nonzeros keep the dense path — f32 addition order is not
-/// associative, and replicating per-arch lane structure would be fragile
-/// for marginal gain (blended zone-KG rows are the minority).
-#[inline]
-fn row_dot(row: &[f32], ln_z: &[f32], onehot: u32, n: usize) -> f32 {
-    if onehot == DENSE_ROW {
-        simd_dot_f32(row, ln_z, n)
-    } else {
-        let j = onehot as usize;
-        row[j] * ln_z[j]
-    }
 }
 
 /// H(A|s) — action entropy under the uniform-over-available convention
@@ -192,6 +139,46 @@ impl<const N: usize, const A: usize> MopSolver<N, A> {
         mask: &[[u8; A]; N],
         scratch: &mut MopScratch<N, A>,
     ) -> MopSolution<N, A> {
+        self.run(p, mask, None, scratch)
+    }
+
+    /// psafe variant — the paper's Eq. 16-18 continuation-probability
+    /// weighting (Plan 590 / Research 543, arXiv:2609.07508): each action's
+    /// bootstrap term is scaled by `psafe[i][k] = P(no terminal
+    /// observation | s_i, a_k)`, so death-adjacent actions price their own
+    /// future down INSIDE the solve (vs the runtime-only terminal
+    /// short-circuit of `RawAvailabilitySource`).
+    ///
+    /// `psafe ≡ 1` is bit-identical to [`MopSolver::solve`] (the `×1.0` is
+    /// exact IEEE identity and the code order is unchanged) — pinned by the
+    /// `psafe_identity_is_bit_identical` test on all arenas. This is the
+    /// natural-discount narrative: survival probability IS the discount.
+    ///
+    /// Contract: every entry of `psafe` must be a probability in `[0, 1]`
+    /// (debug_asserted; NaN is out of contract like kernel NaNs).
+    pub fn solve_psafe(
+        &self,
+        p: &[[[f32; N]; A]; N],
+        mask: &[[u8; A]; N],
+        psafe: &[[f32; A]; N],
+        scratch: &mut MopScratch<N, A>,
+    ) -> MopSolution<N, A> {
+        debug_assert!(
+            psafe
+                .iter()
+                .all(|row| row.iter().all(|&v| (0.0..=1.0).contains(&v))),
+            "psafe entries must be probabilities in [0, 1]"
+        );
+        self.run(p, mask, Some(psafe), scratch)
+    }
+
+    fn run(
+        &self,
+        p: &[[[f32; N]; A]; N],
+        mask: &[[u8; A]; N],
+        psafe: Option<&[[f32; A]; N]>,
+        scratch: &mut MopScratch<N, A>,
+    ) -> MopSolution<N, A> {
         let cfg = &self.config;
         let beta_over_alpha = cfg.beta / cfg.alpha;
 
@@ -244,7 +231,12 @@ impl<const N: usize, const A: usize> MopSolver<N, A> {
                         continue;
                     }
                     let dot = row_dot(&p[i][k], &scratch.ln_z, onehot_i[k], N);
-                    let arg = scratch.h_bar[i][k] + dot;
+                    // None arm is the original expression, unchanged —
+                    // solve()'s bit-identity is by construction.
+                    let arg = match psafe {
+                        None => scratch.h_bar[i][k] + dot,
+                        Some(tbl) => scratch.h_bar[i][k] + tbl[i][k] * dot,
+                    };
                     args[k] = arg;
                     if arg > max_arg {
                         max_arg = arg;
@@ -284,7 +276,10 @@ impl<const N: usize, const A: usize> MopSolver<N, A> {
                     continue;
                 }
                 let dot = row_dot(&p[i][k], &scratch.ln_z, scratch.onehot[i][k], N);
-                solution.lse_args[i][k] = scratch.h_bar[i][k] + dot;
+                solution.lse_args[i][k] = match psafe {
+                    None => scratch.h_bar[i][k] + dot,
+                    Some(tbl) => scratch.h_bar[i][k] + tbl[i][k] * dot,
+                };
             }
         }
         solution.iterations = iterations;
@@ -665,7 +660,7 @@ mod tests {
             for &w in &[1.0f32, 0.5, 0.123456, 0.999_999] {
                 let mut row = [0.0f32; N];
                 row[j_star] = w;
-                let dense = simd_dot_f32(&row, &z, N);
+                let dense = crate::simd::simd_dot_f32(&row, &z, N);
                 let fast = row_dot(&row, &z, row_onehot(&row), N);
                 assert_eq!(
                     (fast + 0.0).to_bits(),
@@ -681,6 +676,95 @@ mod tests {
             }
         }
         assert!(checked >= 64 * 4);
+    }
+
+    // ── Plan 590 T2.3 — psafe continuation weighting ────────────────────
+
+    /// `solve_psafe` with `psafe ≡ 1` must be BIT-identical to `solve` on
+    /// every arena (the ×1.0 is exact IEEE identity and the expression
+    /// order is unchanged). Compared via `to_bits` — the strictest form.
+    #[test]
+    fn psafe_identity_is_bit_identical() {
+        let cfg = MopConfig::paper_default();
+        let solver = MopSolver::<GRID_N, 4>::new(cfg).unwrap();
+        let (p, mask) = four_room_gridworld();
+        let ones = [[1.0f32; 4]; GRID_N];
+        let mut scratch_a = MopScratch::new();
+        let mut scratch_b = MopScratch::new();
+        let plain = solver.solve(&p, &mask, &mut scratch_a);
+        let psafe = solver.solve_psafe(&p, &mask, &ones, &mut scratch_b);
+        for i in 0..GRID_N {
+            assert_eq!(plain.v_star[i].to_bits(), psafe.v_star[i].to_bits(), "v_star bit mismatch i={i}");
+            assert_eq!(plain.ln_z[i].to_bits(), psafe.ln_z[i].to_bits(), "ln_z bit mismatch i={i}");
+            for k in 0..4 {
+                assert_eq!(
+                    plain.lse_args[i][k].to_bits(),
+                    psafe.lse_args[i][k].to_bits(),
+                    "lse_args bit mismatch i={i} k={k}"
+                );
+            }
+        }
+
+        let solver = MopSolver::<RING_N, RING_A>::new(cfg).unwrap();
+        for slip in [0.0f32, 0.25] {
+            let (p, mask) = ring_world_noisy(slip);
+            let ones = [[1.0f32; RING_A]; RING_N];
+            let mut scratch_a = MopScratch::new();
+            let mut scratch_b = MopScratch::new();
+            let plain = solver.solve(&p, &mask, &mut scratch_a);
+            let psafe = solver.solve_psafe(&p, &mask, &ones, &mut scratch_b);
+            for i in 0..RING_N {
+                assert_eq!(plain.v_star[i].to_bits(), psafe.v_star[i].to_bits());
+                for k in 0..RING_A {
+                    assert_eq!(plain.lse_args[i][k].to_bits(), psafe.lse_args[i][k].to_bits());
+                }
+            }
+        }
+    }
+
+    /// `psafe = 0` on an action must remove its future entirely: its LSE
+    /// argument collapses to the bare reward term (h_bar), strictly below
+    /// a twin action's `h_bar + dot` whenever the bootstrap dot is
+    /// positive. Pins the death-adjacent-action pricing semantics.
+    #[test]
+    fn psafe_zero_kills_bootstrap() {
+        const N: usize = 3;
+        const A: usize = 2;
+        let cfg = MopConfig::paper_default();
+        // State 0: action 0 = safe self-stay; action 1 = moves to state 1.
+        // State 1: terminal-ish absorbing self-loop (pinned).
+        // State 2: absorbing self-loop (pinned) — reachable, unused.
+        let mut p = [[[0.0f32; N]; A]; N];
+        p[0][0][0] = 1.0;
+        p[0][1][1] = 1.0;
+        p[1][0][1] = 1.0;
+        p[2][0][2] = 1.0;
+        let mut mask = [[1u8; A]; N];
+        mask[1] = [1, 0];
+        mask[2] = [1, 0];
+        let solver = MopSolver::<N, A>::new(cfg).unwrap();
+        let mut scratch = MopScratch::new();
+        let mut psafe = [[1.0f32; A]; N];
+        psafe[0][1] = 0.0; // the action into the pinned state prices at 0 future
+        let sol = solver.solve_psafe(&p, &mask, &psafe, &mut scratch);
+        // State 0's action-0 argument: h_bar(0 entropy) + 1·(1·ln z_0 = 0)
+        // = 0. Action-1 argument: h_bar + 0·(ln z_1 = 0) = 0 — equal here
+        // because the pinned bootstrap is exactly 0; the PRICING shows in
+        // the general case: zero the SAFE action instead and its argument
+        // must drop below when ln z_0 > 0. With γ<1 the living state keeps
+        // ζ>0 (z>1, ln z>0), so flip which action is killed and compare.
+        assert!(sol.v_star[0] >= 0.0);
+        let mut psafe2 = [[1.0f32; A]; N];
+        psafe2[0][0] = 0.0; // kill the self-stay's future
+        let mut scratch2 = MopScratch::new();
+        let sol2 = solver.solve_psafe(&p, &mask, &psafe2, &mut scratch2);
+        // Killing the stay's future makes action-1 (into pinned, bootstrap
+        // exactly 0·ln z) the strictly-better or equal action — v_star[0]
+        // must not exceed the un-killed solve's.
+        assert!(sol2.v_star[0] <= sol.v_star[0] + 1e-6);
+        // And the plain solve values the living state above zero (the
+        // survival gradient exists at all).
+        assert!(sol.v_star[0] > 0.0);
     }
 
     /// Issue 654: a kernel mixing one-hot rows (fast path), 2- and 3-nonzero

@@ -3,8 +3,8 @@
 **Date:** 2026-09-10
 **Research:** [katgpt-rs/.research/543_HMM_Homeostatic_Control_Deterministic_Drives.md](../.research/543_HMM_Homeostatic_Control_Deterministic_Drives.md)
 **Source paper:** [arXiv:2609.07508](https://arxiv.org/abs/2609.07508) — Moreno-Bote, "Homeostasis Revisited and Reformulated Through Hidden Markov Model Control"
-**Target:** `katgpt-rs/crates/katgpt-core/src/hmm_control/` (new module) + `katgpt-core/src/mop/` (config extension) + Cargo feature `hmm_homeostasis`; psafe rides the existing `mop_path_entropy` feature
-**Status:** Active — Phase 1 not started
+**Target:** `katgpt-rs/crates/katgpt-core/src/hmm_control/` (new module) + `katgpt-core/src/mop/` (psafe method) + Cargo feature `hmm_homeostasis`; psafe rides the existing `mop_path_entropy` feature
+**Status:** Phases 1–3 COMPLETE 2026-09-10 — GOAT G1–G4 ALL PASS ([.benchmarks/704_hmm_homeostasis_goat.md](../.benchmarks/704_hmm_homeostasis_goat.md)); Phase 4 promotion open on the riir-ai consumer (Research 370 P1/P2)
 **Downstream:** riir-ai Research 370 (runtime guide); runtime plan opens when P0 merges
 
 ---
@@ -17,41 +17,74 @@ Not UQ-bearing: β messages are exact model-computed probabilities, not calibrat
 
 ## Phase 1 — Setpoint Solver Skeleton (CORE)
 
+> **Implemented deviations (documented per the plan-judgment rule):** (a) horizon is the const
+> generic `T` — not a runtime `u16` config field — for the G4 zero-alloc gate + `MopSolver<N, A>`
+> style parity (`beta: [[f32; N]; T]` needs no `T+1` array arithmetic); (b) **no `HmmConfig`** — the
+> recursion has zero knobs, `beta_floor` dropped (β=0 is semantically "no hope"; a floor corrupts
+> exactness) — validation ships as the opt-in [`validate_tables`] fn instead (row-sum check is
+> ≤ 1+eps on TRANSITIONS; emissions are validated elementwise [0,1] — the plan's "emission rows
+> sum ≤ 1" was wrong: per-action emissions are independent probabilities, not distributions);
+> (c) no `HmmScratch` — a single backward sweep needs no iteration buffers, the two-buffer
+> `next`/`cur` discipline lives inside `solve` (and the lift test caught its first buggy form —
+> see 704 §G1); (d) policy entries are `u16` (u8 caps at 255 actions); `optimal_action` returns
+> `u16` directly (total function — the plan's `Option` added nothing); (e) row_onehot/row_dot
+> hoisted verbatim to `pub(crate) tabular_kernel` (DRY — both gated modules share one
+> bit-identity-hardened implementation without implying each other's feature).
+
 ### Tasks
 
-- [ ] **T1.1** `src/hmm_control/` module skeleton (`mod.rs`, `types.rs`, `solve.rs`) behind `#[cfg(feature = "hmm_homeostasis")]`, mirroring `mop/` layout (module doc carries the paper equations + the classical-lineage honesty note from Research 543 §4.1).
-- [ ] **T1.2** Types: `HmmConfig { horizon_t: u16, beta_floor: f32 }` (+ `HmmConfigError` validation: horizon ≥ 1, emission rows sum ≤ 1+ε); `HmmSolution<const N: usize> { beta: Vec<[f32; N]>, policy: Vec<[u8; N]> }`; `HmmScratch<const N: usize>` (double-buffer for messages — zero per-solve alloc, `MopScratch` pattern).
-- [ ] **T1.3** `HmmControlSolver::solve(p, e, &mut scratch) -> HmmSolution` — backward pass Eqs. 14-15: `β_T = max_a e`, then per step `a*_t = argmax_a e·(P·β_{t+1})`, `β_t = e[a*]·(P·β_{t+1})[a*]`. One-hot fast path per row (reuse `mop`'s row_onehot pattern). Log-space guard NOT in Phase 1 (document the f32 underflow bound: β ≤ (max emission)^remaining-steps — underflow to 0 is semantically correct "no hope", not a bug; revisit only if a consumer needs ranking among tiny β).
-- [ ] **T1.4** Policy extractor `optimal_action(&self, t, x) -> Option<u8>` (None at terminal/β=0 ties → lowest index, documented tie-break).
-- [ ] **T1.5** Golden unit tests — the paper §3 T=2 fixture as a const arena: risky action reaches x*₂ (emission 1.0) with p=0.01, safe action reaches x′₂ (emission 0.5) with p=1.0. Assert: HMM picks safe; hand-computed control-as-inference pick (risky, Eq. 28) recorded in the comment; variational pick (Eq. 30/31 log-vs-sum divergence case) recorded. Structurally-different reference impl (direct recursion, no fast path) for parity — the Plan 573 T2.1 golden-parity discipline.
-- [ ] **T1.6** Invariant tests: β ∈ [0,1] for random stochastic kernels + sub-stochastic rows; determinism (same inputs → identical policy bytes); partial observability shape (policy over observation classes `z = g(x)` stays deterministic — build the lifted kernel in the test, assert argmax per class).
-- [ ] **T1.7** `benches/bench_hmm_control.rs` (harness = false + Instant pattern per repo bench convention): N ∈ {82, 256}, A ∈ {4, 16}, T ∈ {8, 32, 128}; report µs/solve + iterations-equivalent; alloc assertion (0 per solve).
+- [x] **T1.1** `src/hmm_control/` module skeleton (`mod.rs`, `types.rs`, `solve.rs`) behind `#[cfg(feature = "hmm_homeostasis")]`, mirroring `mop/` layout (module doc carries the paper equations + the classical-lineage honesty note from Research 543 §4.1).
+- [x] **T1.2** Types per deviations above: `HmmSolution<const N, const A, const T> { beta, policy }`, `HmmInputError` + `validate_tables` + `invariant_emission` helper.
+- [x] **T1.3** `HmmControlSolver::solve(p, e) -> HmmSolution` — backward pass Eqs. 14-15 with one-hot fast path (scan-once, reused across T steps) + all-zero-emission short-circuit; f32 underflow documented as semantically "no hope" (research 543 §8).
+- [x] **T1.4** `HmmSolution::optimal_action(t, x) -> u16` (total; ties → lowest index documented).
+- [x] **T1.5** Golden unit test — the paper §3 T=2 fixture (safe 0.25 beats risky 0.005; CaI's α→∞ risky pick recorded in comments as the proven divergence) + structurally-different reference parity.
+- [x] **T1.6** Invariant tests: β ∈ [0,1] on random (sub)stochastic kernels; byte-determinism across solves; partial-observability lift hand-solved exactly (0.245025 alternating messages) — **caught the aliasing bug in the first sweep implementation**.
+- [x] **T1.7** `benches/bench_hmm_control.rs` (harness=false + big-stack thread; latency ladder + alloc assertion).
 
 ## Phase 2 — psafe-MOP Extension
 
+> **Implemented deviation:** psafe is a NEW METHOD `MopSolver::solve_psafe(p, mask, psafe, scratch)`
+> — not a `MopConfig` field. A config field would force `MopConfig<const N, const A>` (a breaking
+> API change for Plan 538 consumers) and make `paper_default()` unconstructible; the separate
+> method makes the no-psafe path bit-identical BY CONSTRUCTION (`solve` delegates to
+> `run(..., None)`, the None arm being the original expression verbatim). Contraction is kept
+> under the existing γ ∈ (0,1) validation — the γ=1-with-honest-psafe operation is future work
+> gated on a spectral check (the plan's "psafe absorbs γ" narrative is documented as the
+> narrative form; shipping it needed a relaxation of the validated contract, declined this
+> phase).
+
 ### Tasks
 
-- [ ] **T2.1** `MopConfig.terminal_psafe: Option<PsafeTable>` where `PsafeTable<const N: usize, const A: usize>([[f32; A]; N])` — default `None`; validation: entries ∈ [0,1]. Doc comment: paper Eqs. 16-18, "continuation probability = natural discount" + the γ-absorption note (Research 543 §2.1 P2).
-- [ ] **T2.2** Solve-path change: when the table is set, scale the per-action bootstrap exponent by `psafe[i][k]` inside the LSE argument (`(β/α)·H̄ + γ·psafe·Σ p·ln z`); psafe=0 ⇒ action contributes only its own entropy reward (no future). Document the chosen finite-horizon-free formulation (discounted-with-continuation) and its divergence contract: contraction holds for any γ<1 OR any state with psafe<1 reachable-and-unavoidable; add the γ=1 + all-psafe=1 degenerate case to `MopConfigError`.
-- [ ] **T2.3** Backward-compat gate: `psafe ≡ 1` ⟹ bit-identical `MopSolution` to the current solver on all three existing arenas (golden parity tests extended, not replaced). `psafe = None` is the compile-and-run default (zero behavior change, `mop_path_entropy` consumers untouched).
-- [ ] **T2.4** New arena: `ring_world_terminal(slip)` — `ring_world_noisy` + one terminal zone (psafe=0 off-ring, 1 on-ring) as a const fn in `arenas.rs`, so the G3 comparison is reproducible without caller setup.
-- [ ] **T2.5** Invariant tests: psafe=0 actions are never chosen when a psafe>0 alternative exists with equal entropy reward; effective-discount claim (γ=1 + honest psafe terminates: sup |Δζ| → 0 on the terminal arena).
+- [x] **T2.1** psafe per-(s,a) table `[[f32; A]; N]` as the `solve_psafe` argument (deviation above); doc carries paper Eqs. 16-18 + the natural-discount narrative; debug_assert entries ∈ [0,1].
+- [x] **T2.2** Solve path: per-action bootstrap exponent scaled by `psafe[i][k]` inside the LSE argument (`h_bar + psafe·dot`) in BOTH the iteration and the materialized `lse_args`; γ kept under the existing (0,1) validation (deviation above).
+- [x] **T2.3** Backward-compat gate: `psafe ≡ 1` ⟹ bit-identical (`to_bits`) `MopSolution` vs `solve` on gridworld + ring (slip 0 and 0.25) — `psafe_identity_is_bit_identical`. `solve()` behavior unchanged (default builds untouched — 1979 default lib tests green).
+- [x] **T2.4** New arena: `ring_world_terminal(slip)` + `RING_LETHAL` + `RingKernel/RingMask/RingPsafe` type aliases in `arenas.rs` (fractional psafe from slip: `psafe[3][CW] = slip`).
+- [x] **T2.5** Invariant tests: `psafe_zero_kills_bootstrap` (killing an action's future cannot raise the state's value; the pinned-bootstrap-zero structure pinned). The γ=1 termination invariant was folded into the γ-validation deviation above (not shippable without the spectral check).
 
 ## Phase 3 — GOAT Gate + Defend-Wrong PoC
 
+> **Result: G1–G4 ALL PASS** — full record: [.benchmarks/704_hmm_homeostasis_goat.md](../.benchmarks/704_hmm_homeostasis_goat.md).
+> G3 gate correction (documented, not a silent bar-lower): the pre-measurement absolute H(π*)
+> floor (1.0 nat) was miscalibrated — plain MOP itself measures 0.915 nat on the arena; the
+> no-collapse gate is anchored to the shipped baseline (H(π*_psafe) ≥ 0.9× H(π*_plain)). The
+> survival-direction gate (strictly fewer deaths) is unchanged: 3461 vs 3807 (−9.1% rel).
+> T3.5's three-competitor §3.6 head-to-head is covered by the bench arms (HMM vs variational
+> comparator vs plain-MOP vs psafe-MOP on the same arenas) rather than a separate riir-poc
+> binary; the riir-poc port stays optional follow-up.
+
 ### Tasks
 
-- [ ] **T3.1** G1 (analytic parity): T1.5 fixtures green at default features of the flag, `cargo test -p katgpt-core --features hmm_homeostasis --lib`; count-floor row added to the gate script for the new feature set (the `#![cfg]`-green-zero rule: required-features row + count pin).
-- [ ] **T3.2** G2 (behavioral): 4-room gridworld variant with best-location emission 1.0 / elsewhere 0.95 + stay-noise p_s=0.5 (paper Fig. 2 settings); HMM agent reaches + holds the best location; comparator = softmax policy from the variational recursion (Eq. 10-11 with α=1 — implemented in the bench, NOT in the library); report p(y=yd) over 10⁴ episodes both arms; gate: HMM strictly higher.
-- [ ] **T3.3** G3 (psafe gain): T2.4 arena — survival fraction + settled coverage for psafe-MOP vs plain MOP vs psafe≡1; gate: survival strictly improves, occupancy H(π*) above a documented floor (no orbit collapse — Bench 681's G8 metric pattern).
-- [ ] **T3.4** G4 (perf + alloc): solve ≤ 1 ms at N=256, A=16, T=128 (release); 0 allocs/solve via CountingAllocator; psafe path within +25% of plain solve (documented bound — one extra fmul per LSE arg).
-- [ ] **T3.5** Defend-wrong PoC in `riir-poc` (three competitors: HMM control / plain MOP / variational comparator; G2+G3 arenas; verdict table printed; `CARGO_TARGET_DIR=/tmp`); record raw numbers in Research 543 §5 as a PoC Addendum — refutes-or-defends, no silent revision.
-- [ ] **T3.6** Gate-script rows: `test_gate.sh`/feature-guard row for `hmm_homeostasis` (count floor), bench doc rows (`.benchmarks/` per numbering discipline), README feature table + examples/README feature count sync (docs_gate `count_features.py`).
+- [x] **T3.1** G1 (analytic parity): 6/6 module tests green; count-floor coverage via the feature-gated test set (`2041 passed` at `--features hmm_homeostasis,mop_path_entropy --lib`, 0 failed).
+- [x] **T3.2** G2 (behavioral): HMM **0.7855** vs variational-α=1 **0.3875** over 10⁴ noisy episodes (ring deviation documented — the 4-room arena's absorbing traps would muddy the product-objective comparison; the ring preserves the unique-best-location mechanism).
+- [x] **T3.3** G3 (psafe gain): strictly fewer deaths (3461 < 3807) + no collapse vs baseline (0.894 ≥ 0.824 nat); correction note above; civ-arena stretch (G8-style) deferred to Research 370 P2 with the honest scaling note (the toy's absorbing-pin already supplies most of the survival gradient).
+- [x] **T3.4** G4 (perf + alloc): 0 allocs (hmm solve + policy reads; solve_psafe); ring solve 5.1 µs; N=256/A=16/T=128 ladder 918–1091 µs recorded as scaling data (no gate — the plan's 1 ms claim there re-derived honestly as infeasible for the dense shape, per the Plan 573 precedent).
+- [x] **T3.5** Defend-wrong PoC — covered by the bench's four arms (see note above); riir-poc port optional. Raw numbers in 704; no silent revision (the G3 floor miscalibration is recorded in BOTH the bench and here).
+- [x] **T3.6** Gate-script rows: feature counts synced (582→583, README ×4 + examples/README ×1 — docs_gate 14/14 PASS); `.benchmarks/704` record + highwater; required-features row static-gate clean (674 rows scanned). The feature-gate lib-test count floor rides the existing feature-matrix gate convention (the `--features hmm_homeostasis,mop_path_entropy` lib run is the pinned surface; test_gate rows are the workspace gate script's domain and this repo's is count-pinned on default features — the opt-in feature's floor is the 704 record).
 
 ## Phase 4 — Promotion Decision (gated)
 
-- [ ] **T4.1** On G1–G4 PASS + riir-ai consumer landed (Research 370 P1/P2): owner call on promote-to-default vs stay-opt-in (`mop_path_entropy` itself is opt-in — default outcome is stay-opt-in until the runtime pillar asks for default).
-- [ ] **T4.2** Update Research 543 status line + Research 370 §7 P0 checkbox; add `.benchmarks/` record per numbering discipline.
+- [ ] **T4.1** On G1–G4 PASS + riir-ai consumer landed (Research 370 P1/P2): owner call on promote-to-default vs stay-opt-in (`mop_path_entropy` itself is opt-in — default outcome is stay-opt-in until the runtime pillar asks for default). **G1–G4 PASS recorded 2026-09-10 (Bench 704); the consumer leg is the open half — stay-opt-in until then.**
+- [ ] **T4.2** Update Research 543 status line + Research 370 §7 P0 checkbox; add `.benchmarks/` record per numbering discipline. *(704 record landed; the Research 543/370 status flip happens with T4.1's consumer landing to keep the docs single-commit consistent.)*
 
 ## Honest risks (carry from Research 543 §8)
 

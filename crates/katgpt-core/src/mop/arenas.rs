@@ -140,3 +140,41 @@ pub fn ring_world_noisy(
     }
     (p, mask)
 }
+
+/// Lethal zone on the ring (Plan 590 T2.4): states 4, 5, 6. Entering one
+/// ends the episode (mask all-zero → MOP pin). Positions 2, 3, 7, 8 are
+/// death-adjacent (their CW/CCW action crosses into the zone with mass
+/// `1 − slip`); the arc 9..15, 0, 1 is death-free.
+pub const RING_LETHAL: [usize; 3] = [4, 5, 6];
+
+/// Ring kernel type (shared by [`ring_world_terminal`]'s triple return).
+pub type RingKernel = [[[f32; RING_N]; RING_A]; RING_N];
+/// Ring mask type.
+pub type RingMask = [[u8; RING_A]; RING_N];
+/// Ring continuation-probability table type (Plan 590).
+pub type RingPsafe = [[f32; RING_A]; RING_N];
+
+/// Terminal-zone ring: [`ring_world_noisy`] + the [`RING_LETHAL`] states
+/// made terminal (mask all-zero, kernel rows zeroed) + the per-(s, a)
+/// continuation-probability table `psafe[s][a] = 1 − (mass the action
+/// flows into the lethal zone)` — the Plan 590 G3 arena (paper Eqs. 16-18,
+/// arXiv:2609.07508). Fractional psafe arises from slip: from state 3, CW
+/// enters state 4 with mass `1 − slip` → `psafe[3][CW] = slip`.
+///
+/// The psafe rows of terminal states are meaningless (no action leaves
+/// them; MOP pins ζ = 0 regardless) and read as 1.0 by construction.
+pub fn ring_world_terminal(slip: f32) -> (RingKernel, RingMask, RingPsafe) {
+    let (mut p, mut mask) = ring_world_noisy(slip);
+    for &s in RING_LETHAL.iter() {
+        mask[s] = [0; RING_A];
+        p[s] = [[0.0f32; RING_N]; RING_A];
+    }
+    let mut psafe = [[1.0f32; RING_A]; RING_N];
+    for (i, row_i) in p.iter().enumerate() {
+        for (k, row_ik) in row_i.iter().enumerate() {
+            let into_lethal: f32 = RING_LETHAL.iter().map(|&l| row_ik[l]).sum();
+            psafe[i][k] = 1.0 - into_lethal;
+        }
+    }
+    (p, mask, psafe)
+}
