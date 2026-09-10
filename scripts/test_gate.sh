@@ -60,8 +60,8 @@
 # Floors measured 2026-09-04 on committed-HEAD-equivalent working tree
 # (debug, M3): katgpt-rs 203 passed / 0 failed (30.9 s), katgpt-core
 # 1974 passed / 0 failed / 7 ignored (11.0 s). katgpt-dec at
-# `--features pca_global` measured 2026-09-10 (Plan 591 Phase 0):
-# 239 passed / 0 failed (225 base + 14 pca). Raising a floor is a
+# `--features pca_global` measured 2026-09-10 (Plan 591 Phase 0 + Phase 1):
+# 243 passed / 0 failed (225 base + 18 pca). Raising a floor is a
 # measured act; lowering one needs a note in the commit that does it.
 #
 # --test-threads=2 is deliberate (the riir-train 507 precedent): a weekly
@@ -79,7 +79,7 @@ set -u
 ROWS="
 katgpt-rs:203
 katgpt-core:1974
-katgpt-dec:239:pca_global
+katgpt-dec:243:pca_global
 "
 
 canary=0

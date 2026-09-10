@@ -18,7 +18,7 @@
 //! "global knowledge" channel is exactly one scalar per tick, which is what
 //! makes the global function programmable rather than emergent.
 //!
-//! # The four globals ([`PcaGlobalFn`])
+//! # The globals ([`PcaGlobalFn`])
 //!
 //! Each evaluates against the state cochain + complex via the shipped DEC
 //! operators:
@@ -30,6 +30,9 @@
 //!   count has no closed form on the subcomplex without restricted Gaussian
 //!   elimination, so it ships as an honest O(V + E) union-find scan (the same
 //!   "document the scan" standard Phase 2 sets for `LargestComponentSize`).
+//! - [`PcaGlobalFn::AliveCount`] — alive-cell count: the paper's COUNT global
+//!   (the placement budget). The one arm that is O(1) incrementable on both
+//!   births and deaths — the live counter [`step_pca_async`] tracks.
 //! - [`PcaGlobalFn::BoundaryFluxMass`] — net morphogen flux across the domain
 //!   boundary: flow = d(channel 1), region = ALL faces, so interior edges
 //!   cancel by orientation and only boundary edges contribute (Stokes).
@@ -112,6 +115,11 @@ pub enum PcaGlobalFn {
     /// Connected-component count of the alive support (channel 0 > 0.5).
     /// NOT [`betti_numbers`] — that is state-blind (module doc explains).
     Betti0,
+    /// Alive-cell count (channel 0 > 0.5) — the paper's COUNT global (the
+    /// Zelda placement budget). O(1) incrementable on births AND deaths, so
+    /// this is the one arm [`step_pca_async`] tracks with a live counter
+    /// (all other arms freeze their pre-tick value through the sweep).
+    AliveCount,
     /// Net morphogen flux across the domain boundary. The flow is the
     /// ENDPOINT-SUM edge lift of the morphogen (see [`morphogen_edge_lift`] —
     /// the gradient lift would be identically zero here by `d∘d = 0`).
@@ -128,6 +136,14 @@ impl PcaGlobalFn {
     pub fn evaluate(&self, cx: &CellComplex, field: &CochainField, scratch: &mut PcaScratch) -> f32 {
         match self {
             Self::Betti0 => betti0_of_support(cx, field, scratch),
+            Self::AliveCount => {
+                let n = cx.n_cells(0);
+                let mut count = 0u32;
+                for v in 0..n {
+                    count += alive_at(field, v) as u32;
+                }
+                count as f32
+            }
             Self::BoundaryFluxMass => {
                 // Boundary-vs-volume is a win only for d ≤ 3 (Plan 591
                 // constraint; the AGENTS.md manifold rule). Untrippable with
@@ -451,6 +467,101 @@ pub fn step_pca_sync(
         }
     }
     value
+}
+
+/// One tick of PCA-ASYNC — the paper's asynchronous dynamic: the decision
+/// sees a LIVE global, updated O(1) on each cell write during the sweep,
+/// instead of the frozen pre-tick value [`step_pca_sync`] gates against.
+///
+/// # The failure this closes (paper §3, the stale-count counter example)
+///
+/// On a k-target placement task the sync step gates the WHOLE birth batch
+/// against the pre-tick count: with count k−1 and 8 pending births, every
+/// birth sees "under target" and is allowed → final count k+7 — OVERSHOOT.
+/// The async step processes the same batch in a FIXED row-major traversal,
+/// incrementing the counter on every allowed birth, so placements stop
+/// EXACTLY at k. Deterministic by traversal order (Gauss–Seidel discipline:
+/// the fixed order replaces the sync step's batch semantics, not a wall
+/// clock).
+///
+/// # Incremental-global scope (honest)
+///
+/// Only [`PcaGlobalFn::AliveCount`] supports O(1) updates on both births and
+/// deaths; for every other arm this step DEGENERATES to sync semantics (the
+/// pre-tick value frozen through the sweep — identical results, documented
+/// rather than hidden). `Betti0` births are union-find-incremental, but a
+/// death can SPLIT a component and union-find cannot delete — wiring that
+/// hybrid (birth-incremental + death-dirty resync) is deferred until a
+/// consumer needs it.
+///
+/// # Sequence
+///
+/// 1. Full `global_fn.evaluate` on the PRE-tick state (the live counter's
+///    seed value).
+/// 2. Alive snapshot; kernel tick — identical to [`step_pca_sync`].
+/// 3. Fixed row-major pass over ALL cells: a DEATH (alive→dead, e.g. via
+///    crowding) decrements the counter; a BIRTH is offered to `decision`
+///    with the CURRENT counter value — allowed births increment it, refused
+///    births are reverted (and do not increment).
+///
+/// # Returns
+///
+/// The POST-pass global value — for `AliveCount` the live counter (the
+/// caller's exact current count); for non-incremental arms the pre-tick
+/// value (matching [`step_pca_sync`]).
+///
+/// # Determinism
+///
+/// Same (field, params, seed, global_fn, decision) → bit-identical final
+/// grid: the traversal order is fixed row-major, the kernel is the same
+/// seeded batch update, and the counter path is pure arithmetic (property
+/// test at ≥100 seeds).
+#[inline]
+pub fn step_pca_async(
+    cx: &CellComplex,
+    field: &mut CochainField,
+    params: &BirthDeathParams,
+    rng: &mut SplitMix64,
+    global_fn: &PcaGlobalFn,
+    decision: &dyn PcaDecision,
+    scratch: &mut PcaScratch,
+) -> f32 {
+    // 1. The live counter's seed — full pre-tick evaluation.
+    let mut live = global_fn.evaluate(cx, field, scratch);
+
+    // 2. Alive snapshot + the untouched local kernel.
+    let n = cx.n_cells(0);
+    let dim = field.dim;
+    debug_assert_eq!(field.rank, 0, "step_pca_async needs the rank-0 state");
+    debug_assert!(dim >= 2, "state needs alive + morphogen channels");
+    debug_assert_eq!(scratch.alive_before.len(), n, "PcaScratch built for this cx?");
+    for (v, slot) in scratch.alive_before.iter_mut().enumerate().take(n) {
+        *slot = alive_at(field, v) as u8;
+    }
+    stochastic_birth_death_step(cx, field, params, rng, &mut scratch.lap, &mut scratch.dropout);
+
+    // 3. Fixed row-major pass with the live counter. Only AliveCount is
+    //    incrementable (enum doc); other arms keep the frozen value.
+    let incrementable = matches!(global_fn, PcaGlobalFn::AliveCount);
+    for v in 0..n {
+        let was_alive = scratch.alive_before[v] != 0;
+        let now_alive = alive_at(field, v);
+        if was_alive && !now_alive {
+            // Death (crowding): O(1) decrement — before the births AFTER v
+            // in the order see it, which is the point of the live counter.
+            if incrementable {
+                live -= 1.0;
+            }
+        } else if !was_alive && now_alive {
+            let local = &field.data[v * dim..v * dim + dim];
+            if decision.decide(local, &GlobalScalars { value: live }) <= 0.0 {
+                field.data[v * dim] = 0.0;
+            } else if incrementable {
+                live += 1.0;
+            }
+        }
+    }
+    live
 }
 
 #[cfg(test)]
@@ -859,6 +970,143 @@ mod tests {
                 field.data.clone()
             };
             assert_eq!(run(), run(), "seed {seed}: same inputs must be bit-identical");
+        }
+    }
+
+    #[test]
+    fn alive_count_global_counts_the_support() {
+        let cx = CellComplex::grid_2d(5, 5);
+        let mut field = make_field(&cx, 2);
+        let mut scratch = PcaScratch::for_complex(&cx, 2);
+        assert_eq!(PcaGlobalFn::AliveCount.evaluate(&cx, &field, &mut scratch), 0.0);
+        seed_alive_morph(&mut field, &[0, 1, 12], 1.0, 2);
+        assert_eq!(PcaGlobalFn::AliveCount.evaluate(&cx, &field, &mut scratch), 3.0);
+    }
+
+    #[test]
+    fn async_avoids_the_stale_count_over_placement() {
+        // The paper §3 counter example: a k-target placement task. Sync gates
+        // the WHOLE batch against the pre-tick count → overshoot; async's
+        // live counter stops placements EXACTLY at k.
+        let cx = CellComplex::grid_2d(5, 5);
+        let params = BirthDeathParams { dropout_prob: 0.0, ..BirthDeathParams::paper_defaults() };
+        let k = 5.0f32;
+
+        // Two far-apart interior seeds (v7 row 1, v17 row 3 on the 5×5):
+        // 2 alive pre-tick, 7 unique pending births across the batch.
+        let mk = || {
+            let mut f = make_field(&cx, 2);
+            seed_alive_morph(&mut f, &[7, 17], 1.0, 2);
+            f
+        };
+        let budget_gate = |target: f32| GlobalTargetGate {
+            target,
+            stop_when: StopWhen::Above,
+        };
+
+        // SYNC: every birth in the batch sees the frozen pre-tick count 2 < k
+        // → all allowed → OVERSHOOT past k (seeds v7/v17 interior: 7 unique
+        // pending births → 9; the exact number depends on neighborhood
+        // geometry — the semantic point is sync > k).
+        let mut synced = mk();
+        let mut scratch = PcaScratch::for_complex(&cx, 2);
+        step_pca_sync(
+            &cx,
+            &mut synced,
+            &params,
+            &mut SplitMix64::new(11),
+            &PcaGlobalFn::AliveCount,
+            &budget_gate(k),
+            &mut scratch,
+        );
+        let sync_alive = synced.data.iter().step_by(2).filter(|&&a| a > 0.5).count();
+        assert!(sync_alive as f32 > k, "sync must overshoot k={k} (stale-count batch), got {sync_alive}");
+
+        // ASYNC: the counter goes live — births stop EXACTLY at k.
+        let mut asynced = mk();
+        let returned = step_pca_async(
+            &cx,
+            &mut asynced,
+            &params,
+            &mut SplitMix64::new(11),
+            &PcaGlobalFn::AliveCount,
+            &budget_gate(k),
+            &mut scratch,
+        );
+        let async_alive = asynced.data.iter().step_by(2).filter(|&&a| a > 0.5).count();
+        assert_eq!(async_alive, k as usize, "async must land exactly on k={k}");
+        assert_eq!(returned, k, "async returns the live post-pass counter");
+
+        // Consistency: the live counter matches a fresh full evaluation.
+        assert_eq!(
+            PcaGlobalFn::AliveCount.evaluate(&cx, &asynced, &mut scratch),
+            returned,
+            "live counter drifted from the field"
+        );
+    }
+
+    #[test]
+    fn async_degenerates_to_sync_semantics_for_non_incremental_arms() {
+        // Documented contract: non-incremental arms freeze the pre-tick value
+        // — same results as sync (same seed).
+        let cx = CellComplex::grid_2d(5, 5);
+        let params = BirthDeathParams { dropout_prob: 0.0, ..BirthDeathParams::paper_defaults() };
+        let gate = GlobalTargetGate { target: 1.0, stop_when: StopWhen::Below };
+        let mk = || {
+            let mut f = make_field(&cx, 2);
+            seed_alive_morph(&mut f, &[0, 24], 1.0, 2);
+            f
+        };
+        let mut a = mk();
+        let mut s = mk();
+        let mut scratch = PcaScratch::for_complex(&cx, 2);
+        step_pca_async(
+            &cx,
+            &mut a,
+            &params,
+            &mut SplitMix64::new(9),
+            &PcaGlobalFn::Betti0,
+            &gate,
+            &mut scratch,
+        );
+        step_pca_sync(
+            &cx,
+            &mut s,
+            &params,
+            &mut SplitMix64::new(9),
+            &PcaGlobalFn::Betti0,
+            &gate,
+            &mut scratch,
+        );
+        assert_eq!(a.data, s.data, "async(Betti0) must equal sync(Betti0)");
+    }
+
+    #[test]
+    fn step_pca_async_is_bit_identical_across_100_seeds() {
+        // Phase 1 G1: same seed + fixed traversal → bit-identical final grid,
+        // property-tested at ≥100 seeds.
+        let cx = CellComplex::grid_2d(6, 6);
+        let params = BirthDeathParams::paper_defaults();
+        let gate = GlobalTargetGate { target: 4.0, stop_when: StopWhen::Above };
+        for seed in 0..100u64 {
+            let run = || {
+                let mut field = make_field(&cx, 2);
+                seed_alive_morph(&mut field, &[0, 21, 14], 1.0, 2);
+                let mut scratch = PcaScratch::for_complex(&cx, 2);
+                for _ in 0..3 {
+                    step_pca_async(
+                        &cx,
+                        &mut field,
+                        &params,
+                        &mut SplitMix64::new(seed),
+                        &PcaGlobalFn::AliveCount,
+                        &gate,
+                        &mut scratch,
+                    );
+                }
+                field.data.clone()
+            };
+            assert_eq!(run(), run(), "seed {seed}: async must be bit-identical");
         }
     }
 

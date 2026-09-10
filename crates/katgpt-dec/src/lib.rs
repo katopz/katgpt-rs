@@ -123,7 +123,8 @@ pub use birth_death::{
 // promote to default only on the Phase 3 GOAT pass.
 #[cfg(feature = "pca_global")]
 pub use pca::{
-    GlobalScalars, GlobalTargetGate, PcaDecision, PcaGlobalFn, PcaScratch, StopWhen, step_pca_sync,
+    GlobalScalars, GlobalTargetGate, PcaDecision, PcaGlobalFn, PcaScratch, StopWhen, step_pca_async,
+    step_pca_sync,
 };
 
 // Plan 560 — SE(2)-equivariant lifting layer (Smets §3.4.1).

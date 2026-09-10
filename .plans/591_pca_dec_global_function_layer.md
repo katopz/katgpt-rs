@@ -1,6 +1,6 @@
 # Plan 591: PCA Global-Function Layer — DEC Aggregates Wired into the CA Decision Function
 
-**Status:** OPEN — Phase 0 LANDED (2026-09-10, this repo; `katgpt-dec/src/pca.rs` behind `pca_global`, 14 tests, gate row `katgpt-dec:239:pca_global`). Open primitive from Research 544 ([arXiv:2609.06102] distillation). Game application is riir-ai's (Proposal 012 revival, Issue 911) — this plan ships ONLY the generic katgpt-dec composition layer, no game semantics.
+**Status:** OPEN — Phase 0 + Phase 1 LANDED (2026-09-10, this repo; `katgpt-dec/src/pca.rs` behind `pca_global`, 18 tests, gate row `katgpt-dec:243:pca_global`). Open primitive from Research 544 ([arXiv:2609.06102] distillation). Game application is riir-ai's (Proposal 012 revival, Issue 911) — this plan ships ONLY the generic katgpt-dec composition layer, no game semantics.
 
 **Date:** 2026-09-10
 **Source research:** [katgpt-rs/.research/544_Programmable_CA_DEC_Global_Function_Layer.md](../.research/544_Programmable_CA_DEC_Global_Function_Layer.md)
@@ -47,9 +47,9 @@ boundary-flux path asserts this.
 
 ## Phase 1 — Async global feedback (the paper's dynamics)
 
-- [ ] `step_pca_async(...)`: FIXED row-major traversal; O(1) incremental counters updated on each cell write (swarm `ripe_per_band` pattern) — deterministic by traversal order
-- [ ] Sync vs async comparison test: async must avoid the stale-count over-placement failure (paper §3 counter example) on a k-target placement task
-- [ ] G1 determinism assertion: same seed + traversal → bit-identical final grid (property test, ≥100 seeds)
+- [x] `step_pca_async(...)`: FIXED row-major traversal; O(1) incremental counters updated on each cell write (swarm `ripe_per_band` pattern) — deterministic by traversal order *(incremental scope is HONEST: only `AliveCount` — added to the enum as the paper's count global — is O(1)-incrementable on births AND deaths; other arms degenerate to sync semantics, documented + pinned by an async(Betti0)==sync(Betti0) test; `Betti0` birth-incremental + death-dirty-resync hybrid deferred until a consumer needs it)*
+- [x] Sync vs async comparison test: async must avoid the stale-count over-placement failure (paper §3 counter example) on a k-target placement task *(k=5: sync overshoots (batch gated against frozen count 2), async lands EXACTLY 5; live counter cross-checked against a fresh full evaluation)*
+- [x] G1 determinism assertion: same seed + traversal → bit-identical final grid (property test, ≥100 seeds) *(100 seeds × 3 ticks)*
 
 ## Phase 2 — Largest-component size (the one crosswalk gap)
 

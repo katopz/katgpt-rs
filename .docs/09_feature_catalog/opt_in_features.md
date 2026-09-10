@@ -3337,11 +3337,12 @@ pass over Plan 454's UNTOUCHED birth/death kernel (`step_pca_sync`). Lives in
 `katgpt-dec/src/pca.rs`; re-exported as `katgpt_core::dec::pca::*`. Opt-in
 (`pca_global = ["grid_3d"]`); promote to default only on the Phase 3 GOAT pass.
 
-### The four globals (`PcaGlobalFn`)
+### The four+ globals (`PcaGlobalFn`)
 
 | Global | Definition | Reads |
 |---|---|---|
 | `Betti0` | connected-component count of the ALIVE support — O(V+E) union-find (NOT `betti_numbers`, which is state-blind to the support) | channel 0 |
+| `AliveCount` | alive-cell count — the paper's COUNT global; O(1) incrementable on births AND deaths (the one arm `step_pca_async` tracks live) | channel 0 |
 | `BoundaryFluxMass` | net morphogen flux across the domain boundary, flow = ENDPOINT-SUM edge lift `f[e] = m(tail)+m(head)` | channel 1 |
 | `BeliefMassDivergence` | ‖δ₁(flow)‖₁ — conservation-violation mass (same definition as the shipped `belief_mass_divergence`, zero-alloc path; equivalence pinned by test) | channel 1 |
 | `Codifferential` | ‖δ₁(flow)‖₂ — concentrated-divergence (clustering) emphasis | channel 1 |
@@ -3363,6 +3364,19 @@ of the field. Seed decision: `GlobalTargetGate { target, stop_when }` — the GL
 termination term pure-local CA cannot express ("stop placing when count ≥ k" /
 "stop once b0 == 1"). A tripped gate refuses every birth; existing cells keep their
 local dynamics.
+
+### Sync vs async (Phase 1, the paper's dynamics)
+
+`step_pca_sync` gates the whole birth batch against the FROZEN pre-tick global —
+on a k-target task that OVERSHOOTS k (the paper §3 stale-count counter example;
+pinned: sync lands 9 on the k=5 probe). `step_pca_async` sweeps in a FIXED
+row-major order with a LIVE counter updated O(1) per cell write — placements stop
+EXACTLY at k (pinned: exactly 5; deterministic by traversal order, ≥100-seed
+bit-identity property test). Honest scope: only `AliveCount` is incremental —
+`Betti0` births are union-find-incremental but deaths can SPLIT components and
+union-find cannot delete, so the other arms degenerate to sync semantics
+(documented + pinned async(Betti0)==sync(Betti0)); the birth-incremental /
+death-dirty-resync hybrid is deferred until a consumer needs it.
 
 🔧 Feature flag: `pca_global` (opt-in; in `katgpt-dec`, implies `grid_3d`).
 
