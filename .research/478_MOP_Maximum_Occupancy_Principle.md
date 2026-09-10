@@ -372,6 +372,7 @@ Per research skill §3.6, the Super-GOAT claim "produces paper-Fig-2-class emerg
   - `katgpt-pruners::SurpriseComputer` — KL-gated surprise, MOP's β knob
 - **Substrate-first check (research skill pre-flight):** consumed, not duplicated. MOP is a new operator; it composes with FORE + CGSP + Induced CWM, doesn't reimplement any of them.
 - **Boundary check:** open primitive in `katgpt-core` (generic math); private runtime in `riir-engine` (per-NPC wiring + game IP); consumer-side in `riir-games-civ`/`riir-games-quest` (game-specific transition kernels). Clean layering.
+- **Follow-up paper (2026-09):** Moreno-Bote [arXiv:2609.07508 "Homeostasis Revisited and Reformulated Through Hidden Markov Model Control"] — FEP/variational critique + exact deterministic setpoint drives (multiplicative messages) + psafe continuation-probability boundary for MOP → distilled in Research 543 + riir-ai Research 370, primitive in Plan 590.
 
 ---
 
