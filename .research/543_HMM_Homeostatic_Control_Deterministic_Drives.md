@@ -2,7 +2,7 @@
 
 > **Source:** "Homeostasis Revisited and Reformulated Through Hidden Markov Model Control" — Rubén Moreno-Bote, [arXiv:2609.07508](https://arxiv.org/abs/2609.07508), q-bio.NC, 2026-09-07 (12 pp).
 > **Date:** 2026-09-10
-> **Status:** Active
+> **Status:** Active — primitive SHIPPED (Plan 590, Bench 704 G1–G4 PASS) + runtime consumer engine-half LANDED (riir-ai Plan 579/Bench 904: psafe derivation + two-mode homeostat + fear_reach bridge); promote-to-default owner call pending (stay-opt-in meanwhile); civ-forager consumer open
 > **Related Research:** 478 (MOP — the same author's prior paper, already shipped), 240 (CGSP), 298 (Induced CWM kernel), 423 (FORE occupancy)
 > **Related Plans:** 573 (mop value-iteration primitive, COMPLETE), 590 (this paper's primitive plan, this session)
 > **Cross-ref (riir-ai):** Research 338 (per-NPC MOP runtime guide — the sibling this extends), Plan 538 (mop_runtime, COMPLETE)
