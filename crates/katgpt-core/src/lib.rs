@@ -1944,6 +1944,14 @@ pub use product_key_memory::{
     score_idw,
 };
 
+// Shared tabular-kernel helpers (one-hot fast path + SIMD row dot) —
+// hoisted verbatim from mop::solve (Plan 573) so hmm_control (Plan 590)
+// consumes the same bit-identity-hardened primitives without implying the
+// mop feature. Compiled only when a consumer feature is on (a bare
+// --no-default-features build must not see dead_code).
+#[cfg(any(feature = "mop_path_entropy", feature = "hmm_homeostasis"))]
+pub(crate) mod tabular_kernel;
+
 // MOP — Maximum Occupancy Principle value-iteration primitive (Plan 573 /
 // Research 478, arXiv:2205.10316). The paper's Eq. 7 fixed-point map in
 // log-space LSE form over a frozen tabular kernel — reward-free optimal
@@ -1953,6 +1961,17 @@ pub use product_key_memory::{
 pub mod mop;
 #[cfg(feature = "mop_path_entropy")]
 pub use mop::{MopConfig, MopConfigError, MopScratch, MopSolver, MopSolution};
+
+// HMM homeostatic control (Plan 590 / Research 543, arXiv:2609.07508) —
+// the exact setpoint-reachability drive solver: multiplicative backward
+// messages β_t(x) = P(y_{t:T}=yd|x) bounded [0,1] by construction + a
+// strictly deterministic argmax policy (the paper's linearity-in-π
+// theorem). The setpoint-drive sibling of `mop` (range drives); shares
+// `tabular_kernel` with it. Opt-in `hmm_homeostasis`.
+#[cfg(feature = "hmm_homeostasis")]
+pub mod hmm_control;
+#[cfg(feature = "hmm_homeostasis")]
+pub use hmm_control::{HmmControlSolver, HmmInputError, HmmSolution};
 // Phase 4 (F4 fusion) — freeze/thaw wrapper around ProductKeyMemory. Gated
 // separately so the leaf-clean retrieval primitive (above) stays usable
 // without the Arc<RwLock<Arc<...>>> + BLAKE3 commitment machinery. See
@@ -2779,7 +2798,12 @@ pub use signed_coupling::{
 pub mod qsg_gossip;
 #[cfg(feature = "qsg_gossip")]
 pub use qsg_gossip::{
-    MessageMode, MAX_K, QsgConfig, QsgError, SIMPLEX_EPS, UniformStream,
+    // Aliased at the flat re-export only: factorized_action already exports
+    // `MAX_K` at the crate root, and the two gated modules collide under
+    // --all-features (E0252 at HEAD 98823631 — Plan 589 landing bug,
+    // unblocked by Plan 590's all-features gate leg). The module path
+    // `qsg_gossip::MAX_K` is unchanged.
+    MessageMode, MAX_K as QSG_MAX_K, QsgConfig, QsgError, SIMPLEX_EPS, UniformStream,
     qsg_blend_listener_into, qsg_disagreement_v, qsg_draw_categorical,
     qsg_gossip_run_into, qsg_gossip_step_into, qsg_init_uniform_into,
     qsg_mean_into, qsg_polarization_u, qsg_sample_message_into,
