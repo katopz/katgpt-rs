@@ -17,6 +17,10 @@
 //! - **Motor-gated field** (opt-in, `motor_gated_field` feature, Plan 357) —
 //!   Amari-style neural-field evolution step unifying the Hodge Laplacian with
 //!   a per-channel motor gain (`evolve_motor_gated_field`).
+//! - **PCA global-function layer** (opt-in, `pca_global` feature, Plan 591) —
+//!   wires the DEC aggregates into the CA decision function: one global
+//!   evaluation per tick + a per-cell decision pass over the untouched
+//!   birth/death kernel (`step_pca_sync`).
 //!
 //! # Conservation Guarantees
 //!
@@ -68,6 +72,8 @@ pub mod motor_gated;
 #[cfg(feature = "heat_kernel_trajectory")]
 pub mod nonlinear_heat_kernel;
 pub mod operators;
+#[cfg(feature = "pca_global")]
+pub mod pca;
 #[cfg(feature = "cochain_point_sampler")]
 pub mod point_sampler;
 #[cfg(feature = "se2_equivariant_lift")]
@@ -109,6 +115,15 @@ pub use motor_gated::{evolve_motor_gated_field, relu_gate_into};
 #[cfg(feature = "grid_3d")]
 pub use birth_death::{
     BirthDeathParams, SplitMix64, argmax_block_type, stochastic_birth_death_step,
+};
+
+// Plan 591 — PCA global-function layer: DEC aggregates as the CA decision
+// function's global channel (Programmable CA, arXiv:2609.06102). Opt-in;
+// composes the Plan 454 kernel (above) with the always-on DEC operators —
+// promote to default only on the Phase 3 GOAT pass.
+#[cfg(feature = "pca_global")]
+pub use pca::{
+    GlobalScalars, GlobalTargetGate, PcaDecision, PcaGlobalFn, PcaScratch, StopWhen, step_pca_sync,
 };
 
 // Plan 560 — SE(2)-equivariant lifting layer (Smets §3.4.1).

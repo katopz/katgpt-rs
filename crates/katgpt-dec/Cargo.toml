@@ -85,6 +85,16 @@ htno_v_cycle = []
 # now always compiled too.
 grid_3d = []
 
+# PCA global-function layer (Plan 591, Research 544 — Programmable CA,
+# arXiv:2609.06102): wires the shipped DEC aggregates (Betti0-of-support,
+# boundary flux mass, belief-mass divergence, codifferential norm) into the CA
+# decision function — one global evaluation per tick + a per-cell decision
+# pass over Plan 454's UNTOUCHED birth/death kernel (`step_pca_sync`). Opt-in;
+# promote to default only on the Phase 3 GOAT pass (G2 target: ≥3× fewer
+# iterations to b0==1 than pure-local). Implies `grid_3d` (the kernel it
+# composes).
+pca_global = ["grid_3d"]
+
 # Continuous cochain point sampler (Plan 422, Research 404) — Whitney/de-Rham
 # reconstruction for modelless intra-primitive field queries. Turns a discrete
 # CochainField into a continuously-queryable field: sample at any continuous

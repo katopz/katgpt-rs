@@ -3328,3 +3328,45 @@ cases over scraped equations).
 per-message budget (NpcCommsBus `DensityBudget::k_for`) doubles monoculture
 drift. Not claimed: calibrated forecasts of real crowds (dynamics of a model;
 any prediction-quality claim owes the conformal floor).
+
+## 98. pca_global — PCA global-function layer: DEC aggregates as the CA decision function (Plan 591)
+
+Wires the shipped DEC aggregates into the CA decision function — the Programmable-CA
+composition (arXiv:2609.06102): ONE global evaluation per tick + a per-cell decision
+pass over Plan 454's UNTOUCHED birth/death kernel (`step_pca_sync`). Lives in
+`katgpt-dec/src/pca.rs`; re-exported as `katgpt_core::dec::pca::*`. Opt-in
+(`pca_global = ["grid_3d"]`); promote to default only on the Phase 3 GOAT pass.
+
+### The four globals (`PcaGlobalFn`)
+
+| Global | Definition | Reads |
+|---|---|---|
+| `Betti0` | connected-component count of the ALIVE support — O(V+E) union-find (NOT `betti_numbers`, which is state-blind to the support) | channel 0 |
+| `BoundaryFluxMass` | net morphogen flux across the domain boundary, flow = ENDPOINT-SUM edge lift `f[e] = m(tail)+m(head)` | channel 1 |
+| `BeliefMassDivergence` | ‖δ₁(flow)‖₁ — conservation-violation mass (same definition as the shipped `belief_mass_divergence`, zero-alloc path; equivalence pinned by test) | channel 1 |
+| `Codifferential` | ‖δ₁(flow)‖₂ — concentrated-divergence (clustering) emphasis | channel 1 |
+
+**The d∘d=0 degeneracy finding (en route, pinned as a regression test):** the flux
+arm MUST NOT use the gradient lift `d(morph)` — the flux of a gradient around any
+closed boundary is identically zero by `d∘d = 0` (the DEC identity this crate is
+built on). The endpoint-sum lift is the canonical pushforward under identity Hodge
+stars and is not a gradient (its curl survives), so the arm measures rim-vs-interior
+morphogen. Stokes identity (boundary flux == volume integral) hand-checked at 40.0
+on the x-ramp probe and pinned executable.
+
+### The decision trait (the paper's constraint as an API shape)
+
+`PcaDecision::decide(local_neighborhood: &[f32], globals: &GlobalScalars) -> f32` —
+the decision consumes ONLY its own cell's channel slice (a kernel output) plus the
+tick's single global scalar; there is no parameter by which it could reach the rest
+of the field. Seed decision: `GlobalTargetGate { target, stop_when }` — the GLOBAL
+termination term pure-local CA cannot express ("stop placing when count ≥ k" /
+"stop once b0 == 1"). A tripped gate refuses every birth; existing cells keep their
+local dynamics.
+
+🔧 Feature flag: `pca_global` (opt-in; in `katgpt-dec`, implies `grid_3d`).
+
+📖 Plan: [591](../../.plans/591_pca_dec_global_function_layer.md). Research:
+[544](../../.research/544_Programmable_CA_DEC_Global_Function_Layer.md). Paper:
+[arXiv:2609.06102](https://arxiv.org/abs/2609.06102). Substrate:
+`crates/katgpt-dec/src/pca.rs`.

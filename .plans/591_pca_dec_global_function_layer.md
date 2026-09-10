@@ -1,6 +1,6 @@
 # Plan 591: PCA Global-Function Layer — DEC Aggregates Wired into the CA Decision Function
 
-**Status:** OPEN — Phase 0 not started. Open primitive from Research 544 ([arXiv:2609.06102] distillation). Game application is riir-ai's (Proposal 012 revival, Issue 911) — this plan ships ONLY the generic katgpt-dec composition layer, no game semantics.
+**Status:** OPEN — Phase 0 LANDED (2026-09-10, this repo; `katgpt-dec/src/pca.rs` behind `pca_global`, 14 tests, gate row `katgpt-dec:239:pca_global`). Open primitive from Research 544 ([arXiv:2609.06102] distillation). Game application is riir-ai's (Proposal 012 revival, Issue 911) — this plan ships ONLY the generic katgpt-dec composition layer, no game semantics.
 
 **Date:** 2026-09-10
 **Source research:** [katgpt-rs/.research/544_Programmable_CA_DEC_Global_Function_Layer.md](../.research/544_Programmable_CA_DEC_Global_Function_Layer.md)
@@ -23,12 +23,27 @@ boundary-flux path asserts this.
 
 ## Phase 0 — Types + sync globals
 
-- [ ] `pca.rs` module in `katgpt-dec` behind `pca_global = ["dep:..."]` (no new external deps; re-export via `katgpt_core::dec`)
-- [ ] `PcaGlobalFn` enum: `Betti0` / `BoundaryFluxMass` / `BeliefMassDivergence` / `Codifferential` — each evaluates against the state cochain + `CellComplex` via existing operators; `debug_assert!(dim() <= 3)` on every boundary-flux path
-- [ ] `PcaDecision` trait: `decide(&local_neighborhood: &[f32], &globals: &GlobalScalars) -> f32` — decision consumes ONLY kernel outputs + global scalars (paper's constraint: decision never reads raw state)
-- [ ] Seed implementation: birth-death alive gate + global termination term ("stop placing when count ≥ k" — the construct pure-local CA cannot express)
-- [ ] `step_pca_sync(...)`: compute globals once per iteration (via `DecCache`), then sweep cells; `*_into` scratch variants, zero-alloc per tick
-- [ ] Unit tests: decision-input purity; d-guard fires; flag-off builds to nothing (required-features row + `#![cfg]` per the green-zero rule)
+- [x] `pca.rs` module in `katgpt-dec` behind `pca_global = ["grid_3d"]` (no new external deps; re-export via `katgpt_core::dec`)
+- [x] `PcaGlobalFn` enum: `Betti0` / `BoundaryFluxMass` / `BeliefMassDivergence` / `Codifferential` — each evaluates against the state cochain + `CellComplex` via existing operators; `debug_assert!(dim() <= 3)` on every boundary-flux path *(Betti0 is the SUPPORT-aware union-find — `betti_numbers(cx)` is state-blind; pinned vs a BFS reference on random fields)*
+- [x] `PcaDecision` trait: `decide(&local_neighborhood: &[f32], &globals: &GlobalScalars) -> f32` — decision consumes ONLY kernel outputs + global scalars (paper's constraint: decision never reads raw state) *(enforced by the signature: no parameter reaches the rest of the field; purity pinned by a recording-decision test)*
+- [x] Seed implementation: birth-death alive gate + global termination term ("stop placing when count ≥ k" — the construct pure-local CA cannot express) *(GlobalTargetGate Above/Below; a tripped gate refuses every birth, existing cells keep their local dynamics — pinned e2e)*
+- [x] `step_pca_sync(...)`: compute globals once per iteration (via `DecCache`), then sweep cells; `*_into` scratch variants, zero-alloc per tick *(DecCache deliberately deferred — no Phase-0 global needs a Hodge decomposition; all paths use the `_into`/`_scratched` operator variants through `PcaScratch`)*
+- [x] Unit tests: decision-input purity; d-guard fires; flag-off builds to nothing (required-features row + `#![cfg]` per the green-zero rule) *(14 tests; the module is `#[cfg(feature)]` in lib.rs so flag-off compiles it to nothing — measured 225 default vs 239 armed; no `[[test]]` target so no required-features row applies; the gate ROW `katgpt-dec:239:pca_global` executes the armed surface)*
+
+### Phase 0 en-route findings (2026-09-10)
+
+1. **The d∘d=0 degeneracy (design-changing, pinned as a regression test):** the
+   `BoundaryFluxMass` arm MUST NOT use the gradient lift `d(morph)` — the flux of
+   a gradient around ANY closed boundary is identically zero by `d∘d = 0`. The arm
+   ships the ENDPOINT-SUM edge lift `f[e] = m(tail)+m(head)` (the canonical
+   pushforward under identity Hodge stars; not a gradient — its curl survives),
+   measuring rim-vs-interior morphogen. Stokes identity hand-checked at 40.0 on
+   the x-ramp probe + pinned executable (`flux_matches_the_volume_integral_stokes_identity`).
+2. **`betti_numbers(cx)` cannot serve as the CA's Betti0** — it ranks the FULL
+   complex's boundary matrices (a solid grid gives β₀=1 regardless of which cells
+   are alive). The support-aware count has no closed form without restricted
+   Gaussian elimination (far worse than O(V+E)), so it ships as union-find over
+   the B₁ incidence, matched against a naive BFS reference on 25 random fields.
 
 ## Phase 1 — Async global feedback (the paper's dynamics)
 

@@ -59,18 +59,27 @@
 #
 # Floors measured 2026-09-04 on committed-HEAD-equivalent working tree
 # (debug, M3): katgpt-rs 203 passed / 0 failed (30.9 s), katgpt-core
-# 1974 passed / 0 failed / 7 ignored (11.0 s). Raising a floor is a
+# 1974 passed / 0 failed / 7 ignored (11.0 s). katgpt-dec at
+# `--features pca_global` measured 2026-09-10 (Plan 591 Phase 0):
+# 239 passed / 0 failed (225 base + 14 pca). Raising a floor is a
 # measured act; lowering one needs a note in the commit that does it.
 #
 # --test-threads=2 is deliberate (the riir-train 507 precedent): a weekly
 # red on runner-load noise from a timing-sensitive test would be alarm
 # fatigue; 2 threads costs ~2x wall on a ~40 s suite.
+#
+# Row format: `pkg:floor` for a default-feature lib suite, or
+# `pkg:floor:features` for a feature-armed one (the riir-chain convention:
+# a feature-gated surface's tests compile to NOTHING at default features —
+# the green-zero trap — so the row that executes them must NAME the
+# feature). First row must stay featureless (the --canary arm runs it).
 
 set -u
 
 ROWS="
 katgpt-rs:203
 katgpt-core:1974
+katgpt-dec:239:pca_global
 "
 
 canary=0
@@ -83,14 +92,22 @@ fail=0
 first=1
 for row in $ROWS; do
     pkg=${row%%:*}
-    floor=${row##*:}
+    tail=${row#*:}
+    floor=${tail%%:*}
+    feats=""
+    case "$tail" in
+        *:*) feats=${tail#*:} ;;
+    esac
     if [ "$canary" = 1 ] && [ "$first" = 1 ]; then
         floor=100000
     fi
     first=0
 
-    echo "=== $pkg --lib (floor $floor, --test-threads=2) ==="
-    if ! out=$(cargo test -p "$pkg" --lib -- --test-threads=2 2>&1); then
+    feat_args=""
+    [ -n "$feats" ] && feat_args="--features $feats"
+
+    echo "=== $pkg --lib (floor $floor, ${feats:-default features}, --test-threads=2) ==="
+    if ! out=$(cargo test -p "$pkg" --lib $feat_args -- --test-threads=2 2>&1); then
         echo "FAIL $pkg: cargo test exited non-zero"
         printf '%s\n' "$out" | tail -20
         fail=1
