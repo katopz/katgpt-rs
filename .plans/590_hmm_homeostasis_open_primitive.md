@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/543_HMM_Homeostatic_Control_Deterministic_Drives.md](../.research/543_HMM_Homeostatic_Control_Deterministic_Drives.md)
 **Source paper:** [arXiv:2609.07508](https://arxiv.org/abs/2609.07508) — Moreno-Bote, "Homeostasis Revisited and Reformulated Through Hidden Markov Model Control"
 **Target:** `katgpt-rs/crates/katgpt-core/src/hmm_control/` (new module) + `katgpt-core/src/mop/` (psafe method) + Cargo feature `hmm_homeostasis`; psafe rides the existing `mop_path_entropy` feature
-**Status:** Phases 1–3 COMPLETE 2026-09-10 — GOAT G1–G4 ALL PASS ([.benchmarks/704_hmm_homeostasis_goat.md](../.benchmarks/704_hmm_homeostasis_goat.md)); consumer landed 2026-09-10 (riir-ai Plan 579 `e0699a10c`, Bench 904) — T4.1's owner call pending, stay-opt-in meanwhile
+**Status:** Phases 1–3 COMPLETE 2026-09-10 — GOAT G1–G4 ALL PASS ([.benchmarks/704_hmm_homeostasis_goat.md](../.benchmarks/704_hmm_homeostasis_goat.md)); consumer COMPLETE 2026-09-10 (riir-ai Plan 579: engine half Bench 904 `e0699a10c` + civ-forager T2.4 Bench 905 — composed-behavior gates ALL PASS, setpoint reach 1.000 vs range-only 0.12–0.17, FearBlend::Max promoted) — T4.1's owner call pending, stay-opt-in meanwhile
 **Downstream:** riir-ai Research 370 (runtime guide); runtime plan opens when P0 merges
 
 ---
@@ -83,7 +83,7 @@ Not UQ-bearing: β messages are exact model-computed probabilities, not calibrat
 
 ## Phase 4 — Promotion Decision (gated)
 
-- [ ] **T4.1** On G1–G4 PASS + riir-ai consumer landed (Research 370 P1/P2): owner call on promote-to-default vs stay-opt-in (`mop_path_entropy` itself is opt-in — default outcome is stay-opt-in until the runtime pillar asks for default). **G1–G4 PASS recorded 2026-09-10 (Bench 704); CONSUMER LANDED 2026-09-10 — riir-ai Plan 579 `e0699a10c` (P1 `mop_psafe` + P2 `mop_homeostasis` engine half, Bench 904 G1–G4 PASS: execute 4.45 ns/tick, psafe survival −91.7%, 0 allocs; civ-forager consumer T2.4 open). Both halves of the gate condition now hold — the promote-vs-stay call is with the owner; stay-opt-in is the documented default outcome until the runtime pillar asks.**
+- [ ] **T4.1** On G1–G4 PASS + riir-ai consumer landed (Research 370 P1/P2): owner call on promote-to-default vs stay-opt-in (`mop_path_entropy` itself is opt-in — default outcome is stay-opt-in until the runtime pillar asks for default). **G1–G4 PASS recorded 2026-09-10 (Bench 704); CONSUMER COMPLETE 2026-09-10 — riir-ai Plan 579: engine half `e0699a10c` (P1 `mop_psafe` + P2 `mop_homeostasis`, Bench 904 G1–G4 PASS: execute 4.45 ns/tick, psafe survival −91.7%, 0 allocs) + the civ-forager T2.4 consumer (riir-ai Bench 905: composed-behavior gates ALL PASS — setpoint reach 1.000 vs range-only 0.116/0.144/0.169, margins 0.83–0.88; no collapse; replay-QA bit-identical; FearBlend::Max promoted; survival parity). Both halves of the gate condition now hold — the promote-vs-stay call is with the owner; stay-opt-in is the documented default outcome until the runtime pillar asks.**
 - [x] **T4.2** Update Research 543 status line + Research 370 §7 P0 checkbox; add `.benchmarks/` record per numbering discipline. *(704 record landed; Research 543 status + Research 370 P0–P3 flips landed with the consumer commit `e0699a10c`.)*
 
 ## Honest risks (carry from Research 543 §8)
