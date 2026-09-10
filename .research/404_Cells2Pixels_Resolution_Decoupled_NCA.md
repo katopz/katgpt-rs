@@ -351,6 +351,7 @@ default; triangle covers mesh consumers).
 - Mordvintsev et al., *Growing Neural Cellular Automata*, Distill 2020 — the original NCA
 - Stanley, *Compositional Pattern Producing Networks* (the LPPN namesake), 2007
 - Existing: Plan 251 (DEC operators), Plan 310 (cross-resolution transport), Plan 357 (motor-gated DEC), Plan 359 (heat-kernel trajectory), Plan 413 (multi-scale V-cycle), Plan 416 (region subspace field), Research 219 (TNO/DEC), Research 291 (cross-resolution), Research 305 (phase-modulated coupling), Research 359 (motor-gated DEC propagation), Research 365 (PhysiFormer heat kernel)
+- Follow-up: Research 544 (Programmable Cellular Automata, arXiv:2609.06102) — measured that the global-function layer (count/connectivity = our `boundary_flux_mass`/`betti_numbers`) is the load-bearing ingredient CA generation was missing; Proposal 012 revival candidate
 
 ---
 
