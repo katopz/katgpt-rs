@@ -13,6 +13,8 @@
 
 ---
 
+> **PASS-Redirect:** Simplex blog "The geometry of nonergodic composition" (→ Research 545) — per-entity composition over K fixed experts with likelihood-weighted, sigmoid-gated readouts now ships modellessly as `NonergodicFilter` (`katgpt-micro-belief/src/nonergodic.rs`, Plan 592, Bench 706) — the two-level Bayes analog of this note's per-entity MoE composition; FAME's function-on-function regression training stays riir-train-side → redirect to R545 / Plan 592.
+
 ## ⚠️ Vocabulary Collision Alert (canonical lesson, DO NOT skip)
 
 **"Functional Attention" means two different things in this corpus:**

@@ -3384,3 +3384,43 @@ death-dirty-resync hybrid is deferred until a consumer needs it.
 [544](../../.research/544_Programmable_CA_DEC_Global_Function_Layer.md). Paper:
 [arXiv:2609.06102](https://arxiv.org/abs/2609.06102). Substrate:
 `crates/katgpt-dec/src/pca.rs`.
+
+## 99. nonergodic_belief — the two-level nonergodic Bayes filter (Plan 592)
+
+K per-generator inner beliefs `η_n` + an online posterior `w_n` over generators,
+updated per token-block by each generator's OWN likelihood and coupled only by one
+scalar normalizer (per-tick LSE renormalization of `log_w` — the numerically stable
+shipped form); the readout is the telescoping object `w_n·η_n` in BoM's K·D slot
+layout. The nonergodic-composition geometry (simplex.pub nonergodic-geometry,
+2026-09-09; classical ancestry MHT/IMM cited, not claimed): time-average ≠
+ensemble-average, so ONE pooled belief misreads mixed-regime streams. K≤16, D≤64,
+fixed-size arrays, `katgpt_types::simd` dots. Lives in
+`katgpt-micro-belief/src/nonergodic.rs`; re-exported via the crate lib behind
+`nonergodic_belief` (opt-in, plain gate — `katgpt-types` is already the non-optional
+SIMD-kernel dep, so no `dep:` edge was needed; documented deviation from the plan's
+`dep:katgpt-core` wording).
+
+GOAT (Bench 706, ALL PASS): G1 exact vs brute-force-by-definition posterior
+(exhaustive L≤12 coin sweeps + Mess3 L≤8 sweeps + 2500 random L=12 streams,
+1e-5); G2 **564 ns/tick @ K=8/D=8** (bar <1 µs; grid 161–11091 ns over
+K∈{2,8,16}×D∈{8,32,64}); G3 default surface unchanged (54 lib tests identical
+with/without the feature); G4 **0 allocs** (hot path + dedicated alloc test).
+Identification (T2.5): beats tuned-leaky (γ*=0.95) AND BoM hard-select on log-loss
+at K=2/3/4; the real win is calibration — ECE 0.015–0.065 vs 0.057–0.073 (leaky)
+vs 0.24–0.59 (one-hot). Report-the-Floor: hypothesis posterior, NOT an interval
+surface — the conformal-naive floor (Research 322) binds only if a
+predictive-interval accessor ever lands on top of `telescope_into`.
+
+Behavior surface: `committed()` (argmax + `1 − max w` uncertainty) and
+`revive_margin`/`revive_gate` (fast_sigmoid of the top-2 log-space gap) — the
+filter REPORTS, the consumer gates.
+
+🔧 Feature flag: `nonergodic_belief` (opt-in; in `katgpt-micro-belief`; NOT in
+default — promotion requires a runtime-consumer GOAT per the similarity_inference
+precedent).
+
+📖 Plan: [592](../../.plans/592_nonergodic_belief_kernel.md). Research:
+[545](../../.research/545_Nonergodic_Belief_Decomposition.md). Source:
+[simplex.pub/nonergodic-geometry](https://simplex.pub/nonergodic-geometry/). Bench:
+[706](../../.benchmarks/706_nonergodic_belief_goat.md). Substrate:
+`crates/katgpt-micro-belief/src/nonergodic.rs`.

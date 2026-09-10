@@ -11,6 +11,8 @@
 
 ---
 
+> **PASS-Redirect:** Simplex blog "The geometry of nonergodic composition" (2026-09-09 → Research 545) — the two-level composition posterior over K generator-hypotheses now ships modellessly as `NonergodicFilter<K,D>` (`katgpt-micro-belief/src/nonergodic.rs`, Plan 592, Bench 706): BoM's K·D slot layout IS the telescoping readout layout (`w_n·η_n`), while the mechanism differs by construction — exact two-level per-generator Bayes with one shared normalizer vs BoM's one-pass tilt-and-sample; no new sampler needed → redirect to R545 / Plan 592.
+
 ## TL;DR
 
 DeltaTok compresses the VFM-feature difference between consecutive video frames into a single continuous "delta" token (1024× token reduction at 512×512), and Best-of-Many (BoM) training samples K Gaussian noise queries per step, supervising only the closest prediction to ground truth, which at inference yields **K diverse plausible futures in a single forward pass**. DeltaWorld (the combination) achieves 35× fewer params and 2000× fewer FLOPs than Cosmos while producing better best-of-20 predictions on dense forecasting.

@@ -20,6 +20,10 @@
 //! - ✅ G2.1 coherence benchmark — Phase 5 T5.0, see [`coherence_bench`].
 //! - ⏳ [`BoMSampler`] — K-hypothesis sampling (Plan 281, behind `bom_sampling`).
 //! - ⏳ [`bom_arena`] — G2 arena harness (Plan 281 T2.3, behind `bom_sampling`).
+//! - ✅ [`NonergodicFilter`] — two-level nonergodic Bayes filter (Plan 592,
+//!   Research 545; behind `nonergodic_belief`): K per-generator inner
+//!   beliefs plus an online posterior over generators, telescoping
+//!   `w_n·η_n` readout, commit/revive semantics.
 //!
 //! # Latent vs raw boundary (AGENTS.md)
 //!
@@ -54,6 +58,8 @@ pub mod bridge;
 pub mod coherence_bench;
 pub mod latent_thought;
 pub mod leaky;
+#[cfg(feature = "nonergodic_belief")]
+pub mod nonergodic;
 pub mod snapshot;
 pub mod types;
 
@@ -121,5 +127,9 @@ pub use bom_arena::{
 pub use bridge::project_to_scalars;
 pub use latent_thought::LatentThoughtKernel;
 pub use leaky::LeakyIntegrator;
+#[cfg(feature = "nonergodic_belief")]
+pub use nonergodic::{
+    BernoulliCoin, ComponentModel, Mess3Block, NonergodicFilter, SyntheticBlock, bernoulli_pair,
+};
 pub use snapshot::{MicroRecurrentKernelSnapshot, SNAPSHOT_VERSION};
 pub use types::{KernelConfig, MicroRecurrentBeliefState, RecurrenceFamily};

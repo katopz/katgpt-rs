@@ -40,3 +40,34 @@ simd_sigmoid = []
 # Forwards to katgpt-types so the DepthInvarianceConfig/Diagnostic/Scratch/
 # classify_chain types resolve.
 depth_invariance = ["katgpt-types/depth_invariance"]
+
+# NonergodicFilter — two-level nonergodic Bayes filter (Plan 592, Research
+# 545): K per-generator inner beliefs η_n + online posterior w over
+# generators, coupled per tick by one scalar LSE normalizer; telescoping
+# readout w_n·η_n; commit/revive semantics. Opt-in — NOT default
+# (promotion requires a runtime-consumer GOAT, plan T3.2).
+nonergodic_belief = []
+
+# Plan 592 G1 exactness + identity tests (T2.1/T2.2).
+[[test]]
+name = "nonergodic_g1_exactness"
+required-features = ["nonergodic_belief"]
+
+# Plan 592 G4 alloc gate (own binary → own CountingAllocator).
+[[test]]
+name = "nonergodic_g4_alloc"
+required-features = ["nonergodic_belief"]
+
+# Plan 592 T2.5 identification bench (quality gates vs leaky/BoM baselines).
+[[test]]
+name = "nonergodic_g5_identification"
+required-features = ["nonergodic_belief"]
+
+# Plan 592 T2.3 — G2 (ns/tick) + G4 (alloc count) over the K×D grid.
+# harness = false + std::time::Instant + inlined CountingAllocator (matches
+# the canon_goat / procrustes_bench convention; criterion is not a dep —
+# the CountingAllocator needs a bare binary to count without harness noise).
+[[bench]]
+name = "nonergodic_perf"
+harness = false
+required-features = ["nonergodic_belief"]
