@@ -3272,3 +3272,56 @@ violate the CLT premise (one-bit flip → max score ×13); G3 bit-determinism +
 BLAKE3 artifacts PASS; G4 zero-alloc steady state PASS. Raw scalars out only
 (latent read → scalar out). Opt-in pending consumers: riir-clippy score_bench
 OOD axis (its Issue 077), engine serving-health audit.
+
+## 97. qsg_gossip — quantized simplex gossip: crowds with a bandwidth dial (Plan 589)
+
+> **Added:** 2026-09-10. Source: arXiv:2603.24676 "When Is Collective
+> Intelligence a Lottery?" (Tanaka, Harvard/NTT, Mar 2026) /
+> [Research 542](../../.research/542_QSG_Memetic_Drift_Simplex_Gossip.md) /
+> [Bench 703](../../.benchmarks/703_qsg_gossip_goat.md) ·
+> Code: `katgpt-core/src/qsg_gossip.rs`
+
+Multi-agent **belief** dynamics on the simplex: N agents hold K-option
+probability distributions; each interaction a random speaker SAMPLES a
+length-m message from its belief and the listener EMA-blends toward it at
+adaptation rate α. Where `signed_coupling_dynamics` (§85) owns the crowd's
+**temperature** axis on binary stances, this owns the **bandwidth m +
+adaptation α** axes on persistent simplex state — sibling dials, compose, do
+not blur (K=2 at α=1 reduces to the voter model).
+
+```text
+x_L ← (1−α)·x_L + α·y,   y = sampled message (Hard / TopM / Soft)
+U = ‖x̄‖²  (1/K = symmetry, 1 = monoculture)   fuel = 1 − ‖x_S‖²
+```
+
+- Kernel: `qsg_gossip_step_into` / `qsg_gossip_run_into` (pair source is a
+  caller seam — uniform via `uniform_ordered_pair`, or spatial/social) +
+  `qsg_blend_listener_into` (the blend half alone, for caller-authored
+  messages: tilted channels, top-K slices).
+- Reducers: `qsg_polarization_u` / `qsg_disagreement_v` /
+  `qsg_coordination_s` / `qsg_uncertainty` — compose with the mean_field
+  population pass.
+- RNG-free (caller uniforms — replayable), zero-alloc, well under the tick
+  budget: 20.6 ns/interaction at K=8, N=1024.
+
+GOAT (Bench 703): G1–G4 **ALL PASS**, stays **opt-in** (promotion waits on a
+production consumer — riir-ai Issue 907). G1 pins every paper law as a test:
+Thm 1/2 variance-injection identities, the 1/m bandwidth law, Soft = exact
+martingale that never breaks symmetry, α=1 → uniform-winner voter model; the
+harness reproduces N² consensus scaling, the exact two-moment (U,V) flow
+(ensemble of 48 runs), the tempered ΓT crossover, and the headline
+**single-parameter fixation collapse onto Γh = mNh/α** across an 8×
+population range.
+
+**One honest deviation the gate recorded:** the measured logistic is
+σ(Γh/2), not the first-order diffusion's σ(Γh) — the approximation drops the
+pair-choice heterogeneity variance (WHICH listener hears the message), which
+doubles the effective noise and halves the logistic's slope. The collapse
+itself holds to ±0.043. Also on the record: the scraped PDF's `(1−α+αN)` is a
+mangle of `(1−α+α/N)` — the α→1 voter limit disambiguates (trust limiting
+cases over scraped equations).
+
+**The m axis is a wire budget read as a dynamical dial:** halving the
+per-message budget (NpcCommsBus `DensityBudget::k_for`) doubles monoculture
+drift. Not claimed: calibrated forecasts of real crowds (dynamics of a model;
+any prediction-quality claim owes the conformal floor).
