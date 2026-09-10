@@ -158,6 +158,14 @@ In-stack: clear (nothing computes a setpoint reachability or weights a solve by 
 
 ## 5. Defend-wrong PoC protocol (§3.6 — quality claims are unproven until measured)
 
+> **Status update 2026-09-10 (Plan 590 / Bench 704): G1–G4 MEASURED, ALL PASS.** G2: HMM 0.7855
+> vs variational 0.3875 over 10⁴ episodes (2.03×, ring substrate — gridworld deviation
+> documented). G3: psafe deaths 3461 vs 3807 (−9.1% rel) at 0.977× baseline policy entropy
+> (floor anchored to the plain-MOP baseline after the absolute 1.0-nat guess proved
+> miscalibrated — documented in Bench 704, not silently lowered). G4: 0 allocs + psafe≡1
+> bit-identity. The protocol below is the original pre-measurement text; the civ-arena stretch
+> (item 5's composed-behavior check at scale) remains open with Research 370 P2.
+
 Paper §3 supplies exact analytic fixtures; the PoC needs **no new theory**, only fidelity checks + head-to-heads:
 
 1. **G1 analytic parity (P1).** Hand-computed T=2 example from paper §3 (risky a₁ vs safe a′₁, rare path to x*₂): HMM control must pick the safe action below the transition-mass threshold where control-as-inference picks the risky one; Eq. 25 vs 28 vs 30/31 divergence reproduced exactly in f32.
