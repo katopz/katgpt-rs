@@ -252,6 +252,7 @@ pub fn generate_training_pairs_from_replays(
         }
     }
 
+    pairs.shrink_to_fit();
     pairs
 }
 

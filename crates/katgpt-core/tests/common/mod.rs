@@ -107,9 +107,7 @@ macro_rules! counting_allocator {
         /// call sites already use. The `Ordering` is accepted and ignored —
         /// a thread-local `Cell` has no cross-thread ordering to specify.
         #[derive(Debug)]
-        struct ThreadCounter(
-            &'static std::thread::LocalKey<std::cell::Cell<usize>>,
-        );
+        struct ThreadCounter(&'static std::thread::LocalKey<std::cell::Cell<usize>>);
 
         #[allow(dead_code)]
         impl ThreadCounter {

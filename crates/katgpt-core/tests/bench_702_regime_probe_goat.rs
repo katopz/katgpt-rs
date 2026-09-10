@@ -749,11 +749,10 @@ fn g2_flip_tolerance_vs_gardner_bound() {
         //    EXCEED the γ=1 value (more facts → tighter basins).
         if facts == 512 {
             let bad = single_bit_failures(&mem, &key_refs, &value_refs);
-            println!("single-bit restoration failures at {load_tag}: {bad}/{}", HEBB_D);
+            println!("single-bit restoration failures at {load_tag}: {bad}/{HEBB_D}");
             assert!(
                 bad * 10 <= HEBB_D,
-                "G2 premise FAIL at {load_tag}: {bad}/{} single-bit sites are dead — basins do not exist",
-                HEBB_D
+                "G2 premise FAIL at {load_tag}: {bad}/{HEBB_D} single-bit sites are dead — basins do not exist"
             );
         } else {
             let prev = prev_median_rho_c.expect("γ=1 ran first");
@@ -961,7 +960,7 @@ fn g3_bit_determinism_across_fresh_reruns() {
     let original = key_to_tokens(&keys[0]);
     let sigma = score_sigma_at(&mem, &value_refs, &keys[0]);
 
-    let mut artifacts = Vec::new();
+    let mut artifacts = Vec::with_capacity(2);
     for _ in 0..2 {
         let ren = HebbianKeyRenovator {
             mem: &mem,
