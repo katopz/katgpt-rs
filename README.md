@@ -3223,10 +3223,11 @@ speaker row, `qsg_draw_categorical` from the tilted copy,
 `qsg_blend_listener_into`; the kernel itself stays neutral. DEC
 `belief_mass_divergence` validates belief-mass conservation for K ≤ 3.
 
-Opt-in — promotion waits on a production consumer (riir-ai Issue 907; the
-signed_coupling precedent). These are dynamics of a model, not calibrated
-forecasts of real crowds; any future prediction-quality claim owes the
-conformal floor.
+Opt-in. First consumer landed 2026-09-10 — riir-ai Plan 577 / Issue 907
+(`riir-games::swarm::qsg_crowd`, itself default-off pending a shipped zone
+consumer); promotion follows the consumer's (the signed_coupling two-step
+rule). These are dynamics of a model, not calibrated forecasts of real
+crowds; any future prediction-quality claim owes the conformal floor.
 
 ### 🔍 gaussianity_probe — Projection-Normality for Embedding Populations (Issue 681, arXiv:2607.00784)
 

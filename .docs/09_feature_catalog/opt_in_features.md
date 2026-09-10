@@ -3304,8 +3304,11 @@ U = ‖x̄‖²  (1/K = symmetry, 1 = monoculture)   fuel = 1 − ‖x_S‖²
 - RNG-free (caller uniforms — replayable), zero-alloc, well under the tick
   budget: 20.6 ns/interaction at K=8, N=1024.
 
-GOAT (Bench 703): G1–G4 **ALL PASS**, stays **opt-in** (promotion waits on a
-production consumer — riir-ai Issue 907). G1 pins every paper law as a test:
+GOAT (Bench 703): G1–G4 **ALL PASS**, stays **opt-in**. First consumer landed
+2026-09-10 — riir-ai Plan 577 / Issue 907, `riir-games::swarm::qsg_crowd`
+(Bench 902 GOAT consumer-class ALL PASS), itself default-off pending a shipped
+zone consumer; promotion follows the consumer's (the `signed_coupling`
+two-step rule). G1 pins every paper law as a test:
 Thm 1/2 variance-injection identities, the 1/m bandwidth law, Soft = exact
 martingale that never breaks symmetry, α=1 → uniform-winner voter model; the
 harness reproduces N² consensus scaling, the exact two-moment (U,V) flow

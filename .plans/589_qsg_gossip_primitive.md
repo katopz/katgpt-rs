@@ -1,7 +1,7 @@
 # Plan 589: QSG Gossip Primitive — Quantized Simplex Belief Dynamics Kernel
 
 **Date:** 2026-09-10
-**Status:** Done — Phases 1–4 complete (Bench 703 GOAT G1–G4 ALL PASS); opt-in pending consumer
+**Status:** Done — Phases 1–4 complete (Bench 703 GOAT G1–G4 ALL PASS); consumer LANDED 2026-09-10 (riir-ai Plan 577 / Issue 907, `riir-games/src/swarm/qsg_crowd.rs`, Bench 902 GOAT ALL PASS) — stays opt-in while the consumer is itself default-off (promotion is a two-step chain: a shipped zone consumer adopts qsg_crowd → qsg_crowd promotes → this follows, the signed_coupling rule)
 **Research:** [katgpt-rs/.research/542_QSG_Memetic_Drift_Simplex_Gossip.md](../.research/542_QSG_Memetic_Drift_Simplex_Gossip.md)
 **Source paper:** [arXiv:2603.24676](https://arxiv.org/abs/2603.24676) — Tanaka, "When Is Collective
 Intelligence a Lottery? Multi-Agent Scaling Laws for Memetic Drift in LLMs" (Mar 2026)

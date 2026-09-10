@@ -2,7 +2,7 @@
 
 > **Source:** "When Is Collective Intelligence a Lottery? Multi-Agent Scaling Laws for Memetic Drift in LLMs" — Hidenori Tanaka (Harvard/NTT Physics of Intelligence), [arXiv:2603.24676](https://arxiv.org/abs/2603.24676), Mar 2026 (19 pp). Companion blog: physicsintelligence.org "What Shapes Collective Belief Collapse in AI Swarms?" (Sep 2026).
 > **Date:** 2026-09-10
-> **Status:** Active
+> **Status:** Active — primitive SHIPPED (Plan 589, Bench 703 GOAT) + first consumer LANDED 2026-09-10 (riir-ai Plan 577 / Issue 907, `qsg_crowd`, Bench 902 consumer-class GOAT; both opt-in, promotion chains off a shipped zone consumer)
 > **Related Research:** 497 (signed-coupling opinion dynamics), 371 (mean-field regime classifier), 469 (collective payoff schemes), 499 (jagged judges), 505 (mean-field distributional steering)
 > **Related Plans:** [Plan 589 — QSG gossip primitive](../.plans/589_qsg_gossip_primitive.md) (this repo)
 > **Cross-ref (riir-ai):** Research 314 (sheaf-ADMM consensus), 167 (cross-NPC set attention), 135 (cascade belief octree), **369 (crowd-consensus guide)**; Issue 907 (swarm consumer POC)

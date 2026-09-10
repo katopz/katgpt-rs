@@ -127,3 +127,13 @@ Crowd-dynamics family: `signed_coupling` (temperature T axis) · `qsg_gossip`
 (bandwidth m + adaptation α axes) · `mean_field` (order-parameter reducers) —
 siblings, none demoted; QSG opens a new axis rather than replacing a slot.
 Feature stays opt-in until the riir-ai consumer lands; re-gate on any touch.
+
+> **Consumer landed 2026-09-10** — riir-ai Plan 577 / Issue 907
+> (`riir-games/src/swarm/qsg_crowd.rs`, GOAT
+> [Bench 902](../../riir-ai/.benchmarks/902_qsg_crowd_consumer_goat.md) —
+> consumer class, ALL PASS; substrate-first drift audit CLEAN, kernel
+> consumption total). The feature **stays opt-in while the consumer is itself
+> default-off** — the promotion chain is: a shipped zone consumer adopts
+> `qsg_crowd` → `qsg_crowd` promotes → `qsg_gossip` follows (the
+> `signed_coupling` rule: default-on lands WITH a default-path consumer, not
+> before).
