@@ -136,18 +136,39 @@ work, since no automatic lane covers develop pushes anymore.
 
 `scripts/docs_gate.sh` runs the manifest/doc/skill drift assertions and
 **prints its own timing** — a hand-typed duration drifts exactly like a
-hand-typed count, and it was also the wrong quantity. Measured 2026-09-07:
-three ways: **11.7s wall on a quiet box**, **128.3s wall** with three sibling
-cargo processes live, and **12.7s CPU** (9.03 user + 3.62 sys) in that same
-busy run. CPU agrees with the quiet wall clock, so ~90% of the busy run was
-contention, not work. The inflation lands on the checks that walk the tree —
+hand-typed count, and it was also the wrong quantity. Measured three times:
+**12.65s · 12.52s · 12.69s CPU** on runs whose WALL clocks were **128.3s ·
+299.1s · 15.0s** — a **20x** wall spread against **1.4%** of CPU spread. That
+is the whole argument for the quantity: **cite CPU, read wall as a range.**
+⛔ A discredited fourth figure is why this paragraph is worded so insistently:
+an earlier version called 11.7s wall a *quiet-box baseline*, and it was taken
+at load 5-7 — the 15.0s run (2026-09-11) is the first one actually measured on
+a quiet box, and it is SLOWER than the number that was being quoted as the
+floor.
+
+The wall inflation lands on the checks that walk the tree —
 `cargo_comment_audit` 54.7s, `bench_doc_audit` 50.4s, `cfg_gated_floor_gate`
-31.2s in that run, everything else under 4s — and **none of those invokes
-cargo**, so it is not the cargo build lock. Which of them dominates is not
-stable either: a second, busier run (308.1s total) put
-`percentile_floor_gate` at 61.3s, which had been fast. Beyond "a busy box
-starves the tree walks" the mechanism is unmeasured. Compare **CPU** across runs; read the per-check `⏱`
-line to see which check is BLOCKING, not to conclude a check got slower.
+31.2s in the 128.3s run, everything else under 4s — and **none of those
+invokes cargo**, so it is not the cargo build lock (the first version of this
+paragraph said it was, on no evidence; the per-check line refuted it). Which
+check dominates is not stable either: the 299.1s run put
+`percentile_floor_gate` at 61.3s and `bench_doc_audit` at 73.1s, and on the
+quiet 15.0s run no check crossed 4s at all. Beyond "a
+busy box starves the tree walks" the mechanism is **unmeasured**. Read the
+per-check `⏱` line to see which check is BLOCKING, never to conclude a check
+got slower.
+
+The CPU figure **asserts itself non-inert**, because its failure mode is a
+well-formed number rather than an error: `times` reports `0m0.000s` children
+CPU from any forked context — a pipeline and a command substitution both fork,
+and the fork has no children of its own, so even `times | sed` purely to
+indent destroys it (the first two versions printed a confident zero next to a
+308s run). It is REDIRECTED to a file, never captured, and the gate prints
+`⛔ … NOT a measurement` instead of the number if the total reads ~0 over a
+multi-second run. Both arms verified against the block extracted from the
+tracked file: redirect → 0.45s from a child that burned 0.43s; pipe → 0.00s
+and the ⛔ fires.
+
 `.github/workflows/docs_gate.yml` runs it per-push on **`main` only** —
 develop pushes do not fire it, so run `./scripts/docs_gate.sh` locally for
 develop work. One line per check:

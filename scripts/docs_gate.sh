@@ -106,8 +106,9 @@ fi
 # ── This gate times ITSELF ──────────────────────────────────────────────────
 # The duration used to be hand-typed in AGENTS.md, and a hand-typed duration
 # drifts exactly like a hand-typed count. It was also the wrong quantity: this
-# gate's WALL time is contention-dominated (measured: 11.7s wall on a quiet
-# box, 128.3s wall / 12.7s CPU under three sibling cargo runs), and which
+# gate's WALL time is contention-dominated (measured: 12.65s / 12.52s / 12.69s
+# CPU on runs whose WALL was 128.3s / 299.1s / 15.0s — a 20x wall spread over
+# 1.4% of CPU spread), and which
 # check absorbs the wait moves between runs. So print BOTH — the per-check
 # wall time names whichever check is blocking today, and the CPU total is the
 # load-invariant figure to compare across runs. Numbers and the measured
@@ -149,20 +150,43 @@ done
 # wall is what the operator experiences. A large gap means the box was busy —
 # compare CPU across runs before concluding a check got slower.
 gate_wall="$(python3 -c "print('%.1f' % ($(now) - $GATE_T0))")"
-echo "  ⏱  total ${gate_wall}s wall · CPU (user sys) — row 1 this shell, row 2 the checks:"
-# `times` must run BARE — no `$( )`, no pipe, not even `| sed` for indentation.
-# Measured on bash 3.2.57 with a child that burned 0.167s of user time:
+
+# `times` must be REDIRECTED, never captured. Measured on bash 3.2.57 against
+# a child that burned 0.167s of user time:
 #     times                 -> 0m0.001s 0m0.002s / 0m0.167s 0m0.015s   correct
+#     times > file          -> 0m0.001s 0m0.002s / 0m0.168s 0m0.024s   correct
 #     times | sed 's/^/ /'  -> 0m0.000s 0m0.000s / 0m0.000s 0m0.000s   ZERO
 #     $(times | tail -1)    -> 0m0.000s 0m0.000s                       ZERO
-# Both a pipeline and a command substitution FORK, and the fork has no
-# children of its own, so it reports zero however much CPU the checks burned.
-# The first two versions of this line did exactly that and printed a confident
-# zero — the same "inert instrument reports a clean number" failure the gates
-# in this directory exist to catch, in the code that measures them.
-times
-echo "     CPU is the load-invariant figure; a large wall/CPU gap is a busy box"
-echo "     (measured: 11.7s wall quiet · 128.3s wall / 12.7s CPU under 3 cargos)."
+# A pipeline forks and a command substitution forks, and the fork has no
+# children of ITS own, so it reports zero however much CPU the checks burned —
+# even piping through `sed` purely to indent destroys the number. A
+# redirection does not fork, so capture once and then format and assert from
+# the file as freely as you like. The first two versions of this block piped,
+# and printed a confident 0m0.000s next to a 308s run: the "inert instrument
+# reports a clean number" failure the gates in this directory exist to catch,
+# occurring in the code that measures them.
+# No EXIT trap for the temp file ON PURPOSE — registering one would put this
+# script into trap_exit_launder_audit.py's population (Issue 734), and the
+# only cost of not having one is a single stray file if the gate is killed.
+times_out="$(mktemp)"
+times > "$times_out"
+gate_cpu="$(awk 'NR==2 { t=0; for (i=1;i<=NF;i++) { split($i, p, "m"); sub("s","",p[2]); t += p[1]*60 + p[2] } printf "%.2f", t }' "$times_out")"
+echo "  ⏱  total ${gate_wall}s wall · ${gate_cpu}s CPU in the checks (rows: this shell, then the checks)"
+sed 's/^/     /' "$times_out"
+
+# ...and the instrument must prove itself NON-INERT, because the failure mode
+# above is a well-formed number, not an error. N python3 checks cannot burn
+# ~no CPU: if the total reads as ~0 across a multi-second run, the measurement
+# broke and the figure must not be quoted.
+if [ "$(awk -v c="$gate_cpu" -v w="$gate_wall" 'BEGIN { print (c < 0.05 && w > 5) ? "INERT" : "OK" }')" = "INERT" ]; then
+    echo "  ⛔ the CPU figure above is NOT a measurement: ${gate_cpu}s of CPU across"
+    echo "     ${gate_wall}s of wall is impossible for ${#CHECKS[@]} python3 checks."
+    echo "     The times builtin was read from a forked context — do not quote it."
+fi
+rm -f "$times_out"
+echo "     CPU is the load-invariant figure: 12.65s / 12.52s / 12.69s measured"
+echo "     on runs whose WALL was 128.3s / 299.1s / 15.0s — 20x wall, 1.4% CPU."
+echo "     Cite the CPU number; read wall as a range, never as a baseline."
 
 if [ "$failed" -ne 0 ]; then
     echo "✗ docs gate FAILED — $failed of ${#CHECKS[@]} check(s)"
