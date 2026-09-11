@@ -21,5 +21,10 @@ pub mod indicator_similarity;
 #[cfg(feature = "indicator_cascade")]
 pub mod indicator_cascade;
 
+/// Margin-gated verification escalation (Issue 745 / Plan 595, Research 548 —
+/// TriSpec distill). Implies `indicator_cascade`.
+#[cfg(feature = "margin_gate")]
+pub mod margin_gate;
+
 #[cfg(feature = "remax_aggregation")]
 pub mod remax;
