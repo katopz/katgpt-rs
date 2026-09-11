@@ -163,7 +163,7 @@ pub struct TrapObservables<'a> {
 /// EMA of the indicator `key != prev_key` with α = 2/(window+1); it reads
 /// `None` until `window` key-pair observations exist (hysteresis) and stays
 /// `None` forever if keys are never supplied. Structurally NaN-free.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct FlipDetector {
     prev_key: Option<u64>,
     ema: f32,
