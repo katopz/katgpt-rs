@@ -1767,3 +1767,28 @@ loads, never constructs — menu does not graduate on one consumer), #6/#8
 stay want-gated, #7's `evolve_belief` substrate lives riir-ai-side (deferred
 to a quiet day there). **Re-file an item when its consumer materializes** —
 the ranking + GOAT gates live in the removed file's git history.
+
+## Issue 745 — Margin-gated verification escalation PoC (TriSpec distill): CLOSED as resolved-split (2026-09-11)
+
+Executed as Plan 595 + Bench 711 (commit `a140c223`; the removed issue file's
+task ledger lives in git history, `git log -- .issues/745_margin_gate_escalation_poc.md`).
+**Split verdict, all 9 gates PASS:** the CASCADE mapping (margin over probe
+scores) is REFUTED at ε=0.5% on both toy geometries — sigmoid score-domain
+saturation + noise-floor gap overlap make every λ that cuts verifier
+invocations also confirm a 3–19% false-flag tail; the TriSpec-faithful ACCEPT
+mapping (margin over the draft token distribution) is VIABLE — 50.5%
+target-invocation cut at 0.25% regression (tail 0.5%), and the tail=2%
+sensitivity control fires. Five recorded findings: (1) Research 548's "margin
+operator ABSENT" claim was a vocabulary miss (`SamplerFeatures.margin`
+shipped 2026-07-05, Plan 399 era); (2) the trust polarity is workload
+geometry — TriSpec's decisive-trust on a cluster world auto-confirms exactly
+the lone-spike FPs the verifier exists to reject (`MarginPolarity` ships both
+arms); (3) the meta-router `compute_reward` shape is BLIND to the lossy tail
+(trusted-wrong and escalated-wrong both score 0 → the ε-violating λ ties the
+best arm); (4) a point-estimate feasibility mask starves a good arm on
+sampling noise (2 wrongs in 196 pulls = 1.02% > ε → permanent mask → −8.8%
+reward) — the z=3 confidence-bound mask is the fix; (5) `margin_gate` stays
+OPT-IN pending a live consumer (similarity_inference demotion precedent; the
+candidate consumer is the d2f draft-accept loop, an engine-lane owner call
+per Research 548 §5). Feature-count claims bumped 588 → 589 across
+README/examples (docs_gate count_features enforcement).
