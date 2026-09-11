@@ -1375,6 +1375,16 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
   14m04s green. AGENTS.md §trigger health names the lane. Issue file removed at close — the nine-repo audit it
   anchored is COMPLETE (its last open item, riir-chain `.issues/130` T2, landed `d44b240a` same day); this row +
   git history are the durable record.)
+  **FOLLOW-UP (2026-09-11, `25c89432`): the T4 lane never passed on CI — all five of its runs (34296642292…
+  34314937986, 2026-09-09) died on the same refusal** — dtolnay/rust-toolchain installed the wasm32 target into
+  STABLE, but the action does not export `RUSTUP_TOOLCHAIN`, so the gate's cargo resolved `rust-toolchain.toml`
+  (1.98.1, no wasm32 std) and Layer 2b correctly refused a partial pass: the `targets:` install from the `e0b7c9e0`
+  class was necessary but NOT sufficient — the second half is full_gate.yml's job-level `RUSTUP_TOOLCHAIN: stable`
+  override, which the new lane copied neither. Fixed by mirroring it (`25c89432`); dispatch run 34578372428 on
+  develop PASSED both simd128 arms (`katgpt-core katgpt-moka-wasm katgpt-rs katgpt-types + 2 named targets`) —
+  the lane's first CI green. Workspace sweep the same day: the pin+targets mismatch class exists ONLY in this
+  repo's two lanes (both overridden now); every other repo's `targets:` workflow has no `rust-toolchain.toml`, so
+  install and resolution agree by construction.
 
 - **Issue 734 — a shell gate that ABORTS mid-run reports exit 0** RESOLVED
   (2026-09-07; T0–T11 landed — `rc=$?; cleanup; exit $rc` cannot repair it (the saved rc is itself 0); the
