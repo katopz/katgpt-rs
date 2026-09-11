@@ -2032,10 +2032,12 @@ pub use gain_cost_halt::{
 // promotion owner-gated (525/Bench-834 precedent).
 #[cfg(feature = "saddle_escape")]
 pub mod saddle_escape;
+// NOTE: `GateDecision` is deliberately NOT re-exported at the crate root —
+// `types::GateDecision` (feature `data_gate`) already owns that name there;
+// use `katgpt_core::saddle_escape::GateDecision`.
 #[cfg(feature = "saddle_escape")]
 pub use saddle_escape::{
-    FlipDetector, GateDecision, HaltOutcome, SaddleEscapeGate, TrapConfig, TrapObservables,
-    apply_kick,
+    FlipDetector, HaltOutcome, SaddleEscapeGate, TrapConfig, TrapObservables, apply_kick,
 };
 // Issue 699 T1-T3 — structural CoT halting (TRACE, arXiv:2510.07880):
 // answer-space cycle detection on reasoning traces — the black-box halt
