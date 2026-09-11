@@ -17,7 +17,7 @@ The paper trains transformers whose attention transformation is **α-entmax** (e
 **Distilled for katgpt-rs (modelless, inference-time):**
 1. **`asentmax_schedule`** — damping mode for `entmax_1p5`: pre-scale scores by `β·(log n_c)^{−0.5}` (n_c = scored candidate count) before the threshold pass. Derived, zero-training, one `powf` + one mul.
 2. **Lemma-2 support controller** — `k̂ = ((α−1)·Δ̂)^{−1/(α−1)}` (α=1.5: `k̂ = 4/Δ̂²`), consuming the shipped `RollingDeltaEstimator` — a derived replacement for the fitted-shaped `sigmoid(w·var+b)` budget in `adaptive_k.rs`.
-3. **Prop 6 eviction window** — ALiBi-biased entmax attention has a hard cutoff `d_max = ⌊(z_max − z_min + 1)/m_h⌋ + 1` beyond which mass is *exactly* zero → KV eviction whose correctness gate is **bit-identity** (a theorem, not a tolerance).
+3. **Prop 6 eviction window** — ALiBi-biased entmax attention has a hard cutoff `d_max = ⌊(z_max − z_min + 1)/m_h⌋ + 1` beyond which mass is *exactly* zero → KV eviction whose correctness gate is **bit-identity** (a theorem, not a tolerance). *(Correction at implementation, Issue 747 P2: the paper's Eq. 110 is `d_max = ⌊(z_max − z_min + 1/(α−1))/m_h + 1⌋` — `+1` inside the floor, numerator `1/(α−1)` = 2 at α=1.5.)*
 4. **Lemma 1 incremental decode** — below-threshold additions leave existing entmax probabilities exactly unchanged → O(candidates) incremental recompute instead of O(n log n) resort per decode step.
 
 ---

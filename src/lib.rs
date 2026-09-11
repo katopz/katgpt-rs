@@ -66,6 +66,14 @@ pub mod dash_attn {
     // P1: the Lemma-2 derived budget (exact length-independent law).
     #[cfg(feature = "asentmax_schedule")]
     pub use katgpt_attn::dash_attn::adaptive_k::compute_derived_k;
+    // P2: theorem-backed ALiBi×entmax KV-eviction window (Prop E.2) +
+    // P3: Lemma-1 incremental decode entmax (Issue 747 family rows).
+    #[cfg(feature = "asentmax_schedule")]
+    pub use katgpt_attn::dash_attn::entmax_incremental::IncrementalEntmax1p5;
+    #[cfg(feature = "asentmax_schedule")]
+    pub use katgpt_attn::dash_attn::eviction_window::{
+        alibi_entmax_window_1p5, evicted_kv_fraction, kv_within_window,
+    };
     #[cfg(feature = "msa_per_group")]
     pub use katgpt_attn::dash_attn::block_topk::PerGroupTopKRouter;
     #[cfg(feature = "vortex_flow")]

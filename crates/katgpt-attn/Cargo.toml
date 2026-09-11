@@ -138,11 +138,19 @@ kda_backward = ["kda_linear"]
 # Implies `mla_attention` (MLA types + forward) + `dash_attn` (VortexFlow scratch
 # types). Opt-in, default-off until GOAT gate (Issue 584 Phase 3).
 flashmemory_sparse = ["mla_attention", "dash_attn"]
-# ASEntmax length-adaptive damping schedule (Issue 747 P0, Research 549,
-# arXiv:2506.16640 Eq 10): pre-scales entmax routing scores by
-# `β·(log n_c)^{−0.5}` — the entmax-side mirror of katgpt-core's SSMax
-# (one extreme-value law, two signed arms). Implies `dash_attn` (the
-# module lives in dash_attn/). Opt-in until the Issue 747 GOAT gate.
+# Issue 747 family gate (Research 549, arXiv:2506.16640) — the ASEntmax
+# modelless-mining rows, one flag (P1 set the precedent of landing
+# non-schedule rows under it):
+# - P0: length-adaptive damping schedule `β·(log n_c)^{−0.5}` (Eq 10) — the
+#   entmax-side mirror of katgpt-core's SSMax (one extreme-value law, two
+#   signed arms). Implies `dash_attn` (the modules live in dash_attn/).
+# - P1: Lemma-2 derived support budget `k̂ = 4/Δ̂²` (adaptive_k).
+# - P2: theorem-backed ALiBi×entmax KV-eviction window (Prop E.2,
+#   eviction_window.rs — bit-identity gate).
+# - P3: Lemma-1 incremental decode entmax (entmax_incremental.rs —
+#   O(1) below-τ pushes, bit-exact vs full resort).
+# Opt-in until the per-row Issue 747 GOAT gates; split is mechanical if a
+# promotion ever needs to demote a subset.
 asentmax_schedule = ["dash_attn"]
 # Trained dual-encoder indexer for FlashMemory (Plan 337 Phase B). Two tiny
 # MLPs (Q-Indexer + K-Indexer) that replace the modelless centroid-dot scorer.
@@ -205,6 +213,24 @@ required-features = ["asentmax_schedule"]
 # boundary law: realized support == k̂ = 4/Δ̂² at every n ∈ 1k..1M).
 [[test]]
 name = "asentmax_p1_derived_k_g1"
+required-features = ["asentmax_schedule"]
+
+# Issue 747 P2 — eviction-window G1 bit-identity gate (Prop E.2: support
+# ⊆ window, evicted probs exactly 0.0, windowed-vs-full bit-identical).
+[[test]]
+name = "asentmax_p2_eviction_g1"
+required-features = ["asentmax_schedule"]
+
+# Issue 747 P3 — incremental decode entmax G1 gate (Lemma 3.1: incremental
+# == full re-sort bit-exact, incl. threshold-brushing adversarial streams).
+[[test]]
+name = "asentmax_p3_incremental_g1"
+required-features = ["asentmax_schedule"]
+
+# Issue 747 P3 — G4 zero-alloc gate (below-τ steady state at capacity).
+# Separate binary (the CountingAllocator must not pick up parallel tests).
+[[test]]
+name = "asentmax_p3_alloc_check"
 required-features = ["asentmax_schedule"]
 
 # Issue 747 P0 — ASEntmax GOAT gate bench (G2 NIAH routing sweep at growing

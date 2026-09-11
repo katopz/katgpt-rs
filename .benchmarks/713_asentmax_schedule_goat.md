@@ -108,7 +108,7 @@ Single-needle retrieval parity at 100% (032 T23 anchor). Cost anchor: 032's own 
 
 - **P0.7 (new, in Issue 747):** wire `score_blocks_entmax_with_schedule_into` into the forward-path routing call site (config-gated), re-gate G2/G3 on the real prefill path, then re-evaluate default-on promotion.
 - P1 (Lemma-2 support controller `k̂ = 4/Δ̂²`) — landed 2026-09-11, see the P1 section below.
-- P2 (Prop 6 eviction window), P3 (incremental decode entmax) — unstarted.
+- P2 (Prop 6 eviction window), P3 (incremental decode entmax) — landed 2026-09-11, see the P2/P3 addendum below.
 
 ## P1 addendum — derived-k budget (Lemma-2 support controller, 2026-09-11)
 
@@ -128,3 +128,40 @@ Single-needle retrieval parity at 100% (032 T23 anchor). Cost anchor: 032's own 
 - Notable: the sigmoid arm's `w=5, b=0` defaults are saturated across the whole sweep (variance ≥ 1 → sigmoid(5·var) ≈ 1) — it is effectively a CONSTANT k=32 here, i.e. not adaptive at all at realistic logit-variance scales.
 
 **Disposition:** the derived budget does NOT replace the sigmoid arm for coverage budgeting (honest negative on the replacement claim). It ships as (a) the exact length-independent law (`compute_derived_k(Δ_level)` — caller-supplied level gap, e.g. from a change-point detector or frozen per-head table) and (b) the concentration-regime convenience (`compute_derived_k_from_scores`). Both stay opt-in under `asentmax_schedule`. A true level-gap estimator could revisit the coverage claim.
+
+## P2 addendum — ALiBi×entmax eviction window (Prop E.2, 2026-09-11)
+
+**T2.1** `alibi_entmax_window_1p5(z_min, z_max, slope)` + `kv_within_window` (the KV-retention predicate) + `evicted_kv_fraction` in new `dash_attn/eviction_window.rs`, gated `asentmax_schedule`. **Formula correction vs the research note:** the paper's Eq. 110 is `d_max = ⌊(z_max − z_min + 1/(α−1))/m_h + 1⌋` — the `+1` is INSIDE the floor and the numerator term is `1/(α−1)` (= 2 for α=1.5), not the note's transcribed `⌊(z_range+1)/m_h⌋ + 1`. Verified against the fetched paper (arXiv:2506.16640v4 App. E.2).
+
+**T2.2 G1 PASS — bit-identity, the cleanest gate in the batch** (`tests/asentmax_p2_eviction_g1.rs`, 4/4): over 432 adversarial configurations (slope × z-range × n ∈ {64,256,1024} × 4 seeds × 3 row builders — random, max-at-farthest-distance, tied-clusters):
+- support ⊆ window at every config (every supported index within d_max);
+- evicted probabilities are EXACTLY 0.0 (never ε);
+- **windowed-vs-full entmax_1p5 bit-identical** (`f32::to_bits` equality at every kept index).
+
+The gate is provable, not just measured: our `entmax_1p5`'s threshold floor `τ_c ≥ s_max − 1` (single-support minimum of the normalized quadratic variant) + the monotone-failure property of the Peters scan imply non-support ⟺ `s ≤ τ_c`; removing exact-zero terms from the index-ordered normalization sum is bit-neutral (`x + 0.0 = x`). Cross-checked with a 20k-trial f64 simulation (0 violations) before the Rust gate. The paper's margin (2) is CONSERVATIVE for our implementation (our true floor is 1) — the gate pins the citable theorem bound.
+
+**T2.3 G2 PASS (model + measured):**
+
+| axis | result |
+|---|---|
+| KV bytes model @ n=1M (32h × 128d × f16 × KV = 16 GiB/layer) | min evicted **98.9%** (flattest head 2⁻⁸ @ σ=4), steepest **99.99%** — **15.8–16.0 GiB/layer** provably evictable; Kamath range law `2σ√(2 ln n)` feeds the bounds |
+| measured entmax row cost @ 1M | full 130,028 µs vs windowed(48) **1.0 µs** — the compute beyond the window is free because the mass is provably zero |
+
+Note: the decode tok/s delta is an ENGINE-level measurement — the riir-ai KV-path wiring is a consumer-side follow-up (the retention predicate + window calc are the katgpt-rs primitives; scope note in the module docs).
+
+## P3 addendum — Lemma-1 incremental decode entmax (2026-09-11)
+
+**T3.1** `IncrementalEntmax1p5` in new `dash_attn/entmax_incremental.rs`, gated `asentmax_schedule`. Below-τ pushes: O(1) (one compare + one zero write — Lemma 1: existing probabilities bit-unchanged). Support-entry pushes: O(candidates) rescan + O(len) probs rebuild. **Drop-below-τ is exact, not approximate:** the Peters-scan threshold is monotone non-decreasing under additions (weighted-average argument; cross-checked 20k spiky streams, 0 violations), so a dropped score can never re-enter the support — and the rescan over surviving candidates reproduces the full re-sort bit-for-bit (same sorted prefix ⇒ same `t_k` arithmetic).
+
+**T3.2 G1 PASS** (`tests/asentmax_p3_incremental_g1.rs`, 5/5): after EVERY push, `(probs, τ, |support|)` == fresh `entmax_1p5(&history)` bit-for-bit, on: random mixed streams (2k pushes, parity every 128), **threshold-brushing** (exactly-at-τ, 1-ULP-below = no-event; 1-ULP-above = event), **spike-after-plateau** (the support-SHRINK case — rising staircase evicts plateau members to exactly 0.0), all-equal (worst case: every push events), descending/ascending monotone streams (descending stabilizes: 0 events after step ~64).
+
+**G2 PASS**: realistic decode stream @ n→512k (5 spikes then N(0,1) bulk): **4 events over 524,288 pushes**, mean **0.046 µs/step**, tail (10k @ n≈512k) **0.015 µs/step** vs full-resort **68,448 µs/step** — the per-step cost is compare+write, not sort. (Full-resort checkpoints at 4k/16k include first-touch effects on the 1M-sized scratch; the 512k checkpoint gates.)
+
+**G4 PASS** (`tests/asentmax_p3_alloc_check.rs`): below-τ steady state within the pre-sized reservation = 0 allocations (CountingAllocator, 1000 measured pushes).
+
+**Verdict P2+P3: 🟢 PASS, stays opt-in** (same family flag `asentmax_schedule`; the window calc and incremental entmax are not yet wired into a production KV/decode path — the riir-ai consumer follow-up would be their hot-path gate).
+
+## P2/P3 substrate check (substrate-first skill)
+
+- Searched vocabulary variants: `eviction`/`window`/`kv_retention`/`prune` on attention paths (katgpt-kv `cache_prune::SummedAreaTable` is a different concern — saliency-based, not distance-windowed; `WallPrefixState::min_retention_at_block` is decay-based, not theorem-backed); `incremental`/`streaming` entmax (nothing — `entmax_1p5_into` is the full-resort baseline P3 replaces on the decode path).
+- `AlibiAction` (katgpt-core `position_group_action`) pins the sign convention `b = −β·(t−j)` the window formula assumes — consumed as documentation parity, no code dep (the window is pure arithmetic).

@@ -1,5 +1,7 @@
-//! Issue 747 P0 T0.3/T0.4 — ASEntmax GOAT gate bench (G2 routing quality,
-//! G3 no-regression, latency).
+//! Issue 747 GOAT gate bench — P0 schedule (G2 routing quality, G3
+//! no-regression, latency), P2 eviction-window G2 (KV bytes model +
+//! windowed-row cost), P3 incremental-decode G2 (per-step cost vs full
+//! resort).
 //!
 //! Harness pattern: Bench 032 (DashAttention routing GOAT — NIAH at growing
 //! chunk counts, coverage, active-chunk histograms) extended with the
@@ -420,12 +422,165 @@ fn main() {
     let per_step = t0.elapsed().as_nanos() as f64 / iters as f64;
     println!("  apply + observe + to_schedule @ n={n}: {per_step:.0} ns/step ({iters} iters)");
 
+    // ── P2 (T2.3): eviction-window G2 — KV bytes + windowed-row cost ─────
+    // Theorem-backed eviction (Prop E.2): beyond d_max the mass is EXACTLY
+    // zero, so the compute AND memory beyond the window are free. Model:
+    // Kamath range law E[z-range] = 2σ√(2 ln n) over ALiBi geometric
+    // slopes; measured: full-row entmax cost vs windowed-row cost.
     println!(
-        "\n════ GOAT: G2={}, G3={} ════",
-        if g2_pass { "PASS" } else { "FAIL" },
-        if g3_pass { "PASS" } else { "FAIL" }
+        "\n── P2 G2: ALiBi×entmax eviction window @ n=1M (model + measured) ──"
     );
-    if !(g2_pass && g3_pass) {
+    use katgpt_attn::dash_attn::entmax::{entmax_1p5_into, entmax_support_into};
+    use katgpt_attn::dash_attn::eviction_window::{
+        alibi_entmax_window_1p5, evicted_kv_fraction,
+    };
+    let n_big = 1u64 << 20; // 1,048,576 tokens
+    // Reference KV geometry (per layer): 32 heads × head_dim 128 × f16 × (K+V).
+    const BYTES_PER_TOKEN_PER_LAYER: f64 = 32.0 * 128.0 * 2.0 * 2.0;
+    let full_kv_gib = n_big as f64 * BYTES_PER_TOKEN_PER_LAYER / (1u64 << 30) as f64;
+    println!(
+        "  ref config: {n_big} tokens, 32 heads × 128 dim × f16 × KV = {full_kv_gib:.2} GiB/layer (full)"
+    );
+    println!("   σ  slope  d_max │ evicted%  GiB saved/layer");
+    let mut p2_pass = true;
+    let mut steepest_frac = 0.0f64;
+    let mut min_frac = 1.0f64;
+    for &sigma in &[1.0_f32, 2.0, 4.0] {
+        // Kamath: E[range] = 2σ√(2 ln n) — the modelless bounds feed.
+        let z_range = 2.0 * sigma * (2.0 * (n_big as f32).ln()).sqrt();
+        let (z_min, z_max) = (-z_range / 2.0, z_range / 2.0);
+        for i in 1..=8u32 {
+            let slope = (2.0f32).powi(-(i as i32)); // ALiBi geometric 2^-i (H=8)
+            let d_max = alibi_entmax_window_1p5(z_min, z_max, slope);
+            let frac = evicted_kv_fraction(n_big as usize, d_max);
+            let saved = frac * full_kv_gib;
+            if sigma == 2.0 && i == 1 {
+                steepest_frac = frac;
+            }
+            min_frac = min_frac.min(frac);
+            println!("{sigma:>3.0} 2^{i:>2}  {d_max:>5} │ {frac:>7.3}  {saved:>8.2}");
+        }
+    }
+    // Even the flattest head (2^-8, σ=4) evicts ≥98%; the steepest ≥99.9%.
+    if !(min_frac >= 0.98 && steepest_frac >= 0.999) {
+        p2_pass = false;
+    }
+    println!(
+        "  P2 model verdict: {} (min evicted {:.1}%, steepest {:.2}%)",
+        if p2_pass { "PASS" } else { "FAIL" },
+        min_frac * 100.0,
+        steepest_frac * 100.0
+    );
+
+    // Measured: full-row entmax vs windowed-row entmax at n=1M. The
+    // windowed row is the steepest head's kept suffix (σ=2 arm).
+    let mut rng = Rng::new(0x747);
+    let row_full: Vec<f32> = (0..n_big)
+        .map(|_| rng.normal() * 2.0)
+        .collect();
+    let sigma = 2.0f32;
+    let z_range = 2.0 * sigma * (2.0 * (n_big as f32).ln()).sqrt();
+    let d_steepest = alibi_entmax_window_1p5(-z_range / 2.0, z_range / 2.0, 0.5);
+    let kept = (d_steepest + 1).min(n_big as usize);
+    let mut sorted_scratch: Vec<(usize, f32)> = Vec::with_capacity(n_big as usize);
+    let mut probs_scratch = vec![0.0f32; n_big as usize];
+    let mut support_buf: Vec<usize> = Vec::new();
+    // Warm-up + measure full row.
+    let t0 = Instant::now();
+    let reps = 3u32;
+    for _ in 0..reps {
+        entmax_1p5_into(black_box(&row_full), &mut sorted_scratch, &mut probs_scratch);
+    }
+    let full_us = t0.elapsed().as_micros() as f64 / reps as f64;
+    entmax_support_into(&probs_scratch, &mut support_buf);
+    let full_support = support_buf.len();
+    // Windowed row.
+    let t1 = Instant::now();
+    for _ in 0..reps {
+        entmax_1p5_into(
+            black_box(&row_full[n_big as usize - kept..]),
+            &mut sorted_scratch,
+            &mut probs_scratch,
+        );
+    }
+    let win_us = t1.elapsed().as_micros() as f64 / reps as f64;
+    println!(
+        "  measured entmax_1p5 row cost @ 1M: full {full_us:.0} µs (|S|={full_support}) vs windowed({kept}) {win_us:.1} µs — {:.0}× cheaper",
+        full_us / win_us.max(1e-9)
+    );
+    if !(win_us < full_us * 0.25 && steepest_frac > 0.99) {
+        p2_pass = false;
+    }
+
+    // ── P3 (T3.2): incremental vs full-resort decode cost ──────────────
+    println!("\n── P3 G2: incremental vs full-resort decode @ n→512k ──");
+    use katgpt_attn::dash_attn::entmax_incremental::IncrementalEntmax1p5;
+    // Full-resort per-step cost at checkpoints (the naive decode design:
+    // re-sort the whole row every step).
+    println!("     n │ full resort µs/step");
+    let mut full_cost_at_512k = 0.0f64;
+    for &ck in &[
+        4_096_usize,
+        16_384,
+        65_536,
+        262_144,
+        524_288,
+    ] {
+        let mut rng = Rng::new(0x747_747);
+        let row: Vec<f32> = (0..ck).map(|_| rng.normal()).collect();
+        let t0 = Instant::now();
+        let reps = if ck >= 262_144 { 3 } else { 20 };
+        for _ in 0..reps {
+            entmax_1p5_into(black_box(&row), &mut sorted_scratch, &mut probs_scratch);
+        }
+        let us = t0.elapsed().as_micros() as f64 / reps as f64;
+        println!("{ck:>6} │ {us:>8.1}");
+        if ck == 524_288 {
+            full_cost_at_512k = us;
+        }
+    }
+    // Incremental: 512k-length realistic decode stream (5 spikes then
+    // N(0,1) bulk — spikes form the stable support, bulk brushes τ).
+    let n_stream = 524_288_usize;
+    let mut rng = Rng::new(0x5_1212);
+    let mut inc = IncrementalEntmax1p5::new(n_stream);
+    let t0 = Instant::now();
+    let mut events = 0usize;
+    for i in 0..n_stream {
+        let s = if i < 5 { 7.0 + rng.unit() } else { rng.normal() };
+        if inc.push(s) {
+            events += 1;
+        }
+    }
+    let inc_total_ms = t0.elapsed().as_millis() as f64;
+    let inc_mean_us = inc_total_ms * 1000.0 / n_stream as f64;
+    // Tail window: the last 10k pushes (per-step cost at n≈512k).
+    let t2 = Instant::now();
+    for _ in 0..10_000 {
+        black_box(inc.push(rng.normal()));
+    }
+    let inc_tail_us = t2.elapsed().as_micros() as f64 / 10_000.0;
+    let ratio = full_cost_at_512k / inc_tail_us.max(1e-9);
+    println!(
+        "  incremental: {events} events over {n_stream} pushes, mean {inc_mean_us:.3} µs/step, tail(10k @ n≈512k) {inc_tail_us:.3} µs/step"
+    );
+    println!(
+        "  full resort @ 512k: {full_cost_at_512k:.1} µs/step — tail speedup {ratio:.0}×"
+    );
+    let p3_pass = events <= 64 && inc_tail_us < full_cost_at_512k / 20.0;
+    println!(
+        "  P3 verdict: {} (events ≤ 64 and tail ≥ 20× cheaper than full resort)",
+        if p3_pass { "PASS" } else { "FAIL" }
+    );
+
+    println!(
+        "\n════ GOAT: G2={}, G3={}, P2={}, P3={} ════",
+        if g2_pass { "PASS" } else { "FAIL" },
+        if g3_pass { "PASS" } else { "FAIL" },
+        if p2_pass { "PASS" } else { "FAIL" },
+        if p3_pass { "PASS" } else { "FAIL" }
+    );
+    if !(g2_pass && g3_pass && p2_pass && p3_pass) {
         std::process::exit(1);
     }
 }

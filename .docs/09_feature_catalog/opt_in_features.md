@@ -3644,7 +3644,7 @@ Source: [arXiv:2609.11801](https://arxiv.org/abs/2609.11801). Bench:
 [712](../../.benchmarks/712_marginal_rewind_poc.md). Substrate:
 `crates/katgpt-core/src/marginal_rewind.rs`.
 
-## 104. asentmax_schedule — length-adaptive α-entmax damping for chunk routing (Issue 747 P0)
+## 104. asentmax_schedule — the Issue 747 ASEntmax family: length-adaptive damping (P0), derived-k budget (P1), ALiBi eviction window (P2), incremental decode entmax (P3)
 
 The entmax-side mirror of SSMax (one extreme-value law, two signed arms):
 as the scored candidate set grows, the α-entmax logit range grows
@@ -3655,9 +3655,9 @@ The paper's Eq 10 derives the counter-schedule: pre-scale scores by
 the scaled range is pinned (n-invariant, σ-free), and the support stops
 collapsing.
 
-- `AsentmaxSchedule` (None / Derived / Generalized sweep surface) +
-  `apply_asentmax_inplace` + `RollingSigmaEstimator` (lock-free EMA) +
-  the `score_blocks_entmax_with_schedule_into` routing socket
+- **P0 schedule**: `AsentmaxSchedule` (None / Derived / Generalized sweep
+  surface) + `apply_asentmax_inplace` + `RollingSigmaEstimator` (lock-free
+  EMA) + the `score_blocks_entmax_with_schedule_into` routing socket
   (`None` is bit-identical to the shipped Plan 106 path).
 - GOAT G1–G4 ALL PASS (Bench 713): **G2 headline — graded-relevance
   planted-set recall 0.81–0.91 scheduled vs 0.14–0.31 unscheduled** at
@@ -3665,18 +3665,42 @@ collapsing.
   holds the relevant set. G3: single-needle retrieval parity at 100%
   (Bench 032 T23 anchor) with support inside the 032 shipped envelope.
   G4: 0 steady-state allocs; ~one `powf` + one mul per head per step.
+- **P1 derived-k**: `compute_derived_k(Δ̂)` — the exact Lemma-2 length-
+  independent support law `k̂ = 4/Δ̂²` (realized support == k̂ at every
+  n ∈ 1k..1M, G1 PASS). Head-to-head vs the sigmoid budget: SPLIT verdict
+  recorded (sigmoid wins saturated coverage, derived wins cost-efficiency
+  4×; no replacement — Bench 713 P1 addendum).
+- **P2 eviction window**: `alibi_entmax_window_1p5(z_min, z_max, slope)` +
+  `kv_within_window` — the paper's Prop E.2 hard cutoff
+  `d_max = ⌊(z_range + 2)/m_h + 1⌋`; attention beyond it is EXACTLY zero, so
+  evicted-vs-full runs are **bit-identical** (G1 = bit-identity, 432
+  adversarial configs). G2 @ n=1M: ≥98.9% of the KV row provably
+  evictable per head (15.8–16.0 GiB/layer at the 32h×128d×f16 reference
+  geometry); measured windowed-row entmax 1.0 µs vs full-row 130 ms.
+- **P3 incremental decode**: `IncrementalEntmax1p5` — Lemma-1 below-τ
+  pushes are O(1) and bit-exact vs the full re-sort (G1 incl.
+  threshold-brushing + support-shrink adversarials; G4 0 steady-state
+  allocs). G2: realistic 512k decode stream = 4 events, 0.015 µs/step
+  tail vs 68,448 µs/step full resort.
 - Honest scope: γ=−0.5 is IID-Gaussian-optimal (per-head fitted γ varies
   in sign); the `Generalized` arm is the offline-sweep surface (P4), and
-  harvested constants may arrive from riir-train Plan 396 Ph2.
+  harvested constants may arrive from riir-train Plan 396 Ph2. P2 assumes
+  the theorem's setting (causal self-attention with a near token; raw
+  logits bounded — feed generous bounds, the window grows linearly in the
+  range); RoPE heads need the periodic re-entry union (P4), not this
+  window.
 
 🔧 Feature flag: `asentmax_schedule` (katgpt-attn; implies `dash_attn`;
-root shim forwards). Opt-in — the primitive passes its gates but is not
-yet wired into the forward-path routing call site; default-on waits for
-the P0.7 wiring + re-gate (feature-gate-audit discipline: no
-default-on-unwired states).
+root shim forwards) — the Issue 747 family gate. Opt-in — every row passes
+its gates but none is wired into a production hot path yet; default-on
+waits for the P0.7 forward wiring + re-gate (feature-gate-audit
+discipline: no default-on-unwired states; the riir-ai KV-path consumer of
+P2/P3 would be its hot-path gate).
 
 📖 Issue: [747](../../.issues/747_asentmax_modelless_mining.md) ·
 Research: [549](../../.research/549_ASEntmax_Length_Adaptive_Entmax_Attention.md) ·
 Bench: [713](../../.benchmarks/713_asentmax_schedule_goat.md) ·
 Source: [arXiv:2506.16640](https://arxiv.org/abs/2506.16640) ·
-Substrate: `crates/katgpt-attn/src/dash_attn/asentmax.rs`.
+Substrate: `crates/katgpt-attn/src/dash_attn/asentmax.rs` (P0),
+`adaptive_k.rs` (P1), `eviction_window.rs` (P2),
+`entmax_incremental.rs` (P3).

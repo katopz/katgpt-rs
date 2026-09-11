@@ -25,6 +25,13 @@ pub mod chunk_summary;
 #[cfg(feature = "asentmax_schedule")]
 pub mod asentmax;
 pub mod entmax;
+// Issue 747 P2/P3 (Research 549 — arXiv:2506.16640 Prop E.2 + Lemma 3.1):
+// theorem-backed ALiBi×entmax KV-eviction window + Lemma-1 incremental
+// decode entmax. Same family flag as the schedule (P1 precedent).
+#[cfg(feature = "asentmax_schedule")]
+pub mod entmax_incremental;
+#[cfg(feature = "asentmax_schedule")]
+pub mod eviction_window;
 pub mod routing;
 // Composition layer (Issue 007 Phase F.4a, 2026-07-02):
 // forward_dash_attn_prefill / forward_dash_attn_decode moved here from root
@@ -58,6 +65,12 @@ pub use chunk_summary::{ChunkSummaryCache, ChunkSummaryQuery, summarize_chunk_wi
 #[cfg(feature = "asentmax_schedule")]
 pub use asentmax::{AsentmaxSchedule, RollingSigmaEstimator, apply_asentmax_inplace};
 pub use entmax::{entmax_1p5, entmax_gqa_aggregate, entmax_support};
+// Issue 747 P3: Lemma-1 incremental decode entmax.
+#[cfg(feature = "asentmax_schedule")]
+pub use entmax_incremental::IncrementalEntmax1p5;
+// Issue 747 P2: ALiBi×entmax eviction window (Prop E.2).
+#[cfg(feature = "asentmax_schedule")]
+pub use eviction_window::{alibi_entmax_window_1p5, evicted_kv_fraction, kv_within_window};
 pub use forward::{forward_dash_attn_decode, forward_dash_attn_prefill};
 pub use routing::{compute_routing_bias, score_blocks_entmax, score_blocks_entmax_with_entropy};
 #[cfg(feature = "asentmax_schedule")]
