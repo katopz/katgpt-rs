@@ -46,7 +46,16 @@
 //! - [`PcaGlobalFn::Codifferential`] — ‖δ₁(flow)‖₂ (RMS-scale). Where the L1
 //!   mass counts EVERY small divergence, the L2 norm emphasizes CONCENTRATED
 //!   divergence — the clustering signal (Phase 2's crosswalk: which vertices
-//!   carry negative δf).
+//!   carry negative δf). A NORM, deliberately: Σ_v δf(v) ≡ 0 (conservation),
+//!   so no signed divergence-direction global exists — the arm separates
+//!   concentrated vs spread fields by MAGNITUDE only (pinned by the crosswalk
+//!   test).
+//! - [`PcaGlobalFn::LargestComponentSize`] — largest connected-component
+//!   cardinality of the alive support: the one Research 544 crosswalk gap
+//!   (b0 gives component COUNT only). Shipped as the SAME O(V + E) union-find
+//!   pass as [`PcaGlobalFn::Betti0`], extended with per-root size tracking —
+//!   one scan, no harmonic projector (per-component Hodge solves are strictly
+//!   worse than O(V + E)), no new deps.
 //!
 //! # Seed decision
 //!
@@ -128,6 +137,11 @@ pub enum PcaGlobalFn {
     BeliefMassDivergence,
     /// ‖δ₁(flow)‖₂ — concentrated-divergence (clustering) emphasis.
     Codifferential,
+    /// Largest connected-component cardinality of the alive support
+    /// (channel 0 > 0.5) — the paper's CONNECTIVITY function ("largest
+    /// connected area"). Same union-find scan as [`PcaGlobalFn::Betti0`]
+    /// with per-root size accumulation; 0.0 on an empty support.
+    LargestComponentSize,
 }
 
 impl PcaGlobalFn {
@@ -135,7 +149,8 @@ impl PcaGlobalFn {
     /// `field`; all scratch goes through `scratch` (zero-alloc).
     pub fn evaluate(&self, cx: &CellComplex, field: &CochainField, scratch: &mut PcaScratch) -> f32 {
         match self {
-            Self::Betti0 => betti0_of_support(cx, field, scratch),
+            Self::Betti0 => support_components(cx, field, scratch).0 as f32,
+            Self::LargestComponentSize => support_components(cx, field, scratch).1 as f32,
             Self::AliveCount => {
                 let n = cx.n_cells(0);
                 let mut count = 0u32;
@@ -246,27 +261,31 @@ fn morphogen_edge_lift(cx: &CellComplex, field: &CochainField, scratch: &mut Pca
     }
 }
 
-/// Connected-component count of the alive support — O(V + E) union-find over
-/// the complex's B₁ incidence (module doc explains why there is no closed
-/// form). `count` starts at the alive-cell count and drops once per
-/// successful union.
-fn betti0_of_support(cx: &CellComplex, field: &CochainField, scratch: &mut PcaScratch) -> f32 {
+/// Connected-component count + largest-component size of the alive support —
+/// ONE O(V + E) union-find pass over the complex's B₁ incidence (module doc
+/// explains why there is no closed form). `count` starts at the alive-cell
+/// count and drops once per successful union; `size` accumulates per root and
+/// the max is read off the surviving roots after the scan.
+fn support_components(cx: &CellComplex, field: &CochainField, scratch: &mut PcaScratch) -> (u32, u32) {
     let n = cx.n_cells(0);
-    debug_assert_eq!(field.rank, 0, "Betti0 needs the rank-0 state cochain");
+    debug_assert_eq!(field.rank, 0, "support_components needs the rank-0 state cochain");
     debug_assert_eq!(scratch.parent.len(), n, "PcaScratch built for this cx?");
+    debug_assert_eq!(scratch.component_size.len(), n, "PcaScratch built for this cx?");
     debug_assert!(
         scratch.first_alive_of_edge.len() >= cx.n_cells(1),
         "PcaScratch built for this cx?"
     );
 
-    // Init: alive cell = own root; dead = sentinel.
+    // Init: alive cell = own root (size 1); dead = sentinel.
     let mut count: u32 = 0;
     for (v, slot) in scratch.parent.iter_mut().enumerate().take(n) {
         if alive_at(field, v) {
             *slot = v as u32;
+            scratch.component_size[v] = 1;
             count += 1;
         } else {
             *slot = u32::MAX;
+            scratch.component_size[v] = 0;
         }
     }
     scratch
@@ -295,10 +314,22 @@ fn betti0_of_support(cx: &CellComplex, field: &CochainField, scratch: &mut PcaSc
             // allocation; path halving in `find_root` keeps this near-linear.
             let (lo, hi) = if a < b { (a, b) } else { (b, a) };
             scratch.parent[hi as usize] = lo;
+            scratch.component_size[lo as usize] += scratch.component_size[hi as usize];
             count -= 1;
         }
     }
-    count as f32
+
+    // Roots are exactly the self-parented alive cells (union by smaller root
+    // keeps the root = minimum index; `find_root` path-halving points every
+    // non-root at an ancestor). Max over roots — not over all cells, whose
+    // stale sizes would double-count.
+    let mut max = 0u32;
+    for v in 0..n {
+        if scratch.parent[v] == v as u32 && scratch.component_size[v] > max {
+            max = scratch.component_size[v];
+        }
+    }
+    (count, max)
 }
 
 /// Union-find root with path halving. Dead cells are `u32::MAX` sentinels and
@@ -369,6 +400,9 @@ pub struct PcaScratch {
     in_region: Vec<bool>,
     /// Union-find parent slots (alive root / `u32::MAX` dead sentinel).
     parent: Vec<u32>,
+    /// Per-cell component size at its union-find root (0 for dead cells;
+    /// stale at non-roots — read only at self-parented roots).
+    component_size: Vec<u32>,
     /// Per-edge first-alive-vertex slot for the Betti0 scan.
     first_alive_of_edge: Vec<u32>,
     /// Alive channel snapshot taken before the kernel tick (the birth gate
@@ -393,6 +427,7 @@ impl PcaScratch {
             region_cells: (0..nf as u32).collect(),
             in_region: vec![false; nf],
             parent: vec![0; nv],
+            component_size: vec![0; nv],
             first_alive_of_edge: vec![u32::MAX; ne],
             alive_before: vec![0; nv],
             lap: CochainField::zeros(0, nv, field_dim),
@@ -581,9 +616,12 @@ mod tests {
         }
     }
 
-    /// Naive BFS component count — the independent reference the union-find
-    /// is pinned against (spec-match convention).
-    fn betti0_reference(cx: &CellComplex, field: &CochainField) -> usize {
+    /// Naive BFS component count + largest-component size — the independent
+    /// reference the union-find is pinned against (spec-match convention).
+    /// Returns `(count, max_size)`; both arms of `support_components` pin
+    /// against the same traversal (the Phase 2 crosswalk uses it for
+    /// `LargestComponentSize`).
+    fn components_reference(cx: &CellComplex, field: &CochainField) -> (usize, usize) {
         let n = cx.n_cells(0);
         let alive: Vec<bool> = (0..n).map(|v| alive_at(field, v)).collect();
         let mut seen = vec![false; n];
@@ -601,14 +639,17 @@ mod tests {
             }
         }
         let mut count = 0;
+        let mut max_size = 0;
         for start in 0..n {
             if !alive[start] || seen[start] {
                 continue;
             }
             count += 1;
+            let mut size = 0;
             let mut stack = vec![start];
             seen[start] = true;
             while let Some(v) = stack.pop() {
+                size += 1;
                 for &e in &adj[v] {
                     for &w in &edge_verts[e] {
                         if alive[w] && !seen[w] {
@@ -618,8 +659,9 @@ mod tests {
                     }
                 }
             }
+            max_size = max_size.max(size);
         }
-        count
+        (count, max_size)
     }
 
     #[test]
@@ -652,7 +694,7 @@ mod tests {
                 }
             }
             let got = PcaGlobalFn::Betti0.evaluate(&cx, &field, &mut scratch);
-            let want = betti0_reference(&cx, &field);
+            let (want, _) = components_reference(&cx, &field);
             assert_eq!(got as usize, want, "union-find disagrees with BFS");
         }
     }
@@ -781,6 +823,7 @@ mod tests {
             PcaGlobalFn::BoundaryFluxMass,
             PcaGlobalFn::BeliefMassDivergence,
             PcaGlobalFn::Codifferential,
+            PcaGlobalFn::LargestComponentSize,
         ] {
             let _ = g.evaluate(&cx, &field, &mut scratch);
             assert_eq!(field.data, before, "{g:?} mutated the state");
@@ -802,6 +845,7 @@ mod tests {
                 PcaGlobalFn::BoundaryFluxMass,
                 PcaGlobalFn::BeliefMassDivergence,
                 PcaGlobalFn::Codifferential,
+                PcaGlobalFn::LargestComponentSize,
             ] {
                 // Debug builds exercise the d ≤ 3 boundary-flux assert here.
                 let _ = g.evaluate(cx, &field, &mut scratch);
@@ -1163,5 +1207,245 @@ mod tests {
         let alive_after = field.data.iter().step_by(2).filter(|&&a| a > 0.5).count();
         assert_eq!(alive_after, alive_before, "a tripped b0==1 gate must freeze the alive set");
         assert!(alive_before > 2, "the merge must have grown past the seeds");
+    }
+
+    // ── Phase 2: LargestComponentSize ─────────────────────────────────────
+
+    #[test]
+    fn largest_component_size_basics() {
+        let cx = CellComplex::grid_2d(5, 5);
+        let mut field = make_field(&cx, 2);
+        let mut scratch = PcaScratch::for_complex(&cx, 2);
+
+        // Empty support → 0 (the b0 companion would report 0 components too).
+        assert_eq!(PcaGlobalFn::LargestComponentSize.evaluate(&cx, &field, &mut scratch), 0.0);
+
+        // One run {0,1,2} (row 0) → size 3.
+        seed_alive_morph(&mut field, &[0, 1, 2], 1.0, 2);
+        assert_eq!(PcaGlobalFn::LargestComponentSize.evaluate(&cx, &field, &mut scratch), 3.0);
+
+        // A second, smaller run {12,13} (row 2) → max stays 3.
+        seed_alive_morph(&mut field, &[12, 13], 1.0, 2);
+        assert_eq!(PcaGlobalFn::LargestComponentSize.evaluate(&cx, &field, &mut scratch), 3.0);
+        assert_eq!(PcaGlobalFn::Betti0.evaluate(&cx, &field, &mut scratch), 2.0);
+
+        // v7 (row 1, col 2) bridges both runs → one component of 6.
+        field.data[7 * 2] = 1.0;
+        assert_eq!(PcaGlobalFn::LargestComponentSize.evaluate(&cx, &field, &mut scratch), 6.0);
+        assert_eq!(PcaGlobalFn::Betti0.evaluate(&cx, &field, &mut scratch), 1.0);
+    }
+
+    #[test]
+    fn largest_component_size_the_larger_component_wins() {
+        let cx = CellComplex::grid_2d(5, 5);
+        let mut field = make_field(&cx, 2);
+        let mut scratch = PcaScratch::for_complex(&cx, 2);
+        // {0} alone (size 1) + row-2 run {12,13,14} (size 3) → 3 wins.
+        seed_alive_morph(&mut field, &[0, 12, 13, 14], 1.0, 2);
+        assert_eq!(PcaGlobalFn::LargestComponentSize.evaluate(&cx, &field, &mut scratch), 3.0);
+        assert_eq!(PcaGlobalFn::Betti0.evaluate(&cx, &field, &mut scratch), 2.0);
+    }
+
+    #[test]
+    fn largest_component_size_matches_bfs_reference() {
+        // Same harness as the Phase 0 Betti0-vs-BFS pin: 25 random fields,
+        // union-find vs the naive BFS traversal — now for the SIZE axis too.
+        let cx = CellComplex::grid_2d(8, 6);
+        let mut rng = SplitMix64::new(0xFEED_FACE);
+        let mut scratch = PcaScratch::for_complex(&cx, 2);
+        for _ in 0..25 {
+            let mut field = make_field(&cx, 2);
+            for v in 0..cx.n_cells(0) {
+                let r = (rng.next_u32() % 100) as f32 / 100.0;
+                if r < 0.4 {
+                    field.data[v * 2] = 1.0;
+                }
+            }
+            let (want_count, want_max) = components_reference(&cx, &field);
+            let got_count = PcaGlobalFn::Betti0.evaluate(&cx, &field, &mut scratch);
+            let got_max = PcaGlobalFn::LargestComponentSize.evaluate(&cx, &field, &mut scratch);
+            assert_eq!(got_count as usize, want_count, "count axis disagrees with BFS");
+            assert_eq!(got_max as usize, want_max, "size axis disagrees with BFS");
+        }
+    }
+
+    // ── Phase 2: Research 544 §2.1 crosswalk parity (executable spec) ─────
+
+    #[test]
+    fn crosswalk_betti0_is_the_component_count() {
+        // Crosswalk row: evolved Connectivity/Counting function ↔ Betti0.
+        // Three disjoint runs on a 7×5 grid, sizes 3 / 2 / 4 — both topological
+        // globals pinned against the BFS reference AND the literals.
+        let cx = CellComplex::grid_2d(7, 5);
+        let mut field = make_field(&cx, 2);
+        let mut scratch = PcaScratch::for_complex(&cx, 2);
+        seed_alive_morph(&mut field, &[0, 1, 2], 1.0, 2); // row 0, cols 0–2
+        seed_alive_morph(&mut field, &[16, 17], 1.0, 2); // row 2, cols 2–3
+        seed_alive_morph(&mut field, &[28, 29, 30, 31], 1.0, 2); // row 4, cols 0–3
+        let (count, max) = components_reference(&cx, &field);
+        assert_eq!(count, 3);
+        assert_eq!(max, 4);
+        assert_eq!(PcaGlobalFn::Betti0.evaluate(&cx, &field, &mut scratch), 3.0);
+        assert_eq!(PcaGlobalFn::LargestComponentSize.evaluate(&cx, &field, &mut scratch), 4.0);
+    }
+
+    #[test]
+    fn crosswalk_boundary_flux_is_the_signed_rim_measure_not_a_perimeter_count() {
+        // Crosswalk rows: Counting/Perimeter function ↔ BoundaryFluxMass.
+        // TRUE identity (region = ALL faces, endpoint-sum lift f[e] =
+        // m(tail)+m(head)):
+        //
+        //   flux = Σ_e coeff(e)·f[e],   coeff(e) = Σ_{faces f ∋ e} σ(e,f)
+        //        = Σ_v m(v)·w(v),      w(v) = Σ_{rim e ∋ v} σ(e)
+        //
+        // Interior edges sit in two faces with opposite signs → coeff = 0; only
+        // the DOMAIN RIM carries mass (w = ±2 along rim interiors, 0 at three
+        // of the four corners). Binary-m consequences pinned below:
+        //   - full domain → exact 0 (rim signs cancel);
+        //   - bottom-row band → +2(w−1): every covered rim edge lifts to
+        //     f = 1+1 = 2, so the plan's "perimeter count" phrasing needs
+        //     exactly this FACTOR 2 (pinned, not adjusted away);
+        //   - left-column band → −2(h−1) (the left rim's σ = −1: the measure
+        //     is SIGNED, not a count);
+        //   - an INTERIOR blob → 0: the blob's own perimeter contributes
+        //     NOTHING to the domain flux (interior face boundaries cancel
+        //     pairwise by Stokes). Honest crosswalk verdict: this arm measures
+        //     rim-adjacent morphogen; the paper's blob-perimeter is a DIFFERENT
+        //     quantity (closest shipped signal: the divergence arms).
+        let w = 6;
+        let h = 5;
+        let cx = CellComplex::grid_2d(w, h);
+        let mut scratch = PcaScratch::for_complex(&cx, 2);
+
+        let mut flux_of = |morph: &[f32]| {
+            let mut field = make_field(&cx, 2);
+            for (v, &m) in morph.iter().enumerate() {
+                field.data[v * 2 + 1] = m;
+            }
+            PcaGlobalFn::BoundaryFluxMass.evaluate(&cx, &field, &mut scratch)
+        };
+
+        assert_eq!(flux_of(&vec![1.0; w * h]), 0.0, "fully-covered rim must cancel to exact 0");
+
+        let mut bottom = vec![0.0; w * h];
+        bottom[..w].fill(1.0);
+        assert_eq!(flux_of(&bottom), 2.0 * (w as f32 - 1.0), "bottom band: factor 2 = endpoint sum");
+
+        let mut left = vec![0.0; w * h];
+        for row in left.chunks_exact_mut(w) {
+            row[0] = 1.0;
+        }
+        assert_eq!(flux_of(&left), -2.0 * (h as f32 - 1.0), "left band: signed, σ = −1");
+
+        let mut blob = vec![0.0; w * h];
+        for y in 1..h - 1 {
+            for x in 2..4 {
+                blob[y * w + x] = 1.0;
+            }
+        }
+        assert_eq!(
+            flux_of(&blob),
+            0.0,
+            "interior blob: zero DOMAIN flux — its own perimeter is a different quantity"
+        );
+
+        // The general identity on a random field, recomputed independently
+        // from B₂/B₁ per edge (the shipped arm walks per-face):
+        // flux == Σ_e coeff(e)·(m(tail)+m(head)).
+        let mut rng = SplitMix64::new(0xB0CA);
+        let mut field = make_field(&cx, 2);
+        for v in 0..cx.n_cells(0) {
+            field.data[v * 2 + 1] = (rng.next_u32() % 2000) as f32 / 1000.0 - 1.0;
+        }
+        let mut coeff = vec![0i32; cx.n_cells(1)];
+        for &(e, _f, s) in cx.boundary_entries(1) {
+            coeff[e] += s as i32;
+        }
+        let mut lift = vec![0.0f32; cx.n_cells(1)];
+        for &(v, e, _s) in cx.boundary_entries(0) {
+            lift[e] += field.data[v * 2 + 1];
+        }
+        let identity: f32 = (0..cx.n_cells(1)).map(|e| coeff[e] as f32 * lift[e]).sum();
+        let got = PcaGlobalFn::BoundaryFluxMass.evaluate(&cx, &field, &mut scratch);
+        assert!((got - identity).abs() < 1e-3, "flux {got} != rim identity {identity}");
+    }
+
+    #[test]
+    fn crosswalk_codifferential_norm_tracks_clustering_magnitude_not_sign() {
+        // Crosswalk row: Clustering function ↔ Codifferential. δ₁∘d₀ is the
+        // graph Laplacian and Σ_v δf(v) ≡ 0 (conservation), so a SIGNED
+        // divergence-direction global cannot exist — the shipped arm is the
+        // L2 NORM, and the test pins what is true instead of faking a sign:
+        //
+        //  (a) complement-profile BIT-EQUALITY ‖δd(1−m)‖ == ‖δd(m)‖ — the norm
+        //      is blind to toward-center vs away-from-center (a peak and its
+        //      complementary dip carry identical norms; dyadic values keep
+        //      every Laplacian op exact, so this is a bit comparison);
+        //  (b) concentration magnitude: heat-smoothing m ← m − 0.1·Lm strictly
+        //      LOWERS the norm each step (spectral contraction |1−ελ| < 1 for
+        //      every nonzero mode at ε = 0.1, λmax ≤ 2·deg = 8) — clustering =
+        //      HIGH norm, dispersed = LOW norm;
+        //  (c) the per-vertex signed divergence sums to 0 — direction exists
+        //      only per-vertex; any global signed sum vanishes by construction.
+        let n = 9;
+        let cx = CellComplex::grid_2d(n, n);
+        let c = 4usize; // center
+        let mut scratch = PcaScratch::for_complex(&cx, 2);
+
+        // Tent, dyadic values only: 1.0 / 0.75 / 0.5 / 0.25 / 0.0.
+        let tent = |v: usize| -> f32 {
+            let dx = (v % n).abs_diff(c);
+            let dy = (v / n).abs_diff(c);
+            1.0 - 0.25 * (dx + dy).min(4) as f32
+        };
+        let bump: Vec<f32> = (0..n * n).map(tent).collect();
+
+        let field_with = |m: &[f32]| {
+            let mut field = make_field(&cx, 2);
+            for (v, &x) in m.iter().enumerate() {
+                field.data[v * 2] = 1.0;
+                field.data[v * 2 + 1] = x;
+            }
+            field
+        };
+
+        // (a) Sign-blindness under the complement profile.
+        let peak = field_with(&bump);
+        let peak_norm = PcaGlobalFn::Codifferential.evaluate(&cx, &peak, &mut scratch);
+        let dip: Vec<f32> = bump.iter().map(|&x| 1.0 - x).collect();
+        let dip_field = field_with(&dip);
+        let dip_norm = PcaGlobalFn::Codifferential.evaluate(&cx, &dip_field, &mut scratch);
+        assert_eq!(
+            peak_norm.to_bits(),
+            dip_norm.to_bits(),
+            "the norm must be blind to the complementary (dispersed) profile"
+        );
+
+        // (b) Strict decrease under heat smoothing.
+        let mut m = bump.clone();
+        let mut morph = CochainField::zeros(0, cx.n_cells(0), 1);
+        let mut prev = peak_norm;
+        for step in 1..=5 {
+            morph.data.copy_from_slice(&m);
+            let flow = crate::operators::exterior_derivative(&cx, &morph);
+            let lap = crate::operators::codifferential(&cx, &flow); // = Lm
+            for (v, slot) in m.iter_mut().enumerate() {
+                *slot -= 0.1 * lap.data[v];
+            }
+            let smoothed = field_with(&m);
+            let norm = PcaGlobalFn::Codifferential.evaluate(&cx, &smoothed, &mut scratch);
+            assert!(
+                norm < prev,
+                "step {step}: smoothing must strictly lower the clustering norm ({norm} !< {prev})"
+            );
+            prev = norm;
+        }
+
+        // (c) Conservation: the signed divergence sums to zero.
+        morph.data.copy_from_slice(&bump);
+        let flow = crate::operators::exterior_derivative(&cx, &morph);
+        let div = crate::operators::codifferential(&cx, &flow);
+        let total: f32 = div.data.iter().sum();
+        assert!(total.abs() < 1e-5, "signed divergence must sum to ~0, got {total}");
     }
 }

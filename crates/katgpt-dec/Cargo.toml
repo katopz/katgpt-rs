@@ -64,7 +64,13 @@ categories = ["mathematics", "science"]
 # reduction); no new deps. The identity fast path (Plan 407 T2.4) uses a 5-point
 # grid stencil for G4 latency (1.808 µs at K=100/d_v=8/d_e=5/T=5). See
 # .benchmarks/407_sheaf_admm_goat.md for the GOAT gate results.
-default = ["heat_kernel_trajectory", "sheaf_admm", "grid_3d", "se2_equivariant_lift"]
+default = [
+    "heat_kernel_trajectory",
+    "sheaf_admm",
+    "grid_3d",
+    "se2_equivariant_lift",
+    "pca_global",
+]
 motor_gated_field = []
 heat_kernel_trajectory = []
 sheaf_admm = []  # DEFAULT-ON (Plan 407 Phase 2 GOAT G1–G6 ALL PASS)
@@ -87,12 +93,17 @@ grid_3d = []
 
 # PCA global-function layer (Plan 591, Research 544 — Programmable CA,
 # arXiv:2609.06102): wires the shipped DEC aggregates (Betti0-of-support,
-# boundary flux mass, belief-mass divergence, codifferential norm) into the CA
-# decision function — one global evaluation per tick + a per-cell decision
-# pass over Plan 454's UNTOUCHED birth/death kernel (`step_pca_sync`). Opt-in;
-# promote to default only on the Phase 3 GOAT pass (G2 target: ≥3× fewer
-# iterations to b0==1 than pure-local). Implies `grid_3d` (the kernel it
-# composes).
+# largest-component size, boundary flux mass, belief-mass divergence,
+# codifferential norm) into the CA decision function — one global evaluation
+# per tick + a per-cell decision pass over Plan 454's UNTOUCHED birth/death
+# kernel (`step_pca_sync` / `step_pca_async`).
+# DEFAULT-ON (2026-09-11, Plan 591 Phase 3 GOAT G1–G4 ALL PASS, Bench 707:
+# G1 BFS-verified finals + 100-seed bit-identity, G2 iteration collapse
+# 12.20× ≥ 3× gate (61 fixpoint ticks pure-local vs 5 pca halt on the 64×64
+# seed-diamond arena), G3 untripped-wrapper bit-identity + untouched kernel,
+# G4 0 allocs/100 ticks sync and async). Implies `grid_3d` (the kernel it
+# composes). The katgpt-core `pca_global` passthrough stays opt-in there —
+# same layer split as `se2_equivariant_lift`.
 pca_global = ["grid_3d"]
 
 # Continuous cochain point sampler (Plan 422, Research 404) — Whitney/de-Rham
@@ -142,3 +153,8 @@ required-features = ["grid_3d"]
 name = "bench_560_se2_lift_perf"
 harness = false
 required-features = ["se2_equivariant_lift"]
+
+[[bench]]
+name = "bench_591_pca_global_goat"
+harness = false
+required-features = ["pca_global"]
