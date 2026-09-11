@@ -1,6 +1,6 @@
 # Issue 743: `gw_alignment` — Gromov–Wasserstein quotient-alignment primitive for katgpt-core
 
-**Status:** Open — 2026-09-10
+**Status:** RESOLVED — LANDED 2026-09-11 (Plan 594, Bench 709, commit ref in git log): `katgpt_core::gw_alignment` behind opt-in `gw_alignment` (multi-start greedy/softmin/uniform/perm-init + product-graph power iteration, sum-exact loss, deterministic, zero steady-state alloc). G1–G4 ALL PASS; stays opt-in (consumer-first rule — riir-poc consumer PoC is the promotion path). Measured evolution vs the sketch: greedy second-order init is load-bearing (uniform-start power iteration is saddle-blind and glacial); 2-opt polish on ΣP removed (walked 0.0016 → 0.145 — ΣP is not the GW objective).
 **Source:** [riir-ai Research 371](../../riir-ai/.research/371_Principal_Bundle_Qualia_Quotient_Orbit_Decomposition.md) (Oizumi/Lim/Kanai principal-bundle qualia framework, verified vs full text) — Issue 912 T4's consume-vs-build decision landed on BUILD. Canonical method: Mémoli 2011 (Gromov–Wasserstein distances); entropic formulation: Peyré/Cuturi/Solomon 2016 (ICML, "Gromov-Wasserstein Averaging of Kernel and Distance Matrices"). External references only: Oizumi-lab GWTune (Takeda 2025, J Neurosci Methods 419:110443) + POT — both Python, both research-grade, both stay OUT of the runtime.
 **Kind:** new modelless primitive (opt-in feature) — cross-space structural alignment from distance matrices alone, no shared coordinates, no training.
 
