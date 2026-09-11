@@ -61,16 +61,27 @@ concurrency:
 jobs:
   wasm32-gate:
     runs-on: ubuntu-latest
-    # The workstation's cold run took <5 min; a cache-miss runner is slower,
-    # but 30 min covers a full cold dep build for the triple.
+    # Generous: the workstation's cold run took <5 min; a cache-miss runner is
+    # slower, but 30 min covers a full cold dep build for the triple.
     timeout-minutes: 30
+    env:
+      # Same override as full_gate.yml, for the same reason: dtolnay/rust-toolchain
+      # installs the wasm32 target into STABLE but does NOT export RUSTUP_TOOLCHAIN,
+      # so without this the gate's cargo resolves the rust-toolchain.toml pin
+      # (1.98.1) — a toolchain that has no wasm32 std — and Layer 2b correctly
+      # refuses a partial pass. The first five CI runs (34296642292…34314937986,
+      # 2026-09-09) died on exactly that refusal. The lane rides the same channel
+      # as the full gate it slices, keeping the two wasm32 verdicts comparable.
+      RUSTUP_TOOLCHAIN: stable
     steps:
       - uses: actions/checkout@v6
 
       # Same action + install shape as full_gate.yml — one way to install a
       # toolchain, not two. Strict gate: the target MUST be present, because
       # `--wasm32-only` (unlike the full gate) has no layers behind a skipped
-      # lane and refuses a partial pass outright.
+      # lane and refuses a partial pass outright. The target pairs with the
+      # RUSTUP_TOOLCHAIN=stable env above — the install alone was not enough
+      # while cargo resolved the pin file.
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
