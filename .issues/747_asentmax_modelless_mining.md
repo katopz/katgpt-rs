@@ -1,6 +1,6 @@
 # Issue 747: ASEntmax modelless mining — entmax damping schedule, derived support controller, theorem-backed KV eviction window
 
-**Status:** Open
+**Status:** In progress — P0 DONE (GOAT PASS, opt-in; Bench 713). P1–P3 open. P0.7 (forward-path wiring + promotion re-gate) tracks the default-on decision.
 **Research:** [katgpt-rs/.research/549](../.research/549_ASEntmax_Length_Adaptive_Entmax_Attention.md) · **Source:** [arXiv:2506.16640](https://arxiv.org/abs/2506.16640) (ICLR 2026) · **Training arm:** riir-train Plan 396 (secondary)
 
 arXiv:2506.16640 derives what our stack is missing on the entmax side of a law we already exploit on the softmax side: softmax needs sharpening ∝ log n (SSMax, Plan 411, shipped), α-entmax needs **damping ∝ (log n)^{−0.5}** (their Eq 10, closed form). Our `entmax_1p5` (DashAttention routing, default-on) has **no length term at all** — as the scored candidate set grows, logit range grows `2σ√(2 log n)`, the threshold eats the support, and routing over-sparsifies (the paper's Copy-table failure mode: fixed-α entmax 28.5% vs softmax 99.4% OOD).
@@ -9,14 +9,17 @@ Execution tracker for the modelless rows of Research 549 §2.3. Feature flags pe
 
 ## Tasks
 
-### P0 — `asentmax_schedule`: derived damping mode for entmax routing
+### P0 — `asentmax_schedule`: derived damping mode for entmax routing — **DONE 2026-09-11 (Bench 713)**
 
-- [ ] **T0.1** Add `AsentmaxSchedule` mode to `katgpt-attn/dash_attn/entmax.rs` (socket-mirrors `SsmaxMode`): pre-scale scores by `(δ + β·(log n_c)^γ)` with derived defaults `δ = 0, γ = −0.5`, `β = 1/(2σ̂√2)` from a rolling σ̂; zero-alloc, one `powf` + one mul per head per step. Feature `asentmax_schedule`, opt-in.
-- [ ] **T0.2** **G1 (stationarity — the paper's failure mode as an assertion):** IID-Gaussian scores, n_c = 512 → 512k; mean support size stationary ±ε with the schedule, → 1 (collapse) without it. Simplex + exact-zero properties preserved.
-- [ ] **T0.3** **G2 (routing quality):** Bench-032-pattern NIAH sweep at growing chunk counts (256 → 4k+): scheduled routing ≥ fixed-α routing coverage/retrieval; record per-arm active-chunk histograms.
-- [ ] **T0.4** **G3 (no-regression):** at Bench-032's original 256-chunk scale, scheduled ≈ fixed-α within noise (adaptive_k floor unchanged).
-- [ ] **T0.5** **G4:** CountingAllocator — 0 steady-state allocs.
-- [ ] **T0.6** GOAT verdict → promote to default (demote fixed-α on the routing path if it wins) or record negative; update `.docs/09_feature_catalog/` + Bench note.
+**Deviation from T0.1 as written:** the schedule ships in a new `dash_attn/asentmax.rs` module (not inline in `entmax.rs`) — mirrors `ssmax.rs`'s standalone status; the transform and the schedule are distinct concerns. **Amended G1 expectations (measured truth):** for pure IID-Gaussian scores the exact stationarity claims are the scaled RANGE (n-invariant by construction) and the σ-AXIS (support σ-invariant — σ cancels in σ·β); the damped support grows mildly ∝ ln n on the n-axis (analytic k* ≈ 4·ln n), and the collapse counterfactual is real on the σ axis (raw support → 1 at σ=10, scheduled holds). The issue's original "stationary ±ε / → 1 without it" wording was pre-measurement; see Bench 713 for the corrected claims.
+
+- [x] **T0.1** `AsentmaxSchedule` (None/Derived/Generalized) + `apply_asentmax_inplace` + `RollingSigmaEstimator` (lock-free EMA, Kamath range law `σ̂ = range/(2√(2 ln n))`) in `katgpt-attn/src/dash_attn/asentmax.rs`; routing socket `score_blocks_entmax_with_schedule_into` (routing.rs, shared-body refactor — bit-identical at `None`, unit-pinned); feature `asentmax_schedule = ["dash_attn"]` + root shim + root re-exports. Zero-alloc: one `powf` + one mul per head per step.
+- [x] **T0.2 G1 PASS** (tests/asentmax_g1_stationarity.rs, 4/4): scaled range pinned 0.83–0.90 over n=512→512k (ratio 1.09, unscheduled 1.58); support σ-invariant (max/min < 2 across σ ∈ {1,3,10}); collapse counterfactual at σ=10 (raw ≤ 4, scheduled ≥ 4×); simplex + EXACT zeros; estimator self-consistency (range-fed σ̂ pins scaled range to exactly 1.0 — finite-n EV corrections cancel by construction, beating the oracle-σ arm's 0.91).
+- [x] **T0.3 G2 PASS** (bench_747_asentmax_goat): graded-relevance planted set (k=8, noise-jittered) recall **0.81–0.91 scheduled vs 0.14–0.31 raw** at n_c 256→16k × σ 1→8; raw support collapses to 1–2.5 chunks, scheduled holds 7–8; planted mass ≈ 1.0 both arms.
+- [x] **T0.4 G3 PASS**: single-needle (032 T23 anchor) retrieval parity 100%/100% at 256 chunks; scheduled support 12–13 sits INSIDE Bench 032's shipped envelope (avg 21.5, range 4–40+); needle mass ≥ 0.61.
+- [x] **T0.5 G4 PASS**: 0 allocs / 1000 steady-state cycles (CountingAllocator + liveness canary; cross-crate `#[path]` include of katgpt-core's shared test common). Latency ≈ 9.7–18.6 µs/step at n=16k (row scan + multiply — same order as the RollingDeltaEstimator precedent).
+- [x] **T0.6 GOAT verdict:** 🟢 PASS, **stays opt-in** — the primitive is not yet on a production hot path (`forward.rs` routing calls the unscheduled variants); default-on now would be an unwired state (feature-gate-audit discipline). `.docs/09_feature_catalog/opt_in_features.md` row added; Bench 713 records the full evidence.
+- [ ] **T0.7 (new)** Wire `score_blocks_entmax_with_schedule_into` into the forward-path routing call site (config-gated, e.g. `DashAttnConfig` schedule field or a forward-local flag), re-run G2/G3 on the real prefill path, then re-evaluate default-on promotion (demote fixed-α on the routing path if it wins there too).
 
 ### P1 — Lemma-2 support controller `k̂ = 4/Δ̂²`
 

@@ -19,6 +19,11 @@
 //! Feature gate: `dash_attn` (Plan 106, Research 68).
 
 pub mod chunk_summary;
+// ASEntmax length-adaptive damping schedule (Issue 747 P0, Research 549 —
+// arXiv:2506.16640 Eq 10): the entmax-side mirror of katgpt-core's SSMax
+// socket. Opt-in until the Issue 747 GOAT gate.
+#[cfg(feature = "asentmax_schedule")]
+pub mod asentmax;
 pub mod entmax;
 pub mod routing;
 // Composition layer (Issue 007 Phase F.4a, 2026-07-02):
@@ -50,6 +55,10 @@ pub mod value_energy;
 pub mod vortex_flow;
 
 pub use chunk_summary::{ChunkSummaryCache, ChunkSummaryQuery, summarize_chunk_with_entropy};
+#[cfg(feature = "asentmax_schedule")]
+pub use asentmax::{AsentmaxSchedule, RollingSigmaEstimator, apply_asentmax_inplace};
 pub use entmax::{entmax_1p5, entmax_gqa_aggregate, entmax_support};
 pub use forward::{forward_dash_attn_decode, forward_dash_attn_prefill};
 pub use routing::{compute_routing_bias, score_blocks_entmax, score_blocks_entmax_with_entropy};
+#[cfg(feature = "asentmax_schedule")]
+pub use routing::score_blocks_entmax_with_schedule_into;

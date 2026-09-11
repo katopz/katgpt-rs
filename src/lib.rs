@@ -55,6 +55,14 @@ pub mod dash_attn {
 
     #[cfg(feature = "msa_adaptive_k")]
     pub use katgpt_attn::dash_attn::adaptive_k::{AdaptiveKConfig, AdaptiveKRouter};
+    // ASEntmax length-adaptive damping schedule (Issue 747 P0, Research 549 —
+    // arXiv:2506.16640 Eq 10): the entmax-side mirror of SSMax.
+    #[cfg(feature = "asentmax_schedule")]
+    pub use katgpt_attn::dash_attn::asentmax::{
+        AsentmaxSchedule, RollingSigmaEstimator, apply_asentmax_inplace,
+    };
+    #[cfg(feature = "asentmax_schedule")]
+    pub use katgpt_attn::dash_attn::routing::score_blocks_entmax_with_schedule_into;
     #[cfg(feature = "msa_per_group")]
     pub use katgpt_attn::dash_attn::block_topk::PerGroupTopKRouter;
     #[cfg(feature = "vortex_flow")]

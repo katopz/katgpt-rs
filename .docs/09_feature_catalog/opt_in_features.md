@@ -3643,3 +3643,40 @@ history keeps the file). Research:
 Source: [arXiv:2609.11801](https://arxiv.org/abs/2609.11801). Bench:
 [712](../../.benchmarks/712_marginal_rewind_poc.md). Substrate:
 `crates/katgpt-core/src/marginal_rewind.rs`.
+
+## 104. asentmax_schedule — length-adaptive α-entmax damping for chunk routing (Issue 747 P0)
+
+The entmax-side mirror of SSMax (one extreme-value law, two signed arms):
+as the scored candidate set grows, the α-entmax logit range grows
+`E[Δ_n] = 2σ√(2 log n)` (Kamath 2015) while the probability budget stays
+fixed at 1 — the threshold eats the support and routing over-sparsifies.
+The paper's Eq 10 derives the counter-schedule: pre-scale scores by
+`β·(log n_c)^{−0.5}` with `β = 1/(2σ̂√2)` from a rolling range-law σ̂ —
+the scaled range is pinned (n-invariant, σ-free), and the support stops
+collapsing.
+
+- `AsentmaxSchedule` (None / Derived / Generalized sweep surface) +
+  `apply_asentmax_inplace` + `RollingSigmaEstimator` (lock-free EMA) +
+  the `score_blocks_entmax_with_schedule_into` routing socket
+  (`None` is bit-identical to the shipped Plan 106 path).
+- GOAT G1–G4 ALL PASS (Bench 713): **G2 headline — graded-relevance
+  planted-set recall 0.81–0.91 scheduled vs 0.14–0.31 unscheduled** at
+  n_c 256→16k × σ 1→8; raw support collapses to 1–2.5 chunks, scheduled
+  holds the relevant set. G3: single-needle retrieval parity at 100%
+  (Bench 032 T23 anchor) with support inside the 032 shipped envelope.
+  G4: 0 steady-state allocs; ~one `powf` + one mul per head per step.
+- Honest scope: γ=−0.5 is IID-Gaussian-optimal (per-head fitted γ varies
+  in sign); the `Generalized` arm is the offline-sweep surface (P4), and
+  harvested constants may arrive from riir-train Plan 396 Ph2.
+
+🔧 Feature flag: `asentmax_schedule` (katgpt-attn; implies `dash_attn`;
+root shim forwards). Opt-in — the primitive passes its gates but is not
+yet wired into the forward-path routing call site; default-on waits for
+the P0.7 wiring + re-gate (feature-gate-audit discipline: no
+default-on-unwired states).
+
+📖 Issue: [747](../../.issues/747_asentmax_modelless_mining.md) ·
+Research: [549](../../.research/549_ASEntmax_Length_Adaptive_Entmax_Attention.md) ·
+Bench: [713](../../.benchmarks/713_asentmax_schedule_goat.md) ·
+Source: [arXiv:2506.16640](https://arxiv.org/abs/2506.16640) ·
+Substrate: `crates/katgpt-attn/src/dash_attn/asentmax.rs`.

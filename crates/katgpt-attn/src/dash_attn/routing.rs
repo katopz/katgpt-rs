@@ -7,6 +7,8 @@
 use katgpt_core::simd::simd_dot_f32;
 use katgpt_core::types::DashAttnConfig;
 
+#[cfg(feature = "asentmax_schedule")]
+use super::asentmax::{AsentmaxSchedule, RollingSigmaEstimator, apply_asentmax_inplace};
 use super::entmax::{entmax_1p5_into, entmax_support_into};
 
 /// Result of entmax routing for one query head.
@@ -116,11 +118,14 @@ pub fn score_blocks_entmax_with_entropy_into(
     config: &DashAttnConfig,
     scratch: &mut RoutingScratch,
 ) -> RoutingResult {
-    let hd = query.len();
     let n = summaries.len();
-    let has_entropy = !entropy_biases.is_empty();
+    grow_routing_scratch(scratch, n);
+    compute_chunk_logits_into(query, summaries, entropy_biases, config, &mut scratch.logits);
+    route_from_logits(n, scratch)
+}
 
-    // Grow buffers if needed
+/// Ensure `logits`/`probs` scratch rows cover `n` chunks.
+fn grow_routing_scratch(scratch: &mut RoutingScratch, n: usize) {
     if scratch.logits.len() < n {
         scratch.logits.resize(n, 0.0);
     }
@@ -128,11 +133,22 @@ pub fn score_blocks_entmax_with_entropy_into(
         scratch.probs.resize(n, 0.0);
     }
     scratch.sorted.clear();
+}
 
-    // Compute chunk logits: z = q · k̄ / √d * γ (+ b'_c if available).
-    // The entropy bias `b'_c` (HiLS Prop 3.1) interpolates between the
-    // mean-logit regime and the true LogSumExp mass; it is a per-chunk
-    // additive term computed once at prefill (Issue 044).
+/// Compute chunk logits `z = q · k̄ / √d * γ (+ b'_c)` into `logits_out`.
+///
+/// The entropy bias `b'_c` (HiLS Prop 3.1) interpolates between the
+/// mean-logit regime and the true LogSumExp mass; it is a per-chunk
+/// additive term computed once at prefill (Issue 044).
+fn compute_chunk_logits_into(
+    query: &[f32],
+    summaries: &[impl AsRef<[f32]>],
+    entropy_biases: &[f32],
+    config: &DashAttnConfig,
+    logits_out: &mut [f32],
+) {
+    let hd = query.len();
+    let has_entropy = !entropy_biases.is_empty();
     let scale = 1.0 / (hd as f32).sqrt() * config.scaling_factor;
     for (i, s) in summaries.iter().enumerate() {
         let s_ref = s.as_ref();
@@ -141,9 +157,14 @@ pub fn score_blocks_entmax_with_entropy_into(
         if has_entropy && i < entropy_biases.len() {
             logit += entropy_biases[i];
         }
-        scratch.logits[i] = logit;
+        logits_out[i] = logit;
     }
+}
 
+/// α-entmax over the first `n` logits + support extraction + routing-bias
+/// computation, building the owned `RoutingResult` (shared tail of every
+/// routing entry point in this module).
+fn route_from_logits(n: usize, scratch: &mut RoutingScratch) -> RoutingResult {
     // α-entmax routing into scratch buffers
     entmax_1p5_into(
         &scratch.logits[..n],
@@ -210,6 +231,44 @@ pub fn score_blocks_entmax_with_entropy_into(
         bias: scratch.bias.clone(),
         probs,
     }
+}
+
+/// Zero-alloc variant that applies an ASEntmax length-adaptive damping
+/// schedule to the chunk logits BEFORE the α-entmax threshold pass
+/// (Issue 747 P0, Research 549 — arXiv:2506.16640 Eq 10).
+///
+/// Identical to [`score_blocks_entmax_with_entropy_into`] except the
+/// logits row is pre-scaled by `δ + β·(log n_c)^γ` — the derived damping
+/// (`AsentmaxSchedule::Derived` with a `RollingSigmaEstimator`) keeps the
+/// scaled logit range n-invariant, which keeps the entmax support size
+/// stationary as the scored chunk count grows (the over-sparsification
+/// counter-schedule; module docs in [`super::asentmax`]).
+///
+/// Pass [`AsentmaxSchedule::None`] for the shipped Plan 106 behavior
+/// (bit-identical to `score_blocks_entmax_with_entropy_into`).
+///
+/// The `estimator` is observed with the RAW (pre-schedule) logits row —
+/// σ̂ must track the unscaled score distribution; pass `None` to skip
+/// observation (caller-managed estimator elsewhere).
+#[cfg(feature = "asentmax_schedule")]
+pub fn score_blocks_entmax_with_schedule_into(
+    query: &[f32],
+    summaries: &[impl AsRef<[f32]>],
+    entropy_biases: &[f32],
+    config: &DashAttnConfig,
+    schedule: &AsentmaxSchedule,
+    estimator: Option<&RollingSigmaEstimator>,
+    scratch: &mut RoutingScratch,
+) -> RoutingResult {
+    let n = summaries.len();
+    grow_routing_scratch(scratch, n);
+    compute_chunk_logits_into(query, summaries, entropy_biases, config, &mut scratch.logits);
+    if let Some(est) = estimator {
+        est.observe_row(&scratch.logits[..n]);
+    }
+    let log_n = if n > 1 { (n as f32).ln() } else { 0.0 };
+    apply_asentmax_inplace(&mut scratch.logits[..n], schedule, log_n);
+    route_from_logits(n, scratch)
 }
 
 /// Compute routing bias for all query heads with GQA aggregation.
@@ -633,5 +692,108 @@ mod tests {
             boosted.probs[0],
             boosted.probs[1]
         );
+    }
+
+    // ── ASEntmax scheduled routing (Issue 747 P0) ──────────────────────────
+
+    /// `AsentmaxSchedule::None` must be bit-identical to the shipped path —
+    /// the no-regression contract for the feature (G3 at the unit level:
+    /// the schedule socket changes nothing until a schedule is supplied).
+    #[cfg(feature = "asentmax_schedule")]
+    #[test]
+    fn test_scheduled_routing_none_is_bit_identical() {
+        let config = default_config();
+        let query = vec![1.0, 0.0, 0.5, -0.25];
+        let summaries: Vec<Vec<f32>> = (0..16)
+            .map(|i| {
+                vec![
+                    ((i * 7) % 13) as f32 / 13.0 - 0.5,
+                    ((i * 5) % 11) as f32 / 11.0 - 0.5,
+                    ((i * 3) % 7) as f32 / 7.0 - 0.5,
+                    ((i * 11) % 17) as f32 / 17.0 - 0.5,
+                ]
+            })
+            .collect();
+        let entropy = vec![0.3_f32; 16];
+
+        let mut s1 = RoutingScratch::new(16, 4);
+        let plain = score_blocks_entmax_with_entropy_into(&query, &summaries, &entropy, &config, &mut s1);
+        let mut s2 = RoutingScratch::new(16, 4);
+        let scheduled = score_blocks_entmax_with_schedule_into(
+            &query,
+            &summaries,
+            &entropy,
+            &config,
+            &AsentmaxSchedule::None,
+            None,
+            &mut s2,
+        );
+        assert_eq!(plain.active_indices, scheduled.active_indices);
+        assert_eq!(plain.probs, scheduled.probs);
+        assert_eq!(plain.bias, scheduled.bias);
+    }
+
+    /// Damping must enlarge (or hold) the support vs the unscheduled path —
+    /// the mechanism the schedule exists for (over-sparsification repair).
+    #[cfg(feature = "asentmax_schedule")]
+    #[test]
+    fn test_scheduled_routing_damping_enlarges_support() {
+        let config = default_config();
+        let d = 4_usize;
+        let n = 512_usize;
+        // Query with a large norm → large logit spread σ ≈ ‖q‖²/√d
+        // (the over-sparsification regime).
+        let query: Vec<f32> = vec![6.0; d];
+        let mut state = 0x5DEE_CE66_D000_0001_u64;
+        let summaries: Vec<Vec<f32>> = (0..n)
+            .map(|_| {
+                (0..d)
+                    .map(|_| {
+                        state = state
+                            .wrapping_mul(6364136223846793005)
+                            .wrapping_add(1442695040888963407);
+                        ((state >> 40) as f32 / (1u64 << 24) as f32) * 2.0 - 1.0
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let mut s1 = RoutingScratch::new(n, d);
+        let plain = score_blocks_entmax_into(&query, &summaries, &config, &mut s1);
+
+        // Estimator-fed derived schedule on the same inputs.
+        let est = RollingSigmaEstimator::new(0.7);
+        let mut s2 = RoutingScratch::new(n, d);
+        // A few warm-up observations so σ̂ converges before the measured run.
+        for _ in 0..10 {
+            let mut s_warm = RoutingScratch::new(n, d);
+            score_blocks_entmax_with_schedule_into(
+                &query,
+                &summaries,
+                &[],
+                &config,
+                &AsentmaxSchedule::None,
+                Some(&est),
+                &mut s_warm,
+            );
+        }
+        let scheduled = score_blocks_entmax_with_schedule_into(
+            &query,
+            &summaries,
+            &[],
+            &config,
+            &est.to_schedule(),
+            Some(&est),
+            &mut s2,
+        );
+        assert!(
+            scheduled.active_indices.len() >= plain.active_indices.len(),
+            "damping must not shrink the support: scheduled={}, plain={}",
+            scheduled.active_indices.len(),
+            plain.active_indices.len()
+        );
+        // Sanity: probs still on the simplex.
+        let sum: f32 = scheduled.probs.iter().sum();
+        assert!((sum - 1.0).abs() < 1e-5);
     }
 }

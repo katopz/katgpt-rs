@@ -138,6 +138,12 @@ kda_backward = ["kda_linear"]
 # Implies `mla_attention` (MLA types + forward) + `dash_attn` (VortexFlow scratch
 # types). Opt-in, default-off until GOAT gate (Issue 584 Phase 3).
 flashmemory_sparse = ["mla_attention", "dash_attn"]
+# ASEntmax length-adaptive damping schedule (Issue 747 P0, Research 549,
+# arXiv:2506.16640 Eq 10): pre-scales entmax routing scores by
+# `β·(log n_c)^{−0.5}` — the entmax-side mirror of katgpt-core's SSMax
+# (one extreme-value law, two signed arms). Implies `dash_attn` (the
+# module lives in dash_attn/). Opt-in until the Issue 747 GOAT gate.
+asentmax_schedule = ["dash_attn"]
 # Trained dual-encoder indexer for FlashMemory (Plan 337 Phase B). Two tiny
 # MLPs (Q-Indexer + K-Indexer) that replace the modelless centroid-dot scorer.
 # Requires training (riir-train Plan 337) → NEVER default-on (modelless-first
@@ -180,3 +186,25 @@ required-features = ["kda_backward"]
 [[test]]
 name = "mla_backward_grad_check"
 required-features = ["mla_backward"]
+
+# Issue 747 P0 — ASEntmax G1 stationarity gate (scaled-range n-invariance,
+# support σ-invariance, unscheduled collapse counterfactual, simplex +
+# exact-zero preservation). Opens with `#![cfg(feature = "asentmax_schedule")]`.
+[[test]]
+name = "asentmax_g1_stationarity"
+required-features = ["asentmax_schedule"]
+
+# Issue 747 P0 — ASEntmax G4 zero-alloc gate. Separate test binary (the
+# karc_alloc_check convention): the CountingAllocator must not pick up
+# allocations from parallel tests.
+[[test]]
+name = "asentmax_alloc_check"
+required-features = ["asentmax_schedule"]
+
+# Issue 747 P0 — ASEntmax GOAT gate bench (G2 NIAH routing sweep at growing
+# chunk counts, G3 no-regression at 256 chunks, latency). harness=false
+# (std::time::Instant convention, mirrors bench_411).
+[[bench]]
+name = "bench_747_asentmax_goat"
+harness = false
+required-features = ["asentmax_schedule"]
