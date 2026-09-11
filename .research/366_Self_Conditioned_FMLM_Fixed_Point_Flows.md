@@ -7,6 +7,7 @@
 > **Related Research:** 035 (Attractor Models / DEQ), 041 (RePlaid — self-conditioning), 073 (LT2 Looped), 097 (Training-Free Looped), 265 (CoFRe / FP-MGM — **direct sibling paper**), 273 (ELT Elastic Looped), 344 (Implicit FP RNN — **closed this design space**)
 > **Related Plans:** 066 (D2F), 079 (ELF modelless), 108 (LT2 `LoopMode::WeightShared` — *is* the FP block), 136 (TF-Loop), 222 (`self_cond_draft` — 2-pass SC), 258 (RCD — closest cousin to warm-start carry), 291 (D2F 3SR warm-start)
 > **Classification:** Public
+> **Update (2026-09-11):** superseded-in-scope by "Thinking with Looped Flows" ([arXiv:2609.11801](https://arxiv.org/abs/2609.11801)) — which positions self-conditioning as the special case z=x̂ of stateful denoising, and trains the recurrence along flow timesteps with shared noise (measurably better: 58.8 vs this line's ARC numbers). Distill + Path 0 merge: `riir-train/.research/452_Looped_Flows_Training_Recipe_Distill.md`; execution plan: `riir-train/.plans/395_looped_flows_recipe_arm.md`.
 
 ---
 
