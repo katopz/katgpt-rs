@@ -505,6 +505,35 @@ impl<const D: usize> HebbianKernelMemory<D> {
 
     // ── Forward pass (zero-alloc hot path) ────────────────────────────────
 
+    /// Feature map `ϕ(z)` — the sketched quadratic (K₂) features this memory
+    /// realizes, written into caller-provided `scratch_phi` (length `m`).
+    /// Zero allocation.
+    ///
+    /// ```text
+    /// ϕ_r(z) = (1/√m) · (A_r·z)(G_r·z)         for r = 0..m
+    /// ```
+    ///
+    /// With independent Gaussian rows, `E[ϕ(x)·ϕ(y)] = (x·y)²` — the degree-2
+    /// polynomial kernel. Exposed so bridges can compute the memory's
+    /// *empirical* cross-kernel `K(i,j) = ϕ(k_i)·ϕ(k_j)` (key-key proximity
+    /// in the retrieval geometry) without duplicating the feature loop;
+    /// [`Self::forward_into`] delegates here.
+    #[inline]
+    #[allow(clippy::needless_range_loop)] // hot path; indexing a, g, scratch_phi in lockstep
+    pub fn features_into(&self, z: &[f32], scratch_phi: &mut [f32]) {
+        let m = self.config.m;
+        debug_assert_eq!(scratch_phi.len(), m, "scratch_phi must be length m");
+        debug_assert_eq!(z.len(), D, "z must be length D");
+        let inv_sqrt_m = 1.0_f32 / (m as f32).sqrt();
+        for r in 0..m {
+            let ar = &self.a[r * D..(r + 1) * D];
+            let gr = &self.g[r * D..(r + 1) * D];
+            let az = simd_dot_f32(ar, z, D);
+            let gz = simd_dot_f32(gr, z, D);
+            scratch_phi[r] = inv_sqrt_m * az * gz;
+        }
+    }
+
     /// Forward pass `MLP(z) = B · ϕ(z)`, writing the `D`-dim result into `out`.
     ///
     /// `scratch_phi` is caller-provided feature scratch of length `m`.
@@ -516,21 +545,11 @@ impl<const D: usize> HebbianKernelMemory<D> {
     /// out[i] = Σ_r B[i, r] · ϕ_r(z)             for i = 0..D
     /// ```
     #[inline]
-    #[allow(clippy::needless_range_loop)] // hot path; indexing a, g, scratch_phi in lockstep
+    #[allow(clippy::needless_range_loop)] // hot path; indexing b, out in lockstep
     pub fn forward_into(&self, z: &[f32], scratch_phi: &mut [f32], out: &mut [f32]) {
         let m = self.config.m;
-        debug_assert_eq!(scratch_phi.len(), m, "scratch_phi must be length m");
         debug_assert_eq!(out.len(), D, "out must be length D");
-        debug_assert_eq!(z.len(), D, "z must be length D");
-
-        let inv_sqrt_m = 1.0_f32 / (m as f32).sqrt();
-        for r in 0..m {
-            let ar = &self.a[r * D..(r + 1) * D];
-            let gr = &self.g[r * D..(r + 1) * D];
-            let az = simd_dot_f32(ar, z, D);
-            let gz = simd_dot_f32(gr, z, D);
-            scratch_phi[r] = inv_sqrt_m * az * gz;
-        }
+        self.features_into(z, scratch_phi);
         // out = B · ϕ  (B is D × m row-major; out[i] = Σ_r B[i*m + r] · ϕ[r])
         for i in 0..D {
             let b_row = &self.b[i * m..(i + 1) * m];
@@ -1329,6 +1348,46 @@ mod tests {
             n_correct >= 7,
             "retrieval argmax recovered {n_correct}/{f} facts (expected >= 7)"
         );
+    }
+
+    // ── Feature map (features_into) ────────────────────────────────────
+
+    #[test]
+    fn features_into_is_degree2_homogeneous() {
+        // ϕ(cz) = c²·ϕ(z) for c > 0 (each feature is a product of two linear
+        // forms). Pins the feature-map contract the empirical cross-kernel
+        // consumers (ndb bridge Plan 322 T4.2) rely on for scale invariance.
+        const D: usize = 8;
+        let (keys, values, fact_map) = synthetic_fact_set::<D>(4, 4, 0x77);
+        let keys_ref = refs(&keys);
+        let values_ref = refs(&values);
+        let cfg = HebbianMlpConfig::new(D, 32);
+        let mem = HebbianKernelMemory::<D>::construct(&keys_ref, &values_ref, &fact_map, cfg, 0x11)
+            .unwrap();
+
+        let z: Vec<f32> = keys[0].clone();
+        let scaled: Vec<f32> = z.iter().map(|x| 2.0 * x).collect();
+        let mut phi_z = vec![0.0_f32; 32];
+        let mut phi_scaled = vec![0.0_f32; 32];
+        mem.features_into(&z, &mut phi_z);
+        mem.features_into(&scaled, &mut phi_scaled);
+        for (p, q) in phi_z.iter().zip(phi_scaled.iter()) {
+            assert!((4.0 * p - q).abs() <= 1e-4 * q.abs().max(1.0));
+        }
+    }
+
+    #[test]
+    fn features_into_maps_zero_to_zero() {
+        const D: usize = 8;
+        let (keys, values, fact_map) = synthetic_fact_set::<D>(4, 4, 0x78);
+        let keys_ref = refs(&keys);
+        let values_ref = refs(&values);
+        let cfg = HebbianMlpConfig::new(D, 32);
+        let mem = HebbianKernelMemory::<D>::construct(&keys_ref, &values_ref, &fact_map, cfg, 0x12)
+            .unwrap();
+        let mut phi = vec![0.0_f32; 32];
+        mem.features_into(&vec![0.0_f32; D], &mut phi);
+        assert!(phi.iter().all(|&p| p == 0.0));
     }
 
     // ── Slot pattern ─────────────────────────────────────────────────────
