@@ -1737,3 +1737,23 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
   inheritance table, so resolution-time enforcement would mean touching ~30
   member manifests (owner call if ever wanted; the toolchain file already
   gates every command).
+
+## Issue 744 — HRM-Text second-pass modelless extraction queue: CLOSED as resolved-negative (2026-09-11)
+
+The 8-candidate queue (3 ranked GOAT-worthy, 5 consumer-gated; source
+Research 547 §Path 0 merge table) closed after a full consumer-hunt pass —
+**no graduating consumer found in the workspace**. Every item's disposition
+is recorded in the issue file's hunt record at closure (git history,
+`git log -- .issues/744_hrm_text_modelless_extractions.md`): #1 negative
+(packed cu_seqlens layout has no workspace analogue), #2 negative (no
+normalize-then-gate incumbent in `rating`/`beta_lcb`), #3 negative
+katgpt-rs-scoped (all `shuffle` hits are faithfulness-probe ablations, not
+materialized permutation orders; sibling-repo side unhunted that day),
+#4 negative (no bulk trunc-normal consumer; spectral_pencil's Kaiming-uniform
+fan-in is by design), #5 gap-real-but-single-consumer
+(`drafter_lora::make_lora_random` is the only construction site — hardcoded
+Kaiming + zero-B for the TRAINED drafter; the modelless `LoraPair` path
+loads, never constructs — menu does not graduate on one consumer), #6/#8
+stay want-gated, #7's `evolve_belief` substrate lives riir-ai-side (deferred
+to a quiet day there). **Re-file an item when its consumer materializes** —
+the ranking + GOAT gates live in the removed file's git history.
