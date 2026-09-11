@@ -2,7 +2,9 @@
 
 **Status:** GOAT G1–G5 ALL PASS (2026-09-11) — feature stays **opt-in**
 (promotion owner-gated per the 525/Bench-834 precedent; a real-model-trace
-demonstration is the remaining promotion condition).
+demonstration is the remaining promotion condition). The demonstration is
+**AUTHORIZED 2026-09-11** (owner call) — schedule in the next idle M3 window;
+promotion still requires it to pass (no toy-only promotion).
 
 **Source paper:** arXiv:2609.04963 "Fractal basins trap latent reasoning"
 (Lai, Bao, Quinn, Gilpin; UT Austin, Sep 2026).

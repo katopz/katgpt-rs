@@ -44,5 +44,5 @@ Tasks:
 
 - [x] T4.1 Criterion bench: decision latency ≤ 500 ns/loop, 0 allocs steady-state (mirrors the halter's G-gates) — measured **5.3 ns/loop**, 0 allocs
 - [x] T4.2 G1 correctness: never kicks on clean convergence; toy-A escape rate ≥ both baselines; Trapped/Converged classification ≥ 95% on constructed systems. G3: flag-off bit-identical + existing halter/ICT suites green. G4: alloc-free. G5: bit-reproducible
-- [x] T4.3 Feature stays opt-in; promotion owner-gated on Phase-3 PoC + a real-trace demonstration (525/Bench-834 precedent)
+- [x] T4.3 Feature stays opt-in; promotion owner-gated on Phase-3 PoC + a real-trace demonstration (525/Bench-834 precedent) — **OWNER AUTHORIZATION 2026-09-11:** the real-model-trace demonstration is AUTHORIZED — schedule in the next idle M3 window; promotion STILL requires it to pass (no toy-only promotion), feature stays opt-in until then.
 - [x] T4.4 Docs: feature-catalog row + README feature-table line + docs-gate count sync (catalog §100; counts landed via sibling 43901e18 — 587/197 includes `saddle_escape`)
