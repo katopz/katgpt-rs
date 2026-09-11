@@ -48,8 +48,11 @@ claims rot:
 >
 > The header carried a hand-typed count (**18**, measured 2026-09-01) while the
 > workspace moved to 16 live repos on 2026-09-04 (three to `git/obsolete/`) — the
-> same rot class the boundary-guard skill de-counted in its 21st run. The census
-> below is a snapshot; the one-liner derives the membership.
+> same rot class the boundary-guard skill de-counted in its 21st run. It is 18
+> again since 2026-09-10 (`riir-esp32` moved out of riir-chain 2026-09-06;
+> `riir-kat` spun out of riir-clippy 2026-09-10) — same count, different
+> membership, which is exactly why the count is derived and the census below is
+> a snapshot; the one-liner derives the membership.
 
 > The header said *"14 as of 2026-08-28"* over a table of **12** rows until
 > 2026-09-01 — wrong twice, and six repos had no row at all, so a sync run that
@@ -88,6 +91,8 @@ it documents the canonical layout and the numbering discipline.
 | `riir-deployer` | **2 numbered folders** (`01_orientation/`, `02_runbooks/`) + a `.docs/README.md` index — the smallest numbered shape in the workspace. No `CLAUDE.md`. Added 2026-09-01 | yes | `.issues` 003, `.plans` 002, `.benchmarks` 001 | `develop` |
 | `katgpt-web` | **No `.docs/` folder** — AGENTS.md-centric. Added 2026-09-01 | yes | none | **`feat/percepta-arch-diagrams`** — the only repo whose checkout is not on its trunk; sync the branch you find, and say which one in the run log |
 | `seal-game-editor` | **NAMED (not numbered) `.docs/` subfolders** — `new-game-schema/`, `registry/`, plus loose `SEALM_ASSETS.md`. Carries `ARCHITECTURE.md` + `DESIGN.md` alongside AGENTS/README, and `ARCHITECTURE.md` is where the internal layering lives (`BOUNDARY.md` covers only the outer edge). Added 2026-09-01 | yes | `.issues` 141, `.plans` 140 | `develop` |
+| `riir-esp32` | **No `.docs/` folder** — AGENTS.md/BOUNDARY.md-centric (the ESP32 Satellite device-tier POC: `crates/riir-satellite-probe`, emulator recipes; explicitly not prod). **Row ADDED 2026-09-11** — the repo moved out of riir-chain 2026-09-06 and this census never gained a row (the same silent-skip class the de-counted header warns about). | Role + boundary + domain test. | `.issues` 110, `.proposals` 006 | `develop` |
+| `riir-kat` | **No `.docs/` folder, no README** — AGENTS.md/BOUNDARY.md/HISTORY.md-centric (the KAT network CLIENT + wire-protocol plane, spun out of riir-clippy issue 088 on 2026-09-10; single crate). **Row ADDED 2026-09-11** — born 2026-09-10, censused a day late. | none — AGENTS.md §Status is the surface | `.issues` 1 | `develop` |
 
 ## The sync workflow (per repo)
 
@@ -187,6 +192,10 @@ Apply the repo-specific rules:
 #### riir-viewbridge (`.docs/01_orientation/` + an AGENTS.md-centric remainder)
 - **`AGENTS.md`**: workspace layout (core/derive/abi/xtask) + boundary rules (latent/raw wall, generated-bindings rule, catch_unwind) + the issue log.
 - **`.benchmarks/`**: GOAT records (e.g. Bench 002 node GOAT). Doc-sync = issue-log resolution entries + benchmark cross-refs.
+
+#### Every repo not subsectioned above (riir-dapps, riir-dao, riir-auth, riir-deployer, riir-esp32, riir-kat, katgpt-web, seal-remake, seal-game-editor)
+- Follow the census-table row — these are AGENTS.md/BOUNDARY.md-centric: doc-sync = AGENTS.md/BOUNDARY.md status sections + numbering highwater + README freshness (riir-kat has no README; its AGENTS.md is the surface). The repo's own AGENTS.md supersedes this skill.
+- `katgpt-web` checkout may sit on a feature branch (see census row) — sync the branch you find, and say which one in the run log.
 
 ### Step 5 — Verify
 

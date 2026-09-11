@@ -38,13 +38,15 @@ non-negotiable per the canonical proposals in `katgpt-rs/.proposals/`.
 - **Cross-repo GOAT cherry-pick audit** → use the `goat-audit` skill.
 - **Bug fixes with no architectural angle.**
 
-## Repos in scope (the product/distillation set — **8**)
+## Repos in scope (the product/distillation set — **7**)
 
 Same layout as the `research` and `goat-audit` skills. **Canonical home for this
 list: `katgpt-rs/AGENTS.md` §"Repo count"** (and Research 003) — it is copied
 here for reading convenience, so when the two disagree, AGENTS.md wins. This
 copy said "7-repo stack" and omitted `riir-dapps` from 2026-08-20 until
-2026-09-01, which is what a duplicated count does:
+2026-09-01, then read "8" — correct for the one day before `riir-armageddon`'s
+retirement (2026-09-02) took the set back to 7, and stale from that day until
+2026-09-11. That is what a duplicated count does:
 
 ```
 katgpt-rs          ← public engine (default target for generic primitives)
@@ -53,14 +55,14 @@ riir-chain         ← private chain (LatCal, quorum, sync-boundary bridge)
 riir-neuron-db     ← private neuron-shard leaf (Pod, freeze, consolidation, AnyRAG)
 riir-train         ← private training vault (training-only methods — research-only routing)
 riir-game-sdk      ← private game-vocabulary facade + dev-tool workspace
-                      (consumers: riir-mmorpg-examples, seal-online-remaster; vocabulary source is
+                      (consumers: riir-mmorpg-examples, seal-remake; vocabulary source is
                       riir-games-shared in riir-ai workspace, re-exported via facade)
 riir-dapps         ← private dApp layer (game outcome → generic chain settlement;
                       added 2026-08-20 — route settlement COMPOSITION here, not
                       riir-chain, which owns only value/authority primitives)
 ```
 
-> The 8 above are the *product/distillation* set, not the workspace. The
+> The 7 above are the *product/distillation* set, not the workspace. The
 > workspace is 18 repos with a root `BOUNDARY.md` — see the `substrate-first`
 > skill's Step 2 for the derived enumeration. Routing targets a product repo;
 > **searching** must cover all 18.

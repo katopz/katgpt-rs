@@ -25,12 +25,13 @@ Use this skill when auditing whether the riir-* private repos have consumed the 
 - Single-repo refactors with no cross-repo angle.
 - Bug fixes with no architectural impact.
 
-## Repos in scope (the product set of 8 — audit focuses on the 4 cherry-pick targets)
+## Repos in scope (the product set of 7 — audit focuses on the 4 cherry-pick targets)
 
 > Canonical list: `katgpt-rs/AGENTS.md` §"Repo count". `riir-dapps` (dApp layer,
-> added 2026-08-20) is the 8th and is OUT OF SCOPE here for the same reason as
+> added 2026-08-20) is OUT OF SCOPE here for the same reason as
 > riir-game-sdk: it composes outcomes, it hosts no feature-gated katgpt
-> primitive to audit.
+> primitive to audit. (This header said "8" from 2026-09-01 — correct for one
+> day, stale from `riir-armageddon`'s retirement 2026-09-02 until 2026-09-11.)
 
 ```
 katgpt-rs          ← public engine (substrate: katgpt-core + 16 leaf crates + root)
@@ -42,6 +43,8 @@ riir-game-sdk      ← private game-vocabulary facade + dev-tool workspace (OUT 
                       consumes vocabulary from riir-games-shared in riir-ai, not katgpt-rs
                       engine primitives directly; transitively reaches katgpt-core only via
                       the always-on path dep, no feature-flag-gated primitives to audit)
+riir-dapps         ← private dApp layer (OUT OF SCOPE — settlement composition over
+                      riir-chain programs; hosts no feature-gated katgpt-rs primitive)
 ```
 
 **Why the SDK is out of scope:** this audit tracks katgpt-rs default-on
@@ -51,6 +54,15 @@ are vocabulary types, not katgpt-rs engine features, so it ships no
 feature-flag-gated katgpt-rs primitive that needs cherry-pick tracking.
 (`riir-armageddon` was listed here on the same reasoning — product-domain
 types — until it was retired 2026-09-02, owner act.)
+
+**Newer workspace repos outside the product set consume katgpt-core directly** —
+`riir-clippy` (ConstraintPruner + ternary matvec + `pick_domain`), `riir-dao`
+(`rating` Elo + `beta_lcb_order_into` — its ONE path dep), `riir-auth` (sigmoid +
+dot-product primitives), `riir-esp32` (`katgpt-device-verify`), `riir-kat`
+(katgpt-* via the `[patch]` unified pin only, no direct imports). They host no
+feature-gated katgpt-rs ENGINE primitive, so they are not cherry-pick targets —
+but they ARE duplication candidates: never scope a Check A/B sweep to the
+product set alone. Derive the repo set (`substrate-first` Step 2), don't type it.
 
 ## Workflow
 
@@ -87,13 +99,13 @@ For each primitive, run ALL THREE greps in parallel across the three consumer
 repos named by §"Repos in scope" above.
 
 **This narrow set is deliberate, not drift** — it is the reasoned in-scope list
-(product set of 8 minus the four documented OUT OF SCOPE entries), which is why
+(product set of 7 minus the three documented OUT OF SCOPE entries), which is why
 the block carries the marker below and `scripts/skill_repo_set_gate.py` does not
 flag it. Widen it only by editing §"Repos in scope" first; the scope section is
 the decision, this grep is only its implementation.
 
 Caveat worth knowing when you read a "0 consumers" result: it is a claim about
-these three repos, not about the workspace's 19. A DUPLICATE of a primitive can
+these three repos, not about the workspace's 18. A DUPLICATE of a primitive can
 live in an out-of-scope repo (the standing example was `riir-armageddon`
 consuming `GenericSpatialBelief` in 3 files — that repo is retired as of
 2026-09-02, but the hazard it illustrates is not) — the anti-duplication

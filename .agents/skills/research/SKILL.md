@@ -15,16 +15,43 @@ Do NOT activate for: pure refactor, bug fixes with no research angle, or ordinar
 
 ## Repos
 
+**Canonical count + membership: `katgpt-rs/AGENTS.md` §"Repo count"** — the
+product/distillation set is **7** (first block below); the workspace is **18
+contract repos** (all with a root `BOUNDARY.md`). Derive the set, never type it:
+
+```bash
+cd /Users/katopz/git && for d in */; do
+  [ -f "$d/BOUNDARY.md" ] && [ -d "$d/.git" ] && echo "${d%/}"
+done
+```
+
+The product/distillation set (7):
+
 - `katgpt-rs/` — public MIT engine. Generic modelless inference primitives. **No game/chain/shard IP.**
 - `riir-ai/` — private game product. Freeze/thaw runtime, self-learn, game systems. Hosts the `.docs/` moat book.
 - `riir-chain/` — private neuro-symbolic chain transport. LatCal, `riir-chaind`, economics, asset lifecycle, `catchup/` (Turso/libSQL, quorum). **Re-exports `riir-neuron-db` under `neuron_db` feature; canonical shard source is `riir-neuron-db/`.**
 - `riir-neuron-db/` — private leaf. `NeuronShard` (Pod, zero-copy mmap), `ShardIndex` (lock-free papaya), generic `MerkleTree`/`MerkleProof`, `MerkleFrozenEnvelope`, MAPE-K, Raven/δ-Mem consolidation, AnyRAG gateway, vibe KG triples, spectral init, `ShardCompactor`, dendritic LoRA branch. **No chain dep — usable standalone.**
 - `riir-train/` — private training vault. **As of 2026-08-06: actively pursued, not lazily redirected.** Applicable training papers get a Plan in `riir-train/.plans/` per §3.5 Path 0.5. `read_file riir-train/.docs/02_pipelines/training_data_pipeline.md` before any training-paper verdict.
-- `riir-game-sdk/` — downstream consumer; rarely a distillation target.
-  (`riir-armageddon/` sat here until it was retired 2026-09-02, owner act —
-  the directory is gone; do not route to it.)
+- `riir-game-sdk/` — private facade + dev-tool workspace; downstream consumer, rarely a distillation target.
+- `riir-dapps/` — private dApp layer (added 2026-08-20). Game outcome → generic chain settlement (`Settlement`, `MultiClaimEscrow` composition) + the KAT ledger/service SERVER plane (kat_ledger, epoch settle, payment rails, CF worker/DO shell). Route settlement-composition + service-economy papers here, NOT riir-chain.
 
-**Routing rule of thumb:** if it's about *how a shard is structured/committed/frozen/consolidated/retrieved/projected* → `riir-neuron-db`. If it's about *how a shard crosses quorum or bridges to LatCal fixed-point* → `riir-chain`.
+The wider workspace (the other 11 — route here only when the insight is
+inseparable from that surface):
+
+- `riir-clippy/` — private multi-domain code healer. **Fusion priority #2** (see the ladder below) — the workspace's densest latent-state consumer per LOC; healer-domain distills file their `.research/` notes HERE (MOAT row below).
+- `riir-auth/` — private. Latent-space session recording (`SessionFingerprint` → `NeuronShard`) + 3-pillar ban quorum + the `account_key` Ed25519 identity substrate. Behavioral-identity/fingerprinting/escalation papers route here.
+- `riir-dao/` — private KAT tokenomics agent (signals → strategy → guards → advisory → commit; modelless Elo + Beta-LCB selection). Tokenomics/governance/mechanism-design papers route here.
+- `riir-kat/` — private KAT network CLIENT + wire-protocol plane (spun out of riir-clippy 2026-09-10, issue 088). Service-protocol papers only; rarely a target.
+- `riir-deployer/` — private manifest-driven deploy orchestrator (genesis ceremony, ops ladder, freeze-lineage probe). Ops/infra papers; rarely a target.
+- `riir-esp32/` — private POC/fun, **not prod**: the ESP32 Satellite device tier (esp-hal firmware, on-device crypto timing). Device-tier papers only.
+- `riir-viewbridge/` — private Unity FFI seam, **PARKED 2026-09-03** (Bevy is the shipping render path). FFI raw/latent-wall papers only; expect no consumer until unfreeze.
+- `katgpt-web/` — PUBLIC explainer site ("The Anatomy of KatGPT-RS"). Presentation surface only — **nothing private may ever appear here**; never a distillation target.
+- `riir-mmorpg-examples/`, `seal-remake/` — game PRODUCT consumers (POC orchard multiplayer; the seal remaster). Paper insights land substrate-side (riir-ai / riir-game-sdk), not here.
+- `seal-game-editor/` — the read-only content authoring tool (READ-ONLY per owner rule). Not a research target.
+- (`riir-armageddon/` sat in the product set until it was retired 2026-09-02, owner
+  act — the directory is gone; do not route to it.)
+
+**Routing rule of thumb:** if it's about *how a shard is structured/committed/frozen/consolidated/retrieved/projected* → `riir-neuron-db`. If it's about *how a shard crosses quorum or bridges to LatCal fixed-point* → `riir-chain`. If it's about *code retrieval / fix trajectories / rule corpora / healer selection* → `riir-clippy`. If it's about *settlement composition or the service economy* → `riir-dapps` (economy governance/tuning → `riir-dao`; the client/wire protocol → `riir-kat`).
 
 ## Commercial strategy (inline short version)
 
@@ -40,8 +67,8 @@ Do NOT activate for: pure refactor, bug fixes with no research angle, or ordinar
 
 Do all five before creating any file:
 
-1. **`read_file` 5 READMEs + `riir-ai/.docs/README.md` + (for training papers) `riir-train/.docs/02_pipelines/training_data_pipeline.md`** — defines scope boundaries. Skipping = #1 cause of false Super-GOAT claims + false PASS on training papers.
-2. **`list_directory` all 5 `.research/` folders** (katgpt-rs, riir-ai, riir-chain, riir-neuron-db, riir-train — create missing ones on first use).
+1. **`read_file` the product-set READMEs (katgpt-rs, riir-ai, riir-chain, riir-neuron-db, riir-train, riir-game-sdk, riir-dapps) + `riir-ai/.docs/README.md` + `riir-clippy/AGENTS.md` (the healer — fusion priority #2) + (for training papers) `riir-train/.docs/02_pipelines/training_data_pipeline.md`** — defines scope boundaries. Skipping = #1 cause of false Super-GOAT claims + false PASS on training papers.
+2. **`list_directory` every `.research/` folder in the workspace** — derive it (`ls -d /Users/katopz/git/*/.research`), never trust a typed count: 9 today (katgpt-rs, riir-ai, riir-auth, riir-chain, riir-clippy, riir-dao, riir-neuron-db, riir-train, riir-viewbridge); create missing ones on first use.
 3. **`list_directory` the 4 runtime/chain/db src trees** — module names are vocab. Skipping = #2 cause of false Super-GOATs.
 4. **`web_search` for published prior art** on the paper's headline technique (see §4). Skipping = #4 false-novelty failure mode.
 5. **`grep` ALL repos for existing training/model-based/self-adaptive code** — the system is three-track, not modelless-only. Skipping = #5 false-PASS mode (canonical failure: arXiv:2511.18538 Code LLM survey was falsely PASSed because the agent only checked riir-train for training code, missing quest_grammar's LoRA training in riir-ai + TernaryDraftModel in riir-clippy + self_evolve). Grep patterns: `*_training.rs|*_train*.rs|LoRA|SFT|GRPO|DPO|ternary|TernaryDraftModel|self_evolve|with_weights|\.bits` across `riir-ai/crates/**/src/`, `riir-clippy/src/`, `riir-neuron-db/src/`. Training pipelines ship OUTSIDE riir-train — the three tracks are: (a) modelless inference, (b) self-adaptive runtime latent updates, (c) model-based trained weights.
@@ -151,8 +178,8 @@ Find the transferable primitive (the geometric/spectral/information-theoretic in
 
 **Fusion protocol:**
 
-1. **Grep ALL SEVEN repos, BOTH layers (notes AND code), in parallel via subagents. Do NOT stop after the first repo or layer, do NOT wait for user prompts to grep the next repo. Grep results are PAGINATED — a full first page is NOT a finished sweep: run `offset` until exhausted, or scope the grep per-repo so every repo's hits are visible.** Closest cousin is frequently in the OTHER repo (cross-repo fusion) or in CODE not notes (mechanisms ship without research notes — `evolve_belief` is a per-NPC recurrent belief-state kernel with no `.research/` framing). Grep:
-   - All 7 `.research/` + `.plans/` folders (riir-train included — applicable training papers get Plans per §3.5 Path 0.5)
+1. **Grep ALL workspace repos, BOTH layers (notes AND code), in parallel via subagents — the product set of 7 first, then the wider 18 (derive the set, never hand-type; see §Repos). Do NOT stop after the first repo or layer, do NOT wait for user prompts to grep the next repo. Grep results are PAGINATED — a full first page is NOT a finished sweep: run `offset` until exhausted, or scope the grep per-repo so every repo's hits are visible.** Closest cousin is frequently in the OTHER repo (cross-repo fusion) or in CODE not notes (mechanisms ship without research notes — `evolve_belief` is a per-NPC recurrent belief-state kernel with no `.research/` framing). Grep:
+   - Every `.research/` + `.plans/` folder in the workspace (derive; `.research/` in 9 repos today, `.plans/` in 15 — riir-train included: applicable training papers get Plans per §3.5 Path 0.5)
    - `riir-ai/.docs/` (the moat/selling-point book — grep alongside `.research/` so you don't claim novelty over a pillar that ships)
    - All shipped `src/`/`crates/` trees (notes describe intent; code describes what shipped)
    - The seven Super-GOAT factory modules above
@@ -222,6 +249,8 @@ Tier verdict measures *how strong*. MOAT gate measures *whether it strengthens T
 | `riir-neuron-db` | Pillar-level or shard/freeze/consolidation novelty | `NeuronShard`, freeze envelope, Raven/δ-Mem, AnyRAG, vibe KG, Merkle, spectral init, compaction, dendritic | Chain commitment of shards → riir-chain; runtime swap → riir-ai |
 | `riir-train` | **Active moat.** Training-method implementations + configs + trained weight assets | Adapter training, optimizers, losses, quant-aware **training**, DPO/GRPO/SFT, trained assets | Inference/runtime/latent ops → katgpt-rs or riir-ai |
 | `riir-clippy` | **Consumer-first moat (investment #2).** Measured healer-quality gains: retrieval floors, score-bench heal rate, OOD generalization, fixer coverage | Corpus/retrieval structure, trajectory memory, selection math, eval harnesses, healer-consumed primitives (`.research/` notes live here for healer-domain distills) | Generic math stays in katgpt-core (consume, never fork); game-runtime concerns → riir-ai |
+| `riir-dapps` | Settlement-composition + service-economy novelty (game outcome → generic chain settlement; the KAT ledger/server plane) | `Settlement` vocabulary, escrow/wallet backends, kat_ledger + epoch settle, payment rails, DO/worker shell, mint-receipt pipeline | Chain value/authority primitives → riir-chain; game rules → riir-ai; economy governance → riir-dao |
+| `riir-dao` | Bounded-autonomy tokenomics governance novelty (modelless selection + guards + advisory, never unguarded execution) | Signals/strategy candidates, guard engine, simulator, advisory transport, decision artifacts | Ledger bound-enforcement stays riir-dapps (the agent only proposes); generic rating/Beta math stays katgpt-core |
 
 9 sloppy-test pillars live in `riir-ai/.docs/03_pillars/README.md` — `read_file` `03_pillars/README.md` + `04_supergoat_candidates/README.md` before any "does this become a pillar?" verdict. Sloppy test: *if it doesn't exist, the system goes structurally sloppy — not slower, broken.*
 
@@ -334,7 +363,7 @@ If §4 surfaces rich landscape, use web search for deeper exploration of specifi
 2. **Latent-to-latent preferred** — operate in latent space as long as possible. Decode/project only at boundary. **Sigmoid, never softmax**, for projections onto learned directions. Semantic (emotion/mood/curiosity/style) → latent. Physical (position/HP/wallet) → raw, deterministic, synced.
 3. **Freeze/thaw over fine-tuning** — only runtime weight mutation is swapping a frozen snapshot (atomic, versioned, BLAKE3-checked) or applying a deterministically-constructed LoRA overlay (raw/lora hot-swap, no GD). Never mutate weights in-place during inference. Gradient updates (after §3.5) → riir-train.
 4. **Self-learn / adaptive CoT welcome** — runtime curiosity, latent prediction, trajectory folding, collapse detection. Update latent state / direction vectors / routing tables, NOT base weights.
-5. **7-repo discipline** (the product/distillation set; canonical list in `katgpt-rs/AGENTS.md` §"Repo count") — katgpt-rs (public) → riir-ai → riir-chain → riir-neuron-db → riir-train (all private) + riir-game-sdk (facade) + riir-dapps (dApp layer: game outcome → generic chain settlement, added 2026-08-20). It read "8-repo" and included `riir-armageddon` until 2026-09-03; that repo was retired 2026-09-02 (owner act, directory gone). Training how never leaks to katgpt-rs; chain IP in riir-chain; shard IP in riir-neuron-db; SDK stays facade over `riir-games-shared`.
+5. **7-repo discipline** (the product/distillation set; canonical list in `katgpt-rs/AGENTS.md` §"Repo count") — katgpt-rs (public) → riir-ai → riir-chain → riir-neuron-db → riir-train (all private) + riir-game-sdk (facade) + riir-dapps (dApp layer: game outcome → generic chain settlement, added 2026-08-20). It read "8-repo" and included `riir-armageddon` until 2026-09-03; that repo was retired 2026-09-02 (owner act, directory gone). The WORKSPACE around that set is 18 contract repos — `riir-clippy`, `riir-auth`, `riir-dao`, `riir-viewbridge` carry `.research/` too (healer-domain notes file in riir-clippy per the MOAT table), and the rest (riir-kat, riir-deployer, riir-esp32, katgpt-web, riir-mmorpg-examples, seal-remake, seal-game-editor) are consumers/protocol/POC/presentation surfaces — routing targets of last resort. **Read a count in prose as a claim, not a fact — derive the set (§Repos).** Training how never leaks to katgpt-rs; chain IP in riir-chain; shard IP in riir-neuron-db; SDK stays facade over `riir-games-shared`.
 6. **SOLID, DRY** — per `katgpt-rs/.contexts/optimization.md`. Zero-alloc hot paths. Pre-computed lookup tables. Fixed-size arrays for bounded domains.
 7. **Tests/examples** — before/after showing the gain. Latent ops: projection preserves ranking. Freeze/thaw: readers never see torn snapshots.
 8. **CPU/GPU/ANE auto-route** — threshold-adaptive. Plasma (µs SIMD) → Hot (sub-ms GPU) → Warm/Cold (ms+ GPU/ANE). L1-fitting latent ops stay SIMD; batched matmul goes GPU.
