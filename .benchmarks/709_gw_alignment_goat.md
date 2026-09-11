@@ -2,7 +2,7 @@
 
 **Status:** DONE 2026-09-11 — G1–G4 ALL PASS; `gw_alignment` stays OPT-IN (consumer-first promotion rule; the zone-belief consumer PoC is riir-poc follow-up per Issue 743 Downstream)
 **Date:** 2026-09-11
-**Issue:** [`.issues/743_gw_alignment_quotient_primitive.md`](../.issues/743_gw_alignment_quotient_primitive.md) · Plan: [`.plans/594_gw_alignment_primitive.md`](../.plans/594_gw_alignment_primitive.md) · Source: riir-ai Research 371 / Issue 912 T4 BUILD decision
+**Issue:** `.issues/743_gw_alignment_quotient_primitive.md` · Plan: [`.plans/594_gw_alignment_primitive.md`](../.plans/594_gw_alignment_primitive.md) · Source: riir-ai Research 371 / Issue 912 T4 BUILD decision
 **Code:** `crates/katgpt-core/src/gw_alignment/` (mod.rs + solve.rs + tests.rs, feature `gw_alignment`, pure std, zero deps)
 **Run:** `cargo test -p katgpt-core --lib gw_alignment --features gw_alignment -- --nocapture` (11 tests; isolated `CARGO_TARGET_DIR=/tmp/gw_743`; CPU-only, no GPU touched)
 

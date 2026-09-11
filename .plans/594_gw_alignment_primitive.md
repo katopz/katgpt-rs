@@ -1,7 +1,7 @@
 # Plan 594: gw_alignment — Gromov–Wasserstein Quotient-Alignment Primitive (Issue 743)
 
 **Status:** COMPLETE 2026-09-11 — module + 11 gates green (G1 brute-force dominance + planted recovery; G2 planted-vs-shuffled per-level dominance ≥ 13/16 + per-level AUC; G4 zero steady-state alloc); Bench 709; README count 585→586, docs_gate 14/14. Promotion stays opt-in (owner call on any default promotion; consumer PoC is riir-poc's, after this lands). Method evolution vs the sketch is documented in the plan-judgment note below.
-**Issue:** [`.issues/743_gw_alignment_quotient_primitive.md`](../.issues/743_gw_alignment_quotient_primitive.md)
+**Issue:** `.issues/743_gw_alignment_quotient_primitive.md`
 **Source:** riir-ai Research 371 / Issue 912 T4 (BUILD decision) · Mémoli 2011 (GW distances) · Peyré/Cuturi/Solomon 2016 (conditional-gradient, product-graph power iteration)
 **Target:** `crates/katgpt-core/src/gw_alignment/` (new module) + Cargo feature `gw_alignment` (opt-in, zero new deps, pure std)
 **Downstream:** riir-ai Issue 912 (landing note when this lands); riir-poc consumer PoC (zone-belief quotient alignment → social KG triples) follows
