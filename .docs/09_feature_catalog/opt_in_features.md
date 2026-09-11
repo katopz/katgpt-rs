@@ -2323,6 +2323,7 @@ These features are DEFAULT-ON (in katgpt-core or root) with significant plans/GO
 | `river_valley` | 152 | root | River-valley diagnostic metrics — subspace ratios, effective rank, cosine similarity. GOAT 25/25 (Bench 050). Substrate in `katgpt-spectral`. |
 | `union_bound_confidence` | 231 | root | Union bound additive branch confidence. GOAT 6/6. |
 | `hebbian_kernel_memory` | 559 | katgpt-core | Closed-Form Fact-Storing MLP Construction + MLP Swap. GOAT G1+G2+G3+G4 ALL PASS (Bench 559). (See §68.) |
+| `karc_hebbian_readout` | 584 | katgpt-core | Hebbian KARC Readout — the `w_out` fit over Hebbian fact construction (same ridge closed form as `fit_ridge`, different feature map). GOAT ALL PASS (Bench 710 — fit 0.7× of `fit_ridge` at runtime scale). (See §102.) |
 | `ica_lens` | 475 | root (forwards `katgpt-spectral`) | ICA Lens — FastICA non-Gaussian direction mining + ERF diagnostic. GOAT G1–G5 ALL PASS (Bench 475). The missing third corner of direction acquisition: unsupervised-statistical. (See README showcase.) |
 | `similarity_inference` | 526 | katgpt-core — **DEMOTED to opt-in 2026-09-04** (Issue 867 T1.3: 24 days default-on, zero consumers) | Similarity Inference — endogenous correlation device from joint-action history. GOAT G1–G8 ALL PASS (Bench 579). Infers the `ω` that shipped CCE (Plan 295) takes exogenously. (See README showcase.) |
 | `channel_simd_align` | 227 Phase 5 | root | Channel SIMD Alignment — cache-line-padded weight storage for vectorized matvec. GOAT G1–G5 ALL PASS (Bench 580: 84.9%/86.7% release-mode throughput). The last of 6 QAT Infusion phases. (See §60 Phase 12 absorption table.) |
@@ -2331,7 +2332,7 @@ These features are DEFAULT-ON (in katgpt-core or root) with significant plans/GO
 
 These are DEFAULT-ON features that form the substrate of the default build. They are listed for cross-reference — most are small utility/substrate primitives that don't warrant individual catalog entries:
 
-`sparse_mlp`, `plasma_path`, `leo_all_goals`, `dual_leo`, `sigmoid_margin`, `spectral_hierarchy`, `dual_gram_pca`, `roofline_cost`, `octree_ctc`, `sector_projection`, `action_bridge`, `triggered_injection`, `temporal_deriv`, `bom_sampling`, `personality_composition`, `depth_invariance`, `cross_resolution_transport`, `latent_field_steering`, `viable_manifold_graph`, `ac_prefix`, `geometric_product`, `fourier_continuation`, `spectral_differentiation`, `tucker_factorization`, `arg_protocol`, `indicator_probe_bank`, `indicator_similarity`, `phase_rotation_coupling`, `spherical_steering`, `closure_instrument`, `non_interference_branches`, `funcattn_structured_basis`, `best_belief`, `committed_field_blend`, `tropical_algebra`, `temp_loss_fingerprint`, `zone_density_routing`, `set_attention`, `clr_weighted_set_attention` (Plan 570 — CLR-amplified reliability-weighted sibling; closes Set Attention G8), `manifold_bandit`, `mean_field_regime`, `qmc_sampling`, `velocity_field_ensemble`, `cognitive_architecture_root`, `ptg_functor_edges`, `local_branch_routing`, `ane_roofline`, `ane_fused_chain`, `cce_moderator`, `llmexec_guard`, `ssd_block`, `salience_tri_gate`, `renoise_ce`, `product_key_memory`, `linking_fold_fold`, `ssmax_temperature`, `subspace_steering`, `region_subspace_steering`, `mag_mining`, `tilr_invariant_subspace`, `manifold_erasure`, `heal_validation`, `smooth_min_similarity`, `simd_lut_dequant`, `poincare_navigator`, `chunked_content_store`, `causal_identification`, `conformal_predictive_intervals`, `karc_forecaster`, `hope_capacity`, `hebbian_kernel_memory`, `claim_rubric`, `clr`, `decode_specialize`, `delta_routing`, `specialist_projection`, `phase_separation` (Plan 571 Phase 25 promotion — modular arithmetic LRC coverage; G1+G2+G3+G4 GOAT gate ALL PASS), `similarity_inference` (Plan 526 Phase 6 promotion — endogenous correlation device; G1–G8 GOAT gate ALL PASS per Bench 579; **DEMOTED to opt-in 2026-09-04** per Issue 867 T1.3), `ica_lens` (Plan 475 — FastICA non-Gaussian direction mining; G1–G5 GOAT gate ALL PASS per Bench 475), `channel_simd_align` (Plan 227 Phase 5 — cache-line-padded weight storage; G1–G5 GOAT gate ALL PASS per Bench 580, 84.9%/86.7% release throughput), `lattice_operad` (Plan 252 Phase 2 — canonical AND/OR pruner expression composition; see §65), `plot` (Issue 355 Phase 2a — plotters dep toggle for benchmark SVG output; pure utility).
+`sparse_mlp`, `plasma_path`, `leo_all_goals`, `dual_leo`, `sigmoid_margin`, `spectral_hierarchy`, `dual_gram_pca`, `roofline_cost`, `octree_ctc`, `sector_projection`, `action_bridge`, `triggered_injection`, `temporal_deriv`, `bom_sampling`, `personality_composition`, `depth_invariance`, `cross_resolution_transport`, `latent_field_steering`, `viable_manifold_graph`, `ac_prefix`, `geometric_product`, `fourier_continuation`, `spectral_differentiation`, `tucker_factorization`, `arg_protocol`, `indicator_probe_bank`, `indicator_similarity`, `phase_rotation_coupling`, `spherical_steering`, `closure_instrument`, `non_interference_branches`, `funcattn_structured_basis`, `best_belief`, `committed_field_blend`, `tropical_algebra`, `temp_loss_fingerprint`, `zone_density_routing`, `set_attention`, `clr_weighted_set_attention` (Plan 570 — CLR-amplified reliability-weighted sibling; closes Set Attention G8), `manifold_bandit`, `mean_field_regime`, `qmc_sampling`, `velocity_field_ensemble`, `cognitive_architecture_root`, `ptg_functor_edges`, `local_branch_routing`, `ane_roofline`, `ane_fused_chain`, `cce_moderator`, `llmexec_guard`, `ssd_block`, `salience_tri_gate`, `renoise_ce`, `product_key_memory`, `linking_fold_fold`, `ssmax_temperature`, `subspace_steering`, `region_subspace_steering`, `mag_mining`, `tilr_invariant_subspace`, `manifold_erasure`, `heal_validation`, `smooth_min_similarity`, `simd_lut_dequant`, `poincare_navigator`, `chunked_content_store`, `causal_identification`, `conformal_predictive_intervals`, `karc_forecaster`, `karc_hebbian_readout` (Plan 584 — the `w_out` fit, Hebbian-flavored; GOAT Bench 710; consumer-first opt-in), `hope_capacity`, `hebbian_kernel_memory`, `claim_rubric`, `clr`, `decode_specialize`, `delta_routing`, `specialist_projection`, `phase_separation` (Plan 571 Phase 25 promotion — modular arithmetic LRC coverage; G1+G2+G3+G4 GOAT gate ALL PASS), `similarity_inference` (Plan 526 Phase 6 promotion — endogenous correlation device; G1–G8 GOAT gate ALL PASS per Bench 579; **DEMOTED to opt-in 2026-09-04** per Issue 867 T1.3), `ica_lens` (Plan 475 — FastICA non-Gaussian direction mining; G1–G5 GOAT gate ALL PASS per Bench 475), `channel_simd_align` (Plan 227 Phase 5 — cache-line-padded weight storage; G1–G5 GOAT gate ALL PASS per Bench 580, 84.9%/86.7% release throughput), `lattice_operad` (Plan 252 Phase 2 — canonical AND/OR pruner expression composition; see §65), `plot` (Issue 355 Phase 2a — plotters dep toggle for benchmark SVG output; pure utility).
 
 The full DEFAULT-ON list lives in `crates/katgpt-core/Cargo.toml` `default = [...]` (73 features) + root `Cargo.toml` `default = [...]` (135 features). See the per-feature Cargo.toml comments for GOAT bench references.
 
@@ -3536,3 +3537,59 @@ Issue 743 Downstream).
 riir-ai Research 371 / Issue 912 T4 BUILD decision. Bench:
 [709](../../.benchmarks/709_gw_alignment_goat.md). Substrate:
 `crates/katgpt-core/src/gw_alignment/` (mod + solve + tests).
+
+## 102. karc_hebbian_readout — the KARC `w_out` fit, Hebbian-flavored (Plan 584)
+
+`KarcForecaster::fit_ridge` (Plan 308) and `HebbianKernelMemory::construct`
+(Plan 559) are the **same ridge closed form with different feature maps** —
+`w_out` solves a ridge system over basis-expanded delay states; the Hebbian
+construct solves a ridge-whitened system over bilinear sketched-Gaussian
+features. This module applies the fact-store thesis to the KARC readout:
+training pairs become facts (key = `pad64(delay_state)`, value =
+`pad64(target)` — zero-padding to the 64-dim shard layout is inner-product-
+exact, verified by gate), and the constructed (A, G, B) plays the `w_out` role.
+
+What the unification buys over a bare `fit_ridge`:
+
+- **Edit semantics** — the fact-edit journal loop (riir-ai Plan 583)
+  applies to forecasting: retract/re-observe a pair, reconstruct.
+- **Per-fact margin audit** — γ_min over the key set, the same soundness
+  certificate `hebbian_kernel_memory` ships.
+- **The freeze chain** — riir-neuron-db `HebbianConstructedShard` → the
+  KARC-identity two-block envelope (`karc_hebbian_envelope`, Plan 584 Phase 2).
+- **The canonical value table** — observed trajectories ARE the values; the
+  riir-ai `journal_from_pairs` graduation (Phase 3) constructs bit-identical
+  memories from the same pairs either way.
+
+`HebbianFitReport.seed` (Plan 584 T4) is the audit-chain single source of
+truth — the packed style_weights metadata cannot record a seed the fit never
+saw (gated by `single_fact`).
+
+GOAT (Bench 710, ALL PASS): G1 — five gates (pair retrieval at belief scale,
+bit-identical determinism, pad64 exactness, F=1 infinite margin, error shape).
+G2a — per-fact fit ratio **0.7×: the Hebbian fit is FASTER than `fit_ridge`
+at runtime scale** (10.6 vs 15.7–15.9 µs/fact; the m=128 f32 closed form beats
+the d_h=256 f64 Cholesky while carrying the margin audit). G2b — forecast
+wrapper Δ 0.5 ns. G4 — 0 allocs. Honest notes kept in the bench: `fit_ridge`
+turns rank-deficient below d_h (discovered by the run); the two arms' data
+shapes differ by construction; cross-arm numerics compare at f32 tolerance
+(this module is f32 throughout, `fit_ridge` solves f64).
+
+Value-geometry corollary (measured in the riir-ai consumer, Plan 584 Phase 3):
+trajectory values live in ~8 of the 64 dims — γ_min is bound by the
+**value-subspace dimension**, not capacity (identical margins m=128..512,
+λ drift <4%); the 0.3 default margin floor is unreachable for trajectory
+seeds, and (0,1)-range HLA beliefs carry a DC offset that makes padded values
+near-collinear — center production value streams before fitting.
+
+🔧 Feature flag: `karc_hebbian_readout = ["hebbian_kernel_memory"]` (opt-in;
+NOT in default — the consumer-first promotion rule, cf. `similarity_inference`
+Issue 867 demote: both private consumers stay opt-in pending the
+swarm-homeostat production wire, so default-on would be 24-days-zero-consumers
+from day one).
+
+📖 Plan: [riir-ai 584](../../../riir-ai/.plans/584_karc_hebbian_wout_unification.md).
+Bench: [710](../../.benchmarks/710_hebbian_karc_readout_goat.md). Substrate:
+`crates/katgpt-core/src/karc/hebbian_readout.rs`. Private consumers:
+riir-neuron-db `karc_hebbian_envelope` (Plan 584 Phase 2) + riir-ai
+`karc_hebbian_bridge` (Phase 3, Bench 909 — stays opt-in).
