@@ -80,6 +80,10 @@ pub struct HebbianFitReport {
     pub gamma_min: f32,
     /// Number of facts (training pairs).
     pub n_facts: usize,
+    /// The construction seed this fit used. Carried so the audit chain
+    /// (ndb's `karc_hebbian_envelope`) reads it from ONE source of truth —
+    /// the frozen metadata cannot record a seed the construction never saw.
+    pub seed: u64,
     /// The config the memory was constructed with (thaw/verify needs it).
     pub config: HebbianMlpConfig,
 }
@@ -167,7 +171,7 @@ impl HebbianKarcReadout {
             f32::INFINITY
         };
 
-        let report = HebbianFitReport { gamma_min, n_facts: f, config };
+        let report = HebbianFitReport { gamma_min, n_facts: f, seed, config };
         Ok((Self { memory, state_dim, target_dim, report }, report))
     }
 
@@ -357,6 +361,7 @@ mod tests {
                 .expect("fit");
         assert!(report.gamma_min.is_infinite());
         assert_eq!(report.n_facts, 1);
+        assert_eq!(report.seed, seed_of(&d_refs, &t_refs), "report carries the fit seed");
     }
 
     #[test]
