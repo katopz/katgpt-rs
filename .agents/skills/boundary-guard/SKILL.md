@@ -160,6 +160,7 @@ Rows carried full narratives until these compactions; `git log -p -- .agents/ski
 
 | Date | Run | Verdict | Record |
 |---|---|---|---|
+| 2026-09-11 | 71st — full (the 088 follow-up adoption landing: dapps + dao consume the riir-kat protocol tier) | exit 0, 0 violations, 0 rot — **18 repos / 273 edges** (the 70th's count, now with both new edges DECLARED in BOUNDARY.md same-commit: dapps `kat_ledger`-gated protocol-only row, dao units row); 2 known-drift expected pair; C8 unchanged | kat `3482a3c` · dapps `f2498d2` · dao `7823daa` |
 | 2026-09-11 | 70th — full (idle unit; script verified not-mid-edit; exit read unpiped to /tmp) | first pass read 1 transient violation (riir-train wsdep token) that did NOT reproduce on re-run — measured mid-landing state, the as-found class; current truth **exit 0, 0 violations, 0 rot — 18 repos / 273 edges**; 2 known-drift expected pair; C8 739-behind/7-security + chain pin 167/1 — soundness-bump advisory stands, owner call | — |
 | 2026-09-11 | 69th — mmorpg per-repo S1 | exit 0, all five checks clean (the 053 exemption set holding) | — |
 | 2026-09-10 | 68th — full (kat lane closeout) | exit 1 → the 67th's findings all closed in-run: riir-kat declares the 9 katgpt-* patch edges (`a80985e`) + riir-ai CANONICAL row for riir-kat (`18c878a32`) → re-run **exit 0, 18 repos / 271 edges**; same window: repo_set.txt + AGENTS count pins 17→18 | riir-kat `a80985e` · ai `18c878a32` |
