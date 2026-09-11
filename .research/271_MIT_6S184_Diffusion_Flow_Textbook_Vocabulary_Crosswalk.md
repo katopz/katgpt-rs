@@ -62,7 +62,7 @@ Future diffusion/score/flow-matching research notes should grep this crosswalk f
 | VAE encoder `q_φ(z\|x)` / decoder `p_θ(x\|z)` | LatCal raw↔latent bridge (deterministic) + HLA projection (latent) | `riir-ai/.../encoding/latcal*.rs`, `katgpt-rs/.../sense/` |
 | VAE KL-to-prior regularizer | (no direct analog — our latents are committed raw via LatCal, not Gaussian-regularized) | gap |
 | VAE rate-distortion Pareto frontier | "5 scalars across sync boundary" heuristic (not yet framed as R-D optimization) | gap → future issue |
-| Fokker-Planck / continuity equation `∂_t p = -div(pu) + (σ²/2)Δp` | (not yet a runtime invariant validator) | gap |
+| Fokker-Planck / continuity equation `∂_t p = -div(pu) + (σ²/2)Δp` | `belief_mass_divergence` (L1 norm `Σ_v |δ₁(flow)[v]|`) | **shipped** (Plan 314, 2026-06-24; opt-in `stokes_calculus` in `katgpt-dec`, re-exported `katgpt_core::dec`) — G3 conservation validator in `motor_gated.rs`, `PcaGlobalFn::BeliefMassDivergence` arm in `pca.rs`. Honest gate record: G-A branching-detector use FAILED (9.5× slower, 36% lower F1 than JS-divergence at `action_dim=8`, riir-ai Bench 334) — retained as a mass-conservation checker, NOT a branching detector |
 | Generator Matching (Remark 40, unified discrete+continuous) | (not framed; CTMC and flow both ship but not unified) | gap |
 | GLASS Flows (Remark 21, stochastic via ODE) | (not applicable — GLASS is narrowly reward-alignment for diffusion models, see Issue 038 closure; `mcts_collapse_bridge.rs` uses MCTS visit statistics, not flow sampling) | closed → Issue 038 |
 | Langevin dynamics `dX = (σ²/2)∇log p dt + σ dW` | (tested by PTRM, zero gain over plain Gaussian — see Issue 037 closure) | closed → Issue 037 |
@@ -124,7 +124,7 @@ Both fusion candidates from the initial version of this note have been **closed*
 
 Two smaller reframings remain mentioned in §3 but **not** worth issues (too small to track):
 - "MoE router = Bayesian posterior over expert identity" (theoretical clarification of 161/246, not new mechanism)
-- "Fokker-Planck as runtime invariant validator" (small implementation detail, ~20 LOC sanity check on HLA updates — pick up next time HLA integrity is touched)
+- "Fokker-Planck as runtime invariant validator" — ✅ **LANDED via Plan 314** (2026-06-24, four days after this note): `belief_mass_divergence` in `katgpt-dec/src/stokes_calculus.rs`, opt-in, zero-alloc wrapper over `codifferential`. The G-A branching-detector gate honestly FAILED (Bench 334: 9.5× slower + 36% lower F1); the primitive stands as a mass-conservation checker feeding `motor_gated` G3 + `pca.rs`.
 
 ---
 
@@ -155,3 +155,14 @@ v3-specific content (v3 = 2026-08-27: new "Road Ahead" discrete-diffusion chapte
 ## TL;DR
 
 MIT 6.S184 is the canonical diffusion/flow-matching textbook. Every chapter ships or is covered in our corpus. **Verdict: Pass on novelty.** The artifact here is a vocabulary crosswalk (§2) to prevent future false-Super-GOAT claims caused by paper-vs-codebase vocabulary mismatch. The two initial "gap" angles (σ-as-runtime-knob, GLASS-flows-for-MCTS) were tracked as Issues 037/038, ran through the Q1–Q4 novelty gate, and **both closed**: 037 because `elf_noise_scale`/`inject_sde_noise` already ship (plus PTRM proved gradient-guided Langevin adds nothing), 038 because GLASS Flows is narrowly reward-alignment for diffusion models and doesn't apply to `mcts_collapse_bridge.rs`. The vocabulary crosswalk itself was the durable output — and the closures proved its worth (Issue 037's failure mode is exactly what the crosswalk was meant to catch, once it was extended with the missing rows). **§6 (2026-08-29) extends the crosswalk to arXiv:2510.21890 "The Principles of Diffusion Models" (v3)** — the field-originators' MIT-Press monograph and the superset reference; same Pass verdict, no new files, v3-specific rows mapped there.
+
+---
+
+## 7. Re-verification addendum (2026-09-11) — same URL, unchanged PDF
+
+The source URL was re-fetched and re-examined end-to-end. **The document is unchanged since this note's distillation**: PDF `ModDate 2026-03-18` (predates the 2026-06-20 distillation), 84 pages (as cited), and all content anchors present (Remark 16 score reparameterization, Remark 21 GLASS Flows, Remark 40 Generator Matching; Appendices A–E incl. the Fokker-Planck proof and the literature guide). **Verdict stands: Pass.**
+
+Crosswalk maintenance from the re-run — one gap row closed by codebase movement since 2026-06-20:
+- §2 **Fokker-Planck row: gap → SHIPPED** (Plan 314 `belief_mass_divergence`; see updated row + §5). Plan 314's Goal line explicitly cites closing this note's gap.
+- §2 remaining gaps unchanged and still adjudicated as not-worth-issues: **VAE KL-to-prior** (by design — our latents commit raw via LatCal, not Gaussian-regularized), **VAE R-D Pareto framing** (still unframed; grep 2026-09-11: no `rate.distortion` hits in `.plans/`/`.issues/`), **Generator Matching unification** (still unframed; grep 2026-09-11: zero code hits).
+- No new mechanisms in the unchanged document warrant rows; the successor-monograph superset is already mapped in §6.
