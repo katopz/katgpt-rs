@@ -1,6 +1,6 @@
 # Plan 592: Nonergodic Belief Kernel (`nonergodic_belief`)
 
-**Status:** Complete (T1.1–T3.3 done 2026-09-11; T3.4 commit = coordinator) — G1–G4 ALL PASS, T2.5 beats both baselines, stays opt-in
+**Status:** Complete (T1.1–T3.4 done 2026-09-11; T3.4 commit = `f3935f7c`, pushed to origin/develop) — G1–G4 ALL PASS, T2.5 beats both baselines, stays opt-in
 **Date:** 2026-09-10
 **Research:** [katgpt-rs/.research/545_Nonergodic_Belief_Decomposition.md](../.research/545_Nonergodic_Belief_Decomposition.md)
 **Source:** Simplex blog "The geometry of nonergodic composition" (simplex.pub/nonergodic-geometry/, 2026-09-09); classical ancestry MHT (Reid 1979) / IMM (Blom & Bar-Shalom 1988) — cited, not claimed.
@@ -44,7 +44,7 @@ Ship the two-level nonergodic Bayes filter as a generic, modelless, zero-alloc r
 - [x] **T3.1** Bench doc in `.benchmarks/` (next free number): G1–G4 table + T2.5 quality table + machine/GPU-exclusivity note (CPU-only — no GPU gate needed). *(.benchmarks/706_nonergodic_belief_goat.md; .highwater 704 → 706 per assignment (706 pre-allocated); M3 Max CPU-only note, GPU-exclusivity N/A, isolated CARGO_TARGET_DIR noted.)*
 - [x] **T3.2** Promotion ruling per AGENTS.md discipline: default-on ONLY with a runtime consumer GOAT (conformal precedent: primitive-level pass + consumer gates). Expected ruling on current evidence: stays opt-in until riir-ai P1/P2 consumers land (Guide 373). *(Ruling CONFIRMED: STAYS OPT-IN — `nonergodic_belief` not added to any default set; recorded in Bench 706 §T3.2 with the similarity_inference precedent.)*
 - [x] **T3.3** `README.md` feature-catalog row + `.docs` updates; PASS-Redirects lines added to closest cousins (R248, R302, R545 already cross-links) — one-line references so future greps hit. *(DONE: README.md count claims 584 → 585 at all four sites + examples/README.md fifth site + Opt-In & Gated Features table row added. The deferred halves — `.docs/09_feature_catalog/opt_in_features.md` §99 row + the R248/R302 PASS-Redirect one-liners — landed by the COORDINATOR in the same commit once the concurrent agent's `.docs` WIP was committed and the paths were no longer contended.)*
-- [ ] **T3.4** Commit on `develop` (`feat: nonergodic_belief kernel`), highwater bumps in same commit, push. *(Coordinator's job per assignment — all changes left uncommitted in the worktree.)*
+- [x] **T3.4** Commit on `develop` (`feat: nonergodic_belief kernel`), highwater bumps in same commit, push. *(DONE: `f3935f7c` — landed 2026-09-11 00:13 with bench 706, docs, highwater 704→706, README counts, feature-catalog rows, PASS-Redirects; origin/develop confirmed in sync.)*
 
 ## Non-goals
 
