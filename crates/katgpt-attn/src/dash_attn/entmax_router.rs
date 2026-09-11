@@ -9,6 +9,8 @@ use katgpt_core::types::DashAttnConfig;
 #[cfg(test)]
 use super::routing::score_blocks_entmax;
 use super::routing::score_blocks_entmax_into;
+#[cfg(feature = "asentmax_schedule")]
+use super::routing::score_blocks_entmax_with_schedule_into;
 use super::vortex_flow::{RoutingDecision, VortexFlow, VortexScratch};
 
 // ---------------------------------------------------------------------------
@@ -67,19 +69,41 @@ impl EntmaxCache {
 pub struct EntmaxRouter {
     /// DashAttention config (controls scaling_factor, alpha, etc.).
     pub config: DashAttnConfig,
+    /// ASEntmax length-adaptive damping (Issue 747 P0.7): when `Some`, the
+    /// indexer routes through `score_blocks_entmax_with_schedule_into` with
+    /// the rolling-σ̂ estimator observing every raw logit row (the
+    /// Bench-713-validated pattern: `est.to_schedule()` per call, σ̂ lags one
+    /// row — the documented EMA warm-start). `None` (default) is the shipped
+    /// Plan 106 path, bit-identical.
+    #[cfg(feature = "asentmax_schedule")]
+    pub asentmax: Option<crate::dash_attn::asentmax::RollingSigmaEstimator>,
 }
 
 impl EntmaxRouter {
     /// Create a new EntmaxRouter with the given DashAttention config.
     pub fn new(config: DashAttnConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            #[cfg(feature = "asentmax_schedule")]
+            asentmax: None,
+        }
     }
 
     /// Create with default DashAttention config.
     pub fn default_router() -> Self {
         Self {
             config: DashAttnConfig::default(),
+            #[cfg(feature = "asentmax_schedule")]
+            asentmax: None,
         }
+    }
+
+    /// Enable the ASEntmax derived damping schedule (rolling-σ̂ estimator,
+    /// α = 0.8 EMA — the Bench 713 G2 configuration). Issue 747 P0.7.
+    #[cfg(feature = "asentmax_schedule")]
+    pub fn with_asentmax_schedule(mut self) -> Self {
+        self.asentmax = Some(crate::dash_attn::asentmax::RollingSigmaEstimator::new(0.8));
+        self
     }
 }
 
@@ -138,6 +162,28 @@ impl VortexFlow for EntmaxRouter {
 
         // Delegate to existing entmax routing, reusing the scratch's
         // RoutingScratch buffers (avoids 5 Vec allocations per call).
+        // With `asentmax` set (Issue 747 P0.7), the logits row is damped by
+        // `est.to_schedule()` before the threshold pass — the derived
+        // counter-schedule to over-sparsification at growing n_blocks.
+        #[cfg(feature = "asentmax_schedule")]
+        let result = match &self.asentmax {
+            Some(est) => score_blocks_entmax_with_schedule_into(
+                query,
+                summaries,
+                &[],
+                &self.config,
+                &est.to_schedule(),
+                Some(est),
+                &mut scratch.routing_scratch,
+            ),
+            None => score_blocks_entmax_into(
+                query,
+                summaries,
+                &self.config,
+                &mut scratch.routing_scratch,
+            ),
+        };
+        #[cfg(not(feature = "asentmax_schedule"))]
         let result =
             score_blocks_entmax_into(query, summaries, &self.config, &mut scratch.routing_scratch);
 
@@ -284,5 +330,105 @@ mod tests {
         // Gap filled with zeros
         assert_eq!(cache.summaries[1], vec![0.0; HEAD_DIM]);
         assert_eq!(cache.summaries[2], vec![0.0; HEAD_DIM]);
+    }
+
+    // ── Issue 747 P0.7: the schedule socket on the router ────────────────
+
+    /// Deterministic splitmix64 → f32 uniform [0,1).
+    fn unit(state: &mut u64) -> f32 {
+        *state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        ((*state >> 40) as f32) / ((1u64 << 24) as f32)
+    }
+
+    #[cfg(feature = "asentmax_schedule")]
+    #[test]
+    fn asentmax_none_default_is_the_shipped_path() {
+        // The default router must produce byte-identical decisions to the
+        // pre-P0.7 path (score_blocks_entmax_into) — the feature-gate-audit
+        // discipline: enabling the feature alone changes nothing.
+        let router = EntmaxRouter::default_router();
+        assert!(router.asentmax.is_none());
+        let mut cache = router.cache_new(4, 3);
+        let mut scratch = VortexScratch::new(4);
+        let summaries: Vec<Vec<f32>> = vec![
+            vec![1.0, 0.2, 0.0],
+            vec![0.0, 1.0, 0.1],
+            vec![0.3, 0.0, 1.0],
+            vec![0.9, 0.9, 0.2],
+        ];
+        for (i, s) in summaries.iter().enumerate() {
+            router.forward_cache(&mut cache, s, &[0.0; 3], i, 3);
+        }
+        let query = vec![1.0, 0.5, 0.25];
+        let via_router = router.forward_indexer(&query, &cache, 4, 4, &mut scratch);
+        let direct = score_blocks_entmax(&query, &summaries, &router.config);
+        assert_eq!(via_router.blocks.len(), direct.active_indices.len());
+        for ((&rb, &w), &di) in via_router
+            .blocks
+            .iter()
+            .zip(via_router.weights.iter())
+            .zip(direct.active_indices.iter())
+        {
+            assert_eq!(rb, di);
+            assert_eq!(w.to_bits(), direct.probs[di].to_bits());
+        }
+    }
+
+    #[cfg(feature = "asentmax_schedule")]
+    #[test]
+    fn asentmax_scheduled_router_holds_support_at_large_sigma() {
+        // The G2 story at router level: at inflated logit scale (σ = 8) the
+        // unscheduled router collapses the support (over-sparsification);
+        // `with_asentmax_schedule()` holds a multi-block support.
+        let n = 256_usize;
+        let hd = 8_usize;
+        let mut state = 0x7E57_u64;
+
+        let mut summaries: Vec<Vec<f32>> = Vec::with_capacity(n);
+        for _ in 0..n {
+            let s: Vec<f32> = (0..hd).map(|_| (unit(&mut state) - 0.5) * 16.0).collect();
+            summaries.push(s);
+        }
+        let query: Vec<f32> = (0..hd).map(|_| (unit(&mut state) - 0.5) * 16.0).collect();
+
+        let build = |sched: bool| {
+            let router = if sched {
+                EntmaxRouter::default_router().with_asentmax_schedule()
+            } else {
+                EntmaxRouter::default_router()
+            };
+            let mut cache = router.cache_new(n, hd);
+            let vals = vec![0.0f32; hd];
+            for (i, s) in summaries.iter().enumerate() {
+                router.forward_cache(&mut cache, s, &vals, i, hd);
+            }
+            let mut scratch = VortexScratch::new(n);
+            // Warm-up: converge the router's rolling σ̂ on this row scale
+            // before the measured call (the estimator persists across calls;
+            // single-call σ̂ would still be the warm-start 1.0).
+            for _ in 0..8 {
+                let _ = router.forward_indexer(&query, &cache, n, n, &mut scratch);
+            }
+            router.forward_indexer(&query, &cache, n, n, &mut scratch)
+        };
+
+        let raw = build(false);
+        let sched = build(true);
+        // σ = 8 × mean-pooled summaries ⇒ raw logits span ~±40: the raw
+        // arm collapses toward 1-2 blocks, the scheduled arm holds ≥ 4×
+        // that (mirrors the Bench 713 G2 measured shape at σ=8).
+        assert!(
+            sched.blocks.len() >= raw.blocks.len(),
+            "scheduled support {} < raw {}",
+            sched.blocks.len(),
+            raw.blocks.len()
+        );
+        assert!(sched.blocks.len() >= 4, "scheduled support {} too small", sched.blocks.len());
+        // Decision weights are the selected blocks' probabilities — a full
+        // support selection sums to the simplex total.
+        let w_sum: f32 = sched.weights.iter().sum();
+        assert!(w_sum <= 1.0 + 1e-5, "weights sum {w_sum} exceeds 1");
     }
 }

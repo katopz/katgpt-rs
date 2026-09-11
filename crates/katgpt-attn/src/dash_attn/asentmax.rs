@@ -265,6 +265,7 @@ pub fn apply_asentmax_inplace(scores: &mut [f32], schedule: &AsentmaxSchedule, l
 /// let log_n = (scores.len() as f32).ln();
 /// apply_asentmax_inplace(&mut scores, &schedule, log_n);
 /// ```
+#[derive(Debug)]
 pub struct RollingSigmaEstimator {
     /// EMA of observed range-derived σ̂, stored as `f64::to_bits` in an
     /// `AtomicU64` for lock-free updates.
