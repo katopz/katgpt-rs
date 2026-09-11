@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/543_HMM_Homeostatic_Control_Deterministic_Drives.md](../.research/543_HMM_Homeostatic_Control_Deterministic_Drives.md)
 **Source paper:** [arXiv:2609.07508](https://arxiv.org/abs/2609.07508) — Moreno-Bote, "Homeostasis Revisited and Reformulated Through Hidden Markov Model Control"
 **Target:** `katgpt-rs/crates/katgpt-core/src/hmm_control/` (new module) + `katgpt-core/src/mop/` (psafe method) + Cargo feature `hmm_homeostasis`; psafe rides the existing `mop_path_entropy` feature
-**Status:** COMPLETE — Phases 1–3 done, GOAT G1–G4 ALL PASS ([.benchmarks/704_hmm_homeostasis_goat.md](../.benchmarks/704_hmm_homeostasis_goat.md)); consumer COMPLETE (riir-ai Plan 579: Bench 904 `e0699a10c` + civ-forager Bench 905 + PRODUCTION swarm consumer Bench 906/Plan 581); T4.1 RESOLVED 2026-09-10 — **owner call: PROMOTED** (supersedes the 2026-09-11 interim stay-opt-in; the production consumer + explicit owner instruction landed after it)
+**Status:** COMPLETE — Phases 1–3 done, GOAT G1–G4 ALL PASS ([.benchmarks/704_hmm_homeostasis_goat.md](../.benchmarks/704_hmm_homeostasis_goat.md)); consumer COMPLETE (riir-ai Plan 579: Bench 904 `e0699a10c` + civ-forager Bench 905 + PRODUCTION swarm consumer Bench 907/Plan 581 — renumbered from a riir-ai 906 collision, first holder keeps); T4.1 RESOLVED 2026-09-10 — **owner call: PROMOTED** (supersedes the 2026-09-11 interim stay-opt-in; the production consumer + explicit owner instruction landed after it)
 **Downstream:** riir-ai Research 370 (runtime guide); runtime plan opens when P0 merges
 
 ---
@@ -83,7 +83,7 @@ Not UQ-bearing: β messages are exact model-computed probabilities, not calibrat
 
 ## Phase 4 — Promotion Decision (gated)
 
-- [x] **T4.1** On G1–G4 PASS + riir-ai consumer landed (Research 370 P1/P2): owner call on promote-to-default vs stay-opt-in. **PROMOTED 2026-09-10 (owner call; Plan 581 T3)** — `hmm_homeostasis` added to katgpt-core default (Phase 30 comment; the evidence chain: Bench 704 G1–G4 + riir-ai Benches 904/905 engine+composed gates + Bench 906 the PRODUCTION swarm consumer). The riir-engine chain (`mop_psafe`/`mop_homeostasis`) promoted in the same call; the game-layer forwards stay opt-in (the Defense 3 layer split). README counts synced (585→587 / 196→197; `count_features.py` green).
+- [x] **T4.1** On G1–G4 PASS + riir-ai consumer landed (Research 370 P1/P2): owner call on promote-to-default vs stay-opt-in. **PROMOTED 2026-09-10 (owner call; Plan 581 T3)** — `hmm_homeostasis` added to katgpt-core default (Phase 30 comment; the evidence chain: Bench 704 G1–G4 + riir-ai Benches 904/905 engine+composed gates + riir-ai Bench 907 the PRODUCTION swarm consumer). The riir-engine chain (`mop_psafe`/`mop_homeostasis`) promoted in the same call; the game-layer forwards stay opt-in (the Defense 3 layer split). README counts synced (585→587 / 196→197; `count_features.py` green).
 - [x] **T4.2** Update Research 543 status line + Research 370 §7 P0 checkbox; add `.benchmarks/` record per numbering discipline. *(704 record landed; Research 543 status + Research 370 P0–P3 flips landed with the consumer commit `e0699a10c`.)*
 
 ## Honest risks (carry from Research 543 §8)
