@@ -1386,7 +1386,7 @@ mod tests {
         let mem = HebbianKernelMemory::<D>::construct(&keys_ref, &values_ref, &fact_map, cfg, 0x12)
             .unwrap();
         let mut phi = vec![0.0_f32; 32];
-        mem.features_into(&vec![0.0_f32; D], &mut phi);
+        mem.features_into(&[0.0_f32; D], &mut phi);
         assert!(phi.iter().all(|&p| p == 0.0));
     }
 
