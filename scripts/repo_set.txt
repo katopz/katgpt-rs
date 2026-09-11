@@ -17,6 +17,7 @@ riir-game-sdk
 riir-kat
 riir-mmorpg-examples
 riir-neuron-db
+riir-shader
 riir-train
 riir-viewbridge
 seal-game-editor
