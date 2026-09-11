@@ -3479,3 +3479,60 @@ default — promotion owner-gated on a real-model-trace demonstration, the
 [arXiv:2609.04963](https://arxiv.org/abs/2609.04963). Bench:
 [707](../../.benchmarks/707_saddle_escape_goat.md). Substrate:
 `crates/katgpt-core/src/saddle_escape.rs`.
+
+**Consumer (landed 2026-09-11):** riir-ai Plan 582's deliberation
+saddle-trap flip leg (`riir-games/src/swarm/deliberation.rs`) rides
+`FlipDetector` over the fleeing NPC's COMPASS-8 heading EMA — the primitive's
+first production wiring (the real-model-trace demonstration the promotion
+gate names is the open half; the consumer exists, the gate's evidence bar
+stands).
+
+## 101. gw_alignment — structure-only cross-space alignment via Gromov–Wasserstein quotient coupling (Issue 743)
+
+Alignment of two precomputed distance matrices `D_A` (n×n) and `D_B` (m×m),
+n, m ≤ [`GW_MAX`]=64, uniform weights, using ONLY intra-space structure — no
+shared coordinates (unlike `mag::transfer::Wasserstein1d`), no correspondence
+prior (unlike RSA). "Do these two probe sets see the same shape of distances?"
+— the cross-NPC zone-belief quotient question of riir-ai Research 371 /
+Issue 912. Method: first-order stationary point via the product-graph power
+iteration (Peyré/Cuturi/Solomon 2016 conditional-gradient formulation; Mémoli
+2011 for the distance) — multiplicative reweighting `T ← T ⊙ (D_A·T·D_B)`
+projected back into the uniform-weight transportation polytope by alternating
+row/column normalization; multi-start init (greedy-on-P, entropic softmin,
+uniform+tilt, + brute-force best permutation when square n ≤ 8) with
+fixed-schedule checkpointing (best-seen restored — non-monotone segments are
+real, measured); closed-form sum-exact loss via the uniform-coupling identity.
+Fixed init + fixed iters + no RNG ⇒ bit-deterministic (replay-safe). `GwScratch`
+preallocates once, reuses across solves of any (n, m) ≤ 64.
+
+GOAT (Bench 709, ALL PASS): G1 — analytic 2×2 optimum 0.5 hand-worked;
+brute-force permutation dominance at n=4 (24 perms, 8 geometries); planted
+recovery at n=8 under 2% noise; loss identity vs the direct O(n²m²) quadratic
+form to 1e-5. G2 — planted-vs-shuffled separation with per-level AUC ≥ 0.93
+(measured ≥ 0.9609 through ε=0.10) across 16 geometries × 8 noise levels, incl.
+the correspondence-break case where flat-vector RSA is structurally blind.
+G3 — default lib build compiles the module to nothing (1987 default count
+unchanged). G4 — 0 steady-state allocations (16 solves post-warmup,
+TrackingAllocator). Honest method-evolution record in the bench: pure
+uniform-start is structure-blind (removed), Frank–Wolfe overlay degraded good
+inits (removed), 2-opt polish on Σ P walked away from the GW objective
+(removed); f32 coupling with f64 loss staging (an f32 round-trip there cost
+~1e-3 relative drift).
+
+Latent-only boundary (house rule): the SCORE may cross into a social KG
+triple; the distance matrices and coupling plan are think-brain-local, never
+on any sync surface. Scope (Issue 743 "explicitly out of scope"): fused GW,
+entropic/large-n variants, TDA stage-1 orbits (the katgpt-dec TDA lane owns
+those).
+
+🔧 Feature flag: `gw_alignment = []` (opt-in, pure std, zero deps; NOT in
+default — the consumer-first promotion rule: riir-ai Issue 912 T4 consumed
+the metric half via `mag::transfer_score(Wasserstein1d)` and DEFERRED the
+topological half; the zone-belief consumer PoC is the riir-poc follow-up per
+Issue 743 Downstream).
+
+📖 Issue: 743 (resolved + removed per noise-reduction; the record lives in
+`HISTORY.md`). Plan: [594](../../.plans/594_gw_alignment_primitive.md). Source:
+riir-ai Research 371 / Issue 912 T4 BUILD decision. Bench:
+[709](../../.benchmarks/709_gw_alignment_goat.md). Substrate:
+`crates/katgpt-core/src/gw_alignment/` (mod + solve + tests).
