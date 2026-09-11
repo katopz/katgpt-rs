@@ -134,6 +134,17 @@ pub mod lod_tier;
 #[cfg(feature = "karc_lod_tier")]
 pub use lod_tier::{KarcLodTier, is_identity_projection, project_wout_lod_into};
 
+// ── Hebbian Readout (riir-ai Plan 584 — the `w_out` fit, Hebbian-flavored) ──
+// The forecaster's training pairs as facts: key = pad64(delay_state), value =
+// pad64(target); the constructed (A, G, B) plays the `w_out` role. Buys edit
+// semantics (the Plan 583 journal loop), the margin audit, and the ndb
+// freeze chain over the fixed-basis `fit_ridge`. Gated on
+// `karc_hebbian_readout` (implies `hebbian_kernel_memory`; the karc-side
+// dependency is conceptual — this module needs no `fit_ridge` machinery,
+// only the pairing convention).
+#[cfg(feature = "karc_hebbian_readout")]
+pub mod hebbian_readout;
+
 // ── Sealed trait machinery ────────────────────────────────────────────────────
 
 mod sealed {
