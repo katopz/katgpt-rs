@@ -8,6 +8,7 @@
 > **Related Plans:** 056 (`GameState` trait + generic MCTS — direct substrate), 243 (NS-CSG two-brain game balance), 318 (rank-k latent functor), 324 (ICT branching runtime)
 > **Cross-ref (riir-ai):** Research 145 (CWM Runtime — Super-GOAT guide), Plan 326 (CWM NPC runtime integration)
 > **Classification:** Public
+> **PASS-Redirects (synthesis):** Huang et al. [arXiv:2609.10540 "Programmable World Model"] — the agent-orchestrator half (VLM coding agent instantiates an engine-executed world program from NL: entities, attributes, relations, rules) is one more instance of the InducedCwmKernel pattern this note distilled; ours ships the stronger form (BLAKE3-committed, hot-swappable, transition-unit-tested). The paper's other half — a deterministic state compiler projecting state-augmented 3D OBBs into pixel-aligned ControlNet conditioning for a video renderer — is video-diffusion training with no substrate in this stack (R460 caveat: no video world model exists).
 
 ---
 

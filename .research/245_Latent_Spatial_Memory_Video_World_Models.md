@@ -6,6 +6,7 @@
 > **Related Research:** 133 (FluxMem), 192 (NextLat belief), 196 (KG-Latent-Octree), 216 (MRAgent reconstructive memory), 242 (recurrent belief — HLA prior-art lesson), 060 (MeMo), 024 (δ-Mem)
 > **Classification:** Public
 > **Cross-ref (riir-ai):** `riir-ai/crates/riir-games-civ/src/civ/spatial_cognition.rs::SpatialMemory` (shipped prior art), `riir-ai/crates/riir-games-shared/src/game_traits/spatial.rs::GenericSpatialBelief`, `riir-ai/crates/riir-engine/src/ns_csg.rs::SpatialBelief`
+> **PASS-Redirects (synthesis):** Huang et al. [arXiv:2609.10540 "Programmable World Model"] — same class (interactive video world model; adopts AlayaWorld's geometry-aligned spatial memory, Mirage's cousin). Its measured thesis — explicit engine-maintained state decoupled from rendering beats implicit generative state (94% Count Acc / 98% State Acc vs 32–58% for implicit-state baselines) — is external validation of the architecture this stack natively ships (authoritative sim → zone sync/AOI reveal → view; `induced_cwm` for the program half); the signature mechanism (OBB → camera-projected pixel-aligned conditioning maps) has no non-video analog here, same as Mirage's pinhole z-buffer readout.
 
 ---
 
