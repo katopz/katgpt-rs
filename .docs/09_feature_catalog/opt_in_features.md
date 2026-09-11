@@ -3334,8 +3334,10 @@ any prediction-quality claim owes the conformal floor).
 Wires the shipped DEC aggregates into the CA decision function — the Programmable-CA
 composition (arXiv:2609.06102): ONE global evaluation per tick + a per-cell decision
 pass over Plan 454's UNTOUCHED birth/death kernel (`step_pca_sync`). Lives in
-`katgpt-dec/src/pca.rs`; re-exported as `katgpt_core::dec::pca::*`. Opt-in
-(`pca_global = ["grid_3d"]`); promote to default only on the Phase 3 GOAT pass.
+`katgpt-dec/src/pca.rs`; re-exported as `katgpt_core::dec::pca::*`. DEFAULT-ON in
+`katgpt-dec` since 2026-09-11 (Plan 591 Phase 3 GOAT G1–G4 ALL PASS, Bench 708);
+the katgpt-core `pca_global` passthrough stays opt-in there (same layer split as
+`se2_equivariant_lift` — it gates on `dec_operators`, itself opt-in at core level).
 
 ### The four+ globals (`PcaGlobalFn`)
 
@@ -3346,6 +3348,7 @@ pass over Plan 454's UNTOUCHED birth/death kernel (`step_pca_sync`). Lives in
 | `BoundaryFluxMass` | net morphogen flux across the domain boundary, flow = ENDPOINT-SUM edge lift `f[e] = m(tail)+m(head)` | channel 1 |
 | `BeliefMassDivergence` | ‖δ₁(flow)‖₁ — conservation-violation mass (same definition as the shipped `belief_mass_divergence`, zero-alloc path; equivalence pinned by test) | channel 1 |
 | `Codifferential` | ‖δ₁(flow)‖₂ — concentrated-divergence (clustering) emphasis | channel 1 |
+| `LargestComponentSize` | largest connected-component cardinality of the alive support — the one crosswalk gap; SAME O(V+E) union-find pass as `Betti0`, extended with per-root size tracking (no harmonic projector: per-component Hodge solves are strictly worse) | channel 0 |
 
 **The d∘d=0 degeneracy finding (en route, pinned as a regression test):** the flux
 arm MUST NOT use the gradient lift `d(morph)` — the flux of a gradient around any
@@ -3378,7 +3381,18 @@ union-find cannot delete, so the other arms degenerate to sync semantics
 (documented + pinned async(Betti0)==sync(Betti0)); the birth-incremental /
 death-dirty-resync hybrid is deferred until a consumer needs it.
 
-🔧 Feature flag: `pca_global` (opt-in; in `katgpt-dec`, implies `grid_3d`).
+🔧 Feature flag: `pca_global` (DEFAULT-ON in `katgpt-dec` since 2026-09-11, Bench 708:
+G1 BFS-verified finals + 100-seed × 3-arm bit-identity; G2 iteration collapse **12.20×**
+≥ 3× gate — pure-local fixpoint 61 ticks vs pca halt 5 on the 64×64 seed-diamond arena
+(raw diagnostic: first-tick-to-b0==1 is 1.00× BY CONSTRUCTION — identical pre-trip
+dynamics; the collapse value IS the early stop pure-local cannot express); G3
+untripped-wrapper bit-identity + untouched kernel + flag-off test floor 225 held; G4
+0 allocs / 100 ticks, sync and async. In `katgpt-dec`, implies `grid_3d`). Phase 2
+crosswalk parity pinned: `BoundaryFluxMass` is the SIGNED rim measure Σ_v m(v)·w(v)
+(= 2× the covered-rim edge count, factor 2 from the endpoint sum; an interior blob's
+own perimeter contributes ZERO — a different quantity), and `Codifferential` is a
+NORM (Σ_v δf ≡ 0 by conservation, so no signed direction global exists): bit-equal
+on complementary peak/dip profiles, strictly decreasing under heat smoothing.
 
 📖 Plan: [591](../../.plans/591_pca_dec_global_function_layer.md). Research:
 [544](../../.research/544_Programmable_CA_DEC_Global_Function_Layer.md). Paper:
@@ -3424,3 +3438,44 @@ precedent).
 [simplex.pub/nonergodic-geometry](https://simplex.pub/nonergodic-geometry/). Bench:
 [706](../../.benchmarks/706_nonergodic_belief_goat.md). Substrate:
 `crates/katgpt-micro-belief/src/nonergodic.rs`.
+
+## 100. saddle_escape — three-way Continue/Halt{Trapped}/Kick control for looped latent reasoners (Plan 593)
+
+The halting family's missing third way (arXiv:2609.04963 "Fractal basins trap
+latent reasoning": looped reasoners slow down scattering off weakly-unstable
+saddles that DECODE TO NEARLY-CORRECT answers; two cheap O(1) observables
+carry the physics). `SaddleEscapeGate` wraps — never forks — the Plan-304
+`GainCostLoopHalter`: the halter's oscillation streak is one leg of the trap
+predicate; the second leg is `FlipDetector`, the decode-flip-rate EMA over
+caller-supplied decoded-answer hashes (the paper's solution-switch frequency,
+O(1) fixed-size, warm-up hysteresis, structurally NaN-free). Trap = oscillation
+patience reached AND flip EMA ≥ τ AND (optional, renoise-CE-shaped) probe
+drift confirms → deterministic BLAKE3-seeded escape kick (`BLAKE3(state_bytes ‖
+loop_idx ‖ kick_no)` direction, eps annealed `eps0·decay^k`, budget-bounded)
+and the loop RESUMES; budget exhausted → `HaltOutcome::Trapped` — a verdict
+the two-way family cannot express. Non-trap halts pass through as
+`Converged(reason)` (halt ≠ classification, the halter's own caveat). NaN
+contract inherited: NaN cos/probe/eps never fire a kick. All latent, local,
+think-brain only; game wiring guide: riir-ai Research 374.
+
+GOAT (Bench 707, ALL PASS): G1 defend-wrong PoC — Toy A (sustained 2-cycle
+saddle band, K=200): gate 100% vs halt-only 0% (the anchor: the two-way
+family halts holding a wrong, still-flipping answer) vs always-on noise 100%
+at 3.5× the perturbations with half-unstable halting decodes; Toy B (hard
+thin-band flip ring): gate 45.5% aimed-budget vs noise's lucky 100% —
+measured + honesty-asserted per plan T3.2 (trapped ⊆ in-band, 59/59; zero
+kicks/Trapped on clean cohorts). G2 **5.3 ns/loop** Continue (≤500 budget),
+21.9 ns trap path. G3 halter suite 39/39 green, default surface compiles the
+module to nothing. G4 **0 allocs**. G5 bit-reproducible (scalar IEEE
+normalization + explicit eps multiplication chain — no SIMD reassociation,
+no libm powi).
+
+🔧 Feature flag: `saddle_escape = ["gain_cost_halt"]` (opt-in; NOT in
+default — promotion owner-gated on a real-model-trace demonstration, the
+525/Bench-834 precedent).
+
+📖 Plan: [593](../../.plans/593_saddle_trap_escape_gate.md). Research:
+[546](../../.research/546_Fractal_Basins_Saddle_Trap_Latent_Reasoning.md). Source:
+[arXiv:2609.04963](https://arxiv.org/abs/2609.04963). Bench:
+[707](../../.benchmarks/707_saddle_escape_goat.md). Substrate:
+`crates/katgpt-core/src/saddle_escape.rs`.

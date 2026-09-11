@@ -120,4 +120,38 @@ Context: overthinking nearly doubles inference cost and adversarial prompts indu
 - **riir-clippy Issue 91** — fix-loop trap detector fusion idea (PoC-first).
 - **Research 079 addendum** — operational exception to the Lyapunov rejection.
 
-**§3.6 PoC status: NOT YET RUN.** Architectural claims (§4 greps + §3 searches) stand on grep/read evidence; the quality claim — "kick escapes traps and improves solve rate vs halt-only without accuracy regression" — is explicitly **unproven** until Plan 593 Phase 3 passes. No promotion before that.
+**§3.6 PoC status: RUN 2026-09-11 — PASS (see the PoC Addendum below + Bench 707).** Toy-domain quality claims (gate beats halt-only on both toys; honesty holds) are now measured; the real-model-trace demonstration stays owner-gated (T4.3).
+
+---
+
+## PoC Addendum (§3.6 discharged — Plan 593 Phase 3, 2026-09-11)
+
+**Status: POCS PASS — the scoped Super-GOAT verdict stands.** Raw numbers:
+[Bench 707](../.benchmarks/707_saddle_escape_goat.md); harness:
+`katgpt-rs/crates/katgpt-core/tests/saddle_escape_poc.rs` (deterministic).
+
+- **Toy A (double-well saddle band, K=200 trapped ICs):** gate **100.0%**
+  solve (200 kicks total, all answers committed) vs halt-only **0.0%** (the
+  defend-wrong anchor: every halt lands in the saddle band holding a
+  still-flipping wrong answer — the exact failure mode this research
+  predicted) vs always-on-noise 100.0% at **700 perturbations** (3.5×) with
+  **100/200 unstable decodes at halt**.
+- **Toy B (decode-keyed flip ring, K=200):** gate **45.5%** aimed-budget
+  escape (59 honest `Halt{Trapped}`, all verified in-band at halt; budget
+  bounded to 310 perturbations) vs halt-only **0.0%** vs always-on-noise
+  100.0% — **the one axis where always-on noise wins the raw rate, recorded
+  honestly**: the thin band (|x−y|<0.2) does not tax per-loop perturbation,
+  and noise's "solves" are uncommitted (flips@halt 200/200, 600
+  perturbations). Plan T3.2's gates for Toy B were measure + honesty — both
+  hold; no assertion was weakened below the plan's actual requirements.
+- **Honesty (both toys + clean cohorts K=600):** zero kicks and zero
+  Trapped on clean convergence; trapped ⊆ in-band (59/59).
+- **GOAT G2/G4/G5:** decide() **5.3 ns/loop** (≤500 budget), 0 allocs,
+  bit-reproducible.
+
+**Standing caveats (unchanged by the PoC):** toy domains are constructed,
+not model traces — the promotion condition (real-model-trace demonstration,
+T4.3/525 precedent) remains owner-gated. The hard-differentiation claim
+("aimed budget beats always-on perturbation as trap difficulty rises") is
+analytically supported (per-kick exit probability × budget vs per-loop
+re-entry) but deliberately NOT asserted on a toy tuned to show it.

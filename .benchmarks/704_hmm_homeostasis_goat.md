@@ -1,9 +1,9 @@
 # Bench 704 — hmm_homeostasis GOAT (Plan 590 Phase 3 / Research 543)
 
 **Date:** 2026-09-10
-**Feature:** `hmm_homeostasis` (opt-in; `mop_path_entropy` untouched — psafe rides it as a new `solve_psafe` method)
+**Feature:** `hmm_homeostasis` (DEFAULT-ON since Plan 590 T4.1 / commit 43901e18, 2026-09-11 — owner call PROMOTE on the production swarm consumer, Benches 904/905/906; `mop_path_entropy` untouched — psafe rides it as a new `solve_psafe` method)
 **Source:** arXiv:2609.07508 (Moreno-Bote, "Homeostasis Revisited and Reformulated Through HMM Control")
-**Verdict:** ✅ **GOAT PASS — G1 + G2 + G3 + G4** (stays opt-in: no default consumer yet; promotion per the mop precedent waits on the riir-ai runtime wiring, Research 370 P1/P2)
+**Verdict:** ✅ **GOAT PASS — G1 + G2 + G3 + G4** (was opt-in at gate time: no default consumer yet; PROMOTED to default 2026-09-11, Plan 590 T4.1, on the riir-ai runtime wiring + production consumer evidence)
 **Run:** `CARGO_TARGET_DIR=/tmp/plan590 cargo bench -p katgpt-core --features hmm_homeostasis,mop_path_entropy --bench bench_hmm_control -- --nocapture`
 
 ## G1 — Analytic parity (module tests, `--features hmm_homeostasis --lib`)
