@@ -216,6 +216,21 @@ cadence_gate = []
 # promotion owner-gated per the 525/Bench-834 precedent.
 saddle_escape = ["gain_cost_halt"]
 
+# marginal_rewind (Issue 746 Row 2, arXiv:2609.11801 "Thinking with Looped
+# Flows", Eq 18 minus the denoiser): calibrated noise-backtrack for
+# interpolant flow states — transport the CURRENT state to an earlier
+# confidence level s at the EXACT marginal variance (a = s/t, fresh-noise
+# sqrt((1−s)² − (a−s)²); identity a²(1−t)² + (1−s)² − (a−s)² = (1−s)²),
+# no clean-point knowledge needed (the q_sample_step cousin needs x0_hat;
+# renoise_ce perturbs uncalibrated; saddle_escape kicks eps·u by config).
+# γ-dial form: a = clip(1−γΔt), s = a·t — 0 = identity, larger = deeper.
+# Zero-alloc, RNG-free (caller supplies the noise stream — BLAKE3-seeded
+# determinism contracts compose). Opt-in — quality claims gated on the
+# Issue-746 defend-wrong PoC (tests/marginal_rewind_poc.rs: calibrated vs
+# additive-at-equal-budget vs naive vs hard restart on a stuck-attractor
+# synthetic); promotion owner-gated (saddle_escape/525 precedent).
+marginal_rewind = []
+
 # regime_probe (Issue 740 / Research 541, arXiv:2604.26841 — UDDMs as
 # associative memories): the predictor-agnostic regime-probe suite — T1
 # per-position conditional entropy of a categorical (max-shift + logsumexp
@@ -2713,6 +2728,25 @@ required-features = ["saddle_escape"]
 [[test]]
 name = "saddle_escape_alloc_check"
 required-features = ["saddle_escape"]
+
+# Issue 746 T1 — defend-wrong PoC: marginal-calibrated backtrack vs
+# additive renoise at equal budget vs naive full-variance resample vs hard
+# restart, on a stuck-attractor bimodal synthetic (collapse-prone +
+# unbiased prior regimes, K=8192 paired stuck states). Asserts G0
+# (telescoping annihilation + collapse cohort ≥ 60%), G1 (calibrated ≥
+# 1.5× additive at equal budget), G2 (calibrated dominates hard restart at
+# lower budget, collapse-prone regime). Verdict tables print with
+# --nocapture.
+[[test]]
+name = "marginal_rewind_poc"
+required-features = ["marginal_rewind"]
+
+# Issue 746 G4 — zero-alloc gate: rewind_plan/gamma_dial_plan (Copy struct
+# returns) + rewind_into (caller-supplied slices) must allocate 0 bytes
+# after warmup.
+[[test]]
+name = "marginal_rewind_alloc_check"
+required-features = ["marginal_rewind"]
 
 # Plan 593 T4.1 — GOAT gates: G2 decide() latency (≤500 ns/loop Continue
 # path; kick path + apply_kick reported) + G5 bit-reproducibility.

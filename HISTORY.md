@@ -1792,3 +1792,45 @@ OPT-IN pending a live consumer (similarity_inference demotion precedent; the
 candidate consumer is the d2f draft-accept loop, an engine-lane owner call
 per Research 548 §5). Feature-count claims bumped 588 → 589 across
 README/examples (docs_gate count_features enforcement).
+
+## Issue 746 — Looped-Flows modelless extraction candidates: CLOSED, split verdict (2026-09-11)
+
+Executed as Bench 712 (the removed issue file's task ledger lives in git
+history, `git log -- .issues/746_looped_flows_modelless_extractions.md`).
+**Split verdict, all gates PASS:**
+
+- **Row 2 (marginal-calibrated backtrack): LIVE** — ships as opt-in
+  `marginal_rewind` (`crates/katgpt-core/src/marginal_rewind.rs`): rewind
+  the CURRENT flow state to an earlier confidence level at the EXACT
+  marginal variance (`a = s/t`, `sqrt((1−s)²−(a−s)²)`; identity
+  `a²(1−t)²+(1−s)²−(a−s)² = (1−s)²`), γ-dial for continuous depth, no
+  clean-point knowledge. Defend-wrong PoC (K=8192 paired stuck states,
+  nearest-mode collapse synthetic): calibrated beats additive-at-equal-
+  budget **5.71×** (41.7% vs 7.3%), dominates hard restart at LOWER
+  budget in the collapse-prone regime (26.1% @ σ=0.74 / 41.7% @ σ=0.90 vs
+  restart 20.9% @ σ=0.95); restart WINS the clean-prior regime (50.3% vs
+  42.4%) — recorded as the consumer decision rule, not hidden. Honest
+  exactness finding: naive full-variance resample TIES calibrated at deep
+  rewind (±0.1pp) — the mechanism is the de-commit shrink; the identity
+  buys on-manifold level statistics (the `q_sample_step` cousin cannot do
+  this without the clean point). Two harness bugs were caught BY the
+  measurement (pre-detection segment integrated to t=1; restart arm drew
+  an unbiased prior) — the defend-wrong discipline working as designed.
+- **Row 1 (anytime commitment schedule): CLOSED** — no consumer with a
+  time-grid need exists (tf_loop `DampedEuler` = fixed-β damped iteration;
+  `CommittedFieldBlend` = sigmoid frozen weights; `set_diffusion_schedule`
+  = reveal-time CDFs, a different family). The 20-line schedule
+  (`r_i = Δt/(1−t_i)`, telescoping annihilation) is exercised by the PoC
+  harness (G0 asserts the annihilation) and stays there until a
+  flow-integrating consumer materializes (AC-Prefix Issue-002 precedent:
+  no consumer ⇒ dead code).
+
+Substrate-first record (pre-implementation gate): searched backtrack/
+rewind/renoise/DampedEuler/q_sample/collapse-recovery/marginal variants
+across the 18-repo workspace — `renoise_ce` (perturb-and-SCORE),
+`q_sample_step` (re-noises a CLEAN x0_hat), `saddle_escape` (uncalibrated
+eps·u kicks), `cgsp/dual_pool` (proactive routing only) — decision: BUILD
+NEW (no x0-free marginal-preserving rewind existed). Feature-count claims
+bumped 589 → 590 across README/examples (docs_gate count_features
+enforcement). Promotion owner-gated on a live consumer (candidates: cgsp
+collapse recovery, stale-belief fog-of-war re-exploration).

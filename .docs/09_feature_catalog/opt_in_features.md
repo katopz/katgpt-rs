@@ -3593,3 +3593,53 @@ Bench: [710](../../.benchmarks/710_hebbian_karc_readout_goat.md). Substrate:
 `crates/katgpt-core/src/karc/hebbian_readout.rs`. Private consumers:
 riir-neuron-db `karc_hebbian_envelope` (Plan 584 Phase 2) + riir-ai
 `karc_hebbian_bridge` (Phase 3, Bench 909 — stays opt-in).
+
+## 103. marginal_rewind — calibrated noise-backtrack for interpolant flow states (Issue 746)
+
+The reactive recovery operator flow-collapse detection currently lacks.
+`cgsp`'s dual-pool routing is proactive (non-trapping by construction);
+when a collapse IS detected, the shipped alternatives are uncalibrated
+perturbation (`saddle_escape` eps·u kicks, `renoise_ce` probes) or hard
+restart. This module transports the CURRENT state to an earlier
+confidence level `s < t` at the EXACT marginal variance — Eq 18 of
+arXiv:2609.11801 "Thinking with Looped Flows" minus the denoiser
+(no clean-point knowledge; the `q_sample_step` cousin needs `x0_hat`):
+
+```text
+a     = s / t                    (γ-dial form: a = clip(1−γΔt), s = a·t)
+x̄_s   = a·x_t + sqrt((1−s)² − (a−s)²)·ε'
+a²(1−t)² + (1−s)² − (a−s)² = (1−s)²        (the marginal identity)
+```
+
+`rewind_plan(t, s) -> RewindPlan { s, a, sigma }` (Copy) +
+`rewind_into(x, plan, eps, out)` (zero-alloc, RNG-free — the caller
+supplies the noise stream, so BLAKE3-seeded determinism contracts
+compose) + `gamma_dial_plan(t, γ, Δt)` for continuous rewind depth.
+
+GOAT (Bench 712, ALL PASS): G0 telescoping annihilation of the companion
+commitment schedule + 78% collapse cohort · G1 defend-wrong PoC —
+**calibrated beats additive-at-equal-budget by 5.71×** (41.7% vs 7.3% best-s
+recovery on the collapse-prone stuck-attractor synthetic, K=8192) and
+**dominates hard restart at lower budget** (26.1% @ σ=0.74 and 41.7% @
+σ=0.90 vs restart's 20.9% @ σ=0.95) · honesty axis — restart wins the
+unbiased-prior regime (50.3% vs 42.4%), giving the consumer decision rule:
+rewind for collapse-prone environments, restart for clean priors ·
+exactness finding — naive full-variance resample TIES calibrated (±0.1pp)
+at deep rewind: the mechanism is the de-commit shrink; the identity buys
+on-manifold level statistics, not escape power. G1 9 module tests
+(identity/marginal-variance MC/dial monotonicity/panics). G4 0 allocs.
+G5 pure ordered scalar arithmetic. Row 1 of the same issue (the anytime
+commitment schedule) CLOSED — no time-grid consumer; the schedule lives
+in the PoC harness (AC-Prefix Issue-002 precedent).
+
+🔧 Feature flag: `marginal_rewind = []` (opt-in; NOT in default —
+promotion owner-gated on a live consumer, the saddle_escape/525 precedent;
+candidates: cgsp collapse recovery, stale-belief fog-of-war re-exploration).
+
+📖 Issue: [746](../../.issues/746_looped_flows_modelless_extractions.md)
+(recorded in Bench 712 + riir-train Research 452 after removal; git
+history keeps the file). Research:
+[riir-train 452](../../../riir-train/.research/452_Looped_Flows_Training_Recipe_Distill.md).
+Source: [arXiv:2609.11801](https://arxiv.org/abs/2609.11801). Bench:
+[712](../../.benchmarks/712_marginal_rewind_poc.md). Substrate:
+`crates/katgpt-core/src/marginal_rewind.rs`.

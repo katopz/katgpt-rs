@@ -2039,6 +2039,21 @@ pub mod saddle_escape;
 pub use saddle_escape::{
     FlipDetector, HaltOutcome, SaddleEscapeGate, TrapConfig, TrapObservables, apply_kick,
 };
+
+// Issue 746 Row 2 (arXiv:2609.11801 "Thinking with Looped Flows", Eq 18
+// minus the denoiser) — marginal-calibrated backtrack for interpolant
+// flow states: transport the CURRENT state to an earlier confidence level
+// at the exact marginal variance (a = s/t; identity
+// a²(1−t)² + (1−s)² − (a−s)² = (1−s)²), no clean-point knowledge — the
+// reactive recovery operator that cgsp collapse detection (proactive
+// dual-pool only) currently lacks. γ-dial form for continuous rewind
+// depth. Zero-alloc, RNG-free. Opt-in — quality claims gated on the
+// Issue-746 defend-wrong PoC (tests/marginal_rewind_poc.rs); promotion
+// owner-gated (saddle_escape/525 precedent).
+#[cfg(feature = "marginal_rewind")]
+pub mod marginal_rewind;
+#[cfg(feature = "marginal_rewind")]
+pub use marginal_rewind::{RewindPlan, gamma_dial_plan, rewind_into, rewind_plan};
 // Issue 699 T1-T3 — structural CoT halting (TRACE, arXiv:2510.07880):
 // answer-space cycle detection on reasoning traces — the black-box halt
 // family (no logits/hidden states/LLM rater). A third independent halt-vote
