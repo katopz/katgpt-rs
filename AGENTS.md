@@ -345,20 +345,27 @@ the EXIT trap with `$?` **already 0** — so an EXIT trap whose last command
 succeeds (`rm -f "$TMP"` always does) makes the abort exit **0**. Everything
 after the abort silently did not run, and the caller reads a pass.
 
-⛔ **This is a WORKSTATION defect, not a CI one — an earlier version of this
-section said "and CI reads a pass" and that was false.** Measured one
-interpreter at a time (`scripts/trap_launder_premise_matrix.py`, 11 of them):
-bash **4.4.23 / 5.0.18 / 5.2.37 / 5.3.15**, dash and busybox ash **all
-preserve** the status; fixed no later than 4.4. Every gate-running workflow in
-the workspace is `runs-on: ubuntu-latest` → bash 5 → an aborting gate exits
-non-zero and the job reds. It bites every **macOS** run, which is where these
-gates are actually run by hand and where every verdict quoted in a doc came
-from. The one place the two meet is `full_gate.yml`, this repo's only
-macos-latest runner of a sentinelled script — what
-`#!/usr/bin/env bash` resolves to on GitHub's macOS image cannot be answered
-from a workstation, so that workflow measures it in its own preamble step
-(Issue 735 T3). There is no `bash:3.2` docker tag, so the premise's own
-interpreter is measurable **only** on macOS.
+⛔ **This bites every macOS run — workstation AND the macOS CI lane; it is
+`ubuntu-latest` that is immune.** This paragraph has now been wrong in BOTH
+directions, which is the lesson: it first said "and CI reads a pass" (false —
+over-claimed), was corrected to "a WORKSTATION defect, **not** a CI one"
+(also false — under-claimed, and in the direction that hides a live
+exposure), and is now measured on both sides. Interpreters, one at a time
+(`scripts/trap_launder_premise_matrix.py`, 11 of them): bash **4.4.23 /
+5.0.18 / 5.2.37 / 5.3.15**, dash and busybox ash **all preserve** the status;
+fixed no later than 4.4. Every gate-running workflow in the workspace is
+`runs-on: ubuntu-latest` → bash 5 → an aborting gate exits non-zero and the
+job reds. **The exception is the macOS lane, and it was measured, not
+reasoned about** (Issue 735 T3, answered early by the 737 layer-2b push run
+`34137014037`): GitHub's `macos-26-arm64` ships bash **3.2.57 ONLY** — PATH =
+`/bin` = `env`, no Homebrew bash in PATH — and reproduces all five errexit
+LAUNDERS cells. So on `full_gate.yml`, this repo's only macos-latest runner of
+a sentinelled script, **the sentinel is load-bearing in CI**, not merely on
+workstations; its preamble step re-measures every run, so image drift is
+observed rather than silent. T4 resolved **do not pin — measure**: a `shell:`
+pin cannot govern a script's own `#!/usr/bin/env bash` shebang anyway. There
+is no `bash:3.2` docker tag, so the premise's own interpreter is measurable
+**only** on macOS — a workstation or that runner.
 
 **Keep the sentinel regardless.** It costs nothing on 5.x, is load-bearing on
 3.2, and "did the script reach its own completion point?" catches every other
