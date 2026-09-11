@@ -163,6 +163,35 @@ pub fn gw_loss(a: &[&[f32]], b: &[&[f32]], scratch: &mut GwScratch) -> Result<f3
     Ok(core.solve(a, b, scratch))
 }
 
+/// Solve and return a copy of the winning coupling plan `T` plus its loss.
+///
+/// The correspondence surface behind [`gw_loss`]: the SAME deterministic
+/// multi-start solve (same schedule, bit-identical result), returning the
+/// winning coupling matrix instead of only its scalar loss. `t[i][j]` is the
+/// transport mass between probe `i` of `A` and probe `j` of `B`; under the
+/// uniform-weight polytope a mass far above `1/(n·m)` marks a structural
+/// correspondence pair. Row sums are `1/n`, column sums `1/m` (up to the
+/// tail-projection f32 noise). Consumers ranking correspondences should
+/// rank by `t[i][j]` directly — the margins are uniform, so masses are
+/// comparable across the whole matrix.
+///
+/// Errors: same as [`gw_loss`].
+pub fn gw_coupling(
+    a: &[&[f32]],
+    b: &[&[f32]],
+    scratch: &mut GwScratch,
+) -> Result<(Vec<Vec<f32>>, f32), GwError> {
+    let core = SolveCore::validate(a, b)?;
+    let loss = core.solve(a, b, scratch);
+    // solve() restores the winning coupling into `scratch.t` before
+    // returning, so the copy below is the winner, not a staging buffer.
+    // (n, m) are the validated matrix dims — read off the inputs rather than
+    // the solver core's private fields.
+    let (n, m) = (a.len(), b.len());
+    let t = (0..n).map(|i| scratch.t[i][..m].to_vec()).collect();
+    Ok((t, loss))
+}
+
 /// Convenience wrapper: sigmoid-bounded alignment score
 /// `sigmoid(−[`GW_SCORE_BETA`]·loss)` per the house bridge rule (sigmoid,
 /// never softmax). Monotone decreasing in [`gw_loss`]; `0.5` at loss 0

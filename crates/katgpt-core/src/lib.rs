@@ -1984,7 +1984,8 @@ pub use hmm_control::{HmmControlSolver, HmmInputError, HmmSolution};
 pub mod gw_alignment;
 #[cfg(feature = "gw_alignment")]
 pub use gw_alignment::{
-    score_from_loss, GwError, GwScratch, GW_ITERS, GW_MAX, GW_SCORE_BETA, GW_TAIL_PASSES,
+    gw_coupling, score_from_loss, GwError, GwScratch, GW_ITERS, GW_MAX, GW_SCORE_BETA,
+    GW_TAIL_PASSES,
 };
 // Phase 4 (F4 fusion) — freeze/thaw wrapper around ProductKeyMemory. Gated
 // separately so the leaf-clean retrieval primitive (above) stays usable

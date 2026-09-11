@@ -10,7 +10,7 @@
 // this whole module (scoped here).
 #![allow(clippy::needless_range_loop)]
 
-use super::{gw_loss, gw_score, score_from_loss, GwError, GwScratch, GW_MAX};
+use super::{gw_coupling, gw_loss, gw_score, score_from_loss, GwError, GwScratch, GW_MAX};
 use super::solve::SolveCore;
 // Deterministic xorshift64* — the ONLY randomness in this module is test
 // geometry generation; the solver consumes no RNG (determinism contract).
@@ -679,4 +679,84 @@ fn g4_zero_steady_state_alloc() {
         count, 0,
         "steady-state solves allocated ({count} allocations)"
     );
+}
+
+// ---- gw_coupling: the public correspondence surface ----
+
+#[test]
+fn coupling_exposes_identity_correspondence() {
+    // A geometry aligned with itself: the winning coupling must concentrate
+    // mass on the diagonal (each probe's structural correspondent is itself)
+    // at near-zero loss — the correspondence map, not just the scalar, is
+    // what `gw_coupling` promises.
+    let mut rng = XorShift::new(0x0C0D_0E0F_1011_1213);
+    let a = random_geometry(8, 3, &mut rng);
+    let ar = refs(&a);
+    let mut scratch = GwScratch::new();
+    let (t, loss) = gw_coupling(&ar, &ar, &mut scratch).expect("valid");
+    let scale = uniform_loss(&ar, &ar);
+    assert!(
+        f64::from(loss) < 1e-3 * scale,
+        "self-alignment loss {loss} not ≈ 0 (uniform-coupling scale {scale})"
+    );
+    assert_eq!(t.len(), 8);
+    for row in &t {
+        assert_eq!(row.len(), 8);
+    }
+    let uniform = 1.0f64 / (8.0 * 8.0);
+    for i in 0..8 {
+        let diag = f64::from(t[i][i]);
+        // Row mass is capped at 1/n by the polytope margins — a concentrated
+        // correspondence carries MORE THAN HALF the row on the diagonal
+        // (the identity coupling carries all of it).
+        assert!(
+            diag > 0.5 / 8.0,
+            "row {i}: diagonal mass {diag} not concentrated (uniform {uniform})"
+        );
+        for j in 0..8 {
+            if i != j {
+                assert!(
+                    diag > f64::from(t[i][j]),
+                    "row {i}: diagonal {diag} not dominant over t[{i}][{j}]={}",
+                    t[i][j]
+                );
+            }
+        }
+    }
+    // Margins: row sums 1/n, col sums 1/m (uniform-weight polytope) up to
+    // tail-projection noise.
+    for (i, row) in t.iter().enumerate() {
+        let rs: f64 = row.iter().map(|v| f64::from(*v)).sum();
+        assert!(
+            (rs - 1.0 / 8.0).abs() < 1e-3,
+            "row {i} sum {rs} != 1/8"
+        );
+    }
+    for j in 0..8 {
+        let cs: f64 = (0..8).map(|i| f64::from(t[i][j])).sum();
+        assert!(
+            (cs - 1.0 / 8.0).abs() < 1e-3,
+            "col {j} sum {cs} != 1/8"
+        );
+    }
+}
+
+#[test]
+fn coupling_matches_solve_loss_and_is_deterministic() {
+    // Two runs over the same inputs must agree bit-for-bit (the determinism
+    // contract extends to the exposed coupling), and the returned loss must
+    // equal `gw_loss` on the same scratch.
+    let mut rng = XorShift::new(0x51DE_7E11_0000_0001);
+    let a = random_geometry(6, 2, &mut rng);
+    let b = random_geometry(7, 4, &mut rng);
+    let (ar, br) = (refs(&a), refs(&b));
+    let mut scratch = GwScratch::new();
+    let (t1, l1) = gw_coupling(&ar, &br, &mut scratch).expect("valid");
+    let l2 = gw_loss(&ar, &br, &mut scratch).expect("valid");
+    let (t2, l3) = gw_coupling(&ar, &br, &mut scratch).expect("valid");
+    assert_eq!(l1, l2, "gw_coupling loss != gw_loss on same inputs");
+    assert_eq!(l1, l3, "loss not bit-deterministic across runs");
+    assert_eq!(t1, t2, "coupling not bit-deterministic across runs");
+    assert_eq!(t1.len(), 6);
+    assert!(t1.iter().all(|r| r.len() == 7));
 }
