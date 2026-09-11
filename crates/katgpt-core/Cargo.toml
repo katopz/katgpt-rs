@@ -2305,6 +2305,13 @@ name = "bench_559_hebbian_kernel_memory_goat"
 harness = false
 required-features = ["hebbian_kernel_memory", "clr_weighted_set_attention"]
 
+# Plan 584 T3 — Hebbian KARC Readout GOAT (G2 fit-vs-fit_ridge ratio +
+# forecast wrapper-Δ + G4 alloc audit). Custom harness, release measurement.
+[[bench]]
+name = "bench_584_hebbian_karc_readout_goat"
+harness = false
+required-features = ["karc_hebbian_readout"]
+
 # Plan 561 Phase 3 — SipIt Transformer Inversion GOAT gate (G2 latency + G4
 # alloc-free). G2 measures per-position latency for random vs gradient-guided
 # policy across |V| ∈ {32, 128, 512}. G4 verifies the _into driver variant is
