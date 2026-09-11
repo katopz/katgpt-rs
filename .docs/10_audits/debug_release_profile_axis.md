@@ -168,7 +168,20 @@ Silence is not success — a target absent from an error list may simply never
 have been attempted. These reproduce only under workspace-wide feature
 unification, so their cause is the profile axis *interacting* with AGENTS.md's
 third axis (`-p` vs `--workspace` at the same nominal features). Filed for
-root-cause with the owner: **riir-ai `.issues/855`**.
+root-cause with the owner: **riir-ai `.issues/855`** (pointer now historical:
+no `.issues/855_*` file exists on develop — recover the disposition with
+`git log --all -- '../riir-ai/.issues/855_*.md` if needed; the durable record
+is this table).
+
+**2026-09-11 owner call (per-repo T3 disposition, subagent re-verdicted):**
+riir-ai's release pass is **DEFERRED, not signed off**. The 232-call-site
+`get_alloc_stats` class stays the known, verified surface — the fix (gate the
+`riir-games-civ` call sites or route them through the existing gated accessor)
+is a riir-ai hygiene item, not a katgpt-rs one. The three riir-gpu
+release-only bench errors remain the second class, whose issue home no longer
+exists on develop (see above). No other repo's disposition changes: chain
+fixed (`feadd573`), train's DEV-only allocator conflict and riir-ai's
+`issue847_tpr_goat` twin remain recorded above as the both-ways caveat.
 
 The three clean repos are a real result too, not an absence of one: each
 compiled hundreds of units in release with zero diagnostics, so their gates can
