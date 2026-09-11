@@ -1269,6 +1269,23 @@ GOAT gate, and the mandatory modelless-unblock protocol (§3.5).
 
 ## Issue log (resolved)
 
+- **Issue 743 — `gw_alignment`, the Gromov–Wasserstein quotient-alignment primitive** RESOLVED + removed
+  (2026-09-11, `ae04a98b`; Plan 594 + Bench 709 — the plan/issue/bench carry the full narrative).
+  `katgpt_core::gw_alignment` behind opt-in `gw_alignment` (zero deps, pure std):
+  structure-only GW alignment of two distance matrices (n,m ≤ 64, uniform weights) via a
+  deterministic multi-start (greedy-on-pairing-mass, entropic softmin, uniform+tilt, brute-force
+  best permutation at square n ≤ 8) → product-graph power iteration with fixed-schedule
+  checkpointing → sum-exact f64 loss + `sigmoid(−β·loss)` score. G1–G4 ALL PASS (11 gates:
+  analytic 2×2 + permutation-dominance n=4 + planted recovery n=8 + direct-form identity;
+  per-level planted-vs-shuffled dominance ≥13/16 + AUC ≥0.93; default build compiles the
+  module to nothing with the default test count unchanged; zero steady-state allocs).
+  Stays opt-in per the consumer-first rule — the riir-poc consumer PoC (zone-belief quotient
+  alignment → social KG triples) is the promotion path, filed as riir-ai Issue 912's tail.
+  Measured evolution vs the issue sketch: the greedy second-order init is load-bearing
+  (uniform-start power iteration is saddle-blind); the sketched 2-opt polish on ΣP was
+  removed (walked 0.0016 → 0.145 — ΣP is not the GW objective). Downstream: riir-ai
+  Issue 912 T4's consume-vs-build decision landed on BUILD; this primitive is it.
+
 - **Issue 742 — the last 42 `#![cfg]`-gated targets in this repo reported a green zero; `SILENT-NOW` is now a WALL at 0** RESOLVED + removed
   (2026-09-09, `2ae0d20a`; the workspace arming sweep's katgpt-rs slice — ndb 616, chain 138, riir-ai 906 landed the same day).
   `SILENT-NOW 42 → 0`, `max_silent_now` re-pinned **42 → 0 as a WALL**; rows DERIVED from the instrument, not hand-typed.
