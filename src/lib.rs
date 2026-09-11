@@ -63,6 +63,9 @@ pub mod dash_attn {
     };
     #[cfg(feature = "asentmax_schedule")]
     pub use katgpt_attn::dash_attn::routing::score_blocks_entmax_with_schedule_into;
+    // P1: the Lemma-2 derived budget (exact length-independent law).
+    #[cfg(feature = "asentmax_schedule")]
+    pub use katgpt_attn::dash_attn::adaptive_k::compute_derived_k;
     #[cfg(feature = "msa_per_group")]
     pub use katgpt_attn::dash_attn::block_topk::PerGroupTopKRouter;
     #[cfg(feature = "vortex_flow")]

@@ -107,4 +107,24 @@ Single-needle retrieval parity at 100% (032 T23 anchor). Cost anchor: 032's own 
 ## Next
 
 - **P0.7 (new, in Issue 747):** wire `score_blocks_entmax_with_schedule_into` into the forward-path routing call site (config-gated), re-gate G2/G3 on the real prefill path, then re-evaluate default-on promotion.
-- P1 (Lemma-2 support controller `k̂ = 4/Δ̂²`), P2 (Prop 6 eviction window), P3 (incremental decode entmax) — unstarted.
+- P1 (Lemma-2 support controller `k̂ = 4/Δ̂²`) — landed 2026-09-11, see the P1 section below.
+- P2 (Prop 6 eviction window), P3 (incremental decode entmax) — unstarted.
+
+## P1 addendum — derived-k budget (Lemma-2 support controller, 2026-09-11)
+
+**T1.1** `compute_derived_k(Δ̂)` (exact law `k̂ = 4/Δ̂²`, the α=1.5 instantiation of `((α−1)Δ̂)^{−1/(α−1)}`) + `compute_derived_k_from_scores` (one-pass max−mean proxy, 4-way unrolled) in `adaptive_k.rs`, gated `asentmax_schedule`. Unit tests pin the exact map, monotonicity, clamps (incl. NaN → k_max, the safe coverage direction), and the proxy.
+
+**T1.2 G1 PASS** (tests/asentmax_p1_derived_k_g1.rs, 4/4): two-level rows planted AT the Lemma-2 boundary (k = k̂(Δ) needles, gap Δ ∈ {0.5, 0.7, 1.0, 1.4}) — **realized entmax support == k̂ at every n ∈ {1k, 8k, 65k, 512k, 1M}**. The condition has no n term; the length-independence law is exact. The sigmoid arm's input (row variance) provably moves with n at fixed structure — no such law exists for it (reported in-test).
+
+**T1.3 head-to-head — SPLIT VERDICT (recorded honestly):**
+
+| Arm | budget k | recall@k (planted k=8) | recall/block |
+|---|---|---|---|
+| sigmoid `w·var+b` (w=5, b=0) | 32 (saturated k_max at every n, σ) | 1.000 | 0.031 |
+| derived `4/Δ̂²` (max−mean) | 4 (k_min floor at every n, σ) | 0.500 | **0.125** |
+
+- **Absolute coverage: sigmoid wins.** The max−mean proxy measures top-to-center (`Δ + bulk-mean-offset`), not the Lemma-2 top-block-to-bulk-level gap — on multi-level rows it saturates k_min and behaves as a binary concentration detector, not a calibrated coverage budget (mechanism pinned by `g1_max_mean_proxy_calibration_pinned`).
+- **Cost efficiency: derived wins 4×** (0.125 vs 0.031 recall/block) — in the concentration regime (single needle) it delivers recall 1.0 at k=4 vs the sigmoid arm's k=32 (8× less attention work).
+- Notable: the sigmoid arm's `w=5, b=0` defaults are saturated across the whole sweep (variance ≥ 1 → sigmoid(5·var) ≈ 1) — it is effectively a CONSTANT k=32 here, i.e. not adaptive at all at realistic logit-variance scales.
+
+**Disposition:** the derived budget does NOT replace the sigmoid arm for coverage budgeting (honest negative on the replacement claim). It ships as (a) the exact length-independent law (`compute_derived_k(Δ_level)` — caller-supplied level gap, e.g. from a change-point detector or frozen per-head table) and (b) the concentration-regime convenience (`compute_derived_k_from_scores`). Both stay opt-in under `asentmax_schedule`. A true level-gap estimator could revisit the coverage claim.

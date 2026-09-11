@@ -350,6 +350,55 @@ fn main() {
     }
     println!("  G3 verdict: {}", if g3_pass { "PASS" } else { "FAIL" });
 
+    // ── P1 (T1.3): derived-k vs sigmoid budget head-to-head ──────────────
+    // Same sweep, same rows: both budgets read the raw logit row. Planted
+    // are top-8 by construction → recall@k = min(k, 8)/8; report the budget
+    // choice, implied recall, and per-block efficiency honestly (the
+    // derived max−mean budget is a concentration detector — see the
+    // compute_derived_k "Which Δ̂ to feed" note).
+    println!(
+        "\n── P1: derived-k vs sigmoid budget (planted k=8, recall@k = min(k,8)/8) ──"
+    );
+    println!("     n     σ │ sig_k der_k │ sig_recall der_recall │ sig_eff der_eff");
+    use katgpt_attn::dash_attn::adaptive_k::{compute_adaptive_k, compute_derived_k_from_scores, AdaptiveKConfig};
+    let kconfig = AdaptiveKConfig::new(4, 32);
+    for &sigma in sigmas {
+        for &n in ns {
+            let mut recalls = Vec::new();
+            let mut deriveds = Vec::new();
+            let mut sigs = Vec::new();
+            for seed in 0..SEEDS {
+                let (_q, summaries, planted) = build_task(n, sigma, 500 + seed * 101);
+                // Reconstruct the logit row exactly as routing would (dot/√d).
+                let mut logits = vec![0.0_f32; n];
+                let scale = 1.0 / (D as f32).sqrt();
+                for (i, s) in summaries.iter().enumerate() {
+                    let mut dot = 0.0_f32;
+                    for (j, &qv) in _q.iter().enumerate() {
+                        dot += qv * s[j];
+                    }
+                    logits[i] = dot * scale;
+                }
+                let _ = planted;
+                let k_sig = compute_adaptive_k(&logits, n, &kconfig);
+                let k_der = compute_derived_k_from_scores(&logits, n, &kconfig);
+                sigs.push(k_sig as f32);
+                deriveds.push(k_der as f32);
+                recalls.push((k_sig.min(8), k_der.min(8)));
+            }
+            let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len() as f32;
+            let k_sig = mean(&sigs);
+            let k_der = mean(&deriveds);
+            let r_sig = recalls.iter().map(|&(s, _)| s).sum::<usize>() as f32 / recalls.len() as f32 / 8.0;
+            let r_der = recalls.iter().map(|&(_, d)| d).sum::<usize>() as f32 / recalls.len() as f32 / 8.0;
+            let eff_sig = r_sig / k_sig.max(1.0);
+            let eff_der = r_der / k_der.max(1.0);
+            println!(
+                "{n:>6} {sigma:>5.1} │ {k_sig:>5.1} {k_der:>5.1} │ {r_sig:>9.3} {r_der:>9.3} │ {eff_sig:>7.4} {eff_der:>7.4}"
+            );
+        }
+    }
+
     // ── Latency: schedule overhead ────────────────────────────────────────
     println!("\n── Latency: schedule overhead per routing step ───────────────────");
     let n = 16_384_usize;

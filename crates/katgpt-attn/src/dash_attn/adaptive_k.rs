@@ -143,6 +143,99 @@ pub fn compute_adaptive_k(scores: &[f32], n_blocks: usize, config: &AdaptiveKCon
 }
 
 // ---------------------------------------------------------------------------
+// Derived k budget (Issue 747 P1, Research 549 — Lemma 2 law)
+// ---------------------------------------------------------------------------
+
+/// Derived k budget from the Lemma-2 two-level law (Issue 747 P1).
+///
+/// The paper's Lemma 2 (α=1.5): k tied tokens at level-gap Δ above the bulk
+/// hold attention 1/k each iff `Δ ≥ 2/√k` — inverting, the boundary block
+/// size is `k̂ = 4/Δ̂²` (the α=1.5 instantiation of `((α−1)·Δ̂)^{−1/(α−1)}`).
+/// **The condition has no n term** — the budget is length-independent by
+/// theorem, which is the property the fitted sigmoid(`w·var+b`) arm of
+/// [`compute_adaptive_k`] does not have.
+///
+/// # Which Δ̂ to feed
+///
+/// Lemma 2's Δ is the **top-block-to-bulk-level gap**. A max−mean proxy
+/// (the shipped `RollingDeltaEstimator` statistic) equals it only in the
+/// single-needle regime (k ≈ 1, bulk centered at 0); on multi-level rows it
+/// measures top-to-center instead. Callers holding a true level-gap estimate
+/// (change-point detector, frozen per-head table) should call this directly;
+/// [`compute_derived_k_from_scores`] is the max−mean convenience for the
+/// concentration regime.
+///
+/// # Direction (honest)
+///
+/// `k̂ = 4/Δ̂²` is the MINIMUM block size that holds concentration at gap Δ̂
+/// — a concentration detector (large gap → small budget), not a coverage
+/// expander. See the Bench 713 P1 section for the measured split vs the
+/// sigmoid arm.
+#[cfg(feature = "asentmax_schedule")]
+#[inline]
+pub fn compute_derived_k(delta_hat: f32, config: &AdaptiveKConfig) -> usize {
+    // α = 1.5: k̂ = ((α−1)·Δ̂)^{−1/(α−1)} = (0.5·Δ̂)^{−2} = 4/Δ̂².
+    let d = delta_hat.max(1e-3);
+    let k_f = 4.0 / (d * d);
+    // Saturating conversion: a huge k_f (tiny Δ̂) must clamp, not wrap.
+    if k_f >= config.k_max as f32 {
+        config.k_max
+    } else {
+        (k_f.round() as usize).max(config.k_min).min(config.k_max)
+    }
+}
+
+/// Derived k budget from raw block scores via the max−mean Δ̂ proxy
+/// (Issue 747 P1 — the one-pass convenience form).
+///
+/// Computes `Δ̂ = max(scores) − mean(scores)` (the `RollingDeltaEstimator`
+/// statistic; 4-way unrolled to mirror [`compute_adaptive_k`]'s shape) and
+/// resolves [`compute_derived_k`]. Calibrated for the single-needle /
+/// concentration regime — see that function's "Which Δ̂ to feed" note.
+#[cfg(feature = "asentmax_schedule")]
+pub fn compute_derived_k_from_scores(
+    scores: &[f32],
+    n_blocks: usize,
+    config: &AdaptiveKConfig,
+) -> usize {
+    let effective_n = n_blocks.min(scores.len());
+    if effective_n == 0 {
+        return config.k_min;
+    }
+    if effective_n <= config.k_min {
+        return effective_n;
+    }
+
+    // One pass: max + sum (4-way unrolled, mirroring compute_adaptive_k).
+    let inv = 1.0 / effective_n as f32;
+    let mut mx0 = f32::NEG_INFINITY;
+    let mut mx1 = f32::NEG_INFINITY;
+    let mut s0 = 0.0f32;
+    let mut s1 = 0.0f32;
+    let chunks = effective_n / 4;
+    for c in 0..chunks {
+        let base = c * 4;
+        let a = scores[base];
+        let b = scores[base + 1];
+        let e = scores[base + 2];
+        let f = scores[base + 3];
+        mx0 = mx0.max(a).max(b);
+        mx1 = mx1.max(e).max(f);
+        s0 += a + b;
+        s1 += e + f;
+    }
+    let mut max = mx0.max(mx1);
+    let mut sum = s0 + s1;
+    let rem = effective_n % 4;
+    for &s in scores[effective_n - rem..effective_n].iter() {
+        max = max.max(s);
+        sum += s;
+    }
+    let mean = sum * inv;
+    compute_derived_k(max - mean, config)
+}
+
+// ---------------------------------------------------------------------------
 // AdaptiveKRouter
 // ---------------------------------------------------------------------------
 
@@ -430,6 +523,57 @@ mod tests {
             k, config.k_max,
             "large variance with strong positive bias should give k_max"
         );
+    }
+
+    // --- Derived k budget (Issue 747 P1) ---
+
+    #[cfg(feature = "asentmax_schedule")]
+    #[test]
+    fn test_derived_k_exact_lemma2_map() {
+        let config = AdaptiveKConfig::new(1, 4096);
+        // k̂ = 4/Δ̂² exactly at the Lemma-2 boundary.
+        assert_eq!(compute_derived_k(2.0, &config), 1); // 4/4
+        assert_eq!(compute_derived_k(1.0, &config), 4); // 4/1
+        assert_eq!(compute_derived_k(0.5, &config), 16); // 4/0.25
+        assert_eq!(compute_derived_k(0.25, &config), 64); // 4/0.0625
+        // Monotone decreasing in Δ̂.
+        let mut prev = usize::MAX;
+        for i in 1..=20 {
+            let d = 0.1 * i as f32;
+            let k = compute_derived_k(d, &config);
+            assert!(k <= prev, "k̂ must be non-increasing in Δ̂ at d={d}");
+            prev = k;
+        }
+    }
+
+    #[cfg(feature = "asentmax_schedule")]
+    #[test]
+    fn test_derived_k_clamps() {
+        let config = AdaptiveKConfig::new(4, 32);
+        // Tiny Δ̂ → k̂ huge → k_max (saturating, no wrap).
+        assert_eq!(compute_derived_k(1e-4, &config), 32);
+        assert_eq!(compute_derived_k(0.0, &config), 32);
+        // Huge Δ̂ → k̂ < 1 → k_min.
+        assert_eq!(compute_derived_k(100.0, &config), 4);
+        // NaN Δ̂: f32::max ignores NaN → d = 1e-3 → huge k̂ → k_max (the
+        // safe direction for a budget — garbage estimate, take coverage).
+        assert_eq!(compute_derived_k(f32::NAN, &config), 32);
+    }
+
+    #[cfg(feature = "asentmax_schedule")]
+    #[test]
+    fn test_derived_k_from_scores_max_mean_proxy() {
+        // Single needle at 5.0 over bulk centered at ~0 → Δ̂ ≈ 5 → k̂ = 4/25 → clamp k_min.
+        let config = AdaptiveKConfig::new(4, 64);
+        let scores: Vec<f32> = vec![5.0, 0.1, -0.2, 0.05, -0.1, 0.15, -0.05, 0.0];
+        assert_eq!(compute_derived_k_from_scores(&scores, 8, &config), 4);
+        // Bulk tightly under the top (Δ̂ small) → large budget.
+        let tight: Vec<f32> = vec![1.02, 1.0, 1.01, 0.99, 1.0, 1.005, 0.995, 1.0];
+        // Δ̂ ≈ 1.02 − ~1.0025 ≈ 0.0175 → k̂ = 4/0.0003 huge → k_max.
+        assert_eq!(compute_derived_k_from_scores(&tight, 8, &config), 64);
+        // Empty / short rows.
+        assert_eq!(compute_derived_k_from_scores(&[], 0, &config), 4);
+        assert_eq!(compute_derived_k_from_scores(&[1.0, 2.0], 2, &config), 2);
     }
 }
 

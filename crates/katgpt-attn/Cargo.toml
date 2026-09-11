@@ -201,6 +201,12 @@ required-features = ["asentmax_schedule"]
 name = "asentmax_alloc_check"
 required-features = ["asentmax_schedule"]
 
+# Issue 747 P1 — derived-k budget G1 length-independence gate (Lemma-2
+# boundary law: realized support == k̂ = 4/Δ̂² at every n ∈ 1k..1M).
+[[test]]
+name = "asentmax_p1_derived_k_g1"
+required-features = ["asentmax_schedule"]
+
 # Issue 747 P0 — ASEntmax GOAT gate bench (G2 NIAH routing sweep at growing
 # chunk counts, G3 no-regression at 256 chunks, latency). harness=false
 # (std::time::Instant convention, mirrors bench_411).

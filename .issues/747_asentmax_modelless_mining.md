@@ -1,6 +1,6 @@
 # Issue 747: ASEntmax modelless mining — entmax damping schedule, derived support controller, theorem-backed KV eviction window
 
-**Status:** In progress — P0 DONE (GOAT PASS, opt-in; Bench 713). P1–P3 open. P0.7 (forward-path wiring + promotion re-gate) tracks the default-on decision.
+**Status:** In progress — P0 DONE (GOAT PASS, opt-in; Bench 713). P1 DONE (length-independence law PASS; head-to-head SPLIT — no replacement, recorded). P2–P3 open. P0.7 (forward-path wiring + promotion re-gate) tracks the default-on decision.
 **Research:** [katgpt-rs/.research/549](../.research/549_ASEntmax_Length_Adaptive_Entmax_Attention.md) · **Source:** [arXiv:2506.16640](https://arxiv.org/abs/2506.16640) (ICLR 2026) · **Training arm:** riir-train Plan 396 (secondary)
 
 arXiv:2506.16640 derives what our stack is missing on the entmax side of a law we already exploit on the softmax side: softmax needs sharpening ∝ log n (SSMax, Plan 411, shipped), α-entmax needs **damping ∝ (log n)^{−0.5}** (their Eq 10, closed form). Our `entmax_1p5` (DashAttention routing, default-on) has **no length term at all** — as the scored candidate set grows, logit range grows `2σ√(2 log n)`, the threshold eats the support, and routing over-sparsifies (the paper's Copy-table failure mode: fixed-α entmax 28.5% vs softmax 99.4% OOD).
@@ -21,11 +21,11 @@ Execution tracker for the modelless rows of Research 549 §2.3. Feature flags pe
 - [x] **T0.6 GOAT verdict:** 🟢 PASS, **stays opt-in** — the primitive is not yet on a production hot path (`forward.rs` routing calls the unscheduled variants); default-on now would be an unwired state (feature-gate-audit discipline). `.docs/09_feature_catalog/opt_in_features.md` row added; Bench 713 records the full evidence.
 - [ ] **T0.7 (new)** Wire `score_blocks_entmax_with_schedule_into` into the forward-path routing call site (config-gated, e.g. `DashAttnConfig` schedule field or a forward-local flag), re-run G2/G3 on the real prefill path, then re-evaluate default-on promotion (demote fixed-α on the routing path if it wins there too).
 
-### P1 — Lemma-2 support controller `k̂ = 4/Δ̂²`
+### P1 — Lemma-2 support controller `k̂ = 4/Δ̂²` — **DONE 2026-09-11 (Bench 713 P1 addendum; SPLIT verdict)**
 
-- [ ] **T1.1** Derived budget in `dash_attn/adaptive_k.rs` (beside the sigmoid path): `k̂ = ((α−1)·Δ̂)^{−1/(α−1)}` from the shipped `RollingDeltaEstimator` (max−mean proxy), clamped `[k_min, k_max]`.
-- [ ] **T1.2** **G1:** two-level synthetic logits (gap Δ, k top) — realized support == k̂ for ALL n ∈ {1k..1M} (**length-independence is the test**; the sigmoid arm has no such law).
-- [ ] **T1.3** **G2/G3:** head-to-head vs `sigmoid(w·var+b)` budget on the T0.3 sweep; no-reg at 256 chunks.
+- [x] **T1.1** `compute_derived_k(Δ̂)` + `compute_derived_k_from_scores` (max−mean proxy) in `dash_attn/adaptive_k.rs`, gated `asentmax_schedule`; clamped `[k_min, k_max]`, saturating conversion, NaN → k_max (the safe coverage direction).
+- [x] **T1.2 G1 PASS** (asentmax_p1_derived_k_g1, 4/4): realized support == k̂ = 4/Δ̂² at the Lemma-2 boundary for ALL n ∈ {1k, 8k, 65k, 512k, 1M} — **length-independence exact** (the condition has no n term; the sigmoid arm's variance input provably drifts with n at fixed structure — no such law). Max−mean proxy calibration pinned honestly (top-to-center ≠ level gap).
+- [x] **T1.3 head-to-head — SPLIT (recorded):** sigmoid arm wins absolute coverage (k=32 saturated, recall 1.0 vs derived k=4 floor, recall 0.5 on the k=8 graded task); derived wins cost efficiency **4×** (0.125 vs 0.031 recall/block; 8× less work in the single-needle concentration regime). The sigmoid arm's w=5/b=0 defaults are saturated across the sweep — effectively constant k=32, not adaptive at realistic variance scales. **Disposition: NO replacement** — derived ships as the exact law (caller-supplied level gap) + concentration-regime convenience; a true level-gap (change-point) estimator could revisit the coverage claim.
 
 ### P2 — Prop 6 eviction window (theorem-backed, bit-identity gate)
 
