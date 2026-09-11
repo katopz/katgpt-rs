@@ -1967,11 +1967,25 @@ pub use mop::{MopConfig, MopConfigError, MopScratch, MopSolver, MopSolution};
 // messages β_t(x) = P(y_{t:T}=yd|x) bounded [0,1] by construction + a
 // strictly deterministic argmax policy (the paper's linearity-in-π
 // theorem). The setpoint-drive sibling of `mop` (range drives); shares
-// `tabular_kernel` with it. Opt-in `hmm_homeostasis`.
+// `tabular_kernel` with it. DEFAULT-ON since 2026-09-10 (Plan 590 T4.1
+// owner call — Phase 30 in Cargo.toml is the evidence chain: Bench 704
+// + riir-ai Benches 904/905/906, the production swarm consumer).
 #[cfg(feature = "hmm_homeostasis")]
 pub mod hmm_control;
 #[cfg(feature = "hmm_homeostasis")]
 pub use hmm_control::{HmmControlSolver, HmmInputError, HmmSolution};
+// Gromov–Wasserstein quotient alignment (Issue 743 / riir-ai Issue 912 T4
+// BUILD decision, Research 371) — structure-only cross-space alignment of
+// two distance matrices (no shared coordinates, no correspondence prior):
+// the case `mag::transfer::Wasserstein1d` and RSA are structurally blind to.
+// Product-graph power iteration over a preallocated scratch; fixed init +
+// fixed iters + no RNG ⇒ bit-deterministic. Opt-in `gw_alignment`.
+#[cfg(feature = "gw_alignment")]
+pub mod gw_alignment;
+#[cfg(feature = "gw_alignment")]
+pub use gw_alignment::{
+    score_from_loss, GwError, GwScratch, GW_ITERS, GW_MAX, GW_SCORE_BETA, GW_TAIL_PASSES,
+};
 // Phase 4 (F4 fusion) — freeze/thaw wrapper around ProductKeyMemory. Gated
 // separately so the leaf-clean retrieval primitive (above) stays usable
 // without the Arc<RwLock<Arc<...>>> + BLAKE3 commitment machinery. See
@@ -2007,6 +2021,21 @@ pub mod gain_cost_halt;
 #[cfg(feature = "gain_cost_halt")]
 pub use gain_cost_halt::{
     GainCostLoopHalter, HaltDecision, HaltReason, angular_change, hidden_erank, step_size,
+};
+// Plan 593 / Research 546 (arXiv:2609.04963 "Fractal basins trap latent
+// reasoning") — Saddle-Trap Escape Gate: three-way Continue /
+// Halt{Converged} / Halt{Trapped} / Kick loop controller wrapping (never
+// forking) the GainCostLoopHalter above. Trap = oscillation patience +
+// decode-flip-rate EMA (+ optional renoise-CE probe confirm); escape =
+// deterministic BLAKE3-seeded, budget-bounded kick. Opt-in — quality
+// claims gated on the Phase-3 defend-wrong PoC (tests/saddle_escape_poc.rs);
+// promotion owner-gated (525/Bench-834 precedent).
+#[cfg(feature = "saddle_escape")]
+pub mod saddle_escape;
+#[cfg(feature = "saddle_escape")]
+pub use saddle_escape::{
+    FlipDetector, GateDecision, HaltOutcome, SaddleEscapeGate, TrapConfig, TrapObservables,
+    apply_kick,
 };
 // Issue 699 T1-T3 — structural CoT halting (TRACE, arXiv:2510.07880):
 // answer-space cycle detection on reasoning traces — the black-box halt
