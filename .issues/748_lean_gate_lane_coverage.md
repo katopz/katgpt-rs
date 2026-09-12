@@ -85,17 +85,38 @@ is the expensive one because its `.lake` is Mathlib-backed.
 - (d) make them `workflow_dispatch`-only, so each is at least nameable without
       firing on every main push.
 
-## Incidental — a numbering observation, not a claim
+## Incidental — a numbering observation that was WRONG, and why
 
-`.issues/.highwater` reads **747** and the max issue file ever added in git
-history is also **747**, so `numbering_gate.py` reports 0 stale allocators and
-passes. But AGENTS.md and HISTORY.md both cite **Issue 750** as a katgpt-rs
-issue (the lossy-surface promotion rule, adopted 2026-08-28). Either 750 was
-allocated without its file ever being committed, or the allocator regressed
-after the file was removed under the noise-reduction rule. The gate cannot see
-either case because it only checks `highwater >= max existing file`. Recorded
-as an observation; 748 was taken for this issue because it is uncontested
-under every source of evidence. (Issue 753 is riir-ai's, not this repo's.)
+⛔ **Retracted 2026-09-12.** The original text read: `.highwater` says 747 and
+the max issue file ever added is 747, yet AGENTS.md cites Issue 750 as this
+repo's — so "either 750 was allocated without its file ever being committed, or
+the allocator regressed." Both hypotheses were false, and the allocator was
+correct the whole time.
+
+What was actually true: the citation was **riir-ai's** Issue 750
+(`750_behavior_first_quantization_promotion_gate.md`, the lossy-surface
+promotion rule), written WITHOUT naming its repo. It has since been qualified
+to "riir-ai Issue 750" in both AGENTS.md and HISTORY.md. katgpt-rs has since
+allocated its own, unrelated `750_checks_array_vs_its_own_documentation.md`.
+Two live 750s in two repos, exactly as designed — numbers are per-repo.
+
+**This is Issue 749's failure mode, observed happening to a reader.** 749 says
+an unqualified cross-repo `Issue N` citation "rebinds to the WRONG document
+once that number is allocated locally." That is not a hypothetical: a reader
+(this issue's author) saw a bare `Issue 750`, resolved it against the local
+repo because nothing said otherwise, found no local file, and inferred an
+allocator defect that did not exist. The rebinding cost a wrong diagnosis
+written into a tracked document — cheap here, because the conclusion was
+recorded as an observation rather than acted on.
+
+The general lesson is narrower than "check your numbers": **a missing repo
+qualifier does not read as missing.** It reads as a local reference, silently
+and with full confidence, because "local" is the reader's default. That is why
+`issue_citation_gate.py` had to exist — and it now PASSES, every cross-repo
+citation naming its repo.
+
+748 remains correct for this issue: it was uncontested under every source of
+evidence when taken, and `numbering_gate.py` is green.
 
 ## Related
 
