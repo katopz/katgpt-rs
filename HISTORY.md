@@ -2242,3 +2242,45 @@ Issue 741 class, since closed by full_gate Layer 6b). Issue file removed
 per the noise-reduction rule; the full record lives in git history
 (`git log -- .issues/757_linking_detector_option_b.md`).
 
+## Issue 747 — ASEntmax modelless mining (damping schedule, derived-k, eviction window, incremental entmax): CLOSED (2026-09-12)
+
+arXiv:2506.16640 / Research 549: softmax needs sharpening ∝ log n (SSMax,
+shipped) — α-entmax needs **damping ∝ (log n)^{−0.5}**; our `entmax_1p5`
+routing had no length term, so growing candidate sets over-sparsify (the
+paper's Copy-table failure mode). Four primitives shipped behind the OPT-IN
+`asentmax_schedule` feature (katgpt-attn), all GOAT-gated; evidence in Bench
+713 + its P1/P2/P3/P0.7 addenda:
+
+- **P0** `AsentmaxSchedule` (None/Derived/Generalized) +
+  `apply_asentmax_inplace` + `RollingSigmaEstimator` (Kamath range law),
+  zero-alloc (G4); wired into `EntmaxRouter::with_asentmax_schedule()` —
+  `None` default bit-identical to the shipped Plan 106 path (unit-pinned,
+  re-pinned on real rows at P0.7).
+- **P1** derived support controller k̂ = 4/Δ̂² — length-independence exact at
+  the Lemma-2 boundary for all n up to 1M; head-to-head vs the sigmoid arm
+  SPLIT (sigmoid wins coverage, derived wins 4× cost efficiency) — no
+  replacement, recorded.
+- **P2** Prop 6 eviction window — windowed-vs-full entmax bit-identical
+  (`f32::to_bits`, 432 adversarial configs); 98.9–99.99% of KV evictable at
+  n=1M under Kamath range bounds + ALiBi 8-head slopes.
+- **P3** Lemma 1 incremental decode entmax — below-τ pushes O(1) and
+  bit-exact; 0.046 µs/step vs 68,448 µs/step full-resort at 512k; 0 allocs
+  steady-state.
+- **P0.7** (2026-09-12, `ab0d79dc` + `603075f7`) the real-model re-gate: an
+  in-repo harness prefills the REAL Ternary-Bonsai-8B (GGUF reader +
+  Q2_0_g128 dequant + faithful qwen3 prefill; forward validated against
+  llama-perplexity 16.9614 vs 16.9778 reference, 0.1%) and replays 1856
+  committed routing rows through the router. **Measured verdict: NO
+  modelless quality gain on the real path** — real σ̂ = 0.1409, an order
+  below the σ ≥ 1 over-sparsification regime; raw support healthy 4–7 (no
+  collapse at n ≤ 32); needle retention parity 96.3%/96.3%; mean oracle-mass
+  −0.017 scheduled; G3 latency +4–8%. **STAYS OPT-IN** (feature-gate-audit
+  discipline — promotion requires a gain); the wiring ships so large-σ
+  regimes can arm it with one builder call. Harness + fixture reusable
+  (`tests/asentmax_p07_realmodel_regate.rs`, 6/6; the 27B is a qwen35 GDN
+  hybrid — infeasible in-repo, recorded as the honest 8B partial).
+
+P4 stretch (T4.1–T4.4) deferred to Issue 762. Issue file removed per the
+noise-reduction rule; the full record lives in git history
+(`git log -- .issues/747_asentmax_modelless_mining.md`).
+
