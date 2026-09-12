@@ -287,3 +287,4 @@ The intervention/evidence distinction is not philosophical — it is a measurabl
 **Run:**
 ```sh
 cargo test -p riir-gpu --test bench_interventional_sft --features interventional_sft -- --nocapture
+```

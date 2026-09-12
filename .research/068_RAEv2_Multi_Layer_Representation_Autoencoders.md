@@ -496,7 +496,6 @@ RAEv2's core ideas transfer to LLM inference at the **mechanism level** (multi-l
 | `crates/katgpt-pruners/src/sdar/sdar_bandit.rs` | `SdarBanditPruner<P>` sigmoid-gated bandit |
 | `src/benchmark/mod.rs` | GOAT benchmark infrastructure, MTP benchmarks |
 | `Cargo.toml` | Feature gates (`sdar_gate`, `elf_sde`, `delta_routing`, etc.) |
-```
 
 ---
 

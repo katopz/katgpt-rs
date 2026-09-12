@@ -479,6 +479,8 @@ The backward pass architecture is sound. Only the attention gradient path needs 
   author  = {Leviathan, Yaniv and others},
   year    = {2022}
 }
+```
+
 ---
 
 # Research Audit Results (Plan 048)

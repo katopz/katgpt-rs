@@ -142,8 +142,11 @@ hand-typed count, and it was also the wrong quantity. Measured three times:
 is the whole argument for the quantity: **cite CPU, read wall as a range.**
 ⚠ Those three are a **14-check** measurement, and the CHECKS set is part of
 the claim exactly as the profile is. Two checks later: **14.42s** CPU at 15
-checks, **13.96s** at 16. Read that honestly — the added check did NOT show up
-as a clean increase, and the 3.3% spread across those two is **wider than the
+checks, **13.96s** at 16, and **13.37s** at 17 (Issue 756's
+`markdown_fence_gate.py`, a 1517-file walk). Read that honestly — the added
+checks did NOT show up as a clean increase; those three RUN DOWNWARD as the
+CHECKS set grows, which is the opposite of what any per-check cost model
+predicts, and the 3.3% spread across the first two is **wider than the
 1.4%** the three 14-check runs suggested. So CPU is the load-invariant figure
 and still the right one to cite, but it is tight-ish, not exact, and a
 difference this size is not evidence a check got slower. Only compare CPU
@@ -198,6 +201,7 @@ develop work. One line per check:
 | `population_sync_gate.py` | the seven independent contract-repo predicates must agree |
 | `trap_sentinel_gate.py` | a shell gate whose abort would report exit 0 — this repo's own two, by MEMBERSHIP (Issue 734) |
 | `issue_citation_gate.py` | a cross-repo `Issue N` citation naming no repo — it rebinds to the WRONG document once that number is allocated locally (Issue 749) |
+| `markdown_fence_gate.py` | a fenced code block never closed — everything after it renders as code, and a fence scanner mis-phases on it (Issue 756) |
 | `docs_gate_checks_sync.py` | this CHECKS array vs the AGENTS.md table documenting it — membership both ways + quantity words (Issue 750) |
 
 The `CHECKS` count is deliberately not written here — it drifted once, which

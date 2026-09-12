@@ -296,3 +296,4 @@ Both architectures separate the expensive operation (LLM inference) from the che
   journal = {arXiv preprint},
   year    = {2026}
 }
+```

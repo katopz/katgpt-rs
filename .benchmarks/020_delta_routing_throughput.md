@@ -197,3 +197,4 @@ cargo test -p katgpt-rs --test bench_097_delta_routing_throughput \
 
 cargo test -p katgpt-rs --test test_097_delta_routing_sharpness \
   --features delta_routing -- --nocapture
+```

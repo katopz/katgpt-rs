@@ -511,3 +511,4 @@ Different scales, different pipelines, different feature flags.
 
 % LoRA Architecture Verdict (internal research 04)
 % Screening Absolute Relevance (internal research 07)
+```

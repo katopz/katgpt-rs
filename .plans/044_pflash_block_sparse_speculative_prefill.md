@@ -1385,3 +1385,4 @@ The block-sparse selection is always compiled. `PrefillMode::Off` is the default
   year      = {2026},
   note      = {C++/CUDA implementation: 10.4× TTFT reduction at 128K context}
 }
+```

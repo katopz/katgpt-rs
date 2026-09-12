@@ -375,3 +375,4 @@ fn batch_validate(&self, grid: &Grid, players: &[(u8,i32,i32)], bombs: &[Bomb]) 
         Some(BatchResult::from_memory(inner, results_off, players.len(), ACTION_COUNT))
     })
 }
+```

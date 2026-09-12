@@ -214,3 +214,4 @@ Both are "adaptive compute" — spend resources where they matter. But BLT does 
   year    = {2026},
   eprint  = {2605.08044}
 }
+```

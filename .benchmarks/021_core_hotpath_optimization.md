@@ -152,3 +152,4 @@ pub fn simd_exp_inplace(x: &mut [f32])
 
 ```sh
 cargo test --test bench_core_optimization --release -- --nocapture --test-threads=1
+```
