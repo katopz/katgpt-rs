@@ -227,7 +227,9 @@ Workstation-only cross-repo sweep family — `docs_drift_sweep.py`,
 `percentile_drift_sweep.py`, `cfg_gated_drift_sweep.py`,
 `cfg_row_implication_drift_sweep.py`, `trap_sentinel_drift_sweep.py`,
 `citation_drift_sweep.py`, `restatement_drift_sweep.py` (every contract repo,
-on demand),
+on demand), `markdown_fence_drift_sweep.py` (every contract repo, on demand —
+the Issue 756 unterminated-fence verdict workspace-wide; its first run caught
+the then-new `seal-online-remaster`), (feat: markdown_fence_drift_sweep.py — the Issue 756 unterminated-fence verdict over every contract repo (workstation, two-axis pins: min_md_files walk floor + max_unterminated=0 wall); its FIRST workspace run caught seal-online-remaster .plans/005:600 (14 swallowed lines — the repo joined the contract set at Issue 760 after the landing measurement; repaired seal-online-remaster 99064c5, floored at 50); AGENTS.md sweep-family row)
 `sibling_docs_drift.yml` (reusable workflow, one caller), and
 `ci_gate_coverage.py` (report, always exit 0: which repos gate their full
 compile+lint surface in CI, and whether anything automatically starts it).

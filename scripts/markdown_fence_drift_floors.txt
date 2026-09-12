@@ -1,0 +1,97 @@
+# Pins for scripts/markdown_fence_drift_sweep.py — EVERY contract repo.
+#
+# Format, 3 whitespace-separated fields:
+#
+#   <repo> <min_md_files> <max_unterminated>
+#
+# Re-pin DELIBERATELY, in the commit that changes the measured value, with the
+# reason in the commit message. A pin that drifts behind reality is a pin
+# nobody trusts.
+#
+# ── the ceiling is a WALL, not a ratchet ──────────────────────────────────────
+# max_unterminated is 0 in all 20 repos (2026-09-12), and that zero was EARNED:
+# Issue 756 took the workspace from 19 files / 611 swallowed lines to zero in
+# one day, across katgpt-rs (12), riir-ai (5) and riir-train (2).
+#
+# ⛔ Do not "fix" a red by raising a ceiling. A new row means a document renders
+# half of itself as a code listing AND a fence-scanning gate downstream of it
+# mis-phases and thereafter scans the complement — reporting clean either way.
+# The repair is one fence.
+#
+# ⚠ And the reported line is the DANGLING fence, not necessarily the defect: a
+# single stray fence inverts the pairing of every fence after it. Two of
+# riir-train's repairs were 495 and 21 lines UPSTREAM of what was reported, and
+# riir-ai/094's needed the OUTER pair widened to ```` rather than the "extra"
+# fence deleted — deleting it leaves the inner code rendering as prose forever.
+#
+# ── the ONE floor, and why one is enough here ─────────────────────────────────
+# max_unterminated = 0 is green over whatever the walk can SEE, and the walk
+# shells out to `git ls-files` — a regression takes the population to 0 and the
+# ceiling passes, indistinguishable from a clean repo.
+#
+# min_md_files is the quantity that moves when that happens, and unlike the
+# trap sweep's population floor it is NON-ZERO in every repo (the smallest,
+# riir-kat, has 3), so it bites everywhere and a second floor would add nothing.
+#
+# All floors are ~55-60% of measured: SLACK against churn (archiving a .plans
+# tree or removing a resolved-issue batch legitimately shrinks the count, and a
+# floor that ratcheted to the last measurement would red that cleanup and teach
+# whoever hit it that the sweep is noise), TIGHT against blindness (a walk
+# regression drops these by an order of magnitude, not by a third).
+#
+# katgpt-rs's min_md_files is NOT free: it must equal
+# markdown_fence_gate.MIN_FILES, and the sweep asserts that rather than
+# trusting it — same quantity, two files.
+#
+# ── no membership pin here, deliberately ──────────────────────────────────────
+# trap_sentinel_gate.py pins its set by NAME because a count is not a checksum
+# over a set. That does not apply here: the verdict is DERIVED from the file's
+# own fence structure and there is no repaired-file list to lose. Every way to
+# reintroduce the defect lands on max_unterminated; every way to go blind to it
+# lands on min_md_files.
+#
+#                       min_md  max_unterminated
+katgpt-rs                  800                 0
+katgpt-web                   3                 0
+riir-ai                    850                 0
+riir-auth                    5                 0
+riir-chain                 130                 0
+riir-clippy                270                 0
+riir-dao                     7                 0
+riir-dapps                  25                 0
+riir-deployer               18                 0
+riir-esp32                   3                 0
+riir-game-sdk               50                 0
+riir-kat                     1                 0
+riir-mmorpg-examples        40                 0
+riir-neuron-db             115                 0
+riir-shader                 13                 0
+riir-train                 375                 0
+riir-viewbridge              7                 0
+seal-game-editor           165                 0
+seal-remake                 12                 0
+seal-online-remaster       50                 0
+
+# Measured 2026-09-12, the landing run: 19 repos · 5058 tracked+untracked .md ·
+# 0 unterminated. Per-repo md counts at landing, for the next re-pin's slack
+# arithmetic:
+#
+#   katgpt-rs 1518 · riir-ai 1424 · riir-train 632 · riir-clippy 455 ·
+#   seal-game-editor 282 · riir-chain 220 · riir-neuron-db 197 ·
+#   riir-game-sdk 90 · riir-mmorpg-examples 74 · riir-dapps 42 ·
+#   riir-deployer 31 · riir-shader 22 · seal-remake 21 · riir-dao 13 ·
+#   riir-viewbridge 13 · riir-auth 9 · katgpt-web 6 · riir-esp32 6 · riir-kat 3
+#
+# ⚠ Read that list as a MEASUREMENT RECORD, not as a second set of pins. The
+# floors above are the claim; these are what they were derived from, dated so a
+# later reader can tell a real shrink from a re-pin nobody justified.
+#
+# ── first post-landing run, 2026-09-12 (the sweep's first CATCH) ─────────────
+# seal-online-remaster joined the contract set (BOUNDARY.md landed there,
+# katgpt-rs Issue 760) AFTER the landing run above — so it was outside the 19
+# and outside every pin. The first full run derived 20 repos / 5146 .md and
+# found exactly one unterminated fence: seal-online-remaster
+# `.plans/005_layer3_reducer.md:600` (14 swallowed lines — the File Map tree;
+# repaired `99064c5`, floored at 50). The class the sweep exists for, caught
+# by its own first workspace run: a repo that joins after the landing
+# measurement arrives with the defect and no gate the day it appears.
