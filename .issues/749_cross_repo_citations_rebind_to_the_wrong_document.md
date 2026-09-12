@@ -104,3 +104,55 @@ a row can be added to one and not the other, and a description can drift in
 either. `docs_gate_paths_sync.py` already exists for exactly this shape one
 axis over (docs_gate.yml's two hand-duplicated `paths:` lists). Follow-up:
 `.issues/750` (this repo).
+
+---
+
+## Addendum (same day) — what the probing taught, after the first commit
+
+### 1. The classifier had a ~50% false-positive rate, found by spot-check
+
+Run across all 19 contract repos, the first version reported **308**
+unqualified citations over 2,939. Spot-checking the first four rows found
+**two clear false positives**: riir-clippy's "dapps Issue 027" and riir-dao's
+"Issue 006" next to "dapps flipped ...". The repo **is** named in both — by
+its SHORT form — and the test only matched the full directory name.
+
+`aliases()` now accepts a `riir-` -stripped short form, but **only >= 4
+characters** (`ai`, `kat`, `dao` collide with ordinary words) and **only
+immediately on the citation** (40 chars of lead), never from the wider window:
+`chain`, `train` and `shader` are ordinary words in this prose, and accepting
+them from a 3-line window would qualify nearly every citation and quietly
+retire the gate. Probed both ways — `train Issue 513` qualifies, `blockchain
+Issue 513` does not.
+
+⛔ **So 308 is a contaminated upper bound, not a finding count**, and is not
+recorded as one anywhere. The cross-repo measurement is filed separately as
+Issue 751.
+
+### 2. The context window is a measured trade-off, not a guess
+
+Tightening from 3 preceding lines to same-line-only yields 4 MORE findings —
+and all 4 are **false positives**, one attribution split by an 80-column line
+break (`Downstream: riir-ai` / `Issue 912 T4's`). The wider window's cost is
+the opposite error: an unrelated repo name within 3 lines (a
+`riir-train/data/*.gguf` path in the model list) qualifies a citation that
+attributes nothing. Both directions are real; 3 lines is where the errors were
+fewest. Recorded in the gate so the next person tightening it sees the
+measurement first.
+
+### 3. ⛔ The gate demonstrated its own blind spot on the founding example
+
+After filing Issue 750 in this repo, the revert probe "un-qualify `Issue 750`"
+**stopped firing** — and the gate is right. 750 is now a LOCAL number, so a
+bare `Issue 750` legitimately reads as `.issues/750_*`. That is the rebinding
+hazard this issue is about, performed live on the citation that motivated it:
+the reference is now unrecoverable-by-number, and only the qualification
+committed in `e258fdaa` preserves its meaning.
+
+The lesson for anyone re-probing this gate: **a revert probe is only valid
+while its number is not locally allocated.** The list-tail probe
+(`Issues 490/493`) and an isolated `Issue 912` probe both still fire, which is
+what establishes the gate is live. A first attempt at the latter passed
+because it was appended under `## Models`, three lines under a
+`riir-train/data/...` path — the window's known false negative, caught by
+reading the result instead of accepting a convenient green.

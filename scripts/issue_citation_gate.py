@@ -113,19 +113,47 @@ def allocated(repo: Path, subdir: str) -> set[int]:
     return out
 
 
-def citations(text: str) -> list[tuple[int, str, int]]:
-    """(line, kind, number) for every citation, list forms expanded."""
+def aliases(repo_name: str) -> list[str]:
+    """Full directory name, plus a SHORT-FORM alias where one is unambiguous.
+
+    Prose names a sibling both ways — "riir-ai Issue 750" and "dapps Issue 027"
+    are equally followable, and a test matching only the directory name calls
+    the second one unqualified. Measured over the workspace, 2 of the first 4
+    flagged rows were exactly that false positive.
+
+    The alias is the name minus a `riir-` prefix, and ONLY when >= 4 characters:
+    `ai`, `kat`, `dao` are too short to appear in prose without colliding with
+    ordinary words. Short aliases keep the full name as their only form.
+    """
+    out = [repo_name]
+    stem = repo_name[5:] if repo_name.startswith("riir-") else ""
+    if len(stem) >= 4:
+        out.append(stem)
+    return out
+
+
+# An alias only qualifies a citation when it sits right ON it ("dapps Issue 27"),
+# never merely somewhere nearby: `chain`, `train` and `shader` are ordinary
+# words in this prose, and a 3-line window full of them would qualify every
+# citation in the repo and quietly retire the gate. The FULL directory name is
+# unambiguous enough to accept from the wider window.
+_ALIAS_REACH = 40
+
+
+def citations(text: str) -> list[tuple[int, str, int, str]]:
+    """(line, kind, number, lead-text) for every citation, list forms expanded."""
     lines = text.splitlines()
     out = []
     for i, line in enumerate(lines, 1):
         for m in _HEAD.finditer(line):
             kind = m.group(1)
-            out.append((i, kind, int(m.group(3))))
+            lead = line[max(0, m.start() - _ALIAS_REACH):m.start()]
+            out.append((i, kind, int(m.group(3)), lead))
             if not m.group(2):  # singular "Issue 47" never heads a list
                 continue
             pos = m.end()
             while (t := _TAIL.match(line, pos)):
-                out.append((i, kind, int(t.group(1))))
+                out.append((i, kind, int(t.group(1)), lead))
                 pos = t.end()
     return out
 
@@ -159,7 +187,7 @@ def main() -> int:
                   f"report clean over a file it never opened")
             return 2
         lines = p.read_text(encoding="utf-8").splitlines()
-        for ln, kind, n in citations("\n".join(lines)):
+        for ln, kind, n, lead in citations("\n".join(lines)):
             scanned += 1
             owners = elsewhere[kind].get(n, [])
             if n in local[kind]:
@@ -168,8 +196,21 @@ def main() -> int:
                 continue
             # Cross-repo: a sibling repo name within the citation's own
             # paragraph-scale context (3 lines) is what makes it followable.
+            # THREE lines, and the window size is a MEASURED trade-off, not a
+            # guess. This prose hard-wraps at 80 columns, so a single sentence
+            # routinely spans 2-3 lines ("Downstream: riir-ai\nIssue 912 T4's"
+            # is one attribution split by a line break). Tightening to
+            # same-line-only was measured at **4 false positives**, all of that
+            # shape. The cost of the wider window is the opposite error: an
+            # unrelated repo name that happens to sit within 3 lines qualifies a
+            # citation that names nothing — a `riir-train/data/*.gguf` path two
+            # lines up in a model list does it. Both directions are real; 3
+            # lines is where the errors were fewest.
             ctx = "\n".join(lines[max(0, ln - 3):ln])
             if any(r.name in ctx for r in sibs):
+                continue
+            if any(re.search(rf"\b{re.escape(a)}\b", lead)
+                   for r in sibs for a in aliases(r.name)[1:]):
                 continue
             where = "/".join(owners) if owners else "NO REPO IN THE WORKSPACE"
             unqualified.append(f"  {doc}:{ln}  {kind} {n} — lives in {where}, "
