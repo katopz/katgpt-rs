@@ -400,6 +400,43 @@ population derived. Verdict half: `scripts/percentile_floor_gate.py` (pins in
 `scripts/percentile_floors.txt`; `min_sites_scanned` is a FLOOR — a tokenizer
 regression takes the population to ~0 and every ceiling passes).
 
+## A Lean theorem can RESTATE its own definition — `scripts/restatement_theorem_audit.py`
+
+`theorem sidecarHeaderSize_eq_sum : sidecarHeaderSize = magicSize + versionSize
++ …` where the RHS **is** the `def` body. `decide` closes it whatever the
+constants hold, so it is green on every transcription typo it was written to
+catch — while `lake build`, `#print axioms` and the proof gate's audited-surface
+count all report it as a theorem that proves something. Four shipped in
+riir-neuron-db for months (Issue 617, removed `24957a2`).
+
+```bash
+scripts/restatement_theorem_audit.py               # all repos with .proofs (derived)
+scripts/restatement_theorem_audit.py ../riir-chain # or one, by path
+scripts/restatement_theorem_audit.py -v            # every row, not just findings
+```
+
+- A **report, not a gate** (exit 0). The criterion is symbolic equality over
+  **leaf** constants: unfold every composite nullary `def`, keep numeral-bodied
+  leaves as symbols, compare as polynomials. Unfolding all the way to numerals
+  instead would compare `464` with `464` and condemn every sound literal pin —
+  **the leaf boundary IS the classifier.**
+- **CROSS-DEF is not a finding.** `commitmentOffset = RAW_PREFIX_LEN` is
+  symbolically equal too, but it pins two *independently maintained*
+  definitions against each other and a perturbation arm proves it reds. The
+  removed four had an RHS that existed only inside the theorem. Pooling the two
+  would have condemned a load-bearing theorem.
+- **UNRESOLVED is not clean** (function application, Mathlib, ℚ/ℝ ops), and
+  `HYPOTHETICAL` — a theorem with binders — is split out rather than pooled,
+  because it is 199 of 255 and pooling hides how few statements the arithmetic
+  pass ever sees.
+- Validated against a tree whose answer was known independently: riir-neuron-db
+  at `24957a2^` reports **exactly** the four Issue-617 theorems, 0 at HEAD.
+  That run is also what exposed the classifier's own defect — a repo-wide def
+  table unfolded `Shard.zoneHashOffset` through ExperienceGraph's same-named
+  chain. Scoped per module + transitive imports now.
+- Standing (2026-09-12): **0 RESTATEMENT-INLINE** over 4 repos / 68 `.lean` /
+  255 theorems; 19 UNRESOLVED + 6 conjuncts read one by one, all value pins.
+
 ## A gate that ABORTS reports exit 0 — `scripts/trap_exit_launder_audit.py`
 
 Every script above is a shell gate with `set -euo pipefail` and a cleanup
