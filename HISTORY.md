@@ -2052,8 +2052,8 @@ the stack could tell them apart from a theorem that proves something:
 `lake build` green, `#print axioms` axiom-free, counted in `proof_gate.sh`'s
 audited surface, and `proof_negative_test.sh` **17/17**, because no arm ever
 red on them and a pass count cannot report which theorem did not fire. They
-were removed by that repo's Issue 617 (`24957a2`, `387b4fc`); this issue owns
-the class-level instrument and the sweep.
+were removed by riir-neuron-db Issue 617 (`24957a2`, `387b4fc`); this issue
+owns the class-level instrument and the sweep.
 
 **The criterion is where the work is: symbolic equality over LEAF constants.**
 Unfold every composite nullary `def`, keep numeral-bodied leaves SYMBOLIC, and
