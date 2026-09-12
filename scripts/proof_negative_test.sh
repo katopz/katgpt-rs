@@ -67,6 +67,21 @@ fail=0
 #   $2 = sed expression
 #   $3 = human description of the bug being simulated
 #   $4 = OPTIONAL module the arm claims is the SOLE catcher (empty = no claim)
+#
+# ⛔ PRECONDITION on $4, measured 2026-09-12 — every arm here deliberately
+# passes NO claim, and that is a verdict rather than an omission. `expect` is
+# only meaningful when the perturbation leaves the EDITED file compiling. Lake
+# builds in dependency order: if the edited file itself errors, every module
+# downstream of it is never built and so cannot report, and the arm then sees
+# exactly one module and "confirms" a sole-catcher claim nothing tested.
+#
+# All 8 arms below were measured, and all 8 red in the very file they edit.
+# Arm 1 is the proof: it breaks Pencil/Sym.lean, and Pencil/SpecTests.lean —
+# which imports Sym — produced ZERO build jobs, so its examples never ran. A
+# claim of "Sym.lean ONLY" would have encoded build ORDER as if it were
+# coverage. Contrast riir-chain, where the same mechanism IS live on 3 arms
+# (1730af72): there a type-correct constant edit leaves Basic.lean compiling
+# and the downstream SpecTests genuinely catches it.
 perturb() {
     local rel="$1" expr="$2" desc="$3" expect="${4:-}"
     local file="$SRC/$rel"
