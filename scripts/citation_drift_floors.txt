@@ -18,12 +18,19 @@
 # is visible in the pins rather than silently tolerated. Lower a ceiling in the
 # commit that qualifies a citation.
 #
-# The backlog was then worked off by the owning repos: **3 rows remain**, in
-# two repos, and both are enumerated in their issue files as needing the
-# AUTHOR rather than a lookup (riir-clippy's two `Issue 665` rows name a class
-# no repo's 665 is about; riir-game-sdk's `Plan 032` names a DeFi dashboard no
-# candidate repo has a Plan 032 about). A ceiling of 0 in 17 of 19 repos makes
-# this file a WALL again everywhere but those two rows.
+# The backlog was then worked off by the owning repos and the campaign is
+# COMPLETE (2026-09-12): **0 CROSS rows across all 19 repos.** The last
+# three rows were resolved by archaeology, not by the author lookup the
+# file previously said they needed: riir-clippy's two `Issue 665` rows are
+# the dual-allocation class NAMED AFTER katgpt-rs Issue 665 (freedom-of-
+# function selection, the only live 665 when the class was named
+# 1c103568b 08-17; riir-ai's spec-decode 665 died 08-15, two days before —
+# riir-clippy 2fc7dac9 / Issue 096); riir-game-sdk's `Plan 032` was a
+# PHANTOM never allocated in any repo, born 06-03 in chain_viz's own
+# doc-comment — removed, not qualified (riir-game-sdk 037042f / Issue 031);
+# seal-remake's 16 rows were repaired 09:18 (92dff5ca) but the ratchet
+# commit never landed — paid here. A ceiling of 0 everywhere makes this
+# file a WALL again, all 19 repos.
 #
 # ⛔ Do NOT read a ceiling as a finding count, and do not read ONE error rate
 # over it. Two populations, two rates, never blended (a SAMPLE rate does not
@@ -87,12 +94,12 @@ katgpt-web                  3      0               0       0
 riir-ai                   305      0               6       0
 riir-auth                   8      0               0       0
 riir-chain                 65      0               1       0
-riir-clippy               513      2               9       0
+riir-clippy               513      0               9       0
 riir-dao                   25      0               0       0
 riir-dapps                104      0               0       0
 riir-deployer              21      0               0       0
 riir-esp32                  2      0               0       0
-riir-game-sdk             172      1               4       0
+riir-game-sdk             172      0               4       0
 riir-kat                    1      0               0       0
 riir-mmorpg-examples      321      0               0       0
 riir-neuron-db             27      0               3       0
@@ -100,17 +107,19 @@ riir-shader                 0      0               0       0
 riir-train                 43      0               1       0
 riir-viewbridge            24     0               2       0
 seal-game-editor            0      0               0       0
-seal-remake                39     16               0       0
+seal-remake                39      0               0       0
 
-# ── how the backlog was cleared, and the two rows it could not clear ─────────
-# riir-game-sdk held the density record at 124/287 (43%) and is now at 1: its
+# ── how the backlog was cleared, and the zero rows that remain ──────────────
+# riir-game-sdk held the density record at 124/287 (43%) and is now at 0: its
 # `.issues` top out at 029 while it cited riir-ai's SDK-extraction arc
 # (458-531, 79 rows) by bare number throughout, plus riir-mmorpg-examples'
 # Plans 006/010/013/016/018/022/031 and katgpt-rs' 244/457/570/576. Repaired
 # 2026-09-12 (riir-game-sdk `.issues/030`), owner read off each referenced
-# document's TITLE, never inferred from the number. The one survivor is
-# `Plan 032` (the `chain_viz` DeFi dashboard): no candidate repo has a Plan 032
-# about a DeFi dashboard, so it needs the author, not a lookup.
+# document's TITLE, never inferred from the number. The last survivor,
+# `Plan 032` (the `chain_viz` DeFi dashboard), was resolved the same day as a
+# PHANTOM — no repo ever allocated a 032 about a DeFi dashboard (born 06-03 in
+# the example's own doc-comment, rider work beside riir-ai Plans 189/190/191);
+# removed, not qualified (riir-game-sdk `037042f` / Issue 031).
 #
 # ⛔ Two of those ceilings fell for the OTHER reason, and the ambiguity is
 # real: riir-mmorpg-examples' in_local_range 16 -> 0 and seal-remake's 1 -> 0
