@@ -88,6 +88,24 @@ The repair also tightened the name match to segment boundaries: a plain
 `"seal-remake" in ctx` read riir-viewbridge's `seal-remake-unity` as naming
 **seal-remake** and qualified a `Plan 031` citation on a different repo's name.
 
+Two adjudications the per-repo filings forced, recorded so they stay decided
+---------------------------------------------------------------------------
+**`ndb` is NOT a missing alias — it is a real finding.** riir-auth writes "ndb
+Plan 327/328" and riir-neuron-db owns both, so the row looks like a false
+positive of the alias table. It is not, and the alias table must NOT grow a
+hand-typed entry for it. The alias is DERIVED (directory name minus `riir-`),
+deliberately, because a hand-maintained list drifts exactly as a hand-typed
+repo set does; and more decisively, AGENTS.md is *the contract a new agent
+reads*, and a new agent does not know that `ndb` means riir-neuron-db. An
+address only its author can follow is the thing this sweep exists to find.
+
+**A truncated read produced a wrong filed count.** riir-viewbridge's issue was
+filed at 12 rows when the true count was 13: the per-repo print caps CROSS at
+12, and the issue's author counted the printed ROWS instead of reading
+`cross=N` in the header. `--full` exists because of this, and the truncation
+notice now names the flag — but the durable lesson is that the header is the
+count and the row list is a sample of it.
+
 Why the window stays BACKWARD-ONLY — measured, not assumed
 ----------------------------------------------------------
 Owner-consistency made the forward-window question answerable for the first
@@ -294,7 +312,7 @@ def audit(repo: Path, sibs: list[Path], alloc: dict[str, dict[str, set[int]]],
                 elsewhere[kind].setdefault(n, []).append(s.name)
 
     got = {"n_docs": 0, "n_cites": 0, "ambiguous": set(), "misleading": 0,
-           "misattributed": 0, "cross_units": set(),
+           "misattributed": 0, "cross_units": set(), "repeat": 0,
            CROSS: [], IN_RANGE: [], ORPHAN: []}
     for doc in docs:
         p = repo / doc
@@ -302,6 +320,18 @@ def audit(repo: Path, sibs: list[Path], alloc: dict[str, dict[str, set[int]]],
             continue          # not every repo carries a HISTORY.md — absence
         got["n_docs"] += 1    # is not a finding, but the doc COUNT is printed
         lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+        # Two passes over the same document: the first records which numbers
+        # the prose DOES attribute somewhere, so the second can tell a bare
+        # citation that is unfollowable from one whose attribution is already
+        # in this very file a few lines away.
+        qualified_here: set[tuple[str, int]] = set()
+        for ln, kind, n, lead in icg.citations("\n".join(lines)):
+            if n in mine[kind]:
+                continue
+            owners = elsewhere[kind].get(n, [])
+            nmd, _ = icg.qualifiers(lines, ln, lead, sibs)
+            if icg.is_qualified(nmd, owners):
+                qualified_here.add((kind, n))
         for ln, kind, n, lead in icg.citations("\n".join(lines)):
             got["n_cites"] += 1
             owners = elsewhere[kind].get(n, [])
@@ -329,6 +359,15 @@ def audit(repo: Path, sibs: list[Path], alloc: dict[str, dict[str, set[int]]],
                 got["misattributed"] += 1
                 tag = (f"  [⛔MISATTRIBUTED: names {'/'.join(sorted(bad))}, "
                        f"which does NOT own {n}]")
+            elif cls is CROSS and (kind, n) in qualified_here:
+                # The repair is MECHANICAL: this document already names the
+                # owner for this number somewhere else, so the fix is to copy
+                # that attribution here, with no lookup and no adjudication.
+                # NOT a qualification — a bare number mid-document still
+                # rebinds the day the repo allocates it locally, which is the
+                # whole hazard. It ORDERS the work.
+                got["repeat"] += 1
+                tag = "  [repeat: this file attributes this number elsewhere]"
             elif cls is CROSS and hint:
                 if hint & set(owners):
                     tag = f"  [crate-hint: {'/'.join(sorted(hint & set(owners)))}]"
@@ -520,7 +559,7 @@ def main() -> int:
 
     bad = False
     tot = {"docs": 0, "cites": 0, "amb": 0, "mis": 0, "misat": 0,
-           "units": 0, CROSS: 0, IN_RANGE: 0, ORPHAN: 0}
+           "units": 0, "rep": 0, CROSS: 0, IN_RANGE: 0, ORPHAN: 0}
     mine_row = None
     for repo in repos:
         sibs = [s for s in repos if s != repo]
@@ -531,6 +570,7 @@ def main() -> int:
         tot["amb"] += len(got["ambiguous"])
         tot["mis"] += got["misleading"]
         tot["misat"] += got["misattributed"]
+        tot["rep"] += got["repeat"]
         units = len(got["cross_units"])
         # SUM, never union: riir-auth and riir-game-sdk both citing Plan 488
         # is TWO adjudications in two documents, not one. A union reported 142
@@ -615,6 +655,12 @@ def main() -> int:
     print(f"  AMBIGUOUS (local AND sibling — undecidable by number, NOT a pass): "
           f"{tot['amb']}  ·  ⛔MISLEADING crate hints: {tot['mis']}"
           f"  ·  ⛔MISATTRIBUTED (names a NON-owner repo): {tot['misat']}")
+    print(f"  of the {tot[CROSS]} CROSS: {tot['rep']} carry the REPEAT label — "
+          f"the same document already attributes that number elsewhere, so the "
+          f"repair is mechanical (copy it), not a lookup. The labels are "
+          f"mutually exclusive and ⛔MISATTRIBUTED outranks REPEAT, so the "
+          f"mechanically-repairable population is {tot['rep']}+ , not exactly "
+          f"{tot['rep']}")
     # TWO error rates over TWO populations, never blended into one number: a
     # SAMPLE rate does not transfer to rows it never sampled (Issue 752).
     print(f"  ⛔ measured FALSE-POSITIVE rates, by population — do NOT quote "
