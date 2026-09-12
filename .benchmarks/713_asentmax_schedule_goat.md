@@ -106,9 +106,8 @@ Single-needle retrieval parity at 100% (032 T23 anchor). Cost anchor: 032's own 
 
 ## Next
 
-- **P0.7 (new, in Issue 747):** wire `score_blocks_entmax_with_schedule_into` into the forward-path routing call site (config-gated), re-gate G2/G3 on the real prefill path, then re-evaluate default-on promotion.
-- P1 (Lemma-2 support controller `k̂ = 4/Δ̂²`) — landed 2026-09-11, see the P1 section below.
-- P2 (Prop 6 eviction window), P3 (incremental decode entmax) — landed 2026-09-11, see the P2/P3 addendum below.
+- ~~P0.7: wire the schedule into the forward path + re-gate on real prefill rows~~ — **complete 2026-09-12**, see the P0.7 addendum above: wiring landed, real-model re-gate measured NO quality gain on the Bonsai-8B routing surface (σ̂ ≈ 0.14 — the over-sparsification regime is absent); **stays opt-in**.
+- P4 stretch (T4.1–T4.4) remains open per the issue.
 
 ## P1 addendum — derived-k budget (Lemma-2 support controller, 2026-09-11)
 
@@ -160,6 +159,125 @@ Note: the decode tok/s delta is an ENGINE-level measurement — the riir-ai KV-p
 **G4 PASS** (`tests/asentmax_p3_alloc_check.rs`): below-τ steady state within the pre-sized reservation = 0 allocations (CountingAllocator, 1000 measured pushes).
 
 **Verdict P2+P3: 🟢 PASS, stays opt-in** (same family flag `asentmax_schedule`; the window calc and incremental entmax are not yet wired into a production KV/decode path — the riir-ai consumer follow-up would be their hot-path gate).
+
+## P0.7 addendum — forward-path wiring + real-model G2/G3 re-gate + promotion decision (2026-09-12)
+
+**Wiring (landed earlier as the P0.7 first half, commit `90575de2`+):**
+`EntmaxRouter::with_asentmax_schedule()` — the production `VortexFlow`
+routing consumer routes through `score_blocks_entmax_with_schedule_into`
+with a rolling-σ̂ EMA (α=0.8) observing every raw logit row; `None` default
+is bit-identical to the shipped Plan 106 path (unit-pinned, and re-pinned
+on REAL rows below).
+
+### Harness: real-model fixture capture
+
+A committed generator (`katgpt-attn/examples/asentmax_p07_gen_fixture.rs`)
+runs an **actual model prefill over real text** in this crate — no
+synthetic routing rows anywhere in the loop:
+
+- **Model**: `Ternary-Bonsai-8B-Q2_0.gguf` (the ternary Bonsai family's 8B;
+`general.architecture = qwen3`, 36 layers all standard full attention,
+32 q-heads/8 kv-heads GQA 4:1, head_dim 128, QK-RMSNorm, SwiGLU, YaRN rope
+base 1e6 factor 4.0 orig-ctx 16384). The 27B is a qwen35 GDN hybrid whose
+faithful forward needs the riir-ai engine — out of scope for an in-repo
+harness; the 8B is the same ternary Q2_0_g128 lineage and has MORE
+full-attention routing surface (36 layers vs the 27B's 16).
+- **Forward**: self-contained f32 CPU prefill (GGUF v3 reader + type-42
+Q2_0_g128 dequant `(q-1)·d` per Issue 578's verified layout + qwen3 block
++ row-parallel deterministic GEMM). **Faithfulness pinned against the
+PrismML llama.cpp fork on this box**: llama-perplexity (Metal AND CPU) on
+the same GGUF, same prompt file, same chunk semantics (n_ctx=1024,
+non-overlapping, positions [512,1024) scored) = **PPL 16.9778**; this
+crate's forward = **PPL 16.9614** (0.10% — f32-vs-f16 compute noise).
+  - Convention search recorded (each rejected arm's PPL): interleave rope
+    667.8; no-QK-norm 6783.5; yarn-with-misread-ramp 140.1; flat θ/4 263.0.
+    The validated combo: half-split rope pairs, QK-norm before rope, and
+    llama.cpp's ACTUAL `rope_yarn_ramp` = `1−clamp((p−start)/(end−start))`
+    (pair index, paper-correct direction) + mscale 1+0.1·ln 4.
+- **Tokenizer**: gpt2 byte-level BPE with llama.cpp's qwen2 pre-tokenizer
+  (ASCII arm) — **2085 tokens on the committed prompt, exactly matching
+  llama.cpp's count**.
+- **Capture**: 2085-token prefill of committed real prose (with a planted
+  needle sentence, Bench 032 pattern); rows at block-end steps only
+  (t = k·64−1, so all k blocks are complete and the oracle covers exactly
+  them); sampled surface = layers {1,5,10,14,19,23,28,33} × q-heads
+  {0,4,9,13,17,22,26,31} (one per kv group → all 8 kv-heads);
+  per row: post-RoPE query (f16) + per-block mean-pooled post-RoPE K
+  summaries (f16, once per (layer,kv-head) stream) + ground-truth
+  per-block softmax mass under FULL attention at t (f32 — the oracle).
+  **Fixture**: 1856 rows / 64 streams / 1,163,568 B committed at
+  `katgpt-attn/tests/data/asentmax_p07_bonsai8b.fixture` (FNV-1a provenance
+  pin against the committed prompt; regeneration documented in the
+  generator header). Needle: char 4244 → token 865 → block 13.
+
+### G2 — routing quality on REAL rows (tests/asentmax_p07_realmodel_regate.rs)
+
+Support vs n (mean over 64 rows per n; arms: raw = shipped Plan 106 path,
+sched = `with_asentmax_schedule()`):
+
+| n | raw \|S\| | sched \|S\| | raw mass | sched mass | raw recall | sched recall |
+|---|---|---|---|---|---|---|
+| 4 | 3.6 | 3.2 | 0.982 | 0.969 | 0.978 | 0.971 |
+| 6 | 4.8 | 4.4 | 0.887 | 0.847 | 0.915 | 0.871 |
+| 8 | 4.9 | 4.4 | 0.869 | 0.812 | 0.848 | 0.789 |
+| 12 | 4.7 | 4.2 | 0.750 | 0.721 | 0.710 | 0.664 |
+| 16 | 6.4 | 6.3 | 0.728 | 0.711 | 0.776 | 0.769 |
+| 20 | 6.6 | 6.5 | 0.682 | 0.663 | 0.701 | 0.701 |
+| 24 | 6.4 | 6.8 | 0.667 | 0.671 | 0.684 | 0.679 |
+| 28 | 6.8 | 7.5 | 0.674 | 0.689 | 0.617 | 0.643 |
+| 32 | 5.9 | 6.9 | 0.603 | 0.617 | 0.569 | 0.586 |
+
+- **No over-sparsification collapse on the real path**: raw support holds
+  3.6–6.9 across n=4→32. The synthetic harness's collapse (raw → 1–2.5 at
+  planted σ 1–8) does NOT occur — **measured real routing-logit σ̂ =
+  0.1409**, an order of magnitude below the σ ≥ 1 regime the correction
+  targets. The Eq-10 schedule on real rows self-calibrates to ×1.35
+  amplification at n=32 (pinning scaled range to 1), i.e. it mild-sharpens
+  here, not damps.
+- **Mean oracle-mass coverage (all 1856 rows): raw 0.7279 vs scheduled
+  0.7107 (Δ −0.0172)** — the scheduled arm is slightly WORSE on average;
+  the per-n deltas are negative at n=5–15 (EMA warm-start lag rows, the
+  documented one-row-lag behavior) and turn marginally positive at n ≥ 24.
+- **Needle retention (real planted needle, block 13)**: 54 oracle-concentrated
+  rows (model's top-1 mass block = needle); kept raw 52/54 (96.3%), sched
+  52/54 (96.3%) — parity, no gain. Max needle mass 0.997.
+
+### G3 — no-regression (steady state, same real rows)
+
+Router latency/row (n ≥ 16 rows, 20 iters after warm-up): raw **0.63 µs**,
+scheduled **0.66 µs** (ratio 1.039; second run 0.60/0.65 = 1.080). The
+schedule adds one `powf` + the O(n) estimator row scan — within noise of
+the O(n·d) dot products. PASS.
+
+None-arm bit-identity re-pinned ON REAL ROWS (`p07_none_arm_bit_identical_on_real_rows`,
+464 rows byte-identical vs `score_blocks_entmax_into`): enabling
+`asentmax_schedule` alone still changes nothing.
+
+### Promotion decision: 🟡 **STAYS OPT-IN — no modelless gain on the real path**
+
+The GOAT promotion rule (§Feature Flag Discipline) requires a modelless
+quality gain on the real hot path. Measured on the actual Bonsai-8B
+prefill routing surface: needle parity (96.3/96.3), mean mass −0.017,
+recall −0.009 avg (better only at n ≥ 27), support +17% at n=32 with no
+quality benefit, latency +4–8%. **No gain — promotion NOT justified.**
+
+The wiring ships (opt-in): any regime where routing-logit σ is large
+(longer contexts at bigger chunk counts than 2k-token prefills, other
+models, post-softmax-sink heads) can arm it with one builder call. The
+measured regime band is pinned in the gate (`σ̂ ∈ [0.05, 0.5]`) so a
+fixture drift that changes the routing scale is caught.
+
+### Honest caveats
+
+1. n ≤ 32 (2085-token prefill / 64-token chunks). Production 65k contexts
+   reach 1024 blocks — untested here (CPU prefill cost grows quadratically);
+   the σ̂ measurement is per-model and per-prompt-shape.
+2. One model family (ternary Bonsai-8B). The 27B's qwen35 hybrid needs the
+   riir-ai engine; its GDN layers have no KV routing surface at all, and
+   its 16 full-attn layers are the same qwen3 attention block.
+3. The synthetic P0 G2 gains were real in their regime (σ 1–8 planted) but
+   the regime itself does not occur on this surface — caveat #2 of the P0
+   record, now measured.
 
 ## P2/P3 substrate check (substrate-first skill)
 

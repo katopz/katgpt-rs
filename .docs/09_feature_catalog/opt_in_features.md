@@ -3688,14 +3688,19 @@ collapsing.
   the theorem's setting (causal self-attention with a near token; raw
   logits bounded — feed generous bounds, the window grows linearly in the
   range); RoPE heads need the periodic re-entry union (P4), not this
-  window.
+  window. The P0.7 re-gate measured the P0 caveat honestly: the synthetic
+  harness's planted-logit σ 1–8 regime does not occur on the real Bonsai-8B
+  routing surface (σ̂ ≈ 0.14) — the primitive repairs a failure mode that
+  is real in the paper's regime and absent here at n ≤ 32.
 
 🔧 Feature flag: `asentmax_schedule` (katgpt-attn; implies `dash_attn`;
-root shim forwards) — the Issue 747 family gate. Opt-in — every row passes
-its gates but none is wired into a production hot path yet; default-on
-waits for the P0.7 forward wiring + re-gate (feature-gate-audit
-discipline: no default-on-unwired states; the riir-ai KV-path consumer of
-P2/P3 would be its hot-path gate).
+root shim forwards) — the Issue 747 family gate. Opt-in: P0's router socket
+is wired (P0.7) but the real-model re-gate measured no quality gain on the
+Bonsai-8B routing surface (σ̂ ≈ 0.14 — the over-sparsification regime is
+absent there), so promotion to default-on is NOT justified by the evidence
+(see the P0.7 row above + Bench 713's P0.7 addendum); P2/P3 remain
+unwired on any production KV path (the riir-ai consumer follow-up would be
+their hot-path gate).
 
 📖 Issue: [747](../../.issues/747_asentmax_modelless_mining.md) ·
 Research: [549](../../.research/549_ASEntmax_Length_Adaptive_Entmax_Attention.md) ·
