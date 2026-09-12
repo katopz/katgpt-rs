@@ -592,6 +592,49 @@ def selftest() -> list[str]:
         if icg.allocated(hd, ".issues", names) != {42}:
             fails.append("allocated() does not union the heading path")
 
+        # ── fenced headings are QUOTED, not allocated. Same standing as the
+        # four arms above: a false allocation SUPPRESSES a finding, and the
+        # shapes are the ones a markdown scanner actually gets wrong — an
+        # inner ```bash must NOT close the block (a naive toggle then scans
+        # the complement, reading prose as code to EOF), and a longer inner
+        # run must not either.
+        fz = ws / "riir-fencerepo"
+        (fz / ".issues").mkdir(parents=True)
+        (fz / "HISTORY.md").write_text(
+            "## Issue 042 (2026-01-01) — a REAL local allocation\n"
+            "```markdown\n"
+            "## Issue 043 (2026-01-01) — quoted from another repo's doc\n"
+            "```bash\n"
+            "## Issue 044 (2026-01-01) — still inside: an INFO STRING never closes\n"
+            "````\n"
+            "## Issue 045 (2026-01-01) — a longer BARE run does close it\n"
+            "````python\n"
+            "## Issue 047 (2026-01-01) — inside a 4-backtick block\n"
+            "```\n"
+            "## Issue 048 (2026-01-01) — a SHORTER run cannot close it\n"
+            "````\n"
+            "## Issue 049 (2026-01-01) — closed at equal width, a REAL allocation\n")
+        got_f = icg.heading_allocated(fz, ".issues", ["riir-fencerepo"])
+        if got_f != {42, 45, 49}:
+            fails.append(f"fenced headings: got {sorted(got_f)}, expected [42, 45, 49] "
+                         f"— 43/44/47/48 are inside a fence and are QUOTED, not allocated")
+
+        # the fail-SAFE arm: an unterminated fence excludes NOTHING (rather
+        # than swallowing the tail to EOF, which is the same suppression one
+        # level over) and is reported as its own hazard.
+        (fz / "AGENTS.md").write_text(
+            "```text\n"
+            "## Issue 046 (2026-01-01) — inside an UNTERMINATED fence\n")
+        inside, open_at = icg.fenced_lines((fz / "AGENTS.md").read_text())
+        if inside or open_at != 0:
+            fails.append(f"unterminated fence: got inside={sorted(inside)} open_at={open_at}, "
+                         f"expected an EMPTY exclusion set and open_at=0")
+        if 46 not in icg.heading_allocated(fz, ".issues", ["riir-fencerepo"]):
+            fails.append("unterminated fence does not fail SAFE — the tail was "
+                         "excluded, which suppresses allocations to EOF")
+        if [d for d, _ in icg.unterminated_fences(fz)] != ["AGENTS.md"]:
+            fails.append("unterminated_fences() does not report the hazard it creates")
+
         # population derivation: BOUNDARY.md + a .git DIRECTORY, both required
         (me / "BOUNDARY.md").write_text("x")
         (me / ".git").mkdir()

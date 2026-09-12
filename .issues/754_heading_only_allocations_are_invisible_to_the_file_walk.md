@@ -72,10 +72,14 @@ So the accepted form is `^##+ <Kind> <N> (<parenthetical naming no other
 contract repo>)`. Recovered: riir-mmorpg-examples 059/060/076/077/078/083 and
 seal-remake 015 — all `.issues`, all same-day-resolved.
 
-**Known gap, measured empty:** a heading inside a fenced code block is not
-excluded by fence tracking (a naive in/out toggle inverts on the first
-unbalanced fence and then scans the complement). The one such heading in the
-workspace fails the other two filters anyway. Re-measure before relying on it.
+**Known gap, CLOSED by Issue 755 (2026-09-12):** a heading inside a fenced code
+block was not excluded by fence tracking. Re-measured as that issue asked — 0
+of 57 `_SELF_HEADING` matches are fenced, so no verdict moved — and closed
+anyway, because this is the suppression path: `fenced_lines()` now excludes
+them CommonMark-wise (not the naive toggle, which inverts on the first
+unbalanced fence and then scans the complement). The citation walk deliberately
+does NOT exclude fences: 57 of 2972 citations live there and they are genuine
+sibling attributions.
 
 **Not extended to inline bold.** riir-game-sdk's `**Issue 005 extension
 (2026-07-19):**` is the same class (its own number, filed and removed same-day)

@@ -148,8 +148,77 @@ _SUBDIR_KIND = {v: k for k, v in KINDS.items()}
 #   `# Proposal 031 §0 + §3: …` — H1, and inside a fenced block besides.
 #
 # 7 of the 11 survive; all 7 read as genuine local allocations. A heading
-# inside a fenced code block is a KNOWN gap of this predicate — measured EMPTY
-# today only because the one such heading fails the other two filters too.
+# inside a fenced code block is EXCLUDED by `fenced_lines()` below — measured
+# EMPTY today (0 of 57 matches workspace-wide), so the filter changes no
+# verdict and is landed for the SUPPRESSION direction it closes: a quoted
+# heading in an example block is not an allocation record, and a false
+# allocation does not drop a row, it INVERTS one (Issue 754).
+# ── fenced code blocks: excluded from the ALLOCATION path ONLY ──────────────
+# The asymmetry is MEASURED on both sides, not reasoned about:
+#
+#   allocation (`heading_allocated`) — can only ever SUPPRESS a finding, and a
+#       heading inside a fence is a QUOTED example, not a record. Excluded.
+#       Measured population: 0 of 57 `_SELF_HEADING` matches workspace-wide.
+#   citations (`citations`) — PRODUCES the findings, and 57 of 2972 citations
+#       (1.9%) live inside fences. They are not incidental: riir-auth's layout
+#       block writes `/git/riir-ai  <- ... Plan 307` and riir-clippy's writes
+#       `Bench 010` / `Issue 081` — genuine sibling ATTRIBUTIONS a reader
+#       follows. Excluding fences there would hide 57 real rows. NOT excluded.
+#
+# Matching is CommonMark-ish rather than a boolean toggle on every ``` line: a
+# naive toggle mis-phases permanently after the first UNTERMINATED fence and
+# then scans the complement — prose read as code and code as prose, reporting
+# clean either way. So the opening run's char and length are recorded and only
+# a BARE run of at least that length of the SAME char closes it.
+_FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
+
+
+def fenced_lines(text: str) -> tuple[set[int], int | None]:
+    """(0-indexed lines inside a fence, opening index of an UNTERMINATED one).
+
+    An unterminated fence is returned rather than swallowed: its tail would
+    otherwise be excluded to EOF, which is the same suppression this filter
+    exists to prevent, just moved. Callers fail SAFE on it (see
+    `heading_allocated`) and it is surfaced as its own verdict.
+    """
+    inside: set[int] = set()
+    open_at: int | None = None
+    ch = ""
+    run_len = 0
+    for i, line in enumerate(text.splitlines()):
+        m = _FENCE.match(line)
+        if m:
+            run, rest = m.group(1), m.group(2).strip()
+            if open_at is None:
+                open_at, ch, run_len = i, run[0], len(run)
+                inside.add(i)
+                continue
+            if run[0] == ch and len(run) >= run_len and not rest:
+                inside.add(i)
+                open_at = None
+                continue
+        if open_at is not None:
+            inside.add(i)
+    return (set() if open_at is not None else inside), open_at
+
+
+def unterminated_fences(repo: Path) -> list[tuple[str, int]]:
+    """(document, 1-indexed line) for every unterminated fence in the pinned docs.
+
+    A parse hazard AND a real rendering bug, worth reporting for its own sake:
+    katgpt-rs's own rust-optimize SKILL.md once swallowed 43 lines this way.
+    """
+    out = []
+    for doc in _self_docs():
+        p = repo / doc
+        if not p.is_file():
+            continue
+        _, open_at = fenced_lines(p.read_text(encoding="utf-8", errors="replace"))
+        if open_at is not None:
+            out.append((doc, open_at + 1))
+    return out
+
+
 _SELF_HEADING = re.compile(
     r"^#{2,}\s+(?:\*\*)?(%s)\s+0*(\d{2,4})\s*\(([^)\n]*)\)" % "|".join(KINDS))
 
@@ -196,7 +265,14 @@ def heading_allocated(repo: Path, subdir: str,
         p = repo / doc
         if not p.is_file():
             continue
-        for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+        text = p.read_text(encoding="utf-8", errors="replace")
+        # Unterminated fence => `fenced_lines` returns an EMPTY set, so nothing
+        # is excluded and behaviour is exactly today's measured-correct one.
+        # The hazard is reported by `unterminated_fences()`, never swallowed.
+        fenced, _ = fenced_lines(text)
+        for i, line in enumerate(text.splitlines()):
+            if i in fenced:
+                continue
             m = _SELF_HEADING.match(line)
             if not m or m.group(1) != kind:
                 continue
@@ -388,6 +464,18 @@ def main() -> int:
     if len(repos) < pins["min_repos"]:
         print(f"✗ INSTRUMENT: derived {len(repos)} contract repos < floor {pins['min_repos']} — "
               f"the population went blind; every ceiling below would pass vacuously")
+        return 2
+
+    # An unterminated fence disarms the allocation path's fence filter (it fails
+    # SAFE, excluding nothing), so the gate would still be correct — but it is a
+    # real rendering bug and the filter's premise, so it REDS rather than being
+    # noted. Scoped to the repos whose allocations this verdict rests on.
+    stray = [(r.name, d, ln) for r in repos for d, ln in unterminated_fences(r)]
+    if stray:
+        for name, doc, ln in stray:
+            print(f"✗ INSTRUMENT: {name}/{doc}:{ln} opens a fenced code block that is "
+                  f"never closed — the tail of that file renders as code, and the "
+                  f"allocation path's fence filter is disarmed over it")
         return 2
 
     local = {k: allocated(REPO_ROOT, d) for k, d in KINDS.items()}
