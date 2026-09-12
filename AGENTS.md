@@ -215,14 +215,29 @@ NOT in docs_gate's CHECKS — CI's single checkout would derive an empty
 population and print a confident green over zero repos. Population derived
 (BOUNDARY.md + `.git`); expectations committed in `scripts/*_floors.txt`.
 
-`citation_drift_sweep.py` is the one that **prints its own error rate next to
-its finding count** — a measured **7/43 = 16%** false-positive rate from a
-stratified manual read (riir-ai Issue 751 T1). Its 254 CROSS rows are not
-quotable without it, nor without the 2,939-citation walk and 19-repo
-population that produced them; its **IN-LOCAL-RANGE** bucket (46) is UNDECIDED
-and never folded into either neighbour. It also asserts its katgpt-rs row
-against `issue_citation_gate.py`'s own parsed run rather than trusting the two
-to agree.
+`citation_drift_sweep.py` is the one that **prints its own error rates next to
+its finding count** — plural, because there are two populations and a SAMPLE
+rate does not transfer to rows it never sampled. Its **291** CROSS rows split
+into the pre-752 corpus of 254, carrying **7/43 = 16%** false positives from a
+stratified manual read (Issue 751 T1), and the **45** rows recovered by
+owner-consistency, carrying **0/45** from a full census (Issue 752). Neither
+number is quotable without the other, nor without the ~2.9k-citation walk and
+19-repo population that produced them — a magnitude, deliberately, because
+five-plus concurrent sessions edit these documents and an exact figure in
+prose is drift waiting to happen (the dated snapshot lives in the sweep's own
+docstring, where it is a measurement record rather than a claim); the **IN-LOCAL-RANGE** bucket (54) is
+UNDECIDED and never folded into either neighbour. It also asserts its
+katgpt-rs row against `issue_citation_gate.py`'s own parsed run rather than
+trusting the two to agree.
+
+Those 45 are the reason to distrust a lone error rate: every other FP class
+this family documents **inflates** a count, and this one **deflated** it by
+~15%. Qualification asked *"is a repo named?"* and never *"does that repo own
+the number?"*, so `riir-chain Plan 211` (riir-chain's `.plans` top out at 058)
+and `katgpt-rs Issue 513` (513 is riir-train's) both read as clean — the
+attribution following the CODE while the number followed the DOCUMENT. Reading
+a measured error rate as if it bounded the error in ONE direction is the
+mistake; it bounds only the direction somebody thought to sample.
 
 Each sweep carries **two floors, not one**: a ceiling is green over whatever
 the instrument can SEE, so the finding count needs the *population* that

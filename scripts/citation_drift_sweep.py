@@ -18,17 +18,25 @@ gate, for the same reason as every other sweep in the family: CI's single
 checkout would derive an EMPTY population and print a confident green over
 zero repos.
 
-Measured (Issue 751 T1, 2026-09-12), over 19 contract repos / 2,939 citations
-in 38 documents:
+Measured (Issue 752, 2026-09-12), over 19 contract repos / 2,948 citations
+in 35 documents — a dated SNAPSHOT, not a checksum: five-plus concurrent
+sessions edit these documents, and the walk moved by 3 between this repair's
+first run and its last:
 
-    254 CROSS · 46 IN-LOCAL-RANGE · 0 ORPHAN · 806 AMBIGUOUS
+    291 CROSS · 54 IN-LOCAL-RANGE · 0 ORPHAN · 908 AMBIGUOUS
+    (of the 291: 7 ⛔MISATTRIBUTED, 22 ⛔MISLEADING crate hints)
 
-and, which is the part that makes the number reportable at all, a **manually
-adjudicated false-positive rate of 7/43 = 16%** over a stratified sample read
-line-by-line across 13 repos. The predecessor figure — 308 — was quoted with
-no error rate at all and was contaminated by an alias class worth ~50% of its
-first four rows (749's addendum). A classifier's bucket boundaries ARE the
-finding, so the FP classes are written down here rather than silently healed:
+⛔ **TWO error rates over TWO populations — they are never blended**, because
+a SAMPLE rate does not transfer to rows it never sampled:
+
+    254 rows (the pre-752 corpus)   7/43 = 16%, a stratified SAMPLE read
+                                    line-by-line across 13 repos (751 T1)
+    +45 rows (owner-consistency)    0/45, a full CENSUS — every row read (752)
+
+The predecessor figure — 308 — was quoted with no error rate at all and was
+contaminated by an alias class worth ~50% of its first four rows (749's
+addendum). A classifier's bucket boundaries ARE the finding, so the FP classes
+are written down here rather than silently healed:
 
     alias/abbreviation NOT in the alias table   ("ndb" = riir-neuron-db,
                                                  "mmorpg" = riir-mmorpg-examples)
@@ -39,6 +47,30 @@ finding, so the FP classes are written down here rather than silently healed:
                                                  the foreign number)
     a local number one above the local max      (riir-ai cites its own Plan 590
                                                  with `.plans` topping out at 588)
+
+and the class that ran the OTHER way — 45 rows the rule ABSORBED
+--------------------------------------------------------------
+Every FP class above inflates the count. Issue 752 measured the deflating one,
+and nobody had looked: qualification asked **"is a repo named?"** and never
+**"does that repo own the number?"**. Of 368 citations the rule certified, **45
+named no owner at all** — 37 where the 3-line window merely contained a sibling
+name (a crate-inventory table row, an adjacent clause) and 8 carrying an
+explicit attribution to a repo that does not have the number. `riir-chain Plan
+211` where riir-chain's `.plans` top out at 058; `riir-mmorpg-examples Issue
+059` where that repo allocated 058 and 061 and never 059; `katgpt-rs Issue 513`
+where 513 is riir-train's and katgpt-rs owns only the script the line is about
+— the attribution followed the CODE while the number followed the DOCUMENT.
+
+That is a **~15% under-count**, the same magnitude as the 16% over-count and
+in the opposite direction. It is the T2(a) argument below applied to the path
+it was never applied to: crate hints were counted as findings *because* a
+plausible address that is wrong beats no address, and the directory-name path
+— which silently absolves where the crate path merely annotates — was exempted
+from that argument with no measurement behind the exemption.
+
+The repair also tightened the name match to segment boundaries: a plain
+`"seal-remake" in ctx` read riir-viewbridge's `seal-remake-unity` as naming
+**seal-remake** and qualified a `Plan 031` citation on a different repo's name.
 
 Three buckets, and the split is the whole point of re-measuring
 ---------------------------------------------------------------
@@ -224,6 +256,7 @@ def audit(repo: Path, sibs: list[Path], alloc: dict[str, dict[str, set[int]]],
                 elsewhere[kind].setdefault(n, []).append(s.name)
 
     got = {"n_docs": 0, "n_cites": 0, "ambiguous": set(), "misleading": 0,
+           "misattributed": 0,
            CROSS: [], IN_RANGE: [], ORPHAN: []}
     for doc in docs:
         p = repo / doc
@@ -238,18 +271,27 @@ def audit(repo: Path, sibs: list[Path], alloc: dict[str, dict[str, set[int]]],
                 if owners:
                     got["ambiguous"].add((kind, n))
                 continue
-            # ── the gate's qualification rule, verbatim (3-line window for the
-            # full directory name; alias only ON the citation) ──────────────
+            # ── the gate's qualification rule, REUSED not re-implemented:
+            # 3-line window for the full directory name, alias only ON the
+            # citation, and the named repo must OWN the number (Issue 752).
+            named, adj = icg.qualifiers(lines, ln, lead, sibs)
+            if icg.is_qualified(named, owners):
+                continue
             ctx = "\n".join(lines[max(0, ln - 3):ln])
-            if any(s.name in ctx for s in sibs):
-                continue
-            if any(re.search(rf"\b{re.escape(a)}\b", lead)
-                   for s in sibs for a in icg.aliases(s.name)[1:]):
-                continue
             hint = _crate_hits(ctx, crates, patterns) - {repo.name}
             cls = (IN_RANGE if n <= top[kind] else CROSS if owners else ORPHAN)
             tag = ""
-            if cls is CROSS and hint:
+            bad = adj - set(owners)
+            if cls is CROSS and bad:
+                # An explicit attribution sitting ON the citation that names a
+                # repo without the number. Same standing as the crate hint: it
+                # ORDERS the repair, it is not a verdict. Hand-adjudicated at
+                # landing, 3 of 8 were genuinely wrong addresses; all 8 were
+                # unqualified either way (Issue 752).
+                got["misattributed"] += 1
+                tag = (f"  [⛔MISATTRIBUTED: names {'/'.join(sorted(bad))}, "
+                       f"which does NOT own {n}]")
+            elif cls is CROSS and hint:
                 if hint & set(owners):
                     tag = f"  [crate-hint: {'/'.join(sorted(hint & set(owners)))}]"
                 else:
@@ -437,7 +479,8 @@ def main() -> int:
              for r in repos}
 
     bad = False
-    tot = {"docs": 0, "cites": 0, "amb": 0, "mis": 0, CROSS: 0, IN_RANGE: 0, ORPHAN: 0}
+    tot = {"docs": 0, "cites": 0, "amb": 0, "mis": 0, "misat": 0,
+           CROSS: 0, IN_RANGE: 0, ORPHAN: 0}
     mine_row = None
     for repo in repos:
         sibs = [s for s in repos if s != repo]
@@ -447,6 +490,7 @@ def main() -> int:
         tot["cites"] += got["n_cites"]
         tot["amb"] += len(got["ambiguous"])
         tot["mis"] += got["misleading"]
+        tot["misat"] += got["misattributed"]
         for cls in (CROSS, IN_RANGE, ORPHAN):
             tot[cls] += len(got[cls])
         if repo.resolve() == REPO_ROOT:
@@ -508,11 +552,20 @@ def main() -> int:
           f"{tot['cites']} citation(s) · {tot[CROSS]} CROSS · "
           f"{tot[IN_RANGE]} IN-LOCAL-RANGE · {tot[ORPHAN]} ORPHAN")
     print(f"  AMBIGUOUS (local AND sibling — undecidable by number, NOT a pass): "
-          f"{tot['amb']}  ·  ⛔MISLEADING crate hints: {tot['mis']}")
-    print(f"  ⛔ measured FALSE-POSITIVE rate 7/43 = 16% (Issue 751 T1, stratified "
-          f"manual read across 13 repos). Do NOT quote {tot[CROSS]} without it — "
-          f"nor without the {tot['cites']}-citation walk and {len(repos)}-repo "
-          f"population that produced it.")
+          f"{tot['amb']}  ·  ⛔MISLEADING crate hints: {tot['mis']}"
+          f"  ·  ⛔MISATTRIBUTED (names a NON-owner repo): {tot['misat']}")
+    # TWO error rates over TWO populations, never blended into one number: a
+    # SAMPLE rate does not transfer to rows it never sampled (Issue 752).
+    print(f"  ⛔ measured FALSE-POSITIVE rates, by population — do NOT quote "
+          f"{tot[CROSS]} without them, nor without the {tot['cites']}-citation "
+          f"walk and {len(repos)}-repo population that produced them:")
+    print(f"       254 rows (the pre-752 corpus): 7/43 = 16%, a STRATIFIED "
+          f"SAMPLE read across 13 repos (Issue 751 T1)")
+    print(f"       +45 rows recovered by owner-consistency: 0/45, a full CENSUS "
+          f"— every row read (Issue 752). {tot['misat']} in CROSS carry an "
+          f"explicit non-owner attribution; hand-adjudicated, 3 are outright "
+          f"WRONG addresses (`riir-chain Plan 211` — riir-chain tops out at "
+          f"058), the rest unqualified either way")
     print(f"  scope: AGENTS.md + HISTORY.md only ({'/'.join(docs)}, pinned in "
           f"{GATE_PINS.name}). A walk of *.md would pull in .plans/.docs/"
           f".research — thousands of by-design LOCAL citations — and drown the "

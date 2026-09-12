@@ -10,19 +10,27 @@
 #
 # ── the ceilings are a RATCHET, not a wall ───────────────────────────────────
 # Unlike trap_sentinel_drift_floors.txt (whose classes are 0 everywhere and
-# whose ceilings are therefore a wall), 254 CROSS rows exist TODAY across 18
+# whose ceilings are therefore a wall), 291 CROSS rows exist TODAY across 18
 # repos this session does not own, and the repair is the OWNING repo's call —
 # per Issue 751's non-goal, the deliverable is a trustworthy instrument plus
-# per-repo issues, not 254 prose edits from here. So each ceiling is pinned at
+# per-repo issues, not 291 prose edits from here. So each ceiling is pinned at
 # its MEASURED count: a NEW unqualified citation reds immediately, and the
 # standing backlog is visible in the pins rather than silently tolerated.
 # Lower a ceiling in the commit that qualifies a citation.
 #
-# ⛔ Do NOT read a ceiling as a finding count. The measured false-positive rate
-# is 7/43 = 16% (Issue 751 T1 — a stratified manual read of 43 rows across 13
-# repos, the four FP classes named in the sweep's docstring). The predecessor
-# figure, 308, was quoted with NO error rate and was ~50% contaminated in its
-# first four rows. A count without its error rate is not a measurement.
+# ⛔ Do NOT read a ceiling as a finding count, and do not read ONE error rate
+# over it. Two populations, two rates, never blended (a SAMPLE rate does not
+# transfer to rows it never sampled): the pre-752 corpus of 254 carries
+# 7/43 = 16% from a stratified manual read across 13 repos (Issue 751 T1); the
+# 45 rows recovered by owner-consistency carry 0/45 from a full CENSUS (Issue
+# 752). The predecessor figure, 308, was quoted with NO error rate and was ~50%
+# contaminated in its first four rows. A count without its error rate is not a
+# measurement.
+#
+# ⛔ A ceiling that FALLS is ambiguous between a repair and a blinded
+# classifier. These ten rose in 2026-09-12's re-pin because the qualification
+# rule stopped accepting a repo name that does not OWN the number (Issue 752) —
+# the instrument got sharper, the prose did not get worse.
 #
 # ⛔ The corpus MOVES. Five-plus agent sessions edit these documents
 # concurrently; riir-mmorpg-examples' HISTORY.md gained 46 lines between two
@@ -56,7 +64,7 @@
 # cannot drift.
 #
 # ── no ceiling on AMBIGUOUS, deliberately ────────────────────────────────────
-# 905 cited numbers exist BOTH locally and in a sibling. The referent is
+# 908 cited numbers exist BOTH locally and in a sibling. The referent is
 # undecidable from the number and the sweep is green over every one of them by
 # construction. A ceiling would red whenever somebody writes a perfectly
 # CORRECT citation to a new local number a sibling also happens to have — a
@@ -67,25 +75,25 @@
 min_repos = 15
 
 #                        cites  cross  in_local_range  orphan
-katgpt-rs                   84      0               0       0
-katgpt-web                   3      1               0       0
-riir-ai                    305      1               2       0
-riir-auth                    8      6               0       0
-riir-chain                  65      4               1       0
-riir-clippy                513     32               8       0
-riir-dao                    25      5               0       0
-riir-dapps                 104     18               0       0
-riir-deployer               21      7               0       0
-riir-esp32                   2      0               0       0
-riir-game-sdk              172    108              14       0
-riir-kat                     1      0               0       0
-riir-mmorpg-examples       321     41              16       0
-riir-neuron-db              27      0               1       0
-riir-shader                  0      0               0       0
-riir-train                  43      3               1       0
-riir-viewbridge             24     12               2       0
-seal-game-editor             0      0               0       0
-seal-remake                 39     16               1       0
+katgpt-rs                  84      0               0       0
+katgpt-web                  3      1               0       0
+riir-ai                   305      2               6       0
+riir-auth                   8      8               0       0
+riir-chain                 65      4               1       0
+riir-clippy               513     36               9       0
+riir-dao                   25      6               0       0
+riir-dapps                104     21               0       0
+riir-deployer              21     10               0       0
+riir-esp32                  2      0               0       0
+riir-game-sdk             172    124              15       0
+riir-kat                    1      0               0       0
+riir-mmorpg-examples      321     43              16       0
+riir-neuron-db             27      0               3       0
+riir-shader                 0      0               0       0
+riir-train                 43      3               1       0
+riir-viewbridge            24     17               2       0
+seal-game-editor            0      0               0       0
+seal-remake                39     16               1       0
 
 # ── the two repos worth reading first ────────────────────────────────────────
 # riir-game-sdk 108 CROSS over 287 citations (38%) — the highest density in the

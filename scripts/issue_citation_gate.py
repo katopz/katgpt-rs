@@ -132,12 +132,73 @@ def aliases(repo_name: str) -> list[str]:
     return out
 
 
+class _NameRx(dict):
+    """`riir-viewbridge` names `seal-remake-unity`; a plain `"seal-remake" in
+    ctx` reads that as naming **seal-remake**, a different repo, and qualified
+    a `Plan 031` citation on it (Issue 752). A repo name is only a repo name
+    when no further name-segment extends it — `riir-ai/scripts/…` and
+    `riir-ai's` still match, `riir-games-mmorpg` does not match
+    `riir-game-sdk`."""
+
+    def __missing__(self, name: str) -> re.Pattern:
+        rx = re.compile(rf"(?<![\w-]){re.escape(name)}(?![\w-])")
+        self[name] = rx
+        return rx
+
+
+_NAME = _NameRx()
+
 # An alias only qualifies a citation when it sits right ON it ("dapps Issue 27"),
 # never merely somewhere nearby: `chain`, `train` and `shader` are ordinary
 # words in this prose, and a 3-line window full of them would qualify every
 # citation in the repo and quietly retire the gate. The FULL directory name is
 # unambiguous enough to accept from the wider window.
 _ALIAS_REACH = 40
+
+
+def qualifiers(lines: list[str], ln: int, lead: str, sibs: list[Path]) -> tuple[set[str], set[str]]:
+    """Repo names the prose offers as this citation's address -> (window, adjacent).
+
+    `window` is the full directory name anywhere in the 3-line backward window;
+    `adjacent` is the subset sitting ON the citation (inside `lead`), plus the
+    short-form aliases, which are only ever accepted there.
+
+    Split because the two carry different weight once the caller checks
+    OWNERSHIP (Issue 752): an adjacent non-owner is somebody writing a wrong
+    address, a window-only non-owner is a name that was never an attribution.
+    """
+    ctx = "\n".join(lines[max(0, ln - 3):ln])
+    window = {s.name for s in sibs if _NAME[s.name].search(ctx)}
+    adjacent = {s.name for s in sibs if _NAME[s.name].search(lead)}
+    adjacent |= {s.name for s in sibs for a in aliases(s.name)[1:]
+                 if re.search(rf"\b{re.escape(a)}\b", lead)}
+    return window | adjacent, adjacent
+
+
+def is_qualified(named: set[str], owners: list[str]) -> bool:
+    """A repo name qualifies a citation only if that repo OWNS the number.
+
+    ⛔ The predicate used to be `named != {}` — "is a repo named?", never "does
+    that repo own it?". Measured over the workspace (Issue 752): of 368
+    qualified citations, **45 named no owner at all** — 37 where the 3-line
+    window merely contained a sibling name (a crate-inventory table row, an
+    adjacent unrelated clause) and 8 carrying an explicit attribution to a repo
+    that does not have the number. `riir-chain Plan 211` where riir-chain's
+    `.plans` tops out at 058; `riir-mmorpg-examples Issue 059` where that repo
+    allocated 058 and 061 but never 059. Every one of the 45 read as CLEAN.
+
+    This is Issue 751 T2(a)'s argument, applied to the path it was never
+    applied to. Crate hints were counted as findings *because* a plausible
+    address that is wrong is worse than no address — and the directory-name
+    path, which silently absolves rather than merely annotating, was exempted
+    from it with no measurement behind the exemption.
+
+    Owner-consistency applies **exactly when the number has owners**. With no
+    owner anywhere in the workspace there is nothing to be consistent with, the
+    row is a dangling reference rather than a rebinding hazard, and any named
+    repo is accepted — ORPHAN is a different repair and keeps its own bucket.
+    """
+    return bool(named & set(owners)) if owners else bool(named)
 
 
 def citations(text: str) -> list[tuple[int, str, int, str]]:
@@ -195,26 +256,33 @@ def main() -> int:
                     ambiguous.add((kind, n))
                 continue
             # Cross-repo: a sibling repo name within the citation's own
-            # paragraph-scale context (3 lines) is what makes it followable.
+            # paragraph-scale context (3 lines) is what OFFERS an address.
             # THREE lines, and the window size is a MEASURED trade-off, not a
             # guess. This prose hard-wraps at 80 columns, so a single sentence
             # routinely spans 2-3 lines ("Downstream: riir-ai\nIssue 912 T4's"
             # is one attribution split by a line break). Tightening to
             # same-line-only was measured at **4 false positives**, all of that
             # shape. The cost of the wider window is the opposite error: an
-            # unrelated repo name that happens to sit within 3 lines qualifies a
-            # citation that names nothing — a `riir-train/data/*.gguf` path two
-            # lines up in a model list does it. Both directions are real; 3
-            # lines is where the errors were fewest.
-            ctx = "\n".join(lines[max(0, ln - 3):ln])
-            if any(r.name in ctx for r in sibs):
-                continue
-            if any(re.search(rf"\b{re.escape(a)}\b", lead)
-                   for r in sibs for a in aliases(r.name)[1:]):
+            # unrelated repo name that happens to sit within 3 lines is offered
+            # as an address for a citation that names nothing — a
+            # `riir-train/data/*.gguf` path two lines up in a model list does
+            # it. Both directions are real; 3 lines is where the errors were
+            # fewest. What makes the OFFER an ANSWER is `is_qualified` —
+            # the named repo has to own the number (Issue 752).
+            named, adj = qualifiers(lines, ln, lead, sibs)
+            if is_qualified(named, owners):
                 continue
             where = "/".join(owners) if owners else "NO REPO IN THE WORKSPACE"
+            why = "names no repo"
+            bad = adj - set(owners)
+            if bad:
+                why = (f"⛔MISATTRIBUTED — names {'/'.join(sorted(bad))}, "
+                       f"which does NOT own {n}")
+            elif named:
+                why = (f"the only repo in its window is "
+                       f"{'/'.join(sorted(named))}, which does NOT own {n}")
             unqualified.append(f"  {doc}:{ln}  {kind} {n} — lives in {where}, "
-                               f"names no repo\n      {lines[ln - 1].strip()[:120]}")
+                               f"{why}\n      {lines[ln - 1].strip()[:120]}")
 
     if scanned < pins["min_citations_scanned"]:
         print(f"✗ INSTRUMENT: scanned {scanned} citations < floor {pins['min_citations_scanned']} — "
