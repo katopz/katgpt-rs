@@ -2609,6 +2609,23 @@ pub use factorized_action::{
     fit_codebook_kmeans_into, motion_input_velocity_into, patchify_1d, relevance_score,
 };
 
+// ooo_audit — direction-bank audit & curation gate (Issue 759 / Research
+// 552, Issa/Liu/Ballé/Klindt bioRxiv 2026.09.05.748439): asymmetric
+// Odd-One-Out interpretability + Cross-OOO diversity + greedy bank
+// curation — the AUDIT stage of the direction-vector ecosystem (MAG R397
+// acquires; LFS/PWC/CFB inject; freeze/thaw commits; nothing verified
+// self-consistency or non-redundancy until this). Pure f32 reductions over
+// an activation matrix + pluggable exemplar-similarity matrix; zero deps,
+// deterministic, zero-alloc *_into (caller-owned scratch). Opt-in pending
+// the Bench 758 GOAT (no-default-consumer rule).
+#[cfg(feature = "direction_bank_audit")]
+pub mod ooo_audit;
+#[cfg(feature = "direction_bank_audit")]
+pub use ooo_audit::{
+    AuditScratch, BankAudit, CurationResult, OooAuditConfig, audit_bank_into, cross_ooo,
+    exemplar_rbf_sim_into, greedy_curate, ooo_score, select_meis_into,
+};
+
 // Velocity-Field Ensemble — Algebraic Combination of Pre-Trained Models
 // (Plan 376, Research 375, arXiv:2602.20070 Coeurdoux et al. ICML 2026 SPIGM).
 // Combine P frozen pre-trained velocity fields (any forward model: LLM

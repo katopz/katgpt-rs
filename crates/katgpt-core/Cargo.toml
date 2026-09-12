@@ -924,6 +924,29 @@ causal_identification = []  # Causal-ID — Algorithmic Syntactic Causal Identif
 # Phase 2 (perturbable reference attention lab) lands in this module later.
 numeric_stability = ["mag_mining"]
 
+# direction_bank_audit (Issue 759 / Research 552, 2026-09-12): the bank
+# audit + curation gate distilled from Issa, Liu, Ballé, Klindt (bioRxiv
+# 2026.09.05.748439, "High-dimensional population codes reveal
+# interpretable and diverse features underlying visual perception") —
+# asymmetric Odd-One-Out interpretability (per unit: threshold = mean
+# pairwise similarity of its top-K maximally-activating exemplars; score =
+# intruder fraction below it; paper Eq. 6–8), Cross-OOO diversity (pairwise
+# attribution of MEIs to unit of origin, Eq. 9–11 — the redundancy detector
+# direction banks never had; 0.5 = chance), and greedy curation (OOO >= 0.8
+# AND cross >= 0.8 vs every kept member → unique-feature count, Fig. 4a —
+# the codebook-K saturation signal). Offline audit over an activation
+# matrix + PLUGGABLE exemplar-similarity matrix (paper: DreamSim; ships a
+# generic RBF kernel). Pure f32, zero deps, deterministic (no RNG/HashMap
+# in lib code), zero-alloc *_into with caller-owned scratch. The audit
+# stage of the direction ecosystem: MAG (R397) acquires, LFS/PWC/CFB
+# inject, freeze/thaw commits — duplicated directions double-count
+# effective weight in sigmoid blends, a correctness bug class, not waste.
+# Consumers: Issue 759 T3 PoC (over-complete EffectCodebook K-selection —
+# the defend-wrong kill condition), riir-ai freeze-time curation guide
+# (R552 F1), riir-clippy rule-corpus Cross-OOO axis (R552 F2). Opt-in
+# pending the Bench 758 GOAT (no-default-consumer rule).
+direction_bank_audit = []
+
 # Plan 371 Phase 5 — Mean-Field Regime Classifier GOAT gate (G2/G4/G5).
 # G1 (defend-wrong PoC) ships separately in riir-poc/benches/.
 [[bench]]
@@ -2866,3 +2889,12 @@ required-features = ["metabolic_gate"]
 [[test]]
 name = "three_ball_paradigm"
 required-features = ["bmr"]
+
+# Issue 759 T4 — direction-bank audit GOAT gate (G1 planted-bank curation
+# recovery on the shared fixture; G2 audit + curation latency at U=64/N=1024;
+# G4 zero-alloc steady-state via counting_allocator). Stays opt-in per the
+# no-default-consumer rule.
+[[bench]]
+name = "bench_759_ooo_audit_goat"
+harness = false
+required-features = ["direction_bank_audit"]

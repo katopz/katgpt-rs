@@ -2,7 +2,7 @@
 
 > **Source:** Issa, Liu, Ballé, Klindt — "High-dimensional population codes reveal interpretable and diverse features underlying visual perception" [bioRxiv 2026.09.05.748439](https://www.biorxiv.org/content/10.64898/2026.09.05.748439v1) (CSHL/NYU, posted 2026-09-11)
 > **Date:** 2026-09-12
-> **Status:** DISTILLED — Gain (GOAT-tier fusion); primitive PoC tracked at `.issues/759`. Super-GOAT claim deliberately NOT made this pass: Q2 (new behavior class) is partial pending the PoC measurement — see Novelty gate.
+> **Status:** SUPER-GOAT (upgraded 2026-09-12 — the PoC pass condition of §3 was met and the mandatory outputs filed: open primitive `ooo_audit` shipped, GOAT gate Bench 758 G1+G2+G4 ALL PASS, this note's addendum records the measurement, the riir-ai guide landed as Research 378, the riir-clippy axis filed as an issue). Honest scope: what the PoC PROVED is codebank/bank-level redundancy detection + curation on shipped substrate (F3) and the metric-granularity law; the crowd-scale NPC premise (F1) remains a projection until the riir-ai consumer lands — the guide is the plan for that. Primitive stays OPT-IN per the no-default-consumer rule.
 > **Related Research:** 397 (MAG — closest cousin, the acquisition half), 144 (Functional Emotions — direction bank), 276/321 (direction consumers PWC/CFB), 409 (MANCE — projection-ablation lineage), 020 (TurboQuant — VQ cousin), 078 (MTP Cluster), 453 (Variable-Rank Domain Expert centroids), 467 (RRQ), 527 (TPR binding), 390 (Expand Neurons — superposition), 475 (ICA Lens — direction discovery cousin)
 > **Cross-ref (riir-ai):** 316 (MAG game-runtime guide — this is its missing curation stage)
 > **Classification:** Public (metrics + greedy curation are generic math); game wiring → riir-ai, healer wiring → riir-clippy, both private.
@@ -47,7 +47,7 @@ Everything below is closed-form matrix reduction over an activation matrix `A �
 - **Q3 product selling point:** conditionally YES — *"every direction in an NPC's frozen personality/emotion bank provably earns its slot: self-consistent (OOO) and non-redundant (Cross-OOO), audited modellessly at freeze time."*
 - **Q4 force multiplier:** YES — MAG banks (R397/316), EmotionDirections (P162), CFB archetype banks (P321), `EffectCodebook`, `cluster_map`, shard-VQ centroids, healer rule corpus (§F2), neuron-db `style_weights[64]` at freeze. ≥2 pillars trivially.
 
-**Verdict: Gain — GOAT-tier fusion, deferred Super-GOAT.** Files: this note + `.issues/759`. On PoC pass (measured redundancy + curation recovering it), update this note to Super-GOAT and file the riir-ai guide (freeze-time bank curation) + riir-clippy axis in the same session.
+**Verdict (superseded 2026-09-12 — see Status + PoC Addendum): Gain — GOAT-tier fusion, deferred Super-GOAT.** The deferral condition has since been MET: the PoC measured real redundancy on shipped substrate and curation recovered it exactly. Files: this note + `.issues/759` (closed, resolution recorded) + Bench 758 + the `ooo_audit` primitive + riir-ai guide (Research 378) + the riir-clippy axis issue.
 
 ## 4. Fusion (what none of the cousins alone can do)
 
@@ -66,6 +66,28 @@ Audit is **offline and latent-only**: activation matrices + similarity matrices,
 - **G3 no-regression:** feature flag `direction_bank_audit`, off by default; consumers unchanged.
 - **G4:** alloc-free reductions (offline gate, same discipline).
 - **Defend-wrong PoC (§3.6, the kill condition):** run the audit on a *real* bank (Plan 418 MAG fixtures or a live `EffectCodebook`). If measured redundancy is below the metric's noise floor, the gate is hygiene-only → demote to opt-in, record the negative result here. UQ floor rule: N/A (no distributional claim).
+
+## PoC Addendum (2026-09-12 — the §3.6 measurement, Bench 758)
+
+The defend-wrong PoC ran on REAL substrate (shipped deterministic k-means,
+`factorized_action::fit_codebook_kmeans_into`) reading an over-complete
+K=12 codebook over 4 planted clusters as a UTM bank (activation =
+−Euclidean distance, the paper's construction):
+
+- **Redundancy measured + recovered:** under concept-level similarity (the
+  DreamSim role), the 12-centroid bank curates to **exactly 4** distinct
+  features; exact-fit K=4 also yields 4 (elbow anchor). Axes confirmed:
+  architectural (grep + shipped substrate), latency (G2 1120 µs full cycle at
+  U=64/N=1024), quality (G1 exact planted-count recovery across 3 seeds).
+- **The metric-granularity law (novel measured finding):** under geometric
+  RBF (γ=1) the SAME bank keeps ~11 — Cross-OOO detects redundancy at the
+  similarity metric's CONCEPT GRANULARITY; the metric defines the concept.
+  Consumers must pick a semantic-granularity metric (span embeddings, latent
+  cosine) or the audit honestly reports micro-features. Pinned as a test.
+- **G4 caught a real bug pre-ship:** `reserve_for`'s len-blind `Vec::reserve`
+  doubled each scratch buffer exactly once (2 steady-state allocs); fixed,
+  gate now 0/100 cycles.
+- Primitive GOAT: G1+G2+G4 PASS; OPT-IN per the no-default-consumer rule.
 
 ## 7. Priority
 
