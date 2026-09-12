@@ -211,8 +211,17 @@ def find_cargo_defaults(repo_root: Path) -> set[str]:
     return reachable_features(load_manifests(repo_root))
 
 
-def reachable_features(mans: dict[str, dict]) -> set[str]:
-    """The `(package, feature)` reachability walk — pure, so it can be pinned."""
+def reachable_nodes(mans: dict[str, dict]) -> set[tuple[str, str]]:
+    """The `(package, feature)` reachability walk, as PAIRS — pure, so it can
+    be pinned.
+
+    The pair form is what the qualified-DEFAULT counterpart adjudicates on:
+    "is the QUALIFIER's own flag on in a default build?" is a question about
+    one NODE, not a bare name — `(riir-games-civ, mop_runtime)` and
+    `(riir-engine, mop_runtime)` are different flags that happen to share a
+    name, and only the node test tells an honest ancestor-forward apart from
+    a same-name misattribution (see qualified_default_drift).
+    """
     seen: set[tuple[str, str]] = {(p, "default") for p, f in mans.items()
                                   if "default" in f}
     stack = list(seen)
@@ -236,7 +245,12 @@ def reachable_features(mans: dict[str, dict]) -> set[str]:
             if node not in seen:
                 seen.add(node)
                 stack.append(node)  # expanding an undefined feature is a no-op
-    return {f for _, f in seen if f != "default"}
+    return seen
+
+
+def reachable_features(mans: dict[str, dict]) -> set[str]:
+    """Bare-name projection of `reachable_nodes` — the deployed model."""
+    return {f for _, f in reachable_nodes(mans) if f != "default"}
 
 
 def local_default_closure(feats: dict) -> set[str]:
@@ -352,13 +366,49 @@ def qualified_optin_is_scoped(qual: str | None, feat: str,
     riir-ai 681/905 lesson). BARE labels stay deployed-level claims: the
     union model still governs them, unchanged.
 
-    Note the unhandled counterpart, deliberately: a QUALIFIED label claiming
-    DEFAULT still passes via `any_default` even when the qualifier ships the
-    flag off. No such label exists in the workspace today (measured
-    2026-09-12); tightening that direction changes green verdicts and is not
-    done blind.
+    Note the counterpart, handled since 2026-09-12: a QUALIFIED label
+    claiming DEFAULT is adjudicated by `qualified_default_drift` against the
+    qualifier's own closure AND its own `(pkg, feat)` node. It was landed
+    non-blind: zero such labels existed at handling time (measured
+    2026-09-12), so the tightening changed no verdict and its policy is
+    pinned by selftest arms in both directions.
     """
     return qual is not None and feat not in own_by_pkg.get(qual, set())
+
+
+def qualified_default_drift(qual: str | None, feat: str,
+                             own_by_pkg: dict[str, set[str]],
+                             defined_by_pkg: dict[str, set[str]],
+                             deployed_nodes: set[tuple[str, str]]) -> bool:
+    """Does a qualified DEFAULT label misattribute ANOTHER crate's default
+    to the qualifier?
+
+    The false-negative mirror of `qualified_optin_is_scoped` (which closed
+    the false-positive direction, 13dbba6b). A `pkg/feat (DEFAULT...)`
+    label used to pass via the bare-name union whenever ANY crate defaulted
+    the NAME — including when the qualifier itself defines the flag, ships
+    it OFF, and the on-ness belongs to a DIFFERENT crate's same-named flag.
+    That is exactly the Defense-3 layer split read backwards: a doc claiming
+    `riir-games-civ/mop_runtime` is default because riir-engine promoted ITS
+    `mop_runtime` is attributing one crate's gate state to another.
+
+    Fires ONLY when all three hold:
+      1. the label is qualified and the qualifier DEFINES the flag (a
+         qualifier that does not define it is citing a dependency's flag —
+         the union model already adjudicated that claim);
+      2. the qualifier's own default closure does NOT turn it on;
+      3. the qualifier's own `(qual, feat)` node is NOT reachable from any
+         default — the discriminator between the two sub-shapes. When the
+         node IS reachable (riir-chaind's default forwards
+         `riir-wallet/siwr`, the 2026-09-01 forwarded-only doctrine), the
+         qualifier's own flag genuinely ships on in a default build and BOTH
+         readings are defensible: counted by the caller, never flagged.
+    """
+    if qual is None or feat not in defined_by_pkg.get(qual, set()):
+        return False
+    if feat in own_by_pkg.get(qual, set()):
+        return False  # the qualifier's own default turns it on — claim holds
+    return (qual, feat) not in deployed_nodes
 
 
 def find_package_names(repo_root: Path) -> set[str]:
@@ -622,7 +672,12 @@ def iter_bench_doc_labels(repo_root: Path):
 def audit_repo(repo_root: Path) -> int:
     repo_root = repo_root.resolve()
     print(f"\n=== Auditing {repo_root.name} ===")
-    any_default = find_cargo_defaults(repo_root)
+    mans = load_manifests(repo_root)
+    any_default = reachable_features(mans)
+    # The (pkg, feat) node set behind any_default — the qualified-DEFAULT
+    # counterpart adjudicates per-crate claims on NODES, not bare names.
+    deployed_nodes = reachable_nodes(mans)
+    defined_by_pkg = {p: set(f) for p, f in mans.items()}
     defined_features = find_defined_features(repo_root)
     package_names = find_package_names(repo_root)
     own_by_pkg = own_closures_by_pkg(repo_root)
@@ -643,6 +698,7 @@ def audit_repo(repo_root: Path) -> int:
     foreign = 0
     forwarded = 0
     scoped = 0
+    qual_default = 0
     for rel, ln, line, qual, feat, raw, parsed in iter_bench_doc_labels(repo_root):
         # A `pkg/feature` label whose pkg is not a crate HERE is a sibling
         # repo's flag: unauditable from this repo, and auditing it against the
@@ -662,6 +718,23 @@ def audit_repo(repo_root: Path) -> int:
         if parsed == "default" and not is_default:
             mismatches += 1
             print(f"  [MISMATCH] doc says DEFAULT but feature NOT in any Cargo default")
+            print(f"    file: {rel}:{ln}")
+            print(f"    feat: {qual + '/' if qual else ''}{feat}  raw_status: {raw!r}")
+            print(f"    line: {line}")
+        elif (parsed == "default"
+              and qualified_default_drift(qual, feat, own_by_pkg,
+                                          defined_by_pkg, deployed_nodes)):
+            # The qualified-DEFAULT counterpart: the qualifier DEFINES the
+            # flag, ships it OFF, and the deployed on-ness belongs to a
+            # DIFFERENT crate's same-named flag — the label attributes one
+            # crate's gate state to another (the Defense-3 mirror; see
+            # qualified_default_drift for the ancestor-forward shape this
+            # deliberately does NOT fire on).
+            qual_default += 1
+            mismatches += 1
+            print(f"  [MISMATCH] doc says DEFAULT but the QUALIFIER defines and "
+                  f"ships the flag OFF (on only via another crate's "
+                  f"same-named default)")
             print(f"    file: {rel}:{ln}")
             print(f"    feat: {qual + '/' if qual else ''}{feat}  raw_status: {raw!r}")
             print(f"    line: {line}")
@@ -697,6 +770,8 @@ def audit_repo(repo_root: Path) -> int:
         notes.append(f"{forwarded} forwarded-only (off in owning crate)")
     if scoped:
         notes.append(f"{scoped} crate-scoped claim")
+    if qual_default:
+        notes.append(f"{qual_default} qualified-default misattributed")
     untracked = UNTRACKED_SKIPPED.get(str(repo_root), 0)
     if untracked:
         notes.append(f"{untracked} untracked manifest(s) not in git")
@@ -792,6 +867,17 @@ def selftest() -> None:
             "  boundary), and `tropical_algebra` MUST NOT be (reachable only\n"
             "  via katgpt-core/, a crate outside the repo). Getting either wrong\n"
             "  reports drift on a doc that is correct — see find_cargo_defaults.")
+    nodes = reachable_nodes(REACHABILITY_CASE)
+    if (("riir-games-shared", "osc_npc") not in nodes
+            or ("riir-engine", "tropical_algebra") in nodes):
+        raise SystemExit(
+            "✗ reachability-nodes self-test FAILED\n"
+            f"  got: {sorted(nodes)}\n"
+            "  (riir-games-shared, osc_npc) MUST be a reachable node and\n"
+            "  (riir-engine, tropical_algebra) MUST NOT — the pair form is the\n"
+            "  discriminator qualified_default_drift adjudicates on; if the\n"
+            "  projection and the walk disagree, per-crate default claims are\n"
+            "  judged against the wrong graph.")
     own = local_default_closure(LOCAL_CLOSURE_CASE)
     if "tropical_algebra" in own or "band_edge_trigger" not in own:
         raise SystemExit(
@@ -826,6 +912,63 @@ def selftest() -> None:
         raise SystemExit(
             "✗ layer-split self-test FAILED: a BARE label is a deployed\n"
             "  claim — the union model governs, never the qualifier escape")
+    # The qualified-DEFAULT counterpart, pinned in BOTH directions. Same
+    # Defense-3 shape, read backwards: a doc claiming the qualifier's flag is
+    # DEFAULT because a DIFFERENT crate promoted the same NAME misattributes
+    # one crate's gate state to another and MUST flag — while the honest
+    # shapes (qualifier defaults it; ancestor forwards THE QUALIFIER's own
+    # node; bare label; qualifier citing a dependency's flag) MUST NOT.
+    LAYER_SPLIT_DEFINED = {
+        "riir-engine": {"mop_psafe", "mop_runtime", "mop_homeostasis"},
+        "riir-games-civ": {"mop_runtime", "mop_homeostasis"},
+    }
+    LAYER_SPLIT_NODES = {
+        ("riir-engine", "mop_psafe"),
+        ("riir-engine", "mop_runtime"),
+        ("riir-engine", "mop_homeostasis"),
+    }
+    if not qualified_default_drift("riir-games-civ", "mop_runtime", LAYER_SPLIT,
+                                   LAYER_SPLIT_DEFINED, LAYER_SPLIT_NODES):
+        raise SystemExit(
+            "✗ qualified-default self-test FAILED: a DEFAULT label on a\n"
+            "  qualifier that DEFINES the flag and ships it OFF, when the\n"
+            "  deployed on-ness belongs to a different crate's same-named\n"
+            "  flag, is misattribution and MUST flag (the Defense-3 mirror\n"
+            "  of the riir-ai 681/905 lesson — this direction used to pass\n"
+            "  silently through the bare-name union)")
+    if qualified_default_drift("riir-engine", "mop_runtime", LAYER_SPLIT,
+                               LAYER_SPLIT_DEFINED, LAYER_SPLIT_NODES):
+        raise SystemExit(
+            "✗ qualified-default self-test FAILED: the qualifier's own default\n"
+            "  turns the flag on — its DEFAULT label holds and must NOT flag")
+    if qualified_default_drift(None, "mop_runtime", LAYER_SPLIT,
+                               LAYER_SPLIT_DEFINED, LAYER_SPLIT_NODES):
+        raise SystemExit(
+            "✗ qualified-default self-test FAILED: a BARE default label is a\n"
+            "  deployed claim — the union model governs, never this detector")
+    # The ancestor-forward shape (riir-chain siwr, 2026-09-01): the qualifier
+    # defines + ships the flag off, but an ancestor's default forwards THE
+    # QUALIFIER'S OWN (pkg, feat) node. Both readings are defensible there —
+    # the node test is exactly what tells this apart from misattribution.
+    FWD_OWN = {"riir-wallet": set()}
+    FWD_DEFINED = {"riir-wallet": {"siwr"}}
+    FWD_NODES = {("riir-wallet", "siwr")}
+    if qualified_default_drift("riir-wallet", "siwr", FWD_OWN, FWD_DEFINED,
+                              FWD_NODES):
+        raise SystemExit(
+            "✗ qualified-default self-test FAILED: the forwarded-only shape —\n"
+            "  the qualifier's own (pkg, feat) node IS reachable from a\n"
+            "  default, so a DEFAULT label is a defensible deployed reading\n"
+            "  (the siwr doctrine) and must NOT flag")
+    # A qualifier that does not DEFINE the flag is citing a dependency's
+    # flag; the union model already adjudicated that claim — not this
+    # detector's to re-judge.
+    if qualified_default_drift("riir-games-civ", "osc_npc", LAYER_SPLIT,
+                               LAYER_SPLIT_DEFINED, LAYER_SPLIT_NODES):
+        raise SystemExit(
+            "✗ qualified-default self-test FAILED: the qualifier does not\n"
+            "  define this flag — the claim is a deployed citation of a\n"
+            "  dependency's flag, already judged by the union model")
     for line, want_qual, want_feat, want_status in TOKENIZER_CASES:
         assert FEATURE_HEADER_RE.match(line), f"header regex missed: {line!r}"
         got = [(m.group("qual"), m.group("feat"), classify_token(line, m)[0])
