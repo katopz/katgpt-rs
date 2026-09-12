@@ -23,8 +23,22 @@ in 35 documents — a dated SNAPSHOT, not a checksum: five-plus concurrent
 sessions edit these documents, and the walk moved by 3 between this repair's
 first run and its last:
 
-    291 CROSS · 54 IN-LOCAL-RANGE · 0 ORPHAN · 908 AMBIGUOUS
+    291 CROSS over 164 per-repo adjudications · 54 IN-LOCAL-RANGE ·
+    0 ORPHAN · 908 AMBIGUOUS
     (of the 291: 7 ⛔MISATTRIBUTED, 22 ⛔MISLEADING crate hints)
+
+**291 counts EDITS; 164 counts DECISIONS, and sizing the work from the first
+is wrong by up to 4.2x.** Inserting a repo name is mechanical; deciding WHICH
+owner a sentence means — most of these numbers are owned by several repos at
+once — is paid once per number, not once per occurrence. riir-viewbridge's 17
+rows are FOUR decisions (`Plan 532` alone recurs nine times); riir-auth's 8
+are three; riir-chain's 4 are four. Reported per repo as `cross=N over M num`,
+with the same standing as tail support in the percentile audit: it ORDERS the
+work and is never a second verdict.
+
+The workspace total is a SUM of the per-repo counts, never a union — riir-auth
+and riir-game-sdk both citing `Plan 488` is two adjudications in two
+documents, and unioning them reported 142 where the work is 164.
 
 ⛔ **TWO error rates over TWO populations — they are never blended**, because
 a SAMPLE rate does not transfer to rows it never sampled:
@@ -259,7 +273,7 @@ def audit(repo: Path, sibs: list[Path], alloc: dict[str, dict[str, set[int]]],
                 elsewhere[kind].setdefault(n, []).append(s.name)
 
     got = {"n_docs": 0, "n_cites": 0, "ambiguous": set(), "misleading": 0,
-           "misattributed": 0,
+           "misattributed": 0, "cross_units": set(),
            CROSS: [], IN_RANGE: [], ORPHAN: []}
     for doc in docs:
         p = repo / doc
@@ -301,6 +315,8 @@ def audit(repo: Path, sibs: list[Path], alloc: dict[str, dict[str, set[int]]],
                     got["misleading"] += 1
                     tag = (f"  [⛔MISLEADING: the only crate in the window is "
                            f"{'/'.join(sorted(hint))}, which does NOT own {n}]")
+            if cls is CROSS:
+                got["cross_units"].add((kind, n))
             got[cls].append(
                 f"{doc}:{ln}  {kind} {n} -> "
                 f"{'/'.join(owners) if owners else 'NO REPO IN THE WORKSPACE'}"
@@ -483,7 +499,7 @@ def main() -> int:
 
     bad = False
     tot = {"docs": 0, "cites": 0, "amb": 0, "mis": 0, "misat": 0,
-           CROSS: 0, IN_RANGE: 0, ORPHAN: 0}
+           "units": 0, CROSS: 0, IN_RANGE: 0, ORPHAN: 0}
     mine_row = None
     for repo in repos:
         sibs = [s for s in repos if s != repo]
@@ -494,6 +510,11 @@ def main() -> int:
         tot["amb"] += len(got["ambiguous"])
         tot["mis"] += got["misleading"]
         tot["misat"] += got["misattributed"]
+        units = len(got["cross_units"])
+        # SUM, never union: riir-auth and riir-game-sdk both citing Plan 488
+        # is TWO adjudications in two documents, not one. A union reported 142
+        # where the work is 164.
+        tot["units"] += units
         for cls in (CROSS, IN_RANGE, ORPHAN):
             tot[cls] += len(got[cls])
         if repo.resolve() == REPO_ROOT:
@@ -513,8 +534,18 @@ def main() -> int:
                     flags.append(f"{cls} {len(got[cls])} > pinned {row[key]}")
         findings = got[CROSS] + got[IN_RANGE] + got[ORPHAN]
         status = "✗" if flags else ("·" if findings else "✓")
+        # `cross` counts EDITS, `over N num` counts ADJUDICATIONS — and they are
+        # not the same job. Inserting the repo name is mechanical; deciding
+        # WHICH owner a sentence means (most numbers have several) is the
+        # expensive part, and it is paid once per number, not once per row.
+        # Measured at landing the ratio runs 1.0x to 4.2x, so a repo owner
+        # sizing the work from the row count alone is wrong by up to 4x:
+        # riir-viewbridge's 17 rows are FOUR decisions. Same standing as tail
+        # support in the percentile audit — it ORDERS the work, it is not a
+        # second verdict, and neither number is the finding count on its own.
         print(f"{status} {repo.name:22s} docs={got['n_docs']} cites={got['n_cites']:<5d} "
-              f"cross={len(got[CROSS]):<4d} in_local_range={len(got[IN_RANGE]):<3d} "
+              f"cross={len(got[CROSS]):<4d} over {units:<3d} num "
+              f"in_local_range={len(got[IN_RANGE]):<3d} "
               f"orphan={len(got[ORPHAN])} ambiguous={len(got['ambiguous'])}")
         # 12 rows keeps the whole-workspace run readable; `--full` is for the
         # one job the truncated view cannot do — writing the OWNING repo's
@@ -557,7 +588,8 @@ def main() -> int:
               f"finding(s) — AGREE (asserted, not assumed)")
 
     print(f"{len(repos)} contract repo(s) · {tot['docs']} document(s) · "
-          f"{tot['cites']} citation(s) · {tot[CROSS]} CROSS · "
+          f"{tot['cites']} citation(s) · {tot[CROSS]} CROSS over "
+          f"{tot['units']} per-repo adjudication(s) · "
           f"{tot[IN_RANGE]} IN-LOCAL-RANGE · {tot[ORPHAN]} ORPHAN")
     print(f"  AMBIGUOUS (local AND sibling — undecidable by number, NOT a pass): "
           f"{tot['amb']}  ·  ⛔MISLEADING crate hints: {tot['mis']}"
