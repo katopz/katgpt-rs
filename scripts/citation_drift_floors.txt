@@ -10,13 +10,20 @@
 #
 # ── the ceilings are a RATCHET, not a wall ───────────────────────────────────
 # Unlike trap_sentinel_drift_floors.txt (whose classes are 0 everywhere and
-# whose ceilings are therefore a wall), 291 CROSS rows exist TODAY across 18
-# repos this session does not own, and the repair is the OWNING repo's call —
-# per Issue 751's non-goal, the deliverable is a trustworthy instrument plus
-# per-repo issues, not 291 prose edits from here. So each ceiling is pinned at
-# its MEASURED count: a NEW unqualified citation reds immediately, and the
-# standing backlog is visible in the pins rather than silently tolerated.
-# Lower a ceiling in the commit that qualifies a citation.
+# whose ceilings are therefore a wall), this file was landed with 291 CROSS
+# rows standing across 18 repos this session did not own, because per Issue
+# 751's non-goal the deliverable was a trustworthy instrument plus per-repo
+# issues, not 291 prose edits from here. Each ceiling is pinned at its MEASURED
+# count: a NEW unqualified citation reds immediately, and the standing backlog
+# is visible in the pins rather than silently tolerated. Lower a ceiling in the
+# commit that qualifies a citation.
+#
+# The backlog was then worked off by the owning repos: **3 rows remain**, in
+# two repos, and both are enumerated in their issue files as needing the
+# AUTHOR rather than a lookup (riir-clippy's two `Issue 665` rows name a class
+# no repo's 665 is about; riir-game-sdk's `Plan 032` names a DeFi dashboard no
+# candidate repo has a Plan 032 about). A ceiling of 0 in 17 of 19 repos makes
+# this file a WALL again everywhere but those two rows.
 #
 # ⛔ Do NOT read a ceiling as a finding count, and do not read ONE error rate
 # over it. Two populations, two rates, never blended (a SAMPLE rate does not
@@ -77,10 +84,10 @@ min_repos = 15
 #                        cites  cross  in_local_range  orphan
 katgpt-rs                  84      0               0       0
 katgpt-web                  3      0               0       0
-riir-ai                   305      2               6       0
+riir-ai                   305      0               6       0
 riir-auth                   8      0               0       0
-riir-chain                 65      4               1       0
-riir-clippy               513     36               9       0
+riir-chain                 65      0               1       0
+riir-clippy               513      2               9       0
 riir-dao                   25      0               0       0
 riir-dapps                104      0               0       0
 riir-deployer              21      0               0       0
@@ -95,9 +102,8 @@ riir-viewbridge            24     0               2       0
 seal-game-editor            0      0               0       0
 seal-remake                39     16               0       0
 
-# ── the repo worth reading first ─────────────────────────────────────────────
-# riir-clippy, 36 CROSS over 855 citations. riir-game-sdk used to hold this
-# slot at 124/287 (43%, the highest density measured) and is now at 1: its
+# ── how the backlog was cleared, and the two rows it could not clear ─────────
+# riir-game-sdk held the density record at 124/287 (43%) and is now at 1: its
 # `.issues` top out at 029 while it cited riir-ai's SDK-extraction arc
 # (458-531, 79 rows) by bare number throughout, plus riir-mmorpg-examples'
 # Plans 006/010/013/016/018/022/031 and katgpt-rs' 244/457/570/576. Repaired

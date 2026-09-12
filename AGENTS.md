@@ -217,16 +217,17 @@ population and print a confident green over zero repos. Population derived
 
 `citation_drift_sweep.py` is the one that **prints its own error rates next to
 its finding count** — plural, because there are two populations and a SAMPLE
-rate does not transfer to rows it never sampled. Its **291** CROSS rows split
-into the pre-752 corpus of 254, carrying **7/43 = 16%** false positives from a
-stratified manual read (Issue 751 T1), and the **45** rows recovered by
-owner-consistency, carrying **0/45** from a full census (Issue 752). Neither
-number is quotable without the other, nor without the ~2.9k-citation walk and
-19-repo population that produced them — a magnitude, deliberately, because
+rate does not transfer to rows it never sampled. Its CROSS rows split into the
+pre-752 corpus, carrying **7/43 = 16%** false positives from a stratified
+manual read (Issue 751 T1), and the **45** rows recovered by owner-consistency,
+carrying **1/45** from a full census (Issue 752, re-rated by Issue 754).
+Neither number is quotable without the other, nor without the ~3k-citation walk
+and 19-repo population that produced them — a magnitude, deliberately, because
 five-plus concurrent sessions edit these documents and an exact figure in
 prose is drift waiting to happen (the dated snapshot lives in the sweep's own
-docstring, where it is a measurement record rather than a claim); the **IN-LOCAL-RANGE** bucket (54) is
-UNDECIDED and never folded into either neighbour. It also asserts its
+docstring, where it is a measurement record rather than a claim); the
+**IN-LOCAL-RANGE** bucket is UNDECIDED and never folded into either
+neighbour. It also asserts its
 katgpt-rs row against `issue_citation_gate.py`'s own parsed run rather than
 trusting the two to agree.
 
@@ -238,6 +239,16 @@ and `katgpt-rs Issue 513` (513 is riir-train's) both read as clean — the
 attribution following the CODE while the number followed the DOCUMENT. Reading
 a measured error rate as if it bounded the error in ONE direction is the
 mistake; it bounds only the direction somebody thought to sample.
+
+⛔ And that census's own `0/45` did not survive either (Issue 754). Its third
+"outright wrong address", `riir-mmorpg-examples Issue 059`, was **correct**:
+that repo records 059 in its own HISTORY.md heading, with the file removed the
+day it was filed and never committed, so neither the worktree walk nor `git
+log` could see it. Reading all 45 rows by hand could not have caught that,
+because every read asked the same blind `allocated()` the same question. **A
+census is exhaustive over ROWS, not over the ORACLE it checks them against** —
+so never quote an error rate without naming the instrument the sample was
+adjudicated against.
 
 Each sweep carries **two floors, not one**: a ceiling is green over whatever
 the instrument can SEE, so the finding count needs the *population* that
