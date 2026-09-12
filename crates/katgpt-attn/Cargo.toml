@@ -240,3 +240,16 @@ required-features = ["asentmax_schedule"]
 name = "bench_747_asentmax_goat"
 harness = false
 required-features = ["asentmax_schedule"]
+
+# Issue 747 P0.7 — real-model fixture GENERATOR (Ternary-Bonsai-8B qwen3
+# prefill → routing rows + block summaries + ground-truth attention masses).
+# Dev-tool: needs the real GGUF on disk; not part of any gate.
+[[example]]
+name = "asentmax_p07_gen_fixture"
+required-features = ["asentmax_schedule"]
+
+# Issue 747 P0.7 — real-model ASEntmax G2/G3 re-gate (replays the committed
+# fixture through EntmaxRouter None vs with_asentmax_schedule).
+[[test]]
+name = "asentmax_p07_realmodel_regate"
+required-features = ["asentmax_schedule"]
