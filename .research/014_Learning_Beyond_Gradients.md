@@ -9,6 +9,8 @@ Weng discovered that LLM coding agents (Codex/gpt-5.4) can maintain and evolve *
 
 Breakout reached theoretical max (864). Ant reached 6000+ via CPG + residual MPC. HalfCheetah reached 11836.7. VizDoom D3 Battle reached mean=557.0 with pure cv2/NumPy. Atari57 median HNS matched PPO baselines at same step count. All without training a neural network.
 
+> **PASS-Redirects (synthesis):** Vaxenburg et al. [Nature s41586-025-09029-4 "Whole-body physics simulation of fruit fly locomotion"] — the CPG+residual pattern (fixed pattern generator + small learned residual, action-penalized to baseline) validated at Nature scale on a 102-DoF fly; distilled in Research 553.
+
 ---
 
 ## Core Concepts
