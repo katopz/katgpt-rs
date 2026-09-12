@@ -1834,3 +1834,75 @@ NEW (no x0-free marginal-preserving rewind existed). Feature-count claims
 bumped 589 → 590 across README/examples (docs_gate count_features
 enforcement). Promotion owner-gated on a live consumer (candidates: cgsp
 collapse recovery, stale-belief fog-of-war re-exploration).
+
+## Plan 596 — sliceTCA modelless slice-rank decomposition: COMPLETE + PROMOTED (2026-09-12)
+
+Executed by parallel subagent (coordinator pre-wired Cargo.toml/lib.rs/
+bench rows so write sets stayed disjoint; Bench 714 is the GOAT record).
+**GOAT G1–G4 ALL PASS → DEFAULT-ON.**
+
+- Ships as `slice_tca = ["subspace_phase_gate", "tucker_factorization"]`
+  (`crates/katgpt-core/src/slice_tca/{mod,types,svd,als,rank,tests}.rs`):
+  three single-class truncated-SVD factorizations (Eckart–Young via
+  `thin_svd_into` through the small-side Gram), closed-form covariability
+  classifier (3 unfolding spectra over the shared ‖X‖²_F denominator +
+  SIGMOID routing — never softmax), joint deterministic-ALS demixer with
+  loading-only block updates (one contraction + ε-floored divide per
+  component per sweep; slice matrices frozen at birth so class assignment
+  cannot drift), HOSVD joint init (**Tucker's first in-tree consumer**, with
+  documented Gram-SVD fallback beyond TuckerConfig's SVD_MAX_RANK=16), and
+  canonicalization (unit-slice norm, largest-|·|-positive sign rule with
+  first-index tie-break, variance-desc sort with lexicographic bit-pattern
+  tie-break).
+- Delta vs the paper's SGD fitter: deterministic pure-function contract
+  (same input bytes → bit-identical factors; BLAKE3-pinned across 16 calls
+  + rebuild) and zero-hyperparameter updates (no LR/schedule/masking
+  curriculum). Fitting novelty NOT claimed (ALS lineage cited in docs).
+- G1: pure-class routing 12/12 across noise 0→0.2; mixed-class
+  [64,128,32] joint loss 0.0263 vs 0.4835 for BOTH naive floors
+  (majority-class AND best-per-unfolding single-SVD) — 18.4×, class split
+  asserted unflipped (lossy-surface rule). G2: ALS monotone, improves
+  HOSVD init 0.0305→0.0263; full fit 29.99ms ≤ 50ms on [64,128,32];
+  canonical 2-comp entity slice 0.375µs (4-comp 1.04–1.34µs documented as
+  L1-store-floor physics — honest caveat, not gated). G4: 0 allocs on
+  shares/route/reconstruct/entity_slice.
+- Honest findings: true held-out CV is structurally impossible for slice
+  models (every axis indexes free slice parameters; measured flat CV
+  surface) — the opt-in "blocked CV" selector is a per-block structural-fit
+  plateau grid, documented in rank.rs. Feature-count claims 198 → 200
+default-on across README (total unchanged 593; both features existed
+opt-in since the scaffold commit ba754109).
+
+## Plan 597 — BMR + EFE-over-models: COMPLETE + PROMOTED (2026-09-12)
+
+Executed by parallel subagent; Bench 715 is the GOAT record.
+**GOAT G1–G4 ALL PASS → DEFAULT-ON.** Unblocks riir-ai `.issues/925`
+(scientist-NPC fusion).
+
+- Ships as `bmr` (`crates/katgpt-core/src/bmr.rs`): `ln_beta`/`ColumnSums`
+incremental cache, bounded `Counts` column store, `bmr_log_evidence`
+(Eq 7/9), `posterior_over_models` (Eq 9), `ModelSpace` sparse-Δ engine +
+`predictive_posterior_into` (Eq 11 — Δa = ŝ⊗ô touches ONE column, only
+that column's Beta terms recomputed), `efe_model_gain` (Eq 10, KL in log
+space, caller-supplied scratch), `occam_log_bayes_factor` (Eq 12),
+`enumerate_isomorphic_rules` (Eq 14). Anti-FEP scope guard in the module
+header: discovery axis ONLY — MOP/HMM control own policy extraction.
+- **Substrate dedup**: the Lanczos ln_gamma extracted from best_belief.rs
+into the shared ungated `pub(crate) mod special_fn` — ONE ln_gamma in the
+crate, bit-identity verified (1992 default tests green including
+best_belief's statrs numerics pins).
+- G1: BMR vs chained-exact brute-force oracle (no lgamma — structurally
+independent) worst |Δ| = 7.1e-14 < 1e-9; three-ball ablation (64 seeds ×
+40 trials): full-info-gain 64/64 discovery (KL→0, Occam +36.8) vs
+states+params-only 2/64 (≥2 plausible in 62/64) vs random 0/64 — the
+paper's qualitative separation reproduced. G2: sparse-Δ 1.92µs/action,
+naive full recompute 983.8µs → **513×** (target ≥100×). G4: 0 allocs /
+3000 steady-state hot-path calls.
+- Honest deviations (bench doc + module header): (1) Research 551's Eq-7/9
+transcription carried the `ln B(a_c)` sign flipped — implemented the
+corrected exact-Bayes-factor form, arbitrated by the plan's own T2.2
+oracle; (2) our tensor encoding yields 81/81 unique rules vs the paper's
+79 (their table encoding is unreproducible from the paper text) — pinned
+honestly; (3) T4.3 debugging tuned priors (λ=4, ã=4.0), never thresholds;
+(4) premature commits = 0 in a deterministic world (the paper's nonzero
+mode needs observation noise) — recorded as a tunable, not a bug.

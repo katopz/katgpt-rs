@@ -3048,8 +3048,8 @@ pub(crate) mod special_fn;
 // single-class truncated-SVD factorizations + closed-form covariability
 // classifier (sigmoid routing, never softmax) + deterministic joint ALS
 // demixer (HOSVD init) + invariance canonicalization. Consumes
-// subspace_phase_gate SVD + linalg::tucker. Opt-in pending the Phase 2
-// GOAT gate (Bench 714).
+// subspace_phase_gate SVD + linalg::tucker. DEFAULT-ON since 2026-09-12
+// (Bench 714 GOAT G1–G4 ALL PASS).
 #[cfg(feature = "slice_tca")]
 pub mod slice_tca;
 
@@ -3057,8 +3057,8 @@ pub mod slice_tca;
 // 551, Friston et al. Nat Commun 2026): closed-form Dirichlet model
 // evidence, posterior over models, predictive model posterior (sparse-delta),
 // EFE model-gain term, Occam commit statistic, isomorphic rule enumerator.
-// Discovery axis only (anti-FEP scope guard, Research 551 §2.4). Opt-in
-// pending the Phase 5 GOAT gate (Bench 715).
+// Discovery axis only (anti-FEP scope guard, Research 551 §2.4).
+// DEFAULT-ON since 2026-09-12 (Bench 715 GOAT G1–G4 ALL PASS).
 #[cfg(feature = "bmr")]
 pub mod bmr;
 
