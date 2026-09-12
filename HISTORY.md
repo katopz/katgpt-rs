@@ -2012,3 +2012,51 @@ unterminated across all 7 sibling files at the sibling repos' origin/develop.
 The removed issue file's full record (three-shape table, the two wrong
 classifiers, the false-positive analysis that left the shared scanner
 alone) lives in git history, `git log -- .issues/756_an_unterminated_fence_swallows_the_rest_of_the_file.md`.
+
+## Issue 749 — a cross-repo `Issue N` citation rebinds to the WRONG document: CLOSED (2026-09-12)
+
+`numbering_gate.py` guards double-allocation inside one repo and cannot see
+a citation whose referent lives in another: AGENTS.md's bare `Issue 750`
+meant riir-ai Issue 750 while the local highwater read 748 — dangling that
+day, silently rebound to an unrelated local issue two allocations later.
+Resolved by `scripts/issue_citation_gate.py` +
+`scripts/issue_citation_floors.txt` in docs_gate's CHECKS (landing
+`e258fdaa`; hardened by `7fdfc554` short-form repo aliases after a measured
+~50% classifier FP rate, `60bc76aa` an alias only qualifies if the repo
+OWNS the number, `37bb9cbf` the CI-deferred verdict). Population reuses
+`numbering_drift_sweep.contract_repos` (the seventh predicate — no eighth
+silent derivation); the walk reads git history, not just the worktree, so
+the noise-reduction rule cannot strand a live citation; floors on repos
+AND citations scanned — a ceiling is green over whatever the instrument
+sees. The 8 unqualified rows (riir-train Issue 513 ×3, riir-ai Issue 750
+×3, riir-ai Issues 490/493 ×2, each resolved uniquely by title) were
+qualified in AGENTS.md + HISTORY.md; revert-probed — un-qualify exits 1
+naming the repo, the list-tail probe (riir-ai Issues 490/493) yields TWO
+rows because the first scan read only the head and hid 493, both floors
+exit 2. The 63 numbers existing both locally and in a sibling are reported
+every run, deliberately NOT gated. Spawned Issue 751 (the cross-repo
+sweep); this repo's own 750 was allocated one commit AFTER the riir-ai
+citation was qualified — the hazard demonstrated live, now held shut by
+the gate. Issue file removed per the noise-reduction rule; the full record
+lives in git history
+(`git log -- .issues/749_cross_repo_citations_rebind_to_the_wrong_document.md`).
+
+## Issue 750 — docs_gate's CHECKS array vs the AGENTS.md table documenting it: CLOSED (2026-09-12)
+
+Two hand-duplicated lists of the same thing with nothing comparing them —
+found already drifted (docs_gate.sh said "six" contract-repo predicates;
+the script and AGENTS.md's table both say seven, Issue 734 added it).
+Resolved by `scripts/docs_gate_checks_sync.py` in CHECKS (landing
+`d10202b1`): MEMBERSHIP of script names both directions, never cardinality
+— a count that MATCHES is not a checksum over a set; plus QUANTITY WORDS
+only, after issue refs are stripped — the lists legitimately differ in
+emphasis, but a number may not differ because a quantity is a claim.
+`MIN_ROWS = 10` floors both parses — a parser reading zero rows reports
+perfect agreement between two empty sets. Revert-probed five ways, every
+verdict distinguishable; registering it added a row to both lists, so it
+checks its own registration. The number 750 is the one Issue 749 was
+about: allocated here one commit after `e258fdaa` qualified the riir-ai
+citation — intended demonstration, not coincidence; the citation gate
+keeps it that way. Issue file removed per the noise-reduction rule; the
+full record lives in git history
+(`git log -- .issues/750_checks_array_vs_its_own_documentation.md`).
