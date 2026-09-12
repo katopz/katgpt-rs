@@ -48,6 +48,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from numbering_drift_sweep import contract_repos  # noqa: E402 — the SEVENTH predicate, reused not re-derived
+from skill_repo_set_gate import fenced_blocks  # noqa: E402 — the fence scanner, reused not re-derived
 
 REPO_ROOT = HERE.parent
 WORKSPACE = REPO_ROOT.parent
@@ -165,12 +166,18 @@ _SUBDIR_KIND = {v: k for k, v in KINDS.items()}
 #       `Bench 010` / `Issue 081` — genuine sibling ATTRIBUTIONS a reader
 #       follows. Excluding fences there would hide 57 real rows. NOT excluded.
 #
-# Matching is CommonMark-ish rather than a boolean toggle on every ``` line: a
-# naive toggle mis-phases permanently after the first UNTERMINATED fence and
-# then scans the complement — prose read as code and code as prose, reporting
-# clean either way. So the opening run's char and length are recorded and only
-# a BARE run of at least that length of the SAME char closes it.
-_FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
+# Matching is delegated to `skill_repo_set_gate.fenced_blocks()` — the same
+# scanner, imported rather than re-derived, exactly as `contract_repos` is. It
+# is already CommonMark-ish (opening run length recorded; only a BARE run of at
+# least that length closes it, so an inner ```bash does not) because it was
+# written after a naive toggle mis-phased on `rust-optimize/SKILL.md`'s
+# unclosed ```text and swallowed that gate's own first canary. A second copy
+# here would be a second thing to get wrong.
+#
+# It reads BACKTICK fences only; `~~~` is unsupported. Measured 2026-09-12: 0
+# tilde fences in tracked `.md` across all 19 contract repos (the one hit in
+# the workspace is vendored llama.cpp, outside the population). A WATCHED
+# class, not a silent one.
 
 
 def fenced_lines(text: str) -> tuple[set[int], int | None]:
@@ -178,27 +185,16 @@ def fenced_lines(text: str) -> tuple[set[int], int | None]:
 
     An unterminated fence is returned rather than swallowed: its tail would
     otherwise be excluded to EOF, which is the same suppression this filter
-    exists to prevent, just moved. Callers fail SAFE on it (see
-    `heading_allocated`) and it is surfaced as its own verdict.
+    exists to prevent, just moved somewhere nobody would look for it. Callers
+    fail SAFE on it (see `heading_allocated`) and it is surfaced as a verdict.
     """
     inside: set[int] = set()
     open_at: int | None = None
-    ch = ""
-    run_len = 0
-    for i, line in enumerate(text.splitlines()):
-        m = _FENCE.match(line)
-        if m:
-            run, rest = m.group(1), m.group(2).strip()
-            if open_at is None:
-                open_at, ch, run_len = i, run[0], len(run)
-                inside.add(i)
-                continue
-            if run[0] == ch and len(run) >= run_len and not rest:
-                inside.add(i)
-                open_at = None
-                continue
-        if open_at is not None:
-            inside.add(i)
+    for first, last, _body, _prev in fenced_blocks(text):
+        if last < 0:            # the unterminated-block sentinel
+            open_at = first - 1
+            continue
+        inside.update(range(first - 1, last))
     return (set() if open_at is not None else inside), open_at
 
 

@@ -1,6 +1,6 @@
 # Issue 755 — a heading inside a fenced code block reads as an ALLOCATION, and the allocation path is the one that suppresses findings
 
-STATUS: RESOLVED 2026-09-12 — `fenced_lines()` landed on the allocation path only; the asymmetry measured on BOTH sides (0 of 57 headings fenced, 57 of 2972 citations fenced); 3 selftest arms canaried two ways; unterminated fences fail SAFE and RED
+STATUS: RESOLVED 2026-09-12 — `fenced_lines()` landed on the allocation path only, DELEGATING to `skill_repo_set_gate.fenced_blocks()` (no second parser); the asymmetry measured on BOTH sides (0 of 57 headings fenced, 57 of 2972 citations fenced); 3 selftest arms canaried two ways; unterminated fences fail SAFE and RED
 
 ## The defect
 
@@ -56,12 +56,28 @@ real and correct the whole time. A sampler's formatting is not the data.
 
 A scanner that flips a boolean on every ` ``` ` line mis-phases permanently
 after the first **unterminated** fence and thereafter scans the complement —
-prose read as code, code read as prose — reporting clean either way
-(precedent: `.agents/skills/rust-optimize/SKILL.md`'s unclosed ` ```text `,
-43 lines swallowed, which silently ate a new gate's first canary). Matching is
-CommonMark-ish instead: the opening run's **char and length** are recorded, and
-only a **bare** run of at least that length of the same char closes it, so an
-inner ` ```bash ` does not close the block.
+prose read as code, code read as prose — reporting clean either way. That is
+not hypothetical in this repo: `.agents/skills/rust-optimize/SKILL.md`'s
+unclosed ` ```text ` swallowed 43 lines and silently ate
+`skill_repo_set_gate.py`'s own first canary, which is how it was found.
+
+⛔ **And that is also where the scanner already lived.** The first version of
+this repair wrote a *second* fence parser, in the same `scripts/` directory as
+`skill_repo_set_gate.fenced_blocks()` — which is CommonMark-ish for exactly the
+reason above, and which this repo's own norm says to reuse
+(`from numbering_drift_sweep import contract_repos  # the SEVENTH predicate,
+reused not re-derived`). The pre-flight grep was scoped to the two citation
+scripts instead of to `scripts/`, which is the substrate-first failure in
+miniature: a single-file grep returning zero is not absence. `fenced_lines()`
+now delegates, and the duplicate parser is deleted — one implementation of a
+rule this subtle is strictly better than two that agree today.
+
+The inherited rule: the opening run's **length** is recorded, and only a
+**bare** run of at least that length closes it, so an inner ` ```bash ` does
+not. It reads **backtick fences only** — `~~~` is unsupported, measured at 0
+across tracked `.md` in all 19 contract repos (the workspace's one tilde fence
+is in vendored `llama.cpp`, outside the population). A watched class, not a
+silent one.
 
 That is not theory here — it is a measured arm. Substituting the naive toggle
 for `fenced_lines()` returns `[42, 44, 47, 49]` against an expected
