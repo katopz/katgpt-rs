@@ -226,7 +226,8 @@ Workstation-only cross-repo sweep family — `docs_drift_sweep.py`,
 `numbering_drift_sweep.py`, `required_features_drift_sweep.py`,
 `percentile_drift_sweep.py`, `cfg_gated_drift_sweep.py`,
 `cfg_row_implication_drift_sweep.py`, `trap_sentinel_drift_sweep.py`,
-`citation_drift_sweep.py` (every contract repo, on demand),
+`citation_drift_sweep.py`, `restatement_drift_sweep.py` (every contract repo,
+on demand),
 `sibling_docs_drift.yml` (reusable workflow, one caller), and
 `ci_gate_coverage.py` (report, always exit 0: which repos gate their full
 compile+lint surface in CI, and whether anything automatically starts it).
@@ -436,6 +437,12 @@ scripts/restatement_theorem_audit.py -v            # every row, not just finding
   chain. Scoped per module + transitive imports now.
 - Standing (2026-09-12): **0 RESTATEMENT-INLINE** over 4 repos / 68 `.lean` /
   255 theorems; 19 UNRESOLVED + 6 conjuncts read one by one, all value pins.
+- Verdict half: `scripts/restatement_drift_sweep.py` (workstation, every repo
+  with `.proofs`, pinned in `scripts/restatement_drift_floors.txt`). **Two
+  floors** — `min_lean_files` catches a WALK regression, `min_theorems` a PARSE
+  one, and only the second moves when a tokenizer breaks on an unchanged tree.
+  `--prove-fires` plants a restatement into a COPY of each repo and requires
+  the count to move, so the ceiling is never a pin nobody has watched fail.
 
 ## A gate that ABORTS reports exit 0 — `scripts/trap_exit_launder_audit.py`
 

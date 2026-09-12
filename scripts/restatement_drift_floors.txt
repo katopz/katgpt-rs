@@ -1,0 +1,58 @@
+# Pins for scripts/restatement_drift_sweep.py — EVERY repo that ships Lean
+# proofs (derived: BOUNDARY.md + .git + .proofs).
+#
+# Format, 5 whitespace-separated fields:
+#
+#   <repo> <min_lean_files> <min_theorems> <max_restatement> <max_identity>
+#
+# Re-pin DELIBERATELY, in the commit that changes the measured value, with the
+# reason in the commit message. A pin that drifts behind reality is a pin
+# nobody trusts.
+#
+# ── the ceilings are a WALL, not a ratchet ────────────────────────────────
+# max_restatement = 0 in every repo, and that zero was EARNED: riir-neuron-db
+# Issue 617 removed four theorems that proved a size *definition* equal to the
+# sum it is DEFINED as, each adjudicated by four independent probes (deletion,
+# planted-canary dependency, perturbation location, two-sound-sites). Do NOT
+# raise a ceiling to clear a red — a RESTATEMENT-INLINE row is a theorem that
+# cannot fail on any constant being wrong, while its doc comment says it is the
+# guard. Remove it, or check whether it is really CROSS-DEF (an RHS that names
+# a second DEFINITION is a cross-check and not this class).
+#
+# max_identity = 0 is the same argument one step out: an algebra identity
+# dressed as a spec claim (`a + b = b + a`) is green for any constants too.
+#
+# ── the two FLOORS, and the second is the one that bites ──────────────────
+# A ceiling of 0 is green over whatever the classifier can SEE, and this one
+# has two independent ways to go blind:
+#
+#   min_lean_files  the WALK. `.proofs` moves or is vendored under a skipped
+#                   name -> 0 files, every ceiling passes.
+#   min_theorems    the PARSE. A tokenizer or block-splitter regression yields
+#                   zero theorems from an unchanged tree — measured during
+#                   development: `:=` tokenizing as `:` + `=` took the def
+#                   table to 0 with the file count identical.
+#
+# Both ~60% of measured (2026-09-12): SLACK against churn (consolidating spec
+# modules legitimately shrinks a count), TIGHT against blindness (a walk or
+# tokenizer regression drops these by an order of magnitude, not a third).
+#
+# ── no membership pin here, deliberately ──────────────────────────────────
+# `trap_sentinel_gate.py` pins its set by NAME because a count is not a
+# checksum over a set. That argument does not transfer: the verdict here is
+# DERIVED per theorem, and there is no set to swap — every way to introduce the
+# class lands as a new RESTATEMENT-INLINE row, and every way to lose a sound
+# theorem lands in LITERAL/CROSS-DEF shrinking, which `min_theorems` catches.
+#
+# ── measured 2026-09-12 (the values these floors are 60% of) ──────────────
+#   katgpt-rs       19 .lean ·  83 theorems ·   1 composite def   · 0 RESTATEMENT
+#   riir-ai          8 .lean ·  22 theorems ·   8 composite defs  · 0 RESTATEMENT
+#   riir-chain      26 .lean ·  92 theorems ·  32 composite defs  · 0 RESTATEMENT
+#   riir-neuron-db  15 .lean ·  58 theorems ·  44 composite defs  · 0 RESTATEMENT
+#                                              (1 CROSS-DEF — keep, it reds)
+#
+# repo             min_lean  min_thm  max_restate  max_identity
+katgpt-rs                11       49            0             0
+riir-ai                   4       13            0             0
+riir-chain               15       55            0             0
+riir-neuron-db            9       34            0             0
