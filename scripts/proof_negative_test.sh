@@ -7,7 +7,10 @@
 # transcription error. The concrete hand-instances in
 # KatgptProof/Pencil/SpecTests.lean close that gap — this script MEASURES
 # it: each perturbation below simulates a spec typo, and `lake build` MUST
-# fail. A perturbation that builds green is a hole.
+# fail — and it must fail because a PROOF no longer holds (an `rfl` that no
+# longer reduces, a `decide` that computes a different value, a `rw` whose
+# rewrite no longer applies), never because the file stopped parsing. A
+# perturbation that builds green is a hole.
 #
 # Usage: scripts/proof_negative_test.sh
 set -euo pipefail
@@ -63,8 +66,9 @@ fail=0
 #   $1 = file path relative to Pencil/
 #   $2 = sed expression
 #   $3 = human description of the bug being simulated
+#   $4 = OPTIONAL module the arm claims is the SOLE catcher (empty = no claim)
 perturb() {
-    local rel="$1" expr="$2" desc="$3"
+    local rel="$1" expr="$2" desc="$3" expect="${4:-}"
     local file="$SRC/$rel"
     local key="${SRC}/${rel}"
     local bak="$BACKUP_DIR/${key//\//__}.bak"
@@ -82,11 +86,38 @@ perturb() {
         return
     fi
 
-    if (cd "$PROOFS" && lake build >/dev/null 2>&1); then
+    # `set -e` is ON: a bare `out="$(failing cmd)"` assignment RETURNS the
+    # command's status, so errexit kills the whole run at the first perturbation
+    # that does its job. The `|| rc=$?` suffix is what makes the assignment a
+    # tested command. (Measured in riir-neuron-db: the first version of this arm
+    # aborted after [1/12] and the sentinel's own exit status was the only sign.)
+    local out rc=0
+    out="$( (cd "$PROOFS" && lake build 2>&1) )" || rc=$?
+    if [ "$rc" -eq 0 ]; then
         echo "  ✗ BUILD PASSED — this bug would ship undetected"
         fail=$((fail + 1))
+    elif printf '%s' "$out" | grep -qE "unexpected token|unexpected identifier|expected term|unterminated"; then
+        # The header's claim is that each perturbation breaks a PROOF -- an `rfl`
+        # that no longer reduces, a `decide` that computes a different value.
+        # Nothing asserted it until now, and a red from a SYNTAX error is a red
+        # that proves nothing about the spec tests: a perturbation that merely
+        # mangles the file would be counted as a pass and the hole it was meant
+        # to probe would stay open. This arm is why a green count is readable.
+        echo "  ✗ PERTURBATION BUG: the file stopped PARSING, so nothing was proved ($desc)"
+        printf '%s' "$out" | grep -E "unexpected token|unexpected identifier|expected term|unterminated" | head -2 | sed 's/^/       /'
+        fail=$((fail + 1))
+    elif [ -n "$expect" ] && printf '%s' "$out" \
+            | grep -oE "error: KatgptProof/[A-Za-z/]+\.lean" | sort -u \
+            | grep -qv "$expect"; then
+        # The arm claims ONLY $expect catches this. A claim nothing checks decays
+        # silently: add a literal theorem to a sibling module and the compensated
+        # perturbation starts reding THERE, the arm still passes, and the
+        # attribution it exists to demonstrate is quietly false.
+        echo "  ✗ ATTRIBUTION BUG: the arm claims ONLY $expect catches this, and the build reds elsewhere too ($desc)"
+        printf '%s' "$out" | grep -oE "error: KatgptProof/[A-Za-z/]+\.lean" | sort -u | sed 's/^/       /'
+        fail=$((fail + 1))
     else
-        echo "  ✓ build failed as required"
+        echo "  ✓ build failed as required${expect:+ — in $expect ONLY}"
         pass=$((pass + 1))
     fi
 
@@ -141,7 +172,11 @@ perturb "SpecTests.lean" \
     "κ=0 instance expects σ(0)·σ(0)=1/2 instead of 1/4"
 
 if [ "$fail" -gt 0 ]; then
-    echo "✗ $fail perturbation(s) built green — spec-test holes"
+    # Three distinct failures share this counter and they are NOT one finding:
+    # a green build (a spec-test hole), a parse error (nothing was proved), and
+    # a wrong attribution (the spec tests are fine; the arm's claim about WHICH
+    # module catches it is stale). Read the per-arm line above for which.
+    echo "✗ $fail perturbation(s) did not do their job — see the per-arm reason above (green build = a spec-test hole; PERTURBATION BUG = it stopped parsing; ATTRIBUTION BUG = it reds, but not only where the arm claims)"
     exit 1
 fi
 echo "✓ all $pass perturbations caught — the spec tests have teeth"
