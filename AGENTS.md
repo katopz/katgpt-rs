@@ -206,14 +206,23 @@ is exactly the drift this gate exists to catch.
 Workstation-only cross-repo sweep family — `docs_drift_sweep.py`,
 `numbering_drift_sweep.py`, `required_features_drift_sweep.py`,
 `percentile_drift_sweep.py`, `cfg_gated_drift_sweep.py`,
-`cfg_row_implication_drift_sweep.py`, `trap_sentinel_drift_sweep.py`
-(every contract repo, on demand),
+`cfg_row_implication_drift_sweep.py`, `trap_sentinel_drift_sweep.py`,
+`citation_drift_sweep.py` (every contract repo, on demand),
 `sibling_docs_drift.yml` (reusable workflow, one caller), and
 `ci_gate_coverage.py` (report, always exit 0: which repos gate their full
 compile+lint surface in CI, and whether anything automatically starts it).
 NOT in docs_gate's CHECKS — CI's single checkout would derive an empty
 population and print a confident green over zero repos. Population derived
 (BOUNDARY.md + `.git`); expectations committed in `scripts/*_floors.txt`.
+
+`citation_drift_sweep.py` is the one that **prints its own error rate next to
+its finding count** — a measured **7/43 = 16%** false-positive rate from a
+stratified manual read (riir-ai Issue 751 T1). Its 254 CROSS rows are not
+quotable without it, nor without the 2,939-citation walk and 19-repo
+population that produced them; its **IN-LOCAL-RANGE** bucket (46) is UNDECIDED
+and never folded into either neighbour. It also asserts its katgpt-rs row
+against `issue_citation_gate.py`'s own parsed run rather than trusting the two
+to agree.
 
 Each sweep carries **two floors, not one**: a ceiling is green over whatever
 the instrument can SEE, so the finding count needs the *population* that
