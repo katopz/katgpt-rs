@@ -85,23 +85,44 @@ riir-dao                   25      0               0       0
 riir-dapps                104     21               0       0
 riir-deployer              21     10               0       0
 riir-esp32                  2      0               0       0
-riir-game-sdk             172    124              15       0
+riir-game-sdk             172      1               4       0
 riir-kat                    1      0               0       0
-riir-mmorpg-examples      321     43              16       0
+riir-mmorpg-examples      321     43               0       0
 riir-neuron-db             27      0               3       0
 riir-shader                 0      0               0       0
 riir-train                 43      0               1       0
 riir-viewbridge            24     0               2       0
 seal-game-editor            0      0               0       0
-seal-remake                39     16               1       0
+seal-remake                39     16               0       0
 
-# ── the two repos worth reading first ────────────────────────────────────────
-# riir-game-sdk 108 CROSS over 287 citations (38%) — the highest density in the
-# workspace by a wide margin, and the sample read in T1 found it genuine: its
-# `.issues` top out at 29 while it cites riir-ai's 469/472/473/478/489/490/496/
-# 518/874 throughout. riir-viewbridge (12/40) and riir-auth (6/14) are the same
-# shape one order of magnitude down: small repos whose whole plan of record
-# lives in riir-ai (`Plan 532`, `Plan 488`) and is cited by bare number.
+# ── the repo worth reading first ─────────────────────────────────────────────
+# riir-clippy, 36 CROSS over 855 citations. riir-game-sdk used to hold this
+# slot at 124/287 (43%, the highest density measured) and is now at 1: its
+# `.issues` top out at 029 while it cited riir-ai's SDK-extraction arc
+# (458-531, 79 rows) by bare number throughout, plus riir-mmorpg-examples'
+# Plans 006/010/013/016/018/022/031 and katgpt-rs' 244/457/570/576. Repaired
+# 2026-09-12 (riir-game-sdk `.issues/030`), owner read off each referenced
+# document's TITLE, never inferred from the number. The one survivor is
+# `Plan 032` (the `chain_viz` DeFi dashboard): no candidate repo has a Plan 032
+# about a DeFi dashboard, so it needs the author, not a lookup.
+#
+# ⛔ Two of those ceilings fell for the OTHER reason, and the ambiguity is
+# real: riir-mmorpg-examples' in_local_range 16 -> 0 and seal-remake's 1 -> 0
+# are NOT prose repairs — they are Issue 754 teaching `allocated()` to read a
+# repo's own `## Issue 059 (2026-08-14)` heading, so 7 numbers that had been
+# invisible to both the worktree walk and `git log` became visible. A falling
+# ceiling is ambiguous between a repair and a blinded classifier; these two
+# were neither, and only the commit message can say so.
+#
+# riir-game-sdk's residual in_local_range = 4 is NOT slack: `Issue 005` and
+# `Issue 006` are that repo's OWN (it allocated 001-004 and 007-009; the swarm-
+# demo topic matches 007/008/009 exactly), filed and removed the same day with
+# no intervening commit — the Issue 754 class again, but written **bold
+# inline** (`**Issue 005 extension (2026-07-19):**`) rather than as a heading.
+# The heading rule deliberately does NOT reach inline bold: that form is common
+# enough in this prose that accepting it would absolve real wrong addresses,
+# and the suppression direction is the one that must be measured before it is
+# widened. So these four stay UNDECIDED, which is what they are.
 #
 # ORPHAN is 0 everywhere and is still its own column: it is a DIFFERENT repair
 # (the number is wrong, or its repo left the contract) from CROSS, and pooling

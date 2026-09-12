@@ -45,7 +45,9 @@ a SAMPLE rate does not transfer to rows it never sampled:
 
     254 rows (the pre-752 corpus)   7/43 = 16%, a stratified SAMPLE read
                                     line-by-line across 13 repos (751 T1)
-    +45 rows (owner-consistency)    0/45, a full CENSUS — every row read (752)
+    +45 rows (owner-consistency)    1/45, a full CENSUS — every row read (752),
+                                    with ONE row refuted afterwards by a
+                                    measurement the census could not make (754)
 
 The predecessor figure — 308 — was quoted with no error rate at all and was
 contaminated by an alias class worth ~50% of its first four rows (749's
@@ -82,10 +84,20 @@ and nobody had looked: qualification asked **"is a repo named?"** and never
 named no owner at all** — 37 where the 3-line window merely contained a sibling
 name (a crate-inventory table row, an adjacent clause) and 8 carrying an
 explicit attribution to a repo that does not have the number. `riir-chain Plan
-211` where riir-chain's `.plans` top out at 058; `riir-mmorpg-examples Issue
-059` where that repo allocated 058 and 061 and never 059; `katgpt-rs Issue 513`
-where 513 is riir-train's and katgpt-rs owns only the script the line is about
-— the attribution followed the CODE while the number followed the DOCUMENT.
+211` where riir-chain's `.plans` top out at 058; `katgpt-rs Issue 513` where
+513 is riir-train's and katgpt-rs owns only the script the line is about — the
+attribution followed the CODE while the number followed the DOCUMENT.
+
+⛔ The census's THIRD example was WRONG, and it is kept here because the way it
+was wrong is the lesson. `riir-mmorpg-examples Issue 059` was filed as an
+outright wrong address "where that repo allocated 058 and 061 and never 059".
+That repo DID allocate 059 — its own HISTORY.md carries `## Issue 059
+(2026-08-14) — Demonstration-teachable pets`, resolved and removed the day it
+was filed, and removed WITHOUT an intervening commit, so neither the worktree
+walk nor `git log` could see it (Issue 754, `heading_allocated()`). The census
+read every row and still could not have caught this: the instrument it checked
+each row against was itself blind, so a full census inherits its ORACLE's blind
+spots at 100%. `0/45` was a statement about the reader, never about the rule.
 
 That is a **~15% under-count**, the same magnitude as the 16% over-count and
 in the opposite direction. It is the T2(a) argument below applied to the path
@@ -557,6 +569,29 @@ def selftest() -> list[str]:
         except ValueError:
             pass
 
+        # ── heading-only allocations (Issue 754). The one path in this
+        # instrument that can SUPPRESS a finding, so all four arms are pinned:
+        # the positive must fire, and each of the three measured negatives
+        # must not — a heading rule that accepts `## Issue 043 follow-up (…)`
+        # would absolve a wrong address, which is the defect, not the repair.
+        hd = ws / "riir-headrepo"
+        (hd / ".issues").mkdir(parents=True)
+        (hd / "HISTORY.md").write_text(
+            "## Issue 042 (2026-01-01) — resolved, file never committed\n"
+            "## Issue 043 follow-up (2026-01-01) — about a FOREIGN number\n"
+            "## Issue 044 (riir-fakesib) — an explicit foreign owner\n"
+            "# Issue 045 (2026-01-01) — H1, a document title\n"
+            "## Plan 046 (2026-01-01) — a different KIND\n")
+        names = ["riir-headrepo", "riir-fakesib"]
+        got_h = icg.heading_allocated(hd, ".issues", names)
+        if got_h != {42}:
+            fails.append(f"heading allocation: got {sorted(got_h)}, expected [42] "
+                         f"— 43/44/45 are the measured negatives, 46 is a Plan")
+        if icg.heading_allocated(hd, ".plans", names) != {46}:
+            fails.append("heading allocation: the KIND is not read from the subdir")
+        if icg.allocated(hd, ".issues", names) != {42}:
+            fails.append("allocated() does not union the heading path")
+
         # population derivation: BOUNDARY.md + a .git DIRECTORY, both required
         (me / "BOUNDARY.md").write_text("x")
         (me / ".git").mkdir()
@@ -735,11 +770,13 @@ def main() -> int:
           f"walk and {len(repos)}-repo population that produced them:")
     print(f"       254 rows (the pre-752 corpus): 7/43 = 16%, a STRATIFIED "
           f"SAMPLE read across 13 repos (Issue 751 T1)")
-    print(f"       +45 rows recovered by owner-consistency: 0/45, a full CENSUS "
-          f"— every row read (Issue 752). {tot['misat']} in CROSS carry an "
-          f"explicit non-owner attribution; hand-adjudicated, 3 are outright "
-          f"WRONG addresses (`riir-chain Plan 211` — riir-chain tops out at "
-          f"058), the rest unqualified either way")
+    print(f"       +45 rows recovered by owner-consistency: 1/45, a full CENSUS "
+          f"— every row read (Issue 752), ONE refuted afterwards by a "
+          f"measurement the census could not make (Issue 754: a census "
+          f"inherits its oracle's blind spots at 100%). {tot['misat']} in "
+          f"CROSS carry an explicit non-owner attribution; hand-adjudicated, "
+          f"2 are outright WRONG addresses (`riir-chain Plan 211` — riir-chain "
+          f"tops out at 058), the rest unqualified either way")
     # ── the two RULE-COST quantities (Issue 753) ────────────────────────────
     # Both were docstring claims measured once; both are re-measured every run
     # now, because the corpus moves and a dated zero is a claim, not a fact.

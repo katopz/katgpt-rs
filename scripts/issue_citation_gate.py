@@ -133,14 +133,91 @@ def parse_pins(path: Path) -> dict[str, int | list[str]]:
     return pins
 
 
-def allocated(repo: Path, subdir: str) -> set[int]:
+_SUBDIR_KIND = {v: k for k, v in KINDS.items()}
+
+# `## Issue 059 (2026-08-14) — Demonstration-teachable pets`: a heading whose
+# number is IMMEDIATELY followed by a parenthetical. Both halves are
+# load-bearing, and both were measured (Issue 754) against the 11 candidate
+# headings in the workspace rather than reasoned about:
+#
+#   `## Issue 667 consumer-side follow-ups (2026-08-14/15)` — words between the
+#       number and the parenthetical: a heading ABOUT a foreign number, not a
+#       record of a local one. Same shape: `## Plan 539 follow-up (…)`.
+#   `## Issue 092 (riir-mmorpg-examples) — …` — the parenthetical NAMES the
+#       owner, and it is not this repo.
+#   `# Proposal 031 §0 + §3: …` — H1, and inside a fenced block besides.
+#
+# 7 of the 11 survive; all 7 read as genuine local allocations. A heading
+# inside a fenced code block is a KNOWN gap of this predicate — measured EMPTY
+# today only because the one such heading fails the other two filters too.
+_SELF_HEADING = re.compile(
+    r"^#{2,}\s+(?:\*\*)?(%s)\s+0*(\d{2,4})\s*\(([^)\n]*)\)" % "|".join(KINDS))
+
+_DOCS_CACHE: list[str] | None = None
+_NAMES_CACHE: list[str] | None = None
+
+
+def _self_docs() -> list[str]:
+    """The pinned document list, read ONCE from the floors file, not re-typed."""
+    global _DOCS_CACHE
+    if _DOCS_CACHE is None:
+        docs = parse_pins(FLOORS)["documents"]
+        assert isinstance(docs, list)
+        _DOCS_CACHE = docs
+    return _DOCS_CACHE
+
+
+def heading_allocated(repo: Path, subdir: str,
+                      repo_names: list[str] | None = None) -> set[int]:
+    """Numbers this repo records for ITSELF in a heading of its own documents.
+
+    A resolved file is REMOVED by the noise-reduction rule; a file created and
+    removed without an intervening commit leaves nothing in `git log` either,
+    and the repo's own HISTORY.md heading is then the WHOLE allocation record.
+    Measured (Issue 754): 7 such numbers workspace-wide, and two of them were
+    driving a `⛔MISATTRIBUTED` verdict against prose that was CORRECT —
+    riir-game-sdk's `riir-mmorpg-examples Issue 059`, which Issue 752's census
+    had adjudicated the other way and recorded as an "outright WRONG address".
+
+    This is the only path here that can SUPPRESS a finding, so its two filters
+    are measured (see `_SELF_HEADING`) rather than assumed.
+    """
+    kind = _SUBDIR_KIND.get(subdir)
+    if kind is None:
+        return set()
+    global _NAMES_CACHE
+    if repo_names is None:
+        if _NAMES_CACHE is None:
+            _NAMES_CACHE = [p.name for p in contract_repos(WORKSPACE)]
+        repo_names = _NAMES_CACHE
+    foreign = [n for n in repo_names if n != repo.name]
+    out: set[int] = set()
+    for doc in _self_docs():
+        p = repo / doc
+        if not p.is_file():
+            continue
+        for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+            m = _SELF_HEADING.match(line)
+            if not m or m.group(1) != kind:
+                continue
+            if any(_NAME[n].search(m.group(3)) for n in foreign):
+                continue
+            out.add(int(m.group(2)))
+    return out
+
+
+def allocated(repo: Path, subdir: str,
+              repo_names: list[str] | None = None) -> set[int]:
     """Every number EVER allocated under `repo/subdir` — worktree AND history.
 
     History is not optional: the noise-reduction rule REMOVES a resolved issue
     file, so a worktree-only walk reports a live citation as dangling. Issue
     750 is exactly that shape — resolved and removed in riir-ai `b559d2da3`.
+
+    Nor is the FILE walk sufficient (Issue 754): remove a file that was never
+    committed and `git log` is empty too. `heading_allocated()` recovers those.
     """
-    out: set[int] = set()
+    out: set[int] = set(heading_allocated(repo, subdir, repo_names))
     d = repo / subdir
     if d.is_dir():
         for f in d.iterdir():
@@ -261,8 +338,13 @@ def is_qualified(named: set[str], owners: list[str]) -> bool:
     window merely contained a sibling name (a crate-inventory table row, an
     adjacent unrelated clause) and 8 carrying an explicit attribution to a repo
     that does not have the number. `riir-chain Plan 211` where riir-chain's
-    `.plans` tops out at 058; `riir-mmorpg-examples Issue 059` where that repo
-    allocated 058 and 061 but never 059. Every one of the 45 read as CLEAN.
+    `.plans` tops out at 058; `katgpt-rs Issue 513` where 513 is riir-train's.
+    Every one of the 45 read as CLEAN.
+
+    ⛔ The census's own `riir-mmorpg-examples Issue 059` example was REFUTED by
+    Issue 754 — that repo does own 059, in a heading no file walk could see.
+    Owner-consistency is only as sound as `allocated()`, which is why the
+    heading path exists and why its filters are measured, not assumed.
 
     This is Issue 751 T2(a)'s argument, applied to the path it was never
     applied to. Crate hints were counted as findings *because* a plausible
