@@ -2799,6 +2799,15 @@ name = "bench_hmm_control"
 harness = false
 required-features = ["hmm_homeostasis", "mop_path_entropy"]
 
+# Issue 745 / Plan 595 — Margin-gated verification escalation PoC (TriSpec
+# distill). G1 polarity-matrix + ε axis, G2 latency, G3 invocation cut, G4
+# alloc-free, T4 bandit-λ. Convention: Instant + counting_allocator +
+# harness = false.
+[[bench]]
+name = "bench_711_margin_gate_escalation_poc"
+harness = false
+required-features = ["margin_gate", "indicator_cascade"]
+
 # Plan 596 Phase 2 — sliceTCA GOAT gate (G1 class recovery + invariance
 # fixtures + monotone loss; G2 vs SVD-per-unfolding at equal budget + latency
 # on [64,128,32]; G4 alloc-free reconstruction/classifier). Convention:
