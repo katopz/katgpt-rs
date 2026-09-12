@@ -339,49 +339,19 @@ pub fn best_belief_scores(candidates: &[(u32, u32)], epsilon: f32) -> Vec<f32> {
 // Internal math
 // ──────────────────────────────────────────────────────────────────────────
 
-/// `ln B(a, b) = ln Γ(a) + ln Γ(b) − ln Γ(a+b)` via [`ln_gamma`].
+/// `ln B(a, b) = ln Γ(a) + ln Γ(b) − ln Γ(a+b)` via the shared Lanczos
+/// substrate [`ln_gamma`] (special_fn.rs — extracted Plan 597 T1.1; the one
+/// ln_gamma in the crate, also consumed by `bmr`).
+use crate::special_fn::ln_gamma;
+
 #[inline]
 fn lbeta(a: f32, b: f32) -> f32 {
-    // Rust std does NOT expose `lgamma` on f32/f64. We roll our own Lanczos
-    // approximation (see [`ln_gamma`]) and run it in f64 — the result feeds an
-    // `exp`, so f64 precision is the right call here.
+    // Rust std does NOT expose `lgamma` on f32/f64. The Lanczos kernel runs
+    // in f64 — the result feeds an `exp`, so f64 precision is the right call.
     let la = ln_gamma(a as f64);
     let lb = ln_gamma(b as f64);
     let lab = ln_gamma((a + b) as f64);
     (la + lb - lab) as f32
-}
-
-/// Lanczos approximation of `ln Γ(x)` for `x > 0`. Uses g=7, n=9 coefficients
-/// (standard Winitzki / Numerical Recipes set) giving ~1e-15 f64 accuracy.
-///
-/// Our domain is always `a, b ≥ 1` (the `+1` pseudocount), so the `x < 0.5`
-/// reflection branch is dead code in practice — kept only for safety.
-#[inline]
-fn ln_gamma(x: f64) -> f64 {
-    const G: f64 = 7.0;
-    const C: [f64; 9] = [
-        0.999_999_999_999_809_9,
-        676.5203681218851,
-        -1259.1392167224028,
-        771.323_428_777_653_1,
-        -176.615_029_162_140_6,
-        12.507343278686905,
-        -0.13857109526572012,
-        9.984_369_578_019_572e-6,
-        1.5056327351493116e-7,
-    ];
-    if x < 0.5 {
-        // Reflection: Γ(x)Γ(1-x) = π / sin(πx).
-        let pi = std::f64::consts::PI;
-        return (pi / (pi * x).sin().abs()).ln() - ln_gamma(1.0 - x);
-    }
-    let z = x - 1.0;
-    let mut a = C[0];
-    for (i, &c_i) in C.iter().enumerate().skip(1) {
-        a += c_i / (z + i as f64);
-    }
-    let t = z + G + 0.5;
-    0.5 * (2.0 * std::f64::consts::PI).ln() + (z + 0.5) * t.ln() - t + a.ln()
 }
 
 /// Beta pdf at `x`, given precomputed `ln_beta = ln B(a, b)`.
