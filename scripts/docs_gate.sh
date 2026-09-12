@@ -97,6 +97,7 @@ CHECKS=(
     "scripts/population_sync_gate.py:the seven independent contract-repo predicates must agree (else an instrument audits a different set and still prints green)"
     "scripts/trap_sentinel_gate.py:a shell gate whose set -u abort would report exit 0 — this repo's own two, by membership (Issue 734)"
     "scripts/issue_citation_gate.py:a cross-repo Issue/Plan/Bench citation naming no repo — it rebinds to the WRONG doc once the number is allocated locally (Issue 749)"
+    "scripts/docs_gate_checks_sync.py:this CHECKS array vs the AGENTS.md table documenting it — membership both ways + quantity words (Issue 750)"
 )
 
 if ! command -v python3 >/dev/null 2>&1; then

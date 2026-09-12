@@ -140,11 +140,14 @@ hand-typed count, and it was also the wrong quantity. Measured three times:
 **12.65s · 12.52s · 12.69s CPU** on runs whose WALL clocks were **128.3s ·
 299.1s · 15.0s** — a **20x** wall spread against **1.4%** of CPU spread. That
 is the whole argument for the quantity: **cite CPU, read wall as a range.**
-⚠ Those three are a **14-check** measurement. CPU is load-invariant, not
-check-set-invariant: adding `issue_citation_gate.py` (19 repos x 5 numbered
-dirs of `git log --all`) took the total to **14.42s CPU** with nothing having
-got slower. Compare CPU only within a fixed CHECKS set; across a change to the
-set, the figure moved for the one reason it is allowed to.
+⚠ Those three are a **14-check** measurement, and the CHECKS set is part of
+the claim exactly as the profile is. Two checks later: **14.42s** CPU at 15
+checks, **13.96s** at 16. Read that honestly — the added check did NOT show up
+as a clean increase, and the 3.3% spread across those two is **wider than the
+1.4%** the three 14-check runs suggested. So CPU is the load-invariant figure
+and still the right one to cite, but it is tight-ish, not exact, and a
+difference this size is not evidence a check got slower. Only compare CPU
+within a fixed CHECKS set, and only as a range.
 ⛔ A discredited fourth figure is why this paragraph is worded so insistently:
 an earlier version called 11.7s wall a *quiet-box baseline*, and it was taken
 at load 5-7 — the 15.0s run (2026-09-11) is the first one actually measured on
@@ -195,6 +198,7 @@ develop work. One line per check:
 | `population_sync_gate.py` | the seven independent contract-repo predicates must agree |
 | `trap_sentinel_gate.py` | a shell gate whose abort would report exit 0 — this repo's own two, by MEMBERSHIP (Issue 734) |
 | `issue_citation_gate.py` | a cross-repo `Issue N` citation naming no repo — it rebinds to the WRONG document once that number is allocated locally (Issue 749) |
+| `docs_gate_checks_sync.py` | this CHECKS array vs the AGENTS.md table documenting it — membership both ways + quantity words (Issue 750) |
 
 The `CHECKS` count is deliberately not written here — it drifted once, which
 is exactly the drift this gate exists to catch.
