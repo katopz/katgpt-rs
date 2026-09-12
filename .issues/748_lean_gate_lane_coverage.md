@@ -13,18 +13,74 @@ gates plus N-4 vacuous.
 
 All six scripts passed, no pin drifted:
 
-| repo | `proof_gate.sh` | theorems vs pin | `proof_negative_test.sh` | `spec_match_gate.sh` |
+| repo | `proof_gate.sh` | theorems | negative-test arms | attribution claims |
 |---|---|---|---|---|
-| katgpt-rs | PASS exit 0 | 39 = 39 | PASS, 8/8 caught | — |
-| riir-ai | PASS exit 0 | 16 = 16 | PASS, 8/8 — **added** `8b0de0f64` | — |
-| riir-chain | PASS exit 0 | 92 = 92 = 92 | PASS, 9/9 + sentinel | PASS, 12 suites / 107 tests |
-| riir-neuron-db | PASS exit 0 | 52 = 52 = 52 | PASS, 9/9 — **added** `41f3dcd` | — |
+| katgpt-rs | PASS exit 0 | 39 | 8/8 | 0 — see precondition below |
+| riir-ai | PASS exit 0 | **22** (was 16) | **15/15** (was 8) | 0 |
+| riir-chain | PASS exit 0 | 92 | 9/9 | **3** (`1730af72`) |
+| riir-neuron-db | PASS exit 0 | **62** (was 52) | **17/17** (was 9) | **4** |
 
-The two new scripts were re-run independently of the session that wrote them
-(8/8 and 9/9, exit 0, sentinel on each file's own last line, `.proofs`
-byte-clean after). Both carry the harness-bug guard **proven to fire**: a
-deliberately vacuous sed reports `HARNESS BUG` and exits 1, so a perturbation
-that silently matches nothing cannot pass as a rejection.
+⚠ The counts in the row above moved a LOT inside one day, in both columns, by
+four different sessions. Read this table as a dated snapshot, not a fact —
+re-derive before citing it (`grep EXPECTED_THEOREMS scripts/proof_gate.sh`, and
+count `perturb`/`perturb_blend` invocations, NOT just `perturb "` — riir-ai's 6
+blend arms take no quoted first argument and a naive pattern reports 9 of 15).
+
+Every row was re-run independently of the session that wrote it: all four gates
+PASS, all four negative tests exit 0 with zero defect arms firing, and
+`.proofs` is byte-clean after each run.
+
+### The `perturb()` helper is now uniform across all four (2026-09-12)
+
+riir-neuron-db grew a strictly better helper; it was ported to the other three
+(katgpt-rs `353e0caa`, riir-chain `7391bbce`, riir-ai in `052aa5b0e`). Four
+distinct failure classes, where the original template had two:
+
+| class | catches |
+|---|---|
+| `BUILD PASSED` | a real hole — the bug would ship |
+| `HARNESS BUG` | the sed matched nothing, so the arm passed vacuously |
+| `PERTURBATION BUG` | the file stopped PARSING — a red that proves nothing about the proofs |
+| `ATTRIBUTION BUG` | the arm's sole-catcher claim is stale |
+
+`PERTURBATION BUG` is the one that changes a number: every header claimed each
+arm breaks because a PROOF no longer holds, and nothing asserted it, so an arm
+that merely mangled its file counted as a rejection and RAISED the pass count
+while the hole it probed stayed open.
+
+Also fixed in the port: under `set -e`, a bare `out="$(failing cmd)"` returns
+the command's status, so capturing build output killed the run at the FIRST
+arm that did its job. It must be `out="$( ... )" || rc=$?`.
+
+### ⛔ The ATTRIBUTION claim has a precondition — measured, and it nearly shipped wrong
+
+`expect` is only meaningful when the perturbation leaves the EDITED file
+**compiling**. Lake builds in dependency order: if the edited file itself
+errors, every module downstream is never built and therefore cannot report, so
+the arm sees exactly one module and "confirms" a sole-catcher claim that
+nothing tested.
+
+Measured per repo before wiring anything:
+
+- **katgpt-rs — all 8 arms red in the very file they edit.** Arm 1 breaks
+  `Pencil/Sym.lean`; `Pencil/SpecTests.lean` imports Sym and produced **zero
+  build jobs**. Eight "X ONLY" claims were about to be added and every one
+  would have encoded build ORDER as coverage. It deliberately carries none, and
+  now says why (`9cb0d59c`).
+- **riir-chain — 3 of 9 arms qualify.** A type-correct constant edit leaves
+  `LatCal/Basic.lean` compiling and the downstream `SpecTests` genuinely
+  catches it. The other 6 red in two modules each, and `expect` takes a single
+  value, so they are left unclaimed rather than given a false claim.
+- **riir-neuron-db — all 4 existing claims are safe**: each names a module
+  *different* from the file it edits, so the precondition holds.
+
+Non-inertness was measured locally, not inherited: pointing riir-chain arm 1's
+claim at `Nonce/Replay.lean` reported `ATTRIBUTION BUG` naming the real catcher,
+tallied 7/9 and exited 1.
+
+Note the intended semantics — this arm reds when coverage **improves** too. A
+new theorem that also catches one of these bugs makes the documented
+attribution stale, and the red is a prompt to re-read it, not a defect claim.
 
 Every timing is **warm-cache** (`.lake` already built, 0.67s-34s). No
 cold-build number exists for any of the four, and a cold number is not the
@@ -61,6 +117,25 @@ Two separate gaps, and they must not be pooled:
    negative test at all, and adding one to each turned "nothing to invoke" into
    "something to invoke that nothing invokes". Writing the script is the
    cheaper half; wiring it is the owner-gated half.
+
+### Concrete cost of gap 1, measured three times in one day
+
+`count_features.py` is a docs-gate check and `docs_gate.yml` is main-only, so a
+develop commit that adds a feature drifts the five hand-typed count claims and
+nothing notices until someone runs the gate by hand. That happened **three
+times on 2026-09-12 alone**, by three different sessions:
+
+| drift | source commit | repaired by |
+|---|---|---|
+| 590 → 591 | `4af9caa5` (marginal_rewind) | `d4b5901e` |
+| 591 → 593 | `ba754109` (slice_tca + bmr scaffold) | `50c9f49d` |
+| 593 → 594 | `54bf63bf` (promote slice_tca + bmr) | this issue's commit |
+
+The third is the instructive one: it correctly updated `default` 198 → 200 and
+missed `total`. A partial update is not carelessness — the two numbers live on
+the same five lines, and the promotion genuinely only changed one of them in
+the author's mental model. This is what "the workstation run IS the coverage"
+costs in practice when the workstation run is optional.
 
 Note `can fire` is not `does fire`: a `workflow_dispatch` entry is a button,
 not coverage.
@@ -126,8 +201,8 @@ evidence when taken, and `numbering_gate.py` is green.
   on 2026-09-12, closing the "one-sided gate" half of this issue. Every Lean
   gate in the workspace is now proven non-inert.
 
-Two things the new instruments found immediately, which is the argument for
-having built them:
+Three things the new instruments found, which is the argument for having
+built them:
 
 - **riir-neuron-db Issue 617** (`3a2811e`): two layout `_eq_sum` theorems
   restate their own definitions and cannot fail on a wrong constant. Not a
@@ -138,6 +213,20 @@ having built them:
   had never been run; measured, the flip FAILS at `Hla/SpecTests.lean:53` and
   `:65`. The note now states the real residual — three point-examples, one of
   them degenerate, give only two independent constraints on five coefficients.
+
+- **riir-ai Issue 930** (`052aa5b0e`): the retraction above named a residual —
+  the example points constrain the weights too weakly to pin their SIGNS. That
+  residual is now CLOSED by 6 monotonicity/antitonicity theorems (audited
+  surface 16 → 22), and the closure is proved two-sided: with the new theorems
+  removed `lake build` goes green over the full 2238-job graph, and with them
+  present it reds. Worth recording how the brief was WRONG — it asked for a
+  compensating *linear* weight change, and that is provably non-constructible
+  once the spec tests carry five one-hot rows, because the identity matrix
+  gives the linear system a unique solution. The real blind spot was never
+  magnitude, it was **linearity**: the examples say nothing about the blend
+  BETWEEN their points, so a non-linear term was the honest witness. A brief
+  that asks for a specific artifact can be unsatisfiable while the gap it
+  describes is completely real.
 
   The lesson is the same one this issue is about, one level up: an *asserted*
   outcome reads exactly like a measured one. A claim that an experiment would
