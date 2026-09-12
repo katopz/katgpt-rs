@@ -2,8 +2,8 @@
 
 > **Source:** Junyu Ren & Lek-Heng Lim, *Low-dimensional topology of deep neural networks*, ICML 2026 (PMLR 306).
 > **arXiv:** [2606.31856](https://arxiv.org/abs/2606.31856)
-> **Date:** 2026-07-07
-> **Status:** Active — GOAT verdict, plan queued (Plan 410).
+> **Date:** 2026-07-07 (addendum 2026-09-12)
+> **Status:** EXECUTED — Plan 410 shipped 2026-07-07: `linking_fold_fold` DEFAULT-ON (Cargo Phase 12, all GOAT gates PASS), `linking_fold_detector` opt-in at audit-cadence (Issue 050 resolved Option A). Option B perf remainder tracked at `.issues/757`. See §6 addendum for the 2026-09-12 re-bench.
 > **Related Research:** 219 (DEC substrate), 242 (topological state tracking), 294 (viable manifold graph), 296 (Stokes vocabulary crosswalk), 317 (Gibbs attractor — same Plan-276 caveat class), 371 (Hopf bifurcation — different "Hopf").
 > **Related Plans:** 251 (DEC operators), 314 (Stokes wrappers), 410 (this paper — queued).
 > **Classification:** Public (katgpt-rs)
@@ -188,4 +188,29 @@ The plan file `katgpt-rs/.plans/410_*.md` is **not** created in this session —
 
 **Verdict: GOAT** (modelless). The paper ships two genuinely-new modelless primitives — a **linking detector** (Algorithm 1: PCA-3D + ε-kNN + cycle basis + Gauss integral) and a **fold projection** (`|x−c|` coordinate fold) — that close a gap the codebase has implicitly (every sigmoid projection is monotonic, hence topologically doomed on linked manifolds, but the codebase has no way to detect when). The detector is a new diagnostic class; the fold is a §3.5 path-3 latent correction. Not Super-GOAT because Q3 (product selling point) is moderate — it's a quality/retrieval gate, not a headline capability.
 
-**Routing:** Open primitive → `katgpt-rs` (`linking_fold` feature). Private guides (HLA + functor + shard-retrieval applications) → deferred to riir-ai/riir-neuron-db follow-up plans if the katgpt-rs primitive ships and proves useful. Plan 410 queued but not created this session.
+**Routing:** Open primitive → `katgpt-rs` (`linking_fold` feature). Private guides (HLA + functor + shard-retrieval applications) → deferred to riir-ai/riir-neuron-db follow-up plans if the katgpt-rs primitive ships and proves useful. Plan 410 queued but not created this session. *(Superseded — see §6.)*
+
+---
+
+## 6. Post-implementation addendum (2026-09-12, closure session)
+
+**Shipped state (verified against the tree, not the note's 2026-07-07 text):**
+
+- **Plan 410 executed without a plan file** — the implementation (code + bench + Cargo comments) references "Plan 410" phases (T4.1 bench, T4.2 alloc gate, T4.4 Option C split) but no `.plans/410_*.md` was ever committed; `.plans/.highwater` never reached 410 via this work. Recorded here so the number is not re-derived as "missing".
+- **`linking_fold_fold` is DEFAULT-ON** (`default` feature list, Cargo Phase 12, 2026-07-07, "T4.4 Option C: hot-path fold ships default-on; cold-path detector stays opt-in").
+- **`linking_fold_detector` stays opt-in** — Issue 050 **resolved 2026-07-07 (Option A: accept the recalibrated 500 ms @ n=2×200 audit-cadence budget)**; the original 50 ms @ n=2×1000 plan budget was brute-force-unreachable. Option B (algorithmic work toward the original budget) remained open with no issue file — **now tracked at `.issues/757`**.
+- **Perf work DID land after the 407 ms measurement**: `CycleBounds::may_link` bounding-sphere early-skip (provable bound `gap² > P_C·P_D/(2π)` ⇒ integral rounds to 0 — correctness-safe), full-SoA auto-vectorized Gauss quadrature, and the opt-in `max_cycles_per_cloud` cap. Fresh re-bench (2026-09-12, 4090 box, `CARGO_TARGET_DIR=/tmp/lf410 cargo bench -p katgpt-core --features linking_fold --bench bench_410_linking_fold_goat`):
+
+| Gate | 2026-09-12 measured | Budget | Verdict |
+|---|---|---|---|
+| G1 correctness smoke | Hopf `link=1`; unlinked `0`; fold-unlinked `0` | exact | ✅ |
+| G2 detector cold-path @ n=2×200, d=8 | **115.74 ms median** (min 115.18, max 118.91) | ≤ 500 ms | ✅ (3.5× better than the historical 407 ms the Cargo comment still quotes) |
+| G2 fold Abs D=8 / Gelu D=8 | 16.25 / 15.76 ns | ≤ 50 ns | ✅ |
+| G2 fold Abs D=64 / Gelu D=64 | 18.18 / 26.14 ns | ≤ 500 ns | ✅ |
+| G5 determinism | detector `link=1` ×3; fold bit-identical ×100 | exact | ✅ |
+
+No `.benchmarks/410_*.md` doc exists — the GOAT numbers live in the Cargo feature comment and this addendum; the properly-numbered bench doc lands with the Issue 757 re-gate.
+
+**Consumer-context reframe (the step-4 question this note pre-dated, cf. the 2026-09-02 canonical-failure-#5 mandate):** the healer surface (fusion priority #2) — two lint-rule embedding clusters that are linked in PCA-3D of the riir-rag span-embedding space would predict retrieval top-1 confusion between those rules (the paper's CIFAR-10 analogue: linking consistency ↔ confusion, Spearman r ≈ 0.48). **Fusion idea, novelty TBD** — tracked as the follow-up section of `.issues/757`, not committed as a plan; the healer corpus is discrete AstChunker spans, not smooth manifolds, so the k-NN-cycle machinery's manifold assumption is unverified there.
+
+**v2 re-check (arXiv v2, 2026-08-18):** the note's distillation covers the v2 content (Thms 3.7/4.7/5.2/5.3, Algorithm 1 §H, Corollary E.1, CIFAR-10 §I). The v2-only appendix material (autoencoder bottleneck Corollary A.5 — "bottleneck dimension d alone determines the topological constraint; place nonmonotonic/skip layers before compression"; layer-by-layer link+d_min tracking §G.8) is architectural guidance for bottleneck surfaces (KV-compression ladders, drafter bottlenecks), noted here for grep; not actionable as a primitive.

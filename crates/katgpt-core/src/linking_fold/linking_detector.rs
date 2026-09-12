@@ -45,8 +45,8 @@
 //! | n (per cloud) | d | median latency |
 //! |---|---|---|
 //! | 80  | 3 | ~25 ms (lib-test scale) |
-//! | 200 | 8 | **~407 ms** (bench G2, audit-cadence budget 500 ms ✅) |
-//! | 1000 | 8 | minutes (extrapolated — **do not call without subsampling**) |
+//! | 200 | 8 | **~115.7 ms** (bench G2 re-measured 2026-09-12, post CycleBounds + SoA; audit-cadence budget 500 ms ✅; the pre-skip code measured 407 ms) |
+//! | 1000 | 8 | ~seconds (quadratic extrapolation from 115.7 ms @ 2×200; the pre-skip code extrapolated to minutes) — **do not call without subsampling** |
 //!
 //! ## Cadence contract — audit only, never per-tick
 //!
@@ -57,8 +57,12 @@
 //! will block for tens of seconds to minutes.
 //!
 //! If a consumer needs n > 500, subsample first (random or farthest-point)
-//! to ≤ 200 per cloud, or wait for the Issue 050 Option B optimization
-//! (batch early-exit on bbox separation + short-cycle pruning) to land.
+//! to ≤ 200 per cloud, or wait for the Issue 757 Option B remainder
+//! (single-pass k-NN, spatial cycle batching toward 50 ms @ n=2×1000) to
+//! land. The correctness-safe bbox early-exit (`CycleBounds::may_link`)
+//! and the SoA vectorized quadrature already landed (407 → 115.7 ms
+//! @ n=2×200); the opt-in `max_cycles_per_cloud` cap is the non-default
+//! short-cycle pruning lever.
 
 use std::collections::VecDeque;
 
