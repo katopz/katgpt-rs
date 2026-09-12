@@ -88,6 +88,7 @@ K=12 codebook over 4 planted clusters as a UTM bank (activation =
   doubled each scratch buffer exactly once (2 steady-state allocs); fixed,
   gate now 0/100 cycles.
 - Primitive GOAT: G1+G2+G4 PASS; OPT-IN per the no-default-consumer rule.
+- **First consumer LANDED (riir-clippy `248be9a5`, 2026-09-12):** the F2 healer axis (Issue 098, Bench 086) — measured PASS on the 100-span real oracle-labeled clippy pool (TF-IDF cosine over op-bigram tokens; the granularity law governed the metric choice); 3 absorption candidates incl. the calibration anchor (`single_match↔single_match_else`, clippy's own split, detected unprompted); `unique_feature_count = 12/17`. Status: DISTILLED — F2 consumed; F1 (game MAG bank) remains with the cadence work.
 
 ## 7. Priority
 
