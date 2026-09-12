@@ -3038,6 +3038,30 @@ pub mod cond_audit;
 #[cfg(feature = "tpr")]
 pub mod tpr;
 
+// special_fn — shared Lanczos ln_gamma substrate (Plan 597 T1.1): the one
+// ln_gamma in the crate, consumed by best_belief + bmr. UNGATED,
+// pub(crate), zero-cost when unused.
+pub(crate) mod special_fn;
+
+// slice_tca — modelless slice-rank decomposition for 3rd-order tensors
+// (Plan 596 / Research 309, Pellegrino et al. Nat Neurosci 2024): three
+// single-class truncated-SVD factorizations + closed-form covariability
+// classifier (sigmoid routing, never softmax) + deterministic joint ALS
+// demixer (HOSVD init) + invariance canonicalization. Consumes
+// subspace_phase_gate SVD + linalg::tucker. Opt-in pending the Phase 2
+// GOAT gate (Bench 714).
+#[cfg(feature = "slice_tca")]
+pub mod slice_tca;
+
+// bmr — Bayesian Model Reduction + EFE-over-models (Plan 597 / Research
+// 551, Friston et al. Nat Commun 2026): closed-form Dirichlet model
+// evidence, posterior over models, predictive model posterior (sparse-delta),
+// EFE model-gain term, Occam commit statistic, isomorphic rule enumerator.
+// Discovery axis only (anti-FEP scope guard, Research 551 §2.4). Opt-in
+// pending the Phase 5 GOAT gate (Bench 715).
+#[cfg(feature = "bmr")]
+pub mod bmr;
+
 // Test-only `#[global_allocator]` so `alloc::tests::*` pass when running
 // `cargo test -p katgpt-core --lib`. Downstream consumers (katgpt-rs root,
 // riir-engine, etc.) install their OWN `#[global_allocator]`; this static is

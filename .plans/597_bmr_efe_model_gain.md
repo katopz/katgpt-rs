@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/551_Active_Inference_Artificial_Reasoning_BMR_EFE.md](../.research/551_Active_Inference_Artificial_Reasoning_BMR_EFE.md)
 **Source paper:** Friston et al., Nat Commun 2026, DOI 10.1038/s41467-026-77209-5 / arXiv:2512.21129 — "Active inference and artificial reasoning"
 **Target:** `crates/katgpt-core/src/bmr.rs` (new module) + Cargo feature `bmr` (default-off until GOAT)
-**Status:** Active — Phase 0 (filed; no code yet). Downstream: riir-ai guide `.research/376` + issue `.issues/925` (scientist-NPC fusion, blocked on this plan).
+**Status:** In Progress — subagent execution started 2026-09-12 (Phase 1). Downstream: riir-ai guide `.research/376` + issue `.issues/925` (scientist-NPC fusion, blocked on this plan).
 
 ---
 

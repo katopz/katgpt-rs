@@ -1,6 +1,6 @@
 # Plan 596: Modelless Slice-Rank Decomposition Primitive
 
-**Status:** Active — Phase 1 not started
+**Status:** In Progress — subagent execution started 2026-09-12 (Phase 1)
 **Date:** 2026-09-11
 **Research:** [riir-neuron-db/.research/309_slice_tca_covariability_class_consolidation.md](../riir-neuron-db/.research/309_slice_tca_covariability_class_consolidation.md) (private; this plan carries only the public generic-math half)
 **Source paper:** Pellegrino, Stein & Cayco-Gajic, *Nat Neurosci* 27, 1199–1210 (2024), doi:10.1038/s41593-024-01626-2 — sliceTCA
