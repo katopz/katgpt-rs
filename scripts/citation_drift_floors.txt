@@ -124,7 +124,13 @@ seal-remake                39      0               0       0
 # on their origins (riir-clippy ecf1d2c7: Bench 717 + Research 391 + Bench 758
 # + the hyphenated Issue-757, all katgpt-rs; riir-train 4de9c801: Plan 596 =
 # katgpt-rs slice_tca) — the ceilings stay 0 (a wall), and the local reds are
-# checkout lag that clears when the owning sessions sync.
+# checkout lag that clears when the owning sessions sync. riir-clippy and
+# riir-train HAVE synced since (green on the 2026-09-12 evening re-run).
+# The class RE-APPEARED once, same day: riir-ai's Issue-925 HISTORY section
+# landed two unqualified `Research 551` rows; verified FIXED at origin
+# b4f6c3d98 (a worktree read off origin shows `katgpt-rs Research 551` at
+# both sites) — same class, same cure: the local checkout was 12 behind,
+# and the red clears when that session syncs.
 # riir-game-sdk held the density record at 124/287 (43%) and is now at 0: its
 # `.issues` top out at 029 while it cited riir-ai's SDK-extraction arc
 # (458-531, 79 rows) by bare number throughout, plus riir-mmorpg-examples'
