@@ -1,0 +1,100 @@
+# Pins for scripts/citation_drift_sweep.py — EVERY contract repo.
+#
+# Format: `key = value` globals, then 5 whitespace-separated fields per repo:
+#
+#   <repo> <min_citations> <max_cross> <max_in_local_range> <max_orphan>
+#
+# Re-pin DELIBERATELY, in the commit that changes the measured value, with the
+# reason in the commit message. A pin that drifts behind reality is a pin
+# nobody trusts.
+#
+# ── the ceilings are a RATCHET, not a wall ───────────────────────────────────
+# Unlike trap_sentinel_drift_floors.txt (whose classes are 0 everywhere and
+# whose ceilings are therefore a wall), 254 CROSS rows exist TODAY across 18
+# repos this session does not own, and the repair is the OWNING repo's call —
+# per Issue 751's non-goal, the deliverable is a trustworthy instrument plus
+# per-repo issues, not 254 prose edits from here. So each ceiling is pinned at
+# its MEASURED count: a NEW unqualified citation reds immediately, and the
+# standing backlog is visible in the pins rather than silently tolerated.
+# Lower a ceiling in the commit that qualifies a citation.
+#
+# ⛔ Do NOT read a ceiling as a finding count. The measured false-positive rate
+# is 7/43 = 16% (Issue 751 T1 — a stratified manual read of 43 rows across 13
+# repos, the four FP classes named in the sweep's docstring). The predecessor
+# figure, 308, was quoted with NO error rate and was ~50% contaminated in its
+# first four rows. A count without its error rate is not a measurement.
+#
+# ⛔ The corpus MOVES. Five-plus agent sessions edit these documents
+# concurrently; riir-mmorpg-examples' HISTORY.md gained 46 lines between two
+# runs an hour apart during T1. An exact-ratchet ceiling WILL red on honest new
+# prose — that is the design (qualify the citation, or re-pin in that commit),
+# and it is why the FLOORS below are slack rather than ratcheted.
+#
+# ── the two FLOORS ───────────────────────────────────────────────────────────
+# max_cross = 0 (or = N) is green over whatever the instrument can SEE.
+#
+#   min_citations  the per-repo citation walk. A regex regression (a Python \s
+#                  handed to an ERE, the classic) takes this to 0 and every
+#                  ceiling passes, indistinguishable from clean prose. Pinned
+#                  at ~60% of measured: SLACK against churn (removing a
+#                  resolved-issue narrative per the noise-reduction rule
+#                  legitimately shrinks a repo's count), TIGHT against
+#                  blindness (a walk regression drops it to zero, not by 40%).
+#                  It is 0 for the three repos with no citations at all —
+#                  which is exactly why it cannot be the only floor.
+#
+#   min_repos      the DERIVED contract-repo set (BOUNDARY.md + .git dir).
+#                  Every class below is decided against it: a population that
+#                  collapses makes every citation read as local-or-orphan and
+#                  the CROSS ceiling passes vacuously. 19 at landing.
+#
+# min_repos is NOT free: it must equal issue_citation_floors.txt's `min_repos`,
+# and the sweep ASSERTS that rather than trusting it — same quantity, two
+# files (the trap_sentinel_drift_sweep vs trap_sentinel_gate.POPULATION_FLOOR
+# precedent). The `documents` list is deliberately NOT restated here: it is
+# read straight out of the gate's pins, because a quantity with one home
+# cannot drift.
+#
+# ── no ceiling on AMBIGUOUS, deliberately ────────────────────────────────────
+# 905 cited numbers exist BOTH locally and in a sibling. The referent is
+# undecidable from the number and the sweep is green over every one of them by
+# construction. A ceiling would red whenever somebody writes a perfectly
+# CORRECT citation to a new local number a sibling also happens to have — a
+# nuisance red for a right action, and a gate that reds on right actions gets
+# bypassed (staged_set_audit.py's rationale, one axis over). It is PRINTED
+# every run instead, so a green is never read as a green over everything.
+
+min_repos = 15
+
+#                        cites  cross  in_local_range  orphan
+katgpt-rs                   84      0               0       0
+katgpt-web                   3      1               0       0
+riir-ai                    305      1               2       0
+riir-auth                    8      6               0       0
+riir-chain                  65      4               1       0
+riir-clippy                513     32               8       0
+riir-dao                    25      5               0       0
+riir-dapps                 104     18               0       0
+riir-deployer               21      7               0       0
+riir-esp32                   2      0               0       0
+riir-game-sdk              172    108              14       0
+riir-kat                     1      0               0       0
+riir-mmorpg-examples       321     41              16       0
+riir-neuron-db              27      0               1       0
+riir-shader                  0      0               0       0
+riir-train                  43      3               1       0
+riir-viewbridge             24     12               2       0
+seal-game-editor             0      0               0       0
+seal-remake                 39     16               1       0
+
+# ── the two repos worth reading first ────────────────────────────────────────
+# riir-game-sdk 108 CROSS over 287 citations (38%) — the highest density in the
+# workspace by a wide margin, and the sample read in T1 found it genuine: its
+# `.issues` top out at 29 while it cites riir-ai's 469/472/473/478/489/490/496/
+# 518/874 throughout. riir-viewbridge (12/40) and riir-auth (6/14) are the same
+# shape one order of magnitude down: small repos whose whole plan of record
+# lives in riir-ai (`Plan 532`, `Plan 488`) and is cited by bare number.
+#
+# ORPHAN is 0 everywhere and is still its own column: it is a DIFFERENT repair
+# (the number is wrong, or its repo left the contract) from CROSS, and pooling
+# the two would hide whichever is rarer.
