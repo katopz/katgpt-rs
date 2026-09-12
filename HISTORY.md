@@ -2041,6 +2041,75 @@ the gate. Issue file removed per the noise-reduction rule; the full record
 lives in git history
 (`git log -- .issues/749_cross_repo_citations_rebind_to_the_wrong_document.md`).
 
+## Issue 761 — a Lean theorem can RESTATE its own definition: CLOSED as resolved (2026-09-12)
+
+Filed and closed the same day, in two commits (`e5d9836c` the report,
+`3d5c87ab` the verdict). The class: `theorem X_eq_sum : X = <the body X is
+DEFINED as>`, which `decide`/`rfl` discharges for ANY constant values. Four
+shipped in riir-neuron-db for months with doc comments claiming each was "the
+`merkle_root` guard" — the exact bug it provably could not see — and nothing in
+the stack could tell them apart from a theorem that proves something:
+`lake build` green, `#print axioms` axiom-free, counted in `proof_gate.sh`'s
+audited surface, and `proof_negative_test.sh` **17/17**, because no arm ever
+red on them and a pass count cannot report which theorem did not fire. They
+were removed by that repo's Issue 617 (`24957a2`, `387b4fc`); this issue owns
+the class-level instrument and the sweep.
+
+**The criterion is where the work is: symbolic equality over LEAF constants.**
+Unfold every composite nullary `def`, keep numeral-bodied leaves SYMBOLIC, and
+compare as polynomials. Unfolding all the way to numerals instead would compare
+`464` with `464` and condemn every sound literal pin — the leaf boundary IS the
+classifier.
+
+Two bucket boundaries earned their separation and both would have been wrong to
+pool. **CROSS-DEF is not a finding:** `commitmentOffset = RAW_PREFIX_LEN` is
+symbolically equal too, but it pins two *independently maintained* definitions
+and an independent perturbation arm proves it reds; the removed four had an RHS
+that existed only inside the theorem, so deleting the theorem deletes the
+duplicate and nothing is left to drift. **HYPOTHETICAL is split from
+STRUCTURAL** because it is 199 of 255 theorems, and pooling hides how few
+statements the arithmetic pass ever sees.
+
+⛔ **The oracle found the instrument's own defect, which is the whole argument
+for having one.** Run against a tree whose answer was known by other means —
+riir-neuron-db at `24957a2^` — it reported the right four, but the caveat named
+the WRONG repo's symbol: a repo-wide `def` table was unfolding
+`Shard.zoneHashOffset` through ExperienceGraph's same-named composite. The
+verdict had survived by luck. Defs are scoped per module + transitive imports
+now, shadowing applied both ways, and a 2-module fixture pins it (pooled it
+reads VALUE-DEPENDENT, scoped it reads RESTATEMENT).
+
+**T1 changed shape when its blocker lifted.** The filing specified a
+`docs_gate.sh` CHECKS row, blocked on Issue 750; 750 closed mid-session in a
+concurrent one, and re-deriving the design rather than inheriting it showed the
+row was never right — CI has a single checkout, so the derived population is
+ONE repo, and it is the repo where the class barely exists (katgpt-rs has **1**
+composite def; riir-neuron-db has 44). A gate that can only see that is worse
+than none because it reads as coverage. Landed as the documented
+workstation-sweep shape instead: `restatement_drift_sweep.py` + committed
+floors. **A blocker lifting is a prompt to re-derive the design, not a green
+light for the design that was blocked.**
+
+Verdict paths proven on the real code, not argued: a planted restatement moves
+the count in all 4 repos (0 → 1); a floor above measured REDS; a
+pinned-but-absent repo REDS as UNSEEN rather than shrinking the population; an
+empty floors file REFUSES instead of passing over zero rows. Two floors, and
+the second is the one that bites — `min_theorems` is what moves when a
+tokenizer regresses on an UNCHANGED tree, measured during development when a
+`:=` tokenized as `:` + `=` took the def table to 0 with the file count
+identical.
+
+Standing (2026-09-12): **0 RESTATEMENT-INLINE · 0 IDENTITY** over 4 repos /
+68 `.lean` / 255 theorems / 284 examples; 1 CROSS-DEF (keep). The 19 UNRESOLVED
+rows + the 6 conjuncts behind the 2 `∧`-of-`=` rows were read one by one and
+are all value pins the arithmetic model cannot reduce — a census adjudicated by
+READING, so it bounds reader error only, in the direction somebody thought to
+look. `[-]` T4 (a `∧` conjunct is only checked when every conjunct is an `=`)
+deferred on measurement: 2 such theorems workspace-wide, both decomposing to
+UNRESOLVED. Issue file removed at close; this row + git history are the durable
+record (read the filing with
+`git show 3d5c87ab:.issues/761_restatement_theorem_class_has_no_verdict_half.md`).
+
 ## Issue 750 — docs_gate's CHECKS array vs the AGENTS.md table documenting it: CLOSED (2026-09-12)
 
 Two hand-duplicated lists of the same thing with nothing comparing them —
