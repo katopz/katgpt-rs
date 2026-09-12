@@ -78,7 +78,7 @@ min_repos = 15
 katgpt-rs                  84      0               0       0
 katgpt-web                  3      0               0       0
 riir-ai                   305      2               6       0
-riir-auth                   8      8               0       0
+riir-auth                   8      0               0       0
 riir-chain                 65      4               1       0
 riir-clippy               513     36               9       0
 riir-dao                   25      6               0       0
@@ -91,7 +91,7 @@ riir-mmorpg-examples      321     43              16       0
 riir-neuron-db             27      0               3       0
 riir-shader                 0      0               0       0
 riir-train                 43      3               1       0
-riir-viewbridge            24     17               2       0
+riir-viewbridge            24     0               2       0
 seal-game-editor            0      0               0       0
 seal-remake                39     16               1       0
 
