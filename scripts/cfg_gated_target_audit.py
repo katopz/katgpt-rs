@@ -577,10 +577,15 @@ def scan_manifest(repo: Path, manifest: Path, rep: RepoReport) -> None:
 
             base = Finding(
                 repo=rep.repo,
-                manifest=str(manifest.relative_to(repo)),
+                # as_posix: the committed pins/allowlists and the manifest
+                # `path` keys are forward-slash; str() would emit backslashes
+                # on Windows and silently fail EVERY membership compare
+                # (the `declared` key match included) — found running the
+                # docs gate on the 4090 box, 2026-09-12.
+                manifest=manifest.relative_to(repo).as_posix(),
                 kind=kind,
                 name=name,
-                path=str(f.relative_to(repo)),
+                path=f.relative_to(repo).as_posix(),
                 features=feats,
                 predicates=preds,
                 declared=key in declared,

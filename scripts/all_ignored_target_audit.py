@@ -312,7 +312,10 @@ def scan_manifest(repo: Path, manifest: Path, rep: RepoReport) -> None:
             ign = sum(1 for t in live if t.ignored)
             t = Target(
                 repo=rep.repo,
-                path=str(f.relative_to(repo)),
+                # as_posix: match the committed allowlist's forward-slash rows
+                # on every platform (str() emits backslashes on Windows and
+                # the membership pin in cfg_gated_floor_gate goes blind).
+                path=f.relative_to(repo).as_posix(),
                 tests=len(tests),
                 compiled=len(live),
                 ignored=ign,

@@ -93,7 +93,12 @@ def main():
     for path in audit.walk_sh(REPO):
         r = audit.analyse(path)
         if r is not None:
-            found[os.path.relpath(path, REPO)] = r["verdict"]
+            # .replace(os.sep, "/"): the membership pins below are committed
+            # forward-slash paths; os.path.relpath emits backslashes on
+            # Windows and every pin compare fails BOTH directions (the
+            # "no longer SENTINELLED" false red) — found running the docs
+            # gate on the 4090 box, 2026-09-12.
+            found[os.path.relpath(path, REPO).replace(os.sep, "/")] = r["verdict"]
 
     problems = []
     if len(found) < POPULATION_FLOOR:
