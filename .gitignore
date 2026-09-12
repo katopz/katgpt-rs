@@ -39,3 +39,8 @@ CLAUDE.md
 # cargo heal runtime state — self-evolve trajectory store + miss queue
 # (machine-local WAL + key seed, never committed; riir-clippy Issue 037)
 .heal/
+
+# Stray process output. `git add -A` from the repo root is indistinguishable
+# from intent (AGENTS.md §shared worktree), and several sessions write here at
+# once — an untracked nohup.out is a landmine, not a file anyone means to keep.
+nohup.out
