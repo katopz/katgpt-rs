@@ -183,6 +183,18 @@ if ! axiom_out="$(lake env lean PrintAxioms.lean 2>&1)"; then
     echo "✗ PrintAxioms.lean failed to run — a theorem name may have been renamed or dropped"
     exit 1
 fi
+# Unwrap: Lean pretty-prints `depends on axioms: [...]` at a fixed width, so a
+# long enough theorem name pushes the axiom list onto continuation lines. That
+# makes the budget parser below fail on line *length* rather than on content,
+# AND silently under-audit: the truncated head record loses its tail axioms
+# from the budget check entirely. (Fired in riir-neuron-db, its Issue 605;
+# ported here 2026-09-11.) An inventory record always starts with a quote;
+# anything else is a continuation.
+axiom_out="$(printf '%s\n' "$axiom_out" | awk '
+    /^'"'"'/ { if (NR > 1 && buf != "") print buf; buf = $0; next }
+    { sub(/^[ \t]+/, ""); buf = buf " " $0 }
+    END { if (buf != "") print buf }
+')"
 if echo "$axiom_out" | grep -qi "error"; then
     echo "$axiom_out" | grep -i "error"
     echo "✗ PrintAxioms.lean reported an error"
