@@ -81,7 +81,7 @@ riir-ai                   305      2               6       0
 riir-auth                   8      0               0       0
 riir-chain                 65      4               1       0
 riir-clippy               513     36               9       0
-riir-dao                   25      6               0       0
+riir-dao                   25      0               0       0
 riir-dapps                104     21               0       0
 riir-deployer              21     10               0       0
 riir-esp32                  2      0               0       0
@@ -90,7 +90,7 @@ riir-kat                    1      0               0       0
 riir-mmorpg-examples      321     43              16       0
 riir-neuron-db             27      0               3       0
 riir-shader                 0      0               0       0
-riir-train                 43      3               1       0
+riir-train                 43      0               1       0
 riir-viewbridge            24     0               2       0
 seal-game-editor            0      0               0       0
 seal-remake                39     16               1       0
