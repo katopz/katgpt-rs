@@ -57,10 +57,20 @@ MIN_FILES = 800
 def unterminated(repo: Path) -> tuple[list[tuple[str, int, int]], int]:
     """([(path, opening line, lines swallowed)], files walked)."""
     out: list[tuple[str, int, int]] = []
-    listing = subprocess.run(
-        ["git", "-C", str(repo), "ls-files", "*.md"],
-        capture_output=True, text=True,
-    ).stdout.splitlines()          # NOT .split() — a tracked path may hold a space
+    # TRACKED **plus** untracked-not-ignored. Tracked-only is not enough and the
+    # miss was measured on this gate's own landing: `.issues/756` carried a live
+    # unterminated fence while the gate reported a clean 1517 files, because the
+    # file was still untracked when it ran. It only becomes visible one commit
+    # after the damage. `--exclude-standard` keeps gitignored vendored drops out
+    # — walking the filesystem instead reported 25 findings in a vendored tree no
+    # repo owns (`trap_exit_launder_audit.py`'s precedent, one axis over).
+    listing = []
+    for args in (["ls-files", "*.md"],
+                 ["ls-files", "--others", "--exclude-standard", "*.md"]):
+        listing += subprocess.run(
+            ["git", "-C", str(repo), *args],
+            capture_output=True, text=True,
+        ).stdout.splitlines()      # NOT .split() — a tracked path may hold a space
     walked = 0
     for rel in listing:
         f = repo / rel
@@ -88,13 +98,13 @@ def main() -> int:
             print(f"  ⛔ {rel}:{line} — fence never closed, {swallowed} line(s) "
                   f"render as code to EOF")
         print(f"✗ markdown fence gate FAILED — {len(findings)} unterminated fence(s) "
-              f"over {walked} tracked .md file(s). The reported line is the DANGLING "
+              f"over {walked} .md file(s). The reported line is the DANGLING "
               f"fence, not necessarily the defect: read the first non-blank body line "
               f"— code means a closer is missing, prose means the fence is an orphan.")
         return 1
 
     print(f"✓ markdown fence gate PASSED — 0 unterminated fence(s) over {walked} "
-          f"tracked .md file(s) (floor {MIN_FILES})")
+          f".md file(s), tracked + untracked-not-ignored (floor {MIN_FILES})")
     return 0
 
 

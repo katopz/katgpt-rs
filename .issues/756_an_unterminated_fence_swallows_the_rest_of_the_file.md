@@ -10,10 +10,16 @@ nav footers, entire subsequent sections. Measured 2026-09-12 with
 
 **19 files, 5048 tracked `.md`, 611 lines swallowed.**
 
-The worst was this repo's own `.plans/048_research_audit_fixes.md`: a
-```bibtex block opened under "Research Citations" at line 456 and never
-closed, turning the following **146** lines — a whole second document section,
+The worst was this repo's own `.plans/048_research_audit_fixes.md`, where a
+bibtex block opened under "Research Citations" at line 456 and never closed,
+turning the following **146** lines — a whole second document section,
 "Research Audit Results (Plan 048)" — into a code listing.
+
+⚠ That sentence is itself the defect's best example. Its first draft wrapped as
+`a` / `` ```bibtex block opened… ``, putting the fence marker at the start of a
+line, and this gate red on its own issue file. A fence at line start is a fence
+regardless of intent — the same shape as riir-train Issue 534's wrapped
+sentence, found the same day, in the document describing it.
 
 It is also a parse hazard, and that is why it is a gate rather than a cleanup.
 A scanner that toggles state on every fence line mis-phases permanently from
@@ -84,8 +90,29 @@ Canaried both arms, because a gate that cannot fail certifies nothing:
 | arm | result |
 |---|---|
 | planted unterminated fence | exit **1**, names the file and line |
+| planted in an **untracked** file | exit **1** (see below) |
 | floor raised above the walk | exit **2**, INSTRUMENT |
-| restored | exit **0**, 1517 files |
+| restored | exit **0**, 1518 files |
+
+⛔ **The walk was tracked-only, and the miss was measured on this gate's own
+landing.** It reported a clean 1517 files while `.issues/756` — this file —
+carried a live unterminated fence, because `git ls-files` cannot see a file
+that is not yet committed. A defect becomes visible one commit *after* it
+lands, which for a documentation gate is precisely too late. The walk is now
+tracked **plus** `--others --exclude-standard`: new files are covered, and
+gitignored vendored drops still are not (walking the filesystem instead is what
+reported 25 findings in a vendored tree no repo owns, one axis over in
+`trap_exit_launder_audit.py`).
+
+The other two findings from that same re-verification were **false positives**,
+and they are the reason the scanner was NOT "fixed": riir-ai's and riir-train's
+issue files quoted fences inside 4-space-indented examples, which CommonMark
+reads as indented code where ` ``` ` is literal. Tightening `fence_run` to
+CommonMark's ≤3-space rule would resolve them — and would break the **73**
+workspace fence lines at indent 6 and 8, which are real fences nested inside
+list items. Measured before changing anything: 21590 fence lines at indent 0,
+1183 at 2, 136 at 3, 181 at ≥4. The documents were rewritten to use ````-fences
+instead; the shared scanner was left alone.
 
 The gate's own landing was verified by an unrelated gate: adding the AGENTS.md
 row citing "Issue 756" **red the citation gate**, because 756 was not yet
