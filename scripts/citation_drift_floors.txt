@@ -93,8 +93,8 @@ katgpt-rs                  84      0               0       0
 katgpt-web                  3      0               0       0
 riir-ai                   305      0               6       0
 riir-auth                   8      0               0       0
-riir-chain                 65      0               1       0
-riir-clippy               513      0               9       0
+riir-chain                 65      0               2       0
+riir-clippy               513      0              10       0
 riir-dao                   25      0               0       0
 riir-dapps                104      0               0       0
 riir-deployer              21      0               0       0
@@ -111,6 +111,20 @@ seal-online-remaster        2      0               0       0  # observed 2026-09
 seal-remake                39      0               0       0
 
 # ── how the backlog was cleared, and the zero rows that remain ──────────────
+# 2026-09-12 in_local_range bumps, both ADJUDICATED local before re-pinning:
+# riir-chain 1->2 — the Issue-145 closed-entry backfill (7e95b1a1) quotes the
+#   repo's OWN finiteness-class Issue 039 (src/finite.rs, WALLET_CPI, MCP
+#   sites — all chain-local code; the issue file was removed same-day, never
+#   committed: the Issue 754 invisible class).
+# riir-clippy 9->10 — the orphan-report serde-boundary entry cites its OWN
+#   Issue 027 class (collapsible_else_if comment-guard gap; the repo's own
+#   Issue 027 record lives at HISTORY.md:1243 — single_match_else /
+#   collapsible_if false-positive cluster, same family).
+# Same day: the three CROSS rows those repos' checkouts still show are FIXED
+# on their origins (riir-clippy ecf1d2c7: Bench 717 + Research 391 + Bench 758
+# + the hyphenated Issue-757, all katgpt-rs; riir-train 4de9c801: Plan 596 =
+# katgpt-rs slice_tca) — the ceilings stay 0 (a wall), and the local reds are
+# checkout lag that clears when the owning sessions sync.
 # riir-game-sdk held the density record at 124/287 (43%) and is now at 0: its
 # `.issues` top out at 029 while it cited riir-ai's SDK-extraction arc
 # (458-531, 79 rows) by bare number throughout, plus riir-mmorpg-examples'
