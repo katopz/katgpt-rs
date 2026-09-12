@@ -231,6 +231,23 @@ saddle_escape = ["gain_cost_halt"]
 # synthetic); promotion owner-gated (saddle_escape/525 precedent).
 marginal_rewind = []
 
+# metabolic_gate (Research 550 / riir-ai Plan 585, arXiv:2609.10817 "Tapes
+# Together Strong: The Co-evolution of Computation and Cooperation"):
+# energy-coupled compute gating — the compute-budget family's STOCK axis
+# where gain_cost_halt uses a utility FLOW. Ships the LAW, not the ALife
+# substrate: MetabolicGate::depth_factor σ((stock−base)/scale) compute-depth
+# multiplier over a metabolic stock; defector_starves — the closed-form
+# starvation design law 2ε < L(1+(1−α)δ) (Theorem 1: lossy theft starves the
+# defector's own computation, cooperation self-stabilizes without memory or
+# police); metabolic_drag_threshold K(ε,L) — the Lemma-1 break-even
+# inefficiency, 32-iter bisection on ln(2ε/(2ε−L(1+K))) = (1+K)·ln(ε/(ε−L));
+# steal_lossy — conservation-exact lossy transfer (system destroys (1−α)δ);
+# execution_share — lottery-share scheduling (both-zero → ½, paper C.1).
+# Zero-alloc, f32, #[inline], NaN-never-fires contract. Opt-in — consumer
+# riir-ai Plan 585 (thermal-LOD metabolic axis + swarm energy commons);
+# re-gate at Phase 4 before any default promotion (no-default-consumer rule).
+metabolic_gate = []
+
 # regime_probe (Issue 740 / Research 541, arXiv:2604.26841 — UDDMs as
 # associative memories): the predictor-agnostic regime-probe suite — T1
 # per-position conditional entropy of a categorical (max-shift + logsumexp
@@ -2832,6 +2849,16 @@ required-features = ["slice_tca"]
 name = "bench_597_bmr_efe_goat"
 harness = false
 required-features = ["bmr"]
+
+# Research 550 / riir-ai Plan 585 T1.3 — Metabolic Gate GOAT gate (G1 the
+# T0.2 design-law tuple identities + K-solver residual; G2 sub-ns-class
+# depth/share + bounded K-solver; G4 alloc-free hot paths via
+# counting_allocator). Stays opt-in — the riir-ai Plan 585 consumer re-gates
+# at Phase 4 (no-default-consumer rule).
+[[bench]]
+name = "bench_716_metabolic_gate_goat"
+harness = false
+required-features = ["metabolic_gate"]
 
 # Plan 597 Phase 4 — three-ball paradigm integration test (G1 qualitative
 # ablation arms a/b/c). required-features + whole-file cfg: the double

@@ -2,7 +2,7 @@
 
 > **Source:** "Tapes Together Strong: The Co-evolution of Computation and Cooperation" [arXiv:2609.10817](https://arxiv.org/abs/2609.10817) — Jha, Cicala, Agüera y Arcas, Richards, Jaques, Kleiman-Weiner, Niklasson, 2026-09-09
 > **Date:** 2026-09-11
-> **Status:** Active — primitive filed, awaiting implementation (consumed by riir-ai Plan 585)
+> **Status:** LANDED 2026-09-12 — primitive implemented (katgpt-core `metabolic_gate`, opt-in; Bench 716 GOAT G1–G4 ALL PASS: K-residual 6.7e-6, depth 3 ns / share sub-ns / K-solver 412 ns bounded, 0 allocs). Consumer riir-ai Plan 585 Phase 0+1 complete; Phases 2–4 pending.
 > **Related Research:** 363 (state-dependent compute budget — closest shipped cousin), 167→Plan 187 (WealthBanditPruner — resource-coupled selection)
 > **Related Plans:** riir-ai `.plans/585` (consumer); katgpt-core implementation rides its Phase 1
 > **Classification:** Public

@@ -2055,6 +2055,19 @@ pub use saddle_escape::{
 pub mod marginal_rewind;
 #[cfg(feature = "marginal_rewind")]
 pub use marginal_rewind::{RewindPlan, gamma_dial_plan, rewind_into, rewind_plan};
+// Research 550 / riir-ai Plan 585 (arXiv:2609.10817) — Metabolic Gate:
+// energy-coupled compute gating, the compute-budget family's STOCK axis
+// (gain_cost_halt gates on a utility flow). depth_factor σ((stock−base)/scale)
+// + the Theorem-1 starvation law 2ε < L(1+(1−α)δ) + the Lemma-1 break-even
+// K(ε,L) bisection + conservation-exact steal_lossy + execution_share
+// scheduling. Zero-alloc f32, NaN-never-fires. Opt-in — consumer riir-ai
+// Plan 585; re-gate before any default promotion (no-default-consumer rule).
+#[cfg(feature = "metabolic_gate")]
+pub mod metabolic_gate;
+#[cfg(feature = "metabolic_gate")]
+pub use metabolic_gate::{
+    MetabolicGate, defector_starves, execution_share, metabolic_drag_threshold, steal_lossy,
+};
 // Issue 699 T1-T3 — structural CoT halting (TRACE, arXiv:2510.07880):
 // answer-space cycle detection on reasoning traces — the black-box halt
 // family (no logits/hidden states/LLM rater). A third independent halt-vote

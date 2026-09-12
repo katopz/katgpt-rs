@@ -3704,3 +3704,40 @@ Source: [arXiv:2506.16640](https://arxiv.org/abs/2506.16640) ·
 Substrate: `crates/katgpt-attn/src/dash_attn/asentmax.rs` (P0),
 `adaptive_k.rs` (P1), `eviction_window.rs` (P2),
 `entmax_incremental.rs` (P3).
+
+## 105. metabolic_gate — energy-coupled compute gating, the compute-budget family's stock axis (Research 550)
+
+Every op costs energy and execution share = energy share: cooperation
+self-stabilizes WITHOUT memory, assortment, or punishment because lossy
+theft destroys the energy a defector needs to finish its own computation
+(Theorem 1). The primitive ships the LAW, not the ALife substrate:
+
+- `MetabolicGate::depth_factor` — `σ((stock − base)/scale)` ∈ (0,1):
+  compute-depth multiplier over a metabolic stock (at `stock == e_base`,
+  exactly 0.5). The stock axis beside `gain_cost_halt`'s utility flow.
+- `defector_starves(ε, L, α, δ)` — the closed-form starvation design law
+  `2ε < L(1+(1−α)δ)`; α→1 recovers zero-sum (no starvation), δ=0 is false
+  in any cooperator-viable regime.
+- `metabolic_drag_threshold(ε, L)` — Lemma-1 break-even inefficiency
+  `K(ε,L)`: a defector whose `(1−α)δ` exceeds K is strictly slower than
+  mutual cooperators even in its best case. 32-iter bisection on
+  `ln(2ε/(2ε−L(1+K))) = (1+K)·ln(ε/(ε−L))`; NaN outside the viable regime.
+- `steal_lossy` — conservation-exact lossy transfer (clamped to the
+  victim's stock; system destroys `(1−α)δ`, returned).
+- `execution_share(e_i, e_j)` — lottery-share scheduling; both-zero → ½.
+
+Zero-alloc, f32, `#[inline]`, NaN-never-fires contract (non-finite inputs
+never produce an actionable verdict).
+
+🔧 Feature flag: `metabolic_gate = []` (katgpt-core) — opt-in per the
+no-default-consumer rule; the riir-ai Plan 585 consumer (thermal-LOD
+metabolic axis + swarm energy commons) re-gates at Phase 4 before any
+promotion decision.
+
+📖 Research: [550](../../.research/550_Metabolic_Gate_Energy_Coupled_Compute.md) ·
+Consumer: riir-ai [Plan 585](../../../riir-ai/.plans/585_metabolic_cognition_self_limiting_defection.md) ·
+Bench: [716](../../.benchmarks/716_metabolic_gate_goat.md) — G1/G2/G3/G4
+ALL PASS (K-residual 6.7e-6; depth 3 ns / share sub-ns / K-solver 412 ns
+bounded; 0 allocs) ·
+Source: [arXiv:2609.10817](https://arxiv.org/abs/2609.10817) ·
+Substrate: `crates/katgpt-core/src/metabolic_gate.rs`.
