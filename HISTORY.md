@@ -2129,3 +2129,25 @@ citation — intended demonstration, not coincidence; the citation gate
 keeps it that way. Issue file removed per the noise-reduction rule; the
 full record lives in git history
 (`git log -- .issues/750_checks_array_vs_its_own_documentation.md`).
+
+## Issue 760 — seal-online-remaster joined the workspace but not `scripts/repo_set.txt`: CLOSED as resolved (2026-09-12)
+
+Filed from the 4090 box (14 live repos) after a docs-gate run surfaced real
+drift amid topology artifacts: `seal-online-remaster/` was a NEW contract
+repo (own root BOUNDARY.md + .git) missing from the canonical repo set. The
+katgpt-rs-side drift was fixed in the filing commit `bfccffea` (repo_set.txt
+evidence-backed typed line + AGENTS.md §Repo count 19→20 + research/
+substrate-first SKILL.md prose counts). The M3-side half completed
+2026-09-12: the repo is cloned at `/Users/katopz/git/seal-online-remaster`
+(synced, `99064c5`); the full-workstation `./scripts/docs_gate.sh` run at
+`5773a614` is **17/17 green** — the three 4090 reds were all partial-clone
+topology (6 canonical repos absent on that box), and the M3 walk — the only
+box that can validate the axis — derives exactly the 20 pinned repos, so no
+`repo_set.txt` regeneration was needed (population_sync + agents_repo_set +
+skill_repo_set all agree at 20). Bonus, same day: the repo's late arrival is
+the exact shape `markdown_fence_drift_sweep.py` exists for — its first
+workspace run caught the new repo's one unterminated fence
+(`.plans/005_layer3_reducer.md:600`, repaired `99064c5`) and floored it at
+50 (`5773a614`). Issue file removed per the noise-reduction rule; the full
+record lives in git history
+(`git log -- .issues/760_seal_online_remaster_missing_from_repo_set.md`).
