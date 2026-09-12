@@ -54,6 +54,16 @@ are written down here rather than silently healed:
 
     alias/abbreviation NOT in the alias table   ("ndb" = riir-neuron-db,
                                                  "mmorpg" = riir-mmorpg-examples)
+    alias TRAILING the citation                 (the alias reach is a 40-char
+                                                 LEAD; the full directory name
+                                                 is read from the whole window,
+                                                 forward text included. MEASURED
+                                                 at 1 of 274 CROSS rows, and that
+                                                 one is `chain` inside prose
+                                                 about the `chain_viz` crate —
+                                                 widening forward buys 0 repairs
+                                                 and SUPPRESSES a true finding,
+                                                 Issue 753)
     attribution just OUTSIDE the 3-line window  (4 lines up, or 2 lines DOWN —
                                                  the window is backward-only;
                                                  MEASURED and deliberately kept,
@@ -171,9 +181,17 @@ are one number: both sides already `int()` (the citation regex `\\d{2,4}`, and
 width-normalisation RENAMES of one document (`.research/07_Screening_…` ->
 `.research/007_Screening_…`, same title). Corpus usage is genuinely mixed —
 **1,713 padded vs 1,221 unpadded citations** — so treating the forms as
-distinct namespaces would misread 58% of it. Recorded blind spot, measured at
-zero cost today: `\\d{2,4}` cannot see a single-digit `Issue 6`, and there are
-**0** such citations in the workspace.
+distinct namespaces would misread 58% of it. The width bound `\\d{2,4}` is
+**load-bearing, not a blind spot awaiting repair** (Issue 753): re-measured over
+every tracked `.md` in the workspace, widening to `\\d{1,4}` would manufacture
+**51 false heads** — `## Bench 1: Throughput` is a section NUMBER, not a
+citation of `.benchmarks/001_*` — and **0** true ones. The list expander's
+PLURAL precondition is the other half and neither may be costed alone: it is
+what keeps `Plan 460, 31.5%` and `Issue 096, 2,294 LOC` from ever being read as
+a second citation. What the class needed was liveness, not width — the
+complement is counted every run and pinned at 0 (`max_single_digit`), because
+"0 occurrences" was a dated measurement over documents five-plus sessions edit
+daily.
 
 Two floors, not one
 -------------------
@@ -313,13 +331,18 @@ def audit(repo: Path, sibs: list[Path], alloc: dict[str, dict[str, set[int]]],
 
     got = {"n_docs": 0, "n_cites": 0, "ambiguous": set(), "misleading": 0,
            "misattributed": 0, "cross_units": set(), "repeat": 0,
+           "unseen_width": 0, "alias_trailing": 0,
            CROSS: [], IN_RANGE: [], ORPHAN: []}
     for doc in docs:
         p = repo / doc
         if not p.is_file():
             continue          # not every repo carries a HISTORY.md — absence
         got["n_docs"] += 1    # is not a finding, but the doc COUNT is printed
-        lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+        text = p.read_text(encoding="utf-8", errors="replace")
+        lines = text.splitlines()
+        # The width bound's complement, re-counted every run rather than
+        # remembered from one dated measurement (Issue 753).
+        got["unseen_width"] += sum(icg.unseen_by_width(text))
         # Two passes over the same document: the first records which numbers
         # the prose DOES attribute somewhere, so the second can tell a bare
         # citation that is unfollowable from one whose attribution is already
@@ -377,6 +400,13 @@ def audit(repo: Path, sibs: list[Path], alloc: dict[str, dict[str, set[int]]],
                            f"{'/'.join(sorted(hint))}, which does NOT own {n}]")
             if cls is CROSS:
                 got["cross_units"].add((kind, n))
+                # The COST of the lead-only alias rule, re-measured rather
+                # than assumed: rows this sweep emits that a forward-reaching
+                # alias would SUPPRESS (Issue 753). A triage quantity with the
+                # same standing as the adjudication count — never a verdict,
+                # because every one needs a line-by-line read.
+                if icg.alias_trail_owners(lines[ln - 1], kind, n, sibs) & set(owners):
+                    got["alias_trailing"] += 1
             got[cls].append(
                 f"{doc}:{ln}  {kind} {n} -> "
                 f"{'/'.join(owners) if owners else 'NO REPO IN THE WORKSPACE'}"
@@ -473,6 +503,40 @@ def selftest() -> list[str]:
             fails.append(f"MISLEADING sub-class did not fire: {mis['misleading']} "
                          f"{mis[CROSS]}")
 
+        # ── the two RULE-COST probes must FIRE, and their controls must NOT
+        # (Issue 753). Both report a 0 in the live workspace, which is exactly
+        # the shape a probe wired to nothing also reports.
+        (me / "AGENTS.md").write_text(
+            "## Bench 1: a section heading, not a citation\n"
+            "Issue 500 is the real one.\n")
+        w = audit(me, [sib], alloc, ["AGENTS.md"], crates, pats)
+        if w["unseen_width"] != 1:
+            fails.append(f"width complement did not fire: {w['unseen_width']} != 1")
+        if w["n_cites"] != 1:
+            fails.append(f"width: `Bench 1` must NOT enter the walk, got "
+                         f"{w['n_cites']} citations")
+        (me / "AGENTS.md").write_text("Issue 500 alone.\n")
+        if audit(me, [sib], alloc, ["AGENTS.md"], crates, pats)["unseen_width"]:
+            fails.append("width complement counted a 3-digit citation")
+
+        # an alias AFTER the citation: still CROSS (the rule is lead-only), and
+        # counted as the cost of that decision.
+        (me / "AGENTS.md").write_text("Issue 500, over in fakesib somewhere.\n")
+        tr = audit(me, [sib], alloc, ["AGENTS.md"], crates, pats)
+        if len(tr[CROSS]) != 1:
+            fails.append(f"a TRAILING alias must not qualify: {tr[CROSS]}")
+        if tr["alias_trailing"] != 1:
+            fails.append(f"alias-trailing cost did not fire: {tr['alias_trailing']}")
+        # CONTROL A: the same alias in the LEAD qualifies, so no row and no cost.
+        (me / "AGENTS.md").write_text("fakesib Issue 500 is addressed.\n")
+        lead = audit(me, [sib], alloc, ["AGENTS.md"], crates, pats)
+        if lead[CROSS] or lead["alias_trailing"]:
+            fails.append(f"lead alias must qualify: {lead[CROSS]} {lead['alias_trailing']}")
+        # CONTROL B: a trailing alias of a NON-owner is not a suppression cost.
+        (me / "AGENTS.md").write_text("Issue 500, over in otherlib somewhere.\n")
+        if audit(me, [sib, other], alloc, ["AGENTS.md"], crates, pats)["alias_trailing"]:
+            fails.append("alias-trailing counted a NON-owner alias")
+
         # padding is the SAME number (Issue 751 T2b) — `006` must read as 6
         (me / "AGENTS.md").write_text("Issue 0500 no; Issue 500 yes.\n")
         pad = audit(me, [sib], alloc, ["AGENTS.md"], crates, pats)
@@ -559,7 +623,8 @@ def main() -> int:
 
     bad = False
     tot = {"docs": 0, "cites": 0, "amb": 0, "mis": 0, "misat": 0,
-           "units": 0, "rep": 0, CROSS: 0, IN_RANGE: 0, ORPHAN: 0}
+           "units": 0, "rep": 0, "width": 0, "trail": 0,
+           CROSS: 0, IN_RANGE: 0, ORPHAN: 0}
     mine_row = None
     for repo in repos:
         sibs = [s for s in repos if s != repo]
@@ -571,6 +636,8 @@ def main() -> int:
         tot["mis"] += got["misleading"]
         tot["misat"] += got["misattributed"]
         tot["rep"] += got["repeat"]
+        tot["width"] += got["unseen_width"]
+        tot["trail"] += got["alias_trailing"]
         units = len(got["cross_units"])
         # SUM, never union: riir-auth and riir-game-sdk both citing Plan 488
         # is TWO adjudications in two documents, not one. A union reported 142
@@ -673,6 +740,20 @@ def main() -> int:
           f"explicit non-owner attribution; hand-adjudicated, 3 are outright "
           f"WRONG addresses (`riir-chain Plan 211` — riir-chain tops out at "
           f"058), the rest unqualified either way")
+    # ── the two RULE-COST quantities (Issue 753) ────────────────────────────
+    # Both were docstring claims measured once; both are re-measured every run
+    # now, because the corpus moves and a dated zero is a claim, not a fact.
+    print(f"  width bound `\\d{{2,4}}`: {tot['width']} single-digit form(s) in "
+          f"scope — NOT scanned, by design. Widening to `\\d{{1,4}}` was measured "
+          f"over every tracked .md in the workspace at 51 FALSE heads "
+          f"(`## Bench 1:` section numbering) and 0 true ones, so the bound "
+          f"stays and the class is WATCHED (pinned 0 in issue_citation_floors.txt)")
+    print(f"  alias reach is LEAD-only: {tot['trail']} of the {tot[CROSS]} CROSS "
+          f"rows would be SUPPRESSED by a forward-reaching alias. Read line by "
+          f"line at landing, 0 of them were genuine attributions (the one row is "
+          f"`chain` inside prose about the `chain_viz` crate), so widening buys 0 "
+          f"repairs and hides true findings — the backward-only window's argument "
+          f"on a second axis. A triage quantity, never a verdict")
     print(f"  scope: AGENTS.md + HISTORY.md only ({'/'.join(docs)}, pinned in "
           f"{GATE_PINS.name}). A walk of *.md would pull in .plans/.docs/"
           f".research — thousands of by-design LOCAL citations — and drown the "

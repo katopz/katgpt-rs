@@ -74,6 +74,52 @@ _TAIL = re.compile(r"\s*(?:,|/|and|&)\s*(\d{2,4})")
 
 NUMBERED = re.compile(r"^(\d+)_")
 
+# ── the WIDTH BOUND is LOAD-BEARING, not a blind spot awaiting repair ────────
+# `\d{2,4}` was recorded (Issue 751 T2b) as "a blind spot, measured at zero
+# cost today: 0 single-digit citations in the workspace". True in this gate's
+# scope, and the framing invited the wrong repair — widening to `\d{1,4}` reads
+# as free. Measured over every tracked `.md` in 19 repos (Issue 753,
+# 2026-09-12) it is not free:
+#
+#   51 false HEADS  — `## Bench 1: Throughput`, `| Bench 3 | …`: a section
+#                     NUMBERING inside a document, never a citation of
+#                     `.benchmarks/001_*`. 0 of them are real.
+#    0 false TAILS  — because the list expander already carries a PLURAL
+#                     precondition. That is the load-bearing half, and it is
+#                     what keeps `Plan 460, 31.5%` -> Plan 31 and
+#                     `Issue 096, 2,294 LOC` -> Issue 2 from ever being built:
+#                     both heads are SINGULAR. Re-measured with `\d{2,4}` in
+#                     force, 0 tail expansions anywhere in the corpus land on
+#                     the integer part of a measurement.
+#
+# ⛔ The 0 is a correction of this session's own first number, which was 55 —
+# measured with the plural precondition DROPPED, and so over-stating the cost
+# of a widening in the direction that flattered the conclusion. The two rules
+# are not independent and neither may be costed alone. The head count moved
+# 44 -> 51 between two runs an hour apart for the ordinary reason (the corpus
+# is edited by five-plus concurrent sessions): read it as a magnitude.
+#
+# So the bound buys ~51 suppressed false rows for 0 suppressed true ones.
+# What the class DOES need is liveness: "0 occurrences" is a dated measurement
+# over documents edited daily, and the day somebody writes `Issue 6` the
+# verdict regex goes silently blind on it. These two patterns are the bound's
+# own complement — counted every run, pinned at 0, and a breach is exit 2
+# (instrument untrustworthy), not exit 1 (prose drift): the prose did not get
+# worse, the scope grew a form the verdict cannot see.
+_HEAD_1D = re.compile(r"\b(?:%s)s?\s+(\d)(?!\d)" % "|".join(KINDS))
+# The tail complement carries `_HEAD`'s own PLURAL precondition: a singular
+# head never expands a list, which is exactly why `Plan 460, 31.5%` is inert
+# TODAY and why dropping the width bound without dropping the plural rule would
+# still be a regression. Measuring the complement without it over-states what a
+# widening would cost, in the direction that makes the widening look worse.
+_TAIL_1D = re.compile(
+    r"\b(?:%s)s\s+\d{2,4}\s*(?:,|/|and|&)\s*(\d)(?!\d)" % "|".join(KINDS))
+
+
+def unseen_by_width(text: str) -> tuple[int, int]:
+    r"""(single-digit heads, single-digit list tails) `\d{2,4}` cannot see."""
+    return len(_HEAD_1D.findall(text)), len(_TAIL_1D.findall(text))
+
 
 def parse_pins(path: Path) -> dict[str, int | list[str]]:
     pins: dict[str, int | list[str]] = {}
@@ -175,6 +221,37 @@ def qualifiers(lines: list[str], ln: int, lead: str, sibs: list[Path]) -> tuple[
     return window | adjacent, adjacent
 
 
+def alias_trail_owners(line: str, kind: str, n: int,
+                       sibs: list[Path]) -> set[str]:
+    """Repos whose SHORT alias sits just AFTER the citation — the population
+    `qualifiers()` deliberately does not read, reported so the cost of that
+    decision is re-measured rather than remembered.
+
+    `_ALIAS_REACH` is a LEAD: aliases qualify only when they precede the number
+    ("dapps Issue 27"). The full directory name is accepted from the whole
+    3-line window (which includes the citation's own line, forward text and
+    all), so only the short form is one-directional.
+
+    Measured (Issue 753, 2026-09-12) over the 274-row CROSS set: **1** row has
+    an owner's alias trailing within 40 chars, and reading it settles the
+    question against widening — riir-game-sdk's ``chain_viz` (Plan 032, DeFi
+    dashboard). The chain viz is` matches on `chain` in *prose about the
+    crate*, not an attribution to riir-chain. So widening forward buys 0
+    genuine repairs and SUPPRESSES 1 true finding (itself a crate-hint row,
+    the class Issue 751 T2(a) ruled must be counted, not excused).
+
+    That is the backward-only window's argument (Issue 752) on a second axis,
+    and it lands the same way for the same reason: an emitted false positive is
+    read and dismissed, a suppressed row is invisible to the sample that
+    measures the error rate. Lead-only stays — MEASURED, not assumed."""
+    m = re.search(rf"\b{kind}s?\s+0*{n}\b", line)
+    if not m:
+        return set()
+    trail = line[m.end():m.end() + _ALIAS_REACH]
+    return {s.name for s in sibs for a in aliases(s.name)[1:]
+            if re.search(rf"\b{re.escape(a)}\b", trail)}
+
+
 def is_qualified(named: set[str], owners: list[str]) -> bool:
     """A repo name qualifies a citation only if that repo OWNS the number.
 
@@ -239,6 +316,7 @@ def main() -> int:
                 elsewhere[k].setdefault(n, []).append(r.name)
 
     scanned = 0
+    unseen_h = unseen_t = 0
     unqualified: list[str] = []
     ambiguous: set[tuple[str, int]] = set()
     for doc in docs:
@@ -247,7 +325,11 @@ def main() -> int:
             print(f"✗ INSTRUMENT: pinned document {doc} is missing — a gate cannot "
                   f"report clean over a file it never opened")
             return 2
-        lines = p.read_text(encoding="utf-8").splitlines()
+        text = p.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        h, t = unseen_by_width(text)
+        unseen_h += h
+        unseen_t += t
         for ln, kind, n, lead in citations("\n".join(lines)):
             scanned += 1
             owners = elsewhere[kind].get(n, [])
@@ -284,6 +366,15 @@ def main() -> int:
             unqualified.append(f"  {doc}:{ln}  {kind} {n} — lives in {where}, "
                                f"{why}\n      {lines[ln - 1].strip()[:120]}")
 
+    if (unseen_h + unseen_t) > pins["max_single_digit"]:
+        print(f"✗ INSTRUMENT: {unseen_h + unseen_t} single-digit citation form(s) "
+              f"({unseen_h} head, {unseen_t} list-tail) now in scope, over the pinned "
+              f"{pins['max_single_digit']} — the `\\d{{2,4}}` width bound cannot SEE them, "
+              f"so a clean verdict no longer covers the scope. Adjudicate the rows: they "
+              f"are citations (qualify them, and widen the bound with the 51-false-head "
+              f"cost re-measured) or section numbering (leave both alone).")
+        return 2
+
     if scanned < pins["min_citations_scanned"]:
         print(f"✗ INSTRUMENT: scanned {scanned} citations < floor {pins['min_citations_scanned']} — "
               f"the citation regex went blind, not the prose clean")
@@ -295,6 +386,11 @@ def main() -> int:
     # what the gate cannot decide, printed next to the verdict so a green is
     # never mistaken for a green over everything.
     print(f"  AMBIGUOUS (local AND sibling — undecidable by number, NOT a pass): {len(ambiguous)}")
+    # The width bound's own complement, re-counted rather than remembered: a
+    # blind spot recorded as empty ONCE is a claim about a corpus five-plus
+    # sessions edit daily (Issue 753).
+    print(f"  width bound `\\d{{2,4}}`: {unseen_h + unseen_t} single-digit form(s) "
+          f"in scope (pinned max {pins['max_single_digit']}) — NOT scanned, by design")
 
     if unqualified:
         print(f"✗ issue citation gate FAILED — {len(unqualified)} unqualified cross-repo citation(s)")

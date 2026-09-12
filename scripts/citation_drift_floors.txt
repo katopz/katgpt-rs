@@ -76,7 +76,7 @@ min_repos = 15
 
 #                        cites  cross  in_local_range  orphan
 katgpt-rs                  84      0               0       0
-katgpt-web                  3      1               0       0
+katgpt-web                  3      0               0       0
 riir-ai                   305      2               6       0
 riir-auth                   8      8               0       0
 riir-chain                 65      4               1       0

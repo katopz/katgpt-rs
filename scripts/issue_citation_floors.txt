@@ -31,3 +31,15 @@ min_citations_scanned = 80
 # and drown the signal. AGENTS.md is the contract a new agent reads; HISTORY.md
 # is where a resolved issue's narrative outlives its file.
 documents = AGENTS.md HISTORY.md
+
+# ── the width bound's own liveness (Issue 753) ───────────────────────────────
+# `\d{2,4}` deliberately cannot see `Issue 6`. That was measured at 0 in this
+# scope ONCE (Issue 751 T2b) and never re-asserted — a dated measurement over
+# documents five-plus concurrent sessions edit daily. Widening the bound is NOT
+# the repair: measured over every tracked .md in the workspace, `\d{1,4}` would
+# manufacture 51 false citations from section numbering (`## Bench 1:`) and 0
+# true ones. So the bound stays and the CLASS is watched instead.
+#
+# A breach is exit 2, not exit 1: the prose did not get worse, the scope grew a
+# form the verdict regex cannot read, so a clean verdict stopped covering it.
+max_single_digit = 0
