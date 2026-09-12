@@ -16,7 +16,7 @@ Do NOT activate for: pure refactor, bug fixes with no research angle, or ordinar
 ## Repos
 
 **Canonical count + membership: `katgpt-rs/AGENTS.md` §"Repo count"** — the
-product/distillation set is **7** (first block below); the workspace is **18
+product/distillation set is **7** (first block below); the workspace is **20
 contract repos** (all with a root `BOUNDARY.md`). Derive the set, never type it:
 
 ```bash
@@ -35,7 +35,7 @@ The product/distillation set (7):
 - `riir-game-sdk/` — private facade + dev-tool workspace; downstream consumer, rarely a distillation target.
 - `riir-dapps/` — private dApp layer (added 2026-08-20). Game outcome → generic chain settlement (`Settlement`, `MultiClaimEscrow` composition) + the KAT ledger/service SERVER plane (kat_ledger, epoch settle, payment rails, CF worker/DO shell). Route settlement-composition + service-economy papers here, NOT riir-chain.
 
-The wider workspace (the other 11 — route here only when the insight is
+**The wider workspace (the other 13 — route here only when the insight is
 inseparable from that surface):
 
 - `riir-clippy/` — private multi-domain code healer. **Fusion priority #2** (see the ladder below) — the workspace's densest latent-state consumer per LOC; healer-domain distills file their `.research/` notes HERE (MOAT row below).
@@ -46,8 +46,9 @@ inseparable from that surface):
 - `riir-esp32/` — private POC/fun, **not prod**: the ESP32 Satellite device tier (esp-hal firmware, on-device crypto timing). Device-tier papers only.
 - `riir-viewbridge/` — private Unity FFI seam, **PARKED 2026-09-03** (Bevy is the shipping render path). FFI raw/latent-wall papers only; expect no consumer until unfreeze.
 - `katgpt-web/` — PUBLIC explainer site ("The Anatomy of KatGPT-RS"). Presentation surface only — **nothing private may ever appear here**; never a distillation target.
-- `riir-mmorpg-examples/`, `seal-remake/` — game PRODUCT consumers (POC orchard multiplayer; the seal remaster). Paper insights land substrate-side (riir-ai / riir-game-sdk), not here.
+- `riir-mmorpg-examples/`, `seal-remake/`, `seal-online-remaster/` — game PRODUCT consumers (POC orchard multiplayer; the seal remaster + its online variant). Paper insights land substrate-side (riir-ai / riir-game-sdk), not here.
 - `seal-game-editor/` — the read-only content authoring tool (READ-ONLY per owner rule). Not a research target.
+- `riir-shader/` — private shader surface (workspace member per `scripts/repo_set.txt`; no established research routing yet).
 - (`riir-armageddon/` sat in the product set until it was retired 2026-09-02, owner
   act — the directory is gone; do not route to it.)
 
@@ -363,7 +364,7 @@ If §4 surfaces rich landscape, use web search for deeper exploration of specifi
 2. **Latent-to-latent preferred** — operate in latent space as long as possible. Decode/project only at boundary. **Sigmoid, never softmax**, for projections onto learned directions. Semantic (emotion/mood/curiosity/style) → latent. Physical (position/HP/wallet) → raw, deterministic, synced.
 3. **Freeze/thaw over fine-tuning** — only runtime weight mutation is swapping a frozen snapshot (atomic, versioned, BLAKE3-checked) or applying a deterministically-constructed LoRA overlay (raw/lora hot-swap, no GD). Never mutate weights in-place during inference. Gradient updates (after §3.5) → riir-train.
 4. **Self-learn / adaptive CoT welcome** — runtime curiosity, latent prediction, trajectory folding, collapse detection. Update latent state / direction vectors / routing tables, NOT base weights.
-5. **7-repo discipline** (the product/distillation set; canonical list in `katgpt-rs/AGENTS.md` §"Repo count") — katgpt-rs (public) → riir-ai → riir-chain → riir-neuron-db → riir-train (all private) + riir-game-sdk (facade) + riir-dapps (dApp layer: game outcome → generic chain settlement, added 2026-08-20). It read "8-repo" and included `riir-armageddon` until 2026-09-03; that repo was retired 2026-09-02 (owner act, directory gone). The WORKSPACE around that set is 18 contract repos — `riir-clippy`, `riir-auth`, `riir-dao`, `riir-viewbridge` carry `.research/` too (healer-domain notes file in riir-clippy per the MOAT table), and the rest (riir-kat, riir-deployer, riir-esp32, katgpt-web, riir-mmorpg-examples, seal-remake, seal-game-editor) are consumers/protocol/POC/presentation surfaces — routing targets of last resort. **Read a count in prose as a claim, not a fact — derive the set (§Repos).** Training how never leaks to katgpt-rs; chain IP in riir-chain; shard IP in riir-neuron-db; SDK stays facade over `riir-games-shared`.
+5. **7-repo discipline** (the product/distillation set; canonical list in `katgpt-rs/AGENTS.md` §"Repo count") — katgpt-rs (public) → riir-ai → riir-chain → riir-neuron-db → riir-train (all private) + riir-game-sdk (facade) + riir-dapps (dApp layer: game outcome → generic chain settlement, added 2026-08-20). It read "8-repo" and included `riir-armageddon` until 2026-09-03; that repo was retired 2026-09-02 (owner act, directory gone). The WORKSPACE around that set is 20 contract repos — `riir-clippy`, `riir-auth`, `riir-dao`, `riir-viewbridge` carry `.research/` too (healer-domain notes file in riir-clippy per the MOAT table), and the rest (riir-kat, riir-deployer, riir-esp32, katgpt-web, riir-mmorpg-examples, seal-remake, seal-online-remaster, seal-game-editor, riir-shader) are consumers/protocol/POC/presentation surfaces — routing targets of last resort. **Read a count in prose as a claim, not a fact — derive the set (§Repos).** Training how never leaks to katgpt-rs; chain IP in riir-chain; shard IP in riir-neuron-db; SDK stays facade over `riir-games-shared`.
 6. **SOLID, DRY** — per `katgpt-rs/.contexts/optimization.md`. Zero-alloc hot paths. Pre-computed lookup tables. Fixed-size arrays for bounded domains.
 7. **Tests/examples** — before/after showing the gain. Latent ops: projection preserves ranking. Freeze/thaw: readers never see torn snapshots.
 8. **CPU/GPU/ANE auto-route** — threshold-adaptive. Plasma (µs SIMD) → Hot (sub-ms GPU) → Warm/Cold (ms+ GPU/ANE). L1-fitting latent ops stay SIMD; batched matmul goes GPU.

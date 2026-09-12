@@ -21,4 +21,5 @@ riir-shader
 riir-train
 riir-viewbridge
 seal-game-editor
+seal-online-remaster
 seal-remake

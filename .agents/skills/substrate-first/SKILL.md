@@ -99,7 +99,7 @@ names.
 # Use multiple variants — the concept may exist under any of them.
 #
 # DERIVE the repo set; never type it (fixed 2026-09-01 — the hard-coded
-# 7-repo brace list this replaced could not see 11 of the 18 contract repos,
+# 7-repo brace list this replaced could not see 13 of the 20 contract repos,
 # INCLUDING two product-set ones: riir-armageddon consumes
 # `GenericSpatialBelief` in 2 files that the canonical DRY grep was structurally
 # unable to find, and riir-dapps was equally invisible. A gate that cannot see a
@@ -209,7 +209,7 @@ reimplemented versions.
 
 **Derive the consumer set** — this block hard-coded
 `{riir-mmorpg-examples,riir-game-sdk}` until 2026-09-01 and so could see 2 of
-the 18 contract repos. That is the same defect the vocabulary step above was
+the 20 contract repos. That is the same defect the vocabulary step above was
 fixed for, in the same file, one section down: `60655c48` corrected the Step 2
 *named* "Step 2" and left this one, which is the step that actually looks for
 duplicate implementations. `riir-armageddon` — a product-set repo that consumes
