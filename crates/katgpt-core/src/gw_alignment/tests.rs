@@ -509,7 +509,7 @@ fn g2_planted_vs_shuffled_separation_and_auc() {
         let shuffled = {
             let mut flat: Vec<f32> = Vec::new();
             for row in planted_base.iter().take(N) {
-                for &v in row.iter().skip(0) {
+                for &v in row.iter() {
                     let _ = v;
                 }
             }
