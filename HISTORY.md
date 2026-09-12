@@ -2041,6 +2041,72 @@ the gate. Issue file removed per the noise-reduction rule; the full record
 lives in git history
 (`git log -- .issues/749_cross_repo_citations_rebind_to_the_wrong_document.md`).
 
+## Issue 751 — the cross-repo citation sweep (18 repos katgpt-rs cannot see): CLOSED as resolved (2026-09-12)
+
+The workstation-wide half the citation gate lacked (the per-push
+`issue_citation_gate.py` sees this repo only; a citation's referent lives
+somewhere else by definition). `scripts/citation_drift_sweep.py` +
+`scripts/citation_drift_floors.txt` landed (`d8041de5`): 19 contract
+repos / 35 documents / 2,939 citations walked at landing; every repo pinned
+min_citations + max_cross + max_in_local_range + max_orphan; the sweep
+ASSERTS its katgpt-rs row against the gate's own parsed run. T1's stratified
+spot-check measured the FP rate the count must be quoted with: **7/43 = 16%**
+(pre-752 corpus). 4 per-repo issues filed from T1's verified rows; the
+backlog they tracked was worked off same-day — 0 CROSS across all 19 repos
+— the campaign record lives in the floors file's header. Issue file
+removed per the noise-reduction rule; the full record lives in git history
+(`git log -- .issues/751_cross_repo_citation_sweep.md`).
+
+## Issue 752 — a repo name QUALIFIES a citation even when that repo does not own the number: CLOSED as resolved (2026-09-12)
+
+The qualification predicate asked "is a repo named?" and never "does that
+repo own the number?" — a citation naming the WRONG repo read as clean.
+Measured before repair: of 368 qualified citations, **45 the reader cannot
+follow** (37 WINDOW_ONLY + 8 ADJACENT). The repair (`60bc76aa`) makes
+ownership load-bearing: a directory-name qualifier counts only if that
+repo ALLOCATED the number (crate hints were already sub-labelled
+⛔MISLEADING and counted as findings). Revert-probed; floors re-pinned in
+the same commit — a ceiling that fell was ambiguous between repair and a
+sharper instrument, and ten rose for the sharper-instrument reason. The
+census's 0/45 did not survive Issue 754, which re-rated it to 1/45. Issue
+file removed per the noise-reduction rule; the full record lives in git
+history (`git log -- .issues/752_qualification_is_owner_blind.md`).
+
+## Issue 753 — the citation rules' own COSTS were recorded once and never re-measured: CLOSED as resolved (2026-09-12)
+
+Two deliberate narrowings had been measured once, written into docstrings,
+and read forever as facts — by a module whose own governing lesson is that
+a count that matches is still a claim. Measured (`5ea1f40a`): (a) the
+`\d{2,4}` width bound is LOAD-BEARING, not free money — widening to
+`\d{1,4}` manufactures 51 false heads (single-digit section numbering
+inside `.benchmarks` headings — the kind-prefixed `N:` heading shape; the
+live example lives in the gate's docstring and the removed issue file) at
+0 true ones, measured over every tracked .md in 19 repos; the class is now
+pinned `max_single_digit = 0` (exit-2 breach) with a two-sided revert probe.
+(b) alias reach = 40-char LEAD re-measured per run: widening buys 0 repairs
+and hides true findings (the one row is `chain` inside prose about the
+`chain_viz` crate). One prose row repaired in katgpt-web, its ceiling
+lowered in the same commit. Issue file removed per the noise-reduction
+rule; the full record lives in git history
+(`git log -- .issues/753_the_citation_rules_own_costs_were_never_measured.md`).
+
+## Issue 754 — an allocation that exists only as a HEADING is invisible to allocated(): CLOSED as resolved (2026-09-12)
+
+Both of `allocated()`'s walks (worktree + `git log`) see nothing when a
+file is created and removed without an intervening commit — the NORMAL
+shape for a same-day issue, whose whole allocation record is then the
+repo's own `## Issue NNN (date, RESOLVED)` heading. Under 752's
+owner-consistency rule that blindness INVERTS: correct prose gets
+⛔MISATTRIBUTED (the live case: riir-game-sdk's
+`riir-mmorpg-examples Issue 059` — which that repo's own HISTORY heading
+proves it owns). `heading_allocated()` landed (`8e0ffaa0`) with a four-arm
+two-sided selftest; fenced headings excluded by 755's scanner when that
+class appeared. 7 numbers recovered workspace-wide, 123 CROSS rows
+retired, Issue 752's census re-rated 0/45 → 1/45 — the lesson that a
+census inherits its oracle's blind spots at 100%. Issue file removed per
+the noise-reduction rule; the full record lives in git history
+(`git log -- .issues/754_heading_only_allocations_are_invisible_to_the_file_walk.md`).
+
 ## Issue 761 — a Lean theorem can RESTATE its own definition: CLOSED as resolved (2026-09-12)
 
 Filed and closed the same day, in two commits (`e5d9836c` the report,
@@ -2175,3 +2241,4 @@ PoC exists) and one side-finding (slice_tca release-profile compile — the
 Issue 741 class, since closed by full_gate Layer 6b). Issue file removed
 per the noise-reduction rule; the full record lives in git history
 (`git log -- .issues/757_linking_detector_option_b.md`).
+
