@@ -16,9 +16,15 @@ All six scripts passed, no pin drifted:
 | repo | `proof_gate.sh` | theorems vs pin | `proof_negative_test.sh` | `spec_match_gate.sh` |
 |---|---|---|---|---|
 | katgpt-rs | PASS exit 0 | 39 = 39 | PASS, 8/8 caught | — |
-| riir-ai | PASS exit 0 | 16 = 16 | (added 2026-09-12) | — |
+| riir-ai | PASS exit 0 | 16 = 16 | PASS, 8/8 — **added** `8b0de0f64` | — |
 | riir-chain | PASS exit 0 | 92 = 92 = 92 | PASS, 9/9 + sentinel | PASS, 12 suites / 107 tests |
-| riir-neuron-db | PASS exit 0 | 52 = 52 = 52 | (added 2026-09-12) | — |
+| riir-neuron-db | PASS exit 0 | 52 = 52 = 52 | PASS, 9/9 — **added** `41f3dcd` | — |
+
+The two new scripts were re-run independently of the session that wrote them
+(8/8 and 9/9, exit 0, sentinel on each file's own last line, `.proofs`
+byte-clean after). Both carry the harness-bug guard **proven to fire**: a
+deliberately vacuous sed reports `HARNESS BUG` and exits 1, so a perturbation
+that silently matches nothing cannot pass as a rejection.
 
 Every timing is **warm-cache** (`.lake` already built, 0.67s-34s). No
 cold-build number exists for any of the four, and a cold number is not the
@@ -46,10 +52,15 @@ Two separate gaps, and they must not be pooled:
    This is a documented owner decision, not a defect — recorded here so nobody
    reads a green `lean_proofs.yml` badge as covering their develop commit.
 
-2. **katgpt-rs's negative test is invoked by nothing** — not even on `main`.
-   riir-chain runs both scripts in one job; katgpt-rs runs only the gate, so
-   the one artifact that proves its gate is non-inert never executes in CI.
-   This is the asymmetry worth closing.
+2. **Three of the four negative tests are invoked by nothing** — not even on
+   `main`. Only riir-chain runs both scripts in one job. katgpt-rs, riir-ai and
+   riir-neuron-db run only `proof_gate.sh`, so in each the one artifact that
+   proves the gate is non-inert never executes in CI.
+
+   This gap WIDENED on 2026-09-12: riir-ai and riir-neuron-db previously had no
+   negative test at all, and adding one to each turned "nothing to invoke" into
+   "something to invoke that nothing invokes". Writing the script is the
+   cheaper half; wiring it is the owner-gated half.
 
 Note `can fire` is not `does fire`: a `workflow_dispatch` entry is a button,
 not coverage.
@@ -62,11 +73,17 @@ three-line change, but it costs **~119s of Actions time per `main` push**
 every schedule in-file for exactly this reason. Spending minutes is an owner
 call, so the repair is **gated**, not silently taken.
 
+Costs are per main push, measured: katgpt-rs ~119s, riir-chain ~15s (already
+paid), riir-ai ~37s, riir-neuron-db ~6s. The two new ones are cheap; katgpt-rs
+is the expensive one because its `.lake` is Mathlib-backed.
+
 **Owner decision needed — pick one:**
-- (a) add the negative test to katgpt-rs's `lean_proofs.yml` job (~119s/main push), or
-- (b) leave CI as-is and rely on the workstation run, or
-- (c) make it `workflow_dispatch`-only in that workflow, so it is at least
-      nameable without firing on every main push.
+- (a) wire all three into their `lean_proofs.yml` jobs (~162s/main push total), or
+- (b) wire only the two cheap ones (riir-ai + riir-neuron-db, ~43s) and leave
+      katgpt-rs to the workstation, or
+- (c) leave CI as-is and rely on the workstation run, or
+- (d) make them `workflow_dispatch`-only, so each is at least nameable without
+      firing on every main push.
 
 ## Incidental — a numbering observation, not a claim
 
@@ -84,5 +101,23 @@ under every source of evidence. (Issue 753 is riir-ai's, not this repo's.)
 
 - Layer-5 wrap repair, ported to all four this session: katgpt-rs `ad7fc9a7`,
   riir-ai `044445651`, riir-chain `cbe76d3d`. Origin riir-neuron-db Issue 605.
-- Negative tests added to riir-ai and riir-neuron-db 2026-09-12, closing the
-  "one-sided gate" half of this issue.
+- Negative tests added to riir-ai (`8b0de0f64`) and riir-neuron-db (`41f3dcd`)
+  on 2026-09-12, closing the "one-sided gate" half of this issue. Every Lean
+  gate in the workspace is now proven non-inert.
+
+Two things the new instruments found immediately, which is the argument for
+having built them:
+
+- **riir-neuron-db Issue 617** (`3a2811e`): two layout `_eq_sum` theorems
+  restate their own definitions and cannot fail on a wrong constant. Not a
+  crisis — the concrete-literal siblings carry the weight — but the doc prose
+  around them claims coverage they do not provide.
+- **riir-ai `0a6c02f57`**: a retraction. The negative test shipped with a scope
+  note asserting a proof hole (a fear-sign flip "builds GREEN"). The experiment
+  had never been run; measured, the flip FAILS at `Hla/SpecTests.lean:53` and
+  `:65`. The note now states the real residual — three point-examples, one of
+  them degenerate, give only two independent constraints on five coefficients.
+
+  The lesson is the same one this issue is about, one level up: an *asserted*
+  outcome reads exactly like a measured one. A claim that an experiment would
+  come out a certain way is not evidence, even when the reasoning is plausible.
