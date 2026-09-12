@@ -76,9 +76,12 @@ riir-dapps                    22     18           0             0
 riir-deployer                  6      0           0             0
 riir-esp32                     0      0           0             0
 riir-game-sdk                 57     36          31             0
+riir-kat                       0      0           0             0  # observed 2026-09-12: no cargo targets
 riir-mmorpg-examples          30     24           0             0  # 4 -> 0 2026-09-10: the last SILENT-NOW target (needs_scenarios_headless, issue 105's withheld sixth row) armed — required-features landed once the sibling's Fixture change landed and the exact-set build was observed green (7/7 release); the repo's whole silent surface is now armed
 riir-neuron-db                65     40           8             0
+riir-shader                    3      0           0             0  # observed 2026-09-12: 3 targets, 0 gated (min at measured — tiny)
 riir-train                   369    229          19             0
 riir-viewbridge                6      0           0             0
 seal-game-editor              44      0           0             0
+seal-online-remaster          21      1           2             0  # observed 2026-09-12: 38 targets / 3 gated / silent_now 2 (ratchet at backlog — the two silent-now targets want required-features rows; the repo owners' lane)
 seal-remake                    6      2           0             0

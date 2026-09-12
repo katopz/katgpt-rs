@@ -58,9 +58,12 @@ riir-dapps                        1     0        0
 riir-deployer                     3     0        0
 riir-esp32                        1     0        0
 riir-game-sdk                     8    30        0
+riir-kat                        1     0        0  # observed 2026-09-12
 riir-mmorpg-examples              4    19        0
 riir-neuron-db                    3    48        0
+riir-shader                     3     0        0  # observed 2026-09-12: 5 manifests, 0 rows
 riir-train                        4   411        0
 riir-viewbridge                   6     0        0
 seal-game-editor                 30     0        0
+seal-online-remaster           13     2        0  # observed 2026-09-12: 24 manifests / 3 rows
 seal-remake                       3     6        0

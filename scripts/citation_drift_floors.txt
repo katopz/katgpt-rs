@@ -107,6 +107,7 @@ riir-shader                 0      0               0       0
 riir-train                 43      0               1       0
 riir-viewbridge            24     0               2       0
 seal-game-editor            0      0               0       0
+seal-online-remaster        2      0               0       0  # observed 2026-09-12: docs=1 cites=2 (AGENTS.md only)
 seal-remake                39      0               0       0
 
 # ── how the backlog was cleared, and the zero rows that remain ──────────────

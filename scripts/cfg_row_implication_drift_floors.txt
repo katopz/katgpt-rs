@@ -95,7 +95,8 @@
 #
 #      katgpt-rs      0 -> 2   kimi_k3_g4_alloc_free, bench_284_clr_goat_g4
 #      riir-neuron-db 1 -> 2   +steering_g5_zero_alloc
-#      riir-train     1 -> 3   +nora_phase2_g4_alloc_probe,
+#      riir-neuron-db 2 -> 3   +1 profile-conditional row (measured 2026-09-12;
+#                              same class as the two above — the profile note governs)#      riir-train     1 -> 3   +nora_phase2_g4_alloc_probe,
 #                              +probe_684_topology_hotpath_alloc
 #
 #    Each was measured in all three configurations before its pin moved (dev /
@@ -158,9 +159,12 @@ riir-dapps                      22            22          0               0
 riir-deployer                    0             0          0               0
 riir-esp32                       0             0          0               0
 riir-game-sdk                   55            40          0               0
+riir-kat                         0             0          0               0  # observed 2026-09-12: no rows
 riir-mmorpg-examples            22            20          0               1
-riir-neuron-db                  52            42          0               2
+riir-neuron-db                  52            42          0               3
+riir-shader                      0             0          0               0  # observed 2026-09-12: no rows
 riir-train                     400           260          0               3
 riir-viewbridge                  0             0          0               0
 seal-game-editor                 0             0          0               0
+seal-online-remaster              3             0          0               0  # observed 2026-09-12: 3 rows, 0 with leading #![cfg]
 seal-remake                      6             2          0               0

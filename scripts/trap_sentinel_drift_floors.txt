@@ -63,11 +63,14 @@ riir-dapps                      2    1    0     0         0         0         0
 riir-deployer                   2    1    0     0         0         0         0
 riir-esp32                      1    0    0     0         0         0         0
 riir-game-sdk                   3    0    0     0         0         0         0
+riir-kat                       2    1    0     0         0         0         0  # observed 2026-09-12
 riir-mmorpg-examples            8    3    0     0         0         0         0
 riir-neuron-db                  2    0    0     0         0         0         0
+riir-shader                    5    0    0     0         0         0         0  # observed 2026-09-12: 0 of 5 scripts carry set -e/-u
 riir-train                     27    4    0     0         0         0         0
 riir-viewbridge                 1    1    0     0         0         0         0
 seal-game-editor                0    0    0     0         0         0         0
+seal-online-remaster           7    1    0     0         0         0         0  # observed 2026-09-12 post-fix; rebuild_data_bin.sh was exposed=1 before the completion sentinel (seal-online-remaster 8edee5e)
 seal-remake                     3    1    0     0         0         0         0
 
 # ── the one standing finding ──────────────────────────────────────────────────
