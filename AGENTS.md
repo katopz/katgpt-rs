@@ -122,6 +122,21 @@ scripts/check_platform_gated_modules.sh --canary ../riir-train riir-train-gpu \
     crates/riir-train-gpu/src/numeric_drift_tap.rs numeric_drift_cuda
 ```
 
+**The profile axis is feature-shaped too (Layer 6b, Issue 758).** Layer 6
+runs `--all-features` — which SUPPLIES `alloc_tracking` — so the (release ×
+default-features) cell was asserted by nothing until slice_tca's module-level
+`use crate::alloc` fell through it (E0432 under `cargo test --release -p
+katgpt-core --lib`, Layer 6 green the whole time). `full_gate.sh` Layer 6b
+closes it: the test_gate population (katgpt-rs, katgpt-core, katgpt-dec at
+its pca_global row) at `cargo check --tests --release`, deliberately not
+`--workspace` (that inherits the platform axis Layer 2 refuses on — the metal
+examples). The matrix: (dev, default) test_gate · (dev, all) Layer 3 ·
+(release, all) Layer 6 · (release, default) Layer 6b. Alloc-gated tests carry
+`#[cfg(any(debug_assertions, feature = "alloc_tracking"))]` — the full
+Issue-741 predicate, so they RUN under `--release --features alloc_tracking`
+(the configuration alloc gates are meant to be read in) and compile away at
+release-default instead of breaking the harness.
+
 Trigger health: CI is MAIN-ONLY + dispatch-only since 2026-09-09 (owner call:
 Actions spending limit + no CI on `develop` pushes) — every `push` trigger is
 `branches: [main]` and every `schedule:` block is suspended in-file (commented,

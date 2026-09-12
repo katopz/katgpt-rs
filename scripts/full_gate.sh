@@ -48,6 +48,11 @@
 #   4. zero errors         → any `error` line or unbuildable target is a finding
 #   6. profile axis        → the same tree with debug_assertions OFF; the four
 #                            axes below all run in the DEV profile (.docs/10_audits/debug_release_profile_axis.md)
+#   6b. profile×default     → Layer 6 runs --all-features, which SUPPLIES
+#                            `alloc_tracking` — the (release × default-features)
+#                            cell was asserted by nothing until Issue 758 fell
+#                            through it (slice_tca/tests.rs E0432). Same three-
+#                            package population as test_gate.sh.
 #   5. doc/script parity   → AGENTS.md must quote the same command this script
 #                            runs; a gate whose spec has drifted from its
 #                            implementation is a gate nobody is running
@@ -350,7 +355,11 @@ if [ "$WASM32_ONLY" -eq 0 ]; then   # full-mode body — closes just before the 
 # when the job ends, so a path printed into a dead runner's filesystem is
 # unreachable — the weekly run would be left with only the summary, which is
 # the situation the retention exists to fix.
-LOG="${FULL_GATE_LOG:-$(mktemp -t full_gate)}"
+# Portable mktemp (Issue 758): `mktemp -t <prefix>` is BSD-only — GNU mktemp
+# (Linux workstations, Git Bash) rejects a template with no X's ("too few X's
+# in template"). The full-path-with-X's form works on both; the BSD forms
+# were latent breaks everywhere the gate had never run but macOS.
+LOG="${FULL_GATE_LOG:-$(mktemp "${TMPDIR:-/tmp}/full_gate.XXXXXX")}"
 mkdir -p "$(dirname "$LOG")"
 
 # Retain the log when the gate fails. The summary below prints error CLASSES and
@@ -512,7 +521,7 @@ fi
 REL_ARGS=(cargo check --workspace --all-targets --all-features --keep-going --release
     --message-format=json)
 echo "▸ Layer 6: profile axis — ${REL_ARGS[*]}"
-REL_LOG="$(mktemp -t full_gate_release)"
+REL_LOG="$(mktemp "${TMPDIR:-/tmp}/full_gate_release.XXXXXX")"
 "${REL_ARGS[@]}" > "$REL_LOG" 2>&1 || true
 REL_UNITS=$({ grep -c '"reason":"compiler-artifact"' "$REL_LOG" || true; })
 REL_ERRS=$({ grep -c '"level":"error"' "$REL_LOG" || true; })
@@ -535,6 +544,80 @@ if [ "$REL_ERRS" -ne 0 ]; then
 fi
 rm -f "$REL_LOG"
 echo "  ✓ release profile clean ($REL_UNITS compiler-artifact record(s))"
+
+# ── Layer 6b: profile axis × DEFAULT features (Issue 758, 2026-09-12) ────────
+# Layer 6 runs --all-features, which SUPPLIES `alloc_tracking` — so one cell
+# of the profile×feature matrix was asserted by NOTHING:
+#
+#   (dev, default)       test_gate.sh   EXECUTED, floored
+#   (dev, all)           Layer 3        clippy compile + lint
+#   (release, all)       Layer 6        check compile
+#   (release, default)   Layer 6b (this) check compile
+#
+# The hole was real and recent: slice_tca/tests.rs imported `crate::alloc`
+# unconditionally at MODULE level (Phase 31, 2026-09-12) — E0432 under
+# `cargo test --release -p katgpt-core --lib` at default features — and Layer 6
+# was GREEN the whole time because --all-features turned the feature on
+# (Issue 758). Every other alloc-importing test survived this cell only by
+# carrying its own `#[cfg(any(debug_assertions, feature = "alloc_tracking"))]`.
+#
+# Scope — the test_gate.sh population (katgpt-rs, katgpt-core, katgpt-dec at
+# its pca_global row), NOT --workspace: a workspace run inherits the PLATFORM
+# axis (katgpt-backend's metal examples are unresolvable off macOS at ANY
+# feature set — measured 2026-09-12: E0433 ×10+ in
+# examples/bench_mtp_metal_batch_floor.rs on Windows), which Layer 2 owns and
+# refuses on. These three packages are the platform-invariant core
+# (test_gate.sh's platform-invariance analysis). If you add a row to
+# test_gate.sh's ROWS, add its package here too — same population, different
+# axis. `--tests`, not --all-targets: the class lives in cfg(test) code;
+# targets skipped by unmet required-features at default features are exactly
+# what `cargo test` at defaults would skip — the lane asserts the cell over
+# what default features SELECT.
+#
+# Canary (two-sided, 2026-09-12): the Issue-758 import reintroduced → the
+# katgpt-core row fails `could not compile (lib test)`; restored → clean.
+# Cost on this lane's first run (16-core workstation): root 40 s cold-ish,
+# core + dec ≈ 2 s (warm from Layer 6's neighbours); expect minutes on a
+# 4-core CI runner — the default-features units are disjoint from Layer 6's
+# all-features units (feature fingerprint), so 6b pays its own compile.
+RELD_ROWS="katgpt-rs:
+katgpt-core:
+katgpt-dec:pca_global"
+for relrow in $RELD_ROWS; do
+    relpkg=${relrow%%:*}
+    relfeats=""
+    case "$relrow" in
+        *:*) relfeats=${relrow#*:} ;;
+    esac
+    relfeat_args=""
+    [ -n "$relfeats" ] && relfeat_args="--features $relfeats"
+    # shellcheck disable=SC2086 — relfeat_args is deliberately word-split
+    RELD_ARGS=(cargo check -p "$relpkg" --tests --release --keep-going
+        --message-format=json $relfeat_args)
+    echo "▸ Layer 6b: profile×default-features — ${RELD_ARGS[*]}"
+    RELD_LOG="$(mktemp "${TMPDIR:-/tmp}/full_gate_release_default.XXXXXX")"
+    "${RELD_ARGS[@]}" > "$RELD_LOG" 2>&1 || true
+    RELD_UNITS=$({ grep -c '"reason":"compiler-artifact"' "$RELD_LOG" || true; })
+    RELD_ERRS=$({ grep -c '"level":"error"' "$RELD_LOG" || true; })
+    if [ "$RELD_UNITS" -eq 0 ]; then
+        echo "✗ full gate INCONCLUSIVE — the release/default-features pass for"
+        echo "  $relpkg produced 0 compiler-artifact records, so it verified"
+        echo "  NOTHING. Cargo did not run (or the -p name drifted)."
+        echo "  log: $RELD_LOG"
+        exit 1
+    fi
+    if [ "$RELD_ERRS" -ne 0 ]; then
+        echo "✗ full gate FAILED — $RELD_ERRS error diagnostic(s) for $relpkg in the"
+        echo "  RELEASE profile at DEFAULT features (Layer 6's --all-features pass"
+        echo "  cannot see this cell: it supplies the very features whose absence"
+        echo "  breaks here — Issue 758's exact hole)."
+        { grep -o '"rendered":"error[^"]*' "$RELD_LOG" | sort -u | head -10 | sed 's/^/    /'; } || true
+        echo "  log: $RELD_LOG"
+        exit 1
+    fi
+    rm -f "$RELD_LOG"
+    echo "  ✓ $relpkg release/default-features clean ($RELD_UNITS compiler-artifact record(s))"
+done
 
 # UNITS is printed on every pass, not just when it is interesting: the number
 # that would have exposed the vacuous CI green was never on screen.

@@ -256,10 +256,39 @@ no-develop-push owner call untouched (`riir-chain` `b4a9b6e7` Tue 04:13 UTC,
 `riir-neuron-db` `9d041d1` 04:29, `riir-dao` `9848811` 04:43 — whose workflow
 also stopped hand-mirroring its guard layers and runs
 `scripts/ci_feature_guard.sh`). The dormancy was not hypothetical: the same
-day, `riir-neuron-db`'s standalone-dep gate was found RED nine days stale
+the same day, `riir-neuron-db`'s standalone-dep gate was found RED nine days stale
 (`29af2b0` changed the katgpt-rs patch set to `katgpt-device-verify` without
 re-pinning `EXPECTED`; fixed `97e5161`) — invisible for exactly this reason,
 because nothing ran the gate.
+
+**Issue 758 (2026-09-12, closed same day): the profile axis had a feature-shaped
+hole.** Layer 6 runs `--all-features`, which SUPPLIES `alloc_tracking` — so the
+(release × **default features**) cell of the matrix was asserted by nothing:
+(dev, default) = test_gate, (dev, all) = Layer 3, (release, all) = Layer 6,
+(release, default) = nobody. Phase 31's slice_tca landed a **module-level**
+unconditional `use crate::alloc::{…}` in `tests.rs` (the intent was the
+Issue-741-blessed "never debug_assertions-only"; the mechanism was wrong) and
+`cargo test --release -p katgpt-core --lib` went E0432 — while Layer 6 stayed
+GREEN, because `--all-features` had turned the very feature on whose absence
+broke the build. Found by Issue 757's release profile harness dying before any
+linking code compiled. Fixed T1(a)-shaped with the FULL Issue-741 predicate —
+`#[cfg(any(debug_assertions, feature = "alloc_tracking"))]` + in-fn `use` (the
+option-(b) shape, `slice_tca = […, "alloc_tracking"]`, was REJECTED: it would
+transitively default `alloc_tracking` on for every consumer, violating the
+twice-documented "MUST stay opt-in" contract in both Cargo.tomls). Verified in
+all three arms: release-default 2027 passed / dev 2035 passed (the 757 baseline
+unchanged) / `--release --features alloc_tracking` the gated test RUNS (1
+passed, not a green zero). The lane is **full_gate Layer 6b** — the test_gate
+population (katgpt-rs, katgpt-core, katgpt-dec@pca_global) at
+`cargo check --tests --release`, NOT `--workspace`: a workspace run inherits
+the platform axis (katgpt-backend's metal examples are unresolvable off macOS
+at ANY feature set — measured, E0433 ×10+ on Windows), which Layer 2 owns.
+Canaried two-sided: the 758 import reintroduced → the katgpt-core row reds with
+`could not compile (lib test)`; restored → clean. Landing 6b on a Windows box
+also caught a latent GNU-portability break in the gate itself: all three
+`mktemp -t <prefix>` calls (Layers 3, 6, 6b) are BSD-only — GNU mktemp rejects
+a template with no X's — and the gate had simply never run anywhere but macOS;
+now the full-path-with-X's form, portable both ways.
 
 ## Docs gate — original section (descriptions + narratives)
 

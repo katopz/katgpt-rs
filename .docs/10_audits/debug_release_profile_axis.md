@@ -1,12 +1,54 @@
 # The profile is part of the claim — the dev/release axis (Issues 715 + 716, closed 2026-09-03, files removed 2026-09-03)
 
-Status: **historical record, both CLOSED.** Issue 715 (an orphaned `#[cfg]`
-binding across a blank line) is fixed and gated at zero; Issue 716 (the full
-gate never ran `--release`) is fixed and the axis is `scripts/full_gate.sh`
-**Layer 6**. The one open row — 716 **T3**, whether each of the 19 sibling repos
-wants a release pass — is an owner call per repo, same shape as Issue 713 T3.
-Recover the narratives with `git log --all -- '.issues/715_*.md' '.issues/716_*.md'`
+Status: **historical record, both CLOSED — with a 2026-09-12 addendum (Issue
+758) completing the matrix.** Issue 715 (an orphaned `#[cfg]` binding across a
+blank line) is fixed and gated at zero; Issue 716 (the full gate never ran
+`--release`) is fixed and the axis is `scripts/full_gate.sh` **Layer 6**. The
+one open row — 716 **T3**, whether each of the 19 sibling repos wants a release
+pass — is an owner call per repo, same shape as Issue 713 T3. Recover the
+narratives with `git log --all -- '.issues/715_*.md' '.issues/716_*.md'`
 (last revisions `52eef429`, `4b96e0e6`).
+
+## Addendum 2026-09-12 — the feature-shaped hole in the profile axis (Issue 758, closed)
+
+Layer 6 as landed asserted the (release × `--all-features`) cell — and
+`--all-features` SUPPLIES `alloc_tracking`, so the (release × **default
+features**) cell was asserted by nothing:
+
+| cell | asserted by |
+|---|---|
+| (dev, default) | `test_gate.sh` — executed, floored |
+| (dev, all) | full_gate Layer 3 — clippy compile+lint |
+| (release, all) | full_gate Layer 6 — check compile |
+| (release, default) | **nothing, until Layer 6b** |
+
+The hole was not hypothetical: Phase 31's slice_tca landed a module-level
+unconditional `use crate::alloc::{…}` in its test module (2026-09-12), and
+`cargo test --release -p katgpt-core --lib` went E0432 while Layer 6 stayed
+green — the exact failure mode this document predicted in 2026-09-03
+("`cargo test --release -p katgpt-core --lib` did not compile at all"),
+reproduced through a gate that had been built in response to it, because the
+gate's own `--all-features` supplied the feature whose absence broke the build.
+
+Fix shape (the Issue 741 doctrine, applied fully): the test carries
+`#[cfg(any(debug_assertions, feature = "alloc_tracking"))]` + in-fn `use` — it
+runs in dev AND in `--release --features alloc_tracking` (the configuration
+this document's Issue-741 sibling says alloc gates are meant to be read in:
+verified, the test RUNS there, 1 passed, not a green zero), and compiles away
+in release-without-feature instead of breaking the harness. The alternative
+(`slice_tca` implies `alloc_tracking`) was rejected: it would transitively
+default the measurement feature on for every consumer, against the documented
+"MUST stay opt-in" contract.
+
+The lane is **full_gate Layer 6b**: the test_gate population (katgpt-rs,
+katgpt-core, katgpt-dec at its pca_global row) at
+`cargo check -p <pkg> --tests --release` with the same JSON compiler-artifact
+liveness signal as Layer 6. Deliberately NOT `--workspace`: that inherits the
+platform axis (katgpt-backend's metal examples are unresolvable off macOS at
+any feature set — measured on Windows while designing the layer), which Layer 2
+owns and refuses on. Canaried two-sided on the real break. Landing it also
+exposed and fixed a latent GNU-portability break in the gate itself (BSD-only
+`mktemp -t` templates, Layers 3/6/6b — the gate had never run off macOS).
 
 **Commits:** 715 — `26d055c6` (introduced: dropped an import, left its attribute
 behind) · `7e34ccef` (erased the evidence by deleting the blank line) ·

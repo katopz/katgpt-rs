@@ -20,7 +20,6 @@ use super::types::*;
 use super::{
     fit_slice_into, fit_with_ranks_into, reallocate_class, relative_loss, route, route_default,
 };
-use crate::alloc::{get_alloc_stats, reset_alloc_stats};
 
 /// Balanced shape for classifier-dependent tests.
 const BAL: [usize; 3] = [48, 48, 48];
@@ -550,10 +549,17 @@ fn knee_and_blocked_cv_agree_on_clean_mixture() {
     assert_eq!(knee, cv, "knee {knee:?} vs cv {cv:?}");
 }
 
-// ─── T2.4 alloc discipline (TrackingAllocator; never debug_assertions-only) ─
-
+// ─── T2.4 alloc discipline (TrackingAllocator) ──────────────────────────────
+// Gated on the SAME predicate as `crate::alloc` itself (Issue 758): the test
+// runs in dev (debug_assertions) AND under `--release --features
+// alloc_tracking` — the Issue 741 configuration the alloc gates are meant to
+// be read in (verified against the optimised code that ships). In a release
+// build WITHOUT the feature the substrate does not exist, so the test
+// compiles away rather than breaking the whole lib test harness (E0432).
+#[cfg(any(debug_assertions, feature = "alloc_tracking"))]
 #[test]
 fn zero_alloc_reconstruction_and_classifier() {
+    use crate::alloc::{get_alloc_stats, reset_alloc_stats};
     let shape = BAL;
     let x = mixed_fixture(shape, 0.05, 7);
     let cfg = SliceTcaConfig::default();
