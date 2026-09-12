@@ -5,6 +5,8 @@
 > **Related Research:** 061 (Entropy Anomaly Detection), 037 (REAP Model-Based/Modelless Duality), 076 (SR²AM), 090 (Epiplexity), 103 (State Distribution View)
 > **Related Plans:** 141 (Data Probe Diagnostics — katgpt-rs core)
 > **Verdict: MEDIUM-HIGH VALUE — Strong conceptual alignment with our entropy anomaly + review metrics infrastructure. The typical-set regime classification (over-conservative / typical / uncertain) maps directly onto our existing `EntropyAnomalySummary` and `token_entropy()` primitives. The formal validation protocol (C1–C4, IV/EV) is a methodology upgrade for ALL our GOAT proofs. Not a Super GOAT — no game-specific knowledge, pure diagnostics tooling.**
+>
+> **PASS-Redirects (synthesis):** Arzt, Hanbury & Blevins [arXiv:2608.15129 "Left-Branching Transformers Excel at Right-Branching Languages: Data Shapes Word Order Preferences in Language Models"] — the paper's 192 PCFG artificial languages (identical derivation probabilities, word order the only varying axis, 6 base orders × 32 switch configs) are data probes at scale, and its headline result — the SAME GPT-2 architecture shows OPPOSITE word-order preferences on artificial vs natural data (left-branching preferred on artificial; SVO emerging on natural at 1 GB), so observed biases are data-driven, not architectural — is a strong external confirmation of this note's premise that probes isolate data effects. PASS for us: empirical linguistics finding, no mechanism to extract, and no consumer surface (zero word-order/multilingual evaluation anywhere in the stack — the early-training preference reversal ~step 100 and AUC↔final-PPL correlation are word-order-specific observations, not general selection laws).
 
 ---
 

@@ -5,6 +5,8 @@
 > **Related Research:** 081 (ToaST Split Trees), 017 (Fast BLT — negative result)
 > **Related Plans:** 122 (ToaST tokenizer — completed), 127 (ConvexTok LP vocabulary optimizer — proposed)
 > **Reference Code:** `.raw/tokenisation_lp/` (paper authors' implementation)
+>
+> **PASS-Redirects (synthesis):** Arzt, Hanbury & Blevins [arXiv:2608.15129 "Left-Branching Transformers Excel at Right-Branching Languages: Data Shapes Word Order Preferences in Language Models"] — its BPEC metric (corpus NLL normalized by the ENGLISH character count of the parallel corpus, Cotterell et al. 2018) is the cross-tokenizer/cross-script comparability trick: the cross-lingual sibling of riir-data's shipped `bits_per_char(log_probs, original_chars)` / `bpb_from_loss` (`metrics/bpb_eval`). PASS: our tokenizer league is same-corpus ConvexTok-vs-BPE (`bench_comparison.rs`), so cross-lingual normalization has no consumer today; recorded here as the ready-made metric if a cross-tokenizer perplexity league (e.g. Bonsai vs Qwen tokenizer on identical text) ever lands.
 
 ---
 
