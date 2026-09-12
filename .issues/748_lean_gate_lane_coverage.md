@@ -121,3 +121,70 @@ having built them:
   The lesson is the same one this issue is about, one level up: an *asserted*
   outcome reads exactly like a measured one. A claim that an experiment would
   come out a certain way is not evidence, even when the reasoning is plausible.
+
+## Both follow-ups CLOSED (2026-09-12, later the same day)
+
+Neither needed an owner call — both were coverage gaps with a mechanical fix,
+and both turned an *argued* claim into a *measured* one.
+
+### riir-neuron-db `c630654` — 9/9 becomes 12/12
+
+`Construction/Layout.lean` was the one spec module with **no** perturbation.
+Nine rejections over four files read as a suite-wide verdict and were not one:
+a file nothing perturbs contributes no evidence, and its absence is invisible
+in the pass count. Three added, each breaking a different theorem (variant tag
+collision → `variant_tags_strictly_increasing`; `envelopeRefSize` 32→4 →
+`sidecarHeaderSize_eq`; `n_facts` offset dropping `variantSize` →
+`offset_chain_monotone`).
+
+**Issue 617 is now measured rather than read, and the measurement narrows it.**
+The wrong-constant perturbation reds at the LITERAL theorem `:123` and never at
+the vacuous `_eq_sum` `:120` — the finding confirmed. But removing the literal
+theorem *still* reds, in `Construction/SpecTests.lean:82,97,98` (control with
+correct constants is green, so the probe is valid). So the constant has **two**
+independent sound sites and `_eq_sum` is neither: redundant, not load-bearing.
+That is what the owner's style call was missing.
+
+### riir-ai `69cc69f4e` — the residual gap CLOSED, not just restated
+
+`0a6c02f57` left the residual as prose: "a three-parameter family of wrong
+weight vectors still passes." That family is no longer described, it is
+**constructed**. Solving the two constraints for a change confined to
+(arousal, valence, calm) gives `dv = -2dc`, `da = dc`; at `dc = 0.01` the
+weights `0.31 / 0.23 / 0.21 / -0.15 / -0.10` change the `oneScalars` sum by
+**exactly 0** and the `testScalars` value by **exactly 0**.
+
+Measured two-sided: with only the original three examples that wrong spec
+**builds GREEN**; with five new one-hot examples it reds at exactly the three
+perturbed weights. It is now perturbation **[9/9]**, so the closure cannot
+silently regress.
+
+⛔ **The planned repair was the wrong one, and cost more.** This issue recorded
+that closing the gap "needs a monotonicity/antitonicity theorem, which would
+raise `EXPECTED_THEOREMS` past 16". A monotonicity theorem pins the five
+**signs and no magnitude** — strictly weaker than what shipped. Five one-hot
+instances give five independent equations, one per coordinate, pinning every
+weight exactly; and because `example`s are anonymous, the audited surface is
+**unchanged at 16** (`proof_gate.sh` counts `#print axioms` directives). The
+blocker in the plan was an artifact of the chosen mechanism, not of the goal.
+
+### A harness gap found while doing both, fixed in both
+
+Both scripts' headers require every perturbation to break because a **proof**
+no longer holds, "never because the file stopped parsing" — and **nothing
+asserted it**. A perturbation that merely mangled a file would have been
+counted as a rejection while the hole it was meant to probe stayed open.
+`perturb()` now discriminates and reports a syntax break as a
+`PERTURBATION BUG`; probed on a COPY of the harness with planted defects
+(editing a running shell script changes its own execution), all three verdicts
+distinguishable.
+
+⛔ And the first version of that arm **aborted the run after [1/12] while the
+pass count read normal**: under `set -e`, a bare `out="$(failing cmd)"`
+assignment returns the command's status, so errexit killed the script at the
+first perturbation that did its job. `|| rc=$?` is what makes the assignment a
+tested command. A harness repair is a harness change, and needs its own probe.
+
+**Still owner-gated:** wiring any of this into CI (the four costed options
+above). Three negative tests now exist that nothing invokes automatically —
+the gap this issue names is unchanged in kind, and one perturbation wider.
