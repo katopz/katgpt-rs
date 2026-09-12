@@ -335,6 +335,9 @@ mod tests {
     // ── Issue 747 P0.7: the schedule socket on the router ────────────────
 
     /// Deterministic splitmix64 → f32 uniform [0,1).
+    // Gated with its only callers: at default features the schedule tests
+    // compile away and an ungated `unit` is dead code in the lib test build.
+    #[cfg(feature = "asentmax_schedule")]
     fn unit(state: &mut u64) -> f32 {
         *state = state
             .wrapping_mul(6364136223846793005)
