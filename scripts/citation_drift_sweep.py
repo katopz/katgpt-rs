@@ -55,7 +55,9 @@ are written down here rather than silently healed:
     alias/abbreviation NOT in the alias table   ("ndb" = riir-neuron-db,
                                                  "mmorpg" = riir-mmorpg-examples)
     attribution just OUTSIDE the 3-line window  (4 lines up, or 2 lines DOWN —
-                                                 the window is backward-only)
+                                                 the window is backward-only;
+                                                 MEASURED and deliberately kept,
+                                                 see below)
     intra-document back-reference               ("see Issue 092 above", where
                                                  THIS doc carries a heading for
                                                  the foreign number)
@@ -85,6 +87,25 @@ from that argument with no measurement behind the exemption.
 The repair also tightened the name match to segment boundaries: a plain
 `"seal-remake" in ctx` read riir-viewbridge's `seal-remake-unity` as naming
 **seal-remake** and qualified a `Plan 031` citation on a different repo's name.
+
+Why the window stays BACKWARD-ONLY — measured, not assumed
+----------------------------------------------------------
+Owner-consistency made the forward-window question answerable for the first
+time, because it strips the noise: ask not "is a repo named below?" but "is an
+OWNER of this number named below?". Measured over the CROSS set, **15 rows**
+qualify within 1-2 lines forward. Read line by line, **at most 3 are genuine
+attributions** — riir-game-sdk's `Issue 458 … See riir-ai/AGENTS.md` is the
+clearest. The other twelve are incidental: a dep-path note two lines down
+(`../katgpt-rs/crates/katgpt-core`), a `Batch 47 …` list, a "three commits
+across repos" enumeration where the named repo is one commit host and not the
+plan's owner, and — twice — a forward line attributing a **different** number
+(`See .issues/529 (riir-ai)` sitting under a citation of 496 and 528).
+
+So widening forward buys ~3 false-positive repairs and costs ~12 newly
+SUPPRESSED true findings. That is the wrong direction by this module's own
+governing lesson: a suppressed row is invisible to the sample that produced
+the 16% figure, while an emitted false positive is merely read and dismissed.
+Backward-only stays.
 
 Three buckets, and the split is the whole point of re-measuring
 ---------------------------------------------------------------
