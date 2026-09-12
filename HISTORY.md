@@ -1977,3 +1977,38 @@ audited with `required_features_build_audit.py --batch` per package
 (isolated `/tmp` target dir) — **0 FAILS / 0 NO-FEAT / 0 UNSEEN across all
 8 packages**. The Full gate + Lean proofs + wasm32 lanes on the same push
 were green; content was never in question, only the lanes' wiring.
+
+## Issue 755 — a quoted heading in a fence is not an allocation: CLOSED as resolved (2026-09-12)
+
+Landed on the allocation path only, DELEGATING to the canonical scanner
+(`620840ce` fenced-heading exclusion via `fenced_lines()`; `3a3d4bc1` the
+delegation refactor — `skill_repo_set_gate.fenced_blocks()`, no second
+parser; `37bb9cbf` the CI-deferred docs_gate wiring). The asymmetry was
+measured on BOTH sides before landing: `heading_allocated()` 0 of 57
+headings fenced (EXCLUDE), `citations()` 57 of 2972 fenced (do NOT exclude
+— the fenced rows carry the sibling-layout attributions, exactly where
+cross-repo ownership is written down most explicitly). Unterminated fences
+fail SAFE (empty exclusion set + surfaced; `issue_citation_gate.main()`
+exits 2 INSTRUMENT on one) — measured 0 across the 35 scoped documents at
+landing. 3 selftest arms canaried both ways: filter removed → 3 red; naive
+toggle → 4 red, wrong in BOTH directions (drops a real allocation, admits
+two quoted ones). No verdict moved (0 fenced allocations today) — landed
+for the direction it closes. The removed issue file's full record lives in
+git history, `git log -- .issues/755_a_quoted_heading_in_a_fence_is_not_an_allocation.md`.
+
+## Issue 756 — an unterminated fence swallows the rest of its file: CLOSED as resolved (2026-09-12)
+
+Measured 19 files / 611 swallowed lines across 19 contract repos (5048
+tracked `.md`); all 19 repaired the same day, in three repos: katgpt-rs 12
+(`1bf768cd` repairs + the `markdown_fence_gate.py` docs-gate row, both arms
+canaried; `ed455885` the walk widened to untracked-not-ignored `.md` after
+the gate missed its own landing issue file), riir-ai 5 (`a1a205681`,
+follow-up `6e73d89c5`), riir-train 2 (`d761a375`, follow-up `ca21b763` —
+both the missing-OPENER shape). The reported line is the DANGLING fence,
+not the defect: three shapes measured (missing closer / stray fence /
+missing opener), discriminated by the first non-blank body line after it.
+Independent verification 2026-09-12: `fenced_blocks()` reports 0
+unterminated across all 7 sibling files at the sibling repos' origin/develop.
+The removed issue file's full record (three-shape table, the two wrong
+classifiers, the false-positive analysis that left the shared scanner
+alone) lives in git history, `git log -- .issues/756_an_unterminated_fence_swallows_the_rest_of_the_file.md`.
