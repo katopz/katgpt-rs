@@ -243,6 +243,9 @@ def top_allocated(repo: Path, alloc: dict[str, set[int]]) -> dict[str, int]:
     return out
 
 
+FULL = "--full" in sys.argv
+
+
 def audit(repo: Path, sibs: list[Path], alloc: dict[str, dict[str, set[int]]],
           docs: list[str], crates: dict[str, str],
           patterns: dict[str, re.Pattern]) -> dict:
@@ -513,11 +516,16 @@ def main() -> int:
         print(f"{status} {repo.name:22s} docs={got['n_docs']} cites={got['n_cites']:<5d} "
               f"cross={len(got[CROSS]):<4d} in_local_range={len(got[IN_RANGE]):<3d} "
               f"orphan={len(got[ORPHAN])} ambiguous={len(got['ambiguous'])}")
-        for r in got[CROSS][:12]:
+        # 12 rows keeps the whole-workspace run readable; `--full` is for the
+        # one job the truncated view cannot do — writing the OWNING repo's
+        # issue, which needs every row it is being asked to repair.
+        cap = len(got[CROSS]) if FULL else 12
+        for r in got[CROSS][:cap]:
             print(f"      cross:    {r}")
-        if len(got[CROSS]) > 12:
-            print(f"      … {len(got[CROSS]) - 12} more cross row(s)")
-        for r in got[IN_RANGE][:4]:
+        if len(got[CROSS]) > cap:
+            print(f"      … {len(got[CROSS]) - cap} more cross row(s) "
+                  f"(re-run with --full)")
+        for r in got[IN_RANGE][:(len(got[IN_RANGE]) if FULL else 4)]:
             print(f"      undecided:{r}")
         for r in got[ORPHAN]:
             print(f"      orphan:   {r}")
