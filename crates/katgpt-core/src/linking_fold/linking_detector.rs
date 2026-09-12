@@ -40,13 +40,28 @@
 //! term is the Gauss pair loop: `β` (cycle rank ≈ E − V + C) grows
 //! ~linearly with `n` for `k = 8`, so the pair count is quadratic-ish in `n`.
 //!
-//! ## Measured scale
+//! ## Measured scale (post Issue 757 Option B, 2026-09-12)
 //!
-//! | n (per cloud) | d | median latency |
-//! |---|---|---|
-//! | 80  | 3 | ~25 ms (lib-test scale) |
-//! | 200 | 8 | **~115.7 ms** (bench G2 re-measured 2026-09-12, post CycleBounds + SoA; audit-cadence budget 500 ms ✅; the pre-skip code measured 407 ms) |
-//! | 1000 | 8 | ~seconds (quadratic extrapolation from 115.7 ms @ 2×200; the pre-skip code extrapolated to minutes) — **do not call without subsampling** |
+//! | n (per cloud) | d | linked (ms) | unlinked-separated (ms) |
+//! |---|---|---|---|
+//! | 80  | 3 | ~1 ms (lib-test scale) | — |
+//! | 200 | 8 | **3.67 ms** (bench G2; audit budget 500 ms ✅; was 407 ms pre-CycleBounds, 115.7 ms pre-757) | 4.4 |
+//! | 500 | 8 | 18.1 | 18.4 |
+//! | 1000 | 8 | **27.9 ms** (the restored Plan-410 original budget — G2b) | 59.9 |
+//!
+//! The Option B levers (all verdict-preserving): single-pass k-NN selection,
+//! longest-first witness ordering (the witness is a long core-winding cycle
+//! — measured at evaluated-pair #20,161 in the old basis order), certified
+//! chunk-level Gauss pruning (per-chunk-pair `link_bound` skipping with a
+//! rigorous |total|±bound_sum rounding rule and a full-recompute fallback
+//! for the ambiguous band), and a uniform grid over the Y-cycle bounding
+//! spheres.
+//!
+//! Fixture caveat (measured): a thickened ring whose fixed thickness exceeds
+//! the ring spacing `2π/n` (n ≥ ~300 at thickness 0.05) is under-sampled —
+//! the kNN cycles go jagged and the quadrature error swamps the ±1 integer,
+//! so BOTH the pre-757 and this detector read link=0. Scale the fixture
+//! thickness with n (the bench uses `min(0.05, π/n)`).
 //!
 //! ## Cadence contract — audit only, never per-tick
 //!
@@ -56,15 +71,14 @@
 //! not this detector. Calling this on n > 500 clouds without subsampling
 //! will block for tens of seconds to minutes.
 //!
-//! If a consumer needs n > 500, subsample first (random or farthest-point)
-//! to ≤ 200 per cloud, or wait for the Issue 757 Option B remainder
-//! (single-pass k-NN, spatial cycle batching toward 50 ms @ n=2×1000) to
-//! land. The correctness-safe bbox early-exit (`CycleBounds::may_link`)
-//! and the SoA vectorized quadrature already landed (407 → 115.7 ms
-//! @ n=2×200); the opt-in `max_cycles_per_cloud` cap is the non-default
-//! short-cycle pruning lever.
+//! If a consumer needs n > 1000, subsample first (random or farthest-point)
+//! — the sweep above stops at 2×1000 (27.9/59.9 ms); the worst case remains
+//! an unlinked-tangled pair, where no early exit fires and every grid
+//! candidate pays at least the may_link check. The opt-in
+//! `max_cycles_per_cloud` cap is the non-default short-cycle pruning lever
+//! (median-closest semantics, Issue 757 — see the config doc).
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Public types
@@ -93,18 +107,18 @@ pub struct LinkingDetectorConfig {
     /// Gauss integral (paper §H.3). Higher = more accurate but slower.
     /// Default `4`.
     pub n_subdivisions: usize,
-    /// **Perf cap (Issue 050, experimental):** maximum number of cycles retained
-    /// per point cloud after sorting the fundamental basis. The Gauss linking
-    /// integral is `O(β_x · β_y · n_sub² · L)` — the cycle count β is the
-    /// quadratic lever. **WARNING: capping by length is NOT correctness-safe**
-    /// — the linking witness is often a LONG topologically-nontrivial cycle
-    /// (e.g. the core circle of a Hopf link, ~80 vertices for n=80), while the
-    /// shortest cycles are small local loops from thickening noise that
-    /// contribute ≈0 to the integral. Setting `max_cycles_per_cloud > 0` keeps
-    /// the `max_cycles` cycles closest to the MEDIAN length (drops the extreme
-    /// short AND long tails); `0` = no cap (full basis, the default).
-    /// Default `0` — the cost is instead controlled by Gauss-pair bounding-box
-    /// early-skip (see `gauss_linking_integral`), which is correctness-safe.
+    /// **Perf cap (Issue 050, semantics fixed in Issue 757):** maximum number
+    /// of cycles retained per point cloud. Setting `max_cycles_per_cloud > 0`
+    /// keeps the `max_cycles` cycles closest to the MEDIAN length (drops the
+    /// extreme short AND long tails); `0` = no cap (full basis, the default).
+    /// The pre-757 implementation kept the SHORTEST N — a doc/code drift that
+    /// retained exactly the thickening-noise loops and dropped the long
+    /// core-winding witnesses (measured in the Issue 757 profile); fixed to
+    /// the documented median-closest contract. ANY cap remains heuristic and
+    /// NOT correctness-safe.
+    /// Default `0` — the cost is instead controlled by the correctness-safe
+    /// levers: pairwise `may_link`, chunk-level certified pruning, the
+    /// Y-cycle grid, and longest-first witness ordering (Issue 757).
     pub max_cycles_per_cloud: usize,
 }
 
@@ -237,29 +251,61 @@ pub fn detect_linking_into(
         return LinkingVerdict::not_linked();
     }
 
-    // ── Step 4: Gauss linking integral over basis-cycle pairs ──
-    // Perf (Issue 050): precompute a bounding sphere per cycle (centroid +
-    // max-dist²) so far-apart cycle pairs can be skipped without the expensive
-    // O(n_sub²·L) quadrature. This is correctness-safe: two cycles whose
-    // bounding spheres are disjoint and well-separated have a Gauss integral
-    // bounded by `|Cx|·|Cy|·n_sub² / gap²`, which rounds to 0 once the gap
-    // exceeds the cycle diameters. The threshold is conservative — only skips
-    // pairs that provably cannot round to ±1.
-    let bounds_x: Vec<CycleBounds> = cycles_x
-        .iter()
-        .map(|c| CycleBounds::compute(c, x_proj))
+    // ── Step 4 (Issue 757 T1.2/T1.3): prepared cycles + longest-first
+    // ordering + grid prefilter + certified chunk-pruned Gauss integral ──
+    //
+    // Measured motivation (Issue 757 profile, n=2×200 Hopf, d=8): 99.4% of
+    // the wall time is the Gauss pair loop; the Issue-050 bounding-sphere
+    // skip already rejects 84.5% of pairs, but the WITNESS is a long
+    // core-winding cycle (len 45/55 vs the ~5-10 thickening-noise loops)
+    // found only at evaluated-pair #20,161 in basis order. Three
+    // verdict-preserving levers land here:
+    //
+    // (a) each cycle is prepared ONCE (SoA segments + chunk bounds +
+    //     bounding sphere) and reused across all its pairs;
+    // (b) each basis is sorted DESCENDING by length — long cycles carry the
+    //     topological winding, so witnesses are evaluated in the first
+    //     pairs instead of after ~20K near-but-unlinked pairs;
+    // (c) a uniform grid over the Y-cycle bounding spheres prunes the
+    //     O(β_x·β_y) may_link sweep. The per-X reach
+    //     `r_x + max_r_y + sqrt(P_x·max_P_y/(2π))` provably covers every
+    //     pair the exact pairwise may_link would keep, so the grid changes
+    //     at most WHICH witness is reported, never the verdict.
+    let mut prep_x: Vec<PreparedCycle> = cycles_x
+        .into_iter()
+        .map(|c| PreparedCycle::new(&c, x_proj, config.n_subdivisions))
         .collect();
-    let bounds_y: Vec<CycleBounds> = cycles_y
-        .iter()
-        .map(|c| CycleBounds::compute(c, y_proj))
+    let mut prep_y: Vec<PreparedCycle> = cycles_y
+        .into_iter()
+        .map(|c| PreparedCycle::new(&c, y_proj, config.n_subdivisions))
         .collect();
-    for (i, cx) in cycles_x.iter().enumerate() {
-        let bx = &bounds_x[i];
-        for (j, cy) in cycles_y.iter().enumerate() {
-            if !bx.may_link(&bounds_y[j]) {
+    // Longest first (witness-first); the sort is stable → deterministic.
+    prep_x.sort_by_key(|p| std::cmp::Reverse(p.indices.len()));
+    prep_y.sort_by_key(|p| std::cmp::Reverse(p.indices.len()));
+
+    let max_r_y = prep_y
+        .iter()
+        .map(|p| p.bounds.r_sq)
+        .fold(0.0_f32, f32::max)
+        .sqrt();
+    let max_p_y = prep_y
+        .iter()
+        .map(|p| p.bounds.perimeter)
+        .fold(0.0_f32, f32::max);
+    let grid = CycleGrid::build(&prep_y);
+
+    let inv_2pi = 1.0_f32 / (2.0 * std::f32::consts::PI);
+    let mut candidates: Vec<usize> = Vec::new();
+    for (i, px) in prep_x.iter().enumerate() {
+        let reach = px.bounds.r_sq.sqrt()
+            + max_r_y
+            + (px.bounds.perimeter * max_p_y * inv_2pi).sqrt();
+        grid.query(&px.bounds.center, reach, &mut candidates);
+        for &j in candidates.iter() {
+            if !px.bounds.may_link(&prep_y[j].bounds) {
                 continue;
             }
-            let link = gauss_linking_integral(cx, cy, x_proj, y_proj, config.n_subdivisions);
+            let link = px.pruned_link(&prep_y[j]);
             if link != 0 {
                 return LinkingVerdict {
                     linked: true,
@@ -535,53 +581,71 @@ fn rotate_by_3x3(v: [[f32; 3]; 3], p: &mut [f32; 3]) {
 /// Build an ε-filtered k-NN graph: node i has edges to its k nearest
 /// neighbors within distance ε. Edges are undirected (we add both
 /// directions). Paper §H.1.
+///
+/// Single pass (Issue 757 T1.1): the pre-757 code walked all O(n²) pairs
+/// TWICE — once to derive ε from the kth-nearest distances, once to build
+/// the adjacency — each with a full O(n log n) sort per node. This version
+/// selects each node's kk nearest once via `select_nth_unstable_by`
+/// (average O(n), no full sort), retains them, derives ε from the retained
+/// kth distances, and assembles the adjacency from the same retained lists.
+/// Distances are compared as SQUARED distances throughout (ε² = the
+/// kth-squared-distance quantile): sqrt is monotone, so the quantile and
+/// the ε-filter select the same sets — the square root is never taken.
 fn build_epsilon_knn_graph(
     points: &[[f32; 3]],
     k: usize,
     epsilon_quantile: f32,
 ) -> Vec<Vec<usize>> {
     let n = points.len();
-    if n == 0 || k == 0 {
-        return Vec::new();
+    if n <= 1 || k == 0 {
+        return vec![Vec::new(); n];
     }
     let kk = k.min(n - 1);
 
-    // For each point, compute distances to all others, find the kk nearest.
-    // Collect all kk-th-nearest distances to compute ε as a quantile.
-    let mut all_kth_distances = Vec::with_capacity(n);
-    let mut adjacency: Vec<Vec<usize>> = vec![Vec::with_capacity(kk * 2); n];
-
-    for i in 0..n {
-        // Collect (distance, j) for all j ≠ i.
-        let mut dists: Vec<(f32, usize)> = (0..n)
-            .filter(|&j| j != i)
-            .map(|j| (dist3(points[i], points[j]), j))
-            .collect();
-        // Partial sort: get the kk smallest.
-        // `total_cmp` is branch-free and NaN-deterministic vs `partial_cmp().unwrap_or(Equal)`.
-        dists.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let kth = dists
-            .get(kk.saturating_sub(1))
-            .map_or(f32::INFINITY, |(d, _)| *d);
-        all_kth_distances.push(kth);
+    // Per-node kk-nearest (unordered among the kk) + the kk-th squared
+    // distance — retained once for BOTH the ε quantile and the adjacency.
+    let mut scratch: Vec<(f32, usize)> = Vec::with_capacity(n - 1);
+    let mut retained: Vec<(f32, usize)> = Vec::with_capacity(n * kk);
+    let mut kth_sq: Vec<f32> = Vec::with_capacity(n);
+    for (i, pi) in points.iter().enumerate() {
+        scratch.clear();
+        for (j, pj) in points.iter().enumerate() {
+            if i == j {
+                continue;
+            }
+            let dx = pi[0] - pj[0];
+            let dy = pi[1] - pj[1];
+            let dz = pi[2] - pj[2];
+            scratch.push((dx * dx + dy * dy + dz * dz, j));
+        }
+        if scratch.is_empty() {
+            // n == 1 (defensive; callers guard n ≥ k+1): no neighbors.
+            kth_sq.push(f32::INFINITY);
+            continue;
+        }
+        if kk < scratch.len() {
+            // Partition so the kk smallest occupy [0, kk); the element AT
+            // kk−1 is the kk-th smallest — the kth-nearest squared distance.
+            scratch.select_nth_unstable_by(kk - 1, |a, b| a.0.total_cmp(&b.0));
+            scratch.truncate(kk);
+        }
+        kth_sq.push(scratch[scratch.len() - 1].0);
+        retained.extend_from_slice(&scratch);
     }
 
-    // ε = quantile of the kth-nearest distances.
-    all_kth_distances.sort_by(|a, b| a.total_cmp(b));
+    // ε² = quantile of the kth-nearest squared distances.
+    kth_sq.sort_unstable_by(|a, b| a.total_cmp(b));
     let qidx = ((epsilon_quantile.clamp(0.0, 1.0)) * (n as f32 - 1.0)).round() as usize;
     let qidx = qidx.min(n - 1);
-    let epsilon = all_kth_distances[qidx];
+    let epsilon_sq = kth_sq[qidx];
 
-    // Build undirected adjacency: edge (i, j) if j is in i's k-NN AND dist ≤ ε.
+    // Adjacency from the retained lists (the same kk-nearest sets the
+    // two-pass version selected; push order differs, which may yield a
+    // different — but equally valid — BFS tree and fundamental basis).
+    let mut adjacency: Vec<Vec<usize>> = vec![Vec::with_capacity(kk * 2); n];
     for i in 0..n {
-        let pi = points[i];
-        let mut dists: Vec<(f32, usize)> = (0..n)
-            .filter(|&j| j != i)
-            .map(|j| (dist3(pi, points[j]), j))
-            .collect();
-        dists.sort_by(|a, b| a.0.total_cmp(&b.0));
-        for (d, j) in dists.into_iter().take(kk) {
-            if d <= epsilon {
+        for &(d_sq, j) in &retained[i * kk..(i + 1) * kk] {
+            if d_sq <= epsilon_sq {
                 if !adjacency[i].contains(&j) {
                     adjacency[i].push(j);
                 }
@@ -592,14 +656,6 @@ fn build_epsilon_knn_graph(
         }
     }
     adjacency
-}
-
-#[inline]
-fn dist3(a: [f32; 3], b: [f32; 3]) -> f32 {
-    let dx = a[0] - b[0];
-    let dy = a[1] - b[1];
-    let dz = a[2] - b[2];
-    (dx * dx + dy * dy + dz * dz).sqrt()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -695,21 +751,44 @@ fn fundamental_cycle_basis(
             cycles.push(cycle);
         }
     }
-    // Perf cap (Issue 050): the Gauss linking integral is O(β_x · β_y). A
-    // dense k-NN graph yields β ≈ 2.25× n cycles; keeping only the shortest
-    // `max_cycles` preserves the geometrically-tight cycles (the ones that
-    // actually link) while cutting the quadratic Gauss cost by ~180× at the
-    // default cap of 32. Short cycles dominate the integral because long
-    // cycles are nearly planar (their Gauss integrand averages to ≈0).
-    if max_cycles > 0 && cycles.len() > max_cycles {
-        // Partial selection: O(β) average — partition so the `max_cycles`
-        // shortest cycles are in the front, then truncate. Cheaper than a
-        // full sort and we only need the K shortest, not a total order.
-        let (_before, _kth, _after) =
-            cycles.select_nth_unstable_by(max_cycles, |a, b| a.len().cmp(&b.len()));
-        cycles.truncate(max_cycles);
+    // Perf cap (Issue 050, semantics fixed in Issue 757): the Gauss linking
+    // integral is O(β_x · β_y); a dense k-NN graph yields β ≈ 2.25× n
+    // cycles. When capped, keep the `max_cycles` cycles closest to the MEDIAN
+    // length — the contract documented on
+    // `LinkingDetectorConfig::max_cycles_per_cloud`. The pre-757 code kept
+    // the SHORTEST N cycles and claimed "short cycles dominate the integral"
+    // — measured false on the thickened Hopf fixture (Issue 757 profile: the
+    // witness is a len-45/55 core-winding cycle against a ~5-10-length noise
+    // population, so a shortest-N cap retains exactly the noise loops and
+    // drops the witness). Median-closest trims BOTH tails. ANY cap remains
+    // heuristic and NOT correctness-safe (opt-in, default 0) — see the
+    // config doc.
+    cap_cycles_median_closest(cycles, max_cycles)
+}
+
+/// Keep the `max_cycles` cycles closest to the median cycle length
+/// (stable tie-break on pre-cap order). See `fundamental_cycle_basis`.
+fn cap_cycles_median_closest(cycles: Vec<Vec<usize>>, max_cycles: usize) -> Vec<Vec<usize>> {
+    if max_cycles == 0 || cycles.len() <= max_cycles {
+        return cycles;
     }
-    cycles
+    let mut lens: Vec<usize> = cycles.iter().map(Vec::len).collect();
+    let mid = lens.len() / 2;
+    lens.select_nth_unstable(mid);
+    let median = lens[mid] as isize;
+    let mut order: Vec<usize> = (0..cycles.len()).collect();
+    order.sort_by_key(|&i| (cycles[i].len() as isize - median).abs());
+    let mut keep = vec![false; cycles.len()];
+    for &i in &order[..max_cycles] {
+        keep[i] = true;
+    }
+    let mut out = Vec::with_capacity(max_cycles);
+    for (i, c) in cycles.into_iter().enumerate() {
+        if keep[i] {
+            out.push(c);
+        }
+    }
+    out
 }
 
 #[inline]
@@ -739,6 +818,10 @@ fn path_to_root(mut node: usize, parent: &[usize]) -> Vec<usize> {
 /// Midpoint quadrature: each cycle edge is subdivided into `n_sub` segments;
 /// the double integral is summed over all (C-segment, D-segment) midpoint
 /// pairs. Paper §H.3.
+// Reference full-evaluation path: used by the profiling harness (tests)
+// and as the documented reference the pruned path certifies against. The
+// detect path itself uses the PreparedCycle machinery.
+#[cfg_attr(not(test), allow(dead_code))]
 fn gauss_linking_integral(
     cycle_x: &[usize],
     cycle_y: &[usize],
@@ -749,51 +832,61 @@ fn gauss_linking_integral(
     if cycle_x.len() < 3 || cycle_y.len() < 3 || n_sub == 0 {
         return 0;
     }
-    let n_sub = n_sub.max(1);
+    let seg_x = subdivide_cycle_soa(cycle_x, points_x, n_sub);
+    let seg_y = subdivide_cycle_soa(cycle_y, points_y, n_sub);
+    gauss_linking_integral_soa(&seg_x, &seg_y)
+}
+
+/// Full (unpruned) Gauss linking integral over prebuilt SoA segment buffers,
+/// rounded to the nearest integer. The reference exact path — and the
+/// fallback for the pruned integral's ambiguous rounding band.
+fn gauss_linking_integral_soa(seg_x: &Segments, seg_y: &Segments) -> i32 {
     let inv_4pi = 1.0_f32 / (4.0 * std::f32::consts::PI);
+    let total = integrate_ranges(
+        seg_x,
+        0..seg_x.mx_x.len(),
+        seg_y,
+        0..seg_y.mx_x.len(),
+    );
+    (inv_4pi * total).round() as i32
+}
 
-    // Full-SoA segment buffers (Issue 050 perf): separate contiguous x / y / z
-    // arrays per component (midpoint + tangent), each stride-1. This is the
-    // layout auto-vec needs — the inner-sy loop loads `my_x[j]`, `my_y[j]`,
-    // `my_z[j]` as independent contiguous f32 streams, which LLVM fuses into
-    // 4-wide vector loads. The earlier stride-3 (xyzxyz) layout blocked vec
-    // (non-power-of-2 stride → gather, not contiguous load).
-    let Segments {
-        mx_x,
-        mx_y,
-        mx_z,
-        tx_x,
-        tx_y,
-        tx_z,
-    } = subdivide_cycle_soa(cycle_x, points_x, n_sub);
-    let Segments {
-        mx_x: my_x,
-        mx_y: my_y,
-        mx_z: my_z,
-        tx_x: ty_x,
-        tx_y: ty_y,
-        tx_z: ty_z,
-    } = subdivide_cycle_soa(cycle_y, points_y, n_sub);
-
+/// Unscaled double midpoint-quadrature sum over `range_x` × `range_y`
+/// segment indices of the two SoA buffers. Shared by the full integral and
+/// the chunk-pruned integral (which calls it per surviving chunk pair), so
+/// the pruned path evaluates EXACTLY the same integrand terms — only the
+/// summation grouping differs.
+///
+/// SoA layout (Issue 050 perf): separate contiguous x/y/z arrays per
+/// component (midpoint + tangent), each stride-1 — the inner-sy loop loads
+/// `my_x[j]`, `my_y[j]`, `my_z[j]` as independent contiguous f32 streams,
+/// which LLVM fuses into wide vector loads. (The earlier stride-3 xyzxyz
+/// layout blocked vec — gather, not contiguous load.)
+fn integrate_ranges(
+    seg_x: &Segments,
+    range_x: std::ops::Range<usize>,
+    seg_y: &Segments,
+    range_y: std::ops::Range<usize>,
+) -> f32 {
     let mut total = 0.0_f32;
-    // Outer loop: one fixed sx segment. Inner loop: reduction over all sy
+    // Outer loop: one fixed sx segment. Inner loop: reduction over the sy
     // segments — branch-free, stride-1 contiguous loads, auto-vec ready.
-    for i in 0..mx_x.len() {
-        let xi = mx_x[i];
-        let yi = mx_y[i];
-        let zi = mx_z[i];
-        let dxi = tx_x[i];
-        let dyi = tx_y[i];
-        let dzi = tx_z[i];
-        for j in 0..my_x.len() {
+    for i in range_x {
+        let xi = seg_x.mx_x[i];
+        let yi = seg_x.mx_y[i];
+        let zi = seg_x.mx_z[i];
+        let dxi = seg_x.tx_x[i];
+        let dyi = seg_x.tx_y[i];
+        let dzi = seg_x.tx_z[i];
+        for j in range_y.clone() {
             // diff = sx_mid - sy_mid
-            let rx = xi - my_x[j];
-            let ry = yi - my_y[j];
-            let rz = zi - my_z[j];
+            let rx = xi - seg_y.mx_x[j];
+            let ry = yi - seg_y.mx_y[j];
+            let rz = zi - seg_y.mx_z[j];
             // cross = sx_tan × sy_tan
-            let dyx = ty_x[j];
-            let dyy = ty_y[j];
-            let dyz = ty_z[j];
+            let dyx = seg_y.tx_x[j];
+            let dyy = seg_y.tx_y[j];
+            let dyz = seg_y.tx_z[j];
             let cx = dyi * dyz - dzi * dyy;
             let cy = dzi * dyx - dxi * dyz;
             let cz = dxi * dyy - dyi * dyx;
@@ -806,7 +899,7 @@ fn gauss_linking_integral(
             total += dot * (w / (norm2 * norm2.sqrt()));
         }
     }
-    (inv_4pi * total).round() as i32
+    total
 }
 
 /// Full-SoA segment buffer: each component (x/y/z) of midpoint and tangent in
@@ -938,25 +1031,280 @@ impl CycleBounds {
         }
     }
 
+    /// Upper bound on the |Gauss linking integral| (link units) between the
+    /// geometry enclosed by these two bounds: `(1/4π)·P_x·P_y / gap²`, with
+    /// gap the minimum distance between the two bounding spheres
+    /// (`f32::INFINITY` when they overlap — no skip possible). Derivation:
+    /// `|cross| ≤ |dx||dy|`, `|diff·cross| ≤ |diff||cross|`, `Σ|dx| = P_x`,
+    /// `Σ|dy| = P_y`, every `|x−y| ≥ gap` (the Issue-050 bound, refactored
+    /// so the chunk-level pruner reuses the same math).
+    #[inline]
+    fn link_bound(&self, other: &Self) -> f32 {
+        // Lower bound on gap²: center-distance² − (r_x + r_y)² (could be < 0
+        // if spheres overlap → treat as 0, i.e. no skip).
+        let ddx = self.center[0] - other.center[0];
+        let ddy = self.center[1] - other.center[1];
+        let ddz = self.center[2] - other.center[2];
+        let center_dist_sq = ddx * ddx + ddy * ddy + ddz * ddz;
+        let r_sum = self.r_sq.sqrt() + other.r_sq.sqrt();
+        let gap_min_sq = center_dist_sq - r_sum * r_sum;
+        if gap_min_sq <= 0.0 {
+            return f32::INFINITY;
+        }
+        (self.perimeter * other.perimeter) / (4.0 * std::f32::consts::PI * gap_min_sq)
+    }
+
     /// Returns false if the Gauss linking integral of these two cycles
     /// provably rounds to 0 (bound < 0.5). Sound: never returns false for a
     /// pair that actually links. May return true for a non-linking pair (the
     /// quadrature still runs and returns 0) — it's a conservative pre-filter.
     #[inline]
     fn may_link(&self, other: &Self) -> bool {
-        // Lower bound on gap²: center-distance² − (r_x + r_y)² (could be < 0
-        // if spheres overlap → gap_min² clamps to 0, no skip).
-        let ddx = self.center[0] - other.center[0];
-        let ddy = self.center[1] - other.center[1];
-        let ddz = self.center[2] - other.center[2];
-        let center_dist_sq = ddx * ddx + ddy * ddy + ddz * ddz;
-        let r_sum = self.r_sq.sqrt() + other.r_sq.sqrt();
-        let gap_min_sq = (center_dist_sq - r_sum * r_sum).max(0.0);
-        // Skip iff `|link| ≤ (1/4π)·P_x·P_y/gap² < 0.5`  ⟺  gap² > P_x·P_y/(2π).
-        // If gap_min_sq > threshold → keep is impossible → return false.
-        let threshold = (self.perimeter * other.perimeter) / (2.0 * std::f32::consts::PI);
-        gap_min_sq <= threshold
+        self.link_bound(other) >= 0.5
     }
+
+    /// Bounds over a contiguous run of SoA segments (a CHUNK of a cycle):
+    /// centroid of the segment midpoints, max squared midpoint distance from
+    /// that centroid, and the Σ of segment tangent lengths (each |tangent| =
+    /// edge_length/n_sub, so the chunk sum is the arc length it covers).
+    /// The bound derivation applies to the quadrature SAMPLE points (the
+    /// midpoints), which is exactly what the pruned integral certifies
+    /// against. Used by `PreparedCycle`'s chunk-level pruning.
+    fn from_soa_range(segs: &Segments, first: usize, len: usize) -> Self {
+        let mut cx = 0.0_f32;
+        let mut cy = 0.0_f32;
+        let mut cz = 0.0_f32;
+        for k in first..first + len {
+            cx += segs.mx_x[k];
+            cy += segs.mx_y[k];
+            cz += segs.mx_z[k];
+        }
+        let inv_n = 1.0_f32 / (len as f32);
+        cx *= inv_n;
+        cy *= inv_n;
+        cz *= inv_n;
+        let mut r_sq = 0.0_f32;
+        let mut perimeter = 0.0_f32;
+        for k in first..first + len {
+            let dx = segs.mx_x[k] - cx;
+            let dy = segs.mx_y[k] - cy;
+            let dz = segs.mx_z[k] - cz;
+            let d2 = dx * dx + dy * dy + dz * dz;
+            if d2 > r_sq {
+                r_sq = d2;
+            }
+            let tx = segs.tx_x[k];
+            let ty = segs.tx_y[k];
+            let tz = segs.tx_z[k];
+            perimeter += (tx * tx + ty * ty + tz * tz).sqrt();
+        }
+        Self {
+            center: [cx, cy, cz],
+            r_sq,
+            perimeter,
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Step 4 machinery (Issue 757): prepared cycles, chunk pruning, Y-cycle grid
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Quadrature segments per pruning chunk (Issue 757 T1.2b): a chunk is a
+/// contiguous run of segments whose joint bound gives a per-chunk-pair
+/// [`CycleBounds::link_bound`]; chunk pairs whose bound is under δ are
+/// skipped without evaluating their segment pairs.
+const CHUNK_SEGMENTS: usize = 8;
+
+/// One pruning chunk: the geometric bound plus the segment range it covers.
+struct Chunk {
+    bound: CycleBounds,
+    /// Segment index range `[first, first + len)` into the owning cycle's
+    /// SoA buffers.
+    first: u32,
+    len: u32,
+}
+
+/// A cycle prepared once per `detect_linking` run: SoA segment buffers, the
+/// whole-cycle bound (for `may_link`), and chunk bounds (for the pruned
+/// integral). Reused across every pair the cycle participates in — the
+/// pre-757 path rebuilt the SoA buffers for every PAIR (Issue 757 profile:
+/// ~20K evaluated pairs at n=2×200 → ~8M redundant segment pushes).
+struct PreparedCycle {
+    indices: Vec<usize>,
+    bounds: CycleBounds,
+    segs: Segments,
+    chunks: Vec<Chunk>,
+}
+
+impl PreparedCycle {
+    fn new(indices: &[usize], points: &[[f32; 3]], n_sub: usize) -> Self {
+        let segs = subdivide_cycle_soa(indices, points, n_sub.max(1));
+        let n_segs = segs.mx_x.len();
+        let mut chunks = Vec::with_capacity(n_segs.div_ceil(CHUNK_SEGMENTS));
+        let mut first = 0usize;
+        while first < n_segs {
+            let len = CHUNK_SEGMENTS.min(n_segs - first);
+            chunks.push(Chunk {
+                bound: CycleBounds::from_soa_range(&segs, first, len),
+                first: first as u32,
+                len: len as u32,
+            });
+            first += len;
+        }
+        Self {
+            indices: indices.to_vec(),
+            bounds: CycleBounds::compute(indices, points),
+            segs,
+            chunks,
+        }
+    }
+
+    /// Certified chunk-pruned Gauss linking integral (Issue 757 T1.2b).
+    ///
+    /// Returns the same integer the full unpruned evaluation rounds to:
+    /// chunk pairs whose `link_bound` is < δ are skipped and their bounds
+    /// summed into `bound_sum`; the true quadrature value then lies in
+    /// `[total − bound_sum, total + bound_sum]`, so
+    ///   - `hi < 0.5`                 → certified round-to-0;
+    ///   - `round(lo) == round(hi)`   → certified integer (round is monotone
+    ///     with jumps at k+0.5; equal endpoint rounds imply no jump inside);
+    ///   - anything else (the ambiguous band) → full unpruned recompute.
+    ///
+    /// δ = 0.25 / num_chunk_pairs caps total skipped mass at 0.25, so both
+    /// common cases stay on the certified fast paths — near-but-unlinked
+    /// pairs (`total ≈ 0` → `hi < 0.5`) and true witnesses (`|total| ≈ 1` →
+    /// `lo > 0.5`) — and only genuinely borderline pairs pay the fallback.
+    fn pruned_link(&self, other: &Self) -> i32 {
+        let n_pairs = (self.chunks.len() * other.chunks.len()).max(1);
+        let delta = 0.25_f32 / n_pairs as f32;
+        let mut total = 0.0_f32;
+        let mut bound_sum = 0.0_f32;
+        for cx in &self.chunks {
+            for cy in &other.chunks {
+                let bound = cx.bound.link_bound(&cy.bound);
+                // INF (overlapping chunk spheres) never skips — integrates.
+                if bound < delta {
+                    bound_sum += bound;
+                    continue;
+                }
+                total += integrate_ranges(
+                    &self.segs,
+                    cx.first as usize..cx.first as usize + cx.len as usize,
+                    &other.segs,
+                    cy.first as usize..cy.first as usize + cy.len as usize,
+                );
+            }
+        }
+        let inv_4pi = 1.0_f32 / (4.0 * std::f32::consts::PI);
+        let scaled = inv_4pi * total;
+        let mag = scaled.abs();
+        let lo = (mag - bound_sum).max(0.0_f32);
+        let hi = mag + bound_sum;
+        if hi < 0.5 {
+            return 0;
+        }
+        let (r_lo, r_hi) = (lo.round(), hi.round());
+        if r_lo == r_hi {
+            // Restore the sign of the computed partial — `mag` dropped it
+            // (both bounds are on the magnitude; the sign is that of
+            // `scaled`, which cannot flip inside a ±bound_sum band around a
+            // |value| that certifies ≥ 1).
+            let sgn: f32 = if scaled.is_sign_negative() { -1.0 } else { 1.0 };
+            return (sgn * r_hi) as i32;
+        }
+        // Ambiguous band: recompute without pruning.
+        gauss_linking_integral_soa(&self.segs, &other.segs)
+    }
+}
+
+/// Uniform grid over Y-cycle bounding-sphere centers (Issue 757 T1.2c).
+/// Prunes the O(β_x·β_y) `may_link` sweep to the buckets within each X
+/// cycle's conservative reach — never changes the verdict (the reach
+/// provably covers every pair the pairwise bound would keep), only which
+/// witness may be reported first. Deterministic: bucket keys visited
+/// lexicographically, indices ascending within a bucket.
+struct CycleGrid {
+    cell: f32,
+    buckets: HashMap<(i32, i32, i32), Vec<usize>>,
+    /// Reach clamp: the grid's own bounding-box diagonal + one cell, so a
+    /// degenerate reach (zero perimeters → NaN, or INF radii) degrades to a
+    /// full scan instead of overflowing the bucket range.
+    max_reach: f32,
+}
+
+impl CycleGrid {
+    fn build(cycles: &[PreparedCycle]) -> Self {
+        if cycles.is_empty() {
+            return Self {
+                cell: 1.0,
+                buckets: HashMap::new(),
+                max_reach: 0.0,
+            };
+        }
+        let mut radii: Vec<f32> = cycles.iter().map(|p| p.bounds.r_sq.sqrt()).collect();
+        radii.sort_unstable_by(|a, b| a.total_cmp(b));
+        let cell = (2.0 * radii[radii.len() / 2]).max(1e-6);
+        let mut buckets: HashMap<(i32, i32, i32), Vec<usize>> = HashMap::new();
+        let mut min = [f32::INFINITY; 3];
+        let mut max = [f32::NEG_INFINITY; 3];
+        for (j, p) in cycles.iter().enumerate() {
+            let key = bucket_key(p.bounds.center, cell);
+            for k in 0..3 {
+                min[k] = min[k].min(p.bounds.center[k]);
+                max[k] = max[k].max(p.bounds.center[k]);
+            }
+            buckets.entry(key).or_default().push(j);
+        }
+        let dx = max[0] - min[0];
+        let dy = max[1] - min[1];
+        let dz = max[2] - min[2];
+        let diag = (dx * dx + dy * dy + dz * dz).sqrt();
+        Self {
+            cell,
+            buckets,
+            max_reach: diag + cell,
+        }
+    }
+
+    /// Fill `out` (cleared) with candidate Y-cycle indices whose centers lie
+    /// within `reach` of `center` — lexicographic bucket order, ascending
+    /// indices within a bucket (deterministic for a fixed input).
+    fn query(&self, center: &[f32; 3], reach: f32, out: &mut Vec<usize>) {
+        out.clear();
+        // NaN reach (zero-perimeter degenerate) → min() yields the clamp →
+        // full scan over the grid's own extent.
+        let reach = reach.min(self.max_reach);
+        let lo = bucket_key(
+            [center[0] - reach, center[1] - reach, center[2] - reach],
+            self.cell,
+        );
+        let hi = bucket_key(
+            [center[0] + reach, center[1] + reach, center[2] + reach],
+            self.cell,
+        );
+        for kx in lo.0..=hi.0 {
+            for ky in lo.1..=hi.1 {
+                for kz in lo.2..=hi.2 {
+                    if let Some(idx) = self.buckets.get(&(kx, ky, kz)) {
+                        out.extend_from_slice(idx);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Floor-division bucket key of a 3D point for a uniform grid cell size.
+/// The `as i32` cast saturates on overflow — a degenerate huge/small cell
+/// degrades to clipped ranges, never UB.
+#[inline]
+fn bucket_key(center: [f32; 3], cell: f32) -> (i32, i32, i32) {
+    (
+        (center[0] / cell).floor() as i32,
+        (center[1] / cell).floor() as i32,
+        (center[2] / cell).floor() as i32,
+    )
 }
 
 /// `(x − y) · (dx × dy) / |x − y|³`. Reference scalar implementation — the
@@ -1181,8 +1529,20 @@ mod tests {
     fn prof_phase_breakdown() {
         use std::hint::black_box;
         use std::time::Instant;
-        let n = 200usize;
-        let d = 8usize;
+        // Parametrized (Issue 757 T0.1): LINKING_PROF_N = comma-separated
+        // per-cloud sizes (the phase breakdown runs on the FIRST; the
+        // scaling sweep at the bottom runs on all), LINKING_PROF_D = ambient dim.
+        let ns: Vec<usize> = std::env::var("LINKING_PROF_N")
+            .unwrap_or_else(|_| "200".into())
+            .split(',')
+            .map(|s| s.trim().parse().expect("LINKING_PROF_N: usize list"))
+            .collect();
+        let d: usize = std::env::var("LINKING_PROF_D")
+            .unwrap_or_else(|_| "8".into())
+            .trim()
+            .parse()
+            .expect("LINKING_PROF_D: usize");
+        let n = ns[0];
         // Build a d=8 Hopf-link fixture matching the bench exactly: first 3
         // dims are the §G.1 Hopf link, remaining d−3 dims are ZERO (the link
         // lives in a 3D subspace; PCA cleanly recovers it). (An earlier version
@@ -1388,5 +1748,132 @@ mod tests {
             verdict
         );
         println!();
+
+        // ── Issue 757 T0.1: real-path scaling sweep over all requested n ──
+        println!("══════════════════════════════════════════════════════════════════");
+        println!("  REAL detect_linking scaling sweep (median of 3, d={d})");
+        println!("  n       linked ms   link   unlinked ms   link");
+        for &ni in &ns {
+            let (xl, yl) = thickened_hopf_link(ni, 0.05);
+            let (xu, yu) = unlinked_circles(ni);
+            // Embed both at ambient d (extra dims zero — the bench pattern).
+            let mut xl_d = vec![0.0_f32; ni * d];
+            let mut yl_d = vec![0.0_f32; ni * d];
+            let mut xu_d = vec![0.0_f32; ni * d];
+            let mut yu_d = vec![0.0_f32; ni * d];
+            for i in 0..ni {
+                for k in 0..3 {
+                    xl_d[i * d + k] = xl[i * 3 + k];
+                    yl_d[i * d + k] = yl[i * 3 + k];
+                    xu_d[i * d + k] = xu[i * 3 + k];
+                    yu_d[i * d + k] = yu[i * 3 + k];
+                }
+            }
+            let mut xp = vec![[0.0_f32; 3]; ni];
+            let mut yp = vec![[0.0_f32; 3]; ni];
+            let mut med3 = |x: &[f32], y: &[f32]| -> (f64, LinkingVerdict) {
+                let mut vs = Vec::with_capacity(3);
+                let mut verdict = LinkingVerdict::not_linked();
+                for run in 0..=3 {
+                    let s = Instant::now();
+                    verdict = detect_linking_into(x, y, d, &mut xp, &mut yp, &cfg);
+                    if run > 0 {
+                        vs.push(s.elapsed().as_secs_f64() * 1000.0);
+                    }
+                }
+                vs.sort_by(|a, b| a.total_cmp(b));
+                (vs[1], verdict)
+            };
+            let (ms_l, v_l) = med3(&xl_d, &yl_d);
+            let (ms_u, v_u) = med3(&xu_d, &yu_d);
+            println!(
+                "  {ni:<6}  {ms_l:>9.2}   {:>4}   {ms_u:>9.2}     {:>4}",
+                v_l.link, v_u.link
+            );
+        }
+        println!();
+    }
+
+    /// Issue 757: the median-closest cap keeps cycles near the median length
+    /// and drops BOTH tails — the pre-757 code kept the SHORTEST N, which
+    /// retained exactly the thickening-noise loops and dropped the long
+    /// core-winding witnesses (doc/code drift, measured in the 757 profile).
+    #[test]
+    fn cap_keeps_median_closest_drops_both_tails() {
+        let cycles: Vec<Vec<usize>> = vec![
+            vec![0; 4],
+            vec![0; 4],
+            vec![0; 5],
+            vec![0; 5],
+            vec![0; 6],
+            vec![0; 50],
+        ];
+        let capped = cap_cycles_median_closest(cycles.clone(), 3);
+        let mut lens: Vec<usize> = capped.iter().map(Vec::len).collect();
+        lens.sort_unstable();
+        assert_eq!(lens, vec![4, 5, 5], "median-5 closest three: {lens:?}");
+        assert!(
+            !capped.iter().any(|c| c.len() == 50),
+            "the long tail must be dropped"
+        );
+        // No cap (0) and cap ≥ count are identities.
+        assert_eq!(cap_cycles_median_closest(cycles.clone(), 0).len(), 6);
+        assert_eq!(cap_cycles_median_closest(cycles, 10).len(), 6);
+    }
+
+    /// Issue 757: the chunk-pruned integral must return the same integer as
+    /// the full unpruned evaluation on randomized near/far cycle pairs — the
+    /// certified-rounding contract of `PreparedCycle::pruned_link`. Covers
+    /// the certified-0 fast path, the certified-integer fast path, and the
+    /// ambiguous-band fallback without distinguishing which fired.
+    #[test]
+    fn pruned_integral_matches_full_on_random_pairs() {
+        let mut seed = 0x5EED_0757_u64;
+        let mut rnd = move || {
+            // xorshift64* — deterministic, dependency-free, output in [0, 1).
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            ((seed.wrapping_mul(0x2545_F491_4F6C_DD1D) >> 33) as f32) * (1.0 / 2147483648.0)
+        };
+        for case in 0..200u32 {
+            let n = 12 + (rnd() * 20.0) as usize;
+            // Two random closed polylines in a box; the offset alternates so
+            // half the cases overlap spatially (near/far coverage).
+            let off = if case % 2 == 0 { 0.0_f32 } else { 4.0 };
+            let mut pts_x = Vec::with_capacity(n);
+            let mut pts_y = Vec::with_capacity(n);
+            for _ in 0..n {
+                pts_x.push([rnd() * 2.0 + off, rnd() * 2.0, rnd() * 2.0]);
+                pts_y.push([rnd() * 2.0 + 1.0 + off, rnd() * 2.0, rnd() * 2.0]);
+            }
+            let cx: Vec<usize> = (0..n).collect();
+            let cy: Vec<usize> = (0..n).collect();
+            let full = gauss_linking_integral(&cx, &cy, &pts_x, &pts_y, 4);
+            let pcx = PreparedCycle::new(&cx, &pts_x, 4);
+            let pcy = PreparedCycle::new(&cy, &pts_y, 4);
+            assert_eq!(
+                pcx.pruned_link(&pcy),
+                full,
+                "case {case}: pruned must equal full"
+            );
+        }
+    }
+
+    /// Issue 757: longest-first ordering + grid prefilter + chunk pruning
+    /// keep the Hopf verdict EXACT (|link| = 1) — the witness indices now
+    /// refer to the length-sorted bases (documented on the step-4 block).
+    #[test]
+    fn longest_first_grid_keeps_hopf_verdict() {
+        let (x, y) = thickened_hopf_link(120, 0.05);
+        let cfg = LinkingDetectorConfig::default();
+        let v = detect_linking(&x, &y, 3, &cfg);
+        assert!(v.linked && v.link.abs() == 1, "got {v:?}");
+        let (i, j) = v.witness.expect("linked ⇒ witness present");
+        // Longest-first: the witness must sit in the FRONT of both sorted
+        // bases (the witness is a long core-winding cycle). Front quarter is
+        // generous headroom over the measured position (#1-2).
+        assert!(i < 16, "witness x index {i} should be near the front");
+        assert!(j < 16, "witness y index {j} should be near the front");
     }
 }

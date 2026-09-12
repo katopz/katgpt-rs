@@ -49,7 +49,8 @@
 #![cfg(feature = "linking_fold")]
 
 use katgpt_core::linking_fold::{
-    LinkingDetectorConfig, detect_linking, fold_gelu_into, fold_projection_into,
+    LinkingDetectorConfig, LinkingVerdict, detect_linking, detect_linking_into,
+    fold_gelu_into, fold_projection_into,
 };
 use std::hint::black_box;
 use std::time::Instant;
@@ -62,13 +63,14 @@ const D_HLA: usize = 8;
 const D_SHARD: usize = 64;
 /// Per-cloud point count for the G2 detector cold-path gate.
 ///
-/// The original plan budgeted n=2×1000 at ≤50ms, but the brute-force
-/// implementation's cost is O(β_X · β_Y · L² · N_sub²) where β (cycle rank)
-/// grows ~linearly with n for a k=8 graph — at n=1000, β≈3000/cloud and the
-/// full β_X×β_Y Gauss sweep takes minutes. n=200 per cloud (β≈400/cloud)
-/// lands the cold-path detector at ~407ms, which fits the audit-cadence
-/// budget of 500ms (Issue 050 Option A, resolved 2026-07-07). The detector
-/// is explicitly audit-cadence (once per session / sleep-cycle); see the
+/// The original plan budgeted n=2×1000 at ≤50ms; the brute-force Issue-050
+/// path was O(β_X·β_Y·L²·n_sub²) — measured 407 ms at n=2×200 and minutes
+/// extrapolated at n=2×1000 — so Issue 050 Option A (2026-07-07) accepted a
+/// 500 ms audit budget at this n. The Issue 757 Option B work (2026-09-12:
+/// single-pass k-NN, longest-first witness ordering, chunk-level certified
+/// Gauss pruning, Y-cycle grid) landed 3.67 ms here — 31.6× under the audit
+/// budget — and RESTORED the original 50 ms @ n=2×1000 target (27.9 ms
+/// linked; enforced as G2b). The detector stays audit-cadence; see the
 /// `linking_detector.rs` module doc for the n-scaling guidance.
 const N_DETECTOR: usize = 200;
 /// Fold latency iterations (matches bench_377's ITERS).
@@ -87,11 +89,16 @@ const DETECTOR_ITERS: usize = 11;
 /// context only — the detector does NOT meet it, and reaching it requires
 /// the Option B optimization (batch early-exit + cycle pruning).
 const DETECTOR_AUDIT_BUDGET_MS: f64 = 500.0;
-/// Historical original-plan budget (50 ms @ n=2×1000). Reported for context;
-/// the detector does NOT pass this and the target is unreachable without
-/// algorithmic work. Kept here so the bench verdict output is honest about
-/// the gap between original intent and measured reality.
+/// Historical original-plan budget (50 ms @ n=2×1000) — RESTORED as an
+/// enforced gate (G2b) by the Issue 757 Option B work: measured 27.9 ms
+/// linked / 59.9 ms unlinked-separated at n=2×1000 (thickness-scaled
+/// fixture; see `scaling_sweep`'s doc for why a fixed thickness breaks
+/// detection at n ≥ ~300).
 const DETECTOR_ORIG_BUDGET_MS: f64 = 50.0;
+/// Per-cloud size for the G2b original-budget gate (Issue 757).
+const N_DETECTOR_ORIG: usize = 1000;
+/// Runs for the G2b gate (each ~30-60 ms — 5 runs keeps the bench bounded).
+const DETECTOR_ORIG_RUNS: usize = 5;
 const FOLD_HLA_BUDGET_NS: f64 = 50.0;
 const FOLD_SHARD_BUDGET_NS: f64 = 500.0;
 
@@ -150,9 +157,16 @@ fn main() {
 
     let g1 = gate_g1_correctness_smoke();
     let g2_detector = gate_g2_detector_cold_path();
+    let g2b_detector_orig = gate_g2b_detector_orig_budget();
     let (g2_fold_hla_abs, g2_fold_hla_gelu, g2_fold_shard_abs, g2_fold_shard_gelu) =
         gate_g2_fold_hot_path();
     let g5 = gate_g5_determinism();
+
+    // Issue 757 T0.1: opt-in scaling sweep — keeps the default gate run
+    // bounded while giving the bench a repeatable n-scaling instrument.
+    if std::env::var("LINKING_SCALING").ok().as_deref() == Some("1") {
+        scaling_sweep();
+    }
 
     println!();
     println!("──────────────────────────────────────────────────────────────────");
@@ -163,15 +177,19 @@ fn main() {
         verdict(g1)
     );
     println!(
-        "  G2 detector cold-path:        {}  ({:.2} ms; audit budget {:.0} ms {} @ n=2×{}, d={}; orig budget {:.0} ms {} — historical, unreachable w/o Option B)",
+        "  G2 detector cold-path:        {}  ({:.2} ms; audit budget {:.0} ms @ n=2×{}, d={})",
         verdict(g2_detector.pass_audit),
         g2_detector.ms,
         DETECTOR_AUDIT_BUDGET_MS,
-        verdict(g2_detector.pass_audit),
         N_DETECTOR,
-        D_HLA,
+        D_HLA
+    );
+    println!(
+        "  G2b detector orig budget:     {}  ({:.2} ms ≤ {:.0} ms @ n=2×{}, linked, thickness π/n; the restored Plan-410 original target — Issue 757)",
+        verdict(g2b_detector_orig.pass_audit),
+        g2b_detector_orig.ms,
         DETECTOR_ORIG_BUDGET_MS,
-        verdict(g2_detector.ms <= DETECTOR_ORIG_BUDGET_MS)
+        N_DETECTOR_ORIG
     );
     println!(
         "  G2 fold hot-path (Abs, D={}):  {}  ({:.2} ns ≤ {:.0} ns)",
@@ -213,6 +231,51 @@ fn main() {
 
 fn verdict(pass: bool) -> &'static str {
     if pass { "✅ PASS" } else { "❌ FAIL" }
+}
+
+/// Issue 757 T0.1: real-path scaling curve for `detect_linking` — linked
+/// (early-exit, time-to-witness) and unlinked (full sweep) fixtures at
+/// n ∈ {100, 200, 500, 1000} per cloud, d = D_HLA, median of 3 after a
+/// warm-up run. Opt-in via `LINKING_SCALING=1` so the default GOAT-gate run
+/// stays bounded; the curve is recorded in the Issue 757 bench doc.
+///
+/// Fixture note (measured, Issue 757): the linked fixture's thickness SCALES
+/// with n — `min(0.05, π/n)`. A fixed 0.05 under-samples the tube once the
+/// ring spacing `2π/n` drops below it (n ≥ ~300): the kNN cycles go jagged
+/// and the Gauss quadrature error swamps the ±1 integer, so BOTH the pre-
+/// 757 and the 757 detector read link=0 (verified on the pre-757 code in a
+/// clean worktree: n=100 ✓, n=200 ✓, n=300 ✗). `π/n` keeps the tube exactly
+/// resolvable at every n (thickness = half the spacing).
+fn scaling_sweep() {
+    println!("\n── Issue 757 T0.1: scaling sweep (median of 3, d={D_HLA}) ──");
+    println!("  n       linked ms   link   unlinked ms   link");
+    let cfg = LinkingDetectorConfig::default();
+    for n in [100usize, 200, 500, 1000] {
+        let thickness = (std::f32::consts::PI / n as f32).min(0.05);
+        let (xl, yl) = thickened_hopf_link_d(n, thickness, D_HLA);
+        let (xu, yu) = unlinked_circles_d(n, D_HLA);
+        let mut xp = vec![[0.0_f32; 3]; n];
+        let mut yp = vec![[0.0_f32; 3]; n];
+        let mut med3 = |x: &[f32], y: &[f32]| -> (f64, LinkingVerdict) {
+            let mut vs = Vec::with_capacity(3);
+            let mut verdict = LinkingVerdict::not_linked();
+            for run in 0..=3 {
+                let t0 = Instant::now();
+                verdict = detect_linking_into(x, y, D_HLA, &mut xp, &mut yp, &cfg);
+                if run > 0 {
+                    vs.push(t0.elapsed().as_secs_f64() * 1000.0);
+                }
+            }
+            vs.sort_by(|a, b| a.total_cmp(b));
+            (vs[1], verdict)
+        };
+        let (ms_l, v_l) = med3(&xl, &yl);
+        let (ms_u, v_u) = med3(&xu, &yu);
+        println!(
+            "  {n:<6}  {ms_l:>9.2}   {:>4}   {ms_u:>9.2}     {:>4}",
+            v_l.link, v_u.link
+        );
+    }
 }
 
 // ── G1: correctness smoke at bench scale ───────────────────────────────────
@@ -276,7 +339,7 @@ fn gate_g2_detector_cold_path() -> DetectorResult {
         "   audit-cadence budget: {DETECTOR_AUDIT_BUDGET_MS:.0}ms @ n=2×{N_DETECTOR}, d={D_HLA}"
     );
     println!(
-        "   (orig plan budget {DETECTOR_ORIG_BUDGET_MS:.0}ms @ n=2×1000 was unreachable; the detector is O(β²).)"
+        "   (orig plan budget {DETECTOR_ORIG_BUDGET_MS:.0}ms @ n=2×{N_DETECTOR_ORIG} enforced below as G2b — Issue 757 Option B landed.)"
     );
     let (x, y) = thickened_hopf_link_d(N_DETECTOR, 0.05, D_HLA);
     let cfg = LinkingDetectorConfig::default();
@@ -311,6 +374,60 @@ fn gate_g2_detector_cold_path() -> DetectorResult {
         pass_audit,
         ms: median_ms,
     }
+}
+
+// ── G2b: the restored original budget (Issue 757) ─────────────────────────
+
+/// The Plan-410 original target, enforced again: `detect_linking` on the
+/// linked thickness-scaled fixture at n=2×1000 must (a) still detect
+/// (|link| = 1) and (b) fit ≤ 50 ms — the budget the brute-force path
+/// missed by ~3 orders of magnitude and the Issue 757 work restored.
+fn gate_g2b_detector_orig_budget() -> DetectorResult {
+    println!(
+        "\n── G2b: detector original budget (n=2×{N_DETECTOR_ORIG}, d={D_HLA}, {DETECTOR_ORIG_RUNS} runs, median) ──"
+    );
+    let thickness = (std::f32::consts::PI / N_DETECTOR_ORIG as f32).min(0.05);
+    let (x, y) = thickened_hopf_link_d(N_DETECTOR_ORIG, thickness, D_HLA);
+    let cfg = LinkingDetectorConfig::default();
+
+    // Warm-up (not timed).
+    let mut xp = vec![[0.0_f32; 3]; N_DETECTOR_ORIG];
+    let mut yp = vec![[0.0_f32; 3]; N_DETECTOR_ORIG];
+    let warm = detect_linking_into(&x, &y, D_HLA, &mut xp, &mut yp, &cfg);
+    assert!(
+        warm.linked && warm.link.abs() == 1,
+        "G2b correctness: must detect |link|=1 at n=2×{N_DETECTOR_ORIG}, got {warm:?}"
+    );
+    println!(
+        "   correctness: linked=true, |link|={} (thickness={thickness:.4})",
+        warm.link.abs()
+    );
+
+    let mut samples_ms: Vec<f64> = Vec::with_capacity(DETECTOR_ORIG_RUNS);
+    for _ in 0..DETECTOR_ORIG_RUNS {
+        let t0 = Instant::now();
+        let v = detect_linking_into(
+            black_box(&x),
+            black_box(&y),
+            black_box(D_HLA),
+            &mut xp,
+            &mut yp,
+            &cfg,
+        );
+        samples_ms.push(t0.elapsed().as_secs_f64() * 1000.0);
+        let _ = black_box(v);
+    }
+    samples_ms.sort_by(|a, b| a.total_cmp(b));
+    let median_ms = samples_ms[samples_ms.len() / 2];
+    let pass_audit = median_ms <= DETECTOR_ORIG_BUDGET_MS;
+    println!(
+        "   median = {:.3} ms  (min {:.3}, max {:.3})  [budget {:.0} ms]",
+        median_ms,
+        samples_ms[0],
+        *samples_ms.last().unwrap(),
+        DETECTOR_ORIG_BUDGET_MS
+    );
+    DetectorResult { pass_audit, ms: median_ms }
 }
 
 // ── G2: fold hot-path latency ──────────────────────────────────────────────

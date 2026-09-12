@@ -3,7 +3,7 @@
 > **Source:** Junyu Ren & Lek-Heng Lim, *Low-dimensional topology of deep neural networks*, ICML 2026 (PMLR 306).
 > **arXiv:** [2606.31856](https://arxiv.org/abs/2606.31856)
 > **Date:** 2026-07-07 (addendum 2026-09-12)
-> **Status:** EXECUTED — Plan 410 shipped 2026-07-07: `linking_fold_fold` DEFAULT-ON (Cargo Phase 12, all GOAT gates PASS), `linking_fold_detector` opt-in at audit-cadence (Issue 050 resolved Option A). Option B perf remainder tracked at `.issues/757`. See §6 addendum for the 2026-09-12 re-bench.
+> **Status:** EXECUTED + Option B CLOSED — Plan 410 shipped 2026-07-07 (`linking_fold_fold` DEFAULT-ON, all GOAT gates PASS); Issue 757 (detector Option B) DONE 2026-09-12: the original 50 ms @ n=2×1000 budget RESTORED (28.3 ms linked, G2b gate; 3.69 ms @ n=2×200, was 115.7) — [Bench 717](../.benchmarks/717_linking_detector_option_b.md). Detector stays opt-in pending a consumer.
 > **Related Research:** 219 (DEC substrate), 242 (topological state tracking), 294 (viable manifold graph), 296 (Stokes vocabulary crosswalk), 317 (Gibbs attractor — same Plan-276 caveat class), 371 (Hopf bifurcation — different "Hopf").
 > **Related Plans:** 251 (DEC operators), 314 (Stokes wrappers), 410 (this paper — queued).
 > **Classification:** Public (katgpt-rs)
