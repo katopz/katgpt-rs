@@ -2151,3 +2151,27 @@ workspace run caught the new repo's one unterminated fence
 50 (`5773a614`). Issue file removed per the noise-reduction rule; the full
 record lives in git history
 (`git log -- .issues/760_seal_online_remaster_missing_from_repo_set.md`).
+
+## Issue 757 — linking_fold detector Option B (the 50 ms @ n=2×1000 remainder): CLOSED as resolved (2026-09-12)
+
+The algorithmic remainder toward the linking_fold detector's original
+50 ms @ n=2×1000 budget (the earlier audit-cadence recalibration had been
+accepted; Option B was the perf work). Landed in full (evidence: Bench 717;
+Research 391 §6; source arXiv:2606.31856): single-pass k-NN
+(`select_nth_unstable_by`, no full sorts, squared distances only),
+longest-first witness ordering, certified chunk-level Gauss pruning with the
+rigorous [total−bound_sum, total+bound_sum] rounding rule (pruned ≡ full,
+200 randomized-pair pins), the Y-cycle uniform grid with conservative per-X
+reach, and `max_cycles_per_cloud` corrected to the documented median-closest
+semantics. ≈31× at the audit point (115.74 → 3.69 ms @ n=2×200, d=8) and the
+ORIGINAL budget RESTORED: G2b **28.28 ms ≤ 50 ms @ n=2×1000 linked, |link|=1**,
+now an enforced bench row. GOAT re-run ALL PASS; G3 default lib suite 2035
+passed unchanged. Verdict: **KEEP OPT-IN** — perf no longer blocks promotion,
+but the only runtime consumer (`LinkingFoldCorrector`) consumes the FOLD
+(default-on), not the detector; promotion re-opens when an audit-cadence
+consumer exists. One deliberate defer recorded in the issue text (the
+healer-surface consumer PoC — fusion idea, novelty TBD, no plan until that
+PoC exists) and one side-finding (slice_tca release-profile compile — the
+Issue 741 class, since closed by full_gate Layer 6b). Issue file removed
+per the noise-reduction rule; the full record lives in git history
+(`git log -- .issues/757_linking_detector_option_b.md`).
