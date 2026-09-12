@@ -155,3 +155,37 @@ T4.3/525 precedent) remains owner-gated. The hard-differentiation claim
 ("aimed budget beats always-on perturbation as trap difficulty rises") is
 analytically supported (per-kick exit probability × budget vs per-loop
 re-entry) but deliberately NOT asserted on a toy tuned to show it.
+
+---
+
+## Training-track interim addendum (riir-train Issue 532 T1-real/T2, 2026-09-12)
+
+**Status: interim measurement — no bifurcation in the available series; probe
+moves CONCORDANT with the first capability shift, no leading evidence.** The
+real-checkpoint probe series (riir-train `12cdea08`, `.issues/532`): C14 base
+step 3500 (pre-Ouro) + Ouro steps 3600/3700/4600 (Phase C campaign as it
+stood on the 4090, ~1100 Ouro steps, vocab-trim 32768, T=4 β=0.05):
+
+| ckpt | NLL (4 fixed Rust prompts) | λF p0 | λF p3 | notes |
+|---|---|---|---|---|
+| 3500 base | 10.33 (≈ ln 32768 = uniform) | −1.396 | −1.379 | pre-Ouro: near-uniform LM, strongly contracting loop map |
+| 3600 | 6.10 | −1.116 | −1.304 | NLL cliffs −4.2 in 100 Ouro steps; contraction weakens concordantly |
+| 3700 | 5.91 | −1.251 | −1.266 | slow drift |
+| 4600 | 5.69 | −1.087 | −1.198 | still contracting; gen still non-compiling (F1-era kw=0) |
+
+Robustness: ε=1e-2 reproduces λF to ±0.01 (linear regime); T=8 preserves the
+ordering (−0.66/−0.61 → −0.56/−0.58; contraction front-loaded) with settle
+unresolved at T=8 (no fixed-point convergence within 8 loops anywhere).
+
+**Honest reading:** (1) the n>1 probe infrastructure is proven on real
+0.4B trained checkpoints — per-checkpoint cost ≈ 11 s (K=32, two probe
+positions, CPU) so it can ride any future eval loop cheaply; (2) the loop
+map's stability structure (λF) moves exactly WITH the capability cliff
+(NLL 10.3→6.1) in the first 100 Ouro steps — coincident, not leading, the
+same limitation the paper's own Fig 5D evidence carries; (3) no positive-λF
+bifurcation anywhere in the series — consistent with the model NOT having
+reached the convergent-loop regime (generation still fails F1-era keyword
+checks at 4600); (4) the 3500→3600 λF move is partly mechanical (Ouro trains
+the looped objective directly) — the probe's discriminating value must come
+from a series that crosses a REAL accuracy cliff (F1 pass@1), which needs
+the completed Phase C campaign (blocked: the 4090 runs the 371/393 lane).
