@@ -3,7 +3,7 @@
 **Status:** COMPLETE (2026-09-11) — Bench 711 ALL 9 GATES PASS; split verdict (cascade REFUTED at ε, accept mapping VIABLE); margin_gate stays opt-in
 
 **Date:** 2026-09-11
-**Issue:** [`.issues/745_margin_gate_escalation_poc.md`](../.issues/745_margin_gate_escalation_poc.md)
+**Issue:** `.issues/745_margin_gate_escalation_poc.md`
 **Research:** [`.research/548_TriSpec_Margin_Gated_Verification_Escalation.md`](../.research/548_TriSpec_Margin_Gated_Verification_Escalation.md)
 **Bench target:** `.benchmarks/711_margin_gate_escalation_poc.md`
 

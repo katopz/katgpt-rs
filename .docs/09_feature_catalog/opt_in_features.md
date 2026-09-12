@@ -3636,7 +3636,7 @@ in the PoC harness (AC-Prefix Issue-002 precedent).
 promotion owner-gated on a live consumer, the saddle_escape/525 precedent;
 candidates: cgsp collapse recovery, stale-belief fog-of-war re-exploration).
 
-📖 Issue: [746](../../.issues/746_looped_flows_modelless_extractions.md)
+📖 Issue: `746`
 (recorded in Bench 712 + riir-train Research 452 after removal; git
 history keeps the file). Research:
 [riir-train 452](../../../riir-train/.research/452_Looped_Flows_Training_Recipe_Distill.md).

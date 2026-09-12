@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-11
 **Bench:** `crates/katgpt-core/benches/bench_711_margin_gate_escalation_poc.rs` (`harness = false`, release)
-**Issue:** [`.issues/745_margin_gate_escalation_poc.md`](../.issues/745_margin_gate_escalation_poc.md)
+**Issue:** `.issues/745_margin_gate_escalation_poc.md`
 **Plan:** [`.plans/595_margin_gate_escalation_poc.md`](../.plans/595_margin_gate_escalation_poc.md)
 **Research:** [`.research/548_TriSpec_Margin_Gated_Verification_Escalation.md`](../.research/548_TriSpec_Margin_Gated_Verification_Escalation.md)
 **Source paper:** [TriSpec (arXiv:2601.23180)](https://arxiv.org/abs/2601.23180) — Qwen Team, Feb 2026
