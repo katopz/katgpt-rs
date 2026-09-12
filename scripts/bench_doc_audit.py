@@ -272,6 +272,36 @@ def local_default_closure(feats: dict) -> set[str]:
     return {f for f in resolved if f in feats}
 
 
+def own_closures_by_pkg(repo_root: Path) -> dict[str, set[str]]:
+    """Per-package local default closures — the qualifier-scoped half of the
+    forwarded-only rule.
+
+    `find_own_crate_defaults` unions these; the union is the right model for a
+    BARE label but the WRONG one for a qualified `pkg/feat` label when a
+    DIFFERENT crate defines and defaults the same feature NAME: riir-ai's
+    `riir-games-civ/mop_runtime` (opt-in) read as default-on because
+    riir-engine — a different crate — promoted its own `mop_runtime` into
+    `default` via `mop_psafe` (Plan 581 / Bench 906, the documented Defense-3
+    layer split: engine default-on, game-layer forwards deliberately opt-in).
+    The qualifier's crate is the one that speaks for its own flag.
+    """
+    out: dict[str, set[str]] = {}
+    for cargo in iter_cargo_manifests(repo_root):
+        try:
+            with cargo.open("rb") as f:
+                data = tomllib.load(f)
+        except Exception:
+            continue
+        feats = data.get("features") or {}
+        if not feats:
+            continue
+        name = data.get("package", {}).get("name")
+        if not name:
+            continue
+        out[name] = local_default_closure(feats)
+    return out
+
+
 def find_own_crate_defaults(repo_root: Path) -> set[str]:
     """Features that some crate turns on in its OWN default closure, counting
     only crates that actually DEFINE the feature.
@@ -309,6 +339,26 @@ def find_own_crate_defaults(repo_root: Path) -> set[str]:
         # entry activates a feature of the same crate.
         own |= local_default_closure(feats)
     return own
+
+
+def qualified_optin_is_scoped(qual: str | None, feat: str,
+                              own_by_pkg: dict[str, set[str]]) -> bool:
+    """Does a qualified opt-in label's claim hold against ITS OWN crate?
+
+    A `pkg/feat` label claims the QUALIFIER ships the flag off. That claim is
+    falsified only by the qualifier's own default closure — not by another
+    crate defaulting a same-named feature (the Defense-3 layer split: engine
+    default-on + game-layer forward opt-in is deliberate, not drift — the
+    riir-ai 681/905 lesson). BARE labels stay deployed-level claims: the
+    union model still governs them, unchanged.
+
+    Note the unhandled counterpart, deliberately: a QUALIFIED label claiming
+    DEFAULT still passes via `any_default` even when the qualifier ships the
+    flag off. No such label exists in the workspace today (measured
+    2026-09-12); tightening that direction changes green verdicts and is not
+    done blind.
+    """
+    return qual is not None and feat not in own_by_pkg.get(qual, set())
 
 
 def find_package_names(repo_root: Path) -> set[str]:
@@ -575,7 +625,8 @@ def audit_repo(repo_root: Path) -> int:
     any_default = find_cargo_defaults(repo_root)
     defined_features = find_defined_features(repo_root)
     package_names = find_package_names(repo_root)
-    own_default = find_own_crate_defaults(repo_root)
+    own_by_pkg = own_closures_by_pkg(repo_root)
+    own_default = {f for s in own_by_pkg.values() for f in s}
     # own-crate default is a strict subset of the deployed default by
     # construction (a bare local entry is also an edge in the reachability
     # graph). If that ever fails the two models have diverged and the
@@ -615,17 +666,19 @@ def audit_repo(repo_root: Path) -> int:
             print(f"    feat: {qual + '/' if qual else ''}{feat}  raw_status: {raw!r}")
             print(f"    line: {line}")
         elif parsed == "opt-in" and is_default:
-            # Forwarded-only: the owning crate ships it off, an ancestor's
-            # default pulls it in. "opt-in" is a defensible reading — but ONLY
-            # for a label that scopes its claim to a crate. A NAMESPACED token
-            # (`riir-wallet/siwr`) is making a per-crate claim, so accept it if
-            # either model agrees. A BARE token in a repo-level doc is making a
-            # deployed claim, and suppressing it hides real drift: katgpt-rs's
-            # own `` `still_kv` (opt-in, Plan 245) `` and
+            # Forwarded-only: the OWNING crate — for a qualified label, the
+            # QUALIFIER — ships the flag off. "opt-in" is a defensible
+            # reading for a per-crate claim, and the qualifier's own closure
+            # is the model that decides it (see qualified_optin_is_scoped:
+            # another crate's same-named default — the Defense-3 layer split
+            # — does not falsify a crate-scoped claim; the riir-ai 681/905
+            # false positives). A BARE token in a repo-level doc is making a
+            # deployed claim, and suppressing it hides real drift:
+            # katgpt-rs's own `` `still_kv` (opt-in, Plan 245) `` and
             # `` `hla_eigenbasis_recovery` (opt-in) `` are both reached from the
             # root default in three hops, and a blanket forwarded-only rule
             # silently excused both.
-            if qual is not None and feat not in own_default:
+            if qualified_optin_is_scoped(qual, feat, own_by_pkg):
                 forwarded += 1
                 continue
             if SCOPED_CLAIM_RE.search(line):
@@ -749,6 +802,30 @@ def selftest() -> None:
             "  `band_edge_trigger` MUST be (a bare entry in `default`).\n"
             "  Collapsing `pkg/feat` to `feat` here reports false drift on\n"
             "  correct docs — see local_default_closure.")
+    # The layer-split shape (riir-ai 681/905, Plan 581 / Bench 906): the
+    # qualifier's forward is opt-in while a DIFFERENT crate defaults the
+    # same feature NAME. A qualified opt-in claim is scoped to its own
+    # crate; a bare one stays a deployed claim; and a qualifier whose own
+    # default DOES turn the flag on still flags.
+    LAYER_SPLIT = {
+        "riir-engine": {"mop_psafe", "mop_runtime", "mop_homeostasis"},
+        "riir-games-civ": set(),
+    }
+    if not qualified_optin_is_scoped("riir-games-civ", "mop_runtime", LAYER_SPLIT):
+        raise SystemExit(
+            "✗ layer-split self-test FAILED: a qualified opt-in label whose\n"
+            "  qualifier ships the flag off must be scoped-skipped even when\n"
+            "  another crate defaults the same name (the Defense-3 split,\n"
+            "  riir-ai .benchmarks/681 + 905 — false drift on correct docs)")
+    if qualified_optin_is_scoped("riir-engine", "mop_runtime", LAYER_SPLIT):
+        raise SystemExit(
+            "✗ layer-split self-test FAILED: when the QUALIFIER's own default\n"
+            "  turns the flag on, its opt-in label is real drift and must NOT\n"
+            "  be scoped-skipped")
+    if qualified_optin_is_scoped(None, "mop_runtime", LAYER_SPLIT):
+        raise SystemExit(
+            "✗ layer-split self-test FAILED: a BARE label is a deployed\n"
+            "  claim — the union model governs, never the qualifier escape")
     for line, want_qual, want_feat, want_status in TOKENIZER_CASES:
         assert FEATURE_HEADER_RE.match(line), f"header regex missed: {line!r}"
         got = [(m.group("qual"), m.group("feat"), classify_token(line, m)[0])
