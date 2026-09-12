@@ -1,0 +1,33 @@
+# Pins for scripts/issue_citation_gate.py (landed 2026-09-12).
+#
+# Two floors, not one. A ceiling is green over whatever the instrument can SEE,
+# so the finding count needs the POPULATION that produced it, and the
+# population floor needs the WALK size underneath it — the workspace rule.
+#
+#   min_repos              the derived contract-repo set (BOUNDARY.md + .git).
+#                          Below this the sibling-ownership lookup is empty and
+#                          every cross-repo citation reads as "NO REPO", or the
+#                          repo-name context test never matches. Workspace was
+#                          19 at landing; floored well under to leave room for a
+#                          repo legitimately leaving the contract.
+#   min_citations_scanned  the citation regex's own walk. A regex regression
+#                          (a Python \s handed to an ERE, the classic) takes
+#                          this to 0 and prints a confident clean. 105 at
+#                          landing across the two documents.
+#
+# There is deliberately NO ceiling on the AMBIGUOUS count (numbers cited here
+# that exist BOTH locally and in a sibling, so the referent is undecidable from
+# the number — 63 at landing). The gate is green over them by construction, and
+# a ceiling would red whenever somebody writes a CORRECT citation to a new
+# local number a sibling also has. It is printed every run instead, so a green
+# is never read as a green over everything.
+
+min_repos = 15
+min_citations_scanned = 80
+# (no ambiguous_ceiling: the blind spot is REPORTED, not gated — see the gate docstring)
+
+# The documents this gate reads. A pinned list, not a walk: a walk of *.md
+# would pull in .plans/.docs/.research (thousands of by-design local citations)
+# and drown the signal. AGENTS.md is the contract a new agent reads; HISTORY.md
+# is where a resolved issue's narrative outlives its file.
+documents = AGENTS.md HISTORY.md

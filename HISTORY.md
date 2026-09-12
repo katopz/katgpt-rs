@@ -389,7 +389,7 @@ paragraph said "the three" for one commit after the fourth was added):
   is the last one: in a simulated single-checkout CI, a broken predicate still
   reds — so the gate is not vacuous in the environment it actually runs in.
 
-- `required_features_static_gate.py` (Issue 513) is the verdict half of the
+- `required_features_static_gate.py` (riir-train Issue 513) is the verdict half of the
   free static pass above: a row naming a feature its package cannot enable
   reds the push that adds it. Gateable where the report's other two verdicts
   are not, because it needs no compiler and is **never legitimate** — cargo
@@ -1122,13 +1122,13 @@ binaries, which is exactly the damage window.
 
 ## Feature Flag Discipline — rule histories (lossy surface, Report the Floor, Plan 467)
 
-**Lossy-surface promotion rule (adopted 2026-08-28, Issue 750 T3):** a
+**Lossy-surface promotion rule (adopted 2026-08-28, riir-ai Issue 750 T3):** a
 promotion of a **lossy** surface (quantization, compression, any bit-changing
 transform) gates on **deployed-path behavior — per-family, conditional
 retention**, not on bit-identity or aggregate perplexity alone: bit-identity
 is only available to lossless surfaces. Three independent arrivals at this
 rule: Research 502 ("Behavior Before Perplexity"), Bench 696 (the KVarN
-sink-guard GOAT), and Issue 750's measured bisection (gemma-2-2b Q4_K:
+sink-guard GOAT), and riir-ai Issue 750's measured bisection (gemma-2-2b Q4_K:
 first behavior flip at prefix k=1 — layer 0 alone flips the sealed family;
 restoring it costs 106.7 MiB, priced by the T2 override probe). Aggregate
 perplexity can be flat while family-conditional behavior flips.
@@ -1166,7 +1166,7 @@ pipeline, state management, spatial query, or vocabulary type, run the
 
 This prevents the recurring drift pattern where an agent builds a parallel
 system that duplicates already-shipped substrate under a different name
-(canonical failures: ThreatField Issue 047, orchard/motivation Issues 490/493).
+(canonical failures: ThreatField Issue 047, orchard/motivation riir-ai Issues 490/493).
 
 ## Research Workflow — original section
 

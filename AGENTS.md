@@ -140,6 +140,11 @@ hand-typed count, and it was also the wrong quantity. Measured three times:
 **12.65s · 12.52s · 12.69s CPU** on runs whose WALL clocks were **128.3s ·
 299.1s · 15.0s** — a **20x** wall spread against **1.4%** of CPU spread. That
 is the whole argument for the quantity: **cite CPU, read wall as a range.**
+⚠ Those three are a **14-check** measurement. CPU is load-invariant, not
+check-set-invariant: adding `issue_citation_gate.py` (19 repos x 5 numbered
+dirs of `git log --all`) took the total to **14.42s CPU** with nothing having
+got slower. Compare CPU only within a fixed CHECKS set; across a change to the
+set, the figure moved for the one reason it is allowed to.
 ⛔ A discredited fourth figure is why this paragraph is worded so insistently:
 an earlier version called 11.7s wall a *quiet-box baseline*, and it was taken
 at load 5-7 — the 15.0s run (2026-09-11) is the first one actually measured on
@@ -185,10 +190,11 @@ develop work. One line per check:
 | `percentile_floor_gate.py` | a percentile index that lands on n-1 and so reports the MAX |
 | `numbering_gate.py` | a number allocated twice, or a stale/malformed `.highwater` (Issues 724, 725) |
 | `docs_gate_paths_sync.py` | docs_gate.yml's two hand-duplicated trigger `paths:` lists stay identical |
-| `required_features_static_gate.py` | a required-features row naming a feature its package cannot enable (Issue 513) |
-| `cfg_row_implication_gate.py` | a required-features row that BUILDS and compiles its target to NOTHING (Issue 513) |
+| `required_features_static_gate.py` | a required-features row naming a feature its package cannot enable (riir-train Issue 513) |
+| `cfg_row_implication_gate.py` | a required-features row that BUILDS and compiles its target to NOTHING (riir-train Issue 513) |
 | `population_sync_gate.py` | the seven independent contract-repo predicates must agree |
 | `trap_sentinel_gate.py` | a shell gate whose abort would report exit 0 — this repo's own two, by MEMBERSHIP (Issue 734) |
+| `issue_citation_gate.py` | a cross-repo `Issue N` citation naming no repo — it rebinds to the WRONG document once that number is allocated locally (Issue 749) |
 
 The `CHECKS` count is deliberately not written here — it drifted once, which
 is exactly the drift this gate exists to catch.
@@ -607,7 +613,7 @@ default-on requires the GOAT gate to pass:
 is NOT a modelless gain — it's a speedup of a wrong result. The quality gate
 (G1 or equivalent) must pass modellessly for the GOAT to hold.
 
-**Lossy-surface promotion rule (Issue 750 T3):** a **lossy** surface
+**Lossy-surface promotion rule (riir-ai Issue 750 T3):** a **lossy** surface
 (quantization, compression, any bit-changing transform) gates on
 **deployed-path behavior — per-family, conditional retention**, not on
 bit-identity or aggregate perplexity alone: aggregate perplexity can be flat
@@ -635,7 +641,7 @@ classification, two-brain model, sync boundary, bridge pattern; (4)
 **consume vs build** — if substrate exists, consume it; if not, file an
 issue in the right repo FIRST. Prevents the drift pattern of a parallel
 system re-implementing shipped substrate under a different name (ThreatField
-Issue 047; orchard/motivation Issues 490/493).
+Issue 047; orchard/motivation riir-ai Issues 490/493).
 
 Research workflow (paper classification, 7-repo routing, fusion-first
 distillation, novelty + GOAT gates, modelless-unblock protocol §3.5):
