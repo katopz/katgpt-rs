@@ -1906,3 +1906,45 @@ oracle; (2) our tensor encoding yields 81/81 unique rules vs the paper's
 honestly; (3) T4.3 debugging tuned priors (λ=4, ã=4.0), never thresholds;
 (4) premature commits = 0 in a deterministic world (the paper's nonzero
 mode needs observation noise) — recorded as a tunable, not a bug.
+
+## 2026-09-12 — the citation gate's first CI run was a blind red (promote `35ac604f`)
+
+The Issue 749 citation gate landed 2026-09-12 in a **main-only CI window**
+(every push trigger `branches: [main]` since 2026-09-09), so it had never run
+in CI when the promote push `c478ab9f..35ac604f` (267 commits) fired
+docs_gate — and red it, exit 2: `derived 1 contract repos < floor 15`. The
+refusal itself was CORRECT (the ownership lookup needs the 19-repo workspace;
+a single checkout would read every cross-repo citation as a false finding),
+but it meant the per-push lane could never carry the check as wired: a check
+added to CHECKS during a window in which its own lane never fires is
+**deployed but never exercised** — the same shape as the `.issues/704`
+trigger-rot class, one level up.
+
+Two defects, one fix commit:
+
+1. **`issue_citation_gate.py` — the CI-deferred verdict.** Under an explicit
+   `DOCS_GATE_CI=1` marker (set by docs_gate.yml, never auto-detected — a
+   blind WORKSTATION run still refuses), the gate verifies the
+   locally-decidable axes (pinned documents present, `max_single_digit` width
+   bound, `min_citations_scanned` walk floor) and DEFERS cross-repo
+   adjudication to the workstation run, saying so in the LAST line — the one
+   docs_gate.sh tail-prints on a pass (the skill_repo_set_gate scope-line
+   pattern). The workstation docs_gate.sh run remains the adjudicating
+   verdict; main only advances by promote and the promote protocol includes
+   it (this promote's workstation run was 17/17).
+2. **docs_gate.yml — the fourth instance of the trigger-omission class.**
+   The four checks added 2026-09-10..12 (trap_sentinel 734 T9, citation 749,
+   checks_sync 750, markdown_fence 756) landed WITHOUT their own `paths:`
+   globs — a push editing the CHECK itself would not re-fire the gate that
+   runs it. All four globs added to BOTH lists (push + pull_request;
+   docs_gate_paths_sync.py asserts the two stay identical), plus the job env
+   marker.
+
+Same push, second lane: **required_features_touched REFUSED by design** —
+`84 selected > --max-rows 24` on a 267-commit promote base (the gate refuses
+rather than truncate; run 33990209894 is the 32-row precedent). The named
+remedy was executed on the workstation the same day: the 84 selected rows
+audited with `required_features_build_audit.py --batch` per package
+(isolated `/tmp` target dir) — **0 FAILS / 0 NO-FEAT / 0 UNSEEN across all
+8 packages**. The Full gate + Lean proofs + wasm32 lanes on the same push
+were green; content was never in question, only the lanes' wiring.

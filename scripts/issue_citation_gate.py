@@ -35,10 +35,25 @@ ambiguous or not.
 Exit 0 clean, 1 on an unqualified citation, **2 if the instrument is
 untrustworthy** (a floor breached => the walk went blind; a scanned document
 missing). An unreliable instrument is not the same finding as drift.
+
+⛔ **The CI lane cannot adjudicate and does not pretend to.** docs_gate.yml
+runs per-push on main in a SINGLE checkout — no sibling workspace, so the
+ownership lookup is structurally empty and every cross-repo citation would
+read as a false finding. A blind run therefore refuses (exit 2) UNLESS the
+workflow has marked the context with DOCS_GATE_CI=1, in which case the gate
+verifies only the axes decidable from this checkout (documents present, the
+width bound, the citation walk over its floor) and says in its LAST line —
+docs_gate.sh prints only tail -1 of a passing check — that the cross-repo
+axis is DEFERRED to the workstation run. The marker is an explicit opt-in
+recorded in the workflow file, never auto-detected, so a blind WORKSTATION
+run (a moved repo, a missing sibling) still refuses. Found the hard way:
+the gate landed during a main-only CI window and the first promote push was
+its first CI run (HISTORY.md 2026-09-12).
 """
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -450,6 +465,49 @@ def citations(text: str) -> list[tuple[int, str, int, str]]:
     return out
 
 
+def ci_deferred(pins: dict, docs: list, n_repos: int) -> int:
+    """The marked-CI verdict: instrument ALIVE, cross-repo adjudication DEFERRED.
+
+    Only the locally-decidable axes run here: the pinned documents exist, the
+    `\\d{2,4}` width bound's complement is still empty, and the citation walk
+    still clears its floor. The ownership half is impossible without the
+    sibling workspace and is NOT guessed at — the verdict says so in its last
+    line, which is the one docs_gate.sh forwards on a pass.
+    """
+    local = {k: allocated(REPO_ROOT, d) for k, d in KINDS.items()}
+    scanned = local_hits = 0
+    unseen_h = unseen_t = 0
+    for doc in docs:
+        p = REPO_ROOT / doc
+        if not p.is_file():
+            print(f"✗ INSTRUMENT: pinned document {doc} is missing — a gate cannot "
+                  f"report clean over a file it never opened")
+            return 2
+        text = p.read_text(encoding="utf-8")
+        h, t = unseen_by_width(text)
+        unseen_h += h
+        unseen_t += t
+        for _ln, kind, n, _lead in citations(text):
+            scanned += 1
+            if n in local[kind]:
+                local_hits += 1
+    if (unseen_h + unseen_t) > pins["max_single_digit"]:
+        print(f"✗ INSTRUMENT: {unseen_h + unseen_t} single-digit citation form(s) "
+              f"now in scope, over the pinned {pins['max_single_digit']} — the "
+              f"width bound cannot SEE them (same verdict as the workstation run)")
+        return 2
+    if scanned < pins["min_citations_scanned"]:
+        print(f"✗ INSTRUMENT: scanned {scanned} citations < floor "
+              f"{pins['min_citations_scanned']} — the citation regex went blind")
+        return 2
+    print(f"  CI: {scanned} citations scanned in {len(docs)} document(s); "
+          f"{local_hits} resolve locally, {scanned - local_hits} cross-repo")
+    print(f"✓ CI scope (DOCS_GATE_CI=1) — instrument alive over {n_repos} repo(s): "
+          f"width bound clean, walk above floor; cross-repo adjudication DEFERRED "
+          f"to the workstation docs_gate run — this line is not an adjudication")
+    return 0
+
+
 def main() -> int:
     pins = parse_pins(FLOORS)
     docs = pins["documents"]
@@ -458,9 +516,11 @@ def main() -> int:
     repos = contract_repos(WORKSPACE)
     sibs = [r for r in repos if r.resolve() != REPO_ROOT]
     if len(repos) < pins["min_repos"]:
-        print(f"✗ INSTRUMENT: derived {len(repos)} contract repos < floor {pins['min_repos']} — "
-              f"the population went blind; every ceiling below would pass vacuously")
-        return 2
+        if os.environ.get("DOCS_GATE_CI") != "1":
+            print(f"✗ INSTRUMENT: derived {len(repos)} contract repos < floor {pins['min_repos']} — "
+                  f"the population went blind; every ceiling below would pass vacuously")
+            return 2
+        return ci_deferred(pins, docs, len(repos))
 
     # An unterminated fence disarms the allocation path's fence filter (it fails
     # SAFE, excluding nothing), so the gate would still be correct — but it is a

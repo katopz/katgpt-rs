@@ -142,6 +142,17 @@ on:
       # Issue 513 T4: docs_gate_paths_sync.py now gates BOTH workflows'
       # hand-duplicated paths lists, so editing that one must re-run this gate.
       - '.github/workflows/required_features_touched.yml'
+      # The four checks added 2026-09-10..12 (Issues 734 T9, 749, 750, 756)
+      # landed WITHOUT their own globs — the fourth instance of the 713/724
+      # trigger-omission class in this file, found when the first main push
+      # after their landing was also the first CI run of the citation gate
+      # (it red on a blind population — see HISTORY.md 2026-09-12). A push
+      # that edits a CHECK must re-fire the gate that runs it.
+      - 'scripts/trap_sentinel_gate.py'
+      - 'scripts/issue_citation_gate.py'
+      - 'scripts/issue_citation_floors.txt'
+      - 'scripts/docs_gate_checks_sync.py'
+      - 'scripts/markdown_fence_gate.py'
   pull_request:
     # Same branch scope as push: PRs targeting main only — a PR against
     # develop is develop work, which this gate no longer covers.
@@ -241,6 +252,17 @@ on:
       # Issue 513 T4: docs_gate_paths_sync.py now gates BOTH workflows'
       # hand-duplicated paths lists, so editing that one must re-run this gate.
       - '.github/workflows/required_features_touched.yml'
+      # The four checks added 2026-09-10..12 (Issues 734 T9, 749, 750, 756)
+      # landed WITHOUT their own globs — the fourth instance of the 713/724
+      # trigger-omission class in this file, found when the first main push
+      # after their landing was also the first CI run of the citation gate
+      # (it red on a blind population — see HISTORY.md 2026-09-12). A push
+      # that edits a CHECK must re-fire the gate that runs it.
+      - 'scripts/trap_sentinel_gate.py'
+      - 'scripts/issue_citation_gate.py'
+      - 'scripts/issue_citation_floors.txt'
+      - 'scripts/docs_gate_checks_sync.py'
+      - 'scripts/markdown_fence_gate.py'
   workflow_dispatch:
 
 concurrency:
@@ -253,6 +275,15 @@ jobs:
     # Generous multiple of the ~3s measured runtime; a timeout this far above
     # the measurement means a hit indicates a hang, not a slow day.
     timeout-minutes: 10
+    env:
+      # Marks THIS context as the single-checkout CI lane for
+      # issue_citation_gate.py, whose cross-repo axis needs the 19-repo
+      # workspace and cannot run here: under the marker it verifies the
+      # locally-decidable axes (documents, width bound, walk floor) and
+      # DEFERS adjudication to the workstation docs_gate.sh run — loudly, in
+      # the line tail-printed on a pass. Deliberately explicit and never
+      # auto-detected, so a blind WORKSTATION run still refuses (exit 2).
+      DOCS_GATE_CI: 1
     steps:
       - uses: actions/checkout@v6
 
