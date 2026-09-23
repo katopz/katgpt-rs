@@ -672,9 +672,12 @@ Roadmap tasks (unchecked):
 - [x] Browser-live head: compile the fitted head to wasm so the
   latent-first lane plays in-tab with zero engine — DONE 2026-09-23 (T13
   addendum below).
-- [ ] Flappy v3 render + lanes cross-lane context — the two recorded
+- [x] Flappy v3 render + lanes cross-lane context — the two recorded
   unblock paths (riir-reflex `.issues/011`) so all three games play on the
-  latent-first lane.
+  latent-first lane — flappy half DONE 2026-09-24 (T14 addendum below: the
+  site renders v3 + the flappy head plays live in-tab; the LANES half stays
+  open — its head reads the other lanes' sentences, and the engine-side
+  serving of both remains that repo's recorded TODO).
 
 ## T12 addendum — the demo boards now play recorded GAMES (2026-09-23, site `6269565`)
 
@@ -754,4 +757,48 @@ repo, zero deps, no wasm-bindgen).
   was NOT re-run (no engine up on the box this session); its engine-path
   assertions are untouched by the change (the wasm branch is demo-only).
 - Remaining roadmap: the 3-board layout (gated on the engine `X-Reflex-Lane:
-  raw` knob) + flappy v3 render + lanes cross-lane context.
+  raw` knob) + lanes cross-lane context + the engine-side flappy serving.
+
+## T14 addendum — the flappy head joins the browser-live lane (2026-09-24, site `9230b6e`)
+
+The flappy half of issue 011's site-side unblock path is landed: the site's
+`flappy.js` renders the **v3 grammar** (band + quantized offset + neutral
+post-motion — v2's band-alone arm is the measured-degenerate 77/100
+constant-pick, Bench 881), the demo reel regenerates from
+`flappy_oracle_laya_en_v3.jsonl` (merge semantics: the recorded tetris walks
+are owned by the recorder and preserved), and a SECOND wasm head — Bench
+882's decoded arm — plays flappy live in-tab with zero engine.
+
+- The flappy head answers the **(state, option) sentence pair** — the
+  joined-state protocol issue 011 records (the head row needs the state's
+  pre-rel/v/h), trivially natural in-tab where the call takes both
+  sentences. The reconstruction law (structured units from the decoded
+  fills, crash tails at ±(h+1), pre_rel clamped ±2) is ported verbatim and
+  tested exact against the fixture's own feature arrays wherever the render
+  is exact.
+- Published anchors reproduced BIT-FOR-BIT in the browser artifact: λ=1,
+  in-corpus 96/100, LOO 96/100, and the **full head digest**
+  `c93d36dc…e3c5` (`decode_01_losslessness`'s
+  `FLAPPY_V3_DECODED_HEAD_ANCHOR`) from the committed blob through the
+  boot path.
+- Measured caught-by-the-gate defect: the first flappy blob stored the
+  raws as `as u8` — Rust's saturating cast turned every NEGATIVE structured
+  unit (post_v, pre_rel, edge_margin) into 0, corrupting 846/1600 cells.
+  The anchors still passed (96/100 — the head is that robust) but the
+  digest gate red'd; raws travel as i8 now, and the i8-vs-f64
+  standardizer-equality test pins the cast in both directions.
+- Gates all green: wasm-head tests 17/17; parity — tetris 836/836
+  bit-exact + flappy agreement 96/100 = the published anchor over the
+  corpus reel; demo check 100/100 sentence+option parity on the v3 reel;
+  golden tests 7/7 rebinding v3; headless demo smoke + a PROD no-engine
+  smoke (live page, engine route-blocked): both boards live in-tab
+  (tetris ~33 µs/spot, flappy live decisions beside the laya reel).
+- The wasm ABI grew a ready MASK (bit0 tetris / bit1 flappy) and
+  `head_score_state(state, option)` — a per-head failure degrades that
+  head alone; the other keeps playing.
+- Still open: the LANES half (its head reads the other lanes' sentences —
+  needs the joined-state protocol end to end), the 3-board layout (gated
+  on the engine `X-Reflex-Lane: raw` knob), and the ENGINE-side serving of
+  the flappy head (riir-reflex's recorded TODO — engine-connected flappy
+  modelless still abstains there; the wasm head is the zero-engine
+  posture).
