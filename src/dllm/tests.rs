@@ -1446,3 +1446,35 @@ mod multi_layer_training_tests {
         }
     }
 }
+
+// ── Continue-train entry (`train_mini_dllm_from`, riir-train Plan 416 T1.2) ──
+
+#[test]
+fn test_train_mini_dllm_from_is_deterministic_and_continues() {
+    let config = Config::micro_dllm();
+    let mut rng = Rng::new(42);
+    let train_data = generate_pattern_dataset(&mut rng, 100, 4, 8);
+    let test_data = generate_pattern_dataset(&mut rng, 20, 4, 8);
+    let (w1, _) = train_mini_dllm(&config, &train_data, &test_data, 200, 0.01, 0.25, 42);
+
+    // Same weights + same seed => byte-identical continue-train run.
+    let (wa, ha) = train_mini_dllm_from(&config, w1.clone(), &train_data, &test_data, 100, 0.01, 0.25, 7);
+    let (_wb, hb) = train_mini_dllm_from(&config, w1.clone(), &train_data, &test_data, 100, 0.01, 0.25, 7);
+    assert_eq!(ha, hb, "same-seed continue-train must be deterministic");
+
+    // Continuing a trained model must not lose to a same-budget re-init on
+    // the same data (a 0.05 tolerance absorbs SGD noise at this micro scale).
+    let (w_fresh, _) = train_mini_dllm(&config, &train_data, &test_data, 100, 0.01, 0.25, 7);
+    let acc_cont = evaluate_accuracy(&wa, &test_data, &config, 0.25, &mut Rng::new(99));
+    let acc_fresh = evaluate_accuracy(&w_fresh, &test_data, &config, 0.25, &mut Rng::new(99));
+    assert!(
+        acc_cont >= acc_fresh - 0.05,
+        "continue-train (acc {acc_cont:.3}) should not lose to same-budget re-init (acc {acc_fresh:.3})"
+    );
+
+    // The seed parameter seeds the shuffle/corruption stream only: two
+    // continue-train runs over the same weights with DIFFERENT seeds produce
+    // different histories (the stream is actually consumed).
+    let (_wc, hc) = train_mini_dllm_from(&config, w1, &train_data, &test_data, 100, 0.01, 0.25, 8);
+    assert_ne!(ha, hc, "different continue-train seeds must diverge");
+}

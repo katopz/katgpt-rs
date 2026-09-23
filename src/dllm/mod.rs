@@ -1779,7 +1779,52 @@ pub fn train_mini_dllm(
     seed: u64,
 ) -> (TransformerWeights, Vec<f32>) {
     let mut rng = Rng::new(seed);
-    let mut weights = TransformerWeights::new(config, &mut rng);
+    let weights = TransformerWeights::new(config, &mut rng);
+    train_mini_dllm_epochs(config, weights, train_data, test_data, n_epochs, lr, mask_ratio, rng)
+}
+
+/// Continue-train mini dLLM from EXISTING weights (riir-train Plan 416 T1.2:
+/// the planted-forgetting arms' stage-2 entry — pretrain on a mix, then
+/// re-enter the trainer with a different data mix; [`train_mini_dllm`] always
+/// re-initializes). Identical epoch loop; `seed` seeds the shuffle/corruption
+/// stream only (no weight-initialization draws are consumed from it).
+pub fn train_mini_dllm_from(
+    config: &Config,
+    weights: TransformerWeights,
+    train_data: &[Vec<usize>],
+    test_data: &[Vec<usize>],
+    n_epochs: usize,
+    lr: f32,
+    mask_ratio: f32,
+    seed: u64,
+) -> (TransformerWeights, Vec<f32>) {
+    train_mini_dllm_epochs(
+        config,
+        weights,
+        train_data,
+        test_data,
+        n_epochs,
+        lr,
+        mask_ratio,
+        Rng::new(seed),
+    )
+}
+
+/// The shared epoch loop behind [`train_mini_dllm`] and
+/// [`train_mini_dllm_from`]. `weights` and `rng` enter by value — the rng
+/// stream arrives positioned after any weight-initialization draws, so both
+/// entry points keep their historical shuffle/corruption streams.
+#[allow(clippy::too_many_arguments)]
+fn train_mini_dllm_epochs(
+    config: &Config,
+    mut weights: TransformerWeights,
+    train_data: &[Vec<usize>],
+    test_data: &[Vec<usize>],
+    n_epochs: usize,
+    lr: f32,
+    mask_ratio: f32,
+    mut rng: Rng,
+) -> (TransformerWeights, Vec<f32>) {
     let mut loss_history = Vec::with_capacity(n_epochs);
     let mut fwd_ctx = ForwardSaveContext::new(config);
     let mut bwd_ctx = BackwardContext::new(config);
