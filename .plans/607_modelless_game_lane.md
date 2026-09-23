@@ -675,9 +675,11 @@ Roadmap tasks (unchecked):
 - [x] Flappy v3 render + lanes cross-lane context — the two recorded
   unblock paths (riir-reflex `.issues/011`) so all three games play on the
   latent-first lane — flappy half DONE 2026-09-24 (T14 addendum below: the
-  site renders v3 + the flappy head plays live in-tab; the LANES half stays
-  open — its head reads the other lanes' sentences, and the engine-side
-  serving of both remains that repo's recorded TODO).
+  site renders v3 + the flappy head plays live in-tab); LANES half DONE
+  2026-09-24 (T15 addendum below: the lanes head plays live in-tab through
+  the joined-state protocol, the published 84/100 anchor reproduced, zero
+  engine). The ENGINE-side serving of both remains that repo's recorded
+  TODO.
 
 ## T12 addendum — the demo boards now play recorded GAMES (2026-09-23, site `6269565`)
 
@@ -802,3 +804,54 @@ are owned by the recorder and preserved), and a SECOND wasm head — Bench
   the flappy head (riir-reflex's recorded TODO — engine-connected flappy
   modelless still abstains there; the wasm head is the zero-engine
   posture).
+
+## T15 addendum — the LANES head joins the browser-live lane: the joined-state protocol end to end (2026-09-24, site `aff4bcc`, prod CF `a677747e`)
+
+Issue 011's lanes half is CLOSED on the site side: the published lanes
+head (Bench 880: λ=0.01, 84/100 in-corpus + LOO, head digest prefix
+`7d3f1d8e`) now plays three-lanes live in-tab with zero engine — the
+third and last wasm head. The blocker (this plan's lanes grammar reads
+the OTHER lanes: feature columns 6–7 count the other lanes' obstacles, so
+a single-sentence path cannot reproduce the head) dissolves in-tab: the
+page holds the whole turn, so `head_score_lanes(p0,l0,p1,l1,p2,l2,lane)`
+takes ALL THREE option sentences in pinned lane order plus the lane to
+score — the joined-state protocol issue 011 records, implemented exactly
+(end to end) in the wasm, no engine involved.
+
+- **The decode arm is EXACTLY lossless here** (Bench 882: Δ0, 0/100
+  flips, decoded rows bit-identical to structured → the same head digest),
+  and the wasm port proves it per-cell: `gen::parse_lanes` asserts decoded
+  == the fixture's own feature arrays on ALL 300 rows — a single drifted
+  cell is a loud panic, never "close enough". The fit then reproduces λ
+  0.01 (LOO-selected, travels as generated data), 84/84, and the digest
+  prefix `7d3f1d8e` — the same head the published record names.
+- Grammar port: `laya-lanes-v1`'s TWO templates (clear / blocked) decode
+  through the counting walker with the derivation count summed ACROSS
+  templates — zero or ≥2 derivations refuse (the engine's multi-template
+  decode twin). A sentence naming the wrong lane for its position, a lane
+  index ≥ 3, or any off-grammar sentence refuses (NaN → the honest
+  abstain).
+- Gates all green: wasm-head 23/23 (blob regen; recipe anchors incl. the
+  digest prefix; the 300/300 lossless cells; grammar round-trips over all
+  300 sentences; boot determinism; i8 standardizer; score paths incl.
+  cross-grammar + wrong-lane + lane≥3 refusals); parity — tetris 836/836
+  bit-exact + flappy 96/100 + **lanes 84/100 = the published anchor** over
+  the corpus reel (~2.2 µs/decision incl. the 3-sentence decode); demo
+  check (lanes reel 100/100 sentence+option+argmax parity); headless demo
+  smoke + a PROD no-engine smoke (live page, engine route-blocked): all
+  three modelless boards LIVE in-tab (tetris ~33 µs/spot, flappy live
+  P(clean), lanes live lane ps beside the laya recorded reel). Golden
+  tests 8/8 (renderers untouched).
+- lanes ready-mask bit2 (`head_lanes_lambda`/`head_lanes_anchor` exports);
+  a per-head failure degrades that head alone. Artifact 92 KB (wasm-opt
+  -Oz; three incompressible corpus blobs). Boot ~2.8 ms (three heads).
+- Engine-connected behavior is UNCHANGED: the arena's engine lane still
+  forwards each lane sentence ALONE as the state (the measured laya
+  protocol), and the engine's serving-side lanes/flappy abstains stay
+  riir-reflex's recorded TODO (issue 011) — sibling-active repo, not
+  touched this session. The wasm head is the zero-engine posture and the
+  engine path never reads it.
+- Remaining roadmap: the 3-board layout (gated on the engine `X-Reflex-Lane:
+  raw` knob) + the ENGINE-side serving of the flappy/lanes heads
+  (riir-reflex issue 011). Site-side, every unblock path this plan names
+  is now LANDED.
