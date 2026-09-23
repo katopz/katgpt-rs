@@ -34,7 +34,7 @@ this entry is the batch record. Per-row verdicts live in their home artifacts:
   verified on disk directly; the audit's alias seam is its own follow-up.
 - **Row 4a — `certified_frontier` (Plan 580): keep opt-in; promote the day a
   production consumer lands, promote+consumer in the same window.** No gate is
-  open (Bench 822 closed them); the blocker is the no-default-consumer rule —
+  open (riir-ai Bench 822 closed them); the blocker is the no-default-consumer rule —
   an owner call, now made.
 - **Row 4b — `gw_alignment` (Plan 594): do NOT promote; stays opt-in.** The
   consumer PoC measured NEGATIVE (riir-clippy `gw_corpus` Bench 083, GW
@@ -125,7 +125,7 @@ permanently non-executable; the tracker is complete.
 Durable findings kept: the models share a real **aggregate** contrast
 direction (AGGo to +0.44 at k=16, noisy) with weak pair-specific observed
 correspondence (OBS +0.16..0.22 vs its own null +0.11..0.18). Reopen paths
-live in Bench 605 §Verdict(6): an observed-level gate with the fit-time
+live in riir-train Bench 605 §Verdict(6): an observed-level gate with the fit-time
 null mandatory, an intervention study, and/or a corpus at
 gemma-reliability-adequate scale. Reopen authority: Research 459 (CLOSED
 2026-07-27 — reopens only on a non-hidden-state construction). Proposal 010
