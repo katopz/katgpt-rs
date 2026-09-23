@@ -947,3 +947,56 @@ against.
   until then the site states the requirement honestly on every v0.2.2
   install. Engine-side flappy/lanes serving stays riir-reflex
   `.issues/011`.
+
+## T19 addendum — the ENGINE-side flappy + lanes serving LANDED (2026-09-24, riir-reflex `d1eda08` + site `edeb133`, prod CF `a5f86875`)
+
+Issue 011 CLOSED in riir-reflex (record in its HISTORY.md): both
+remaining boards serve from the engine at their PUBLISHED anchors, and
+the site's live path speaks the two new request shapes. The three-tier
+arena (laya teacher / fitted head / raw baseline) now runs on all three
+games over HTTP.
+
+- **Lanes** — Bench 880's lossless decoded arm: λ 0.01, in-corpus
+  84/100, head digest `7d3f1d8e…09d34` FULL (matches the published
+  pin). Joined-state protocol (011's option 1, refined): ONE `/decide`
+  per turn, `state` = the three lane sentences one per line, exactly
+  three noul questions, answer i = lane i; the lane-name fill must
+  equal the line's position (a swapped turn refuses).
+- **Flappy** — Bench 882's v3 decoded arm: λ 1, in-corpus 96/100, FULL
+  digest `c93d36dc…e3c5` exact. (state, option) protocol: `state` =
+  the state sentence + the option sentence (two lines), one noul
+  question, per-option requests — the head row needs the state's
+  pre-rel/v/h beside the option's post band.
+- **The protocol discovery**: `noul` questions legally carry no options
+  (`WireError::NoulCarriesOptions`), so the sentence sequence rides in
+  the `state` field ONE PER LINE (closed-grammar sentences never
+  contain newlines) — 011's "joined with ; " sketch refined for exactly
+  this reason: no case normalization, no punctuation surgery, one
+  split rule for both games.
+- **A substrate fact measured en route**: the fixtures' `features`
+  column carries the STRUCTURED TRUE geometry, while the reconstruction
+  lawfully collapses the documented tails — which is exactly why Bench
+  882 pins TWO digests (`dc6bcf73…` structured, `c93d36dc…` decoded) at
+  ONE 96/100 agreement ("Δ0" is the agreement delta, not digest
+  equality). The lanes decoded == structured per-row cross-check
+  (881's losslessness) is kept in the engine's parse; a flappy equality
+  check would be wrong by design and is replaced by the full-digest pin.
+- **Engine hygiene riding the lane**: `game_heads.rs` genericized (the
+  fit core — Standardizer/HeadCorpus/loo_select/head_digest — is one
+  const-generic implementation over all three widths, DRY vs the
+  per-game copies); `/healthz` advertises the heads map;
+  `engine_gates`' body pin re-pinned. Drive-by gate repair
+  (`c08419d`): `tests/harness_units.rs` carries its modelless gate now
+  — the flag-OFF posture was red at import resolution since 67470be.
+- **Site half** (`edeb133`, deployed CF `a5f86875`): the live path
+  speaks both shapes, modelless lane ONLY (the laya lane's measured
+  per-option shape never moves; raw keeps skipping the heads). With an
+  OLDER engine the new shapes fall through and abstain — the labelled
+  fallback already rendered, no version gate.
+- **Verified live**: arena_smoke PASS against the new engine (flappy
+  `flap 0.140 · coast 0.119`, lanes `left 0.124 · middle 0.138 · right
+  0.138` — real head scores over HTTP); demo smoke + demo check + goldens
+  7/7 PASS; prod-page + local-engine smoke PASS on all three boards.
+- **Remaining**: the v0.2.3 engine release tag (still deferred — the
+  Metal lane's landing cuts it; the site states the requirement
+  honestly on v0.2.2 installs). Roadmap: ALL items landed.
