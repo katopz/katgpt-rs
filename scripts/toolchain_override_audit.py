@@ -170,6 +170,27 @@ for .py, UNPARSED on a runaway region (the trap-sentinel law) — not
 docstring obfuscation, not a self-exemption. Post-repair: the three
 self-hits gone, every other repo's verdict byte-identical to the pre-
 incident green, sweep green.
+
+Alias-seam repair (2026-09-23): this audit's own main() was the one
+production walk the Issue-842 batch missed — the SWEEP opened repos
+through `sweep_population.open_repo` from the start, but the audit's
+derived mode built `WORKSPACE / <contract-name>` handles directly, and
+on this box (repo_alias.local.txt active, 3 mappings) that opened
+directories that DO NOT EXIST for the three aliased mmorpg-* repos:
+measured pre-fix, files=0 pin=none for all three with ✓ glyphs over the
+zeros and exit 2 only because their floors rows caught it (a box without
+those rows would have read a confident green over nothing). The repair
+is the one seam, not a third walk spelling: derived mode opens through
+`open_repo(n, WORKSPACE)` while the LABEL stays the contract handle, so
+pins, floors and stdout keep the contract vocabulary and the alias
+content never prints. Post-fix, same run: 70/39/41 files for the three
+repos (floors 30/13/25 — held), pin=1.98.1 read for real (the row-4f
+pins became visible to this instrument the same day they landed), 23/23
+selftest arms green, the sweep byte-identical, and the explicit-path
+invocation unchanged. Family grep for the raw `WORKSPACE / n` shape: no
+other production walk carries it — the remaining hits are selftest
+fixtures, where repo_alias.real's identity mapping is what keeps them
+fixture-safe.
 """
 
 from __future__ import annotations
@@ -185,6 +206,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from skill_repo_set_gate import derive_repos  # noqa: E402
+from sweep_population import open_repo  # noqa: E402
 from tracked_walk import tracked_files  # noqa: E402
 
 # Issue 804: this instrument is documented as directly invokable, and its
@@ -827,12 +849,24 @@ def main() -> int:
         return rc
     print()
 
-    repos = ([Path(a).resolve() for a in args.repos] if args.repos
-             else [WORKSPACE / n for n in derive_repos(WORKSPACE)])
-    if not repos:
-        print("⛔ derived population is EMPTY — refusing to report a green "
-              "over zero repos")
-        return 2
+    if args.repos:
+        paths = [Path(a).resolve() for a in args.repos]
+        scans = [scan_repo(p, p.name) for p in paths]
+    else:
+        names = derive_repos(WORKSPACE)
+        if not names:
+            print("⛔ derived population is EMPTY — refusing to report a "
+                  "green over zero repos")
+            return 2
+        # Issue 842 seam: derive_repos returns CONTRACT names, and on an
+        # alias box the on-disk directory spells differently — opening
+        # WORKSPACE / name measured three repos at zero files with every
+        # verdict judged against a directory that does not exist (only the
+        # floors rows kept it from reading as a green). Open through the
+        # seam; the LABEL stays the contract handle, so pins, floors and
+        # stdout keep the contract vocabulary and the alias content never
+        # prints (repo_alias's own rule).
+        scans = [scan_repo(open_repo(n, WORKSPACE), n) for n in names]
 
     floors: dict = {}
     if PINS.is_file():
@@ -845,7 +879,6 @@ def main() -> int:
         print(f"⚠ floors file absent ({PINS.name}) — walk-floor assertion "
               "skipped (first run on a fresh clone)\n")
 
-    scans = [scan_repo(r, r.name) for r in repos]
     report(scans, args.verbose)
 
     blind = []
