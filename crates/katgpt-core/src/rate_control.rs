@@ -348,6 +348,126 @@ impl RateController {
     pub fn restore(&mut self, saved: &Self) {
         *self = *saved;
     }
+
+    /// Fixed-layout little-endian byte snapshot (65 bytes) — the binary
+    /// checkpoint seam (riir-train Plan 416 T2.2: the controller state rides
+    /// the trainer's checkpoint file as a trailing block). Layout:
+    /// `slow` fit (6×f32 + u32) ‖ `fast` fit (6×f32 + u32) ‖ `factor` f32 ‖
+    /// `pending_jump` (u8 tag 0=None/1=Some + f32 slot, written 0.0 when
+    /// None). katgpt-core owns the layout so consumers carry opaque bytes;
+    /// a format change bumps [`RateController::SNAPSHOT_LEN`], which rejects
+    /// old/new mismatches loudly instead of decoding garbage.
+    pub const SNAPSHOT_LEN: usize = 65;
+
+    pub fn to_bytes(&self) -> [u8; Self::SNAPSHOT_LEN] {
+        let mut b = [0u8; Self::SNAPSHOT_LEN];
+        let mut w = 0usize;
+        for fit in [&self.slow, &self.fast] {
+            le_f32_put(&mut b, &mut w, fit.s0);
+            le_f32_put(&mut b, &mut w, fit.sx);
+            le_f32_put(&mut b, &mut w, fit.sy);
+            le_f32_put(&mut b, &mut w, fit.sxx);
+            le_f32_put(&mut b, &mut w, fit.sxy);
+            le_f32_put(&mut b, &mut w, fit.syy);
+            le_u32_put(&mut b, &mut w, fit.t);
+        }
+        le_f32_put(&mut b, &mut w, self.factor);
+        // Tag first (advances the cursor), then the f32 slot — a None writes
+        // 0.0 so the layout is arm-independent.
+        b[60] = match self.pending_jump {
+            None => 0,
+            Some(_) => 1,
+        };
+        w += 1;
+        le_f32_put(&mut b, &mut w, self.pending_jump.unwrap_or(0.0));
+        debug_assert_eq!(w, Self::SNAPSHOT_LEN);
+        b
+    }
+
+    /// Inverse of [`RateController::to_bytes`]. Rejects (returns `None`,
+    /// never a half-built controller) on: wrong length, an unknown
+    /// pending-jump tag, or any non-finite float (a corrupted byte must not
+    /// poison the fits — the controller would read as inert NaN math). The
+    /// factor is clamped into `[FACTOR_FLOOR, FACTOR_CEIL]` rather than
+    /// rejected: every mutation path clamps, so an out-of-range value is
+    /// corruption, but the clamp is the same invariant the live controller
+    /// holds.
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() != Self::SNAPSHOT_LEN {
+            return None;
+        }
+        let mut r = 0usize;
+        let mut fit = || EwlsFit {
+            s0: le_f32_at(bytes, &mut r),
+            sx: le_f32_at(bytes, &mut r),
+            sy: le_f32_at(bytes, &mut r),
+            sxx: le_f32_at(bytes, &mut r),
+            sxy: le_f32_at(bytes, &mut r),
+            syy: le_f32_at(bytes, &mut r),
+            t: le_u32_at(bytes, &mut r),
+        };
+        let slow = fit();
+        let fast = fit();
+        let factor = le_f32_at(bytes, &mut r);
+        let tag = le_u8_at(bytes, &mut r);
+        let pending_jump = match tag {
+            0 => None,
+            1 => Some(le_f32_at(bytes, &mut r)),
+            _ => return None,
+        };
+        let floats = [
+            slow.s0, slow.sx, slow.sy, slow.sxx, slow.sxy, slow.syy, fast.s0, fast.sx, fast.sy,
+            fast.sxx, fast.sxy, fast.syy, factor,
+        ];
+        if floats.iter().any(|v| !v.is_finite()) {
+            return None;
+        }
+        if let Some(j) = pending_jump
+            && !j.is_finite()
+        {
+            return None;
+        }
+        Some(Self {
+            slow,
+            fast,
+            factor: factor.clamp(FACTOR_FLOOR, FACTOR_CEIL),
+            pending_jump,
+        })
+    }
+}
+
+/// LE f32 read that advances the caller's cursor (bounds are guaranteed by
+/// [`RateController::SNAPSHOT_LEN`], checked once at entry).
+fn le_f32_at(b: &[u8], r: &mut usize) -> f32 {
+    let v = f32::from_le_bytes(b[*r..*r + 4].try_into().expect("SNAPSHOT_LEN bounds"));
+    *r += 4;
+    v
+}
+
+/// LE u32 read that advances the caller's cursor.
+fn le_u32_at(b: &[u8], r: &mut usize) -> u32 {
+    let v = u32::from_le_bytes(b[*r..*r + 4].try_into().expect("SNAPSHOT_LEN bounds"));
+    *r += 4;
+    v
+}
+
+/// LE u8 read that advances the caller's cursor.
+fn le_u8_at(b: &[u8], r: &mut usize) -> u8 {
+    let v = b[*r];
+    *r += 1;
+    v
+}
+
+/// LE f32 write that advances the caller's cursor (invariant: w + 4 ≤ len).
+fn le_f32_put(b: &mut [u8], w: &mut usize, v: f32) {
+    b[*w..*w + 4].copy_from_slice(&v.to_le_bytes());
+    *w += 4;
+}
+
+/// LE u32 write that advances the caller's cursor.
+fn le_u32_put(b: &mut [u8], w: &mut usize, v: u32) {
+    b[*w..*w + 4].copy_from_slice(&v.to_le_bytes());
+    *w += 4;
 }
 
 #[cfg(test)]
@@ -637,5 +757,76 @@ mod tests {
         }
         let (count, _bytes) = crate::alloc::get_alloc_stats();
         assert_eq!(count, 0, "observe must not allocate (got {count})");
+    }
+
+    // ── Byte-snapshot seam (Plan 416 T2.2 checkpoint carrier) ──────────
+
+    #[test]
+    fn snapshot_bytes_round_trip_bit_identical() {
+        let mut c = RateController::new();
+        let mut rng = SimpleLcg::new(7);
+        for t in 0..64 {
+            c.observe(0.02 * t as f32 + rng.signed(0.3), 0.05);
+        }
+        let bytes = c.to_bytes();
+        assert_eq!(bytes.len(), RateController::SNAPSHOT_LEN);
+        let back = RateController::from_bytes(&bytes).expect("valid snapshot must parse");
+        assert_eq!(back, c, "Copy PartialEq round trip must be exact");
+        // And the restored controller continues identically.
+        let mut a = c;
+        let mut b = back;
+        for t in 64..128 {
+            let y = 0.02 * t as f32 + rng.signed(0.3);
+            a.observe(y, 0.05);
+            b.observe(y, 0.05);
+        }
+        assert_eq!(a, b, "post-restore trajectories must match bit for bit");
+    }
+
+    #[test]
+    fn snapshot_bytes_carry_pending_jump_and_default() {
+        let mut c = RateController::new();
+        c.pending_jump = Some(-0.5);
+        c.factor = 1.25;
+        let back = RateController::from_bytes(&c.to_bytes()).expect("parse");
+        assert_eq!(back.pending_jump, Some(-0.5));
+        assert_eq!(back.factor, 1.25);
+
+        let d = RateController::default();
+        assert_eq!(
+            RateController::from_bytes(&d.to_bytes()).expect("parse"),
+            d,
+            "the default controller must round trip"
+        );
+    }
+
+    #[test]
+    fn snapshot_bytes_reject_corruption() {
+        let c = RateController::new();
+        let bytes = c.to_bytes();
+        // Truncated and over-long payloads are refused, never half-built.
+        assert!(RateController::from_bytes(&bytes[..40]).is_none());
+        let mut long = bytes.to_vec();
+        long.push(0);
+        assert!(RateController::from_bytes(&long).is_none());
+        // Unknown pending-jump tag.
+        let mut bad_tag = bytes;
+        bad_tag[60] = 2;
+        assert!(RateController::from_bytes(&bad_tag).is_none());
+        // Non-finite float anywhere in the sums or the factor — NaN math must
+        // not ride back in as an inert controller.
+        let mut nan_factor = bytes;
+        nan_factor[56..60].copy_from_slice(&f32::NAN.to_le_bytes());
+        assert!(RateController::from_bytes(&nan_factor).is_none());
+        let mut nan_sum = bytes;
+        nan_sum[0..4].copy_from_slice(&f32::INFINITY.to_le_bytes());
+        assert!(RateController::from_bytes(&nan_sum).is_none());
+        // Out-of-range factor is CLAMPED into the invariant, not rejected
+        // (every live mutation path clamps — the snapshot must land in the
+        // same state space).
+        let mut big = bytes;
+        big[56..60].copy_from_slice(&9.0f32.to_le_bytes());
+        let back = RateController::from_bytes(&big).expect("finite factor parses");
+        assert_eq!(back.factor(), FACTOR_CEIL);
     }
 }
