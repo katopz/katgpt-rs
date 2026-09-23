@@ -663,13 +663,12 @@ and asked five questions. Verdicts, all measured:
 Roadmap tasks (unchecked):
 
 - [ ] 3-board arena layout (latent-first head vs laya vs explicit raw
-  baseline) — gated on the engine lane-override knob (`X-Reflex-Lane:
-  raw`); knob ISSUE FILED 2026-09-24 as riir-reflex `.issues/014`
-  (`35b5400`): design constraints (T8 lane pattern, fail-closed,
-  `/healthz` advertises `raw`, per-lane-claims law) + paired-smoke
-  acceptance. Layout implementation waits on the knob landing in the
-  engine (riir-reflex is sibling-active on `src/game_heads.rs` / the
-  Metal lane — engine edits deferred to avoid conflict).
+  baseline) — the engine lane-override knob (`X-Reflex-Lane: raw`) is
+  LANDED 2026-09-24 (riir-reflex `4c657f8`, T17 below; issue 014 closed:
+  fail-closed, `/healthz` advertises `raw`, per-lane-claims law,
+  paired-smoke both directions). UNGATED site-side now: the site's lane
+  discovery reads `/healthz`, so the raw board lights up for engines ≥
+  `4c657f8` and shows an honest unavailable state on older engines.
 - [x] Fresh full-argmax laya recording + a recorded fitted-head game — DONE
   2026-09-23 (site `6269565`, T12 record below): `record_demo_walks.mjs`
   plays tetris against a live v0.2.2 engine and records both walks with
@@ -882,3 +881,26 @@ agents (the game-heads G1 bench refresh + the Metal attention lane)
 whose working surface (`src/game_heads.rs`, `src/laya/riir/*`) is the
 exact seam the knob touches; the `.issues/`-only write avoided the
 conflict entirely.
+
+## T17 addendum — the knob LANDED (2026-09-24, riir-reflex `4c657f8`)
+
+The `X-Reflex-Lane: raw` lane-override knob is IMPLEMENTED and pushed
+(riir-reflex develop `4c657f8`, issue 014 closed into that repo's
+HISTORY.md): the serve edge accepts `raw` alongside `laya`/`modelless`,
+skips the game-head try, and answers from the raw modelless engine —
+the abstain IS the answer, never a head fallback; `/healthz` advertises
+`"raw":"ready"`; unknown lanes still 400; default posture byte-identical
+(no header = head-first). Per-lane claims hold by construction — the
+engine's response discloses itself (lane `modelless`, the engine's own
+routing reason), never the head's. Paired smoke pins BOTH directions on
+the fixture spot question (head-first by default, raw abstain under the
+override); flappy/lanes raw pins the abstain baseline with the
+WITHOUT-header side deliberately unpinned (it moves when `.issues/011`'s
+engine-side serving lands). Gating suite green: clippy -D at default
+features, serve_lanes 9, game_heads_serve 6, serve_cors 7,
+engine_gates 8 (its `/healthz` exact-body pin re-pinned for the
+additive key). The Metal sibling's WIP (`src/laya/riir/*`,
+`tests/metal_ops_smoke.rs`, `.issues/008`) was left unstaged throughout.
+
+The 3-board layout is now UNGATED site-side work (the site's lane
+discovery reads `/healthz`, so it lights up for engines ≥ `4c657f8`).
