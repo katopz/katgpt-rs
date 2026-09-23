@@ -2,7 +2,7 @@
 
 **Status:** GOAT PASS (opt-in; no promotion — the no-default-consumer rule)
 **Date:** 2026-09-23
-**Issue:** [875](../.issues/875_pfd_horizon_weighting_target_anchored_probe.md) T3 · **Research:** [582](../.research/582_Probability_Flow_Distillation_Wasserstein_Gradient_Flow.md) (arXiv:2605.09071 PFD)
+**Issue:** `875` T3 · **Research:** [582](../.research/582_Probability_Flow_Distillation_Wasserstein_Gradient_Flow.md) (arXiv:2605.09071 PFD)
 **Commits:** katgpt-rs — this commit (see git log for the exact SHA) · riir-train — the `feat(875-t3)` commit whose message cites this bench (the consumer side, lands after the upstream)
 
 ## What shipped

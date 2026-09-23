@@ -4536,7 +4536,7 @@ no-default-consumer rule); re-gate trigger = a default-path
 `renoise_ce` caller.
 
 📖 Bench: [877](../../.benchmarks/877_renoise_horizon_goat.md) ·
-Issue: [875](../../.issues/875_pfd_horizon_weighting_target_anchored_probe.md).
+Issue: `875`.
 
 ## 124. renoise_ce_surprise — target-anchored renoise-CE probe: distributional surprise vs self-consistency (Issue 875 T4 / Research 582)
 
@@ -4570,7 +4570,7 @@ call site; re-gate trigger = the riir-neuron-db consolidation-admission
 consumer wiring up.
 
 📖 Bench: [879](../../.benchmarks/879_renoise_surprise_goat.md) ·
-Issue: [875](../../.issues/875_pfd_horizon_weighting_target_anchored_probe.md).
+Issue: `875`.
 
 ## 126. horizon_weights (T3 layer) — time-annealed sampling ranges + the closed-form truncation predicate (Issue 875 T3 / Research 582)
 
@@ -4601,7 +4601,7 @@ per the no-default-consumer rule; the C9 toy's `pfd_anneal` forwarding
 feature (riir-train) consumes it.
 
 📖 Bench: [883](../../.benchmarks/883_time_anneal_t3_goat.md) ·
-Issue: [875](../../.issues/875_pfd_horizon_weighting_target_anchored_probe.md) (CLOSED).
+Issue: `875` (CLOSED).
 
 ## 125. template_decode — bounded template decode over closed sentence grammars (Plan 607 T2)
 

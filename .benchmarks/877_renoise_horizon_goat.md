@@ -2,7 +2,7 @@
 
 **Status:** GOAT G1 / G2-QUALITY / G2-LATENCY / G3 / G4 ALL PASS (2026-09-22) — lands OPT-IN as a combined-gate surface (`renoise_ce` + `horizon_weights`; `renoise_ce` itself is katgpt-core default-on and its incumbent path is byte-untouched). NOT PROMOTED: T5 owns the promotion verdict; `horizon_weights` stays default-off, and the mode's `tau` does not transfer from the incumbent's calibration (documented in-module).
 
-Owner: [Issue 875](../.issues/875_pfd_horizon_weighting_target_anchored_probe.md) T2 · Source: [Research 582](../.research/582_Probability_Flow_Distillation_Wasserstein_Gradient_Flow.md) (arXiv:2605.09071 Probability-Flow Distillation, Theorem 1's (T−t) Fubini factor) · T1 substrate: commit `02d5813d` (the T1 weights/table substrate — no bench doc of its own; this bench covers the CONSUMER).
+Owner: `Issue 875` T2 · Source: [Research 582](../.research/582_Probability_Flow_Distillation_Wasserstein_Gradient_Flow.md) (arXiv:2605.09071 Probability-Flow Distillation, Theorem 1's (T−t) Fubini factor) · T1 substrate: commit `02d5813d` (the T1 weights/table substrate — no bench doc of its own; this bench covers the CONSUMER).
 
 ## Box state (the G2 rule)
 

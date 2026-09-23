@@ -109,8 +109,8 @@ T1–T3 all landed; T4/T5 are dead branches by their own conditions. T1
 `65b199b0` (the 38-bin `source_features` AST-histogram extractor, opt-in
 `canon_source_features`) and T2 `67884461` (`SourceFeatureAdapter` ridge
 fit + zero-alloc apply) shipped in `katgpt-canon`. T3 — the decisive G5
-cross-arch gate — ran riir-train-side at [Bench
-605](../../riir-train/.benchmarks/605_issue567_g5_source_features_gate.md)
+cross-arch gate — ran riir-train-side at
+[Bench 605](../riir-train/.benchmarks/605_issue567_g5_source_features_gate.md)
 (harness riir-train `48623505`, corpus `49a4a72f`): PRIMARY
 +0.50..0.55 at k∈{2,4,8,16}, **but the fit-time shuffle null manufactures
 +0.41..0.44 on its own** (within ~1σ of PRIMARY at every k, clearing the
@@ -562,7 +562,7 @@ Bench 847/850):
   ×2 → `.is_multiple_of()`. Behavior-identical mechanical rewrites;
   bitcos tests 13/13 green on the avx2 lane post-repair.
 
-Issue: [`.issues/869_multi_layer_d2f_taps.md`](.issues/869_multi_layer_d2f_taps.md) (T1–T4
+Issue: `.issues/869_multi_layer_d2f_taps.md` (T1–T4
 landed; T5 open). No bench — no perf claim (depth 1 is the exact old op sequence; the GOAT/perf
 question belongs to the scale lane's own gate, pre-wired as Bench 847's inverted bars).
 
