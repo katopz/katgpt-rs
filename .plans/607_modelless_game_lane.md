@@ -669,8 +669,9 @@ Roadmap tasks (unchecked):
   2026-09-23 (site `6269565`, T12 record below): `record_demo_walks.mjs`
   plays tetris against a live v0.2.2 engine and records both walks with
   per-decision ms; the mixed-play capture is retired.
-- [ ] Browser-live head: compile the fitted head to wasm so the
-  latent-first lane plays in-tab with zero engine.
+- [x] Browser-live head: compile the fitted head to wasm so the
+  latent-first lane plays in-tab with zero engine — DONE 2026-09-23 (T13
+  addendum below).
 - [ ] Flappy v3 render + lanes cross-lane context — the two recorded
   unblock paths (riir-reflex `.issues/011`) so all three games play on the
   latent-first lane.
@@ -707,3 +708,50 @@ genuine engine-played games recorded through the LIVE `/decide` wire:
 - Validated: demo check PASS (70 + 46 turns chain-verified), demo smoke
   PASS, deployed (CF version `a576f7c7`), prod oracle verified (46/70
   turns, 0.4/394.6 ms).
+
+## T13 addendum — the browser-live head: the latent-first lane plays in-tab, zero engine (2026-09-23, site `87ad03a`)
+
+T11 Q5's endgame landed: the fitted Tetris head now ships compiled to
+WebAssembly on the arena page, and the modelless board PLAYS LIVE in the
+tab with no engine at all. Not a snapshot of weights — the page boots the
+PUBLISHED RECIPE (standardize → ridge at the LOO-selected λ → linear
+score) over the same BLAKE3-pinned oracle fixture the engine fits from,
+as a 35 KB corpus blob inside a 72 KB artifact (`wasm-head/` in the site
+repo, zero deps, no wasm-bindgen).
+
+- **Bit-parity is proven, never assumed.** Every op is a correctly-rounded
+  IEEE-754 f64 primitive with a pinned accumulation order (`fmadd` on
+  arm64; libm `fma`/`sqrt` on wasm32 — no wasm fma opcode exists). Gates:
+  (1) build time — `wasm-head/tests/recipe.rs`: blob regenerates
+  byte-identically, the FULL recipe incl. LOO hits λ=1 + 44/120 + 44/120,
+  all 2660 corpus sentences decode+re-render byte-identically, the u8
+  standardizer is bit-equal to the f64 one; (2) boot — the wasm re-validates
+  the blob, RE-RUNS the fit in-tab, and refuses (`head_init != 0`) unless
+  the 44/120 anchor reproduces; (3) behavior — before any play, the page
+  probes ALL 836 recorded (sentence → f32 P(clean)) pairs of the demo's
+  head game and requires `Math.fround` bit-exactness on every one; any
+  failure keeps the recorded demo (the head never half-plays).
+- **Measured**: boot ~2 ms, ~1.2 µs/decision through the full JS ABI (node
+  probe: `scripts/arena_head_parity.mjs` PASS 836/836); headless-Chromium
+  demo smoke shows the live board at ~22 µs/spot including enumeration
+  overhead — the µs story is now live on the page next to laya's recorded
+  394.6 ms.
+- The wasm lane answers ONLY the pinned spot question (grammar-gated —
+  flappy/lanes sentences refuse → the honest abstain, mirroring the
+  engine's fall-through; the T12 `allowDemoPs` leak class cannot recur by
+  construction). Live board plays its own seeded game (the seed control is
+  real again for the modelless lane); the demo loops; labels say
+  `modelless · wasm head (in-tab)`.
+- Engine-connected behavior is UNCHANGED (the engine is the canonical
+  server of the same fit); the wasm is the zero-engine posture. flappy +
+  lanes modelless keep the recorded honest-abstain reels (`.issues/011`
+  unblock paths unchanged).
+- Site: `assets/arena_head.js` (loader + probe + score), `arena.js` wiring,
+  `arena/index.html` copy (demo banner + explain + footnote), smoke updated
+  to assert the live posture (LIVE wasm or recorded fallback, SOURCE label
+  check). `scripts/arena_demo_check.mjs` PASS; `arena_demo_smoke.mjs` PASS
+  (LIVE wasm in headless Chromium). The `arena_smoke.mjs` live-engine smoke
+  was NOT re-run (no engine up on the box this session); its engine-path
+  assertions are untouched by the change (the wasm branch is demo-only).
+- Remaining roadmap: the 3-board layout (gated on the engine `X-Reflex-Lane:
+  raw` knob) + flappy v3 render + lanes cross-lane context.
