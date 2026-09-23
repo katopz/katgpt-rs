@@ -43,13 +43,15 @@ name: tests
 
 on:
   workflow_dispatch:
-  # SCHEDULE SUSPENDED (owner call 2026-09-09): Actions spending limit hit;
-  # schedules always evaluate against the DEFAULT branch (`develop`), which
-  # the owner wants CI-silent. Re-add to re-enable:
-  # schedule:
-  #   # Weekly, Tuesdays 05:03 UTC — staggered from the sibling repos'
-  #   # Tuesday/Thursday rot checks.
-  #   - cron: '3 5 * * 2'
+  # RE-ARMED 2026-09-23 (owner call, owner-gates menu v2 row 5): this repo is
+  # PUBLIC — Actions minutes are free, so the 2026-09-09 spending premise is
+  # gone here. Schedules evaluate against the default branch (`develop`); the
+  # develop-silence owner call stands for PUSH triggers only (every `push:`
+  # stays main-only).
+  schedule:
+    # Weekly, Tuesdays 05:03 UTC — staggered from the sibling repos'
+    # Tuesday/Thursday rot checks.
+    - cron: '3 5 * * 2'
 
 jobs:
   tests:

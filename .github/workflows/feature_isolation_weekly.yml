@@ -37,15 +37,15 @@ name: Feature isolation (weekly default-on)
 
 on:
   workflow_dispatch:
-  # SCHEDULE SUSPENDED (owner call 2026-09-09): Actions spending limit hit —
-  # this sweep ran on macos-latest (10x minute multiplier) — and schedules
-  # always evaluate against the DEFAULT branch (`develop`), which the owner
-  # wants CI-silent. Re-add to re-enable:
-  # schedule:
-  #   # Mondays 04:47 UTC — after full_gate's Monday 04:17 slot (never two
-  #   # macOS gates at once on this account), off-the-hour for the runner
-  #   # queue, and clear of the siblings' Tuesday 04:1x-04:4x weekly slots.
-  #   - cron: '47 4 * * 1'
+  # RE-ARMED 2026-09-23 (owner call, owner-gates menu v2 row 5): this repo is
+  # PUBLIC — Actions minutes are free, so the 2026-09-09 spending premise
+  # (which named the macOS 10x multiplier) is gone here. Schedules evaluate
+  # against the default branch (`develop`); push triggers stay main-only.
+  schedule:
+    # Mondays 04:47 UTC — after full_gate's Monday 04:17 slot (never two
+    # macOS gates at once on this account), off-the-hour for the runner
+    # queue, and clear of the siblings' Tuesday 04:1x-04:4x weekly slots.
+    - cron: '47 4 * * 1'
 
 # The schedule is the rot check — never cancel a scheduled run mid-flight.
 concurrency:

@@ -52,14 +52,15 @@ name: Full gate
 
 on:
   workflow_dispatch:
-  # SCHEDULE SUSPENDED (owner call 2026-09-09): the Actions spending limit is
-  # hit, and scheduled workflows always evaluate against the DEFAULT branch
-  # (`develop`), which the owner wants CI-silent. Re-add to re-enable:
-  # schedule:
-  #   - cron: '17 4 * * 1'
+  # RE-ARMED 2026-09-23 (owner call, owner-gates menu v2 row 5): this repo is
+  # PUBLIC — Actions minutes are free, so the 2026-09-09 spending premise is
+  # gone here. The push trigger below stays main-only (the develop-push-silence
+  # half of that call stands).
+  schedule:
+    - cron: '17 4 * * 1'
   push:
-    # Main-only (owner call 2026-09-09) — same budget call as the schedule
-    # suspension above; `develop` pushes no longer fire any katgpt-rs lane.
+    # Main-only (owner call 2026-09-09, still standing) — `develop` pushes
+    # fire no katgpt-rs lane.
     branches: [main]
     # Only the gate's own definition. Broadening this to '**/*.rs' is the
     # per-push cost this file's preamble argues against.
