@@ -1000,3 +1000,42 @@ games over HTTP.
 - **Remaining**: the v0.2.3 engine release tag (still deferred — the
   Metal lane's landing cuts it; the site states the requirement
   honestly on v0.2.2 installs). Roadmap: ALL items landed.
+  → DISCHARGED by T20 (tagged `a386119`, dist live).
+
+## T20 addendum — the v0.2.3 ENGINE RELEASE SHIPPED (2026-09-24, riir-reflex tag `a386119`, docs record `2977b6d`+`10fbf3b`) — the last roadmap item DISCHARGED
+
+T19's Remaining row is discharged: the Metal lane landed (`4ef290c`
+two-instance sgemm pick + `a51ea42` narrow-BK64/xwide), the three-board
+serving was on develop (`d1eda08`), and v0.2.3 tagged the develop head
+at `a386119`.
+
+- **The release surface**: GitHub release v0.2.3 on `gist-rs/reflex`
+  (the DIST repo — NOT the private source checkout; the wrong-repo
+  trap recorded in reflex HISTORY) — 6 assets, leak-scan PASS ×5,
+  SHA256SUMS v0.2.3-only. Homebrew tap `3054310` + scoop bucket
+  `5900c33`, both hash-verified; the installers are
+  version-discovering (`releases/latest`), so nothing hardcoded needed
+  a bump.
+- **Gates on the tagged tree**: G5 parity green BOTH postures (cpu
+  27.8 s / metal 9.9 s), metal smoke 7/7 ×3 SERIALIZED (issue 015's
+  posture; its observation 4 — the first serialized run red minutes
+  after sibling GPU work ceased, then stable greens — recorded in the
+  issue) + full laya-riir-metal suite 154/0; packaged-binary live
+  smoke — all three heads at their published digests (Tetris FULL
+  `00aa6221…c6e`, lanes PREFIX `7d3f1d8e` — Bench 880 published only
+  the prefix, flappy FULL `c93d36dc…e3c5`), lanes turn answered from
+  the head.
+- **Site**: reflex-site `6db0cce` deployed (CF `ab5d8524`) — version
+  floor bumped; v0.2.2 installs show the honest "needs engine v0.2.3+"
+  state the T18 row described, v0.2.3 installs serve all three boards.
+- **Release-process traps** (reflex HISTORY, both paid for this
+  release): the wrong-repo trap (`gh release create` from the source
+  checkout creates on the PRIVATE repo — the dist surface is
+  `gist-rs/reflex`; the mistaken release deleted, tag kept) and the
+  `--clobber` renamed-asset trap (a renamed upload file creates a NEW
+  asset instead of replacing; the CDN serves pre-replacement bytes for
+  minutes — verify via the API route, not the page).
+- **Roadmap: fully discharged — no Remaining items.** Optional
+  follow-up, not owed: the on-4090 windows smoke was not repeated this
+  release (archives hash-pinned; linux musl cross-smokes
+  build-verified).
