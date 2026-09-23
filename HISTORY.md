@@ -1,3 +1,64 @@
+## 2026-09-23 — the owner-gates menu v2 executed: schedules re-armed (row 5), pipefail residue closed (4e), toolchain batch-pin (4f), and the opt-in verdicts recorded (4a/4b/4c/4d)
+
+The owner approved the corrected owner-gates decision table (menu v2) wholesale;
+this entry is the batch record. Per-row verdicts live in their home artifacts:
+
+- **Row 5 — CI posture (THIS repo):** the three suspended weekly schedules are
+  RE-ARMED (`test.yml` Tuesdays 05:03, `full_gate.yml` Mondays 04:17,
+  `feature_isolation_weekly.yml` Mondays 04:47). Grounds: this repo is public —
+  Actions minutes are free, so the 2026-09-09 spending premise is gone here.
+  The other half of that owner call stands unchanged: every `push` trigger
+  stays `branches: [main]` (no CI on `develop` pushes). Every private sibling's
+  schedules stay suspended under the same spend call. **Remaining owner
+  infrastructure (not executable by an agent): the self-hosted 4090 runner for
+  the ~8 private repos — needs runner registration + a box-uptime commitment.**
+- **Row 4e — pipefail "47 kill-shapes awaiting triage": closed as stale.** The
+  figure was the superseded first-run census; the standing state was 10 pinned
+  rows. The sweep found exactly ONE unpinned residue —
+  `riir-neuron-db:release/dist-repo/install.sh:43` (TAIL-KILL: an empty grep
+  capture silently skipped sha256 verification) — fixed at the source in
+  riir-neuron-db `c5c11b5a273e` + `6f457a6260ca` (`|| true` neutralizer + the
+  emptiness fail-loud the record's own rule demands; the nested-quote spelling
+  was then hoisted so the classifier reads the neutralizer). Post-fix sweep:
+  **PASSED — every repo within its pins, every pinned row firing** (10
+  findings, 0 unpinned, 0 unparsed).
+- **Row 4f — toolchain batch-pin: landed, and the "13/20 unpinned" figure was
+  stale too** — most repos were pinned since the menu was drafted; the audit's
+  real unpinned population on this box was 5, all pinned this batch (channel
+  1.98.1 + clippy/rustfmt, the reflex shape): seal-game-editor `8c7755b3fdbb`,
+  seal-online-remaster `c47227e06fcb`, katgpt-web `d0c917f1eb60` (its default
+  branch is `main`), riir-llm `ee8b6c2bee6c`, riir-viewbridge `d54fbe8ebf32`.
+  riir-esp32 has no root `Cargo.toml` (not a cargo workspace root) — nothing to
+  pin. ⚠ `toolchain_override_audit.py` blind-walks the three aliased `mmorpg-*`
+  repos on this box (0 files walked, loud ⛔ disclosure) — the seal-* pins were
+  verified on disk directly; the audit's alias seam is its own follow-up.
+- **Row 4a — `certified_frontier` (Plan 580): keep opt-in; promote the day a
+  production consumer lands, promote+consumer in the same window.** No gate is
+  open (Bench 822 closed them); the blocker is the no-default-consumer rule —
+  an owner call, now made.
+- **Row 4b — `gw_alignment` (Plan 594): do NOT promote; stays opt-in.** The
+  consumer PoC measured NEGATIVE (riir-clippy `gw_corpus` Bench 083, GW
+  precision@60 = base rate); reopen trigger on record: a semantic fix-shape
+  embedding.
+- **Row 4c — `hint_regret` Phase 5 (Plan 576): stays opt-in; the two remaining
+  Phase-5 arms stay unwired until a consumer needs them** (the landed consumer
+  runs behind opt-in `demo_coverage_curiosity`; a default flip would ship an
+  unexercised surface in every build).
+- **Row 4d — Issue 815 options 1/3: closed as answered-by-precedent.** The
+  Issue-842 alias codec retired the `DOCS_GATE_KNOWN_EXTRA` marker (measured on
+  the 4090: 2/33 → 33/33 with the alias file), and the AGENTS repo-count note
+  already claims `mmorpg-editor`/`mmorpg-remake`/`mmorpg-remaster` under
+  contract names. The membership question is settled; no 22-file registration
+  ripple. This box's `scripts/repo_alias.local.txt` carries the same 3 rows
+  (machine-local, gitignored, never committed).
+- **Row 1 (riir-ai Plan 611), Row 2 (crates.io ×3), Row 3 (riir-dapps mainnet
+  bundle): recorded in their home repos** — riir-ai (plateau formally accepted,
+  decision (b)), riir-infer + riir-reflex (publication kept closed/deferred),
+  riir-dapps + riir-chain (bundle sequenced under one trigger; `NO_REMINT`
+  ratified SET; the second-live-mainnet question closed).
+
+Session: owner-gates-m2, 1790121600
+
 ## 2026-09-23 — Issue 877 CLOSED (merge `b701cf564`): the main↔develop sync — origin/main merged into develop with `-s ours`, zero content delta, ancestry restored
 
 main was NOT an ancestor of develop: three main-only commits over merge-base
