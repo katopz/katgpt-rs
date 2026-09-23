@@ -664,7 +664,12 @@ Roadmap tasks (unchecked):
 
 - [ ] 3-board arena layout (latent-first head vs laya vs explicit raw
   baseline) — gated on the engine lane-override knob (`X-Reflex-Lane:
-  raw`); file the knob in riir-reflex beside `.issues/011`.
+  raw`); knob ISSUE FILED 2026-09-24 as riir-reflex `.issues/014`
+  (`35b5400`): design constraints (T8 lane pattern, fail-closed,
+  `/healthz` advertises `raw`, per-lane-claims law) + paired-smoke
+  acceptance. Layout implementation waits on the knob landing in the
+  engine (riir-reflex is sibling-active on `src/game_heads.rs` / the
+  Metal lane — engine edits deferred to avoid conflict).
 - [x] Fresh full-argmax laya recording + a recorded fitted-head game — DONE
   2026-09-23 (site `6269565`, T12 record below): `record_demo_walks.mjs`
   plays tetris against a live v0.2.2 engine and records both walks with
@@ -855,3 +860,25 @@ score — the joined-state protocol issue 011 records, implemented exactly
   raw` knob) + the ENGINE-side serving of the flappy/lanes heads
   (riir-reflex issue 011). Site-side, every unblock path this plan names
   is now LANDED.
+
+## T16 addendum — the engine knob issue filed (2026-09-24, riir-reflex `35b5400`)
+
+The one remaining gating artifact is now TRACKED: riir-reflex
+`.issues/014_engine_lane_override_raw_knob.md` records the
+`X-Reflex-Lane: raw` lane-override knob end to end — the why (T11's
+ratified three-tier arena cannot show its raw baseline beside the
+head-first serve path), the design constraints (T8's lane pattern
+verbatim: explicit override, default posture byte-identical, fail-closed
+with the per-lane-claims law, `/healthz` advertises `raw`, unknown lanes
+still refuse), what `raw` shows today (modelless abstain on
+flappy/lanes — the honest baseline — while issue 011's engine-side
+serving TODO is independent) and the paired-smoke acceptance that pins
+BOTH directions.
+
+The 3-board layout itself stays unchecked: it is implemented site-side
+the day `/healthz` advertises the lane. Engine edits were deliberately
+NOT attempted this session — riir-reflex carries two active sibling
+agents (the game-heads G1 bench refresh + the Metal attention lane)
+whose working surface (`src/game_heads.rs`, `src/laya/riir/*`) is the
+exact seam the knob touches; the `.issues/`-only write avoided the
+conflict entirely.
