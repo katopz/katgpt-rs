@@ -662,13 +662,15 @@ and asked five questions. Verdicts, all measured:
 
 Roadmap tasks (unchecked):
 
-- [ ] 3-board arena layout (latent-first head vs laya vs explicit raw
-  baseline) — the engine lane-override knob (`X-Reflex-Lane: raw`) is
-  LANDED 2026-09-24 (riir-reflex `4c657f8`, T17 below; issue 014 closed:
-  fail-closed, `/healthz` advertises `raw`, per-lane-claims law,
-  paired-smoke both directions). UNGATED site-side now: the site's lane
-  discovery reads `/healthz`, so the raw board lights up for engines ≥
-  `4c657f8` and shows an honest unavailable state on older engines.
+- [x] 3-board arena layout (latent-first head vs laya vs explicit raw
+  baseline) — DONE 2026-09-24: the engine knob LANDED (riir-reflex
+  `4c657f8`, T17; issue 014 closed) and the site layout LANDED (site
+  `d092fb8`, prod CF version `5981518b`, T18 below): a third boardcard per
+  game (raw baseline · heads skipped), `/healthz` lane discovery with the
+  honest "needs engine v0.2.3+" state on older engines, and a
+  labelled-empty demo posture (no recorded substitute — never invented
+  data). The raw lane reaches VISITORS at the next engine release
+  (v0.2.3) — the knob is on develop, not yet tagged.
 - [x] Fresh full-argmax laya recording + a recorded fitted-head game — DONE
   2026-09-23 (site `6269565`, T12 record below): `record_demo_walks.mjs`
   plays tetris against a live v0.2.2 engine and records both walks with
@@ -904,3 +906,44 @@ additive key). The Metal sibling's WIP (`src/laya/riir/*`,
 
 The 3-board layout is now UNGATED site-side work (the site's lane
 discovery reads `/healthz`, so it lights up for engines ≥ `4c657f8`).
+
+## T18 addendum — the 3-board arena LANDED (2026-09-24, site `d092fb8`, prod CF `5981518b`)
+
+The ratified three-tier arena is the page's real layout: a third
+boardcard per game ("raw baseline · heads skipped") beside laya and the
+modelless head board, same seeded stream. Every raw-board decision
+carries `X-Reflex-Lane: raw`; the engine answers from the corpus engine
+without its heads and the abstain plays as a labelled random pick — the
+honest floor the head's 44/120 and laya's argmax play are measured
+against.
+
+- **Lane discovery:** the raw chip reads `/healthz`'s lane map; an older
+  engine (v0.2.2) shows "needs engine v0.2.3+" — the absence of the key
+  is stated, never guessed at. The status line composes what is armed
+  ("modelless + laya + raw armed").
+- **Demo posture honest:** the raw lane has no recorded substitute, so
+  its board stays labelled-empty in the no-engine demo ("raw baseline is
+  a live-engine lane — start the engine to play it") — never invented
+  data.
+- **DRY:** the five `lane === "laya" ? "laya" : null` call sites
+  collapsed into one `LANE_HEADER` map; the boards grid renamed
+  `.duo` → `.boards` with track min 320 → 300px so three cards sit side
+  by side at the 980px wrap (measured 3×303px on one row).
+- **A live-path defect caught by the live smoke:** `TetrisBoard.step`
+  dereferenced `demo.tetrisWalk` unconditionally — a TypeError on EVERY
+  live tetris turn since the T12 demo-walk refactor, invisible because
+  the live browser smoke had not run since (the demo path masked it;
+  the recorder never goes through the page). Fixed by computing the
+  walk locals only when a demo is loaded.
+- **Verified:** `arena_demo_check` PASS (katgpt-rs fixtures); demo smoke
+  PASS with the new raw labelled-empty pin; live smoke PASS against the
+  knob engine (raw chip ready, raw board `abstain ×9`, head-first
+  default unchanged at `P(clean) 0.542`); prod deployed (CF version
+  `5981518b`) and prod-checked — the live page against a local
+  raw-capable engine shows "modelless + raw armed", the raw board
+  abstaining, the default head-first.
+- **Remaining distribution step:** visitors get the raw lane at the
+  next engine release (v0.2.3 must tag the `4c657f8` develop head);
+  until then the site states the requirement honestly on every v0.2.2
+  install. Engine-side flappy/lanes serving stays riir-reflex
+  `.issues/011`.
