@@ -665,12 +665,45 @@ Roadmap tasks (unchecked):
 - [ ] 3-board arena layout (latent-first head vs laya vs explicit raw
   baseline) — gated on the engine lane-override knob (`X-Reflex-Lane:
   raw`); file the knob in riir-reflex beside `.issues/011`.
-- [ ] Fresh full-argmax laya recording to replace the mixed-play
-  state-capture walk in the demo (the mixed play is disclosed in the
-  banner; `gen_demo_oracle.mjs` + `arena_demo_check.mjs` are committed for
-  exactly this swap; v0.2.2 is cut, so the engine port is free).
+- [x] Fresh full-argmax laya recording + a recorded fitted-head game — DONE
+  2026-09-23 (site `6269565`, T12 record below): `record_demo_walks.mjs`
+  plays tetris against a live v0.2.2 engine and records both walks with
+  per-decision ms; the mixed-play capture is retired.
 - [ ] Browser-live head: compile the fitted head to wasm so the
   latent-first lane plays in-tab with zero engine.
 - [ ] Flappy v3 render + lanes cross-lane context — the two recorded
   unblock paths (riir-reflex `.issues/011`) so all three games play on the
   latent-first lane.
+
+## T12 addendum — the demo boards now play recorded GAMES (2026-09-23, site `6269565`)
+
+The owner's round-4: the recorded demo still showed the modelless board at
+its abstain walk (score 40, 36 abstains, random-class mess, no timing) and
+"both lanes look the same speed". Fixed at the root — the demo now replays
+genuine engine-played games recorded through the LIVE `/decide` wire:
+
+- `scripts/record_demo_walks.mjs` (site): plays tetris with the site's own
+  enumeration against a running v0.2.2+ engine (same seed 607 for both
+  games), sequential per-option decisions, argmax picks, chain-verified
+  before writing. `tetris_head_walk` = the modelless fitted-head game (ps +
+  picks + per-decision ms); `tetris_walk` = the laya game at TRUE argmax —
+  the old mixed-play state-capture is retired.
+- Recorded on this box (engine `00aa6221…c6e` serving digest, CPU laya):
+  head **140 pts / 3 lines / 46 pieces @ p50 0.4 ms**; laya **660 pts / 11
+  lines / 70 pieces @ p50 394.6 ms** — the ~1000× latency gap and the
+  play-quality gap are both now ON the page instead of described in prose.
+- arena.js: per-board walk selection (head walk present → modelless shows
+  real ps + recorded ms; absent → old honest abstain), recorded-p50 timing
+  readout in demo, auto-start demo LOOPS (a frozen dead board is not a
+  demo), flappy/lanes modelless keep the abstain via an explicit
+  `allowDemoPs` opt-in — the first cut dropped the lane gate and the smoke
+  caught flappy/lanes modelless replaying laya's ps; the opt-in shape is
+  the fix.
+- `arena_demo_check.mjs`: verifies BOTH walks (chain/arity/ms arity) + a
+  head-quality floor (head walk must clear ≥ 2 lines — random class ~1 must
+  never come back) + head ms presence. `arena_demo_smoke.mjs`: asserts the
+  head answer + `recorded · p50 N ms` timing line + `tetris_head_walk`
+  presence in the served oracle.
+- Validated: demo check PASS (70 + 46 turns chain-verified), demo smoke
+  PASS, deployed (CF version `a576f7c7`), prod oracle verified (46/70
+  turns, 0.4/394.6 ms).
