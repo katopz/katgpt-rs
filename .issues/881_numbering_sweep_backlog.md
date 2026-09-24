@@ -114,6 +114,22 @@ not a collision, and pinning 5 would pin an instrument artifact.
   them would red STALE), and keep the adjacent-commit window explicit and armed
   — a recycle (holder closed, number re-spent later) must still count. Until
   then riir-shader stays red on `max_hist` BY DESIGN rather than pinned.
+  - **Measured 2026-09-24 (katgpt-rs-9a) — the naive rule is UNSAFE.** Over
+    the 193 historical collisions in 11 repos, **22** are a same-number
+    delete+add in ONE commit and **5** more a same-author pair within 10
+    minutes (per repo: katgpt-rs 2+2, mmorpg-editor 6+0, riir-ai 6+2,
+    riir-chain 1, riir-mmorpg-examples 2, riir-shader 3+1, riir-train 2).
+    But the same-commit set CONTAINS A REAL RECYCLE: katgpt-rs `.plans/236`
+    — `4b708807f` deleted `236_core_optimization_audit_2` and added the
+    unrelated `236_bake_precision_gated_embeddings` in one commit. A
+    same-commit rule would hide exactly the class the gate exists for, in
+    the silent direction. The renames sampled (katgpt-rs `.research/383`
+    Latent_Forcing retitle, riir-ai `.plans/188` gumbel→sigmoid, riir-train
+    `.issues/476` retitle, riir-shader 030-034) all share TOPIC tokens in
+    the stem; 236 shares none. So the discriminator needs a second axis — a
+    lowered `-M` similarity on the pair, or distinctive-stem-token overlap —
+    and each candidate must be read against the 27 before landing, with 236
+    pinned as the arm's negative.
 
 ## T3 — mmorpg-editor: one new reset in a read-only repo
 
