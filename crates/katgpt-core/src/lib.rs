@@ -3458,6 +3458,27 @@ pub mod sigmoid_calibration;
 #[cfg(feature = "distance_abstain")]
 pub mod distance_abstain;
 
+/// Fitted anchor tables — the SHARED streaming table-builder substrate
+/// (Issues 882+883 P0 / Research 586+587, the F1 fusion: one calibration
+/// pass, two consumers). Per-key streaming mean rows (they ARE the table
+/// product) + f64 one-way-ANOVA sufficient statistics (the R² dashboard:
+/// per-dim and variance-weighted token-explained fractions, exact from
+/// accumulated stats) + James–Stein shrinkage `n/(n+λ)` + the tail-lump
+/// lower-bound law + Zipf coverage curves. Q-side consumers: 882's
+/// anchors; V-side: 883's E_l[s] tables. Opt-in (`fitted_anchor_tables`).
+#[cfg(feature = "fitted_anchor_tables")]
+pub mod fitted_anchor_table;
+
+/// Differential anchor scoring (Issue 882 P0 / Research 586) — the
+/// subtract arm of the attention-noise-control family: `q̂ = q − λ·ā`, one
+/// axpy, λ=0 bit-identical; hub candidates lose their generic mass,
+/// query-specific candidates keep theirs. Ships the anchor builders
+/// (mean-query / mean-corpus, A/B'd per domain), the frozen λinit const
+/// table + neutral-at-zero reparam, and λ* by direct grid evaluation
+/// (never GD). Opt-in (`differential_anchor`).
+#[cfg(feature = "differential_anchor")]
+pub mod differential_anchor;
+
 /// Exact-mass sigmoid admission (Issue 879 / Research 584, arXiv:2609.25518
 /// "Matryoshka attribution") — the calibrated-mass "sigmoid top-k": bisect
 /// τ until Σσ((s−τ)/T) = k, emit the soft mask mᵢ = σ((sᵢ−τ)/T). Sum-to-k,

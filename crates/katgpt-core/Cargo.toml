@@ -895,6 +895,47 @@ distance_abstain = []
 # the no-default-consumer rule.
 exact_mass_admit = []
 
+# fitted_anchor_tables (Issues 882+883 P0 / Research 586+587, 2026-09-25):
+# the SHARED streaming table-builder substrate — one calibration pass, two
+# consumers (the F1 fusion). `StreamingMeanTable`: per-key streaming mean
+# accumulator (n + f32 sum rows — the rows ARE the table product) + f64
+# one-way-ANOVA sufficient statistics (grand Σx/Σx²) + James–Stein
+# shrinkage `n/(n+λ)` at finalize + the tail-lump lower-bound law (partial
+# top-K tracking ⇒ reported ρ is a strict lower bound while SS_total stays
+# exact — an honest go/no-go with measured coverage) + Zipf coverage
+# curves (the 883 P1-P3 storage dial). Consumers: (a) Issue 882 P0's
+# Q-side anchors (the generic-query / corpus-centroid direction, consumed
+# by `differential_anchor`); (b) Issue 883 P0's V-side calibration (the
+# `katgpt-core` accumulation module: E_l[s] = mean(V−K|s) per layer/token
+# for the fitted K=V+ retrofit, the token-mean-removed V-quant, and the
+# V-cache-halving reconstruction; riir-infer's gemma taps feed it). The
+# substrate reverse-grepped clean (no prior streaming per-key mean/ANOVA
+# table in-tree — the Welford hits are regime gates, karc/chiaroscuro).
+# Zero deps; observe alloc-free by construction (asserted by bench_886's
+# counting allocator); offline report methods allocate. OPT-IN per the
+# no-default-consumer rule.
+fitted_anchor_tables = []
+
+# differential_anchor (Issue 882 P0 / Research 586, 2026-09-25): the
+# subtract arm of the attention-noise-control family (SSMax rescale-UP /
+# ASEntmax sparsify-DOWN shipped; Diff Transformer arXiv:2410.05258's
+# differential mechanism ships NOWHERE on score surfaces we own).
+# `correct_query`: q̂ = q − λ·ā — ONE axpy, λ=0 bit-identical (kill
+# switch), stack-buffer, zero alloc; the existing KNN/rerank pass runs
+# unchanged. Anchor builders (mean-query / mean-corpus, A/B'd per domain
+# on fixtures — hubness ≠ illegitimacy, trap 1) consume the SHARED
+# fitted_anchor_tables substrate. Frozen λinit(l) = 0.8 − 0.6·exp(−0.3(l−1))
+# const table (override-able prior, NOT a law — trap 5) + the
+# neutral-at-zero reparam λ = e^u − e^v + λinit (latents at 0 ⇒ the
+# prior). λ* by direct grid evaluation on oracle fixtures, never GD.
+# G1 (synthetic hub world: hubs win at λ=0, true matches recover at λ*,
+# hubness skewness strictly ↓) / G2 (axpy ≤ 1 µs at d=512 + corrected
+# pass ≤ 2% via ab_median_ratio paired protocol, bench_886) / G3 (λ=0
+# bit-identical, pinned) / G4 (counting allocator, 0 steady-state
+# allocs). Implies fitted_anchor_tables (the DRY implication form —
+# one substrate, two consumers).
+differential_anchor = ["fitted_anchor_tables"]
+
 # state_option_scoring (Plan 607 T1, 2026-09-22): per-option centroid-cosine
 # scoring over a fixed option table + the pinned lowest-index argmax — the
 # game-decision lane's scoring primitive, upstreamed from riir-reflex Issue
@@ -2698,6 +2739,14 @@ required-features = ["gold_share_probe", "sink_aware_attn"]
 # Issue 819 (Research 566) — prior-lane + sink-margin-forecast GOAT gate:
 # G3 lane-on forward ratio vs lane-off (≤1.10× gate) + forecast ns/call,
 # G4 alloc counts (lane-on == lane-off steady state; forecast 0 allocs).
+[[test]]
+name = "bench_886_differential_anchor_goat"
+harness = false
+required-features = ["differential_anchor"]
+
+# (kept as a [[bench]]-shaped gate; the 813 precedent puts GOAT gates in
+# tests/ with harness=false and a required-features row — the cfg-gated
+# green-zero rule.)
 [[bench]]
 name = "bench_813_prior_lane_margin_goat"
 harness = false
