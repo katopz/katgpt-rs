@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # elan reads `.proofs/lean-toolchain` and fetches the pinned version
       # (leanprover/lean4:v4.32.0-rc1).

@@ -92,13 +92,13 @@ jobs:
       # `git show <base>:Cargo.toml` failing reads as "this manifest is new,
       # select every row in it" — a REFUSE, not a silent pass, but the wrong
       # answer for the wrong reason.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       # Public repo: the default GITHUB_TOKEN is enough, no PAT involved.
       - name: Check out katgpt-rs (script + path-dep target)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: katopz/katgpt-rs
           ref: ${{ inputs.katgpt_ref }}
