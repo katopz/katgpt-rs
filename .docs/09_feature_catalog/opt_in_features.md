@@ -4743,3 +4743,84 @@ passthrough). **OPT-IN**, with no consumer.
 
 📖 Bench: [885](../../.benchmarks/885_calibrated_mass_gate_goat.md) ·
 Resolution: HISTORY.md §Issue 880.
+
+## 128. differential_anchor — the subtract arm on the score axis (Issue 882 P0 / Research 586)
+
+Diff Transformer (arXiv:2410.05258 §3) cancels common-mode noise by
+subtracting a correlated reference; the score-axis integration is
+`score(q, d) = sim(q, d) − λ·sim(ā, d) = (q − λ·ā)·d` — one axpy produces
+the corrected query `q̂ = q − λā` and the existing KNN/rerank pass runs
+unchanged. Hub candidates (similar to everything) lose their generic mass;
+query-specific candidates keep theirs. Prior art honestly named: CSLS
+(per-candidate neighborhood hubness — the single-shared-anchor form is the
+O(d)-per-query simplification) and contrastive decoding (the subtract
+principle at logits level). Ours is the integration on the score surfaces
+we own, not a new principle.
+
+Pieces: `correct_query`/`correct_query_into` (λ=0 bit-identical kill
+switch), `differential_score` (fused two-dot form), `AnchorBuilder` over
+two A/B'd sources (`MeanQuery` / `MeanCorpus` — hubness ≠ illegitimacy,
+never assumed), the frozen per-layer prior `λinit(l) = 0.8 −
+0.6·exp(−0.3(l−1))` as a const table pinned to its closed form
+(override-able, never a law — trap 5), `reparam_lambda` (neutral-at-zero
+`λ = e^u − e^v + λinit`), `pick_lambda_by_eval` (grid + argmax on oracle
+fixtures, deterministic smallest-λ tie-break — never GD), and
+`hubness_skewness` (the G1 statistic).
+
+Gates (P0, `bench_886`): G1 synthetic hub world (hubs win at λ=0, true
+matches recover at λ*, hubness skewness strictly ↓); G2 axpy ≤ 1 µs at
+d=512 + corrected-vs-plain pass ≤ 2% via the `ab_median_ratio` paired
+protocol; G3 λ=0 bit-identical; G4 zero steady-state allocs (counting
+allocator).
+
+### `fitted_anchor_tables` — the shared streaming per-key mean table
+
+The one-substrate-two-consumers DRY implication: a streaming per-key
+mean/ANOVA table (`StreamingMeanTable`) fitting anchors from observed
+vectors — reverse-grepped clean at filing (no prior streaming per-key mean
+table in-tree; the Welford hits are regime gates, karc/chiaroscuro).
+Consumes: (a) Issue 882 P0's Q-side anchors (this section), (b) Issue 883
+P0's V-side calibration (`E_l[s] = mean(V−K|s)` per layer/token for the
+fitted K=V+ retrofit). Observe alloc-free by construction; offline report
+methods allocate.
+
+🔧 Feature flags: `differential_anchor` (katgpt-core, implies
+`fitted_anchor_tables`) · `fitted_anchor_tables` (katgpt-core). **OPT-IN**,
+with no live consumer yet — promotion rides the healer rerank lane's GOAT
+(the 882 P0 rider).
+
+## 129. habituation_filter — the subtract arm on the time axis (riir-ai Issue 1006 T1 / Research 586)
+
+The perception-side isomorphism of §128: **habituation** — respond to
+*changes*, not constants. Per channel: `b_t = (1−β)·b_{t−1} + β·s_t` (EMA
+baseline, update first), `n_t = s_t − λ·b_t` (novelty), `fire iff
+σ(κ·n_t) > θ` (per-channel scalar gate — the house fast sigmoid, never
+softmax). Transfer function: first-order high-pass with **DC gain exactly
+`(1−λ)`** — the paper's own headwise `(1−λinit)` multiplier isomorphism on
+the time axis. Constant input settles to `(1−λ)·s`: attenuated,
+deliberately NOT zeroed (contrast `temporal_deriv`'s DC-nulling derivative
+— different transfer function and gate granularity, the complement not a
+duplicate; `modality_additive` is the cross-modality axis, not temporal;
+`riir-stealth` wear-off is post-trigger decay, not pre-trigger
+high-pass).
+
+Pieces: `HabituationFilter<P>` (fixed `[f32; P]` Pod-resident state, zero
+alloc by construction; `observe` + the per-channel-λ `observe_with`),
+`novelty_gate` (strict `>`, so σ(0)=0.5 never fires θ ≥ 0.5),
+`settling_ticks` (closed form `t_ε = ln(1/ε)/ln(1/(1−β))` — the issue's
+`ln(1/ε)/ln(1/β)` spelling is the retention convention; they agree at
+β=0.5 only), and the channel-class priors `THREAT_LAMBDA = 0.2` (keep
+signal) / `AMBIENT_LAMBDA = 0.8` (cancel hard) — the §128 λinit endpoints
+as override-able classes on the time axis. EMA state is per-NPC latent,
+never synced (the domain rules).
+
+T1 gates (closed-form unit tests, in-module): DC-gain sweep across λ ∈
+{0, 0.2, 0.5, 0.8, 1}, λ=1 nulls constants, λ=0 bit-identical (G3 kill
+switch), EMA recursion pinned at exact ticks, step fires on tick 1,
+settling law vs measured decay, gate threshold semantics. **T2** (the
+consumer GOAT: `evolve_belief` front-end, ≤ 2 ns/NPC/tick against the
+11–12 ns envelope, `ab_timing.rs` paired protocol, λ=0 bit-identical
+default path) rides riir-ai Issue 1006.
+
+🔧 Feature flag: `habituation_filter` (katgpt-core). **OPT-IN**, with no
+consumer yet — promotion rides T2's GOAT + owner call.

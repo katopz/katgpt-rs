@@ -936,6 +936,25 @@ fitted_anchor_tables = []
 # one substrate, two consumers).
 differential_anchor = ["fitted_anchor_tables"]
 
+# habituation_filter (riir-ai Issue 1006 T1 / Research 586, 2026-09-25): the
+# subtract arm of the attention-noise-control family transplanted from the
+# score axis to the TIME axis — habituation, respond to CHANGES not
+# constants. n = s − λ·EMA(s): a first-order high-pass with DC gain exactly
+# (1−λ) (the paper's own headwise (1−λinit) multiplier isomorphism, on the
+# time axis); constant input settles to (1−λ)·s, deliberately NOT zeroed
+# (contrast temporal_deriv's DC-nulling derivative — substrate-first verdict
+# in-module). Per-channel scalar sigmoid gate σ(κ·n) > θ (fast_sigmoid,
+# never softmax) + the per-channel-λ class form (threat 0.2 keeps, ambient
+# 0.8 cancels — the 882 λinit endpoints as override-able class priors, trap
+# 5 posture) + closed-form settling t_ε = ln(1/ε)/ln(1/(1−β)). G1/G3/G4
+# closed-form unit tests in-module (DC gain sweep, λ=0 bit-identical kill
+# switch, EMA recursion at exact ticks, step-fires-on-tick-1, settling law
+# vs measured decay); G2 perf + GOAT promotion ride the consumer wiring
+# (1006 T2, the katgpt-sense evolve_belief front-end). Fixed [f32; P] Pod
+# state, zero alloc by construction. OPT-IN per the no-default-consumer
+# rule.
+habituation_filter = []
+
 # state_option_scoring (Plan 607 T1, 2026-09-22): per-option centroid-cosine
 # scoring over a fixed option table + the pinned lowest-index argmax — the
 # game-decision lane's scoring primitive, upstreamed from riir-reflex Issue

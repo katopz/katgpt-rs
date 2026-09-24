@@ -3479,6 +3479,16 @@ pub mod fitted_anchor_table;
 #[cfg(feature = "differential_anchor")]
 pub mod differential_anchor;
 
+/// Differential habituation filter (riir-ai Issue 1006 T1 / Research 586) —
+/// the subtract arm transplanted from the score axis to the TIME axis:
+/// `n = s − λ·EMA(s)`, a first-order high-pass with DC gain exactly (1−λ).
+/// Respond to changes, not constants; constant input settles to (1−λ)·s
+/// (deliberately NOT zeroed — contrast `temporal_deriv`'s derivative).
+/// Per-channel scalar sigmoid gate + closed-form settling law. Opt-in
+/// (`habituation_filter`).
+#[cfg(feature = "habituation_filter")]
+pub mod habituation_filter;
+
 /// Exact-mass sigmoid admission (Issue 879 / Research 584, arXiv:2609.25518
 /// "Matryoshka attribution") — the calibrated-mass "sigmoid top-k": bisect
 /// τ until Σσ((s−τ)/T) = k, emit the soft mask mᵢ = σ((sᵢ−τ)/T). Sum-to-k,
