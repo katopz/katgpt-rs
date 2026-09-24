@@ -1,6 +1,6 @@
 # Issue 881 — the numbering sweep's standing backlog: 3 repos over their ratchets
 
-**Status:** OPEN — measured, deliberately NOT re-pinned.
+**Status:** OPEN — T1 RESOLVED (instrument defect, fixed at `216defb9b`, no re-pin needed); T2 ANSWERED (renames, not collisions — repair task T2.4 open); T3 open.
 **Filed:** 2026-09-24, from the citation-sweep campaign's neighbouring run.
 **Instrument:** `scripts/numbering_drift_sweep.py` ·
 pins `scripts/numbering_drift_floors.txt`.
@@ -20,8 +20,8 @@ repos that were behind and tracked-clean:
 
 | repo | column | pinned | measured | posture |
 |---|---|---:|---:|---|
-| riir-ai | `max_resets` | 9 | **26** | UNREAD — needs the per-reset walk |
-| riir-shader | `max_hist` | 0 | **5** | READ, one systematic cause |
+| riir-ai | `max_resets` | 9 | **26** → **9** | RESOLVED — 17 were PHANTOMS of the walker (`216defb9b`) |
+| riir-shader | `max_hist` | 0 | **5** | ANSWERED — 5 renames `-M` cannot pair (T2) |
 | mmorpg-editor | `max_resets` | 5 | **6** | READ-ONLY here per the owner rule |
 
 Two more were resolved rather than pinned and are recorded so the next reader
@@ -45,16 +45,33 @@ looked at**. A reset means a commit (or a merge resolution) landed a
 which is the mechanism that produces the historical collisions column two
 tables over, so this is upstream of a defect class and not bookkeeping.
 
-- [ ] Enumerate the resets with `--hist-rows` and diff them against the nine
+- [x] Enumerate the resets with `--hist-rows` and diff them against the nine
   the row already names.
-- [ ] For each new one, say whether it is a merge resolution taking the lower
+- [x] For each new one, say whether it is a merge resolution taking the lower
   side (Issue 770's expected shape) or a genuine backwards write.
-- [ ] Only then re-pin, at measured, with the specimens in the row — the shape
+- [-] Only then re-pin, at measured, with the specimens in the row — the shape
   every other row in that file uses.
 
 ⚠ Do NOT attribute this to the 2026-09-24 fast-forward of that checkout: it
 brought **one** docs commit (`309893426a`), and one commit can add at most one
 reset.
+
+**T1 RESOLVED 2026-09-24 — every one of the 17 was a PHANTOM, and the pin of 9
+was right the whole time** (session katgpt-rs-9a, fixed at `216defb9b`). Read
+per reset against `git show <c>:.issues/.highwater`: `4f14e64250` reported
+588→586 where it and its parent both hold **587**; `2f3749c8ba` reported
+627→614 for an ordinary **626→627** alloc. Cause: riir-ai `892dec017`
+(2026-09-23 — which is why the breach is one day old, not nineteen) committed a
+TWO-LINE `.issues/.highwater` (`998\n999`), and `counter_history` framed
+`git cat-file --batch` by LINE, so the stray `999` was read as the next
+response's header and every older commit's value came back one response off.
+The parser now reads by the declared byte size (`parse_cat_file_batch`, 0 value
+mismatches vs `git show` over riir-ai's 4594 events), and riir-ai measures
+**9 = pin** with the specimens the row already names — so the re-pin task is
+`[-]` moot, not done. Side effect: workspace resets 46 → 28, riir-clippy 5 → 4.
+⚠ The "one commit can add at most one reset" reasoning above was sound and
+still pointed the wrong way: one commit CAN'T add seventeen resets, but it can
+corrupt the instrument's reading of seventeen older ones.
 
 ## T2 — riir-shader: five `.issues` collisions with one systematic cause
 
@@ -65,9 +82,9 @@ Measured rows: `030/031/032/033/034`, each held twice, and the pairs are
 independent accidents; it is one convention that allocated a **pair** of
 documents per number, five times.
 
-- [ ] Confirm the reading in the repo (it was **4 commits behind origin** with
+- [x] Confirm the reading in the repo (it was **4 commits behind origin** with
   a dirty tree at filing, so this box's view is not authoritative — Issue 798).
-- [ ] Decide with that repo's owner whether the `_port`/`_queue` pairing is
+- [x] Decide with that repo's owner whether the `_port`/`_queue` pairing is
   DELIBERATE (a number owning two documents by design, which is the
   `.benchmarks` family convention one directory over and would make this a
   SCOPE question, not a collision) or an accident to renumber.
@@ -75,6 +92,28 @@ documents per number, five times.
   renumber plus a ratchet at measured. **Do not pin it at 5 before that
   question is answered** — a ratchet over an unread bucket is Issue 785's
   forbidden shape.
+
+**T2 ANSWERED 2026-09-24 — neither deliberate nor an accident: each pair is ONE
+document RENAMED** (riir-shader checked at origin, 0 behind). Every `_queue`
+file was added in `a375b93` (the six-gallery queue) and deleted as its port
+landed, replaced by the `_port` file: 031 and 034 add `_port` and delete
+`_queue` **in the same commit** (`abd575e`, `903b09f`); 030 splits it across
+two commits two minutes apart (`ce6030e` adds, `6359580` "commit the 030
+queue-file rename deletion"). The rewrite on landing was heavy enough that
+`-M`'s default 50% similarity does not pair them, so `removed_by_number`
+reports the old stem as a second holder. One number, one document at a time —
+not a collision, and pinning 5 would pin an instrument artifact.
+
+- [ ] **T2.4 — rename-aware holder recovery** in
+  `citation_weight.removed_by_number` (imported by `numbering_gate` and the
+  sweep, so one fix reaches both): a deletion of `NNN_a` whose commit — or an
+  adjacent commit by the same author within minutes — ADDS `NNN_b` in the same
+  directory is a rename, not a second holder. ⚠ It changes the recovered
+  population for EVERY repo, so measure the delta per repo before landing
+  (katgpt-rs's own collision pins are a membership wall and a rename-pair among
+  them would red STALE), and keep the adjacent-commit window explicit and armed
+  — a recycle (holder closed, number re-spent later) must still count. Until
+  then riir-shader stays red on `max_hist` BY DESIGN rather than pinned.
 
 ## T3 — mmorpg-editor: one new reset in a read-only repo
 
