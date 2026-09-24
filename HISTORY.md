@@ -1,3 +1,36 @@
+## Issue 881 (2026-09-24) — the numbering sweep's standing backlog, three repos over their ratchets: CLOSED
+
+Filed from the citation-sweep campaign's neighbouring run: riir-ai `max_resets`
+26 > 9, riir-shader `max_hist` 5 > 0, mmorpg-editor `max_resets` 6 > 5. Recorded
+as an issue rather than re-typed pins — *a pin file re-typed after every run is a
+diary, not a wall*. **None of the three needed its pin loosened except the one
+real event, and that one was read before it was typed.**
+
+- **T1 riir-ai — 17 of 17 new resets were PHANTOMS of the walker** (`216defb9b`).
+  riir-ai `892dec017` committed a two-line `.issues/.highwater` (`998\n999`), and
+  `counter_history` framed `git cat-file --batch` by LINE, so the stray line was
+  read as the next response's header and every older value came back one
+  response off. Parser now reads by declared byte size (`parse_cat_file_batch`,
+  0 mismatches vs `git show` over 4594 events). riir-ai measures 9 = pin;
+  workspace resets 46 → 28. ⚠ "One commit can add at most one reset" was sound
+  reasoning pointing the wrong way — one commit can corrupt the READING of many.
+- **T2 riir-shader — the five collisions were renames `-M` cannot pair**
+  (`3141a0467`). `NNN_<x>_queue` → `NNN_<x>_port`, rewritten past 50% similarity
+  on landing. Repair is `numbering_gate.collapse_renames` (same commit or same
+  author ≤ 1h, stem-token Jaccard ≥ 0.25, predecessor first); line similarity was
+  measured and rejected because the real recycle katgpt-rs `.plans/236` scores
+  0.065, inside the renames' range. Same change: `removed_by_number` gained
+  `--full-history` (merged-branch deletions were pruned by history
+  simplification). Workspace 195 → 180 (15 collapsed, 2 surfaced). Rule text:
+  AGENTS.md § Numbering Discipline.
+- **T3 mmorpg-editor — one REAL reset, read then pinned** (this close-out).
+  `.plans 249→248 @ 86713c4e8c`, a merge taking its lower parent (249 · 248 —
+  Issue 770's expected shape), measured at origin with 0 behind. It re-spent
+  nothing: `.plans/249` has one holder and the counter re-climbed to 250. Pin
+  5 → 6 with the specimen in the row. Repo stays read-only from here.
+
+Numbering sweep: **PASSED workspace-wide** at close.
+
 ## 2026-09-23 — the owner-gates menu v2 executed: schedules re-armed (row 5), pipefail residue closed (4e), toolchain batch-pin (4f), and the opt-in verdicts recorded (4a/4b/4c/4d)
 
 The owner approved the corrected owner-gates decision table (menu v2) wholesale;
