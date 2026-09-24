@@ -1,6 +1,6 @@
 # Proposal 010 — Non-Hidden-State Canonical Construction (Source-Feature Directions)
 
-Status: **draft**
+Status: **draft** — ⚠ 2026-09-25: every MiniCPM5-1B hidden state behind this proposal's evidence (riir-train Benches 422–427, 605) came from a RoPE-broken forward (llama.cpp's interleaved Q/K under a rotate-half RoPE; fixed riir-infer `0b26b9a`, ppl 259.9 → 69.05 == HF fp32). The cross-arch negatives are UNVERIFIED, not refuted — re-run plan: riir-train Issue 571.
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: Proposal 009 (canonical intent space, PERMANENTLY DEMOTED cross-arch) + Research 459 (hidden-state path exhausted) + code2vec (Alon et al. 2018, AST path embeddings)
