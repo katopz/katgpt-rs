@@ -3479,6 +3479,16 @@ pub mod fitted_anchor_table;
 #[cfg(feature = "differential_anchor")]
 pub mod differential_anchor;
 
+/// Streaming attention-SNR accumulators (Issue 882 P1 / Research 586) —
+/// exact softmax entropy + participation ratio from two extra online-softmax
+/// registers (`T = Σe^{x−m}(x−m)`, `R₂ = Σe^{2(x−m)}`, closed-form rescale on
+/// max moves), the fused tiled-kernel arm
+/// ([`attention::tiled_attention_forward_snr`]), and per-head measured
+/// sharpening `τ_h` by bisection onto the SSMax `Fixed` socket. Entropy is
+/// concentration, not relevance (trap 2). Opt-in (`attention_snr`).
+#[cfg(feature = "attention_snr")]
+pub mod attention_snr;
+
 /// Differential habituation filter (riir-ai Issue 1006 T1 / Research 586) —
 /// the subtract arm transplanted from the score axis to the TIME axis:
 /// `n = s − λ·EMA(s)`, a first-order high-pass with DC gain exactly (1−λ).

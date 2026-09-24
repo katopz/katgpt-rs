@@ -4824,3 +4824,42 @@ default path) rides riir-ai Issue 1006.
 
 🔧 Feature flag: `habituation_filter` (katgpt-core). **OPT-IN**, with no
 consumer yet — promotion rides T2's GOAT + owner call.
+
+## 130. attention_snr — streaming attention-SNR accumulators (Issue 882 P1 / Research 586)
+
+The measurement arm of the attention-noise-control family: exact softmax
+**entropy** and **participation ratio** maintained inside the online-softmax
+loop from two extra registers, `T = Σe^{x−m}(x−m)` and `R₂ = Σe^{2(x−m)}`,
+so `H = ln l − T/l` and `PR = l²/R₂ = 1/Σp²`. A max move `m → m'`
+(`Δ = m − m'`, `c = e^Δ`) rescales both in closed form: `T ← c(T + Δ·l_old)`,
+`R₂ ← c²R₂`. Two multiply-adds per element on top of the `exp` the loop
+already pays; nothing materialized.
+
+Pieces: `SoftmaxSnr` (standalone streaming state: `observe` with masked
+`−∞` keys skipped branch-free, `merge` for split-K, `entropy` /
+`normalized_entropy` / `participation_ratio` / `collision_mass`), the fused
+kernel arm `attention::tiled_attention_forward_snr` (a monomorphized
+`TileStats` sink — the plain forward's `NoStats` instantiation compiles
+every hook to nothing, so its output is bit-identical at N ≥ 128), per-head
+measured sharpening `fit_tau` (log-space bisection of
+`H(softmax(τx))/ln N = h*`, saturation reported rather than hidden) onto the
+shipped SSMax socket as `SsmaxMode::Fixed { s_l: τ/ln N }` (no new enum
+variant — downstream exhaustive matches stay intact), and `TauEma`
+(log-space smoothing across steps; latent state, no weights move).
+
+**Trap 2, pinned as a measured negative:** entropy is concentration, not
+relevance — a planted distractor yields `Hn = 0.001` (as sharp as a hit) at
+gold mass `4.8e-7`. Any policy on these statistics needs the P4 `m_Y`
+falsifier.
+
+Gates (`bench_887`, M3 Max, 3 runs): G1a kernel vs f64 reference
+`|ΔH| ≤ 5.8e-6` nats incl. a rising-max-every-tile fixture; G1b
+retrieval-proxy Spearman −1.000 (single planted key — near-monotone by
+construction, a sanity proxy, not the m_Y gate); G1c fit → socket → kernel
+`|Hn − target| ≤ 4.8e-7`; G2 stats arm vs plain forward median **+0.9–1.1%**
+(N=1024, D=64) / **+0.4–0.6%** (N=512, D=128), paired `ab_median_ratio`, bar
+≤ 2%; G3 bit-identical N ∈ {128, 1024}; G4 0 allocs.
+
+🔧 Feature flag: `attention_snr` (katgpt-core, implies `ssmax_temperature`
++ `tiled_attention`). **OPT-IN**, with no consumer yet — promotion waits on
+a consumer GOAT and the P4 `m_Y` correlation.

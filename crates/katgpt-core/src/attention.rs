@@ -163,7 +163,151 @@ fn tiled_attention_forward_impl(
         &mut local_o_tile
     };
 
-    tiled_attention_inner(q, k, v, output, seq_len, head_dim, scale, o_tile);
+    tiled_attention_inner(
+        q,
+        k,
+        v,
+        output,
+        seq_len,
+        head_dim,
+        scale,
+        o_tile,
+        &mut NoStats,
+    );
+}
+
+/// Per-row statistics hooks for [`tiled_attention_inner`].
+///
+/// Monomorphized per sink: [`NoStats`] has `ACTIVE = false` and empty
+/// `#[inline(always)]` bodies, so the plain forward carries no extra work —
+/// not a branch, not a copy (the `y_row` copy is behind `S::ACTIVE`, a
+/// compile-time constant).
+#[cfg(feature = "tiled_attention")]
+trait TileStats {
+    /// Whether the kernel must keep a pre-exp copy of each score row.
+    const ACTIVE: bool;
+    /// A new query tile begins.
+    fn reset_tile(&mut self);
+    /// Row `i`'s running max moved: `delta = scale·(m_old − m_new)` in logit
+    /// units, `correction = e^delta`, `l_old` the normalizer before rescale.
+    fn rebase(&mut self, i: usize, delta: f32, correction: f32, l_old: f32);
+    /// Row `i` folded one K tile: `y` = shifted logits, `p` = `e^y`.
+    fn fold(&mut self, i: usize, y: &[f32], p: &[f32]);
+    /// Row `i` (global query `row`) is final with normalizer `l` over `n` keys.
+    fn finish(&mut self, row: usize, i: usize, l: f32, n: usize);
+}
+
+/// The inert sink — the plain forward.
+#[cfg(feature = "tiled_attention")]
+struct NoStats;
+
+#[cfg(feature = "tiled_attention")]
+impl TileStats for NoStats {
+    const ACTIVE: bool = false;
+    #[inline(always)]
+    fn reset_tile(&mut self) {}
+    #[inline(always)]
+    fn rebase(&mut self, _: usize, _: f32, _: f32, _: f32) {}
+    #[inline(always)]
+    fn fold(&mut self, _: usize, _: &[f32], _: &[f32]) {}
+    #[inline(always)]
+    fn finish(&mut self, _: usize, _: usize, _: f32, _: usize) {}
+}
+
+/// The attention-SNR sink (Issue 882 P1): the two extra online-softmax
+/// registers `T = Σe^y·y` and `R₂ = Σe^{2y}` per tile row, finalized into
+/// exact entropy + participation ratio. See [`crate::attention_snr`].
+#[cfg(all(feature = "tiled_attention", feature = "attention_snr"))]
+struct SnrSink<'a> {
+    t: [f32; BR],
+    r2: [f32; BR],
+    out: &'a mut [crate::attention_snr::SnrRowStats],
+}
+
+#[cfg(all(feature = "tiled_attention", feature = "attention_snr"))]
+impl TileStats for SnrSink<'_> {
+    const ACTIVE: bool = true;
+    #[inline(always)]
+    fn reset_tile(&mut self) {
+        self.t = [0.0; BR];
+        self.r2 = [0.0; BR];
+    }
+    #[inline(always)]
+    fn rebase(&mut self, i: usize, delta: f32, correction: f32, l_old: f32) {
+        // First K tile: l_old = 0 and delta = −∞; `−∞·0` would be NaN.
+        if l_old > 0.0 {
+            self.t[i] = correction * (self.t[i] + delta * l_old);
+            self.r2[i] *= correction * correction;
+        }
+    }
+    #[inline(always)]
+    fn fold(&mut self, i: usize, y: &[f32], p: &[f32]) {
+        self.t[i] += crate::simd::simd_dot_f32(p, y, p.len());
+        self.r2[i] += crate::simd::simd_dot_f32(p, p, p.len());
+    }
+    #[inline(always)]
+    fn finish(&mut self, row: usize, i: usize, l: f32, n: usize) {
+        let (t, r2) = (self.t[i], self.r2[i]);
+        self.out[row] = crate::attention_snr::SnrRowStats {
+            entropy: if l > 0.0 {
+                (l.ln() - t / l).max(0.0)
+            } else {
+                0.0
+            },
+            participation_ratio: if r2 > 0.0 { l * l / r2 } else { 0.0 },
+            n: n as u32,
+        };
+    }
+}
+
+/// Scratch length `tiled_attention_forward_snr` needs for its `o_tile`.
+#[cfg(all(feature = "tiled_attention", feature = "attention_snr"))]
+#[inline]
+pub const fn tiled_snr_scratch_len(head_dim: usize) -> usize {
+    BR * head_dim
+}
+
+/// Tiled flash attention that also writes exact per-query-row softmax
+/// entropy + participation ratio (Issue 882 P1, the streaming attention-SNR
+/// accumulators).
+///
+/// Output is **bit-identical** to [`tiled_attention_forward`] for
+/// `seq_len ≥ 128` (the same kernel; the sink never touches the output
+/// accumulators). Below that threshold the plain forward takes its
+/// materialized fallback while this always runs the tiled kernel — equal to
+/// f32 rounding, not bitwise.
+///
+/// Allocation-free: `o_tile` is caller scratch of at least
+/// [`tiled_snr_scratch_len`]`(head_dim)` elements; `stats` has `seq_len` rows.
+#[cfg(all(feature = "tiled_attention", feature = "attention_snr"))]
+#[allow(clippy::too_many_arguments)]
+pub fn tiled_attention_forward_snr(
+    q: &[f32],
+    k: &[f32],
+    v: &[f32],
+    output: &mut [f32],
+    seq_len: usize,
+    head_dim: usize,
+    scale: f32,
+    o_tile: &mut [f32],
+    stats: &mut [crate::attention_snr::SnrRowStats],
+) {
+    let expected = seq_len * head_dim;
+    debug_assert_eq!(q.len(), expected, "Q slice length mismatch");
+    debug_assert_eq!(k.len(), expected, "K slice length mismatch");
+    debug_assert_eq!(v.len(), expected, "V slice length mismatch");
+    debug_assert_eq!(output.len(), expected, "output slice length mismatch");
+    assert!(stats.len() >= seq_len, "stats needs one row per query");
+    assert!(o_tile.len() >= BR * head_dim, "o_tile scratch too small");
+    if seq_len == 0 {
+        return;
+    }
+    let mut sink = SnrSink {
+        t: [0.0; BR],
+        r2: [0.0; BR],
+        out: stats,
+    };
+    tiled_attention_inner(q, k, v, output, seq_len, head_dim, scale, o_tile, &mut sink);
 }
 
 /// Inner tiled attention implementation with online-softmax.
@@ -180,7 +324,7 @@ fn tiled_attention_forward_impl(
 /// 3. Final normalize: o_tile / norm_tile
 #[cfg(feature = "tiled_attention")]
 #[allow(clippy::too_many_arguments)]
-fn tiled_attention_inner(
+fn tiled_attention_inner<S: TileStats>(
     q: &[f32],
     k: &[f32],
     v: &[f32],
@@ -191,6 +335,9 @@ fn tiled_attention_inner(
     // Scratch buffer for output tile accumulation. Must be at least `BR * head_dim` elements.
     // Zeroed at the start of each query tile.
     o_tile: &mut [f32],
+    // Per-row statistics sink. `NoStats` compiles every hook to nothing, so the
+    // plain forward is the same machine code it was before the sink existed.
+    stats: &mut S,
 ) {
     let log2e_scale = scale * std::f32::consts::LOG2_E;
     let q_tiles = seq_len.div_ceil(BR);
@@ -209,6 +356,9 @@ fn tiled_attention_inner(
     // never be observed. The one-time -inf fill is retained only as a
     // debugging-friendly poison value.
     let mut s_tile = [f32::NEG_INFINITY; BR * BC];
+    // Pre-exp copy of one score row, read only by an active stats sink (the
+    // entropy numerator needs `y·e^y`, and `exp` overwrites `y` in place).
+    let mut y_row = [0.0f32; BC];
 
     for q_tile_idx in 0..q_tiles {
         let q_start = q_tile_idx * BR;
@@ -219,6 +369,7 @@ fn tiled_attention_inner(
         o_tile[..tile_elems].fill(0.0);
         let mut max_tile = [f32::NEG_INFINITY; BR];
         let mut norm_tile = [0.0f32; BR];
+        stats.reset_tile();
 
         for k_tile_idx in 0..k_tiles {
             let k_start = k_tile_idx * BC;
@@ -262,6 +413,7 @@ fn tiled_attention_inner(
                         &mut o_tile[i * head_dim..i * head_dim + head_dim],
                         correction,
                     );
+                    stats.rebase(i, (m_old - m_new) * scale, correction, norm_tile[i]);
                     norm_tile[i] *= correction;
                 }
 
@@ -270,7 +422,11 @@ fn tiled_attention_inner(
                 // since exp(x) = exp2(x * LOG2_E).
                 let p_row = &mut s_tile[i * BC..i * BC + actual_bc];
                 crate::simd::simd_fused_sub_scale_inplace(p_row, m_new, scale);
+                if S::ACTIVE {
+                    y_row[..actual_bc].copy_from_slice(p_row);
+                }
                 crate::simd::simd_exp_inplace(p_row);
+                stats.fold(i, &y_row[..actual_bc], p_row);
 
                 // Rowsum via SIMD (single reduction vs scalar accumulator)
                 let rowsum = crate::simd::simd_sum_f32(p_row);
@@ -307,6 +463,7 @@ fn tiled_attention_inner(
                 &o_tile[o_off..o_off + head_dim],
                 inv_norm,
             );
+            stats.finish(q_start + i, i, *norm_tile_i, seq_len);
         }
     }
 }

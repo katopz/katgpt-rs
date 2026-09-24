@@ -936,6 +936,22 @@ fitted_anchor_tables = []
 # one substrate, two consumers).
 differential_anchor = ["fitted_anchor_tables"]
 
+# attention_snr (Issue 882 P1 / Research 586, 2026-09-25): streaming
+# attention-SNR accumulators — exact softmax entropy H = ln l − T/l and
+# participation ratio PR = l²/R₂ from two extra online-softmax registers
+# (T = Σe^{x−m}(x−m), R₂ = Σe^{2(x−m)}; closed-form rescale on a max move:
+# T ← c(T + Δ·l_old), R₂ ← c²R₂). Standalone `SoftmaxSnr` (observe/merge,
+# masked-key safe) + the fused tiled-kernel arm
+# `attention::tiled_attention_forward_snr` (a monomorphized stats sink —
+# the plain forward's `NoStats` instantiation carries zero extra work, output
+# bit-identical at N ≥ 128) + per-head measured sharpening `fit_tau`
+# (log-space bisection to a target normalized entropy) onto the SSMax
+# `Fixed` socket (`s_l = τ/ln N`, no new enum variant) + `TauEma`
+# (log-space, latent state). Entropy is concentration, not relevance
+# (trap 2 — pinned as a measured negative in bench_887). Implies
+# ssmax_temperature (the socket) + tiled_attention (the kernel). OPT-IN.
+attention_snr = ["ssmax_temperature", "tiled_attention"]
+
 # habituation_filter (riir-ai Issue 1006 T1 / Research 586, 2026-09-25): the
 # subtract arm of the attention-noise-control family transplanted from the
 # score axis to the TIME axis — habituation, respond to CHANGES not
@@ -2762,6 +2778,15 @@ required-features = ["gold_share_probe", "sink_aware_attn"]
 name = "bench_886_differential_anchor_goat"
 harness = false
 required-features = ["differential_anchor"]
+
+# Issue 882 P1 — streaming attention-SNR accumulators GOAT gate (G1a
+# exactness vs f64 incl. the rising-max rescale path, G1b retrieval proxy +
+# trap-2 pinned negative, G1c fit_tau → SSMax socket closed loop, G2 paired
+# ab_median_ratio ≤ 1.02, G3 bit-identical at N ≥ 128, G4 0 allocs).
+[[test]]
+name = "bench_887_attention_snr_goat"
+harness = false
+required-features = ["attention_snr"]
 
 # (kept as a [[bench]]-shaped gate; the 813 precedent puts GOAT gates in
 # tests/ with harness=false and a required-features row — the cfg-gated
