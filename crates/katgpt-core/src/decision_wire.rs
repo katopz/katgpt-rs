@@ -354,6 +354,10 @@ pub enum Lane {
     Laya,
     /// Both, composed (e.g. laya proposes, modelless gates/abstains).
     Hybrid,
+    /// The CLM comparison lane (riir-reflex Issue 019) — the external
+    /// Apache-2.0 Contrastive-LM reference served over HTTP, measured in
+    /// the arena's comparison tables; never a default-on product lane.
+    Clm,
 }
 
 /// Router verdict: which lane, and why it was picked (laya's Router runs
