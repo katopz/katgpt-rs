@@ -3489,6 +3489,14 @@ pub mod differential_anchor;
 #[cfg(feature = "attention_snr")]
 pub mod attention_snr;
 
+/// Row-relative sink-exempt logit floor + b-bit logit codec (Issue 882 P2 /
+/// Research 586) — `l̃ = max(l, m_r − w)` over non-sink, unmasked keys bounds
+/// the row to `[m_r − w, m_r]`, codable in `b` bits with a `2^b`-entry exp
+/// table, under a closed-form softmax error envelope. Opt-in
+/// (`row_logit_floor`).
+#[cfg(feature = "row_logit_floor")]
+pub mod row_logit_floor;
+
 /// Differential habituation filter (riir-ai Issue 1006 T1 / Research 586) —
 /// the subtract arm transplanted from the score axis to the TIME axis:
 /// `n = s − λ·EMA(s)`, a first-order high-pass with DC gain exactly (1−λ).

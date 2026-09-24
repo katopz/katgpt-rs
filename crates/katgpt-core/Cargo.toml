@@ -952,6 +952,18 @@ differential_anchor = ["fitted_anchor_tables"]
 # ssmax_temperature (the socket) + tiled_attention (the kernel). OPT-IN.
 attention_snr = ["ssmax_temperature", "tiled_attention"]
 
+# row_logit_floor (Issue 882 P2 / Research 586, 2026-09-25): row-relative,
+# sink-exempt logit floor l̃ = max(l, m_r − w) (m_r = non-sink row max, so a
+# FLOOR not a cap) bounding every non-sink logit to [m_r − w, m_r]; a
+# symmetric b-bit LogitCodec over that domain (step w/(2^b − 2), masked keys
+# → MASKED) with a 2^b-entry exp LUT softmax; the closed-form envelope
+# (floor TV ≤ A/(1+A), A = n_floored·e^{−w}; code |p̃/p − 1| ≤ e^{2h} − 1);
+# min_width_for_tv = ln(n/ε), the row-independent width that GUARANTEES a
+# floor budget; RangeEma (the issue's w_h, raw-row range EMA). Sinks and −∞
+# are exempt by construction (traps 3 + the unmask trap). Pure, no deps.
+# OPT-IN.
+row_logit_floor = []
+
 # habituation_filter (riir-ai Issue 1006 T1 / Research 586, 2026-09-25): the
 # subtract arm of the attention-noise-control family transplanted from the
 # score axis to the TIME axis — habituation, respond to CHANGES not
@@ -2787,6 +2799,15 @@ required-features = ["differential_anchor"]
 name = "bench_887_attention_snr_goat"
 harness = false
 required-features = ["attention_snr"]
+
+# Issue 882 P2 — row-relative sink-exempt logit floor + b-bit codec GOAT:
+# G1a measured TV ≤ closed-form envelope (every cell), G1b trap-3 + G1c
+# unmask negatives pinned, G2 decode-head paired A/B ≤ 1.01, G3 width=+∞
+# bit-identical, G4 0 allocs.
+[[test]]
+name = "bench_888_row_logit_floor_goat"
+harness = false
+required-features = ["row_logit_floor"]
 
 # (kept as a [[bench]]-shaped gate; the 813 precedent puts GOAT gates in
 # tests/ with harness=false and a required-features row — the cfg-gated

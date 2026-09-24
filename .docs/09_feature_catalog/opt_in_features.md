@@ -4863,3 +4863,41 @@ construction, a sanity proxy, not the m_Y gate); G1c fit → socket → kernel
 🔧 Feature flag: `attention_snr` (katgpt-core, implies `ssmax_temperature`
 + `tiled_attention`). **OPT-IN**, with no consumer yet — promotion waits on
 a consumer GOAT and the P4 `m_Y` correlation.
+
+## 131. row_logit_floor — row-relative sink-exempt logit floor + b-bit codec (Issue 882 P2 / Research 586)
+
+The bounding arm of the attention-noise-control family: `l̃ = max(l, m_r − w)`
+over non-sink, unmasked keys (`m_r` = the non-sink row max, so this is a
+**floor** that raises the far tail, not a cap). The row is then bounded to
+`[m_r − w, m_r]`, which makes it codable in `b` bits (`LogitCodec`, symmetric,
+step `w/(2^b − 2)`, both endpoints exact, masked keys → `MASKED`), and its
+softmax becomes a `2^b`-entry exp lookup table (`exp_lut_into` +
+`softmax_coded_into`, sinks exact).
+
+- **Envelope:** floor TV ≤ `A/(1+A)` with `A = n_floored·e^{−w}`; the code
+  term is `|p̃/p − 1| ≤ e^{2h} − 1` per entry.
+- **Width:** `min_width_for_tv(n, ε) = ln(n/ε)` is the row-independent width
+  that guarantees a floor budget on any row. `RangeEma` is the issue's `w_h`:
+  narrower, but without the guarantee.
+- **Exemptions:** sinks (trap 3) and `−∞` (the unmask trap) are exempt by
+  construction, and both are pinned as measured negatives.
+
+Gates (`bench_888`, M3 Max, 3 runs):
+
+- **G1a:** measured TV ≤ envelope in all 144 cells (n up to 65536, 8/6/4-bit,
+  both width policies).
+- **G1b:** dropping the sink exemption adds 8.3pp of context TV, 2.8× the
+  6-bit code error. The pre-registered 10×-joint bar failed at 5.7× and is
+  recorded as such.
+- **G1c:** masked mass is exactly 0.
+- **G2:** the decode head is latency-neutral-to-positive: −1.1% at D=64 and
+  ±0.2% at D=128, against a bar of ≤ +1%. The LUT softmax alone is **−14.8%**.
+- **G3:** width = +∞ is bit-identical.
+- **G4:** 0 allocations.
+
+What 8-bit costs: ~0.75% context-conditional TV, and ~3% at 6-bit.
+
+🔧 Feature flag: `row_logit_floor` (katgpt-core, no deps). **OPT-IN**. The
+ppl and needle@64K quality gate is riir-infer Issue 011 (the consumer), and
+promotion waits on it.
+
