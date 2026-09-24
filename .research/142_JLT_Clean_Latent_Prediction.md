@@ -333,3 +333,5 @@ The remaining techniques (EMA alignment, async timesteps, logit-normal schedule)
 - EDM: Karras et al., "Elucidating the design space of diffusion-based generative models", NeurIPS 2022
 - SiT: Ma et al., "SiT: Exploring flow and diffusion-based generative models with scalable interpolant transformers", ECCV 2024
 - REPA: Yu et al., "Representation alignment for generation", ICLR 2025
+
+> **PASS-Redirects (synthesis):** Feng et al. [arXiv:2609.28473 "On the Diffusibility of High-Dimensional Latents"] — the ECCV'26 successor to this exact mechanism: restates JLT/JiT's target geometry in subspace-projector form (v* = Q·v_l* + (1/t)·P⊥·z_t, orthogonal term deterministic, E‖ε⊥‖² = h−l) and measures reconstruction-tuned encoders collapsing effective dim (finetuned DINOv2-L R90 672→129 of 1024). Confirms D1's verdict: clean prediction is the right parameterization in the collapsed-effective-dim regime — our D2F CE-on-clean-tokens choice needs no change.

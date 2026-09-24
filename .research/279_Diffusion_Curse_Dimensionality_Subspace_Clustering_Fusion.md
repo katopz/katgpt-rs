@@ -222,3 +222,5 @@ Per workflow §1.5, all three are produced in this session:
 - **Stage-gated HLA**: `katgpt-rs/.research/269_Variable_Width_Shape_Adapter_Fusion.md`.
 - **Canonical LatCal Super-GOAT precedent**: `katgpt-rs/.research/212_Gemini_Fourier_LatCal_Fusion_Verdict.md`.
 - **Private Super-GOAT guide**: `riir-neuron-db/.research/001_Subspace_Consolidation_Quality_Gate_Guide.md`.
+
+> **PASS-Redirects (synthesis):** Feng et al. [arXiv:2609.28473 "On the Diffusibility of High-Dimensional Latents"] — adds the empirical half of this note's subspace story: reconstruction-tuned encoders measurably collapse effective dimensionality (R90 672→129 of 1024 on finetuned DINOv2-L; MAE R90=103 of 768), and x0-prediction — not a dimensionality-reducing adapter — restores diffusibility in the FULL ambient space. Our own surfaces already measure + exploit the same collapse (KV-key d_eff≈4–6, style_weights rank≈3 per riir-train Plan 316), as compression headroom rather than training obstacle.
