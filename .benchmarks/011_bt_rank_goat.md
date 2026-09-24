@@ -1,7 +1,7 @@
 # Benchmark 011: Bradley-Terry Pairwise Ranking — GOAT Proof
 
 **Date:** 2026-05-19
-**Plan:** 079 (BT Selection — OpenDeepThink Distillation)
+**Plan:** none (bench is the GOAT artifact — the historical "Plan 079" label was a phantom: katgpt-rs `.plans/079` is the ELF plan and no BT plan ever existed at that number)
 **Features:** `--features bt_rank`
 **Command:** `cargo test --features bt_rank --test bench_bt_rank_goat -- --nocapture`
 **Source:** [OpenDeepThink: Parallel Reasoning via Bradley–Terry Aggregation](https://arxiv.org/pdf/2605.15177) (Zhou et al., 2026)
@@ -93,7 +93,7 @@ BT ranking addresses the **untested variable**: how we pick among candidates giv
 |------|---------------|--------|-----|
 | 052 GFlowNet | Flow regularization (reward) | No DDTree gain | Reward modulation, not selection |
 | 072 SDAR Modelless | Sigmoid gating (reward) | ELO 954 ≈ 955 | Reward modulation, not selection |
-| **079 BT Rank** | **Selection mechanism** | **+10.6pp over pointwise** | **The untested variable** |
+| **BT Rank (this bench)** | **Selection mechanism** | **+10.6pp over pointwise** | **The untested variable** |
 
 ## Next Steps
 

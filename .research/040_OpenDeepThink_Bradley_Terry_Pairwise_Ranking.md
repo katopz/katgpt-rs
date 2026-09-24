@@ -257,7 +257,7 @@ This aligns with our architecture: game domains have **ground truth** (win/loss)
 | **P3** | PairwiseValidator compare() | riir-validator-sdk | 1 day | Low — ABI extension, future-proofing |
 | **P4** | Critique-conditioned DPO | riir-ai loss pipeline | 3 days | Medium — if P1/P2 show gain |
 
-### ✅ GOAT Proof Passed (Plan 079)
+### ✅ GOAT Proof Passed (Bench 011)
 
 `bt_rank` feature gate — `tests/bench_bt_rank_goat.rs` — 4/4 proofs:
 
@@ -308,7 +308,7 @@ The BT ranking idea should be tested as a new pruner variant that compares DDTre
 | 071 ROPD Modelless | ✅ Done | Rubric scoring is pointwise — BT could replace it |
 | 072 SDAR Modelless | ✅ Done (negative) | Sigmoid gating is reward modulation, not selection — explains null result |
 | 073 SDAR Model-Based | ✅ Done | SDAR gate at gradient level — orthogonal to BT selection |
-| **079** BT Selection | ✅ GOAT proof passed | `bt_rank` feature — BT > pointwise (+10.6pp), > win rate (τ +0.016) |
+| **Bench 011** BT Selection | ✅ GOAT proof passed | `bt_rank` feature — BT > pointwise (+10.6pp), > win rate (τ +0.016) |
 
 ---
 
@@ -318,3 +318,5 @@ The BT ranking idea should be tested as a new pruner variant that compares DDTre
 - Bradley & Terry, "Rank Analysis of Incomplete Block Designs," Biometrika, 1952
 - Singh et al., "V1: Unifying Generation and Self-Verification," arXiv:2603.04304, 2026 (concurrent: pairwise > pointwise)
 - Huang et al., "Large Language Models Cannot Self-Correct Reasoning Yet," arXiv:2310.01798, 2023
+
+> **PASS-Redirects (synthesis):** Fu, Kulanthaivelu, Yamada [arXiv:2609.19526 "Self Improvement via Fast Tree-search"] — external validation of this note's design at self-improvement-archive scale: pairwise BT RANKS (never raw scores — fit scale varies with comparison topology, ordering does not) drive parent sampling + eval priority; judge ρ=0.68 on full-file inputs vs 0.40 on diff chains; swap-order debiasing adds ~nothing at 2× cost. Direct port to the healer is inverted by cheap-oracle economics; distilled in riir-clippy `.research/208_sift_judge_ordered_eval.md`.
