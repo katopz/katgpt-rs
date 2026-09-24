@@ -8,6 +8,7 @@
 > **Related Plans:** none new (both search arms already shipped: `parallel_probe` + `renoise_ce::best_of_n_*`)
 > **Cross-ref (riir-ai):** Issue 997 (stigmergic verified forage sharing — the one mechanism gap)
 > **Verdict: Gain (validation-class).** ~8 of the paper's 11 mechanism rows ship in full — several at higher fidelity (fog-of-war gating, BLAKE3 admission) — one ships with its response polarity inverted (plateau detector yes, divergent family-switch no), and **two composed-mechanism gaps** remain: **stigmergic attractive forage-discovery sharing** and **plateau-triggered divergent family switch with peer-occupancy awareness** → both folded into riir-ai Issue 997. The paper's additive value to us is NOT a new primitive: the core inequality ships in our own lineage (UnMaskFork Eq 1, seven months earlier), and both search arms (communicating + independent) are deployed per-domain. The value is (a) the **conditions law** (stage-count m × verifier accessibility × per-agent compute) as external validation + a candidate orchestration-law packaging, and (b) the empirical multiplier (team@k ≈ best@4k–6.6k, growing with k).
+> **Delta (2026-09-24):** Research 585 (SAT, arXiv:2609.22682) operationalizes this note's verifier-accessibility axis as a **measured** demonstrability score (external-panel discriminability of correct-vs-wrong certificates; ρ=0.90 with team-over-best across 8 benchmarks) — the axis recorded here as "candidate packaging" now has a published measurement protocol; our consumer-side instantiation filed as riir-clippy Issue 134.
 
 ---
 
