@@ -4713,3 +4713,7 @@ top-k.
 Bench: [884](../../.benchmarks/884_exact_mass_admit_goat.md) ·
 Resolution: HISTORY.md §Issue 879 (issue file removed per the noise-reduction
 rule; 2026-09-24).
+Follow-up: [Issue 880](../../.issues/880_calibrated_mass_router_gate.md)
+(OPEN, filed 2026-09-24) — consumer lane (a), the calibrated-mass
+`gate_sigmoid_topk` upgrade as a separately-named gate; the promotion
+question for this flag rides that gate, not this entry.
