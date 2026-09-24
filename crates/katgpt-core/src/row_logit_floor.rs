@@ -176,12 +176,21 @@ impl LogitCodec {
     #[inline]
     pub fn encode_into(&self, ctx: &[f32], m_r: f32, width: f32, out: &mut [i8]) {
         assert_eq!(out.len(), ctx.len(), "encode_into: length mismatch");
-        let l = self.levels as f32;
-        let inv = (2.0 * l) / width;
-        let centre = m_r - 0.5 * width;
+        let k = self.kernel(m_r, width);
         for (o, &x) in out.iter_mut().zip(ctx) {
-            let c = ((x - centre) * inv).round().clamp(-l, l) as i8;
-            *o = if x == f32::NEG_INFINITY { MASKED } else { c };
+            *o = k.code(x);
+        }
+    }
+
+    /// The per-row encode constants, shared by [`Self::encode_into`] and
+    /// [`floored_coded_exp_inplace`] so the two can never disagree on a code.
+    #[inline]
+    fn kernel(&self, m_r: f32, width: f32) -> CodeKernel {
+        let l = self.levels as f32;
+        CodeKernel {
+            l,
+            inv: (2.0 * l) / width,
+            centre: m_r - 0.5 * width,
         }
     }
 
@@ -216,6 +225,65 @@ impl LogitCodec {
             lut[(c as i8) as u8 as usize] = (base + c as f32 * step).exp();
         }
     }
+}
+
+/// Per-row encode constants (see [`LogitCodec::kernel`]).
+#[derive(Clone, Copy)]
+struct CodeKernel {
+    l: f32,
+    inv: f32,
+    centre: f32,
+}
+
+impl CodeKernel {
+    #[inline(always)]
+    fn code(&self, x: f32) -> i8 {
+        let c = ((x - self.centre) * self.inv)
+            .round()
+            .clamp(-self.l, self.l) as i8;
+        if x == f32::NEG_INFINITY { MASKED } else { c }
+    }
+}
+
+/// Floor, code and exp-table one score row IN PLACE — the fused
+/// decode-attention form of [`floor_row_sink_exempt`] →
+/// [`LogitCodec::encode_into`] → [`softmax_coded_into`], with no code buffer.
+///
+/// On return `row[i]` holds the UNNORMALISED softmax numerator relative to
+/// the row max (sinks exact from `f32`, context from the table, masked `0`),
+/// and the second value is their sum `Z`. `row[i] / Z` equals
+/// [`softmax_coded_into`]'s output bit for bit (same entries, same summation
+/// order). `lut` is scratch (refilled per row).
+///
+/// `width` must be finite and `> 0`: the kill switch belongs to the caller's
+/// plain-softmax path, not to an infinite width here. A row with no live key
+/// at all returns `Z = 0`, as a plain softmax would.
+#[inline]
+pub fn floored_coded_exp_inplace(
+    row: &mut [f32],
+    n_sink: usize,
+    width: f32,
+    codec: &LogitCodec,
+    lut: &mut [f32; 256],
+) -> (RowFloor, f32) {
+    let rf = floor_row_sink_exempt(row, n_sink, width);
+    let shift = rf.row_max();
+    codec.exp_lut_into(width, rf.m_r - shift, lut);
+    let s = n_sink.min(row.len());
+    let (sinks, ctx) = row.split_at_mut(s);
+    let mut z = 0.0f32;
+    for x in sinks.iter_mut() {
+        let e = (*x - shift).exp();
+        *x = e;
+        z += e;
+    }
+    let k = codec.kernel(rf.m_r, width);
+    for x in ctx.iter_mut() {
+        let e = lut[k.code(*x) as u8 as usize];
+        *x = e;
+        z += e;
+    }
+    (rf, z)
 }
 
 /// Softmax of a coded row: sinks from their `f32` logits (exact), context
@@ -393,7 +461,9 @@ mod tests {
     fn lut_softmax_matches_decoded_softmax_and_envelope() {
         let c = LogitCodec::new(8);
         let sinks = [9.0f32, 4.0];
-        let mut ctx: Vec<f32> = (0..300).map(|i| ((i * 37 % 101) as f32) * 0.2 - 18.0).collect();
+        let mut ctx: Vec<f32> = (0..300)
+            .map(|i| ((i * 37 % 101) as f32) * 0.2 - 18.0)
+            .collect();
         ctx[7] = f32::NEG_INFINITY;
         let raw: Vec<f32> = sinks.iter().chain(&ctx).copied().collect();
         let mut row = raw.clone();
@@ -408,10 +478,52 @@ mod tests {
         softmax_coded_into(&row[..2], &codes, shift, &lut, &mut p);
         assert_eq!(p[2 + 7], 0.0, "masked key must stay at zero mass");
         let exact = softmax_f64(&raw);
-        let tv: f64 = 0.5 * p.iter().zip(&exact).map(|(a, b)| (*a as f64 - b).abs()).sum::<f64>();
+        let tv: f64 = 0.5
+            * p.iter()
+                .zip(&exact)
+                .map(|(a, b)| (*a as f64 - b).abs())
+                .sum::<f64>();
         let env = c.envelope(w, rf.n_floored);
         assert!(rf.n_floored > 0, "fixture must exercise the floor");
-        assert!(tv <= env.total_tv() as f64 + 1e-6, "tv {tv} > {}", env.total_tv());
+        assert!(
+            tv <= env.total_tv() as f64 + 1e-6,
+            "tv {tv} > {}",
+            env.total_tv()
+        );
+    }
+
+    #[test]
+    fn fused_inplace_is_bit_identical_to_the_composition() {
+        for bits in [6u8, 8] {
+            let c = LogitCodec::new(bits);
+            let mut raw: Vec<f32> = (0..517)
+                .map(|i| ((i * 53 % 211) as f32) * 0.13 - 20.0)
+                .collect();
+            raw[0] = 31.0; // sink outlier
+            raw[40] = f32::NEG_INFINITY;
+            let (n_sink, w) = (4usize, min_width_for_tv(raw.len() - 4, 1e-2));
+            // composition
+            let mut row = raw.clone();
+            let rf = floor_row_sink_exempt(&mut row, n_sink, w);
+            let mut codes = vec![0i8; raw.len() - n_sink];
+            c.encode_into(&row[n_sink..], rf.m_r, w, &mut codes);
+            let mut lut = [0.0f32; 256];
+            let shift = rf.row_max();
+            c.exp_lut_into(w, rf.m_r - shift, &mut lut);
+            let mut p = vec![0.0f32; raw.len()];
+            let z_ref = softmax_coded_into(&row[..n_sink], &codes, shift, &lut, &mut p);
+            // fused
+            let mut fused = raw.clone();
+            let mut lut2 = [0.0f32; 256];
+            let (rf2, z) = floored_coded_exp_inplace(&mut fused, n_sink, w, &c, &mut lut2);
+            assert_eq!(rf, rf2);
+            assert_eq!(z.to_bits(), z_ref.to_bits());
+            let inv = 1.0 / z;
+            for (a, b) in fused.iter().zip(&p) {
+                assert_eq!((a * inv).to_bits(), b.to_bits());
+            }
+            assert_eq!(fused[40], 0.0, "masked key stays at zero mass");
+        }
     }
 
     #[test]
