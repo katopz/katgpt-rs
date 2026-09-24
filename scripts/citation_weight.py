@@ -151,9 +151,18 @@ def removed_by_number(repo: Path, dirname: str) -> dict[int, set[str]]:
     single-number view of this and DELEGATES rather than re-deriving it: a
     caller asking about 51 numbers otherwise pays 51 subprocesses for one
     answer, and two copies of the parse are two things to get wrong (Issue 755).
+
+    ⛔ `--full-history` is load-bearing too (Issue 881 T2.4). A pathspec'd
+    `git log` SIMPLIFIES history: at a merge whose result is TREESAME to one
+    parent for `<dir>/`, it follows that parent only, so a document added and
+    deleted on a merged feature branch is never seen. Measured 2026-09-24:
+    mmorpg-editor (feature-branch heavy) carried two such collisions —
+    `.plans/191` and `.issues/161`, each two unrelated documents allocated on
+    parallel branches — and the whole workspace read 193 where it held 195.
     """
     out = subprocess.run(
-        ["git", "-C", str(repo), "log", "-M", "--diff-filter=D", "--name-only",
+        ["git", "-C", str(repo), "log", "--full-history", "-M",
+         "--diff-filter=D", "--name-only",
          "--format=", "--", f"{dirname}/"],
         capture_output=True, encoding="utf-8", errors="replace").stdout
     by_num: dict[int, set[str]] = {}

@@ -44,7 +44,10 @@
 # `.issues 741`. Nothing sits between them, so no row is on the wrong side of
 # it by a judgement call. Re-measure before moving it.
 era_boundary = 700
-legacy_ratchet = 61
+# 61 -> 60 2026-09-24 (Issue 881 T2.4): `.research/383` Latent_Forcing_Pixel_Diffusion_PASS
+# -> Latent_Forcing_Multi_Time_Scheduling is ONE document retitled in one commit
+# (verdict revised), now recognised as a rename rather than a second holder.
+legacy_ratchet = 60
 min_dirs = 4
 min_numbers = 1200
 

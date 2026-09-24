@@ -355,7 +355,117 @@ def parse_collision_pins(path: Path) -> tuple[dict, dict[tuple[str, int], str]]:
     return scalars, rows
 
 
-def historical_collisions(repo: Path, dirs: list[str]) -> tuple[list[tuple[str, int, list[str]]], int]:
+# ── rename recognition (Issue 881 T2.4) ────────────────────────────────────
+# `-M` pairs a rename only above git's 50% content similarity, and a document
+# RETITLED as its thesis changes is usually rewritten far past that: riir-shader
+# 030-034 (`_queue` -> `_port`) measured 0.03-0.10 line similarity, so each read
+# as a second holder of its own number. Content similarity cannot be the second
+# axis — the real recycle katgpt-rs `.plans/236` (an unrelated plan taking the
+# number in the SAME commit that deleted the old one) measured 0.065, inside the
+# renames' range. The axis that separates them is the TOPIC, read off the stem.
+# Measured over the 30 rename-shaped pairs in 11 repos (same commit, or same
+# author within the window): every labelled recycle scores stem-token Jaccard
+# <= 0.12 (236 0.0, `.research/230` 0.10, the rest 0.0) and every pair at
+# >= 0.25 is a retitle, merge or supersede of ONE document. The cost runs in the
+# LOUD direction by design: retitles sharing no stem token (mmorpg-editor
+# `.plans/061`, riir-ai `.proposals/033`) stay collisions, a false red, rather
+# than any recycle reading as a rename, a false green.
+# The WINDOW is measured, not round: every adjacent-commit recycle fell inside
+# 9 minutes and was refused on topic alone, so time never separated them.
+# Widening 600s -> 1h (and 6h) adds exactly one pair, riir-shader `.issues/033`
+# (its `_queue` deleted 47 min after `_port` landed); 1 day admits katgpt-rs
+# `.research/399`, a REAL recycle whose stems overlap only through the shared
+# `PASS` verdict suffix (Jaccard 0.29). So 1h, and not a day.
+RENAME_WINDOW_S = 3600
+RENAME_MIN_JACCARD = 0.25
+
+
+def lifecycle(repo: Path, dirname: str) -> tuple[dict[str, list[tuple[str, str, int]]],
+                                                  dict[str, list[tuple[str, str, int]]]]:
+    """`(adds, dels)`: stem -> [(commit, author, unix time)] for every numbered
+    document added/deleted under `dirname`. One `git log` for the directory.
+
+    `--no-renames` so an `-M`-paired rename reports its A and D (a pair `-M`
+    already paired never reaches the collision set, so over-reporting here is
+    harmless); `--full-history` for the side-branch reason on
+    `citation_weight.removed_by_number`.
+    """
+    out = subprocess.run(
+        ["git", "-C", str(repo), "log", "--full-history", "--no-renames",
+         "--name-status", "--format=%x00%H%x09%an%x09%at", "--", f"{dirname}/"],
+        capture_output=True, encoding="utf-8", errors="replace").stdout
+    return parse_lifecycle(out)
+
+
+def parse_lifecycle(out: str):
+    """`lifecycle`'s parse, PURE over the `git log` text so its guards are
+    armable without a repo (the extraction AGENTS.md records as the repair for
+    a decision welded to its subprocess). Only `A`/`D` rows of a numbered
+    `.md` count — an `M` read as a `D` would invent a deletion."""
+    adds: dict[str, list[tuple[str, str, int]]] = {}
+    dels: dict[str, list[tuple[str, str, int]]] = {}
+    for chunk in out.split("\x00")[1:]:
+        lines = chunk.strip("\n").split("\n")
+        head = lines[0].split("\t")
+        if len(head) != 3 or not head[2].isdigit():
+            continue
+        ev = (head[0], head[1], int(head[2]))
+        for ln in lines[1:]:
+            parts = ln.split("\t")
+            if len(parts) != 2 or parts[0] not in ("A", "D"):
+                continue
+            name = parts[1].rsplit("/", 1)[-1]
+            if NUMBERED.match(name):
+                (adds if parts[0] == "A" else dels).setdefault(name[:-3], []).append(ev)
+    return adds, dels
+
+
+def is_rename(old: str, new: str, adds, dels) -> bool:
+    """`old` was deleted as `new` was added — same commit, or same author within
+    `RENAME_WINDOW_S` — AND the two stems share their topic (Jaccard over
+    `citation_weight.stem_tokens` >= `RENAME_MIN_JACCARD`). Both halves are
+    required: timing alone hides katgpt-rs `.plans/236`, tokens alone would
+    pair two unrelated allocations years apart that happen to share a word.
+
+    ⛔ And `old` must PREDATE `new`: a commit that adds both is two documents
+    allocated together, never a handoff. Without it the window alone paired
+    this module's own collision arm (two holders added in one commit, both
+    closed seconds later) — the fast-closing-duplicate shape, in the silent
+    direction."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from citation_weight import stem_tokens
+
+    ta, tb = stem_tokens(old), stem_tokens(new)
+    if not ta or not tb or len(ta & tb) / len(ta | tb) < RENAME_MIN_JACCARD:
+        return False
+    a_adds, b_adds = adds.get(old, ()), adds.get(new, ())
+    if {c for c, _, _ in a_adds} & {c for c, _, _ in b_adds}:
+        return False
+    if a_adds and b_adds and min(t for _, _, t in a_adds) > min(t for _, _, t in b_adds):
+        return False
+    return any(dc == ac or (da == aa and abs(dt - at) <= RENAME_WINDOW_S)
+               for dc, da, dt in dels.get(old, ())
+               for ac, aa, at in adds.get(new, ()))
+
+
+def collapse_renames(stems: set[str], on_disk: set[str], adds, dels) -> tuple[set[str], list[tuple[str, str]]]:
+    """-> (holders, [(predecessor, successor)]). A REMOVED stem renamed into a
+    holder still in the set is one document, not a second holder. A stem on
+    disk is never a predecessor, and removal is sequential so a cycle (a -> b
+    -> a) keeps one side rather than erasing both."""
+    live, pairs = set(stems), []
+    for a in sorted(stems):
+        if a in on_disk:
+            continue
+        succ = next((b for b in sorted(live) if b != a and is_rename(a, b, adds, dels)), None)
+        if succ is not None:
+            live.discard(a)
+            pairs.append((a, succ))
+    return live, pairs
+
+
+def historical_collisions(repo: Path, dirs: list[str],
+                          renamed: list | None = None) -> tuple[list[tuple[str, int, list[str]]], int]:
     """Numbers held by 2+ documents across HISTORY -> (rows, numbers walked).
 
     ⛔ The tracked-duplicate check one function up is correct and blind to the
@@ -368,6 +478,11 @@ def historical_collisions(repo: Path, dirs: list[str]) -> tuple[list[tuple[str, 
     The recovery is `citation_weight.removed_by_number`, imported rather than
     re-derived: the `-M` rename exclusion it carries is subtle enough that a
     second copy would be a second thing to get wrong (Issue 755).
+
+    A number whose extra holders are all RENAME predecessors (`collapse_renames`,
+    Issue 881 T2.4) is one document and not a row; each collapsed pair is
+    appended to `renamed` as `(dir, num, old, new)` when the caller passes a
+    list, so the reduction is disclosed rather than silent.
     """
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from citation_weight import removed_by_number
@@ -375,16 +490,26 @@ def historical_collisions(repo: Path, dirs: list[str]) -> tuple[list[tuple[str, 
     rows, walked = [], 0
     for dirname in dirs:
         seen = {n: set(v) for n, v in removed_by_number(repo, dirname).items()}
+        on_disk: set[str] = set()
         d = repo / dirname
         if d.is_dir():
             for entry in d.iterdir():
                 m = NUMBERED.match(entry.name)
                 if m:
                     seen.setdefault(int(m.group(1)), set()).add(entry.name[:-3])
+                    on_disk.add(entry.name[:-3])
         walked += len(seen)
+        life = None
         for num, stems in sorted(seen.items()):
-            if len(stems) > 1:
-                rows.append((dirname, num, sorted(stems)))
+            if len(stems) < 2:
+                continue
+            if life is None:                  # one git log per dir, only if needed
+                life = lifecycle(repo, dirname)
+            live, pairs = collapse_renames(stems, on_disk, *life)
+            if renamed is not None:
+                renamed.extend((dirname, num, a, b) for a, b in pairs)
+            if len(live) > 1:
+                rows.append((dirname, num, sorted(live)))
     return rows, walked
 
 
@@ -552,7 +677,7 @@ def collision_arms() -> list[str]:
         eq("a number held twice with BOTH sides removed is a collision",
            [(dd, nn) for dd, nn, _ in rows], [(".issues", 10)])
         eq("...and both stems are reported",
-           next(st for _, nn, st in rows if nn == 10),
+           next((st for _, nn, st in rows if nn == 10), None),
            ["010_first_holder", "010_second_holder"])
         eq("a removed document held ONCE is not a collision",
            any(nn == 11 for _, nn, _ in rows), False)
@@ -572,6 +697,115 @@ def collision_arms() -> list[str]:
            sorted(nn for _, nn, _ in rows), [10, 12])
         eq("a directory that does not exist contributes nothing",
            historical_collisions(root, [".nope"]), ([], 0))
+
+        # ── RENAME recognition (Issue 881 T2.4). Author dates are pinned so
+        # the window is asserted, not raced. Arm 010 above is the NEGATIVE for
+        # "added together": its holders share `holder` (Jaccard 0.33) and were
+        # closed seconds apart, and it must still be a row.
+        import os as _os
+
+        def commit_at(ts: int, msg: str):
+            env = {**_os.environ, "GIT_AUTHOR_DATE": f"@{ts} +0000",
+                   "GIT_COMMITTER_DATE": f"@{ts} +0000"}
+            subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", msg],
+                           check=True, env=env, capture_output=True)
+
+        t0 = 1_700_000_000
+        for name in ("020_fog_height_queue.md", "021_core_audit_two.md",
+                     "022_raging_sea_queue.md", "023_parallax_uv_queue.md",
+                     "026_tone_map_queue.md"):
+            (d / name).write_text("q\n", encoding="utf-8")
+        commit_at(t0, "queue")
+        # 020: retitled IN ONE COMMIT, rewritten past -M's 50% -- a rename.
+        (d / "020_fog_height_queue.md").unlink()
+        (d / "020_fog_height_port.md").write_text("port\n" * 9, encoding="utf-8")
+        # 021: the katgpt-rs `.plans/236` shape -- an UNRELATED document takes
+        # the number in the same commit. Must stay a collision.
+        (d / "021_core_audit_two.md").unlink()
+        (d / "021_bake_precision_embeddings.md").write_text("b\n" * 9, encoding="utf-8")
+        commit_at(t0 + 86_400, "port 020, recycle 021")
+        # 022: add then delete 120s apart -- inside the window.
+        (d / "022_raging_sea_port.md").write_text("p\n" * 9, encoding="utf-8")
+        commit_at(t0 + 2 * 86_400, "add 022 port")
+        (d / "022_raging_sea_queue.md").unlink()
+        commit_at(t0 + 2 * 86_400 + 120, "rm 022 queue")
+        # 023: the same shape a day apart -- OUTSIDE the window.
+        (d / "023_parallax_uv_port.md").write_text("p\n" * 9, encoding="utf-8")
+        commit_at(t0 + 3 * 86_400, "add 023 port")
+        (d / "023_parallax_uv_queue.md").unlink()
+        commit_at(t0 + 4 * 86_400, "rm 023 queue")
+        # 025: the LATER document is removed within the window and the EARLIER
+        # one stays -- a handoff runs old -> new, never backwards.
+        # Both events sit INSIDE the window of the earlier document's add, so
+        # only the predate rule can refuse it.
+        (d / "025_bloom_emissive_queue.md").write_text("q\n", encoding="utf-8")
+        commit_at(t0 + 5 * 86_400, "add 025 queue")
+        (d / "025_bloom_emissive_port.md").write_text("p\n" * 9, encoding="utf-8")
+        commit_at(t0 + 5 * 86_400 + 30, "add 025 port")
+        (d / "025_bloom_emissive_port.md").unlink()
+        commit_at(t0 + 5 * 86_400 + 60, "rm 025 port")
+
+        # 026: renamed away, then the old document RESTORED -- both live now,
+        # so the old stem is a second holder again, not a predecessor.
+        (d / "026_tone_map_queue.md").unlink()
+        (d / "026_tone_map_port.md").write_text("p\n" * 9, encoding="utf-8")
+        commit_at(t0 + 6 * 86_400, "port 026")
+        (d / "026_tone_map_queue.md").write_text("q\n", encoding="utf-8")
+        commit_at(t0 + 7 * 86_400, "restore 026 queue")
+
+        renamed: list = []
+        rows, _ = historical_collisions(root, [".issues"], renamed)
+        got = sorted(nn for _, nn, _ in rows)
+        eq("a same-commit retitle sharing its topic is ONE document",
+           20 in got, False)
+        eq("a same-commit RECYCLE with a disjoint topic stays a collision "
+           "(the .plans/236 negative)", 21 in got, True)
+        eq("an adjacent-commit retitle inside the window is one document",
+           22 in got, False)
+        eq("the same shape OUTSIDE the window stays a collision", 23 in got, True)
+        eq("the LATER document is never the predecessor of the earlier one",
+           25 in got, True)
+        eq("a stem still ON DISK is never a rename predecessor", 26 in got, True)
+        eq("the pre-existing arms are unchanged by rename recognition",
+           [n for n in got if n < 20], [10, 12])
+        eq("every collapse is disclosed as (dir, num, old, new)",
+           sorted(renamed),
+           [(".issues", 20, "020_fog_height_queue", "020_fog_height_port"),
+            (".issues", 22, "022_raging_sea_queue", "022_raging_sea_port")])
+        adds, dels = lifecycle(root, ".issues")
+        eq("the lifecycle walk sees every add", len(adds["020_fog_height_port"]), 1)
+        eq("a timing-only pair with no shared topic is not a rename",
+           is_rename("021_core_audit_two", "021_bake_precision_embeddings",
+                     adds, dels), False)
+
+    # ── the rename rule's BOUNDARIES and its parse, pure (no repo needed).
+    ev = lambda c, t: (c, "u", t)                     # noqa: E731
+    A = {"100_aaa_bbb": [ev("c0", 0)], "100_aaa_ccc_ddd": [ev("c1", 5)]}
+    D = {"100_aaa_bbb": [ev("c1", 5)]}
+    eq("Jaccard EXACTLY at the bar is a rename (1/4 = 0.25)",
+       is_rename("100_aaa_bbb", "100_aaa_ccc_ddd", A, D), True)
+    eq("...and just under it is not (1/5)",
+       is_rename("100_aaa_bbb", "100_aaa_ccc_ddd_eee", {**A, "100_aaa_ccc_ddd_eee": [ev("c1", 5)]}, D), False)
+    A2 = {"101_fog_queue": [ev("c0", 0)], "101_fog_port": [ev("c1", 100)]}
+    eq("a gap of EXACTLY the window is inside it",
+       is_rename("101_fog_queue", "101_fog_port", A2,
+                 {"101_fog_queue": [ev("c2", 100 + RENAME_WINDOW_S)]}), True)
+    eq("...and one second past it is not",
+       is_rename("101_fog_queue", "101_fog_port", A2,
+                 {"101_fog_queue": [ev("c2", 101 + RENAME_WINDOW_S)]}), False)
+    eq("equal add times in DIFFERENT commits do not refuse (only strictly later does)",
+       is_rename("101_fog_queue", "101_fog_port",
+                 {"101_fog_queue": [ev("c0", 7)], "101_fog_port": [ev("c1", 7)]},
+                 {"101_fog_queue": [ev("c1", 7)]}), True)
+    a, dl = parse_lifecycle(
+        "\x00h1\tu\t10\n\nA\t.issues/200_x_y.md\nM\t.issues/201_x_y.md\n"
+        "R100\t.issues/202_a.md\t.issues/202_b.md\nD\t.issues/notnumbered.md\n"
+        "\x00h2\tu\tnotatime\n\nD\t.issues/203_x_y.md\n"
+        "\x00h3\tu\n\nD\t.issues/204_x_y.md\n")
+    eq("parse: an A row of a numbered doc is an add", sorted(a), ["200_x_y"])
+    eq("parse: M / R / un-numbered rows and malformed headers add NO deletion",
+       dl, {})
 
     return fails
 

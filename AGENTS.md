@@ -3344,6 +3344,20 @@ a deletion at its old number and the tool resurrects a collision somebody
 already resolved). Issue 791 recorded **three** collisions; the same scan with
 the recovery says **70**, over 1374 numbers, 9 of them at or above 700 and all 9
 from one 57-commit divergence.
+- ⛔ **`-M` is necessary and not sufficient, in BOTH directions** (Issue 881
+  T2.4). It pairs a rename only above 50% content similarity, and a document
+  RETITLED as its thesis changes is rewritten far past that (riir-shader
+  `_queue` → `_port`, 0.03–0.10), so each read as a second holder.
+  `numbering_gate.collapse_renames` treats a removed stem as a rename only if it
+  was deleted in the same commit as the new stem's add, or by the same author
+  within 1 h, **and** the two stems share a topic (stem-token Jaccard ≥ 0.25),
+  **and** the old stem predates the new one. Line similarity cannot make this
+  call: the real recycle katgpt-rs `.plans/236` measured 0.065, inside the
+  renames' range. The rule costs false reds, never false greens: retitles that
+  share no stem token stay collisions. Separately, a pathspec'd `git log`
+  SIMPLIFIES history and dropped deletions made on merged feature branches, so
+  the recovery passes `--full-history`. Measured: 195 → 180 workspace-wide, 15
+  collapsed, 2 surfaced.
 
 ⚠ **Take the SCOPE from `scripts/numbering_floors.txt`, never from a walk of
 the tree.** A first pass over every numbered directory found 122, and 52 of

@@ -1,6 +1,6 @@
 # Issue 881 — the numbering sweep's standing backlog: 3 repos over their ratchets
 
-**Status:** OPEN — T1 RESOLVED (instrument defect, fixed at `216defb9b`, no re-pin needed); T2 ANSWERED (renames, not collisions — repair task T2.4 open); T3 open.
+**Status:** OPEN — T1 RESOLVED (instrument defect, fixed at `216defb9b`, no re-pin needed); T2 RESOLVED (renames, not collisions — T2.4 rename recognition LANDED, riir-shader green); T3 open (read-only repo).
 **Filed:** 2026-09-24, from the citation-sweep campaign's neighbouring run.
 **Instrument:** `scripts/numbering_drift_sweep.py` ·
 pins `scripts/numbering_drift_floors.txt`.
@@ -21,7 +21,7 @@ repos that were behind and tracked-clean:
 | repo | column | pinned | measured | posture |
 |---|---|---:|---:|---|
 | riir-ai | `max_resets` | 9 | **26** → **9** | RESOLVED — 17 were PHANTOMS of the walker (`216defb9b`) |
-| riir-shader | `max_hist` | 0 | **5** | ANSWERED — 5 renames `-M` cannot pair (T2) |
+| riir-shader | `max_hist` | 0 | **5** → **0** | RESOLVED — 5 renames `-M` cannot pair, recognised by T2.4 |
 | mmorpg-editor | `max_resets` | 5 | **6** | READ-ONLY here per the owner rule |
 
 Two more were resolved rather than pinned and are recorded so the next reader
@@ -88,8 +88,8 @@ documents per number, five times.
   DELIBERATE (a number owning two documents by design, which is the
   `.benchmarks` family convention one directory over and would make this a
   SCOPE question, not a collision) or an accident to renumber.
-- [ ] The answer determines the repair: a scope exclusion in the sweep, or a
-  renumber plus a ratchet at measured. **Do not pin it at 5 before that
+- [x] The answer determines the repair: a scope exclusion in the sweep, or a
+  renumber plus a ratchet at measured. → NEITHER: rename recognition (T2.4). **Do not pin it at 5 before that
   question is answered** — a ratchet over an unread bucket is Issue 785's
   forbidden shape.
 
@@ -104,7 +104,7 @@ queue-file rename deletion"). The rewrite on landing was heavy enough that
 reports the old stem as a second holder. One number, one document at a time —
 not a collision, and pinning 5 would pin an instrument artifact.
 
-- [ ] **T2.4 — rename-aware holder recovery** in
+- [x] **T2.4 — rename-aware holder recovery** in
   `citation_weight.removed_by_number` (imported by `numbering_gate` and the
   sweep, so one fix reaches both): a deletion of `NNN_a` whose commit — or an
   adjacent commit by the same author within minutes — ADDS `NNN_b` in the same
@@ -130,6 +130,34 @@ not a collision, and pinning 5 would pin an instrument artifact.
     lowered `-M` similarity on the pair, or distinctive-stem-token overlap —
     and each candidate must be read against the 27 before landing, with 236
     pinned as the arm's negative.
+
+  - **LANDED 2026-09-24 (katgpt-rs-9a)** — `numbering_gate.collapse_renames`
+    (in the gate, not `removed_by_number`, so `citation_weight`'s candidate
+    lists stay unchanged). Rule: a removed stem is a rename predecessor of a co-holder
+    iff (same commit, OR same author within **1h**) AND stem-token Jaccard
+    **≥ 0.25** AND the old stem was added strictly before the new one, and a
+    stem on disk is never a predecessor. Labelled over the 30 rename-shaped pairs
+    by commit subject: every recycle scores ≤ 0.12 (236 **0.0**), and the 15
+    that collapse are all retitles, merges or supersedes of ONE document.
+    Line similarity was measured and REJECTED as the axis (236 at 0.065 sits
+    inside the renames' 0.03–0.74). The window is measured: widening to 1h/6h
+    adds exactly riir-shader 033 (queue deleted 47 min after the port landed),
+    and 1 day admits katgpt-rs `.research/399`, a real recycle that overlaps only
+    through the `PASS` suffix. The predate rule was forced by this gate's
+    own collision arm (two holders added together, closed seconds apart).
+    Known cost, in the LOUD direction: retitles that share no stem token
+    (mmorpg-editor `.plans/061`, riir-ai `.proposals/033`) remain collisions.
+  - **Second finding, same change:** `removed_by_number` walked a
+    pathspec'd `git log` WITHOUT `--full-history`, and history simplification
+    pruned deletions on merged feature branches — mmorpg-editor `.plans/191`
+    (3 unrelated holders) and `.issues/161` (2) were invisible. Fixed.
+  - Measured delta: workspace 195 → **180** (15 collapsed, 2 surfaced).
+    Ratchets tightened at measured with the specimens named in each row:
+    katgpt-rs 71→70 (+ gate `legacy_ratchet` 61→60), riir-ai 71→67,
+    riir-chain 6→5, riir-mmorpg-examples 4→3, riir-train 11→9; riir-shader
+    0 = measured, **green**; mmorpg-editor 12 = measured (the composition
+    moved, the count did not). Arms: 13 new, each guard mutation-verified, and
+    `arm_reach_audit numbering_gate` reports only its 2 pre-pinned I/O rows.
 
 ## T3 — mmorpg-editor: one new reset in a read-only repo
 
