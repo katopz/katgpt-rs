@@ -255,6 +255,7 @@ pub(super) fn is_avx2_fma_available() -> bool {
 /// conversion kernel (`avx2_dot_f16_f32`). F16C is baseline on every
 /// x86_64 CPU since Haswell (2013) but NOT implied by the target triple,
 /// so the probe (not a cfg) decides — the `is_avx2_fma_available` shape.
+#[cfg(target_arch = "x86_64")]
 pub(super) fn is_f16c_available() -> bool {
     #[cfg(all(target_arch = "x86_64", target_feature = "f16c"))]
     {
