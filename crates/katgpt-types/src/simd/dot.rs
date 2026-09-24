@@ -975,6 +975,74 @@ pub fn simd_matmul_relu_rows(
 
 // ── f16×f32 Mixed-Precision Kernels ──────────────────────────
 
+/// x86_64 AVX2+F16C dot kernel: `Σ f16_weight[i] * f32_input[i]` with the
+/// f16→f32 widening done IN-REGISTER by `vcvtph2ps` (8 lanes/instr).
+///
+/// The x86 fallback this replaces measured **1 tok/s** on the 13700K
+/// gemma-2-2b f16 lane (the 883 P0 calibration box) against the NEON
+/// path's M3 numbers — `scalar_dot_f16_f32` was the only non-aarch64
+/// backend. Structure mirrors `avx2_dot_f32` (4 independent accumulators,
+/// 32 elements/iter, 8-wide leftover block, scalar tail); the f16 input
+/// is loaded as `__m128i` (8×u16) and widened once per 8 lanes — no
+/// per-element `to_f32()` call on the critical path.
+///
+/// Numerics: same FMA-lane semantics as the f32 AVX2 kernel (single
+/// rounding per mul-add, lane-parallel then horizontal reduce) — a
+/// DIFFERENT accumulation order than the scalar fallback's 4-chain
+/// mul_add, in the same way `avx2_dot_f32` already differs from
+/// `scalar_dot_f32`. Dispatch prefers this only under the runtime F16C
+/// probe; F16C-less x86 keeps the scalar backend bit-identically.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma,f16c")]
+#[inline]
+unsafe fn avx2_dot_f16_f32(w_f16: &[half::f16], x_f32: &[f32], len: usize) -> f32 {
+    use core::arch::x86_64::{
+        __m128i, _mm256_add_ps, _mm256_cvtph_ps, _mm256_fmadd_ps, _mm256_loadu_ps, _mm256_setzero_ps,
+        _mm_loadu_si128,
+    };
+    unsafe {
+        let mut acc0 = _mm256_setzero_ps();
+        let mut acc1 = _mm256_setzero_ps();
+        let mut acc2 = _mm256_setzero_ps();
+        let mut acc3 = _mm256_setzero_ps();
+        let mut i = 0;
+        let chunks4 = len / 32;
+
+        for _ in 0..chunks4 {
+            // 8 f16 weights per 128-bit load → widen → FMADD against f32.
+            let w0 = _mm256_cvtph_ps(_mm_loadu_si128(w_f16.as_ptr().add(i) as *const __m128i));
+            acc0 = _mm256_fmadd_ps(w0, _mm256_loadu_ps(x_f32.as_ptr().add(i)), acc0);
+            let w1 = _mm256_cvtph_ps(_mm_loadu_si128(w_f16.as_ptr().add(i + 8) as *const __m128i));
+            acc1 = _mm256_fmadd_ps(w1, _mm256_loadu_ps(x_f32.as_ptr().add(i + 8)), acc1);
+            let w2 = _mm256_cvtph_ps(_mm_loadu_si128(w_f16.as_ptr().add(i + 16) as *const __m128i));
+            acc2 = _mm256_fmadd_ps(w2, _mm256_loadu_ps(x_f32.as_ptr().add(i + 16)), acc2);
+            let w3 = _mm256_cvtph_ps(_mm_loadu_si128(w_f16.as_ptr().add(i + 24) as *const __m128i));
+            acc3 = _mm256_fmadd_ps(w3, _mm256_loadu_ps(x_f32.as_ptr().add(i + 24)), acc3);
+            i += 32;
+        }
+
+        let mut sum = horizontal_sum_256(_mm256_add_ps(
+            _mm256_add_ps(acc0, acc1),
+            _mm256_add_ps(acc2, acc3),
+        ));
+
+        let mut acc = _mm256_setzero_ps();
+        let remaining = (len - i) / 8;
+        for _ in 0..remaining {
+            let w = _mm256_cvtph_ps(_mm_loadu_si128(w_f16.as_ptr().add(i) as *const __m128i));
+            acc = _mm256_fmadd_ps(w, _mm256_loadu_ps(x_f32.as_ptr().add(i)), acc);
+            i += 8;
+        }
+        sum += horizontal_sum_256(acc);
+
+        while i < len {
+            sum += (*w_f16.get_unchecked(i)).to_f32() * *x_f32.get_unchecked(i);
+            i += 1;
+        }
+        sum
+    }
+}
+
 /// SIMD dot product: `Σ f16_weight[i] * f32_input[i]`.
 ///
 /// Converts f16 weights to f32 on-the-fly during accumulation.
@@ -990,7 +1058,15 @@ pub fn simd_dot_f16_f32(w_f16: &[half::f16], x_f32: &[f32], len: usize) -> f32 {
     {
         unsafe { neon_dot_f16_f32(w_f16, x_f32, len) }
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
+    {
+        if super::is_f16c_available() {
+            unsafe { avx2_dot_f16_f32(w_f16, x_f32, len) }
+        } else {
+            scalar_dot_f16_f32(w_f16, x_f32, len)
+        }
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         scalar_dot_f16_f32(w_f16, x_f32, len)
     }

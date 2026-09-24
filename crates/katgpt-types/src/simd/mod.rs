@@ -250,3 +250,38 @@ pub(super) fn is_avx2_fma_available() -> bool {
         CACHED.load(Ordering::Relaxed)
     }
 }
+
+/// Runtime F16C probe (CPUID.1:ECX bit 29) — gates the AVX2 f16→f32
+/// conversion kernel (`avx2_dot_f16_f32`). F16C is baseline on every
+/// x86_64 CPU since Haswell (2013) but NOT implied by the target triple,
+/// so the probe (not a cfg) decides — the `is_avx2_fma_available` shape.
+pub(super) fn is_f16c_available() -> bool {
+    #[cfg(all(target_arch = "x86_64", target_feature = "f16c"))]
+    {
+        true
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "f16c")))]
+    {
+        #[cfg(target_arch = "x86_64")]
+        {
+            use std::sync::atomic::{AtomicBool, Ordering};
+            static CACHED: AtomicBool = AtomicBool::new(false);
+            static INIT: std::sync::Once = std::sync::Once::new();
+            #[allow(unused_unsafe)]
+            INIT.call_once(|| {
+                // F16C is only usable through AVX (`vcvtph2ps` is a VEX
+                // encoding); probe both bits so an F16C-without-AVX
+                // hypothetical cannot arm the kernel.
+                let cpuid1 = unsafe { core::arch::x86_64::__cpuid(1) };
+                let has_avx = (cpuid1.ecx & (1 << 28)) != 0;
+                let has_f16c = (cpuid1.ecx & (1 << 29)) != 0;
+                CACHED.store(has_avx && has_f16c, Ordering::Relaxed);
+            });
+            CACHED.load(Ordering::Relaxed)
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            false
+        }
+    }
+}
