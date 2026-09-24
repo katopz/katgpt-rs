@@ -454,6 +454,21 @@ per-decision laya outputs are generatable LOCALLY (riir-reflex's G5-parity
   modelless-legal (search is not learning) but low value-per-effort. File
   a `.research/` note only if T4's oracle replay shows the argmax scorer
   losing decisions to laya on multi-step lookahead.
+  **Condition EVALUATED 2026-09-24 — deferral HOLDS, trigger not fired:**
+  the letter of the condition is met (the scorer does lose decisions to
+  the laya oracle on Tetris, 13/120 raw → 44/120 fitted, and Tetris is
+  the multi-step game), but its CAUSE reading is refuted by the recorded
+  evidence — Bench 881 attributes the tetris gap to RENDER/feature
+  coverage (bumpiness, wells, transitions, eroded never rendered; the
+  decoded arm BEATS structured and G1 HOLDS at 44/120 vs constant-pick
+  13), i.e. a representation gap that PUCT search over the same prior
+  cannot fix, and Bench 876 shows play quality is already owned by
+  arithmetic (Dellacherie 195.6 lines vs sentence-scorer 3.4) while the
+  lane thesis is "match the model's read, never out-fly arithmetic".
+  Recorded remedy for the real gap is render-side re-widening (Issue
+  876, flappy + tetris render), not search. Re-open the question only if
+  a render-fixed scorer still loses to laya specifically on decisions
+  where the oracle's choice pays off several pieces later.
 - [x] **T8 — the LIVE arena on reflex.gist.rs (owner addendum, 2026-09-23,
   "still see no tetris running side by side at reflex.gist.rs like
   original, what block?")**: the plan's arenas were OFFLINE benches
@@ -468,7 +483,10 @@ per-decision laya outputs are generatable LOCALLY (riir-reflex's G5-parity
   origins, mapping unit-tested weights-free (12 lane tests; clippy clean
   at default/all-features/no-default; the pre-existing
   `harness_families_gates` G2 red at HEAD is box-load, reproduced on a
-  clean tree at load 18-34).
+  clean tree at load 18-34 — CONFIRMED by quiet-box re-run 2026-09-24:
+  detached worktree at `2f85388`, isolated `CARGO_TARGET_DIR`, build
+  settled, 7/7 gates green incl. the G2 floor at load 4.3-4.4, the
+  quietest this box carries with standing agent sessions).
   **reflex-site** (`60bd192` + `4eba4aa` + `c7aa731` + `20388c9`, deployed
   live) — `/arena/`: Tetris + Flappy + three-lanes, TWO boards side by
   side (laya | modelless) from the same seeded stream; the games are the
