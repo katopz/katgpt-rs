@@ -1131,8 +1131,17 @@ mod tests {
     #[cfg(feature = "calibrated_mass_gate")]
     #[test]
     fn t15_mass_gate_selection_matches_incumbent() {
-        // τ reweights, never re-ranks: same index set AND order as the
-        // incumbent wherever the incumbent's weights are unsaturated.
+        // τ reweights, never re-ranks: same index SET as the incumbent, and
+        // the same σ-score at every rank beyond sigmoid-impl rounding. The
+        // incumbent ranks by `fast_sigmoid(z)`; the mass gate ranks by the
+        // RAW logit — a pair whose σ values are bit-equal (a fast_sigmoid
+        // quantization plateau, or a 1-ULP logit near-tie) can swap ranks
+        // between the two lanes without any score moving, so INDICES are
+        // compared as sets and SCORES positionally. Measured on x86_64
+        // (2026-09-24): n=1000 k=100 seed=2 carries exactly such a pair
+        // (z gap 2.38e-7, σ bit-identical, ranks 30/31 swap); aarch64's dot
+        // path did not collide on the fixture — a strict index-order assert
+        // is arch-dependent by construction.
         for &(n, d, k) in &[(64usize, 16usize, 4usize), (256, 16, 8), (1000, 16, 100)] {
             for seed in 0..8u64 {
                 let r = seeded_matrix(3000 + seed, n, d);
@@ -1142,7 +1151,27 @@ mod tests {
                 let kk = gate_sigmoid_topk_into(&x, &r, n, d, 1.3, k, &mut scores, &mut idx);
                 let m = run_mass(&x, &r, n, d, 1.3, k, 1.0);
                 assert_eq!(m.kk, kk);
-                assert_eq!(&m.idx[..kk], &idx[..kk], "n={n} k={k} seed={seed}");
+                // SET equality is the contract.
+                let mut inc_sorted = idx[..kk].to_vec();
+                inc_sorted.sort_unstable();
+                let mut mass_sorted = m.idx[..m.kk].to_vec();
+                mass_sorted.sort_unstable();
+                assert_eq!(mass_sorted, inc_sorted, "n={n} k={k} seed={seed}: SET must agree");
+                // Positional σ-score equality beyond rounding: the mass
+                // gate's rank-w pick must carry the incumbent's rank-w
+                // σ-score (σ ties may swap adjacent INDICES, never scores).
+                for w in 0..kk {
+                    let inc_sigma = scores[idx[w]];
+                    // The mass gate's σ for its pick — recomputed from the
+                    // same logits via the same fast_sigmoid so the comparison
+                    // isolates ORDERING, not sigmoid-impl drift.
+                    let mass_sigma = katgpt_core::simd::fast_sigmoid(m.logits[m.idx[w]]);
+                    assert!(
+                        (inc_sigma - mass_sigma).abs() <= 1e-6,
+                        "n={n} k={k} seed={seed}: rank {w} σ diverged: \
+                         incumbent {inc_sigma:.7} vs mass {mass_sigma:.7}"
+                    );
+                }
             }
         }
     }
