@@ -497,6 +497,7 @@ clr_calibration = ["katgpt-claim/clr_calibration"]  # CLR verdict calibration �
 kron_tile = ["katgpt-core/kron_tile"]  # Issue 839 — Kronecker-factored tile apply `(A ⊗ B) · x = A Z Bᵀ` as two small GEMMs (2n³ MACs / 2n² params against n⁴ / n⁴), batched, zero-alloc, with a delegating Walsh–Hadamard fast path. Research 569 (Cactus Needle 3). Passthrough only — the primitive lives in katgpt-core::linalg::kron_tile; this row exists so Bench 839 can name it in required-features. Opt-in per the no-default-consumer rule.
 kpt_archive = ["katgpt-core/kpt_archive"]  # Issue 841 / Research 568 fusion 2 (owner call 2026-09-19) — .kpt single-file weight-archive POC: nameless positional layer-major file × BLAKE3/Merkle integrity × atomic file-replacement hot-swap, over packed ternary layers. Passthrough only — the POC module lives in katgpt-core::kpt_archive; examples/kpt_archive_poc.rs (poc + perf) and tests/kpt_archive_sec_injection.rs (bad-injection arms) name this row in required-features. Opt-in POC, NOT promoted: the format+engine lift waits for a NeuronShard-Merkle consumer wanting single-file mmap hot-swap.
 horizon_weights = ["katgpt-core/horizon_weights"]  # Issue 875 T1 / Research 582 (arXiv:2605.09071) — PFD (T−t) remaining-horizon weighting: the Fubini-law (T−t)/T weights + the exact closed form w(t) = ½(T−t)g²c², c = exp(−∫a), frozen into a BLAKE3-committed fixed-grid table (the static_cal pattern, exact — no calibration pass) + the law's exact inverse-CDF sampler (T2). Pure math, zero new deps, zero-alloc. Passthrough only — the primitive lives in katgpt-core::horizon_weights; this row exists so tests/bench_875_horizon_weights_goat.rs + tests/bench_875_renoise_horizon_goat.rs can name it in required-features (the T3 gate bench_875_time_anneal_goat additionally names critical_interval_gate for the dllm_solver seam). T2 consumer shipped as the combined-gate renoise_ce_score_horizon (Bench 877 GOAT); the feature stays opt-in — promotion is Issue 875 T5's verdict.
+exact_mass_admit = ["katgpt-core/exact_mass_admit"]  # Issue 879 / Research 584 (arXiv:2609.25518 "Matryoshka attribution") — the MAttr budget-primitive family: exact_mass_admit (calibrated-mass "sigmoid top-k" — bisect τ until Σσ((s−τ)/T) = k; sum-to-k, shift-invariant, nested-in-k, zero-alloc) + log_frontier (the modelless AdaptiveLogK extraction — log-space budget ceiling moved by ±lr sign steps against a scalar accuracy target, probe cadence). Passthrough only — the primitives live in katgpt-core::{exact_mass_admit, log_frontier}; this row exists so tests/bench_884_exact_mass_admit_goat.rs can name it in required-features (the gate baseline arm needs katgpt-spectral's gate_sigmoid_topk_into, which rides the root's default manifold_power_iter_router). Opt-in per the no-default-consumer rule — Bench 884 records the cost; promotion needs a measured consumer gain (none assumed, Issue 879 T4).
 renoise_ce_surprise = ["katgpt-core/renoise_ce_surprise"]  # Issue 875 T4 / Research 582 — the target-anchored renoise-CE probe mode (PFD's resolve-against-the-teacher): each re-resolved draw scored against a caller-supplied frozen target anchor instead of the candidate itself. Flow-relative novelty — states at the prior's own distance but in a foreign basin separate only through the flow (Bench 879: surprise precision@32 1.000 vs incumbent 0.000 vs plain-distance 0.428 chance). Consumer sketch: consolidation surprise ordering (Raven/δ-Mem sleep-cycle admission), ordering-only. Passthrough only; opt-in per the T5 promotion rule.
 claim_rubric = ["katgpt-claim/claim_rubric"]  # Claim Rubric Runtime — L1/L2/L3 evidence ladder validator (Plan 307, Research 287). Phase 11 (2026-07-04): module moved to katgpt-claim; root forwards.
 bandit_top_p = ["bandit", "katgpt-pruners/bandit_top_p"]  # Adaptive top-p bandit arm selection (Plan 181, default ON candidate)
@@ -777,6 +778,19 @@ required-features = ["horizon_weights", "critical_interval_gate"]
 [[test]]
 name = "bench_875_renoise_surprise_goat"
 required-features = ["renoise_ce_surprise"]
+
+# Issue 879 T3 — the exact_mass_admit GOAT gate (G1 spot in-process, the
+# heavy G1 in katgpt-core's exact_mass_admit_g1; G2 latency + CALIBRATION
+# table vs the hard-cut baseline family — katgpt-spectral's
+# gate_sigmoid_topk_into (its designed N≤~1e3 selection-sort regime only)
+# and select_nth+sigmoid at N ∈ {1e3, 1e5, 1e7} — via the shared
+# best_of_arms harness; G4 rides katgpt-core's exact_mass_admit_g4_alloc).
+# Informational cost/c calibration record — the promotion decision is
+# Issue 879 T4's, per the no-assumed-win rule. Row required (the
+# Issue-808 green-zero class).
+[[test]]
+name = "bench_884_exact_mass_admit_goat"
+required-features = ["exact_mass_admit"]
 
 [[test]]
 name = "bench_280_cs_kv_probe_goat"

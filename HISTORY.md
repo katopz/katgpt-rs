@@ -9077,3 +9077,37 @@ with zero p ties, no constant-flap degeneration.
   the docs commit of the same landing.
 
 Session: katgpt-rs-876-flappy-v3, 2026-09-23
+
+## Issue 879 (2026-09-24) — MAttr budget primitives landed opt-in: exact mass at router-regime cost; calibrated-mass column says what the hard cut cannot: CLOSED
+
+The Research 584 (arXiv:2609.25518 "Matryoshka attribution") POC landed
+as `exact_mass_admit` (katgpt-core, opt-in + root forward): the
+calibrated-mass "sigmoid top-k" (`exact_mass_admit_into` — bisect τ until
+Σσ((s−τ)/T) = k, soft mask mᵢ = σ((sᵢ−τ)/T), `simd::exact_sigmoid_f64`
+substrate) + `log_frontier` (the modelless `AdaptiveLogK` extraction —
+log-space budget ceiling, ±lr sign steps against a scalar accuracy,
+probe cadence; caller-owned randomness, no internal RNG). Issue file
+removed per the noise-reduction rule; the durable record is Bench 884.
+
+- **G1 14/14** (sum-to-k across the N/k/T grid, power-of-two shift
+  BIT-invariance on dyadic fixtures, nestedness-in-k, extremes, constant
+  scores, tiny-T near-binary, LogFrontier protocol/determinism) + G4 0
+  allocs; wasm32 `--features exact_mass_admit --lib` clean; default
+  build unchanged (G3).
+- **Bench 884's two honest findings** (best_of_arms harness, release,
+  4090RTX box): (1) ours pins `|Σm−k|` to ~1e-8 RELATIVE at every
+  N ∈ {1e3, 1e5, 1e7} while the hard-cut baselines drift −6.4% (sigmoid
+  weights ≈ 0.936·k, distribution-dependent); (2) at the router's
+  designed N=1e3 the calibrated operator is CHEAPER than the shipped
+  `gate_sigmoid_topk_into` — 69.8 vs 77.1 µs, 0.906× — the bisection's
+  ~32-50 scalar passes cost less than its O(k·N) selection sort at
+  k=100. Against the generic `select_nth` hard cut the cost is real
+  (~45× at 1e5/1e7, 1.10 s vs 25 ms @1e7) — the offline/calibration-tier
+  posture the issue scoped.
+- **No consumer wired → no promotion** (the T4 clause as written). The
+  consumer postures for any future promotion gate live in Bench 884:
+  gate_sigmoid_topk calibrated-mass upgrade (katgpt-spectral), block_topk
+  gate mass, cs_kv_probe exact-k sweep, riir-ai memory_soup SSC top-k.
+- Naming defense (load-bearing, from the verdict round): `exact_mass_admit`
+  ≠ `gate_sigmoid_topk` — one token apart, opposite mass semantics; both
+  module docs state the split.

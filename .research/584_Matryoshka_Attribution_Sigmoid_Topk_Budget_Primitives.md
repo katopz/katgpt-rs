@@ -2,7 +2,7 @@
 
 > **Source:** "Matryoshka attribution: Learning to attribute language model outputs to representations and weights" — Arora, Acharya, Hu, Zhang, Goodman, Jurafsky, Potts (Stanford) — [arXiv:2609.25518](https://arxiv.org/abs/2609.25518), 2026-09-22. Code: `aryamanarora/matryoshka-attribution` @ `360ff6af9f202396131231f59ab6bcc48f609ab0` (shallow clone, read-only, since removed; **no LICENSE file** — algorithm distilled from the paper's published math, no code copied).
 > **Date:** 2026-09-24
-> **Status:** Active — distillation landed; POC issue 879 open (`exact_mass_admit` + log-frontier tracker); fusion issues: riir-clippy 133 filed; riir-train 571 written on disk UNFILED-PENDING (§Fusion row 3).
+> **Status:** RECORD — POC LANDED 2026-09-24 (Issue 879 resolved, Bench 884): `exact_mass_admit` + `log_frontier` shipped opt-in in katgpt-core (G1 14/14, G4 0-allocs; calibrated mass ~1e-8 rel at every N; **0.906× the shipped gate's cost at its designed N=1e3**; ~45× the generic hard cut at 1e5+ — offline-tier posture, no consumer wired → no promotion). Fusion issues: riir-clippy 133 filed (defer-trigger); riir-train 571 written on disk UNFILED-PENDING (§Fusion row 3).
 > **Related Research:** 053 (CNA — shipped sparse-circuit + refusal-steering twin), 362 (HydraHead causal head importance), 467 (RRQ vs Matryoshka — the prior verdict that nested-slicing lost), katgpt-rs Research 599 line (set_admission), riir-train Research 021 (DeltaZip sparse delta compression).
 > **Classification:** Public (katgpt-rs). No game/chain/shard IP in the extracted primitives.
 

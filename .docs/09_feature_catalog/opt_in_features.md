@@ -4663,3 +4663,53 @@ features). Test-gate row `katgpt-core:2074:template_decode`.
 Bench: [881](../../.benchmarks/881_template_decode_losslessness.md) ·
 Follow-up: [882](../../.benchmarks/882_flappy_v3_render_widening.md)
 (Issue 876).
+
+## 127. exact_mass_admit — calibrated-mass "sigmoid top-k" + the log-frontier budget tracker (Issue 879 / Research 584)
+
+**What.** The MAttr (arXiv:2609.25518 "Matryoshka attribution") budget-
+primitive family, two modules behind one flag:
+
+- `katgpt_core::exact_mass_admit` — `exact_mass_admit_into(scores, k, T,
+  out) -> τ`: bisect τ over `[min−10T, max+10T]` (≤50 iters, branch-free
+  interval select, early-exit at 1e-9·n mass tolerance) until
+  `Σσ((s−τ)/T) = k`; emit the soft admission mask `mᵢ = σ((sᵢ−τ)/T)`.
+  Sigmoid substrate: `simd::exact_sigmoid_f64` (the bit-stable libm
+  variant — calibration wants exactness). The workspace shipped NO
+  exact-cardinality soft selection before: `entropic_tilt` is a KL budget
+  on softmax advantages, `set_admission` greedy DPP, `argtopk` /
+  `block_topk` / katgpt-spectral's `gate_sigmoid_topk` hard cuts with
+  UNCALIBRATED sigmoid mass. The naming split vs `gate_sigmoid_topk` is
+  load-bearing (one token apart, opposite mass semantics).
+- `katgpt_core::log_frontier` — `LogFrontier::new(total, target, lr,
+  probe_frac, floor)`: the modelless extraction of upstream
+  `schedules.py::AdaptiveLogK` (not in the paper text). One log-space
+  budget ceiling moved by ±lr sign steps against a SCALAR accuracy target,
+  with a probe cadence (probe_frac=0.25 → every 4th draw samples exactly
+  k_max and arms the controller). Consumes only `acc: f32` — the
+  k-supervision dial for KV `DensityBudget` ladders, `thermal_lod`
+  attention_k elbows, and the riir-clippy Issue 133 rule_embed lane.
+
+**Measured** (Bench 884, 4090RTX box, release, best-of-arms): calibration
+pins `|Σm−k|` to ~1e-8 RELATIVE at every N ∈ {1e3, 1e5, 1e7} while both
+hard-cut baselines drift −6.4% (uncalibrated sigmoid mass ≈ 0.936·k);
+at the router's designed N=1e3 the calibrated operator is CHEAPER than
+the shipped `gate_sigmoid_topk_into` (69.8 vs 77.1 µs — the ~32-50
+bisection passes cost less than its O(k·N) selection sort at k=100);
+against the generic `select_nth` hard cut the cost is real, ~45× at
+1e5/1e7 (1.10 s vs 25 ms @1e7) — the offline/calibration-tier posture.
+G1 14/14 (sum-to-k grid, power-of-two shift BIT-invariance, nestedness-
+in-k, extremes, degenerate scores, tiny-T, LogFrontier protocol);
+G4 0 allocs (500× N=4096 operator + 100k tracker ops); G3 default build
+unchanged + wasm32-clean; G2 gross ceiling 2.5 s @1e7.
+
+🔧 Feature flag: `exact_mass_admit = []` (katgpt-core; root forward for
+`tests/bench_884_exact_mass_admit_goat.rs`). **OPT-IN** — no consumer
+wired, no gain assumed (the Issue-879 T4 posture). Consumer postures
+recorded in Bench 884: gate_sigmoid_topk calibrated-mass upgrade,
+block_topk gate mass, cs_kv_probe exact-k sweep, riir-ai memory_soup SSC
+top-k.
+
+📖 Research: [584](../../.research/584_Matryoshka_Attribution_Sigmoid_Topk_Budget_Primitives.md) ·
+Bench: [884](../../.benchmarks/884_exact_mass_admit_goat.md) ·
+Resolution: HISTORY.md §Issue 879 (issue file removed per the noise-reduction
+rule; 2026-09-24).

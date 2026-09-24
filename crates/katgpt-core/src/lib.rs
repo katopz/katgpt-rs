@@ -3458,6 +3458,26 @@ pub mod sigmoid_calibration;
 #[cfg(feature = "distance_abstain")]
 pub mod distance_abstain;
 
+/// Exact-mass sigmoid admission (Issue 879 / Research 584, arXiv:2609.25518
+/// "Matryoshka attribution") — the calibrated-mass "sigmoid top-k": bisect
+/// τ until Σσ((s−τ)/T) = k, emit the soft mask mᵢ = σ((sᵢ−τ)/T). Sum-to-k,
+/// shift-invariant, nested-in-k, zero-alloc. Distinct from
+/// katgpt-spectral's `gate_sigmoid_topk` (hard cut, uncalibrated mass) —
+/// the naming split is load-bearing. Offline/calibration-tier posture;
+/// Bench 884 records the cost. Opt-in (`exact_mass_admit`).
+#[cfg(feature = "exact_mass_admit")]
+pub mod exact_mass_admit;
+
+/// Log-frontier budget tracker (Issue 879 / Research 584) — the modelless
+/// extraction of MAttr's `AdaptiveLogK`: one log-space budget ceiling moved
+/// by ±lr sign steps against a scalar accuracy target, with a
+/// probe-cadence arm (probe_frac) that samples exactly k_max. Consumes
+/// only `acc: f32` — the k-supervision dial for `DensityBudget` ladders,
+/// `thermal_lod` tier elbows, and the riir-clippy Issue 133 lane. Opt-in
+/// (`exact_mass_admit` — one feature, one primitive family).
+#[cfg(feature = "exact_mass_admit")]
+pub mod log_frontier;
+
 /// Calibration staleness at the freeze/thaw seam (Issue 841 §B-3) — a
 /// snapshot swap invalidates every attached calibration head; `SnapshotBound`
 /// returns `None` + one loud warning instead of a stale plausible score.
