@@ -78,6 +78,51 @@ def commit_subject(repo: Path, h: str) -> str:
     return r.stdout.strip()
 
 
+def parse_cat_file_batch(out: bytes, want: list[str]) -> dict[str, int]:
+    """`{spec: counter value}` from `git cat-file --batch` output, one
+    response per spec in `want` order.
+
+    The wire format per response is `<oid> blob <size>\n<content>\n` (a
+    missing object answers `<spec> missing\n`). The content is read as
+    EXACTLY `size` bytes and the single LF after it is consumed — the only
+    framing that holds for every blob. The previous reader took ONE LINE of
+    content plus an optional blank, which is correct only for a
+    single-line counter: measured 2026-09-24, riir-ai `892dec017` committed
+    a two-line `.issues/.highwater` (`998\n999`), its second line was read
+    as the NEXT response's header, and every older commit's value came back
+    one response off — 17 phantom resets (`4f14e64250` reported 588->586
+    where both it and its parent hold 587), riir-ai's pin breached 26 > 9.
+
+    Value = the LAST integer token of the content, so a multi-line blob
+    reads as the value its final line claims (the allocator's intent when
+    a write appended rather than replaced); an unparseable blob is skipped —
+    the malformed class belongs to the numbering gate, not to this walk.
+    """
+    val: dict[str, int] = {}
+    pos, n = 0, len(out)
+    for spec in want:
+        if pos >= n:
+            break
+        nl = out.find(b"\n", pos)
+        if nl < 0:
+            break
+        head = out[pos:nl].decode("utf-8", "replace")
+        pos = nl + 1
+        m = re.match(r"^[0-9a-f]+ \S+ (\d+)$", head)
+        if not m:
+            continue                       # "<spec> missing" — never existed
+        size = int(m.group(1))
+        body = out[pos:pos + size].decode("utf-8", "replace")
+        pos += size + 1                    # content + its one LF terminator
+        if not head.split()[1] == "blob":
+            continue
+        try:
+            val[spec] = int(body.strip().split()[-1])
+        except (ValueError, IndexError):
+            continue                       # malformed — ng's class owns it
+    return val
+
+
 def counter_history(repo: Path, subdir: str) -> list[dict]:
     """Per-commit counter events over HEAD's history, parent-compared.
 
@@ -114,47 +159,20 @@ def counter_history(repo: Path, subdir: str) -> list[dict]:
         return []
 
     # (2) blob values for every commit that could carry the file, in ONE
-    # cat-file --batch pass. The wire format per response is
-    #   `<oid> blob <size>\n<content>\n\n`  — content then a BLANK separator
-    # (missing objects answer `<spec> missing\n`, one line, no blank). The
-    # counter is a single short line, so one content line per blob; the
-    # separator is consumed explicitly — skipping it desyncs every
-    # subsequent response onto the wrong spec (measured: half the parents
-    # read as missing, every base collapsed to 0).
+    # cat-file --batch pass, parsed by `parse_cat_file_batch` — by the
+    # response's declared SIZE, never by line (see its docstring for the
+    # measured desync a line-based reader produced).
     rel = f"{subdir}/.highwater"
     want: list[str] = []
     for c, *ps in pairs:
         want.append(c)
         want.extend(ps)
-    val: dict[str, int] = {}
     batch = subprocess.run(
         ["git", "-C", str(repo), "cat-file", "--batch"],
-        input="\n".join(f"{s}:{rel}" for s in want) + "\n",
-        capture_output=True, encoding="utf-8", errors="replace",
+        input="\n".join(f"{s}:{rel}" for s in want).encode("utf-8") + b"\n",
+        capture_output=True,
     )
-    it = iter(want)
-    lines = batch.stdout.split("\n")
-    i = 0
-    while i < len(lines):
-        spec = next(it, None)
-        if spec is None:
-            break
-        head = lines[i]
-        i += 1
-        m = re.match(r"^[0-9a-f]+ blob (\d+)$", head)
-        if not m:
-            continue                       # "<spec> missing" — never existed
-        size = int(m.group(1))
-        body = ""
-        if size > 0:
-            body = lines[i] if i < len(lines) else ""
-            i += 1
-        if i < len(lines) and lines[i] == "":
-            i += 1                       # the blank separator after content
-        try:
-            val[spec] = int(body.strip().split()[-1])
-        except (ValueError, IndexError):
-            continue                       # malformed — ng's class owns it
+    val = parse_cat_file_batch(batch.stdout, want)
 
     # (3) classify each commit against ITS OWN parents
     events: list[dict] = []
@@ -352,6 +370,51 @@ def selftest() -> list[str]:
         if len(w3b["resets"]) != 1 or w3b["resets"][0][:2] != (769, 4):
             fails.append(f"line: a real backward commit is a reset (769, 4): "
                          f"{w3b['resets']}")
+
+        # ── the framing: a two-line blob, a newline-less blob, a missing
+        # object and an empty blob, back to back. Each value must land on
+        # ITS OWN spec — a line-based reader shifts every spec after `b`.
+        wire = (b"1111 blob 8\n998\n999\n\n"      # b: two lines
+                b"2222 blob 3\n587\n"               # c: no trailing LF
+                b"c:x missing\n"                     # d: missing
+                b"3333 blob 0\n\n"                  # e: empty
+                b"4444 blob 4\n626\n\n")           # f: ordinary
+        got = parse_cat_file_batch(wire, ["b", "c", "d", "e", "f"])
+        if got != {"b": 999, "c": 587, "f": 626}:
+            fails.append(f"framing: each blob's value on its own spec "
+                         f"{{b: 999, c: 587, f: 626}}, got {got}")
+
+        # ── the same on REAL git (riir-ai 892dec017's shape): a two-line
+        # counter must not shift any OLDER commit's value. The history needs
+        # a MERGE below the bad blob: on a straight line a commit and its
+        # parent shift by the same stride, so a line-based reader still sees
+        # +1 steps and passes (measured — the straight-line version of this
+        # arm was green against the broken reader). With the merge the old
+        # reader printed phantom gaps (0,4) (2,4) (4,6); the answer is none.
+        repo4 = ws / "twoline-repo"
+        repo4.mkdir()
+        git(repo4, "init", "-q", "-b", "main")
+        (repo4 / ".issues").mkdir()
+        hw4 = repo4 / ".issues" / ".highwater"
+
+        def commit4(text: str, msg: str) -> None:
+            hw4.write_bytes(text.encode("utf-8"))
+            git(repo4, "add", "-A")
+            git(repo4, "commit", "-q", "-m", msg)
+        commit4("1\n", "1")
+        git(repo4, "checkout", "-q", "-b", "side")
+        commit4("2\n", "side 2")
+        git(repo4, "checkout", "-q", "main")
+        git(repo4, "merge", "-q", "--no-ff", "-m", "merge side", "side")
+        commit4("3\n", "3")
+        commit4("4\n", "4")
+        commit4("4\n5\n", "two-line counter")
+        commit4("6\n", "6")
+        w4 = classify_history(counter_history(repo4, ".issues"), repo=repo4)
+        if w4["resets"] or w4["gaps"] or w4["final"] != 6:
+            fails.append(f"two-line blob on real git: 0 resets, 0 gaps, final "
+                         f"6 — got resets={w4['resets']} gaps={w4['gaps']} "
+                         f"final={w4['final']}")
 
         # ── non-git dir: [] (the sweep selftest's tempdir shape)
         ng_repo = ws / "not-a-repo"
