@@ -3175,6 +3175,18 @@ else happening to be watching the process table.
   same rule §Docs gate states for CPU seconds; it is restated here because
   *written-down beats remembered only if the write-up is in the path you
   actually walk*, and that one lives in a section about docs-gate timing.
+- ⛔ **On a laptop, POWER SOURCE and POWER MODE belong in that list, and they
+  were the axis nothing recorded** (riir-reflex Issue 021, 2026-09-24). An
+  entire paired A/B session on the M3 ran unplugged (100% → 45%) while its
+  baselines were AC, and no instrument noticed. Apple Silicon sheds sustained
+  GPU clock off AC; `pmset powermode` is a **three**-state enum (0 Automatic,
+  1 Low Power, 2 High Power — this box's AC profile is 2), so "not 0" is not
+  "Low Power". There is no sudo-free throttle readout here (`pmset -g therm`,
+  `kern.thermalpressure`, `powermetrics` all measured unusable), so the
+  detector is a fixed-kernel canary. Reference gate:
+  `riir-reflex/scripts/bench_preflight.sh` — refuses on battery, Low Power,
+  < `SETTLE_MIN` since plug-in, or over a load ceiling, and prints a
+  `PROVENANCE:` line to quote beside the number.
 - ↔ **This bullet is the GENERAL rule; §Docs gate's "load-invariant has a
   measured LIMIT" paragraph is the INSTANCE** — it owns the docs-gate CPU
   figures and their quiet-box scoping, this owns any perf number plus the
