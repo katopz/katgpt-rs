@@ -114,13 +114,47 @@
 # bevy worktree reads 191 while other refs sit at 194 — a pin would be ref-set
 # dependent and red on a box that owes nothing. It is PRINTED by the sweep
 # every run, never gated.
+#
+# ── the `216defb9b` walker defect: WHICH rows here read corrupt values ───
+#
+# That commit fixed the walker (the reader framed `cat-file --batch` by LINE,
+# so one two-line `.highwater` blob shifted every older commit's value) and
+# recorded the effect on COUNTS: workspace resets 46 → 28, riir-ai 26 → 9,
+# riir-clippy 5 → 4. That is the wrong quantity for adjudicating THIS file.
+# A pin is sound only if the values behind it were read correctly, and a
+# history can be corrupt WITHOUT its reset count moving — so the question
+# every row here needs answered is not "did my number change" but "was my
+# repo's counter history being read wrong at all".
+#
+# Measured 2026-09-24 (the landed `parse_cat_file_batch` against the old
+# line-framed reader over one `--batch` stream, every contract repo on the
+# box): **85 repo+dir counter histories, 3 CORRUPT** —
+#   ⛔ riir-ai     .issues    2080 commit(s) read the wrong value
+#   ⛔ riir-clippy .research   668
+#   ⛔ riir-clippy .plans      565
+# — and `riir-clippy .plans` is the row that makes the point: its reset count
+# was 0 BEFORE and 0 AFTER, so no count delta could ever have revealed it.
+# Reading the fix's own summary as the blast radius would have declared that
+# history clean.
+#
+# Every other row in this file — katgpt-rs 5, mmorpg-editor 6, riir-shader 1,
+# riir-train 2, riir-mmorpg-examples 1 — sat on a history read CORRECTLY
+# throughout, so those pins were never in question and need no re-measurement.
+# That is the useful half: it BOUNDS the damage to two repos instead of
+# leaving the whole file under suspicion. It is also what licenses
+# mmorpg-editor's 5→6 below — a count that did NOT move across the walker fix
+# is not by itself evidence it was right.
+#
+# ⚠ It is a repo+dir DISAGREEMENT count, not a per-event correctness proof.
+# The stronger check (every event's value vs `git show`) was run only where it
+# mattered: riir-ai's 4594 events, 0 mismatches after the fix.
 
 katgpt-rs           	795	0	0	0	5	1200	70	# resets (770 walk): Issue 577→25 + Plan 572→526 + Bench 427→205 (the promote-to-main merge), 564→204, 585→584  • max_hist 71→70 2026-09-24 (Issue 881 T2.4): rename recognition — .research/383 collapse as RETITLES of one document (same commit or ≤1h, stem-token Jaccard ≥ 0.25, predecessor first), not second holders
 katgpt-web          	0	0	0	0	0	0	0	# observed 2026-09-05: 0 files (no .plans/.research yet)  ⛔ min_numbers/max_hist UNMEASURED on this box (absent — partial clone); max_hist 0 reds on the canonical workstation BY DESIGN, demanding a measurement rather than inventing a ceiling that cannot fire
 riir-ai             	493	0	0	0	9	1200	67	# resets: Issue 627→614 ×2 (one at a Merge), 763→762 + Bench ×6 (incl. 641→640 ×2, one at a Merge); 2026-09-05 dups RESOLVED (T4b)  • max_hist 71→67 2026-09-24 (Issue 881 T2.4): rename recognition — .plans/169 · .plans/188 · .issues/591 · .research/043 collapse as RETITLES of one document (same commit or ≤1h, stem-token Jaccard ≥ 0.25, predecessor first), not second holders
 riir-auth           	0	0	0	0	0	0	0	# observed 2026-09-05: 0 files
 riir-chain          	0	0	0	0	0	180	5	# resets 0 under the 770 walk — the 769 walker's ×4 rows were ALL phantoms (forward bumps on diverged lineages); allocator repaired 007->008 2026-09-05  • max_hist 6→5 2026-09-24 (Issue 881 T2.4): rename recognition — .plans/021 collapse as RETITLES of one document (same commit or ≤1h, stem-token Jaccard ≥ 0.25, predecessor first), not second holders
-riir-clippy         	183	0	0	0	5	350	3	# resets: Issue 82→81 + Research 57→54, 87→86 + Bench 16→13, 42→41; 2026-09-05 dups RESOLVED (Issue 069 T2)
+riir-clippy         	183	0	0	0	4	350	3	# resets: Issue 82→81 + Research 87→86 + Bench 16→13, 42→41; 2026-09-05 dups RESOLVED (Issue 069 T2)  • 2026-09-24: max_resets 5→4 — `Research 57→54` was a PHANTOM of the line-framed `cat-file --batch` reader (fixed `216defb9b`). The fix's own summary named this 5→4 and the pin was not lowered with it; a ratchet left at 5 tolerates one REAL reset silently, which is the one direction a ratchet must never drift. Re-measured with the landed parser at origin (0 ahead / 0 behind), so this is the repo and not a stale view (Issue 798). ⚠ The COUNT delta understates what was wrong here: this repo's `.plans` history was corrupt too (565 commits, against `.research`'s 668) and its reset count was 0 either side, so nothing in the count column showed it
 riir-dao            	3	0	0	0	0	0	0	# observed 2026-09-05: 4 files  ⛔ min_numbers/max_hist UNMEASURED on this box (absent — partial clone); max_hist 0 reds on the canonical workstation BY DESIGN, demanding a measurement rather than inventing a ceiling that cannot fire
 riir-dapps          	15	0	0	0	0	70	0	# observed 2026-09-05: 19 files
 riir-deployer        	4	0	0	0	0	0	0	# observed 2026-09-05: 5 files  ⛔ min_numbers/max_hist UNMEASURED on this box (absent — partial clone); max_hist 0 reds on the canonical workstation BY DESIGN, demanding a measurement rather than inventing a ceiling that cannot fire
@@ -138,4 +172,4 @@ mmorpg-remaster   	49	0	0	0	0	72	5	# Issue 842: first REAL measurement 2026-09-1
 mmorpg-remake         	13	0	0	0	0	45	0	# Issue 842: first REAL measurement 2026-09-19 (21 files · 45 numbers · hist 0)  • 2026-09-19 (later the same day): the row above was measured on a checkout that sat BEHIND origin, so it was never true of the REPO — only of this box's stale view of it (Issue 798's class, reached by a PIN rather than by a finding). Re-measured after `git merge --ff-only`: min_files 21→19 — two legitimate closures (.issues/030 @ 156c373, /032 @ 1e3342c), HISTORY records kept; the walk is NOT blind, nums holds at 46  • 2026-09-24 (katgpt-rs-9a): min_files 19→13 — measured 16 after TWELVE legitimate closures since 09-19 (.issues/025–039: 025, 026/027/028 parked, 033, 034, 035, 036, 037, 038, 039 — each removed with a HISTORY record), ~80% of measured per the header rule; walk NOT blind (nums 54). Same run: the stale .plans allocator (max 12 > .highwater 11) was a REAL defect, FIXED at mmorpg-remake 3666b68, not pinned
 riir-reflex       	6	0	0	0	0	12	1  # 2026-09-24 re-pin, the repo's first since birth: it was pinned all-zero on 2026-09-21 with NO numbered documents and now carries 10 files / 17 numbers, so every floor here was vacuous. min_files 6 (60% of measured, deliberately looser than the 80% convention — this repo closes-and-removes issues fast, 001-010 are already gone) and min_numbers 12 (that walk only grows). max_hist 0 -> 1: `.issues/014` is DOUBLY HELD by two independent same-day filings, `014_engine_lane_override_raw_knob` (35b5400) and `014_engine_sigmoid_local_copy` (64a7525) — the concurrent-session dual allocation `dual_allocation_gate` exists to catch at write time. BOTH have closed and been removed, so nothing is on disk to renumber and Issue 795's rule applies: the row comes out only when the NUMBER stops being doubly held, which a deletion never achieves. A ratchet at measured, so a SECOND collision reds on arrival. The stale `.plans` allocator this row used to carry was FIXED, not pinned (riir-reflex `c9edb39`: .highwater 1 -> 2 over a live 002), so max_above stays a wall at 0
 #   ⚠ observed 2026-09-21: joined the workspace that day (Plan 603 T1.1 registration, owner-delegated repo birth); the ORIGINAL row was pinned min_files=3 for the three .highwater seeds and MEASURED 0, because the allocator-serial walk counts NUMBERED DOCUMENTS and not .highwater files (the riir-llm 0-row is the correct empty-repo shape)
-riir-infer        	0	0	0	0	0	0	0 # observed 2026-09-22: joined the workspace 2026-09-22 (riir-ai Issue 998 / reflex Issue 008 carve — Proposal 041 T-B fired); no numbered documents yet (the riir-llm/reflex 0-row shape)
+riir-infer        	0	0	0	0	0	1	0 # observed 2026-09-22: joined the workspace 2026-09-22 (riir-ai Issue 998 / reflex Issue 008 carve — Proposal 041 T-B fired); no numbered documents yet (the riir-llm/reflex 0-row shape)  • 2026-09-24: it has one now — `.issues/001_exl3_trellis_format_support.md` (`b70fee8`), so every floor on this row was vacuous. min_numbers 0→1 is the only one that can be raised honestly: `n_numbers` is recovered from `git log` as well as disk, so it only ever grows. **min_files stays 0 deliberately** — this repo is one issue old and that issue may legitimately close and be removed under the noise-reduction rule, which would red a floor of 1 for doing the right thing (the riir-reflex row's 60%-of-measured reasoning, at n=1 where no percentage means anything)
