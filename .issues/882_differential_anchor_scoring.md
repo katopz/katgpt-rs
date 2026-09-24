@@ -1,0 +1,31 @@
+# Issue 882 — differential anchor scoring (common-mode-rejection for score surfaces we own)
+
+**Status:** OPEN — P0 unblocked (pure math + existing fixtures). Research: [586](../.research/586_Differential_Scoring_Anchor_Noise_Cancellation.md) · riir-ai Issue 1006 (habituation consumer) · riir-train Plan 417 (recipes, SECONDARY).
+
+## Problem
+
+Diff Transformer (arXiv:2410.05258) shows softmax allocation carries a common-mode noise floor (~0.5 of mass on irrelevant context) and that the differential amplifier — subtract a correlated reference map — cancels it. Two arms of the attention-noise-control family already ship (SSMax rescale, Plan 411; ASEntmax sparsify, Issue 747). **The third arm (subtract) ships nowhere**, and on the score surfaces we own — no trained weights involved — it is a ~30-LOC primitive with a known trap.
+
+## The primitive
+
+`score(q, d) = sim(q, d) − λ·sim(ā, d) = (q − λ·ā)·d` — one axpy produces the corrected query `q̂ = q − λā`; the existing KNN/rerank pass runs unchanged. Candidates similar-to-everything (hubs) lose their generic mass; query-specific candidates keep theirs. λ=0 must be byte-identical (kill switch `KATGPT_NO_DIFF_ANCHOR=1`-class env or feature-gated default-off). λ* found by direct evaluation (grid on oracle fixtures — the Plan 340 conformal-calibration precedent), never GD.
+
+Prior art (honest, from the §4 sweep): CSLS (arXiv:1804.07745) subtracts per-candidate neighborhood hubness; the single-shared-anchor form is the O(d)-per-query simplification. Contrastive decoding owns the subtract principle at logits level. Our claim is the integration (folded into the query, on the healer/routing/abstention sockets), not a new principle.
+
+## Tasks
+
+- [ ] **P0 — `katgpt-core/src/differential_anchor.rs`**: `correct_query(q, anchor, lambda)` + anchor builders (mean-corpus, mean-query — both A/B'd on fixtures) + the frozen `λinit(l) = 0.8 − 0.6·exp(−0.3(l−1))` const table + the neutral-at-zero reparam envelope (`λ = e^u − e^v + λinit`, latent-at-0 ⇒ prior). Feature `differential_anchor`, default-off. G1: oracle-fixture top-1 (`retrieval_eval`/`clippy_oracle` pattern) not worse at λ*, hubness skewness S_N strictly decreases; report per-domain (the hubness≠illegitimacy trap: mechanical lints are CORRECTLY high-frequency). G2: +O(d) axpy ≤ 1 µs, invisible vs the 123 µs latent-KNN p50. **G2 protocol: paired A/B via `tests/common/ab_timing.rs` (`ab_median_ratio`, never two sequential arms — ±21.7% box drift measured); `black_box` on result AND arguments (LTO deletes a dead-result timing loop); box state recorded beside any published figure (free RAM, commit-vs-limit, concurrent jobs — the G2 box-state law).** G3: λ=0 bit-identical, pinned. G4: stack-buffer query, zero alloc.
+- [ ] **P0 rider — consumer #1 (healer rerank, fusion priority #2)**: a differential mode beside `RerankMode::Structural` in riir-clippy `latent_matcher.rs`, consuming the katgpt-core primitive (cross-repo cherry-pick via goat-audit at landing). Gate: score-bench heal rate + oracle top-1 at λ* vs λ=0.
+- [ ] **P1 — streaming attention-SNR accumulators**: exact softmax entropy + participation ratio maintained inside the online-softmax loop (`T ← e^Δ(T + Δ·l_old) + Σ e^{x−m}(x−m)` rescale recurrence; `PR = 1/Σp²` via `R₂ ← e^{2Δ}R₂ + Σ e^{2(x−m)}`) — 5 extra FLOPs/element, registers only. Plus per-head measured sharpening τ_h by 1-D bisection to a target normalized entropy, on the SSMax socket (`SsmaxMode` extension) — the measured-per-head complement to the shipped global schedule. G1: m_Y correlation (P4) + retrieval-proxy; G2: ≤ 2% kernel step latency (register pressure is the real cost — measure occupancy); **protocol: `ab_timing.rs` paired interleave, `black_box` on the accumulator reads (result AND arguments — the extra FLOPs are exactly the shape fat-LTO deletes when the stats go unread), box state recorded with any figure**. G3: gate-off bit-identical + ppl Δ within noise band; G4: alloc-free.
+- [ ] **P2 — row-relative sink-exempt logit clamp**: `l̃ᵢ = m_r − min(w_h, m_r − lᵢ)` with `w_h` = EMA of per-head row logit range (latent state, sanctioned class); bounds the quantization domain → int8 scale `w_h/127`, per-row softmax error envelope `≤ 2·pᵢ·w_h/254` closed-form. Sink set EXEMPT via the shipped kv_sink_window machinery (sinks are legitimate outliers — the trap). Consumers: riir-infer low-bit attention paths (prefill league adjacent). G1: ppl Δ within the analytic envelope's prediction + needle@64K ≥ baseline − ε at 6-bit; G2: 2 comparisons/logit, < 1% kernel time; **protocol: `ab_timing.rs` paired interleave, `black_box` on clamped-and-unclamped outputs both (result AND arguments), box state recorded**; G3: disabled bit-identical.
+- [ ] **P3 — differential KV eviction**: `specificity_j = max over recent queries of (a_j − λ·μ_j)` with `μ_j` = EMA of key j's attention mass (O(1)/key/step bookkeeping, no kernel change); evict argmin; sink keys exempt. G1: multi-needle @64K on Bonsai/Qwen at 25%/50% cache ≥ full-cache − ε; G3: no-eviction bit-identical.
+- [ ] **P4 — `attention_to_answer` eval harness**: `m_Y = (1/R)Σ_r Σ_{i∈Y} p_{r,i}` over dumped attention rows + labeled answer spans — the paper's Table-3 instrument on OUR models; the falsifier for P1/P2. Riders: canonical context assembly for oracle-anchored evals (permutation spread → 0 by construction); rank-1 spectral deflation `A′ = A − λσ₁u₁v₁ᵀ` on the rerank-stage M×M candidate affinity, gated on erank < θ (only deflate a collapsed matrix — the anti-help trap), as P4 stretch.
+- [ ] **Promotion**: any task promoting to default requires its GOAT pass + the loser demoted (the standing rule).
+
+## Known traps (from the panel, load-bearing)
+
+1. Hubness ≠ illegitimacy (P0) — adjudicate anchor + λ per domain on fixtures; never assume.
+2. Concentration ≠ relevance (P1) — entropy measures concentration, a head can be confidently wrong; m_Y is the falsifier.
+3. Sinks are legitimate outliers (P2) — exemption is load-bearing, silent long-context regression otherwise.
+4. "Generically attended" ≈ "consistently relevant" (P3) — query-distribution shift breaks the assumption; recency priors partially cover; failures are silent.
+5. λinit is one run's hyperparameters, not a law — override-able prior, never a hard default.
