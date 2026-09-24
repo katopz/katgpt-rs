@@ -1,3 +1,14 @@
+## Issue 880 (2026-09-24) — calibrated-mass router gate, `exact_mass_admit` consumer lane (a): CLOSED (shipped opt-in, G2 FAIL by construction)
+
+Filed by the 4090 session from Bench 884's promotion candidates. It was implemented on the M3, because the lane is CPU-only and was waiting on the 4090 only for that box's harness window.
+
+- **Shipped:** `katgpt_spectral::manifold_power_iter_router::gate_sigmoid_topk_mass_into`, behind the new opt-in flag `calibrated_mass_gate` (katgpt-spectral, implies `manifold_power_iter_router` + `katgpt-core/exact_mass_admit`; root passthrough). It keeps the incumbent's logits and exact-k selection, and its weights are σ((z − τ)/T) with τ solved so that Σm = k. It ranks by logit, so ties from sigmoid saturation cannot reorder it. Buffers are zero-alloc and caller-owned.
+- **DRY refactor:** the incumbent `gate_sigmoid_topk_into` now uses the shared helpers `router_logits_into` and `select_topk_desc_into`. t14 pins it bit-identical to its pre-refactor body, including sort tie order under β = 400, and a `>` → `>=` mutation turns t14 red.
+- **Measured** ([Bench 885](.benchmarks/885_calibrated_mass_gate_goat.md), M3, interleaved A/B, 3 runs): |Σm − k| ≤ 9e-7, while the incumbent's weights total ≈ N/2 whatever k is. Cost is 11.0× / 6.6× / 1.75× the incumbent at N=64 k=4 / N=256 k=8 / N=1000 k=100. G1 t15–t19 PASS, G3 PASS, G4 0 allocs.
+- ⛔ **The issue's G2 bar (≤ 1.05×) was inherited from a comparison of ALTERNATIVES.** Bench 884's 0.906× pitted the operator against the gate as rivals at k = N/10, where the gate's O(k·N) selection sort dominates. The upgrade COMPOSES them: it keeps the sort, because that is the index contract, and adds several sigmoid passes over N. One such pass costs about the incumbent's whole budget, so no calibrated gate can reach the bar at game-scale k. A ratio measured between two operators does not transfer to an operator built from both.
+- The remaining lever is a safeguarded-Newton τ solve in `katgpt-core::exact_mass_admit`: about 5–8 passes against about 32, still around 3× at the hot regime. It is recorded in Bench 885 and not filed, because no consumer exists and it would have to re-earn that module's bit-exact shift-invariance pins.
+- Promotion stays with a future consumer's own GOAT. `.docs/09_feature_catalog/opt_in_features.md` carries both entries.
+
 ## Issue 881 (2026-09-24) — the numbering sweep's standing backlog, three repos over their ratchets: CLOSED
 
 Filed from the citation-sweep campaign's neighbouring run: riir-ai `max_resets`

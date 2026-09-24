@@ -78,6 +78,12 @@ gauge_invariant = ["katgpt-core/newton_schulz"]
 # for snapshot hashing.
 manifold_power_iter_router = ["blake3"]
 
+# Calibrated-mass sigmoid top-k gate (Issue 880, Bench 884 candidate (a)):
+# `gate_sigmoid_topk_mass_into` — the incumbent's logits + exact-k selection,
+# weights re-biased by katgpt-core's `exact_mass_admit` so Σm = k. Opt-in:
+# the router has no production consumer, so there is no gain to promote on.
+calibrated_mass_gate = ["manifold_power_iter_router", "katgpt-core/exact_mass_admit"]
+
 # Quantile Balancing MoE Router (Plan 455, Research 447 §2.4) — sibling to
 # manifold_power_iter_router. One-shot per-expert bias `β` computation at
 # freeze/thaw snapshot swap via alternating-coordinate descent on the

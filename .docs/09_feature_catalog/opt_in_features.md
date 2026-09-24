@@ -4713,7 +4713,33 @@ top-k.
 Bench: [884](../../.benchmarks/884_exact_mass_admit_goat.md) ·
 Resolution: HISTORY.md §Issue 879 (issue file removed per the noise-reduction
 rule; 2026-09-24).
-Follow-up: [Issue 880](../../.issues/880_calibrated_mass_router_gate.md)
-(OPEN, filed 2026-09-24) — consumer lane (a), the calibrated-mass
-`gate_sigmoid_topk` upgrade as a separately-named gate; the promotion
-question for this flag rides that gate, not this entry.
+Follow-up: Issue 880 (CLOSED 2026-09-24, HISTORY.md §Issue 880) —
+consumer lane (a) shipped as the separate opt-in flag `calibrated_mass_gate`
+(below). ⚠ Bench 884's "cheaper than the shipped gate at N=1e3" compared the
+two as ALTERNATIVES; the upgrade COMPOSES them and measures 1.75× at that N
+and 11× at the hot N=64 (Bench 885). The promotion question for this flag
+still needs a consumer, not this entry.
+
+### `calibrated_mass_gate` — calibrated-mass sigmoid top-k router gate (Issue 880)
+
+`katgpt_spectral::manifold_power_iter_router::gate_sigmoid_topk_mass_into`:
+the incumbent `gate_sigmoid_topk_into`'s logits `z = β·x·R'ᵀ` and exact-k
+selection (same indices, same order), with weights `σ((z − τ)/T)` whose τ is
+solved by `exact_mass_admit_into` so that `Σm = k`. Zero-alloc (caller-owned
+logits, mass and index buffers). NOT a drop-in replacement: the weights are
+coupled through τ (the inverse of the incumbent's t06 independence, pinned as
+t17).
+
+**Measured** (Bench 885, M3, release, interleaved A/B, 3 runs): |Σm − k| ≤
+9e-7 in every regime against the incumbent's ≈ N/2 total weight; cost
+**11.0× / 6.6× / 1.75×** the incumbent at N=64 k=4 / N=256 k=8 / N=1000 k=100.
+G1 t15–t19 PASS, G3 t14 bit-identical incumbent, G4 0 allocs. G2's ≤ 1.05×
+bar is unreachable by construction (calibration adds several sigmoid passes
+over N; one pass ≈ the incumbent's whole cost).
+
+🔧 Feature flag: `calibrated_mass_gate` (katgpt-spectral, implies
+`manifold_power_iter_router` + `katgpt-core/exact_mass_admit`; root
+passthrough). **OPT-IN**, with no consumer.
+
+📖 Bench: [885](../../.benchmarks/885_calibrated_mass_gate_goat.md) ·
+Resolution: HISTORY.md §Issue 880.

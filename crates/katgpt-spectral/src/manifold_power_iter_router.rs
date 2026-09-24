@@ -426,38 +426,115 @@ pub fn gate_sigmoid_topk_into(
     debug_assert_eq!(out_scores.len(), n_experts, "out_scores length mismatch");
     debug_assert_eq!(idx_buf.len(), n_experts, "idx_buf length mismatch");
 
-    // Per-expert independent sigmoid.
-    for i in 0..n_experts {
-        let row = &r_prime[i * d_model..(i + 1) * d_model];
-        let dot = simd_dot_f32(x, row, d_model);
-        let z = beta * dot;
+    // Per-expert independent sigmoid over the router logits.
+    router_logits_into(x, r_prime, n_experts, d_model, beta, out_scores);
+    for s in out_scores.iter_mut() {
         // σ(z) = 1/(1+e^{-z}). Delegates to `katgpt_core::simd::fast_sigmoid`
         // (Cephes polynomial, ~1 ULP accurate).
-        out_scores[i] = katgpt_core::simd::fast_sigmoid(z);
+        *s = katgpt_core::simd::fast_sigmoid(*s);
     }
+    select_topk_desc_into(out_scores, k, idx_buf)
+}
 
-    // Initialize idx_buf to [0, 1, 2, ..., n_experts-1] in place.
+/// Router logits `zᵢ = β · x · R'[i]^T`, written into caller-owned `out`
+/// (length `n_experts`). The shared first half of every sigmoid gate in this
+/// module — the gates differ only in how they turn `z` into a weight.
+#[inline]
+fn router_logits_into(
+    x: &[f32],
+    r_prime: &[f32],
+    n_experts: usize,
+    d_model: usize,
+    beta: f32,
+    out: &mut [f32],
+) {
+    for (i, z) in out.iter_mut().enumerate().take(n_experts) {
+        let row = &r_prime[i * d_model..(i + 1) * d_model];
+        *z = beta * simd_dot_f32(x, row, d_model);
+    }
+}
+
+/// Top-`k` indices of `scores` in descending order, written into
+/// `idx_buf[..kk]`; returns `kk = min(k, n)`. Strict `>` keeps the lowest
+/// index on the first pass over a tie.
+///
+/// Selection sort: for small k (typical game-scale N ≤ 256) it is
+/// cache-friendly; for large N the caller should use a priority queue. Kept
+/// branch-light for the hot N≤64 case.
+#[inline]
+fn select_topk_desc_into(scores: &[f32], k: usize, idx_buf: &mut [usize]) -> usize {
+    let n = scores.len();
+    // Initialize idx_buf to [0, 1, 2, ..., n-1] in place.
     for (i, slot) in idx_buf.iter_mut().enumerate() {
         *slot = i;
     }
-
-    // Top-k by score. For small k (typical game-scale N ≤ 256) selection
-    // sort is cache-friendly; for large N the caller should use a priority
-    // queue. Keep this path branch-free for the hot N≤64 case.
-    let kk = k.min(n_experts);
+    let kk = k.min(n);
     for i in 0..kk {
         // Find max in [i..n].
         let mut best = i;
-        let mut best_score = out_scores[idx_buf[i]];
-        for j in (i + 1)..n_experts {
-            if out_scores[idx_buf[j]] > best_score {
+        let mut best_score = scores[idx_buf[i]];
+        for j in (i + 1)..n {
+            if scores[idx_buf[j]] > best_score {
                 best = j;
-                best_score = out_scores[idx_buf[j]];
+                best_score = scores[idx_buf[j]];
             }
         }
         idx_buf.swap(i, best);
     }
     kk
+}
+
+// ── Calibrated-mass gate (Issue 880, opt-in `calibrated_mass_gate`) ─────
+
+/// **Calibrated-mass** sigmoid top-k gate — the `exact_mass_admit` sibling of
+/// [`gate_sigmoid_topk_into`] (Issue 880, Bench 884 promotion candidate (a)).
+///
+/// Same logits `zᵢ = β · x · R'[i]^T` and the same exact-k selection contract
+/// (`idx_buf[..kk]`, `kk = min(k, n_experts)`, descending), but the weights
+/// are `mᵢ = σ((zᵢ − τ)/T)` with `τ` solved by
+/// [`katgpt_core::exact_mass_admit::exact_mass_admit_into`] so that
+/// `Σᵢ∈all mᵢ = k`. At `T = 1, τ = 0` this is exactly the incumbent's
+/// weight `σ(zᵢ)`; `τ` is the one bias shift that turns those weights into a
+/// budget.
+///
+/// **Not a drop-in replacement.** The incumbent's weights are per-expert
+/// independent (t06); these are coupled through `τ` — perturbing one
+/// expert's row moves `τ` and therefore every mass. Different name,
+/// different suite (the `exact_mass_admit` naming rule).
+///
+/// Ranking is by logit, not by weight: σ is monotone so the order is the
+/// same wherever the weights are distinct, and the logit breaks the ties
+/// that sigmoid saturation creates in f32.
+///
+/// Buffers are caller-owned and zero-alloc: `logits_buf`, `out_mass` and
+/// `idx_buf` each of length `n_experts`. Returns `(kk, τ)`.
+#[cfg(feature = "calibrated_mass_gate")]
+pub fn gate_sigmoid_topk_mass_into(
+    x: &[f32],
+    r_prime: &[f32],
+    n_experts: usize,
+    d_model: usize,
+    beta: f32,
+    k: usize,
+    temperature: f32,
+    logits_buf: &mut [f32],
+    out_mass: &mut [f32],
+    idx_buf: &mut [usize],
+) -> (usize, f32) {
+    debug_assert_eq!(r_prime.len(), n_experts * d_model, "r_prime shape mismatch");
+    debug_assert_eq!(logits_buf.len(), n_experts, "logits_buf length mismatch");
+    debug_assert_eq!(out_mass.len(), n_experts, "out_mass length mismatch");
+    debug_assert_eq!(idx_buf.len(), n_experts, "idx_buf length mismatch");
+
+    router_logits_into(x, r_prime, n_experts, d_model, beta, logits_buf);
+    let tau = katgpt_core::exact_mass_admit::exact_mass_admit_into(
+        logits_buf,
+        k as f32,
+        temperature,
+        out_mass,
+    );
+    let kk = select_topk_desc_into(logits_buf, k, idx_buf);
+    (kk, tau)
 }
 
 // ── Snapshot-swap hook (Phase 2) ─────────────────────────────────────────
@@ -963,6 +1040,194 @@ mod tests {
         assert_eq!(kk, n, "kk must clamp to n_experts when k > n");
         // All indices present exactly once.
         let mut sorted = idx_buf[..kk].to_vec();
+        sorted.sort_unstable();
+        assert_eq!(sorted, (0..n).collect::<Vec<usize>>());
+    }
+
+    /// The pre-Issue-880 inline body of `gate_sigmoid_topk_into`, kept
+    /// verbatim as the G3 reference for the helper extraction.
+    fn gate_reference(
+        x: &[f32],
+        r_prime: &[f32],
+        n_experts: usize,
+        d_model: usize,
+        beta: f32,
+        k: usize,
+        out_scores: &mut [f32],
+        idx_buf: &mut [usize],
+    ) -> usize {
+        for i in 0..n_experts {
+            let row = &r_prime[i * d_model..(i + 1) * d_model];
+            let dot = simd_dot_f32(x, row, d_model);
+            out_scores[i] = katgpt_core::simd::fast_sigmoid(beta * dot);
+        }
+        for (i, slot) in idx_buf.iter_mut().enumerate() {
+            *slot = i;
+        }
+        let kk = k.min(n_experts);
+        for i in 0..kk {
+            let mut best = i;
+            let mut best_score = out_scores[idx_buf[i]];
+            for j in (i + 1)..n_experts {
+                if out_scores[idx_buf[j]] > best_score {
+                    best = j;
+                    best_score = out_scores[idx_buf[j]];
+                }
+            }
+            idx_buf.swap(i, best);
+        }
+        kk
+    }
+
+    #[test]
+    fn t14_gate_helper_extraction_is_byte_identical() {
+        // Issue 880 G3: extracting `router_logits_into` +
+        // `select_topk_desc_into` must not move a single bit of the
+        // incumbent's scores or indices. Includes a saturating β so the
+        // tie-handling of the selection sort is exercised too.
+        for &(n, d, k, beta) in &[
+            (5usize, 6usize, 3usize, 1.3f32),
+            (64, 16, 4, 1.3),
+            (256, 16, 8, 0.7),
+            (64, 16, 8, 400.0),
+            (3, 4, 9, 1.0),
+        ] {
+            for seed in 0..8u64 {
+                let r = seeded_matrix(1000 + seed, n, d);
+                let x = seeded_vec(2000 + seed, d);
+                let (mut sa, mut sb) = (vec![0.0f32; n], vec![0.0f32; n]);
+                let (mut ia, mut ib) = (vec![0usize; n], vec![0usize; n]);
+                let ka = gate_sigmoid_topk_into(&x, &r, n, d, beta, k, &mut sa, &mut ia);
+                let kb = gate_reference(&x, &r, n, d, beta, k, &mut sb, &mut ib);
+                assert_eq!(ka, kb);
+                assert_eq!(ia, ib, "indices moved (n={n} k={k} β={beta} seed={seed})");
+                let bits = |v: &[f32]| v.iter().map(|f| f.to_bits()).collect::<Vec<_>>();
+                assert_eq!(bits(&sa), bits(&sb), "scores moved (n={n} β={beta} seed={seed})");
+            }
+        }
+    }
+
+    // ── Issue 880: calibrated-mass gate (G1) ───────────────────────────
+
+    #[cfg(feature = "calibrated_mass_gate")]
+    struct MassRun {
+        kk: usize,
+        tau: f32,
+        logits: Vec<f32>,
+        mass: Vec<f32>,
+        idx: Vec<usize>,
+    }
+
+    #[cfg(feature = "calibrated_mass_gate")]
+    fn run_mass(x: &[f32], r: &[f32], n: usize, d: usize, beta: f32, k: usize, t: f32) -> MassRun {
+        let mut logits = vec![0.0f32; n];
+        let mut mass = vec![0.0f32; n];
+        let mut idx = vec![0usize; n];
+        let (kk, tau) =
+            gate_sigmoid_topk_mass_into(x, r, n, d, beta, k, t, &mut logits, &mut mass, &mut idx);
+        MassRun { kk, tau, logits, mass, idx }
+    }
+
+    #[cfg(feature = "calibrated_mass_gate")]
+    #[test]
+    fn t15_mass_gate_selection_matches_incumbent() {
+        // τ reweights, never re-ranks: same index set AND order as the
+        // incumbent wherever the incumbent's weights are unsaturated.
+        for &(n, d, k) in &[(64usize, 16usize, 4usize), (256, 16, 8), (1000, 16, 100)] {
+            for seed in 0..8u64 {
+                let r = seeded_matrix(3000 + seed, n, d);
+                let x = seeded_vec(4000 + seed, d);
+                let mut scores = vec![0.0f32; n];
+                let mut idx = vec![0usize; n];
+                let kk = gate_sigmoid_topk_into(&x, &r, n, d, 1.3, k, &mut scores, &mut idx);
+                let m = run_mass(&x, &r, n, d, 1.3, k, 1.0);
+                assert_eq!(m.kk, kk);
+                assert_eq!(&m.idx[..kk], &idx[..kk], "n={n} k={k} seed={seed}");
+            }
+        }
+    }
+
+    #[cfg(feature = "calibrated_mass_gate")]
+    #[test]
+    fn t16_mass_gate_sums_to_k_and_orders_its_masses() {
+        for &(n, k, t) in &[(64usize, 4usize, 1.0f32), (256, 8, 0.5), (1000, 100, 2.0)] {
+            let d = 16usize;
+            let r = seeded_matrix(5000 + n as u64, n, d);
+            let x = seeded_vec(6000 + n as u64, d);
+            let m = run_mass(&x, &r, n, d, 1.3, k, t);
+            let sum: f64 = m.mass.iter().map(|&v| v as f64).sum();
+            let tol = 1e-3 + 2.0e-7 * n as f64;
+            assert!((sum - k as f64).abs() <= tol, "Σm={sum} k={k} n={n}");
+            assert!(m.mass.iter().all(|v| (0.0..=1.0).contains(v)));
+            assert!(m.tau.is_finite());
+            // Selected masses are non-increasing along the returned order,
+            // and every selected mass dominates every unselected one.
+            let sel = &m.idx[..m.kk];
+            assert!(sel.windows(2).all(|w| m.mass[w[0]] >= m.mass[w[1]]));
+            let floor = m.mass[sel[m.kk - 1]];
+            assert!(m.idx[m.kk..].iter().all(|&j| m.mass[j] <= floor));
+        }
+    }
+
+    #[cfg(feature = "calibrated_mass_gate")]
+    #[test]
+    fn t17_mass_gate_couples_experts_through_tau() {
+        // The documented INVERSE of t06: perturbing expert 0's row leaves
+        // every other expert's LOGIT bit-identical but moves τ, and with it
+        // their masses. This is the semantic difference, pinned.
+        let (n, d, k) = (32usize, 16usize, 4usize);
+        let r = seeded_matrix(7000, n, d);
+        let x = seeded_vec(7001, d);
+        let a = run_mass(&x, &r, n, d, 1.3, k, 1.0);
+        let mut r2 = r.clone();
+        for v in &mut r2[..d] {
+            *v += 0.5;
+        }
+        let b = run_mass(&x, &r2, n, d, 1.3, k, 1.0);
+        assert_eq!(a.logits[1..], b.logits[1..], "other logits must not move");
+        assert_ne!(a.tau, b.tau, "τ must move when one expert moves");
+        assert!(
+            (1..n).any(|j| a.mass[j] != b.mass[j]),
+            "masses of untouched experts must move with τ"
+        );
+    }
+
+    #[cfg(feature = "calibrated_mass_gate")]
+    #[test]
+    fn t18_mass_gate_recovers_incumbent_weights_at_its_own_mass() {
+        // At T = 1 with k set to the incumbent's own total weight Σσ(z), the
+        // calibration has nothing to correct: τ ≈ 0 and mᵢ ≈ σ(zᵢ). (k is
+        // integral in the API, so pick a fixture whose Σσ(z) we then round
+        // and compare the reweighting against the exact shift.)
+        let (n, d) = (128usize, 16usize);
+        let r = seeded_matrix(8000, n, d);
+        let x = seeded_vec(8001, d);
+        let m = run_mass(&x, &r, n, d, 1.3, 1, 1.0);
+        let k = m.logits.iter().map(|&z| katgpt_core::simd::exact_sigmoid_f64(z as f64)).sum::<f64>();
+        let kr = k.round() as usize;
+        let m2 = run_mass(&x, &r, n, d, 1.3, kr, 1.0);
+        for (j, &z) in m2.logits.iter().enumerate() {
+            let want = katgpt_core::simd::exact_sigmoid_f64(z as f64 - m2.tau as f64);
+            assert!((m2.mass[j] as f64 - want).abs() <= 1e-6, "mass is σ(z − τ) at j={j}");
+        }
+        // Rounding k by ≤ 0.5 over a slope of Σσ'(z) moves τ by at most
+        // 0.5 / Σσ'(z); well inside 0.1 for this fixture.
+        assert!(m2.tau.abs() <= 0.1, "τ={} should be ≈0 at k≈Σσ(z)={k}", m2.tau);
+    }
+
+    #[cfg(feature = "calibrated_mass_gate")]
+    #[test]
+    fn t19_mass_gate_budget_extremes() {
+        let (n, d) = (8usize, 4usize);
+        let r = seeded_matrix(9000, n, d);
+        let x = seeded_vec(9001, d);
+        let zero = run_mass(&x, &r, n, d, 1.0, 0, 1.0);
+        assert_eq!(zero.kk, 0);
+        assert!(zero.mass.iter().all(|&v| v == 0.0));
+        let all = run_mass(&x, &r, n, d, 1.0, n + 3, 1.0);
+        assert_eq!(all.kk, n);
+        assert!(all.mass.iter().all(|&v| v == 1.0));
+        let mut sorted = all.idx.clone();
         sorted.sort_unstable();
         assert_eq!(sorted, (0..n).collect::<Vec<usize>>());
     }
