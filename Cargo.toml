@@ -674,6 +674,12 @@ stale_residual = ["katgpt-core/stale_residual"]
 # first_pit changepoint + the K* law. Forwards katgpt-core's opt-in feature
 # for the T5 GOAT bench (bench_684). OPT-IN.
 prover_selection = ["katgpt-core/prover_selection"]
+# Fitted token-value/anchor tables (Issues 882 P0 + 883 P0, Bench 886): the
+# shared streaming table-builder substrate in katgpt-core. Forwarded for the
+# root-package consumers (bench_889's Kimi-K3 dashboard — the 883 P0 second
+# fixture). OPT-IN; riir-infer forwards the same katgpt-core feature for the
+# gemma-2 harness.
+fitted_anchor_tables = ["katgpt-core/fitted_anchor_tables"]
 # Safetensors loader + tiktoken tokenizer for real-model loading.
 # Stays OPT-IN — pulls heavy deps (safetensors, base64) only needed when
 # actually loading model.safetensors.
@@ -1143,6 +1149,18 @@ harness = false
 name = "bench_012_kimi_k3_trajectory_geometry"
 path = "benches/bench_012_kimi_k3_trajectory_geometry.rs"
 required-features = ["kimi_k3_loader", "latent_trajectory_geometry"]
+harness = false
+
+# Issue 883 P0 second fixture — the Kimi-K3 MLA/KDA R² dashboard
+# (dashboard-only; the gemma-2 half is riir-infer Bench 003). Taps the two
+# MLA layers' up-projected K/V (w_uk·c vs w_uv·c) replayed exactly from the
+# cached latents after each chunk — zero production-forward changes; KDA
+# layers are documented fixture-class nulls (no KV cache). Measurement-only
+# (the 883 P0 law). Requires real model.safetensors.
+[[bench]]
+name = "bench_889_kimi_k3_vk_dashboard"
+path = "benches/bench_889_kimi_k3_vk_dashboard.rs"
+required-features = ["kimi_k3_loader", "fitted_anchor_tables"]
 harness = false
 
 # riir-train Issue 407 T4 precondition — K3 pause-token logit-divergence

@@ -358,6 +358,109 @@ impl R2Report {
     }
 }
 
+/// Per-layer triplet of streaming tables (V, K, V−K) — one
+/// [`StreamingMeanTable`] per signal, `top_k` tracked token rows + the
+/// tail lump per table. The two-fixture shared shape: gemma-2 (26 GQA
+/// layers, one triplet per layer) and Kimi-K3 (the 2 MLA layers only —
+/// KDA layers carry no KV cache and are documented fixture-class nulls).
+pub struct VkLayerTables {
+    /// `E^V_l[s] = mean(V_t | s_t = s)` — the value-mean table (P1's
+    /// mean-removed-quant input).
+    pub v: StreamingMeanTable,
+    /// `mean(K_t | s_t = s)` — the K-mean table (the K=V+ baseline read).
+    pub k: StreamingMeanTable,
+    /// `E_l[s] = mean(V_t − K_t | s_t = s)` — the retrofit table (P2/P3's
+    /// fitted residual).
+    pub vk: StreamingMeanTable,
+}
+
+/// The full layered calibration state: one [`VkLayerTables`] triplet per
+/// tapped layer + the token→row map (`u32::MAX` = untracked → tail) built
+/// from the corpus frequency pre-pass, plus the owned V−K scratch (so the
+/// observe path never borrows caller buffers).
+///
+/// Promoted from riir-infer's gemma-2 harness at the Kimi-K3 fixture's
+/// landing (883 P0, Bench 889): one builder, two fixtures — the layer count
+/// and row width are caller facts (`n_layer` = the TAPPED layers only;
+/// `layer` in [`observe_layer`](Self::observe_layer) is the table index,
+/// which the harness maps onto its model-layer list).
+pub struct LayeredVkCalibration {
+    /// One triplet per TAPPED layer (harness-indexed, not model-indexed).
+    pub layers: Vec<VkLayerTables>,
+    /// vocab-size map: token id → tracked row index, or `u32::MAX` (tail).
+    pub row_of_token: Vec<u32>,
+    /// Corpus frequency counts per token id (the Zipf shape read).
+    pub token_counts: Vec<u64>,
+    /// Tracked key count (the top-K residency dial).
+    pub top_k: usize,
+    vk_scratch: Vec<f32>,
+}
+
+impl LayeredVkCalibration {
+    /// Build tables for `n_layer` tapped layers of `kv_dim`-wide rows,
+    /// tracking the `top_k` most frequent tokens of `token_counts` (the
+    /// frequency pre-pass output; ties broken by token id for determinism).
+    #[must_use]
+    pub fn from_counts(
+        n_layer: usize,
+        kv_dim: usize,
+        token_counts: Vec<u64>,
+        top_k: usize,
+    ) -> Self {
+        let vocab = token_counts.len();
+        let mut order: Vec<u32> = (0..vocab as u32)
+            .filter(|&t| token_counts[t as usize] > 0)
+            .collect();
+        order.sort_unstable_by(|a, b| {
+            token_counts[*b as usize]
+                .cmp(&token_counts[*a as usize])
+                .then_with(|| a.cmp(b))
+        });
+        let top_k = top_k.min(order.len());
+        let mut row_of_token = vec![u32::MAX; vocab];
+        for (row, &tok) in order[..top_k].iter().enumerate() {
+            row_of_token[tok as usize] = row as u32;
+        }
+        let layers = (0..n_layer)
+            .map(|_| VkLayerTables {
+                v: StreamingMeanTable::new(top_k, kv_dim),
+                k: StreamingMeanTable::new(top_k, kv_dim),
+                vk: StreamingMeanTable::new(top_k, kv_dim),
+            })
+            .collect();
+        Self {
+            layers,
+            row_of_token,
+            token_counts,
+            top_k,
+            vk_scratch: vec![0.0; kv_dim],
+        }
+    }
+
+    /// Observe one token's tap pair for tapped-layer index `layer`.
+    /// `k_vec` MUST be the tap-point-law K (where the cache path would
+    /// consume it); `v_vec` the corresponding V. The V−K residual is
+    /// computed into the owned scratch — the retrofit table's exact future
+    /// input. Alloc-free (the substrate's G4 law).
+    pub fn observe_layer(&mut self, layer: usize, token: usize, k_vec: &[f32], v_vec: &[f32]) {
+        let kvd = self.vk_scratch.len();
+        for i in 0..kvd {
+            self.vk_scratch[i] = v_vec[i] - k_vec[i];
+        }
+        let t = &mut self.layers[layer];
+        let row = self.row_of_token[token] as usize;
+        if row != u32::MAX as usize {
+            t.v.observe(row, v_vec);
+            t.k.observe(row, k_vec);
+            t.vk.observe(row, &self.vk_scratch);
+        } else {
+            t.v.observe_tail(v_vec);
+            t.k.observe_tail(k_vec);
+            t.vk.observe_tail(&self.vk_scratch);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -524,6 +627,48 @@ mod tests {
         assert!((m[0] - 1.0).abs() < 1e-4);
         let true_mean = 0.25 * (0.0 + 1.0 + 2.0 + 3.0 + 4.0 + 5.0 + 6.0) / 7.0;
         assert!((m[1] - true_mean).abs() < 1e-3, "m[1] = {}", m[1]);
+    }
+
+    /// Layered builder: frequency-ranked row map (ties by id), untracked
+    /// → tail, per-layer table triplets independent, V−K residual exact.
+    #[test]
+    fn layered_calibration_row_map_and_residual() {
+        // vocab of 5; counts make token 4 the most frequent, token 1 next;
+        // token 0 never seen → excluded from ranking entirely.
+        let counts = vec![0, 7, 0, 0, 9];
+        let mut c = LayeredVkCalibration::from_counts(2, 3, counts, 2);
+        assert_eq!(c.top_k, 2);
+        assert_eq!(c.row_of_token[4], 0, "most frequent → row 0");
+        assert_eq!(c.row_of_token[1], 1, "second → row 1 (tie n/a)");
+        assert_eq!(c.row_of_token[0], u32::MAX, "never-seen → untracked");
+        assert_eq!(c.row_of_token[2], u32::MAX);
+
+        c.observe_layer(0, 4, &[1.0, 2.0, 3.0], &[2.0, 2.0, 1.0]);
+        // layer 1 sees the same token — tables are independent per layer.
+        c.observe_layer(1, 4, &[0.0, 0.0, 0.0], &[1.0, 1.0, 1.0]);
+        // untracked token 2 → tail rows.
+        c.observe_layer(0, 2, &[5.0, 5.0, 5.0], &[5.0, 5.0, 5.0]);
+
+        let r0v = c.layers[0].v.r_squared();
+        assert_eq!(r0v.n, 2);
+        assert!((r0v.tracked_mass - 0.5).abs() < 1e-12);
+        // V−K of the tracked obs = [1,0,−2]; tail = [0,0,0].
+        let mut vk_mean = [0.0f32; 3];
+        c.layers[0].vk.mean_into(0, &mut vk_mean);
+        assert_eq!(vk_mean, [1.0, 0.0, -2.0]);
+        let mut k1_mean = [0.0f32; 3];
+        c.layers[1].k.mean_into(0, &mut k1_mean);
+        assert_eq!(k1_mean, [0.0, 0.0, 0.0]);
+    }
+
+    /// Tie-break determinism: equal counts rank by ascending token id.
+    #[test]
+    fn layered_calibration_ties_break_by_token_id() {
+        let counts = vec![3, 3, 3];
+        let c = LayeredVkCalibration::from_counts(1, 1, counts, 3);
+        assert_eq!(c.row_of_token[0], 0);
+        assert_eq!(c.row_of_token[1], 1);
+        assert_eq!(c.row_of_token[2], 2);
     }
 
     trait SortedCheck {
