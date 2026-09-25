@@ -1,3 +1,43 @@
+## Issue 887 (2026-09-25) — `ladder_gate` streak-gated advancement + corrective backtracking FSM: CLOSED (GOAT PASS, stays opt-in)
+
+- **Shipped:** `crates/katgpt-core/src/ladder_gate.rs`, opt-in `ladder_gate = []`, at `ba7fb89ba`. Source: Research 589 / arXiv:2609.19717 (ATC). A stage advances only after m consecutive evals at or above τ, and a single eval below τ resets the streak. The retention path gates each ADVANCE and retreats to the SHALLOWEST failing stage (argmin j). A malformed probe slice fails closed to stage 1. Nothing demotes automatically.
+- **Gates ([Bench 891](.benchmarks/891_ladder_gate_goat.md), all pass):**
+  - G1: 17/17, including the streak-reset pin, the three-pattern argmin retreat, and two paper negative controls. With λ=0 the ladder never passes stage 2. The probe-free windowed ladder shows the collapse class and has no possible red.
+  - G2: 0.8–1.2 ns/eval. The k64/k8 paired ratio is 0.977, i.e. O(k).
+  - G3: flag-off is clean; the default lib suite still passes 2063, unchanged.
+  - G4: 0 allocs.
+- **Toy-ceiling caveat, kept on record:** the dwell-dominance pin asserts (0.9, 5) > (0.9, 1). The (0.98, 1) middle arm is excluded because the toy's 0.95 training cap makes τ = 0.98 unreachable.
+- **Why it stays opt-in:** there is no production consumer yet (the 873/874/875 precedent). The named consumers are riir-clippy corpus staging (after the Issue-102 fade clock), riir-reflex `cal_min_obs` dwell, riir-ai CGSP zone unlock, and the riir-train ATC rig (Plan 352). Each consumer files its own wiring.
+
+## Issue 885 (2026-09-25) — `laya-tetris-v3` real-hard-drop lane (Issue 884 path B): CLOSED (every lane landed and deployed)
+
+- **katgpt-rs:**
+  - `1a05a9764` added `DropRule { DeepestFit (v2), FromTop (v3) }` and `landing_options_with`, plus the enumerator's `--grammar` / `--join` / `--carry-from` flags. The v2 default is unchanged.
+  - `6a35cde32` added the v3 fixture `tests/fixtures/tetris_oracle_laya_en_v3.jsonl` (blake3 `12035ebf…`, sha256 `eb67bc16…`). The oracle was re-run on only the 3 changed states (102 forwards, M3 Metal); the other 117 were carried verbatim, which is allowed only when every sentence is byte-identical, and that is asserted.
+  - The numerics-parity read is recorded in `_meta`: 0/99 bit-exact, max |Δp| 4e-6. Exactly 3 of 2660 options move between v2 and v3 (the `holes` archetype).
+- **riir-reflex:** `ca1483c` serves the v3-fitted head. `a56d850` makes `fixture_pins()` a four-hash check; before it, the pins checked length only.
+- **reflex-site:**
+  - `6116e70` serves v3 with the golden sha256 pin (2660/2660).
+  - `2e99eca` added the v3-refit wasm head (anchors 44/120 → 42/120, LOO λ still 1, Bench 892) and re-recorded the demo walks against a live v3 engine. Head parity is 809/809.
+  - `793dcdd` regenerated `demo_oracle.json` under v3.
+  - Deployed: on 2026-09-25 the live reflex.gist.rs `arena/demo_oracle.json` and `assets/arena_head.wasm` were sha256-identical to `b935412`.
+- The boundary rule this lane followed now lives in [`.docs/06_game_arenas/tetris_sim_fidelity_boundary.md`](.docs/06_game_arenas/tetris_sim_fidelity_boundary.md) (ex-Issue 878). The v4 preview lane that followed is Plan 609 / Bench 890.
+
+## Issue 878 (2026-09-24) — tetris_sim fidelity boundary: RECORD RELOCATED (2026-09-25)
+
+The boundary record (do NOT swap in a guideline Tetris engine; new fidelity ships as a NEW lane with its own fixture and head) was moved verbatim-in-substance to [`.docs/06_game_arenas/tetris_sim_fidelity_boundary.md`](.docs/06_game_arenas/tetris_sim_fidelity_boundary.md). The issue file was removed because a standing rule is documentation, not an open issue. Its sim path was updated to `crates/katgpt-tetris/src/sim.rs` (Issue 893).
+
+## Issue 873 (2026-09-22) — governed paged-pool primitives from mini-AGI: CLOSED (all three landed, opt-in; consumer work handed off)
+
+- **Shipped** (Research 581, volotat/mini-AGI @ `96784b7`, MIT), all opt-in in katgpt-core:
+  - A, `pool_admission`, at `eabd0cb80` ([Bench 873](.benchmarks/873_pool_admission_goat.md)): G1 16/16. G2 75.6 ns/cycle at K=32 and 422.9 ns at K=256; fair_turn after the sweep terminates is 0.3 ns. G4 0 allocs.
+  - B, `rate_control`, at `ee01f1598` ([Bench 875](.benchmarks/875_rate_control_goat.md)): G1 13/13. G2 42.0 ns/observe. G4 0 allocs. The constants are pinned and it reports first. `b7f9fc370` added the SNAPSHOT byte seam.
+  - C, `dying`, at `650faeac7` ([Bench 874](.benchmarks/874_dying_goat.md)): G1 11/11. G2 1.30 ns/row. G4 0 allocs.
+  - A and C were a same-day TWIN landing. Origin's commits were kept as canonical (see HISTORY.md § "2026-09-22 — Issue 873 primitive B landed twice").
+- **Handed off, not dropped:**
+  - B5 is the consumer A/B, riir-train Plan 416 Phase 2. T2.1 consumes `rate_control`, T2.2 is wired into the live Bonsai GDN SFT trainer at riir-train `e2721e83`, and the T2.3 A/B is running on the 4090. T2.5 tracks it there.
+  - C4 (promote/demote) waits on first-consumer GOATs: ndb `shard_compactor` (assessed 2026-09-23, `07689b5c4` — needs a retrieval-trace A/B plan before wiring), riir-clippy corpus retirement, belief GC, and riir-ai working sets. Each consumer repo files its own wiring issue. Closing this issue wires nothing.
+
 ## Issue 884 (2026-09-25) — tetris_sim `hard_drop` tunnels through roofs: CLOSED (fix path A, site-side; corpus untouched)
 
 - **Trigger:** owner screenshot of reflex.gist.rs/arena, *"why partial 1 block not fall to the bottom? bug?"*. The floating remnant is **naive gravity** (a line clear shifts rows above by the cleared count, cells never cascade into gaps) — standard Tetris, not a bug.

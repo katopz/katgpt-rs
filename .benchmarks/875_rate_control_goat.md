@@ -2,7 +2,7 @@
 
 **Status:** GOAT G1/G2/G3/G4 PASS (2026-09-22) — lands OPT-IN (`rate_control = []`, katgpt-core). NOT PROMOTED: no consumer-measured gain exists (the stack-slot rule); the first consumer A/B is riir-train Plan 416 Phase 2 (vs cosine at fixed budget + regime-change arm). Report-first posture (R135/Bench 047): gates nothing until evidence volume exists.
 
-Owner: [Issue 873](../.issues/873_mini_agi_governed_pool_primitives.md) · Source: [Research 581](../.research/581_Mini_AGI_Governed_Pool_Modelless.md) (volotat/mini-AGI @ `96784b7`, `plasticity.py:63-358`, MIT). Companion landings the same day: A `pool_admission` ([Bench 873](873_pool_admission_goat.md), `eabd0cb8`) and C `dying` ([Bench 874](874_dying_goat.md), `650faeac`) by the parallel session — a same-day TWIN landing; origin's A/C commits are canonical and this session's duplicate A/C implementations were discarded per the Batch-169 precedent. This bench covers B only.
+Owner: Issue 873 (closed 2026-09-25, HISTORY.md § Issue 873) · Source: [Research 581](../.research/581_Mini_AGI_Governed_Pool_Modelless.md) (volotat/mini-AGI @ `96784b7`, `plasticity.py:63-358`, MIT). Companion landings the same day: A `pool_admission` ([Bench 873](873_pool_admission_goat.md), `eabd0cb8`) and C `dying` ([Bench 874](874_dying_goat.md), `650faeac`) by the parallel session — a same-day TWIN landing; origin's A/C commits are canonical and this session's duplicate A/C implementations were discarded per the Batch-169 precedent. This bench covers B only.
 
 ## Box state (the G2 rule)
 

@@ -33,6 +33,7 @@
 | [`go_arena.md`](go_arena.md) | Go Arena — AI vs AI auto-play engine (Plan 065) |
 | [`moka_head_to_head.md`](moka_head_to_head.md) | Moka v1 head-to-head — complete record (Plan 563 + 565, Bench 204 + 205) |
 | [`open_ended_evolution.md`](open_ended_evolution.md) | Plan 191 — open-ended problem-evolution arena |
+| [`tetris_sim_fidelity_boundary.md`](tetris_sim_fidelity_boundary.md) | Tetris sim boundary rule — a placement-enumeration oracle, not an engine; new fidelity = new lane (ex-Issue 878) |
 | [`hl_arena_detail.md`](hl_arena_detail.md) | Cross-cutting HL & arena detail + thesis verdict |
 
 ## See also

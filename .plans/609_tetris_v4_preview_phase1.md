@@ -4,7 +4,7 @@ Status: **Phase 1 EXECUTED 2026-09-25 (Bench 890): T1.7 flip 75/120 (62.5% — s
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Proposal: [015 — Tetris next-piece preview](../.proposals/015_tetris_next_piece_preview_lane.md) — Claude verdict AGREE (round 3, session `7cd12b60`); this plan expands its Phase-1 sketch
-Depends: [Issue 885](../.issues/885_laya_tetris_v3_real_hard_drop_lane.md) — katgpt-rs-side items ONLY (oracle + v3 fixture + `_meta` parity read); the reflex/reflex-site consumer tail of 885 is NOT a precondition for this plan (v4's own consumer pass is Phase 2, separate lanes)
+Depends: Issue 885 (closed 2026-09-25, HISTORY.md § Issue 885) — katgpt-rs-side items ONLY (oracle + v3 fixture + `_meta` parity read); the reflex/reflex-site consumer tail of 885 is NOT a precondition for this plan (v4's own consumer pass is Phase 2, separate lanes)
 
 ## Scope
 
