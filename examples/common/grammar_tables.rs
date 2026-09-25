@@ -196,6 +196,35 @@ static T_TETRIS_STATE_FLAT: [Seg; 7] = [
     Seg::Slot(3), // TETRIS_PIECE
     Seg::Lit(" piece is falling."),
 ];
+/// v4 state templates: the v2 shapes plus the next-piece preview sentence
+/// (plan 609 T1.2) — the 5th slot reuses `TETRIS_PIECE`. Option templates
+/// are UNCHANGED (the preview lives in the state line only).
+static T_TETRIS_STATE_V4_SPREAD: [Seg; 13] = [
+    Seg::Lit("The stack stands "),
+    Seg::Slot(0), // TETRIS_HW
+    Seg::Lit(", tall on the "),
+    Seg::Slot(1), // TETRIS_SIDE3 (tallest region)
+    Seg::Lit(" and low on the "),
+    Seg::Slot(1), // TETRIS_SIDE3 (lowest region)
+    Seg::Lit(". "),
+    Seg::Slot(2), // TETRIS_HOLES2
+    Seg::Lit(" The "),
+    Seg::Slot(3), // TETRIS_PIECE
+    Seg::Lit(" piece is falling. The next piece is the "),
+    Seg::Slot(4), // TETRIS_PIECE (reused — the preview)
+    Seg::Lit(" piece."),
+];
+static T_TETRIS_STATE_V4_FLAT: [Seg; 9] = [
+    Seg::Lit("The stack stands "),
+    Seg::Slot(0), // TETRIS_HW
+    Seg::Lit(" and the surface is mostly flat. "),
+    Seg::Slot(2), // TETRIS_HOLES2
+    Seg::Lit(" The "),
+    Seg::Slot(3), // TETRIS_PIECE
+    Seg::Lit(" piece is falling. The next piece is the "),
+    Seg::Slot(4), // TETRIS_PIECE (reused — the preview)
+    Seg::Lit(" piece."),
+];
 static T_FLAPPY_OPTION: [Seg; 3] = [Seg::Lit("The bird "), Seg::Slot(0), Seg::Lit(".")];
 /// v3 option template: band + offset + neutral post-motion (Issue 876).
 static T_FLAPPY_OPTION_V3: [Seg; 7] = [
@@ -253,6 +282,24 @@ pub fn tetris_state() -> Grammar {
     Grammar::new(&VOCABS, &TEMPLATES)
 }
 
+/// `laya-tetris-v4` state context sentence (plan 609 T1.3): the v2 shapes
+/// plus the preview tail. The 5th slot REUSES `TETRIS_PIECE` — same
+/// vocabulary, its own slot ordinal.
+pub fn tetris_state_v4() -> Grammar {
+    static VOCABS: [&[&str]; 5] = [
+        &TETRIS_HW,
+        &TETRIS_SIDE3,
+        &TETRIS_HOLES2,
+        &TETRIS_PIECE,
+        &TETRIS_PIECE, // slot 4 — the preview, same vocabulary
+    ];
+    static TEMPLATES: [Template; 2] = [
+        Template(&T_TETRIS_STATE_V4_SPREAD),
+        Template(&T_TETRIS_STATE_V4_FLAT),
+    ];
+    Grammar::new(&VOCABS, &TEMPLATES)
+}
+
 /// `laya-flappy-v2` per-option sentence: the position band alone.
 /// FROZEN — the committed v2 fixture's decode table (Bench 880/881
 /// provenance); the live grammar is `flappy_option_v3`.
@@ -289,10 +336,11 @@ pub fn lanes_option() -> Grammar {
 /// Every table's full fill product is tiny; this cap is the checked bound.
 pub const CLOSED_SPACE_CAP: usize = 100_000;
 
-/// `verify_closed` over all six tables — the full closed-space proof.
+/// `verify_closed` over every table — the full closed-space proof.
 pub fn verify_all_closed() -> Result<(), String> {
     tetris_spot().verify_closed(CLOSED_SPACE_CAP)?;
     tetris_state().verify_closed(CLOSED_SPACE_CAP)?;
+    tetris_state_v4().verify_closed(CLOSED_SPACE_CAP)?;
     flappy_option().verify_closed(CLOSED_SPACE_CAP)?;
     flappy_option_v3().verify_closed(CLOSED_SPACE_CAP)?;
     flappy_state().verify_closed(CLOSED_SPACE_CAP)?;
@@ -309,6 +357,24 @@ pub fn decode_tetris_spot(g: &Grammar, sentence: &str) -> Result<[u8; 5], Decode
     debug_assert_eq!(m.template, 0);
     debug_assert_eq!(m.n_slots, 5);
     Ok([m.fills[0], m.fills[1], m.fills[2], m.fills[3], m.fills[4]])
+}
+
+/// Decode a tetris v4 state sentence → the v2 fills plus the preview
+/// piece fill: `Ok` = the SPREAD shape (fills [hw, tallest, lowest, holes2,
+/// piece, next], template 0); `Err` = the FLAT shape (fills [hw, holes2,
+/// piece, next], template 1). A sentence outside the grammar is a contract
+/// violation (the caller renders through the same table) — loud refusal.
+pub fn decode_tetris_state_v4(g: &Grammar, sentence: &str) -> Result<[u8; 6], [u8; 4]> {
+    let m = g
+        .decode(sentence)
+        .unwrap_or_else(|e| panic!("v4 state sentence must decode ({e:?}): {sentence:?}"));
+    match m.template {
+        0 => Ok([
+            m.fills[0], m.fills[1], m.fills[2], m.fills[3], m.fills[4], m.fills[5],
+        ]),
+        1 => Err([m.fills[0], m.fills[1], m.fills[2], m.fills[3]]),
+        t => unreachable!("v4 state grammar has 2 templates, decoded {t}"),
+    }
 }
 
 /// Decode a flappy v2 option sentence → the `PosBand` fill ordinal.
@@ -685,6 +751,23 @@ pub fn tetris_state_forward(
     }
 }
 
+/// The v4 state sentence's semantic fills (plan 609 T1.3): the v2 forward
+/// plus the preview fill. `Ok` = SPREAD ([hw, tallest, lowest, holes2,
+/// piece, next]); `Err` = FLAT ([hw, holes2, piece, next]). Composes
+/// [`tetris_state_forward`] — one copy of the band math.
+pub fn tetris_state_forward_v4(
+    board: &Board,
+    piece_fill: u8,
+    next_fill: u8,
+) -> Result<[u8; 6], [u8; 4]> {
+    match tetris_state_forward(board, piece_fill) {
+        Ok([hw, tallest, lowest, holes2, piece]) => {
+            Ok([hw, tallest, lowest, holes2, piece, next_fill])
+        }
+        Err([hw, holes2, piece]) => Err([hw, holes2, piece, next_fill]),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -921,5 +1004,96 @@ mod tests {
         assert_eq!(d.lane, 2);
         assert_eq!(d.kind, 3);
         assert_eq!(d.dist, Some(1));
+    }
+
+    #[test]
+    fn tetris_v4_state_round_trip_both_shapes() {
+        // The v4 table renders exactly what the preview renderer spells,
+        // decodes back to the forward fills, and re-renders byte-identically
+        // — whichever shape the board takes (plan 609 T1.3).
+        let g = tetris_state_v4();
+        let board = Board::from_strings(&["..........", "..XX....XX"]);
+        let (mut spread_n, mut flat_n) = (0usize, 0usize);
+        for piece in Piece::ALL {
+            for next in Piece::ALL {
+                let rendered =
+                    tetris_sim::render_state_sentence_with_preview(&board, piece, next);
+                let fwd = tetris_state_forward_v4(
+                    &board,
+                    tetris_piece_fill(piece.id()),
+                    tetris_piece_fill(next.id()),
+                );
+                match (&decode_tetris_state_v4(&g, &rendered), &fwd) {
+                    (Ok(dec), Ok(f)) => {
+                        spread_n += 1;
+                        assert_eq!(dec, f, "{piece:?}>{next:?}: decode == forward");
+                        assert_eq!(g.render(0, f), rendered, "{piece:?}>{next:?}: re-render");
+                    }
+                    (Err(dec), Err(f)) => {
+                        flat_n += 1;
+                        assert_eq!(dec, f, "{piece:?}>{next:?}: decode == forward");
+                        assert_eq!(g.render(1, f), rendered, "{piece:?}>{next:?}: re-render");
+                    }
+                    _ => panic!("{piece:?}>{next:?}: shape disagreement decode vs forward"),
+                }
+            }
+        }
+        // Shape coverage (both shapes exercised) is the archetype-board
+        // test's job — this board is flat-shaped throughout.
+    }
+
+    #[test]
+    fn tetris_v4_state_forward_matches_the_renderer_over_all_boards() {
+        // Drift detector over the archetype board shapes + every piece pair:
+        // whatever the renderer says, the forward must decode it back.
+        let g = tetris_state_v4();
+        let mut spread_n = 0usize;
+        let mut flat_n = 0usize;
+        for heights in [
+            [3usize; 10],
+            [14, 13, 12, 10, 8, 6, 5, 4, 3, 2],
+            [2, 3, 4, 5, 6, 8, 10, 12, 13, 14],
+            [2, 4, 7, 9, 11, 11, 9, 7, 4, 2],
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        ] {
+            let mut b = Board::empty();
+            for (c, &h) in heights.iter().enumerate() {
+                for r in (tetris_sim::HEIGHT - h)..tetris_sim::HEIGHT {
+                    b.place(&[(r, c)]);
+                }
+            }
+            for piece in Piece::ALL {
+                for next in Piece::ALL {
+                    let rendered =
+                        tetris_sim::render_state_sentence_with_preview(&b, piece, next);
+                    let fwd = tetris_state_forward_v4(
+                        &b,
+                        tetris_piece_fill(piece.id()),
+                        tetris_piece_fill(next.id()),
+                    );
+                    match fwd {
+                        Ok(f) => {
+                            spread_n += 1;
+                            assert_eq!(
+                                decode_tetris_state_v4(&g, &rendered).unwrap(),
+                                f,
+                                "{rendered:?}"
+                            );
+                            assert_eq!(g.render(0, &f), rendered);
+                        }
+                        Err(e) => {
+                            flat_n += 1;
+                            assert_eq!(
+                                decode_tetris_state_v4(&g, &rendered).unwrap_err(),
+                                e,
+                                "{rendered:?}"
+                            );
+                            assert_eq!(g.render(1, &e), rendered);
+                        }
+                    }
+                }
+            }
+        }
+        assert!(spread_n > 0 && flat_n > 0, "both shapes must be exercised");
     }
 }

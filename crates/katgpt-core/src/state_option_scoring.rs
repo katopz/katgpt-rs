@@ -317,6 +317,138 @@ pub mod head {
         }
     }
 
+    /// One λ's grouped-LOO reading (katgpt-rs Plan 609 T1.5).
+    pub struct GroupLamRow {
+        pub lam: f64,
+        pub mse: f64,
+        pub agree: usize,
+    }
+
+    /// The grouped leave-one-group-out result at the selected λ.
+    pub struct GroupLooOut {
+        /// The selected λ (lowest MSE; strict `<`, so the FIRST λ of the
+        /// grid wins an exact tie — the state-level selection law).
+        pub lam: f64,
+        /// Per-decision-set LOO picks at the chosen λ (lowest-index
+        /// tie-break).
+        pub picks: Vec<usize>,
+        /// Per-row LOO predictions at the chosen λ (aligned with `rows`).
+        pub preds: Vec<f64>,
+        /// Per-λ readings for printing.
+        pub rows: Vec<GroupLamRow>,
+    }
+
+    /// Group-level leave-one-group-out λ selection over a corpus of
+    /// decision sets (katgpt-rs Plan 609 T1.5).
+    ///
+    /// `state_offsets` bounds each decision set in `rows`/`targets`
+    /// (`state_offsets[s]..state_offsets[s+1]`); `group_offsets` bounds
+    /// GROUPS of consecutive decision sets and is the HOLD-OUT unit — a
+    /// group's every option is excluded from the fit that predicts it, so
+    /// correlated states (the v4 paired corpus: all 7 preview states of one
+    /// board) never leak across the fold. Per λ: refit on the complement,
+    /// predict each held-out decision set's options, per-set argmax
+    /// (strict-greater, lowest-index ties) and squared error; MSE over ALL
+    /// rows selects λ. This is the generalization of the example-side
+    /// state-level recipe (groups of size 1); that path is UNCHANGED and
+    /// its published head digests are the G3 pins — this fn adds the grouped
+    /// unit, never re-spells the fit math ([`HeadFitter::fit_into`] is the
+    /// one arithmetic).
+    pub fn loo_group_select<const D: usize>(
+        fitter: &mut HeadFitter<D>,
+        rows: &[[f64; D]],
+        targets: &[f64],
+        state_offsets: &[usize],
+        group_offsets: &[usize],
+        argmaxes: &[usize],
+        ridge_grid: &[f64],
+    ) -> GroupLooOut {
+        assert!(!rows.is_empty(), "grouped LOO needs rows");
+        assert_eq!(rows.len(), targets.len(), "design/target length mismatch");
+        assert_eq!(
+            state_offsets.first(),
+            Some(&0),
+            "state_offsets must start at 0"
+        );
+        assert_eq!(
+            state_offsets.last(),
+            Some(&rows.len()),
+            "state_offsets must end at rows.len()"
+        );
+        let n_states = argmaxes.len();
+        assert_eq!(
+            state_offsets.len(),
+            n_states + 1,
+            "one state bound per argmax + 1"
+        );
+        assert_eq!(group_offsets.first(), Some(&0), "groups must start at 0");
+        assert_eq!(
+            group_offsets.last(),
+            Some(&n_states),
+            "groups must end at the state count"
+        );
+        for w in group_offsets.windows(2) {
+            assert!(w[0] < w[1], "groups are contiguous and non-empty");
+        }
+        for w in state_offsets.windows(2) {
+            assert!(w[0] < w[1], "decision sets are non-empty");
+        }
+        assert!(!ridge_grid.is_empty(), "the λ grid must not be empty");
+
+        let mut chosen: Option<(f64, Vec<usize>, Vec<f64>)> = None;
+        let mut chosen_mse = f64::INFINITY;
+        let mut lam_rows = Vec::with_capacity(ridge_grid.len());
+        for &lam in ridge_grid {
+            let mut sq = 0.0f64;
+            let mut agree = 0usize;
+            let mut picks = vec![0usize; n_states];
+            let mut preds = vec![0.0f64; rows.len()];
+            for group in group_offsets.windows(2) {
+                let (gs, ge) = (group[0], group[1]);
+                let (ra, rb) = (state_offsets[gs], state_offsets[ge]);
+                let mut train: Vec<[f64; D]> = Vec::with_capacity(rows.len() - (rb - ra));
+                train.extend_from_slice(&rows[..ra]);
+                train.extend_from_slice(&rows[rb..]);
+                let mut ty: Vec<f64> = Vec::with_capacity(targets.len() - (rb - ra));
+                ty.extend_from_slice(&targets[..ra]);
+                ty.extend_from_slice(&targets[rb..]);
+                let head = fitter.fit_into(&train, &ty, lam);
+                for s in gs..ge {
+                    let (a, b) = (state_offsets[s], state_offsets[s + 1]);
+                    let mut best_pred = f64::NEG_INFINITY;
+                    let mut bi = 0usize;
+                    for (j, row) in rows[a..b].iter().enumerate() {
+                        let p = head.score(row);
+                        preds[a + j] = p;
+                        let e = p - targets[a + j];
+                        sq += e * e;
+                        if p > best_pred {
+                            best_pred = p;
+                            bi = j;
+                        }
+                    }
+                    picks[s] = bi;
+                    if bi == argmaxes[s] {
+                        agree += 1;
+                    }
+                }
+            }
+            let mse = sq / targets.len() as f64;
+            lam_rows.push(GroupLamRow { lam, mse, agree });
+            if mse < chosen_mse {
+                chosen_mse = mse;
+                chosen = Some((lam, picks, preds));
+            }
+        }
+        let (lam, picks, preds) = chosen.expect("ridge_grid is non-empty");
+        GroupLooOut {
+            lam,
+            picks,
+            preds,
+            rows: lam_rows,
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -460,6 +592,116 @@ pub mod head {
         fn length_mismatch_is_refused() {
             let rows = [[1.0, 2.0], [3.0, 4.0]];
             let _ = FittedHead::<2>::fit(&rows, &[1.0], RIDGE);
+        }
+
+        /// A tiny grouped corpus: `groups` decision sets each with `per`
+        /// options, target = planted linear head + a group-specific offset
+        /// (the correlated-within-group structure the hold-out must guard).
+        fn grouped_corpus(
+            groups: usize,
+            per: usize,
+        ) -> (Vec<[f64; 3]>, Vec<f64>, Vec<usize>, Vec<usize>, Vec<usize>) {
+            const PLANTED: [f64; 2] = [1.0, -2.0];
+            let mut rows = Vec::new();
+            let mut targets = Vec::new();
+            let mut state_offsets = vec![0usize];
+            let mut argmaxes = Vec::new();
+            for g in 0..groups {
+                for s in 0..per {
+                    for j in 0..4 {
+                        let x = lcg_row::<3>(0x0670_e000 + (g * 97 + s * 4 + j) as u64);
+                        let base: f64 = PLANTED.iter().zip(x.iter()).map(|(w, v)| w * v).sum();
+                        // group offset shifts the LEVEL (calibration), the
+                        // planted direction drives the within-set ranking —
+                        // exactly the paired-corpus shape.
+                        let t = base + 0.25 * g as f64;
+                        rows.push(x);
+                        targets.push(t);
+                    }
+                    state_offsets.push(rows.len());
+                    argmaxes.push(0); // placeholder; the test reads preds/picks
+                }
+            }
+            let group_offsets = (0..=groups).map(|g| g * per).collect();
+            (rows, targets, state_offsets, group_offsets, argmaxes)
+        }
+
+        #[test]
+        fn grouped_loo_predictions_equal_explicit_complement_refits() {
+            // The load-bearing hold-out property: the prediction for every
+            // row of group g comes from a head fitted on the complement of
+            // group g's rows — verified against explicit refits.
+            let (rows, targets, state_offsets, group_offsets, argmaxes) = grouped_corpus(4, 3);
+            let mut fitter = HeadFitter::<3>::new();
+            let grid = [1e-2];
+            let out = loo_group_select(
+                &mut fitter,
+                &rows,
+                &targets,
+                &state_offsets,
+                &group_offsets,
+                &argmaxes,
+                &grid,
+            );
+            for g in 0..4 {
+                let (gs, ge) = (group_offsets[g], group_offsets[g + 1]);
+                let (ra, rb) = (state_offsets[gs], state_offsets[ge]);
+                let mut train: Vec<[f64; 3]> = Vec::new();
+                train.extend_from_slice(&rows[..ra]);
+                train.extend_from_slice(&rows[rb..]);
+                let mut ty: Vec<f64> = Vec::new();
+                ty.extend_from_slice(&targets[..ra]);
+                ty.extend_from_slice(&targets[rb..]);
+                let head = FittedHead::<3>::fit(&train, &ty, grid[0]);
+                for s in gs..ge {
+                    let (a, b) = (state_offsets[s], state_offsets[s + 1]);
+                    for (j, row) in rows[a..b].iter().enumerate() {
+                        let expect = head.score(row);
+                        assert_eq!(
+                            out.preds[a + j], expect,
+                            "group {g} state {s} option {j}: not the complement refit"
+                        );
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn grouped_loo_lambda_tie_takes_the_first_of_the_grid() {
+            // Two identical grid entries → identical MSE → the FIRST is
+            // chosen (the state-level selection law, strict <). The grid
+            // carries ONLY the duplicated λ so a different-λ winner cannot
+            // mask the tie law.
+            let (rows, targets, state_offsets, group_offsets, argmaxes) = grouped_corpus(3, 2);
+            let mut fitter = HeadFitter::<3>::new();
+            let out = loo_group_select(
+                &mut fitter,
+                &rows,
+                &targets,
+                &state_offsets,
+                &group_offsets,
+                &argmaxes,
+                &[0.5, 0.5],
+            );
+            assert_eq!(out.lam, 0.5, "the first λ of a tie wins");
+            assert_eq!(out.rows.len(), 2);
+            assert_eq!(out.rows[0].mse, out.rows[1].mse, "the tie is exact");
+        }
+
+        #[test]
+        #[should_panic(expected = "groups must end at the state count")]
+        fn grouped_loo_refuses_a_group_bound_that_drops_states() {
+            let (rows, targets, state_offsets, _group_offsets, argmaxes) = grouped_corpus(3, 2);
+            let mut fitter = HeadFitter::<3>::new();
+            let _ = loo_group_select(
+                &mut fitter,
+                &rows,
+                &targets,
+                &state_offsets,
+                &[0, 2], // drops the last state
+                &argmaxes,
+                &[1e-2],
+            );
         }
     }
 }

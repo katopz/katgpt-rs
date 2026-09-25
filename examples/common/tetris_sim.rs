@@ -488,9 +488,15 @@ pub fn dellacherie_score(f: &OutcomeFeatures) -> f32 {
 pub const GRAMMAR_ID: &str = "laya-tetris-v2";
 
 /// The v3 grammar id: the v2 sentence grammar under a real hard drop
-/// ([`DropRule::FromTop`], katgpt-rs Issue 884). Sentences are unchanged;
+/// (`DropRule::FromTop`, katgpt-rs Issue 884). Sentences are unchanged;
 /// the option set differs wherever v2 tunnelled through a roof.
 pub const GRAMMAR_ID_V3: &str = "laya-tetris-v3";
+
+/// The v4 grammar id: the v3 game under a next-piece preview — the state
+/// sentence gains `The next piece is the {piece} piece.` (plan 609 T1.2);
+/// option sentences stay byte-compatible with v3's renders (the preview
+/// lives in the state line only).
+pub const GRAMMAR_ID_V4: &str = "laya-tetris-v4";
 
 /// The per-spot question, world-anchored (never "what should I do" — the
 /// wording lesson from laya's own page). P(clean) is the oracle signal.
@@ -710,6 +716,17 @@ pub fn render_state_sentence(board: &Board, piece: Piece) -> String {
     s
 }
 
+/// The v4 state sentence: the v3 render plus the next-piece preview
+/// (plan 609 T1.2). The preview sentence is the ONLY delta — the base
+/// render stays byte-identical to v3's (the v2/v3 pins are untouched by
+/// construction: this composes [`render_state_sentence`], never re-spells
+/// it).
+pub fn render_state_sentence_with_preview(board: &Board, piece: Piece, next: Piece) -> String {
+    let mut s = render_state_sentence(board, piece);
+    s.push_str(&format!(" The next piece is the {} piece.", next.spoken()));
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -864,5 +881,31 @@ mod tests {
         let s = render_state_sentence(&b, Piece::T);
         assert!(!s.chars().any(|c| c.is_ascii_digit()), "{s}");
         assert!(s.contains("T shaped piece is falling"), "{s}");
+    }
+
+    #[test]
+    fn v4_preview_sentence_extends_the_v3_render_verbatim() {
+        // The v4 render is the v3 render + exactly one appended sentence
+        // (plan 609 T1.2); words only, and the base render is untouched.
+        let mut b = Board::empty();
+        for c in 0..6 {
+            for r in 15..HEIGHT {
+                b.place(&[(r, c)]);
+            }
+        }
+        let v3 = render_state_sentence(&b, Piece::T);
+        let v4 = render_state_sentence_with_preview(&b, Piece::T, Piece::L);
+        assert!(v4.starts_with(&v3), "{v4:?} must extend {v3:?}");
+        assert_eq!(
+            &v4[v3.len()..],
+            " The next piece is the right leaning ell piece."
+        );
+        assert!(!v4.chars().any(|c| c.is_ascii_digit()), "{v4}");
+        // Every piece's preview is a pure suffix of its own v3 render.
+        for next in Piece::ALL {
+            let s = render_state_sentence_with_preview(&b, Piece::T, next);
+            assert!(s.starts_with(&v3));
+            assert!(s.contains(&format!("The next piece is the {} piece.", next.spoken())));
+        }
     }
 }
