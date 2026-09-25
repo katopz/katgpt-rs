@@ -84,8 +84,14 @@ impl Default for KVarNConfig {
 
 /// Per-tile metadata for a quantized tile.
 struct TileMeta {
-    /// Number of valid positions in this tile (≤ tile_size).
+    /// Number of positions stored into this tile so far (≤ tile_size).
     count: usize,
+    /// Whether the packed payload + scales below hold this tile's data
+    /// (Issue 896). Set when the tile is quantized (full, or the last tile at
+    /// `max_seq_len − 1`); cleared by `reset()`. While `false`, every read of
+    /// the tile is served EXACTLY from the layer's raw buffer and the scale
+    /// vectors — empty, or a previous sequence's — are never consulted.
+    quantized: bool,
     /// Variance normalization scales.
     var_scales: VarianceNormScales,
     /// Per-row RTN scales (channel scales for K, token scales for V).
@@ -98,6 +104,7 @@ impl TileMeta {
     fn empty(_tile_size: usize, rows: usize, cols: usize) -> Self {
         Self {
             count: 0,
+            quantized: false,
             var_scales: VarianceNormScales {
                 s_col: vec![1.0; cols],
                 s_row: vec![1.0; rows],
@@ -131,13 +138,19 @@ pub struct KVarNKVCache {
     /// the previous Vec<Vec<TileMeta>> to collapse two pointer chases + two
     /// bounds checks on every per-token/per-dequant access into one of each.
     key_tiles: Vec<TileMeta>,
-    /// Key tile buffer: [kv_dim * tile_size] — accumulates raw data for current tile.
+    /// Raw key tile buffers, one per layer: flat `[n_layers * raw_tile_len]`,
+    /// each `[kv_dim, tile_size]` row-major (row = channel, col = token).
+    /// Accumulates the layer's current (in-progress) tile. Per LAYER, not
+    /// shared (Issue 896): a shared buffer let decode-order stores
+    /// (for each position, for each layer) quantize the last layer's data
+    /// into every layer. Allocated once at construction.
     key_buffer: Vec<f32>,
     /// Quantized value data: flat `[n_layers * n_tiles * val_tile_packed_len]`.
     val_quantized: Vec<u8>,
     /// Value tile metadata, flat `[n_layers * n_tiles]` (see `key_tiles`).
     val_tiles: Vec<TileMeta>,
-    /// Value tile buffer: [tile_size * kv_dim].
+    /// Raw value tile buffers, one per layer: flat `[n_layers * raw_tile_len]`,
+    /// each `[tile_size, kv_dim]` row-major (see `key_buffer`, Issue 896).
     val_buffer: Vec<f32>,
     // ── Scratch buffers for zero-alloc hot path ──
     /// Scratch for tile operations: [tile_rows * tile_cols].
@@ -198,6 +211,8 @@ pub struct KVarNKVCache {
     tile_size: usize,
     /// Number of complete tiles.
     n_tiles: usize,
+    /// f32 elements of one layer's raw tile buffer: `kv_dim * tile_size`.
+    raw_tile_len: usize,
     /// Bytes per row for packed quantized data.
     #[allow(dead_code)] // computed at construction for fast path access
     bytes_per_row: usize,
@@ -284,8 +299,9 @@ impl KVarNKVCache {
             })
             .collect();
 
-        let key_buffer_size = cfg.kv_dim * tile_size;
-        let val_buffer_size = tile_size * cfg.kv_dim;
+        // One raw tile per layer (Issue 896) — K and V tiles have the same
+        // element count, `kv_dim * tile_size`.
+        let raw_tile_len = cfg.kv_dim * tile_size;
 
         // VarN scratch sizes: key tile is [kv_dim, count], val tile is [count, kv_dim].
         // Both dimensions are bounded by max(kv_dim, tile_size), so a single square
@@ -311,11 +327,11 @@ impl KVarNKVCache {
         Self {
             key_quantized,
             key_tiles,
-            key_buffer: vec![0.0; key_buffer_size],
+            key_buffer: vec![0.0; cfg.n_layers * raw_tile_len],
             val_quantized,
             val_tiles,
-            val_buffer: vec![0.0; val_buffer_size],
-            scratch_tile: vec![0.0f32; key_buffer_size.max(val_buffer_size)],
+            val_buffer: vec![0.0; cfg.n_layers * raw_tile_len],
+            scratch_tile: vec![0.0f32; raw_tile_len],
             scratch_unpack: vec![0u32; cfg.kv_dim],
             varn_cur: vec![0.0f32; varn_tile_size],
             varn_col_s: vec![0.0f32; varn_max_dim],
@@ -339,6 +355,7 @@ impl KVarNKVCache {
             max_seq_len: cfg.max_seq_len,
             tile_size,
             n_tiles,
+            raw_tile_len,
             bytes_per_row,
             key_tile_packed_len,
             val_tile_packed_len,
@@ -380,9 +397,11 @@ impl KVarNKVCache {
         let tile_idx = pos / self.tile_size;
         let pos_in_tile = pos % self.tile_size;
 
-        // Buffer layout: [kv_dim, tile_size] row-major, so row=channel, col=token
+        // Buffer layout: [kv_dim, tile_size] row-major, so row=channel, col=token.
+        // This layer's own raw tile (Issue 896).
+        let base = layer * self.raw_tile_len;
         for (ch, &k) in key.iter().enumerate().take(self.kv_dim) {
-            self.key_buffer[ch * self.tile_size + pos_in_tile] = k;
+            self.key_buffer[base + ch * self.tile_size + pos_in_tile] = k;
         }
 
         let tile = &mut self.key_tiles[Self::tile_meta_idx(self.n_tiles, layer, tile_idx)];
@@ -407,8 +426,9 @@ impl KVarNKVCache {
         let tile_idx = pos / self.tile_size;
         let pos_in_tile = pos % self.tile_size;
 
-        // Buffer layout: [tile_size, kv_dim] row-major, so row=token, col=channel
-        let off = pos_in_tile * self.kv_dim;
+        // Buffer layout: [tile_size, kv_dim] row-major, so row=token, col=channel.
+        // This layer's own raw tile (Issue 896).
+        let off = layer * self.raw_tile_len + pos_in_tile * self.kv_dim;
         self.val_buffer[off..off + self.kv_dim].copy_from_slice(value);
 
         let tile = &mut self.val_tiles[Self::tile_meta_idx(self.n_tiles, layer, tile_idx)];
@@ -420,7 +440,10 @@ impl KVarNKVCache {
         }
     }
 
-    /// Inputs of one key-column dequant, or `None` if the tile is empty.
+    /// Inputs of one key-column dequant, or `None` if the tile holds no
+    /// quantized data — empty, or still in progress (Issue 896: such a tile is
+    /// served exactly from the layer's raw buffer by
+    /// [`Self::dequantize_key_into`], and its scale vectors are never read).
     ///
     /// Read-only view of exactly what [`Self::dequantize_key_into`] feeds its
     /// kernel (Issue 894) — the seam the bit-identity oracle and the paired
@@ -430,7 +453,7 @@ impl KVarNKVCache {
         let tile_idx = pos / self.tile_size;
         let pos_in_tile = pos % self.tile_size;
         let tile = &self.key_tiles[Self::tile_meta_idx(self.n_tiles, layer, tile_idx)];
-        if tile.count == 0 {
+        if !tile.quantized {
             return None;
         }
         // Use actual tile cols for bpr (may differ for incomplete last tile)
@@ -452,7 +475,8 @@ impl KVarNKVCache {
         })
     }
 
-    /// Inputs of one value-row dequant, or `None` if the tile is empty.
+    /// Inputs of one value-row dequant, or `None` if the tile holds no
+    /// quantized data (empty or in progress — see [`Self::key_col_view`]).
     ///
     /// Read-only view of exactly what [`Self::dequantize_value_into`] feeds
     /// its kernel (Issue 894); see [`Self::key_col_view`].
@@ -461,7 +485,7 @@ impl KVarNKVCache {
         let tile_idx = pos / self.tile_size;
         let pos_in_tile = pos % self.tile_size;
         let tile = &self.val_tiles[Self::tile_meta_idx(self.n_tiles, layer, tile_idx)];
-        if tile.count == 0 {
+        if !tile.quantized {
             return None;
         }
         let bpr = packed_bytes_per_row(self.kv_dim, self.bits);
@@ -489,7 +513,7 @@ impl KVarNKVCache {
         match self.key_col_view(layer, pos) {
             Some(v) => dequant_key_col(&v, out),
             None => {
-                out.fill(0.0);
+                self.read_raw_key(layer, pos, out);
                 return;
             }
         }
@@ -520,7 +544,7 @@ impl KVarNKVCache {
         };
         self.scratch_unpack = scratch;
         if !hit {
-            out.fill(0.0);
+            self.read_raw_value(layer, pos, out);
             return;
         }
 
@@ -528,6 +552,42 @@ impl KVarNKVCache {
         if self.effective_hadamard && self.kv_dim.is_power_of_two() {
             hadamard::hadamard_transform_inplace(out);
         }
+    }
+
+    /// Read one key of a NOT-yet-quantized tile exactly from the layer's raw
+    /// buffer (Issue 896). The raw buffer holds the values as stored — before
+    /// Hadamard, var-norm or RTN — so no inverse transform applies. A slot not
+    /// stored yet (`pos_in_tile >= count`, including an empty tile) reads 0.
+    #[inline]
+    fn read_raw_key(&self, layer: usize, pos: usize, out: &mut [f32]) {
+        let tile_idx = pos / self.tile_size;
+        let pos_in_tile = pos % self.tile_size;
+        let count = self.key_tiles[Self::tile_meta_idx(self.n_tiles, layer, tile_idx)].count;
+        if pos_in_tile >= count {
+            out.fill(0.0);
+            return;
+        }
+        // Column `pos_in_tile` of this layer's `[kv_dim, tile_size]` tile.
+        let base = layer * self.raw_tile_len + pos_in_tile;
+        let col = self.key_buffer[base..].iter().step_by(self.tile_size);
+        for (o, &k) in out.iter_mut().zip(col) {
+            *o = k;
+        }
+    }
+
+    /// Read one value of a NOT-yet-quantized tile exactly from the layer's raw
+    /// buffer (Issue 896) — see [`Self::read_raw_key`].
+    #[inline]
+    fn read_raw_value(&self, layer: usize, pos: usize, out: &mut [f32]) {
+        let tile_idx = pos / self.tile_size;
+        let pos_in_tile = pos % self.tile_size;
+        let count = self.val_tiles[Self::tile_meta_idx(self.n_tiles, layer, tile_idx)].count;
+        if pos_in_tile >= count {
+            out.fill(0.0);
+            return;
+        }
+        let off = layer * self.raw_tile_len + pos_in_tile * self.kv_dim;
+        out.copy_from_slice(&self.val_buffer[off..off + self.kv_dim]);
     }
 
     /// Test-only: force the quantize/dequant mode `with_config` derives from
@@ -549,8 +609,13 @@ impl KVarNKVCache {
         for layer in 0..self.n_layers {
             let base = layer * self.n_tiles;
             for t in 0..self.n_tiles {
+                // Clearing `quantized` is what keeps the previous sequence's
+                // scales from ever being read again (Issue 896): until a tile
+                // re-quantizes (overwriting every scale), reads go raw.
                 self.key_tiles[base + t].count = 0;
+                self.key_tiles[base + t].quantized = false;
                 self.val_tiles[base + t].count = 0;
+                self.val_tiles[base + t].quantized = false;
             }
         }
     }
@@ -580,9 +645,11 @@ impl KVarNKVCache {
         let (rtn_scales_len, packed_len, bits) = {
             let tile_data = &mut self.scratch_tile[..rows * cols];
 
-            // Strided copy: key_buffer is [kv_dim, tile_size] row-major; compact to [rows, cols].
+            // Strided copy: this layer's key_buffer tile is [kv_dim, tile_size]
+            // row-major; compact to [rows, cols].
+            let raw = &self.key_buffer[layer * self.raw_tile_len..(layer + 1) * self.raw_tile_len];
             for ch in 0..rows {
-                let src = &self.key_buffer[ch * tile_size..ch * tile_size + cols];
+                let src = &raw[ch * tile_size..ch * tile_size + cols];
                 let dst = &mut tile_data[ch * cols..ch * cols + cols];
                 dst.copy_from_slice(src);
             }
@@ -712,6 +779,7 @@ impl KVarNKVCache {
         let bpr = packed_bytes_per_row(cols, bits);
         let meta = &mut self.key_tiles[Self::tile_meta_idx(self.n_tiles, layer, tile_idx)];
         meta.count = count;
+        meta.quantized = true;
         meta.var_scales.s_col.clear();
         meta.var_scales.s_col.extend_from_slice(&self.scratch_var_s_col[..cols]);
         meta.var_scales.s_row.clear();
@@ -741,8 +809,10 @@ impl KVarNKVCache {
         let (rtn_scales_len, packed_len, bits) = {
             let tile_data = &mut self.scratch_tile[..rows * cols];
 
-            // val_buffer is already [tile_size, kv_dim] row-major contiguous; copy directly.
-            tile_data.copy_from_slice(&self.val_buffer[..rows * cols]);
+            // This layer's val_buffer tile is already [tile_size, kv_dim] row-major
+            // contiguous; copy directly.
+            let raw_off = layer * self.raw_tile_len;
+            tile_data.copy_from_slice(&self.val_buffer[raw_off..raw_off + rows * cols]);
 
             // Hadamard rotation per-tile (clustered across channels per token)
             if self.effective_hadamard && cols.is_power_of_two() {
@@ -861,6 +931,7 @@ impl KVarNKVCache {
         let bpr = packed_bytes_per_row(cols, bits);
         let meta = &mut self.val_tiles[Self::tile_meta_idx(self.n_tiles, layer, tile_idx)];
         meta.count = count;
+        meta.quantized = true;
         meta.var_scales.s_col.clear();
         meta.var_scales.s_col.extend_from_slice(&self.scratch_var_s_col[..cols]);
         meta.var_scales.s_row.clear();

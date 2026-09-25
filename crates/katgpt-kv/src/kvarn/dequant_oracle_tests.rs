@@ -9,12 +9,16 @@
 //! for both value rows and key columns. The rule is `to_bits` equality on
 //! every element: 0 differing bits.
 //!
-//! Positions of a counted-but-not-yet-quantized tile read the tile's EMPTY
-//! metadata (length `tile_size` / `kv_dim` scales); in the grouped 2-bit
-//! value arm that indexing is out of range in the OLD code too, so those
-//! positions are skipped exactly when the old read would have panicked
-//! (grouped 2-bit value rows, and grouped 2-bit key columns whose token-group
-//! stride runs past the empty `kv_dim`-long scale vector).
+//! Positions of a counted-but-not-yet-quantized tile used to read the tile's
+//! EMPTY metadata (zeros; a panic in the grouped 2-bit arms). Since Issue 896
+//! such a tile has no view (`key_col_view` / `value_row_view` return `None`)
+//! and is served from the layer's raw buffer, so those positions are asserted
+//! to read back the STORED input exactly (`to_bits` equality) instead of
+//! being compared against the old loops. Every quantized-tile read is still
+//! bit-identical to the oracle: this is the layer-major pin Issue 896 T1
+//! requires (the stores below are layer-major, n_layers = 2).
+
+#![allow(clippy::needless_range_loop)] // `p` indexes the cache as well as `inputs`
 
 use super::hadamard::hadamard_transform_inplace;
 use super::kv_cache::{KVarNConfig, KVarNKVCache, unpack_row, unpack_value};
@@ -73,19 +77,23 @@ fn run_case(
     c.set_quant_mode_for_test(mode.0, mode.1);
     let mut rng = Rng(0x894 ^ ((bits as u64) << 32) ^ ((kv_dim as u64) << 16) ^ tile as u64);
     let mut v = vec![0.0f32; kv_dim];
-    for layer in 0..2 {
+    // Stored inputs, `[layer][pos] -> (key, value)`, for the in-progress reads.
+    let mut inputs: Vec<Vec<(Vec<f32>, Vec<f32>)>> = (0..2).map(|_| Vec::with_capacity(stored)).collect();
+    for (layer, inp) in inputs.iter_mut().enumerate() {
         for p in 0..stored {
             let constant = p % 11 == 5;
             for (ch, x) in v.iter_mut().enumerate() {
                 *x = if constant { 0.25 } else { rng.val(ch) };
             }
             c.store_key(layer, p, &v);
+            let key = v.clone();
             for x in v.iter_mut() {
                 if !constant {
                     *x = rng.val(kv_dim - 1) * 0.5;
                 }
             }
             c.store_value(layer, p, &v);
+            inp.push((key, v.clone()));
         }
     }
     let had = hadamard && kv_dim.is_power_of_two();
@@ -102,36 +110,31 @@ fn run_case(
     };
     for layer in 0..2 {
         for p in 0..stored {
+            let (key_in, val_in) = &inputs[layer][p];
             // ── key column ──
-            if let Some(view) = c.key_col_view(layer, p) {
-                let view: KVarNKeyColView<'_> = view;
-                let old_panics = bits == 2 && view.skip_varn && view.group_size > 0 && {
-                    let gpr = view.actual_cols.div_ceil(view.group_size);
-                    let g = (view.pos_in_tile / view.group_size).min(gpr - 1);
-                    (kv_dim - 1) * gpr + g >= view.rtn_scales.len()
-                };
-                // `old_panics`: the old code panics here too (unquantized tile) — see header.
-                if !old_panics {
+            match c.key_col_view(layer, p) {
+                Some(view) => {
+                    let view: KVarNKeyColView<'_> = view;
                     oracle::old_dequantize_key(&view, &mut want);
                     if had {
                         hadamard_transform_inplace(&mut want);
                     }
-                    got.fill(f32::NAN);
-                    c.dequantize_key_into(layer, p, &mut got);
-                    cmp(&got, &want);
                 }
+                // In-progress tile (Issue 896): exact raw read, no transform.
+                None => want.copy_from_slice(key_in),
             }
+            got.fill(f32::NAN);
+            c.dequantize_key_into(layer, p, &mut got);
+            cmp(&got, &want);
             // ── value row ──
             let Some(view) = c.value_row_view(layer, p) else {
+                want.copy_from_slice(val_in);
+                got.fill(f32::NAN);
+                c.dequantize_value_into(layer, p, &mut got);
+                cmp(&got, &want);
                 continue;
             };
             let view: KVarNValueRowView<'_> = view;
-            if bits == 2 && view.skip_varn && view.group_size > 0 {
-                let gpr = kv_dim.div_ceil(view.group_size);
-                if view.pos_in_tile * gpr + gpr > view.rtn_scales.len() {
-                    continue; // the old code panics here too (unquantized tile)
-                }
-            }
             oracle::old_dequantize_value(&view, &mut scratch, &mut want);
             if had {
                 hadamard_transform_inplace(&mut want);
