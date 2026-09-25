@@ -11,7 +11,7 @@
 
 #![allow(dead_code)] // each example consumes a different slice
 
-use crate::tetris_sim::{landing_options_with, Board, DropRule, Piece, HEIGHT, WIDTH};
+use crate::tetris_sim::{Board, DropRule, HEIGHT, Piece, WIDTH, landing_options_with};
 
 // ── Terminal-board evaluation (shared; disclosed) ────────────────────────
 
@@ -37,35 +37,11 @@ pub struct BoardFeats {
 }
 
 pub fn board_features(b: &Board, lines_cleared: u32) -> BoardFeats {
-    let h = b.heights();
-    let mut row_trans = 0.0;
-    for r in 0..HEIGHT {
-        let mut prev = true; // wall
-        for c in 0..WIDTH {
-            let cur = b.cell(r, c);
-            if cur != prev {
-                row_trans += 1.0;
-            }
-            prev = cur;
-        }
-        if !prev {
-            row_trans += 1.0; // right wall
-        }
-    }
-    let mut col_trans = 0.0;
-    for c in 0..WIDTH {
-        let mut prev = false; // open ceiling
-        for r in 0..HEIGHT {
-            let cur = b.cell(r, c);
-            if cur != prev {
-                col_trans += 1.0;
-            }
-            prev = cur;
-        }
-        if !prev {
-            col_trans += 1.0; // floor
-        }
-    }
+    // Fused two-pass scan (identical values to the historical per-feature
+    // walks — heights/wells read the same height array, transitions count
+    // the same wall conventions).
+    let s = b.scan();
+    let h = &s.heights;
     // Cumulative wells: per column, depth = max(0, min(neighbors) − h);
     // walls count at full height (the edge I-slot is a well like any other).
     let mut wells = 0.0;
@@ -81,9 +57,9 @@ pub fn board_features(b: &Board, lines_cleared: u32) -> BoardFeats {
     }
     BoardFeats {
         lines: lines_cleared,
-        row_trans,
-        col_trans,
-        holes: b.hole_count() as f64,
+        row_trans: s.row_trans as f64,
+        col_trans: s.col_trans as f64,
+        holes: s.holes as f64,
         wells,
         deep_well,
         max_h: *h.iter().max().unwrap_or(&0) as f64,
@@ -107,10 +83,7 @@ pub fn eval_board(f: &BoardFeats, shaped: bool) -> f64 {
 /// the number of rows cleared.
 pub fn apply(board: &Board, cells: &[(usize, usize)]) -> (Board, u32) {
     let mut b = board.clone();
-    b.place(cells);
-    let full = b.full_rows();
-    let n = full.len() as u32;
-    b.clear_rows(&full);
+    let n = b.place_and_clear(cells);
     (b, n)
 }
 

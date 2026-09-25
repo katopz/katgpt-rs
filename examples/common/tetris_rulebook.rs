@@ -28,8 +28,9 @@
 
 #![allow(dead_code)] // each example consumes a different slice
 
-use crate::tetris_lookahead::{apply, Bag, LINES_SCORE};
-use crate::tetris_sim::{landing_options_with, Board, DropRule, Piece, HEIGHT, WIDTH};
+use crate::tetris_lookahead::{Bag, LINES_SCORE, apply};
+use crate::tetris_sim::{Board, BoardScan, DropRule, HEIGHT, Piece, WIDTH, landing_options_with};
+use rayon::prelude::*;
 
 // ── Vocabulary ────────────────────────────────────────────────────────────
 
@@ -508,7 +509,11 @@ impl Genome {
 
     /// Effective search plies.
     pub fn plies(&self) -> u8 {
-        if self.on(RuleId::NextPreview) { self.depth.max(2) } else { 1 }
+        if self.on(RuleId::NextPreview) {
+            self.depth.max(2)
+        } else {
+            1
+        }
     }
 
     /// The FSM: mode of a ROOT board (data predicates, evaluated in order).
@@ -535,6 +540,23 @@ impl Genome {
                 let w = self.w[r.id as usize][m];
                 if w != 0.0 {
                     s += w * (r.feature)(leaf);
+                }
+            }
+        }
+        s
+    }
+
+    /// [`Self::eval`] over a precomputed [`BoardScan`] — the search hot
+    /// path. Same RULES iteration order, same inclusion condition, same
+    /// integer-valued features (bit-identical sum; pinned by `selftest`).
+    pub fn eval_with(&self, leaf: &Leaf, mode: Mode, scan: &BoardScan) -> f64 {
+        let m = mode as usize;
+        let mut s = 0.0;
+        for r in &RULES {
+            if r.kind == RuleKind::BoardWeight && self.on(r.id) {
+                let w = self.w[r.id as usize][m];
+                if w != 0.0 {
+                    s += w * rule_value(r.id, leaf, scan);
                 }
             }
         }
@@ -651,18 +673,57 @@ pub struct View<'a> {
     pub bag_remaining: &'a [Piece],
 }
 
-fn leaf_value(g: &Genome, mode: Mode, b: &Board, lines: u32, tetrises: u32, held: Option<Piece>) -> f64 {
+fn leaf_value(
+    g: &Genome,
+    mode: Mode,
+    b: &Board,
+    lines: u32,
+    tetrises: u32,
+    held: Option<Piece>,
+) -> f64 {
+    // One fused scan feeds heights AND every board feature (identical values
+    // to the per-feature walks — `selftest` pins eval ≡ eval_with).
+    let scan = b.scan();
     let leaf = Leaf {
         board: b,
-        heights: b.heights(),
+        heights: scan.heights,
         lines,
         tetrises,
         held,
     };
-    g.eval(&leaf, mode)
+    g.eval_with(&leaf, mode, &scan)
 }
 
 const TOPOUT: f64 = -1.0e12;
+
+/// A rule's feature value from the fused [`BoardScan`] (+ leaf counters) —
+/// integer-exact against the `feature` fn on its RULES row.
+fn rule_value(id: RuleId, l: &Leaf, s: &BoardScan) -> f64 {
+    match id {
+        RuleId::Lines => l.lines as f64,
+        RuleId::RowTrans => s.row_trans as f64,
+        RuleId::ColTrans => s.col_trans as f64,
+        RuleId::Holes => s.holes as f64,
+        RuleId::Wells => (0..WIDTH).map(|c| well_depth(&s.heights, c)).sum::<usize>() as f64,
+        RuleId::MaxHeight => *s.heights.iter().max().unwrap_or(&0) as f64,
+        RuleId::DeepWellUrgency => (0..WIDTH)
+            .map(|c| {
+                let d = well_depth(&s.heights, c);
+                if d > 2 { (d - 2) * (d - 2) } else { 0 }
+            })
+            .sum::<usize>() as f64,
+        RuleId::NineOneWell => well_depth(&s.heights, WELL_COL).min(4) as f64,
+        RuleId::TetrisBonus => l.tetrises as f64,
+        RuleId::FlatTop => (1..WELL_COL)
+            .map(|c| s.heights[c].abs_diff(s.heights[c - 1]))
+            .sum::<usize>() as f64,
+        RuleId::HoleCover => s.hole_cover as f64,
+        RuleId::HoldI => f64::from(u8::from(l.held == Some(Piece::I))),
+        // Search-policy / native / inapplicable rows carry no board weight
+        // (filtered by kind before `rule_value` is consulted).
+        _ => 0.0,
+    }
+}
 
 /// Best value of placing `piece` on `b` then continuing `plies_left − 1`
 /// more plies. `after` = the known piece sequence after `piece` (preview),
@@ -684,6 +745,17 @@ fn best_value(
     if opts.is_empty() {
         return TOPOUT;
     }
+    if plies_left <= 1 {
+        // Leaf ply: best option value, computed in option order with no
+        // intermediate collection (identical to the historical kids fold).
+        let mut best = f64::NEG_INFINITY;
+        for p in &opts {
+            let (nb, l) = apply(b, &p.cells);
+            let t = tetrises + u32::from(l == 4);
+            best = best.max(leaf_value(g, mode, &nb, lines + l, t, held));
+        }
+        return best;
+    }
     // Children with their 1-ply leaf value (the prior).
     let mut kids: Vec<(Board, u32, u32, f64)> = opts
         .iter()
@@ -703,10 +775,25 @@ fn best_value(
     let mut best = f64::NEG_INFINITY;
     for (nb, l, t, _) in &kids {
         let v = match after {
-            Some(nxt) => best_value(g, mode, nb, nxt, None, support, plies_left - 1, *l, *t, held),
+            Some(nxt) => best_value(
+                g,
+                mode,
+                nb,
+                nxt,
+                None,
+                support,
+                plies_left - 1,
+                *l,
+                *t,
+                held,
+            ),
             None => {
                 // Chance node: exact expectation over the 7-bag support.
-                let sup: &[Piece] = if support.is_empty() { &Piece::ALL } else { support };
+                let sup: &[Piece] = if support.is_empty() {
+                    &Piece::ALL
+                } else {
+                    support
+                };
                 let mut acc = 0.0;
                 for &x in sup {
                     acc += best_value(g, mode, nb, x, None, &[], plies_left - 1, *l, *t, held);
@@ -757,28 +844,61 @@ pub fn decide_scored(g: &Genome, v: &View) -> Vec<(Decision, f64)> {
     let mut scored: Vec<(Decision, f64)> = Vec::new();
     for (use_hold, piece, after, held_after) in cands {
         let opts = landing_options_with(v.board, piece, DropRule::FromTop);
-        for (i, p) in opts.iter().enumerate() {
-            let (nb, l) = apply(v.board, &p.cells);
-            let t = u32::from(l == 4);
-            let val = if plies <= 1 {
-                leaf_value(g, mode, &nb, l, t, held_after)
-            } else {
-                match after {
-                    Some(nxt) => {
-                        // Piece after `nxt` is unknown → bag support.
-                        best_value(g, mode, &nb, nxt, None, v.bag_remaining, plies - 1, l, t, held_after)
-                    }
-                    None => {
-                        let sup: &[Piece] =
-                            if v.bag_remaining.is_empty() { &Piece::ALL } else { v.bag_remaining };
-                        let mut acc = 0.0;
-                        for &x in sup {
-                            acc += best_value(g, mode, &nb, x, None, &[], plies - 1, l, t, held_after);
+        // Root options are independent subtrees (~0.1 ms each serial) — run
+        // them on the rayon pool and collect IN OPTION ORDER, so `decide`'s
+        // first-strict-argmax fold is bit-identical to the sequential loop.
+        let vals: Vec<f64> = opts
+            .par_iter()
+            .map(|p| {
+                let (nb, l) = apply(v.board, &p.cells);
+                let t = u32::from(l == 4);
+                if plies <= 1 {
+                    leaf_value(g, mode, &nb, l, t, held_after)
+                } else {
+                    match after {
+                        Some(nxt) => {
+                            // Piece after `nxt` is unknown → bag support.
+                            best_value(
+                                g,
+                                mode,
+                                &nb,
+                                nxt,
+                                None,
+                                v.bag_remaining,
+                                plies - 1,
+                                l,
+                                t,
+                                held_after,
+                            )
                         }
-                        acc / sup.len() as f64
+                        None => {
+                            let sup: &[Piece] = if v.bag_remaining.is_empty() {
+                                &Piece::ALL
+                            } else {
+                                v.bag_remaining
+                            };
+                            let mut acc = 0.0;
+                            for &x in sup {
+                                acc += best_value(
+                                    g,
+                                    mode,
+                                    &nb,
+                                    x,
+                                    None,
+                                    &[],
+                                    plies - 1,
+                                    l,
+                                    t,
+                                    held_after,
+                                );
+                            }
+                            acc / sup.len() as f64
+                        }
                     }
                 }
-            };
+            })
+            .collect();
+        for (i, val) in vals.into_iter().enumerate() {
             scored.push((Decision { use_hold, index: i }, val));
         }
     }
@@ -815,12 +935,7 @@ pub struct GameStats {
 }
 
 /// Play one seeded game under genome `g` (7-bag + preview + optional hold).
-pub fn play_game(
-    g: &Genome,
-    seed: u64,
-    cap: usize,
-    start: Board,
-) -> GameStats {
+pub fn play_game(g: &Genome, seed: u64, cap: usize, start: Board) -> GameStats {
     let mut bag = Bag::new(seed);
     let mut board = start;
     let mut next = bag.draw();
@@ -892,6 +1007,46 @@ pub fn selftest() {
     // The recorded champion's id is pinned (a drifted line is a new genome).
     assert_eq!(Genome::champion_points().id(), "ed5aa14b7d68472e");
     assert_eq!(Genome::champion_hybrid().id(), "68cae9d382014662");
+    // eval ≡ eval_with (the fused-scan hot path is bit-identical to the
+    // per-feature walk) over boards with holes, overhangs, wells and tall
+    // stacks, under every mode and genome.
+    {
+        use crate::tetris_lookahead::garbage_board;
+        let mut boards = vec![
+            Board::empty(),
+            garbage_board(7, 18, 75),
+            garbage_board(8, 16, 85),
+        ];
+        let mut stack = Board::empty();
+        for r in 4..HEIGHT {
+            for c in 0..WIDTH - 1 {
+                stack.place(&[(r, c)]);
+            }
+        }
+        boards.push(stack);
+        for b in &boards {
+            let scan = b.scan();
+            for g in [
+                Genome::full(Physics::FromTop),
+                Genome::bench891_ply2_shaped(),
+                Genome::champion_points(),
+                Genome::champion_hybrid(),
+            ] {
+                for mode in MODES {
+                    let leaf = Leaf {
+                        board: b,
+                        heights: scan.heights,
+                        lines: 2,
+                        tetrises: 1,
+                        held: Some(Piece::I),
+                    };
+                    let a = g.eval(&leaf, mode);
+                    let bb = g.eval_with(&leaf, mode, &scan);
+                    assert_eq!(a.to_bits(), bb.to_bits(), "eval ≡ eval_with");
+                }
+            }
+        }
+    }
     // Physics is part of the rule: T-spin inert under FromTop, live under
     // soft-drop physics.
     let ts = &RULES[RuleId::TSpin as usize];

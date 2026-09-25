@@ -124,7 +124,7 @@ fn load_v4(path: &std::path::Path) -> V4Loaded {
         let mut fs = Vec::with_capacity(opts.len());
         for (p, fo) in opts.iter().zip(&st.options) {
             assert!(
-                p.rot == fo.rot && p.col == fo.col && p.row == fo.row && p.cells == fo.cells,
+                p.rot == fo.rot && p.col == fo.col && p.row == fo.row && p.cells[..] == fo.cells[..],
                 "{}: placement drifted at rot {} col {}",
                 st.state_id,
                 fo.rot,

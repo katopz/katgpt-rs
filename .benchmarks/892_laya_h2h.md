@@ -228,3 +228,65 @@ Readings:
   weights, but Downstack/Survive fall back to the survival weights: 19/20 vs
   18/20 at 18@75 and +6% points; per-seed points are split (hybrid 14–6 at
   10@75, score champion 11–9 at 18@75).
+
+---
+
+## Optimization addendum (2026-09-25, same day) — 8.1–8.8× per-decision, bit-identical play
+
+`perf` pass over the search hot path (`examples/common/tetris_sim.rs`,
+`tetris_lookahead.rs`, `tetris_rulebook.rs`). Every optimization is
+**bit-exact by construction and by gate**: the h2h replays above reproduce
+to the digit (per-seed pieces/lines/points identical on all validation
+seeds — empty 1..=10 cap 300 + 18@75 where seed 8's early top-out
+12 pcs/3 lines/120 pts is the fingerprint), the v2/v3/v4 fixture replay
+still recomputes 120 states / 2660 options byte-identically, the arena
+`anchor` lane is 2/2, and the fused eval is pinned `eval ≡ eval_with`
+(bit-level `to_bits` assert, all modes × all genomes) inside
+`tetris_rulebook::selftest`.
+
+| lane | before | after | speedup |
+|---|---|---|---|
+| rulebook-hybrid-d3, empty 10×300 | 6.92 ms/decision | **0.85** | 8.1× |
+| rulebook-hybrid-d3, 18@75 10×300 | 7.32 ms/decision | **0.82** | 8.9× |
+| rulebook-points-d3, empty 10×300 | 6.85 ms/decision | **0.85** | 8.1× |
+| ply2-shaped (Bench 891), empty | 0.348 ms/decision | **0.12–0.14** | ~2.5× |
+| rulebook-hybrid-d3, empty 20×500 | — (8.6 in the table above) | 0.855 | — |
+
+Box: M3 Max, loadavg 3.5–6.8 during measurement (sibling agent sessions
+active; the speedup is 8×, far outside load noise). Sequential
+(`--jobs 1`) per-move wall time.
+
+What changed (no behavior change anywhere):
+
+1. **Static rotation table** (`rotations_static`) — `Piece::rotations()`
+   built Vec allocations per call; the search now reads a process-wide
+   table built once by the same normalize/dedupe pipeline.
+2. **FromTop landing via column occupancy masks** — the per-option
+   row-by-row descent scan is replaced by, per piece cell, the first
+   occupied row at-or-below its spawn row (`trailing_zeros` over a
+   per-column mask): O(4) per option instead of O(HEIGHT×4).
+   ⚠ A plain column-heights shortcut is WRONG under overhangs (the shadow
+   below a floating cell is open) — the mask form is the correct one, and
+   the fast path is pinned against the descent scan by
+   `from_top_fast_path_is_bit_identical_to_the_descent_scan` (3000+
+   boards incl. overhang/covered-hole/tall-stack shapes; the heights
+   version of this test caught a real seed-8 divergence during
+   development and was replaced).
+3. **`Placement.cells` as `[(usize, usize); 4]`** — a tetromino is always
+   exactly 4 cells; the search no longer allocates a Vec per landing.
+4. **Fused `Board::place_and_clear` + `Board::scan`** — place + clear in
+   one bottom-up compaction pass (no `full_rows` Vec), and heights +
+   row/col transitions + holes + hole-cover computed in two passes
+   (integer-exact vs the per-feature walks; pinned by
+   `scan_matches_the_per_feature_walks` over 2000+ boards). The rulebook
+   leaf eval consumes the scan (`Genome::eval_with`), and ply-1 nodes no
+   longer materialize the kids Vec (max fold in option order).
+5. **rayon at the `decide_scored` root** — the ~34 root landing options
+   are independent ~0.1 ms subtrees; collected IN OPTION ORDER so
+   `decide`'s first-strict-argmax fold is bit-identical to the sequential
+   loop. rayon was already a root-crate dependency.
+
+The recorded champion numbers in the tables above are unchanged — this
+pass makes the SAME decisions ~8× faster. The reflex-site arena's
+"rulebook ~6.2 ms/piece" bar is now ~0.9 ms on this box (site lane
+regenerates on its own cadence).

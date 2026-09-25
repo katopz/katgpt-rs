@@ -261,7 +261,7 @@ fn build_record(
             rot: p.rot,
             col: p.col,
             row: p.row,
-            cells: p.cells.clone(),
+            cells: p.cells.to_vec(),
             features: f.into(),
             sentence,
         });

@@ -31,6 +31,8 @@
 
 // ── Board ────────────────────────────────────────────────────────────────
 
+use std::sync::OnceLock;
+
 pub const WIDTH: usize = 10;
 pub const HEIGHT: usize = 20;
 
@@ -92,6 +94,31 @@ impl Board {
         }
     }
 
+    /// Place `cells`, then clear complete rows in one bottom-up compaction
+    /// pass (identical result to `place` + `full_rows` + `clear_rows`, without
+    /// the intermediate `Vec`). Returns rows cleared.
+    pub fn place_and_clear(&mut self, cells: &[(usize, usize)]) -> u32 {
+        for &(r, c) in cells {
+            self.cells[r][c] = true;
+        }
+        let mut write = HEIGHT;
+        let mut cleared = 0u32;
+        for r in (0..HEIGHT).rev() {
+            if self.cells[r].iter().all(|&b| b) {
+                cleared += 1;
+            } else {
+                write -= 1;
+                if write != r {
+                    self.cells[write] = self.cells[r];
+                }
+            }
+        }
+        for row in &mut self.cells[..write] {
+            *row = [false; WIDTH];
+        }
+        cleared
+    }
+
     pub fn full_rows(&self) -> Vec<usize> {
         (0..HEIGHT)
             .filter(|&r| (0..WIDTH).all(|c| self.cells[r][c]))
@@ -130,6 +157,72 @@ impl Board {
         }
         b
     }
+
+    /// Fused single-scan board features (the search hot path): heights +
+    /// row/col transitions + holes + hole cover, integer-exact against the
+    /// per-feature scans (`heights`/`hole_count`/`f_row_trans`-shape walks).
+    /// Two passes over the 200-byte grid: one column-major, one row-major.
+    pub fn scan(&self) -> BoardScan {
+        let mut heights = [0usize; WIDTH];
+        let mut col_trans = 0u32;
+        let mut holes = 0u32;
+        let mut hole_cover = 0u32;
+        for (c, hc) in heights.iter_mut().enumerate() {
+            let mut top: isize = -1;
+            let mut filled = 0u32;
+            let mut prev = false;
+            let mut filled_above = 0u32;
+            for r in 0..HEIGHT {
+                let cur = self.cells[r][c];
+                col_trans += u32::from(cur != prev);
+                prev = cur;
+                if cur {
+                    if top < 0 {
+                        top = r as isize;
+                    }
+                    filled += 1;
+                    filled_above += 1;
+                } else if top >= 0 {
+                    // A hole: everything above it covers it.
+                    hole_cover += filled_above;
+                }
+            }
+            col_trans += u32::from(!prev); // floor (bottom cell empty → transition)
+            *hc = if top < 0 {
+                0
+            } else {
+                (HEIGHT as isize - top) as usize
+            };
+            holes += *hc as u32 - filled;
+        }
+        let mut row_trans = 0u32;
+        for r in 0..HEIGHT {
+            let mut prev = true; // wall
+            for c in 0..WIDTH {
+                let cur = self.cells[r][c];
+                row_trans += u32::from(cur != prev);
+                prev = cur;
+            }
+            row_trans += u32::from(!prev); // right wall
+        }
+        BoardScan {
+            heights,
+            row_trans,
+            col_trans,
+            holes,
+            hole_cover,
+        }
+    }
+}
+
+/// [`Board::scan`] output — integer-valued features (exact in f64).
+#[derive(Clone, Copy, Debug)]
+pub struct BoardScan {
+    pub heights: [usize; WIDTH],
+    pub row_trans: u32,
+    pub col_trans: u32,
+    pub holes: u32,
+    pub hole_cover: u32,
 }
 
 // ── Pieces ───────────────────────────────────────────────────────────────
@@ -148,7 +241,15 @@ pub enum Piece {
 }
 
 impl Piece {
-    pub const ALL: [Self; 7] = [Self::I, Self::O, Self::T, Self::S, Self::Z, Self::J, Self::L];
+    pub const ALL: [Self; 7] = [
+        Self::I,
+        Self::O,
+        Self::T,
+        Self::S,
+        Self::Z,
+        Self::J,
+        Self::L,
+    ];
 
     /// Spoken name for the state sentence.
     pub fn spoken(&self) -> &'static str {
@@ -179,28 +280,81 @@ impl Piece {
     /// Distinct rotations as cell-offset lists (dy, dx), dy=0 at the top of
     /// the bounding box, normalized to the origin. Deduped (I: 2, O: 1,
     /// rest: 4) — order is pinned (rotation counterclockwise from base).
+    /// Backed by a process-wide static table (built by the same algorithm
+    /// once): allocation-free reads for the search hot path.
     pub fn rotations(&self) -> Vec<Vec<(usize, usize)>> {
-        let base: Vec<(usize, usize)> = match self {
-            Self::I => vec![(1, 0), (1, 1), (1, 2), (1, 3)],
-            Self::O => vec![(0, 1), (0, 2), (1, 1), (1, 2)],
-            Self::T => vec![(0, 1), (1, 0), (1, 1), (1, 2)],
-            Self::S => vec![(0, 1), (0, 2), (1, 0), (1, 1)],
-            Self::Z => vec![(0, 0), (0, 1), (1, 1), (1, 2)],
-            Self::J => vec![(0, 0), (1, 0), (1, 1), (1, 2)],
-            Self::L => vec![(0, 2), (1, 0), (1, 1), (1, 2)],
+        rotations_static(*self)
+            .iter()
+            .map(|f| f.cells.to_vec())
+            .collect()
+    }
+
+    /// Index into `Piece::ALL` (the static rotation table's key).
+    pub fn index(self) -> usize {
+        match self {
+            Self::I => 0,
+            Self::O => 1,
+            Self::T => 2,
+            Self::S => 3,
+            Self::Z => 4,
+            Self::J => 5,
+            Self::L => 6,
+        }
+    }
+}
+
+/// One distinct rotation in the static table: normalized (sorted) cells +
+/// bounding width — exactly what `Piece::rotations()` returns, minus the
+/// per-call allocation.
+pub struct RotForm {
+    pub cells: [(usize, usize); 4],
+    /// max dx + 1 (the column-span of the form).
+    pub width: usize,
+}
+
+static ROT_FORMS: OnceLock<[Vec<RotForm>; 7]> = OnceLock::new();
+
+/// The process-wide rotation table (built once from the pinned normalize/
+/// dedupe pipeline; `Piece::rotations()` is a view over it).
+pub fn rotations_static(piece: Piece) -> &'static [RotForm] {
+    &ROT_FORMS.get_or_init(build_rot_forms)[piece.index()]
+}
+
+fn build_rot_forms() -> [Vec<RotForm>; 7] {
+    let mut out: [Vec<RotForm>; 7] = Default::default();
+    for (i, &piece) in Piece::ALL.iter().enumerate() {
+        let base: Vec<(usize, usize)> = match piece {
+            Piece::I => vec![(1, 0), (1, 1), (1, 2), (1, 3)],
+            Piece::O => vec![(0, 1), (0, 2), (1, 1), (1, 2)],
+            Piece::T => vec![(0, 1), (1, 0), (1, 1), (1, 2)],
+            Piece::S => vec![(0, 1), (0, 2), (1, 0), (1, 1)],
+            Piece::Z => vec![(0, 0), (0, 1), (1, 1), (1, 2)],
+            Piece::J => vec![(0, 0), (1, 0), (1, 1), (1, 2)],
+            Piece::L => vec![(0, 2), (1, 0), (1, 1), (1, 2)],
         };
         let dim = 4usize; // rotation inside a 4x4 box
         let mut cur = base;
-        let mut out: Vec<Vec<(usize, usize)>> = Vec::with_capacity(4);
+        let mut norms: Vec<Vec<(usize, usize)>> = Vec::with_capacity(4);
         for _ in 0..4 {
             let norm = normalize(&cur);
-            if !out.contains(&norm) {
-                out.push(norm);
+            if !norms.contains(&norm) {
+                norms.push(norm);
             }
             cur = rotate(&cur, dim);
         }
-        out
+        out[i] = norms
+            .iter()
+            .map(|v| {
+                let mut cells = [(0usize, 0usize); 4];
+                for (dst, &c) in cells.iter_mut().zip(v.iter()) {
+                    *dst = c;
+                }
+                let width = cells.iter().map(|&(_, dx)| dx).max().unwrap_or(0) + 1;
+                RotForm { cells, width }
+            })
+            .collect();
     }
+    out
 }
 
 /// Rotate (dy, dx) clockwise inside a `dim`-box: (dy, dx) -> (dx, dim-1-dy).
@@ -231,8 +385,10 @@ pub struct Placement {
     pub col: usize,
     /// Top row of the piece's bounding box at rest.
     pub row: usize,
-    /// Absolute resting cells (row, col), sorted.
-    pub cells: Vec<(usize, usize)>,
+    /// Absolute resting cells (row, col), sorted. A tetromino is always
+    /// exactly 4 cells — the fixed array keeps the search hot path
+    /// allocation-free.
+    pub cells: [(usize, usize); 4],
 }
 
 /// Is the piece at bounding-box top-left (row, col) collision-free?
@@ -293,28 +449,56 @@ pub fn hard_drop_with(
 ) -> Option<Placement> {
     let rest = match rule {
         DropRule::DeepestFit => (0..HEIGHT).rev().find(|&row| fits(board, cells, row, col)),
-        DropRule::FromTop => {
-            if !fits(board, cells, 0, col) {
-                return None;
-            }
-            let mut row = 0;
-            while row + 1 < HEIGHT && fits(board, cells, row + 1, col) {
-                row += 1;
-            }
-            Some(row)
-        }
+        DropRule::FromTop => from_top_rest(board, cells, col).map(|r| r as usize),
     }?;
     Some(Placement {
         rot: 0, // caller owns the rotation index
         col,
         row: rest,
         cells: {
-            let mut v: Vec<(usize, usize)> =
-                cells.iter().map(|&(dy, dx)| (rest + dy, col + dx)).collect();
+            let mut v = [(0usize, 0usize); 4];
+            for (dst, &(dy, dx)) in v.iter_mut().zip(cells.iter()) {
+                *dst = (rest + dy, col + dx);
+            }
             v.sort_unstable();
             v
         },
     })
+}
+
+/// FromTop rest row from per-column occupancy masks instead of the
+/// row-by-row descent scan: each piece cell is blocked by the FIRST
+/// occupied row at or below its spawn row (`trailing_zeros` over the
+/// column mask), and the piece rests one row above its first collision.
+/// Returns `None` when the spawn itself is blocked (`min room <= 0`).
+/// Bit-identical to the descent scan in `hard_drop_with` (pinned by the
+/// equivalence tests below) — a plain heights shortcut is WRONG under
+/// overhangs (the shadow below a floating cell is open).
+fn from_top_rest(board: &Board, cells: &[(usize, usize)], col: usize) -> Option<u8> {
+    let mut masks = [0u32; WIDTH];
+    for (c, m) in masks.iter_mut().enumerate() {
+        let mut v = 0u32;
+        for r in 0..HEIGHT {
+            if board.cell(r, c) {
+                v |= 1 << r;
+            }
+        }
+        *m = v;
+    }
+    let mut min_room = isize::MAX;
+    for &(dy, dx) in cells {
+        let below = masks[col + dx] & !((1u32 << dy) - 1); // rows ≥ dy
+        let first_occ = if below == 0 {
+            HEIGHT as u32
+        } else {
+            below.trailing_zeros()
+        };
+        let room = first_occ as isize - dy as isize;
+        if room < min_room {
+            min_room = room;
+        }
+    }
+    (min_room > 0).then_some((min_room - 1) as u8)
 }
 
 /// Enumerate every distinct hard-drop landing for `piece` on `board` under
@@ -326,18 +510,71 @@ pub fn landing_options(board: &Board, piece: Piece) -> Vec<Placement> {
 }
 
 /// [`landing_options`] under an explicit drop rule (same pinned order).
+/// FromTop takes the heights-based fast path (no per-option descent scan);
+/// DeepestFit keeps the scan (fixture-fidelity lane).
 pub fn landing_options_with(board: &Board, piece: Piece, rule: DropRule) -> Vec<Placement> {
     let mut out = Vec::with_capacity(34);
-    for (ri, cells) in piece.rotations().iter().enumerate() {
-        let width = cells.iter().map(|&(_, dx)| dx).max().unwrap_or(0) + 1;
-        for col in 0..=(WIDTH - width) {
-            if let Some(mut p) = hard_drop_with(board, cells, col, rule) {
-                p.rot = ri;
-                out.push(p);
+    match rule {
+        DropRule::FromTop => {
+            // Per-column occupancy masks: bit r set ⇔ (r, c) occupied. The
+            // FromTop rest row needs, per piece cell, the FIRST occupied row
+            // at or below the cell's spawn row — a heights shortcut is wrong
+            // under overhangs (the shadow below a floating cell is open).
+            let mut masks = [0u32; WIDTH];
+            for (c, m) in masks.iter_mut().enumerate() {
+                let mut v = 0u32;
+                for r in 0..HEIGHT {
+                    if board.cell(r, c) {
+                        v |= 1 << r;
+                    }
+                }
+                *m = v;
+            }
+            for (ri, form) in rotations_static(piece).iter().enumerate() {
+                for col in 0..=(WIDTH - form.width) {
+                    let mut min_room = isize::MAX;
+                    for &(dy, dx) in &form.cells {
+                        let below = masks[col + dx] & !((1u32 << dy) - 1); // rows ≥ dy
+                        let first_occ = if below == 0 {
+                            HEIGHT as u32
+                        } else {
+                            below.trailing_zeros()
+                        };
+                        let room = first_occ as isize - dy as isize;
+                        if room < min_room {
+                            min_room = room;
+                        }
+                    }
+                    if min_room <= 0 {
+                        continue; // spawn blocked — no v3 landing here
+                    }
+                    let rest = (min_room - 1) as usize;
+                    let mut cells = [(0usize, 0usize); 4];
+                    for (dst, &(dy, dx)) in cells.iter_mut().zip(&form.cells) {
+                        *dst = (rest + dy, col + dx);
+                    }
+                    cells.sort_unstable();
+                    out.push(Placement {
+                        rot: ri,
+                        col,
+                        row: rest,
+                        cells,
+                    });
+                }
+            }
+        }
+        _ => {
+            for (ri, cells) in piece.rotations().iter().enumerate() {
+                let width = cells.iter().map(|&(_, dx)| dx).max().unwrap_or(0) + 1;
+                for col in 0..=(WIDTH - width) {
+                    if let Some(mut p) = hard_drop_with(board, cells, col, rule) {
+                        p.rot = ri;
+                        out.push(p);
+                    }
+                }
             }
         }
     }
-    out.shrink_to_fit();
     out
 }
 
@@ -429,21 +666,25 @@ pub fn outcome_features(board: &Board, p: &Placement) -> OutcomeFeatures {
     for c in 0..WIDTH {
         let h = heights[c];
         let left = if c == 0 { usize::MAX } else { heights[c - 1] };
-        let right = if c == WIDTH - 1 { usize::MAX } else { heights[c + 1] };
+        let right = if c == WIDTH - 1 {
+            usize::MAX
+        } else {
+            heights[c + 1]
+        };
         if left > h && right > h {
             let d = left.min(right) - h;
             cumulative_wells += (d * (d + 1) / 2) as u32;
         }
     }
 
-    let eroded_cells = p
+    let eroded_cells = p.cells.iter().filter(|&&(r, _)| full.contains(&r)).count() as u32;
+
+    let landing_height = p
         .cells
         .iter()
-        .filter(|&&(r, _)| full.contains(&r))
-        .count() as u32;
-
-    let landing_height =
-        p.cells.iter().map(|&(r, _)| (HEIGHT - r) as f32).sum::<f32>() / p.cells.len() as f32;
+        .map(|&(r, _)| (HEIGHT - r) as f32)
+        .sum::<f32>()
+        / p.cells.len() as f32;
 
     OutcomeFeatures {
         lines_cleared: full.len() as u32,
@@ -467,8 +708,8 @@ pub const DELLACHERIE_WEIGHTS: [f32; 6] = [
     -4.500_158_3, // landing height
     3.418_126_8,  // eroded piece cells
     -3.217_888_4, // row transitions
-    -9.348_696,  // col transitions
-    -7.899_265_3,  // holes
+    -9.348_696,   // col transitions
+    -7.899_265_3, // holes
     -3.385_597_2, // cumulative wells
 ];
 
@@ -670,7 +911,9 @@ pub fn render_spot_sentence(board: &Board, p: &Placement, f: &OutcomeFeatures) -
         3 => ", and clears three lines",
         _ => ", and clears four lines",
     };
-    format!("The piece {holes_clause} under it {side_clause}, {surface_clause}, and {height_clause}{clears_clause}.")
+    format!(
+        "The piece {holes_clause} under it {side_clause}, {surface_clause}, and {height_clause}{clears_clause}."
+    )
 }
 
 /// The state context sentence (board-level facts, all in words — the lanes
@@ -780,13 +1023,222 @@ mod tests {
             let a = landing_options(&Board::empty(), piece);
             let b = landing_options_with(&Board::empty(), piece, DropRule::FromTop);
             assert_eq!(a.len(), b.len());
-            assert!(a.iter().zip(&b).all(|(x, y)| x.row == y.row && x.cells == y.cells));
+            assert!(
+                a.iter()
+                    .zip(&b)
+                    .all(|(x, y)| x.row == y.row && x.cells == y.cells)
+            );
         }
         // A blocked top row: no v3 landing in that column.
         let mut b = Board::empty();
         b.place(&[(0, 0), (1, 0)]);
         let cells = Piece::O.rotations()[0].clone();
         assert!(hard_drop_with(&b, &cells, 0, DropRule::FromTop).is_none());
+    }
+
+    #[test]
+    fn from_top_fast_path_is_bit_identical_to_the_descent_scan() {
+        // Independent reference: the ORIGINAL row-by-row descent, inlined
+        // (reaches no shared helper — immune to implementation drift).
+        let scan_rest = |board: &Board, cells: &[(usize, usize); 4], col: usize| -> Option<usize> {
+            let fits_at = |row: usize| {
+                cells.iter().all(|&(dy, dx)| {
+                    let r = row + dy;
+                    let c = col + dx;
+                    c < WIDTH && r < HEIGHT && !board.cells[r][c]
+                })
+            };
+            if !fits_at(0) {
+                return None;
+            }
+            let mut row = 0usize;
+            while row + 1 < HEIGHT && fits_at(row + 1) {
+                row += 1;
+            }
+            Some(row)
+        };
+        let mut boards = vec![
+            Board::empty(),
+            garbage_like(7, 55),
+            garbage_like(8, 75),
+            garbage_like(9, 90),
+        ];
+        let mut x = 0x243F6A8885A308D3u64;
+        for _ in 0..3000 {
+            let p = 30 + (x % 60);
+            let mut b = Board::empty();
+            for r in 0..HEIGHT {
+                for c in 0..WIDTH {
+                    x ^= x << 13;
+                    x ^= x >> 7;
+                    x ^= x << 17;
+                    if x % 100 < p {
+                        b.cells[r][c] = true;
+                    }
+                }
+            }
+            boards.push(b);
+        }
+        for board in &boards {
+            for piece in Piece::ALL {
+                let fast = landing_options_with(board, piece, DropRule::FromTop);
+                let forms = rotations_static(piece);
+                let mut mism = String::new();
+                let mut n = 0usize;
+                for (ri, form) in forms.iter().enumerate() {
+                    for col in 0..=(WIDTH - form.width) {
+                        match scan_rest(board, &form.cells, col) {
+                            Some(rest) => {
+                                if n < fast.len()
+                                    && fast[n].rot == ri
+                                    && fast[n].col == col
+                                    && fast[n].row == rest
+                                {
+                                    n += 1;
+                                } else if mism.is_empty() {
+                                    mism = format!(
+                                        "{piece:?} rot {ri} col {col}: fast {:?} vs scan rest {rest}",
+                                        fast.get(n)
+                                    );
+                                }
+                            }
+                            None => {
+                                if mism.is_empty()
+                                    && n < fast.len()
+                                    && fast[n].rot == ri
+                                    && fast[n].col == col
+                                {
+                                    mism = format!(
+                                        "{piece:?} rot {ri} col {col}: fast has a placement, scan says blocked"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                if fast.len() != n + usize::from(!mism.is_empty()) {
+                    eprintln!(
+                        "COUNT MISMATCH {piece:?}: fast {} scan-side {} mism: {}",
+                        fast.len(),
+                        n,
+                        mism
+                    );
+                    for row in board.to_strings() {
+                        eprintln!("  {row}");
+                    }
+                    eprintln!("  heights: {:?}", board.heights());
+                    for (ri, form) in forms.iter().enumerate() {
+                        eprintln!("  rot {ri} cells {:?} w {}", form.cells, form.width);
+                    }
+                }
+                assert_eq!(
+                    fast.len(),
+                    n + usize::from(!mism.is_empty()),
+                    "count {piece:?}"
+                );
+                assert!(
+                    mism.is_empty(),
+                    "board:\n{:?}\n{}",
+                    board.to_strings(),
+                    mism
+                );
+            }
+        }
+    }
+
+    /// A garbage-shaped board (deterministic, for the equivalence walk).
+    fn garbage_like(seed: u64, fill_pct: u64) -> Board {
+        let mut x = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        let mut b = Board::empty();
+        for r in HEIGHT.saturating_sub(18)..HEIGHT {
+            for c in 0..WIDTH {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                if x % 100 < fill_pct {
+                    b.cells[r][c] = true;
+                }
+            }
+        }
+        b
+    }
+
+    #[test]
+    fn scan_matches_the_per_feature_walks() {
+        let mut boards = vec![
+            Board::empty(),
+            garbage_like(7, 55),
+            garbage_like(8, 75),
+            garbage_like(9, 90),
+        ];
+        let mut x = 0x9E37_79B9_7F4A_7C15u64;
+        for _ in 0..2000 {
+            let p = 25 + (x % 70);
+            let mut b = Board::empty();
+            for r in 0..HEIGHT {
+                for c in 0..WIDTH {
+                    x ^= x << 13;
+                    x ^= x >> 7;
+                    x ^= x << 17;
+                    if x % 100 < p {
+                        b.cells[r][c] = true;
+                    }
+                }
+            }
+            boards.push(b);
+        }
+        for b in &boards {
+            let s = b.scan();
+            assert_eq!(s.heights, b.heights(), "heights");
+            assert_eq!(s.holes as usize, b.hole_count(), "holes");
+            // row/col transitions vs the reference walks (the lookahead/
+            // rulebook wall conventions).
+            let mut row_t = 0u32;
+            for r in 0..HEIGHT {
+                let mut prev = true;
+                for c in 0..WIDTH {
+                    let cur = b.cell(r, c);
+                    if cur != prev {
+                        row_t += 1;
+                    }
+                    prev = cur;
+                }
+                if !prev {
+                    row_t += 1;
+                }
+            }
+            let mut col_t = 0u32;
+            for c in 0..WIDTH {
+                let mut prev = false;
+                for r in 0..HEIGHT {
+                    let cur = b.cell(r, c);
+                    if cur != prev {
+                        col_t += 1;
+                    }
+                    prev = cur;
+                }
+                if !prev {
+                    col_t += 1;
+                }
+            }
+            assert_eq!(s.row_trans, row_t, "row_trans");
+            assert_eq!(s.col_trans, col_t, "col_trans");
+            // hole cover vs the rulebook walk (filled above each hole).
+            let h = s.heights;
+            let mut cover = 0usize;
+            for c in 0..WIDTH {
+                let top = HEIGHT - h[c];
+                let mut filled_above = 0usize;
+                for r in top..HEIGHT {
+                    if b.cell(r, c) {
+                        filled_above += 1;
+                    } else {
+                        cover += filled_above;
+                    }
+                }
+            }
+            assert_eq!(s.hole_cover as usize, cover, "hole_cover");
+        }
     }
 
     #[test]

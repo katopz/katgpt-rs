@@ -120,7 +120,7 @@ pub fn recompute_and_verify(st: &FixtureState) -> Result<Recomputed, String> {
     }
     let mut spot_sentences = Vec::with_capacity(options.len());
     for (p, fo) in options.iter().zip(&st.options) {
-        if p.rot != fo.rot || p.col != fo.col || p.row != fo.row || p.cells != fo.cells {
+        if p.rot != fo.rot || p.col != fo.col || p.row != fo.row || p.cells[..] != fo.cells[..] {
             return Err(format!(
                 "{}: placement drifted at rot {} col {}",
                 st.state_id, fo.rot, fo.col
@@ -226,7 +226,7 @@ pub fn play_game(
         };
         let pick = policy(&re);
         let mut after = re.board.clone();
-        let cells = re.options[pick].cells.clone();
+        let cells = re.options[pick].cells;
         after.place(&cells);
         let full = after.full_rows();
         cleared += full.len() as u32;
