@@ -1,6 +1,6 @@
 # Bench 895 — fitted token-value table primitives (Issue 883 P1–P4, primitive half)
 
-**Status:** P1/P2/P3 primitives LANDED, **OPT-IN**. G1/G3/G4 pass on every arm. **Two G2 bars FAILED and are recorded as failed:** P1's fused dequant+restore costs +4.8–5.2% against a ≤ +1% bar, and P3's reconstruct-from-K costs 14–15× against a ≤ 1.00× bar. P2 G2 passes. This bench makes no model-level quality claim; that half is riir-infer Issue 013.
+**Status:** P1/P2/P3 primitives LANDED, **OPT-IN**. G1/G3/G4 pass on every arm. **Two G2 bars FAILED and are recorded as failed:** P1's fused dequant+restore costs +4.8–5.2% against a ≤ +1% bar, and P3's reconstruct-from-K costs 14–15× against a ≤ 1.00× bar. P2 G2 passes. P1 G2 was re-attempted with the dequant-fold lever and **still fails** (see the addendum at the end; the original figures below are unchanged). This bench makes no model-level quality claim; that half is riir-infer Issue 013.
 
 - **Issue:** [883](../.issues/883_fitted_value_anchor_tables.md) · **Research:** [587](../.research/587_Memory_Attention_Fitted_Token_Value_Tables.md) · **Substrate:** Bench 886 (`fitted_anchor_table.rs`, P0) · **Model-bound G1:** riir-infer Issue 013
 - **Features:** `fitted_value_tables` (P1+P2, implies `fitted_anchor_tables`) · `fitted_v_reconstruct` (P3, implies `fitted_value_tables` + `position_group_action`). katgpt-kv forwards `fitted_value_tables` so P1 is gated against the real KVarN backend.
@@ -117,3 +117,56 @@ This is the dashboard's go/no-go made quantitative. On this law, gemma-2-2b's me
 - **P3:** the reconstruction is exact to 1.8ε, the kill switch is bitwise, and trap 2 is pinned. G2 FAILED at 14–15× with the shipped `RopeAction`; a cheap-angle rotation kernel is the named missing piece.
 - **P4:** the FLOP law is verified; the saving is byte-shaped, not FLOP-shaped. The storage dial and the 50%/GQA law are recorded.
 - **All four stay OPT-IN.** No model-level quality claim is made. PPL at matched bits, the per-family retention walk, the K=V+ λ ladder with NIAH, and tg128 KV bytes/token all belong to riir-infer Issue 013.
+
+## Addendum — 2026-09-25: the dequant-fold lever (P1 G2 re-attempt)
+
+**Verdict: P1 G2 still FAILS.** The lever named above, folding the table-row add-back into KVarN's own dequant epilogue, is slower than the shipped axpy-epilogue form in every variant tried. It was committed so it can be reproduced (`60f1e7baa`) and then reverted (`a24112aa7`). The bar stays at ≤ +1%. The original P1 G2 table above is unchanged.
+
+**What was tried (`60f1e7baa`).** `QuantizedKVCache::dequantize_value_add_into(layer, pos, out, bias)` was added to `katgpt-types` as a trait method whose default dequantizes and then does one f32 `+` per element, so every other backend compiles unchanged. KVarN overrode it with a const-generic `dequantize_value_impl::<BIAS>` that appends `+ bias[ch]` to each bit-width's epilogue, falling back to two passes when Hadamard is on. `MeanRemovedValueCache::{dequantize_value_into, accumulate_value}` routed through it. There was no existing `dequant…add` / `_with_bias` spelling to reuse: `git grep` found only the per-backend `dequantize_value_into` and an unrelated `route_with_bias`.
+
+**New gates, kept after the revert.**
+- **G3b** checks a non-zero table: the decorated read and `accumulate_value` must match plain dequant followed by the unfused `+ E[s]` / `w·(x + m)` **bitwise**, at bits 2, 4 and 8 and with Hadamard. Every fold of the add-back into a backend epilogue now has to pass it.
+- **Three G2 REPORT arms:**
+  - an **A/A** control (a second plain cache), which measures the protocol's floor on this box;
+  - **lookup-only** (a miss table), which isolates the per-position token → row resolution;
+  - **deferred restore**, the next lever, described below.
+
+**Box state.** M3 Max, 64 GiB, AC power, battery 100% charged, `powermode 2`. Swap was 1078.44 / 2048 MiB used (1070.44 MiB in the last block). Other agent sessions were running throughout. Each figure is an `ab_median_ratio` median (21 rounds × 10 iters, 3 warm-up), built with `--release`, with `black_box` on the weight argument and on the accumulator sink. Free RAM comes from `vm_stat` and load is the 1-minute average; both were read immediately before each run.
+
+**The fold, bit-identical (`60f1e7baa` tree). FAIL 3/3.**
+
+| run | free / load | **fused / plain** | two-pass read | A/A | lookup-only | deferred |
+|---|---|---|---|---|---|---|
+| 1 | 1.38 GiB / 24.4 | **1.1392** | 1.1380 | 0.9977 | 1.0119 | 1.0373 |
+| 2 | 2.41 GiB / 28.5 | **1.1388** | 1.1409 | 0.9986 | 1.0121 | 1.0154 |
+| 3 | 2.26 GiB / 29.0 | **1.1425** | 1.0353 | 1.0006 | 1.0135 | 1.0184 |
+
+G3, G3b and G4 all pass: 0 differing elements and 0 allocations. The fold is exact, but at **+13.9–14.2%** it is nearly 3× the shipped +4.8–5.3%.
+
+**Working-tree probes (not committed).**
+- **FMA-contracted fold.** The var-norm epilogues became `(fma(q,s,zp)·s_col).mul_add(var_row, e)`, which replaces a multiply instead of adding an op. This is `scale·q + (zero + E)` in the only place the add can be absorbed: every var-norm arm multiplies after the affine term, so `E` cannot go into `zp`.
+  - Timings: **1.0864 / 1.0941 / 1.0057** (free 1.41 / 1.17 / 1.69 GiB, load 39.3 / 40.2 / 40.2). The third run sat inside a 0.49–1.97 per-round band at a plain pass of 686 µs, so the box was thrashing.
+  - Bit-identity: it **breaks G3b** at bits 4 and 8, with 154,225 and 153,932 of 524,288 read elements differing, and 89 and 105 of 128 accumulate elements. The 2-bit and Hadamard arms stay bitwise, because their epilogues have no trailing multiply to contract.
+  - A ULP bound was not pinned, because the variant loses on both axes. For the record, per element the difference is bounded by `½ε·(|rnd(t·v)| + |u| + |f|)` (ε = `f32::EPSILON`), where `u` is the unfused result and `f` the fused one.
+- **Zip-vectorized 4-bit loop.** The 4-bit full-pair loop was rewritten as `chunks_exact` zips with no bounds checks, keeping the same per-element ops in the same order. G3b passes on the new kernel.
+  - **The plain pass drops from 494–531 µs to 156–162 µs, i.e. 3.2× faster.** This is a finding in its own right: the shipped KVarN 4-bit value dequant is scalar. It is filed as its own issue: [Issue 894](../.issues/894_kvarn_value_dequant_4bit_scalar_loop.md).
+  - On that kernel, though, the fold costs **1.2777 / 1.2779 / 1.2889** (free 1.20 / 0.94 / 1.10 GiB, load 38.0 / 35.7 / 37.3). Deferred restore costs +3.1–3.3% and lookup-only +1.6–3.5%.
+  - The effect runs against the bar: vectorizing the backend shrinks the denominator, so every per-position cost the restore adds becomes a larger share of it.
+
+**The shipped form, re-measured after the revert (`a24112aa7` tree).**
+
+| run | free / load | **fused / plain** (plain µs) | two-pass read | A/A | lookup-only | deferred |
+|---|---|---|---|---|---|---|
+| 1 | 5.68 GiB / 34.7 | **1.0480** (436.5) | 1.1219 | 0.9947 | 1.0248 | 1.0197 |
+| 2 | 5.67 GiB / 32.8 | **1.0464** (459.0) | 1.1206 | 0.9966 | 1.0284 | 1.0211 |
+| 3 | 6.00 GiB / 32.8 | **1.0491** (510.7) | 1.1176 | 0.9941 | 1.0249 | 1.0146 |
+
+This reproduces the original +4.8–5.2% at a heavier load, with the A/A floor at −0.3 to −0.6%.
+
+**Where the cost lives, and the next lever.**
+- **Scalar loops pay more for the add.** An extra load and add per element costs more inside a scalar, bounds-checked dequant loop (+13.9%) than inside the vectorized axpy (+4.8%). The recorded lever put the add in the wrong loop.
+- **The lookup alone breaks the bar.** The per-position token → row resolution, with no add at all, costs **+1.2–2.8%**, measured as a decorator whose table misses everything. So no restore that resolves a row per position inside the V loop can reach ≤ +1% on this kernel, and the vectorized kernel makes it worse.
+- **Next lever: deferred restore by linearity.** The aggregation is linear, so `Σ_p w_p·(v̂_p + E[s_p]) = Σ_p w_p·v̂_p + Σ_s W_s·E[s]` with `W_s = Σ_{p: s_p=s} w_p`. The V loop becomes exactly the plain loop plus one scalar bucket add per position, and each table row is read once per distinct token at the end. The test-local probe uses a pre-resolved per-position index (one load, not the decorator's two-level lookup) and measures **+2.0 / +2.1 / +1.5%** on the shipped kernel. That is the closest any form has come, and it still FAILS.
+  - The remaining scalar add belongs in the consumer's softmax-weight loop, which already walks every position. That is the model-level decode kernel, i.e. riir-infer Issue 013.
+  - This lever is **not bit-identical**, because it reassociates the sum. A ship candidate must pin a stated bound, for example the recursive-summation bound `2γ_{T+2}·Σ_p |w_p|(|v̂_p| + |E[s_p]|)`, and must keep the miss / E=0 path bitwise.
+- **The lever that was tried is demoted.** P1 stays OPT-IN, and the G2 bar is unchanged.
