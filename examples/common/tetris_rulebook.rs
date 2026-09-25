@@ -719,8 +719,26 @@ fn best_value(
     best
 }
 
-/// Choose a decision under genome `g`. `None` = top out.
+/// Choose a decision under genome `g`. `None` = top out. The first
+/// (candidate order, then option order) strict maximum of
+/// [`decide_scored`]'s root values.
 pub fn decide(g: &Genome, v: &View) -> Option<Decision> {
+    let mut best: Option<(Decision, f64)> = None;
+    for (d, val) in decide_scored(g, v) {
+        if best.is_none_or(|(_, bv)| val > bv) {
+            best = Some((d, val));
+        }
+    }
+    best.map(|(d, _)| d)
+}
+
+/// Every root decision with its searched value, in candidate order (no-hold
+/// first, then the hold swap) and, within a candidate, in
+/// `landing_options_with(board, piece, FromTop)` order. Empty = top out.
+/// [`decide`] is exactly the first strict argmax of this vector — exposed so
+/// a recorder can show the per-option values behind the pick (the
+/// reflex-site walk, `examples/tetris_09_site_walk.rs`).
+pub fn decide_scored(g: &Genome, v: &View) -> Vec<(Decision, f64)> {
     let mode = g.mode_of(v.board);
     let plies = g.plies();
     let hold_on = g.on(RuleId::HoldQueue) && v.hold_ready;
@@ -736,7 +754,7 @@ pub fn decide(g: &Genome, v: &View) -> Option<Decision> {
             None => cands.push((true, v.next, None, Some(v.cur))),
         }
     }
-    let mut best: Option<(Decision, f64)> = None;
+    let mut scored: Vec<(Decision, f64)> = Vec::new();
     for (use_hold, piece, after, held_after) in cands {
         let opts = landing_options_with(v.board, piece, DropRule::FromTop);
         for (i, p) in opts.iter().enumerate() {
@@ -761,13 +779,10 @@ pub fn decide(g: &Genome, v: &View) -> Option<Decision> {
                     }
                 }
             };
-            let d = Decision { use_hold, index: i };
-            if best.is_none_or(|(_, bv)| val > bv) {
-                best = Some((d, val));
-            }
+            scored.push((Decision { use_hold, index: i }, val));
         }
     }
-    best.map(|(d, _)| d)
+    scored
 }
 
 /// The harness-signature adapter (`fn(&Board, cur, next) -> Option<usize>`,

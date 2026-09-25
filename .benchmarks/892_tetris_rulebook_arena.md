@@ -158,6 +158,29 @@ later regresses. `climb` is the delta-gated proposer; `enum` is the
 enumerative (ruliology) census; `ladder_gate` (katgpt-core, Issue 887) is
 the natural curriculum gate over garbage depth when a loop consumes this.
 
+## Site walk — the champion on the reflex-site's seed-607 stream (`tetris_09_site_walk`)
+
+`examples/tetris_09_site_walk.rs` replays the champion (no hold, preview,
+`FromTop`, empty board, cap 300) on the reflex-site's OWN piece stream,
+ported bit-exactly (fastrand 2.4.1 `u32(..n)` = the site's `u32Below`):
+parity proven for the first **1001** pieces of both site streams (JS
+`assets/games` vs Rust, byte-identical). Merged into
+`reflex-site/arena/demo_oracle.json` as `tetris_rulebook_walk` +
+`_meta.sources.tetris_rulebook` by `scripts/merge_rulebook_walk.mjs`, which
+chain-replays every row through the site's `buildTurn` first; the site's
+`arena_demo_check.mjs` re-verifies it every run.
+
+| stream (seed 607) | pieces | lines | tetrises | points | topped out | p50 ms/decision |
+|---|---:|---:|---:|---:|---|---:|
+| `PieceBag` — live boards (**merged**) | 300 | 114 | 19 | 24,420 | no | 3.65 |
+| `PIECES[u32Below(7)]` — the recorded laya/head/raw/python walks | 300 | 115 | 15 | 20,600 | no | 6.23 |
+
+Uniform stream, first 60 pieces (laya's recorded game length): 1,640 pts /
+14 lines vs laya (Rust) 520 / 8. M3, AC + `powermode 2`, load avg 4.56 / 4.07 / 4.33,
+`--release`; the ms is in-process search time (no transport). `decide`
+unchanged: `decide_scored` exposes the root values, `decide` = its first
+strict argmax (asserted every turn; `anchor` 5/5 identical).
+
 ## Reproduce
 
 ```sh
