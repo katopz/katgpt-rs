@@ -26,11 +26,15 @@
 //!   cargo build --release --features kvarn 2>/dev/null && ls -la target/release/katgpt-rs
 //!   The two binary sizes should be identical when kvarn is off by default.
 
+mod dequant;
+#[cfg(test)]
+mod dequant_oracle_tests;
 pub mod eval;
 pub mod hadamard;
 pub mod kv_cache;
 pub mod var_norm;
 
+pub use dequant::{KVarNKeyColView, KVarNValueRowView};
 pub use eval::pseudo_decode_eval;
 pub use kv_cache::{
     KVarNKVCache, pack_value, packed_bytes_per_row, rtn_quantize_rows, rtn_quantize_rows_grouped,

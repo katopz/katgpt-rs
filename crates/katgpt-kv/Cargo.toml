@@ -144,6 +144,14 @@ name = "bench_895_mean_removed_v_quant_goat"
 harness = false
 required-features = ["kvarn", "fitted_value_tables"]
 
+# Issue 894 — KVarN dequant kernels as bounds-check-free zips: G3 old-vs-new
+# bitwise (the pre-894 loops kept verbatim in tests/common/kvarn_dequant_oracle.rs),
+# G4 0 allocs, G2 paired interleaved new/old on the plain dequant+axpy pass.
+[[test]]
+name = "bench_894_kvarn_dequant_zip_goat"
+harness = false
+required-features = ["kvarn"]
+
 # Issue 800 Arm B1 — lock-free slot-flip PoC bench. harness = false: the PoC
 # prints its own results table + the B2 decision-gate verdict (it is not a
 # criterion bench). Standalone: uses only std, no new deps, and does not

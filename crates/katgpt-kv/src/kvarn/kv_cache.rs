@@ -11,6 +11,7 @@
 
 #![allow(clippy::needless_range_loop)]
 
+use super::dequant::{KVarNKeyColView, KVarNValueRowView, dequant_key_col, dequant_value_row};
 use super::hadamard;
 use super::var_norm::{VarNormConfig, VarianceNormScales, variance_normalize_into_scales};
 
@@ -419,93 +420,77 @@ impl KVarNKVCache {
         }
     }
 
-    /// Dequantize key into pre-allocated buffer (zero-alloc hot path).
-    pub fn dequantize_key_into(&mut self, layer: usize, pos: usize, out: &mut [f32]) {
-        debug_assert_eq!(out.len(), self.kv_dim);
+    /// Inputs of one key-column dequant, or `None` if the tile is empty.
+    ///
+    /// Read-only view of exactly what [`Self::dequantize_key_into`] feeds its
+    /// kernel (Issue 894) — the seam the bit-identity oracle and the paired
+    /// A/B gate drive the pre-894 loops through. Hadamard is NOT applied here.
+    #[inline]
+    pub fn key_col_view(&self, layer: usize, pos: usize) -> Option<KVarNKeyColView<'_>> {
         let tile_idx = pos / self.tile_size;
         let pos_in_tile = pos % self.tile_size;
-
         let tile = &self.key_tiles[Self::tile_meta_idx(self.n_tiles, layer, tile_idx)];
         if tile.count == 0 {
-            out.fill(0.0);
-            return;
+            return None;
         }
-
         // Use actual tile cols for bpr (may differ for incomplete last tile)
         let actual_cols = tile.count.min(self.tile_size);
-        let bits = self.bits as usize;
-        let bpr = packed_bytes_per_row(actual_cols, self.bits);
-        let kv_dim = self.kv_dim;
+        let off = self.key_tile_off(layer, tile_idx);
+        Some(KVarNKeyColView {
+            quantized: &self.key_quantized[off..off + self.key_tile_packed_len],
+            bpr: packed_bytes_per_row(actual_cols, self.bits),
+            actual_cols,
+            rtn_scales: &tile.rtn_scales,
+            rtn_zp: &tile.rtn_zp,
+            s_row: &tile.var_scales.s_row,
+            var_col: tile.var_scales.s_col[pos_in_tile],
+            pos_in_tile,
+            kv_dim: self.kv_dim,
+            bits: self.bits,
+            skip_varn: self.skip_varn,
+            group_size: self.group_size,
+        })
+    }
 
-        let quantized_off = self.key_tile_off(layer, tile_idx);
-        let quantized =
-            &self.key_quantized[quantized_off..quantized_off + self.key_tile_packed_len];
+    /// Inputs of one value-row dequant, or `None` if the tile is empty.
+    ///
+    /// Read-only view of exactly what [`Self::dequantize_value_into`] feeds
+    /// its kernel (Issue 894); see [`Self::key_col_view`].
+    #[inline]
+    pub fn value_row_view(&self, layer: usize, pos: usize) -> Option<KVarNValueRowView<'_>> {
+        let tile_idx = pos / self.tile_size;
+        let pos_in_tile = pos % self.tile_size;
+        let tile = &self.val_tiles[Self::tile_meta_idx(self.n_tiles, layer, tile_idx)];
+        if tile.count == 0 {
+            return None;
+        }
+        let bpr = packed_bytes_per_row(self.kv_dim, self.bits);
+        let row_off = self.val_tile_off(layer, tile_idx) + pos_in_tile * bpr;
+        Some(KVarNValueRowView {
+            packed_row: &self.val_quantized[row_off..row_off + bpr],
+            rtn_scales: &tile.rtn_scales,
+            rtn_zp: &tile.rtn_zp,
+            s_col: &tile.var_scales.s_col,
+            var_row: tile.var_scales.s_row[pos_in_tile],
+            pos_in_tile,
+            kv_dim: self.kv_dim,
+            bits: self.bits,
+            skip_varn: self.skip_varn,
+            group_size: self.group_size,
+        })
+    }
 
-        // Precompute column-scale constant (same for all channels)
-        let var_col = tile.var_scales.s_col[pos_in_tile];
-        let rtn_scales = &tile.rtn_scales;
-        let rtn_zp = &tile.rtn_zp;
-        let s_row = &tile.var_scales.s_row;
-
-        // Specialized hot path per bit-width to avoid generic division/modulo.
-        // Inner loops use `mul_add` so `(q*s + zp)` becomes a single fused FMA.
-        match bits {
-            4 => {
-                // 4-bit: 2 values per byte, pos_in_tile determines nibble
-                let byte_off = pos_in_tile >> 1;
-                let shift = (pos_in_tile & 1) * 4;
-                let mask: u8 = 0x0F;
-                for ch in 0..kv_dim {
-                    let q = ((quantized[ch * bpr + byte_off] >> shift) & mask) as f32;
-                    let var_row = s_row[ch];
-                    out[ch] = q.mul_add(rtn_scales[ch], rtn_zp[ch]) * var_col * var_row;
-                }
-            }
-            2 => {
-                // 2-bit: 4 values per byte
-                let byte_off = pos_in_tile >> 2;
-                let shift = (pos_in_tile & 3) * 2;
-                let mask: u8 = 0x03;
-                if self.skip_varn {
-                    if self.group_size > 0 {
-                        // Grouped quantization: find group for this position
-                        let groups_per_row = actual_cols.div_ceil(self.group_size);
-                        let g = pos_in_tile / self.group_size;
-                        for ch in 0..kv_dim {
-                            let q = ((quantized[ch * bpr + byte_off] >> shift) & mask) as f32;
-                            let idx = ch * groups_per_row + g.min(groups_per_row - 1);
-                            out[ch] = q.mul_add(rtn_scales[idx], rtn_zp[idx]);
-                        }
-                    } else {
-                        for ch in 0..kv_dim {
-                            let q = ((quantized[ch * bpr + byte_off] >> shift) & mask) as f32;
-                            out[ch] = q.mul_add(rtn_scales[ch], rtn_zp[ch]);
-                        }
-                    }
-                } else {
-                    for ch in 0..kv_dim {
-                        let q = ((quantized[ch * bpr + byte_off] >> shift) & mask) as f32;
-                        let var_row = s_row[ch];
-                        out[ch] = q.mul_add(rtn_scales[ch], rtn_zp[ch]) * var_col * var_row;
-                    }
-                }
-            }
-            8 => {
-                // 8-bit: 1 value per byte, trivial
-                for ch in 0..kv_dim {
-                    let q = quantized[ch * bpr + pos_in_tile] as f32;
-                    let var_row = s_row[ch];
-                    out[ch] = q.mul_add(rtn_scales[ch], rtn_zp[ch]) * var_col * var_row;
-                }
-            }
-            _ => {
-                // Fallback: generic unpack
-                for ch in 0..kv_dim {
-                    let row_off = ch * bpr;
-                    let q = unpack_value(&quantized[row_off..row_off + bpr], pos_in_tile, bits);
-                    let var_row = s_row[ch];
-                    out[ch] = (q as f32).mul_add(rtn_scales[ch], rtn_zp[ch]) * var_col * var_row;
-                }
+    /// Dequantize key into pre-allocated buffer (zero-alloc hot path).
+    ///
+    /// Per-bit-width kernels live in `kvarn::dequant` (Issue 894: bounds-check-free
+    /// zip loops, bit-identical to the pre-894 indexed loops).
+    pub fn dequantize_key_into(&mut self, layer: usize, pos: usize, out: &mut [f32]) {
+        debug_assert_eq!(out.len(), self.kv_dim);
+        match self.key_col_view(layer, pos) {
+            Some(v) => dequant_key_col(&v, out),
+            None => {
+                out.fill(0.0);
+                return;
             }
         }
 
@@ -513,200 +498,45 @@ impl KVarNKVCache {
         // Hadamard is applied per-tile on the channel dimension (columns for keys,
         // rows for values). The dequantized output vector needs inverse Hadamard
         // to recover the original channel values.
-        if self.effective_hadamard && kv_dim.is_power_of_two() {
+        if self.effective_hadamard && self.kv_dim.is_power_of_two() {
             hadamard::hadamard_transform_inplace(out);
         }
     }
 
     /// Dequantize value into pre-allocated buffer (zero-alloc hot path).
+    ///
+    /// Per-bit-width kernels live in `kvarn::dequant` (Issue 894).
     pub fn dequantize_value_into(&mut self, layer: usize, pos: usize, out: &mut [f32]) {
         debug_assert_eq!(out.len(), self.kv_dim);
-        let tile_idx = pos / self.tile_size;
-        let pos_in_tile = pos % self.tile_size;
-
-        let tile = &self.val_tiles[Self::tile_meta_idx(self.n_tiles, layer, tile_idx)];
-        if tile.count == 0 {
+        // The generic-bits fallback needs `&mut scratch_unpack` while the view
+        // borrows the tile storage; `mem::take` of a Vec allocates nothing.
+        let mut scratch = std::mem::take(&mut self.scratch_unpack);
+        let hit = match self.value_row_view(layer, pos) {
+            Some(v) => {
+                dequant_value_row(&v, &mut scratch, out);
+                true
+            }
+            None => false,
+        };
+        self.scratch_unpack = scratch;
+        if !hit {
             out.fill(0.0);
             return;
         }
 
-        let bits = self.bits as usize;
-        let kv_dim = self.kv_dim;
-        let bpr = packed_bytes_per_row(kv_dim, self.bits);
-
-        let row_off = pos_in_tile * bpr;
-        let tile_off = self.val_tile_off(layer, tile_idx);
-        let packed_row = &self.val_quantized[tile_off + row_off..tile_off + row_off + bpr];
-
-        // Precompute row-scale constant (same for all channels in this row)
-        let var_row = tile.var_scales.s_row[pos_in_tile];
-        let rtn_scales = &tile.rtn_scales;
-        let rtn_zp = &tile.rtn_zp;
-        let s_col = &tile.var_scales.s_col;
-
-        // Specialized hot path per bit-width — inline unpack directly into dequant.
-        // Inner loops use `mul_add` so `(q*s + zp)` becomes a single fused FMA.
-        match bits {
-            4 => {
-                // 2 values per byte, dequant inline.
-                // Split into full-pair loop (branch-free) + odd tail to eliminate the
-                // per-iteration `if 2*i+1 < kv_dim` check on the common even-kv_dim path.
-                let rtn_scale = rtn_scales[pos_in_tile];
-                let rtn_zp_val = rtn_zp[pos_in_tile];
-                let full_pairs = kv_dim / 2;
-                for i in 0..full_pairs {
-                    let b = packed_row[i];
-                    let q0 = (b & 0x0F) as f32;
-                    out[2 * i] = q0.mul_add(rtn_scale, rtn_zp_val) * s_col[2 * i] * var_row;
-                    let q1 = (b >> 4) as f32;
-                    out[2 * i + 1] = q1.mul_add(rtn_scale, rtn_zp_val) * s_col[2 * i + 1] * var_row;
-                }
-                if kv_dim & 1 == 1 {
-                    let b = packed_row[full_pairs];
-                    let q0 = (b & 0x0F) as f32;
-                    out[2 * full_pairs] =
-                        q0.mul_add(rtn_scale, rtn_zp_val) * s_col[2 * full_pairs] * var_row;
-                }
-            }
-            2 => {
-                // 4 values per byte
-                if self.skip_varn {
-                    if self.group_size > 0 {
-                        // Grouped quantization: per-token, per-channel-group scales.
-                        //
-                        // Fast path: group_size == 4 means each byte covers exactly
-                        // one group (4 values / 4 = 1 byte per group). This is the
-                        // only configuration that sets group_size > 0 (see with_config:
-                        // `group_size: if cfg.bits <= 2 { 4 } else { 0 }`), so we can
-                        // specialize the branch-free inner loop. The original code
-                        // had 3 `if 4*i+k < kv_dim` checks per byte.
-                        debug_assert_eq!(
-                            self.group_size, 4,
-                            "group_size>0 implies group_size==4 at 2-bit"
-                        );
-                        let groups_per_row = kv_dim.div_ceil(self.group_size);
-                        let row_base = pos_in_tile * groups_per_row;
-                        let full_quads = kv_dim / 4;
-                        for i in 0..full_quads {
-                            let b = packed_row[i];
-                            let g = i.min(groups_per_row - 1);
-                            let idx = row_base + g;
-                            let scale = rtn_scales[idx];
-                            let zp = rtn_zp[idx];
-                            out[4 * i] = ((b & 0x03) as f32).mul_add(scale, zp);
-                            out[4 * i + 1] = (((b >> 2) & 0x03) as f32).mul_add(scale, zp);
-                            out[4 * i + 2] = (((b >> 4) & 0x03) as f32).mul_add(scale, zp);
-                            out[4 * i + 3] = (((b >> 6) & 0x03) as f32).mul_add(scale, zp);
-                        }
-                        // Tail: 0..=3 remaining values packed in the next byte,
-                        // all in the last group.
-                        let tail_start = 4 * full_quads;
-                        if tail_start < kv_dim {
-                            let b = packed_row[full_quads];
-                            let idx = row_base + (groups_per_row - 1);
-                            let scale = rtn_scales[idx];
-                            let zp = rtn_zp[idx];
-                            let shifts = [0u32, 2, 4, 6];
-                            for (j, &sh) in shifts.iter().enumerate() {
-                                let k = tail_start + j;
-                                if k >= kv_dim {
-                                    break;
-                                }
-                                out[k] = (((b >> sh) & 0x03) as f32).mul_add(scale, zp);
-                            }
-                        }
-                    } else {
-                        // Non-grouped: per-token scale
-                        let rtn_scale = rtn_scales[pos_in_tile];
-                        let rtn_zp_val = rtn_zp[pos_in_tile];
-                        // Branch-free over complete quads; tail handled separately.
-                        let full_quads = kv_dim / 4;
-                        for i in 0..full_quads {
-                            let b = packed_row[i];
-                            out[4 * i] = ((b & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val);
-                            out[4 * i + 1] =
-                                (((b >> 2) & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val);
-                            out[4 * i + 2] =
-                                (((b >> 4) & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val);
-                            out[4 * i + 3] =
-                                (((b >> 6) & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val);
-                        }
-                        let tail_start = 4 * full_quads;
-                        if tail_start < kv_dim {
-                            let tail_byte = packed_row[full_quads];
-                            let shifts = [0u32, 2, 4, 6];
-                            for (j, &sh) in shifts.iter().enumerate() {
-                                let idx = tail_start + j;
-                                if idx >= kv_dim {
-                                    break;
-                                }
-                                out[idx] = (((tail_byte >> sh) & 0x03) as f32)
-                                    .mul_add(rtn_scale, rtn_zp_val);
-                            }
-                        }
-                    }
-                } else {
-                    let rtn_scale = rtn_scales[pos_in_tile];
-                    let rtn_zp_val = rtn_zp[pos_in_tile];
-                    // Process complete quads branch-free, then handle the 0–3 elem tail.
-                    // Common case (kv_dim divisible by 4) skips all per-iter bounds checks.
-                    let full_quads = kv_dim / 4;
-                    for i in 0..full_quads {
-                        let b = packed_row[i];
-                        let q0 = (b & 0x03) as f32;
-                        out[4 * i] = q0.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i] * var_row;
-                        let q1 = ((b >> 2) & 0x03) as f32;
-                        out[4 * i + 1] =
-                            q1.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i + 1] * var_row;
-                        let q2 = ((b >> 4) & 0x03) as f32;
-                        out[4 * i + 2] =
-                            q2.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i + 2] * var_row;
-                        let q3 = ((b >> 6) & 0x03) as f32;
-                        out[4 * i + 3] =
-                            q3.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i + 3] * var_row;
-                    }
-                    // Tail: 0..=3 remaining elements packed in the next byte.
-                    // Only access packed_row[full_quads] if a tail actually exists.
-                    let tail_start = 4 * full_quads;
-                    if tail_start < kv_dim {
-                        let tail_byte = packed_row[full_quads];
-                        let shifts = [0u32, 2, 4, 6];
-                        for (j, &sh) in shifts.iter().enumerate() {
-                            let idx = tail_start + j;
-                            if idx >= kv_dim {
-                                break;
-                            }
-                            let q = ((tail_byte >> sh) & 0x03) as f32;
-                            out[idx] = q.mul_add(rtn_scale, rtn_zp_val) * s_col[idx] * var_row;
-                        }
-                    }
-                }
-            }
-            8 => {
-                let rtn_scale = rtn_scales[pos_in_tile];
-                let rtn_zp_val = rtn_zp[pos_in_tile];
-                for ch in 0..kv_dim {
-                    let q = packed_row[ch] as f32;
-                    out[ch] = q.mul_add(rtn_scale, rtn_zp_val) * s_col[ch] * var_row;
-                }
-            }
-            _ => {
-                // Fallback: batch unpack then dequant
-                let rtn_scale = rtn_scales[pos_in_tile];
-                let rtn_zp_val = rtn_zp[pos_in_tile];
-                let scratch = &mut self.scratch_unpack[..kv_dim];
-                unpack_row(packed_row, bits, scratch);
-                for ch in 0..kv_dim {
-                    let q = scratch[ch] as f32;
-                    out[ch] = q.mul_add(rtn_scale, rtn_zp_val) * s_col[ch] * var_row;
-                }
-            }
-        }
-
         // Inverse Hadamard on the output vector — see dequantize_key_into.
-        if self.effective_hadamard && kv_dim.is_power_of_two() {
+        if self.effective_hadamard && self.kv_dim.is_power_of_two() {
             hadamard::hadamard_transform_inplace(out);
         }
+    }
+
+    /// Test-only: force the quantize/dequant mode `with_config` derives from
+    /// `bits` (skip_varn = bits ≤ 2, group_size = 4 at ≤ 2 bits, else 0), so the
+    /// Issue 894 oracle can reach every dequant arm. Call before any store.
+    #[cfg(test)]
+    pub(crate) fn set_quant_mode_for_test(&mut self, skip_varn: bool, group_size: usize) {
+        self.skip_varn = skip_varn;
+        self.group_size = group_size;
     }
 
     /// Reset cache for a new sequence.
