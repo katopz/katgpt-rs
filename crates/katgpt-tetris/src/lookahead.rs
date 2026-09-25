@@ -3,11 +3,9 @@
 //! the owner's deep-well shaping, the depth-1/depth-2 pickers, the seeded
 //! 7-bag and the garbage-start board. One copy, so the POC, the rulebook
 //! arena (`tetris_06_rulebook_arena`) and the laya head-to-head
-//! (`tetris_07_laya_h2h`) all measure the SAME player.
-//!
-//! Include with `#[path = "common/tetris_lookahead.rs"] mod tetris_lookahead;`
-//! AFTER `#[path = "common/tetris_sim.rs"] mod tetris_sim;` (this module
-//! reaches the sim via `crate::tetris_sim`).
+//! (`tetris_07_laya_h2h`) all measure the SAME player. One crate copy since
+//! Issue 893 — the `#[path]` per-example inclusion era is over; this module
+//! reaches the sim via `crate::sim`.
 
 #![allow(dead_code)] // each example consumes a different slice
 

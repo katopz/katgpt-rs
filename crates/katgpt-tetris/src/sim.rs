@@ -2,9 +2,9 @@
 //! sentence grammar — the shared substrate of the Plan 607 game-decision
 //! arenas (`tetris_01_state_enum` T4a, `tetris_02_arena` T4).
 //!
-//! Included via `#[path]` by each example (the `tests/common/ab_timing.rs`
-//! precedent — `examples/common/` carries no `main.rs` so cargo never
-//! auto-discovers it as a target).
+//! Shipped as the `katgpt-tetris` leaf crate since Issue 893 (moved verbatim
+//! from `examples/common/`; examples import it via
+//! `use katgpt_tetris::sim as tetris_sim;`).
 //!
 //! ## The laya Tetris protocol (pinned grammar `laya-tetris-v1`)
 //!
