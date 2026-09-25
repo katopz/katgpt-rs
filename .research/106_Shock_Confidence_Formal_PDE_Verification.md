@@ -165,3 +165,5 @@ The prover's most valuable property: **it knows when it can't prove something** 
 - Code: https://github.com/ammarhakim/gkylcas/ (Racket), https://github.com/ammarhakim/gkylzero/ (C)
 - Related research: Research 088/104 (AlphaProof Nexus), Research 040 (Bradley-Terry ranking), Research 051 (Deep Manifold fixed-point boundaries)
 - Related plans: Plan 128 (proof sketch evolution), Plan 143 (Nexus Elo Plackett-Luce P-UCB)
+
+> **PASS-Redirects (synthesis):** Zenan Li, Kaiyu Yang, et al. [github.com/Lizn-zn/VeriTile @ 6619023b, MIT — "VeriTile: Formal Verification for Triton Kernels" (Lean 4.29+Mathlib, 2026-09-25)] — PASS: formal verification of numerical kernels at production scale with the same honest-scoping discipline this note prizes (345 headlines: 8 full-value / 296 specializations, disclosed in their completion audit); two-layer split (Real-arithmetic proof + empirical IEEE gap checker — IEEE-754 permanently outside proof scope) parallels this note's honest-failure finding; #specNonCircular/#stmtSurfaceSubset statement audits = the structural defense for the circular-spec class our SpecTests convention defends empirically.
