@@ -65,7 +65,7 @@ flowchart LR
 
 The honest floor every other lane is measured against.
 
-## 4 · KatGPT rulebook search — plan three pieces ahead
+## 4 · Reflexer (the rulebook search) — plan three pieces ahead
 
 The Issue 892 hybrid champion (genome `68cae9d382014662`): no model, no
 sentence — it searches placements and scores the boards with a strategy
@@ -73,7 +73,7 @@ rulebook.
 
 ```mermaid
 %% file: tetris_flow_rulebook.svg
-%% aria: KatGPT rulebook search: try every spot for the falling piece, every spot for the preview piece keeping the best six, then every piece still left in the bag; score each end board with the strategy rulebook, average over the unknown piece, take the best plan, and play its first move, in under a millisecond
+%% aria: Reflexer, the rulebook search: try every spot for the falling piece, every spot for the preview piece keeping the best six, then every piece still left in the bag; score each end board with the strategy rulebook, average over the unknown piece, take the best plan, and play its first move, in under a millisecond
 flowchart TB
     subgraph R1["look ahead"]
         direction LR
