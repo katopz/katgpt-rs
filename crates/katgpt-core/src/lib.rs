@@ -3507,6 +3507,20 @@ pub mod row_logit_floor;
 #[cfg(feature = "habituation_filter")]
 pub mod habituation_filter;
 
+/// Streak-gated difficulty-ladder advancement + corrective backtracking FSM
+/// (Issue 887 / Research 589, arXiv:2609.19717) — ATC's stage controller:
+/// advance iff held-out accuracy ≥ τ for m CONSECUTIVE evals (any sub-τ
+/// eval resets), and at the completing eval re-probe every passed stage —
+/// any regression retreats the pointer to the SHALLOWEST failing stage
+/// (argmin, never the most recent). Dwell dominance pinned as an ordering
+/// inequality ((0.9,5) ≥ (0.98,1) ≥ (0.9,1)); the probe-free `on_eval`
+/// path is the paper's collapse class (cannot red — pinned as the negative
+/// control). `rehearsal_frac` is consumer-facing (the trainer's preventive
+/// mix — the gate detects decay, it cannot prevent it). Zero deps,
+/// zero alloc. Opt-in (`ladder_gate`).
+#[cfg(feature = "ladder_gate")]
+pub mod ladder_gate;
+
 /// Exact-mass sigmoid admission (Issue 879 / Research 584, arXiv:2609.25518
 /// "Matryoshka attribution") — the calibrated-mass "sigmoid top-k": bisect
 /// τ until Σσ((s−τ)/T) = k, emit the soft mask mᵢ = σ((sᵢ−τ)/T). Sum-to-k,

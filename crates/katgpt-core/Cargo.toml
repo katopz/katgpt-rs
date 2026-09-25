@@ -983,6 +983,22 @@ row_logit_floor = []
 # rule.
 habituation_filter = []
 
+# ladder_gate (Issue 887 / Research 589, arXiv:2609.19717 ATC, 2026-09-25):
+# streak-gated difficulty-ladder advancement + corrective backtracking FSM —
+# advance iff held-out accuracy ≥ τ for m consecutive evals (any sub-τ resets;
+# dwell dominance: (0.9,5) > (0.98,1) > (0.9,1), pinned as an ordering test),
+# and at the completing eval re-probe every passed stage — a regression
+# retreats to the SHALLOWEST failing stage (argmin). The probe-free on_eval
+# path is the paper's collapse class (structurally cannot red — pinned as a
+# negative control); malformed probe slices fail closed to stage 1. λ
+# rehearsal_frac is consumer-facing (the trainer's preventive mix; the gate
+# detects decay, it cannot prevent it). Zero deps, zero alloc, #[repr(u8)]
+# actions. Consumers wire later (riir-clippy staging is doctrine-gated on
+# Issue 102's fade clock; riir-reflex cal cadence + riir-ai CGSP are config
+# consumers). OPT-IN — no production consumer yet; promotion waits on the
+# first consumer's GOAT (the 873/874/875 precedent).
+ladder_gate = []
+
 # state_option_scoring (Plan 607 T1, 2026-09-22): per-option centroid-cosine
 # scoring over a fixed option table + the pinned lowest-index argmax — the
 # game-decision lane's scoring primitive, upstreamed from riir-reflex Issue
@@ -2790,6 +2806,14 @@ required-features = ["gold_share_probe", "sink_aware_attn"]
 name = "bench_886_differential_anchor_goat"
 harness = false
 required-features = ["differential_anchor"]
+
+# Issue 887 (Research 589) — ladder_gate GOAT gate: G2 (probe-free ns-scale
+# O(1); retention path µs-scale, k64/k8 paired ratio bar 40× — linear scan)
+# + G4 (0 steady-state allocs over a driven ladder). run_in_bench = true.
+[[test]]
+name = "bench_887_ladder_gate_goat"
+harness = false
+required-features = ["ladder_gate"]
 
 # Issue 882 P1 — streaming attention-SNR accumulators GOAT gate (G1a
 # exactness vs f64 incl. the rising-max rescale path, G1b retrieval proxy +
