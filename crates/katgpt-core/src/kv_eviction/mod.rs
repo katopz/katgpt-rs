@@ -71,6 +71,14 @@ use crate::float_order;
 #[cfg(feature = "dying")]
 pub mod dying;
 
+// differential (Issue 882 P3): the keep-side score with the common mode
+// rejected — specificity_j = max over recent queries of (a_j − λ·μ_j), μ_j
+// the EMA of key j's attention mass; evict argmin, sinks exempt through
+// kv_sink_window's pin mask. λ = 0 is the max-recent baseline bit-for-bit.
+// OPT-IN (Bench 894; the model-bound needle@64K half is riir-infer Issue 012).
+#[cfg(feature = "differential_kv_eviction")]
+pub mod differential;
+
 /// Per-row usage bookkeeping. One row per live KV slot, per (batch, head);
 /// the caller owns the slot indexing.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -210,7 +218,14 @@ pub fn select_evict_into(scores: &[f32], k: usize, pinned: &[bool], out: &mut Ve
         // it). The sort key is looked up from `scores` — no tuple pairs, no
         // scratch allocation. Sorted unconditionally: the priority-order
         // contract holds even when k >= candidates.
-        out.sort_by(|&a, &b| {
+        //
+        // UNSTABLE on purpose (Bench 894 G4): the stable `sort_by` heap-
+        // allocates its merge scratch once the slice outgrows its on-stack
+        // buffer — measured 1 alloc per call at n = 4096, invisible to this
+        // module's own G4 test at n = 128. The comparator is a TOTAL order
+        // over distinct indices (the index tie-break), so the unstable sort
+        // yields the identical sequence and allocates nothing.
+        out.sort_unstable_by(|&a, &b| {
             float_order::cmp_for_min(scores[a], scores[b]).then(a.cmp(&b))
         });
     }

@@ -4968,3 +4968,41 @@ observe allocs, fit allocs = baseline.
 🔧 Feature flags: `act_channel_moments` (katgpt-core) · `act_aware_fit`
 (katgpt-types, implies `ternary_group_scale`; forwarded by katgpt-core).
 **OPT-IN** — no production weight-quant authoring consumer.
+
+## 134. differential_kv_eviction — common-mode-rejecting KV eviction score (Issue 882 P3 / Research 586)
+
+The subtract arm of the attention-noise-control family on the KV EVICTION
+score: `specificity_j = max over recent queries of (a_j − λ·μ_j(t−1))`, with
+`μ_j` the EMA of key `j`'s caller-supplied attention mass. It uses 3 `f32`
+per key, is O(1) per key per step, keeps a two-bucket recency window and
+needs no kernel change. The argmin is evicted through the shipped
+`kv_eviction::select_evict_into`, and sinks are exempt via
+`kv_sink_window::sink_pin_mask_into`.
+
+- `kv_eviction::differential::DifferentialEvictTable` is SoA (`observe_query`,
+  `specificity_into`, `select_evict_into`, `select_evict_sink_exempt`).
+- `DiffEvictConfig::max_recent(W)` is the λ = 0 baseline. It is the plain
+  max-recent-attention (TOVA/H2O-class) score, **bit-identically**.
+- `evictions_for_budget` returns 0 at budget ≥ live, which is the no-op.
+
+Gates ([Bench 894](../../.benchmarks/894_differential_kv_eviction_goat.md),
+M3 Max, loaded box, 4 runs):
+
+- **G1a:** synthetic planted-needle retrieval **0.945 / 0.977 at 25% / 50%
+  cache** against full 1.000. The max-recent baseline scores 0.680 / 0.758,
+  the shipped usage-rate score **0.000**, and random 0.289 / 0.531. This is
+  regime-conditional (see the S sweep).
+- **G1b:** the trap-4 negative is pinned. Distractor spikes with a generic
+  future cost **1.35–1.47×** the baseline's output error.
+- **G1c:** the sink exemption is load-bearing at λ > 1, where sinks are lost
+  32/32 unpinned. The pre-registered λ = 1 bar failed at 0/32.
+- **G1d:** λ = 0 ≡ max-recent in 28/28 cells.
+- **G2:** **~1 ns/key/step**, ~16% faster than the shipped usage-rate
+  `observe` loop.
+- **G3:** no eviction is bit-identical.
+- **G4:** 0 allocations. Getting there fixed the shipped selector's stable
+  sort, which allocated 1× per call at n = 4096.
+
+🔧 Feature flag: `differential_kv_eviction` (katgpt-core, implies
+`kv_sink_window`). **OPT-IN**. The model-bound needle@64K gate is riir-infer
+Issue 012 (the consumer), and promotion waits on it.

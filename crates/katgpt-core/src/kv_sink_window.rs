@@ -114,7 +114,9 @@ pub fn select_evict_windowed(
     );
     let n_stale = out.len();
     if n_stale > 1 {
-        out.sort_by(|&a, &b| positions[a].cmp(&positions[b]).then(a.cmp(&b)));
+        // Unstable: total order (index tie-break) ⇒ identical sequence, and
+        // no merge-scratch heap allocation at large n (Bench 894 G4).
+        out.sort_unstable_by(|&a, &b| positions[a].cmp(&positions[b]).then(a.cmp(&b)));
     }
 
     // Phase 2 — window rows by score. Appended after the stale block, then
@@ -129,7 +131,7 @@ pub fn select_evict_windowed(
         );
         let tail = &mut out[n_stale..];
         if tail.len() > 1 {
-            tail.sort_by(|&a, &b| {
+            tail.sort_unstable_by(|&a, &b| {
                 let sa = scores.get(a).copied().unwrap_or(0.0);
                 let sb = scores.get(b).copied().unwrap_or(0.0);
                 float_order::cmp_for_min(sa, sb).then(a.cmp(&b))

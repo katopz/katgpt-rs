@@ -250,6 +250,19 @@ pool_admission = []
 # belief GC. OPT-IN pending first consumer GOAT.
 dying = ["usage_rate_eviction"]
 
+# differential_kv_eviction (Issue 882 P3 / Research 586, 2026-09-25): the
+# subtract arm of the attention-noise-control family on the KV EVICTION
+# score — specificity_j = max over recent queries of (a_j − λ·μ_j(t−1)), μ_j
+# the EMA of key j's caller-supplied attention mass (3 f32/key, O(1)/key/
+# step, two-bucket recency window, no kernel change); evict argmin through
+# kv_eviction::select_evict_into, sinks exempt via kv_sink_window's pin mask
+# (a sink is the ultimate hub — without the exemption this policy evicts it
+# FIRST). λ = 0 is the plain max-recent-attention (TOVA/H2O-class) baseline
+# bit-identically; budget >= live evicts nothing. Trap 4 (query-distribution
+# shift) is a pinned measured NEGATIVE in Bench 894. OPT-IN; the model-bound
+# needle@64K gate is riir-infer Issue 012.
+differential_kv_eviction = ["kv_sink_window"]
+
 # rate_control (Issue 873 primitive B, 2026-09-22): dual-EWLS effect-size
 # rate controller (Research 581 — mini-AGI `plasticity.py:63-358`, MIT).
 # Closed-form multiplicative nudge exp(gain·tanh((v−T_MID)/width)) with
@@ -2879,6 +2892,15 @@ required-features = ["attention_snr"]
 name = "bench_888_row_logit_floor_goat"
 harness = false
 required-features = ["row_logit_floor"]
+
+# Issue 882 P3 — differential KV eviction GOAT: G1 planted-needle retention
+# at 25%/50% budget vs the λ=0 max-recent baseline (+ trap-4 shift negative,
+# sink-exemption arm, λ=0 ≡ baseline bit-identical order), G2 bookkeeping
+# ns/key/step (paired interleave + best-of), G3 no-eviction no-op, G4 0 allocs.
+[[test]]
+name = "bench_894_differential_kv_eviction_goat"
+harness = false
+required-features = ["differential_kv_eviction"]
 
 # (kept as a [[bench]]-shaped gate; the 813 precedent puts GOAT gates in
 # tests/ with harness=false and a required-features row — the cfg-gated
