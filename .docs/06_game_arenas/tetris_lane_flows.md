@@ -73,7 +73,7 @@ rulebook.
 
 ```mermaid
 %% file: tetris_flow_rulebook.svg
-%% aria: KatGPT rulebook search: try every spot for the falling piece, every spot for the preview piece keeping the best six, then every piece still left in the bag; score each end board with the strategy rulebook, average over the unknown piece, take the best plan, and play its first move, in about eight milliseconds
+%% aria: KatGPT rulebook search: try every spot for the falling piece, every spot for the preview piece keeping the best six, then every piece still left in the bag; score each end board with the strategy rulebook, average over the unknown piece, take the best plan, and play its first move, in about six to nine milliseconds
 flowchart TB
     subgraph R1["look ahead"]
         direction LR
@@ -81,7 +81,7 @@ flowchart TB
     end
     subgraph R2["decide"]
         direction LR
-        V["score each end board<br/>with the rulebook"] --> G["average over the<br/>unknown piece ·<br/>best over the plan"] --> P["play the best<br/>first move<br/>~8 ms"]
+        V["score each end board<br/>with the rulebook"] --> G["average over the<br/>unknown piece ·<br/>best over the plan"] --> P["play the best<br/>first move<br/>~6–9 ms"]
     end
     C --> V
 ```
