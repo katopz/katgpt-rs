@@ -1418,3 +1418,25 @@ fn test_wilson_ci_zero_failures_one_sample() {
     assert!(lo > 0.0 && lo < 0.5, "lo = {lo}");
     assert!((hi - 1.0).abs() < 1e-12, "hi = {hi}");
 }
+
+/// Issue 895: `reseed` is `new_multi` without the (allocating) polynomial
+/// search — bit-identical streams.
+#[test]
+fn sobol_reseed_matches_new_multi_bit_identically() {
+    for dim in [1usize, 5, 30, SOBOL_MAX_DIM] {
+        let mut cached = SobolQmc::new_multi(0, dim);
+        for seed in [1u64, 42, 0xDEAD_BEEF, u64::MAX] {
+            let mut fresh = SobolQmc::new_multi(seed, dim);
+            cached.reseed(seed);
+            let mut a = vec![0.0f32; 7 * dim];
+            let mut b = vec![0.0f32; 7 * dim];
+            fresh.draw_nd(7, &mut a);
+            cached.draw_nd(7, &mut b);
+            let (a, b): (Vec<u32>, Vec<u32>) = (
+                a.iter().map(|x| x.to_bits()).collect(),
+                b.iter().map(|x| x.to_bits()).collect(),
+            );
+            assert_eq!(a, b, "dim {dim} seed {seed}");
+        }
+    }
+}

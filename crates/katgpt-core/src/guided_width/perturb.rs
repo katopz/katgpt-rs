@@ -32,6 +32,29 @@ pub trait Perturbation {
     fn admits_guidance(&self) -> bool {
         true
     }
+
+    /// Whether this arm draws the diversity-init offsets itself. `false`
+    /// (dense arms) ⇒ the driver uses the Sobol init; `true` ⇒ branch `b ≥ 1`
+    /// starts at `h0 + init_offset(..)` so the arm's invariant holds from the
+    /// first state (the mass-conserving arm: a Sobol offset is not
+    /// divergence-free).
+    fn owns_init(&self) -> bool {
+        false
+    }
+
+    /// Add this arm's init offset of magnitude `spread` to `h` (only called
+    /// when [`Self::owns_init`]). Default: the arm's own draw at `σ = spread`.
+    fn init_offset(&mut self, h: &mut [f32], noise: &mut [f32], seed: u64, spread: f32) {
+        let zero: [f32; 0] = [];
+        self.perturb(h, &zero, noise, seed, spread);
+    }
+
+    /// Whether `saddle_escape::apply_kick`'s isotropic unit kick preserves
+    /// this arm's invariant. `false` ⇒ the driver kicks with the arm's own
+    /// draw at `σ = eps` instead.
+    fn admits_kick(&self) -> bool {
+        true
+    }
 }
 
 /// Arm (a): transversal (`project = true`) or isotropic (`project = false`)

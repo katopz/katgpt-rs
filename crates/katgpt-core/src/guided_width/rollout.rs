@@ -22,6 +22,9 @@
 //!
 //! Init (T4): branch 0 = `h0`; branch `b ≥ 1` = `h0 + σ_max·spread·Sobol_b`
 //! plus the μ≠0 commitment `κ·σ_max·s_b·d_{j_b}` when a table is present.
+//! An arm that carries an invariant (`Perturbation::owns_init` /
+//! `admits_kick` false — the mass-conserving arm) draws its own init offset,
+//! respawn offset and escape kick, so the invariant holds on every state.
 //! After K steps every branch is scored by [`super::latent_value_into`] and
 //! the best is written to `out`.
 //!
@@ -187,9 +190,33 @@ where
     let guidance = if n_dirs > 0 { guidance } else { None };
 
     // ── Init (T4 + T5 commitment) ─────────────────────────────────────
-    {
-        let GuidedWidthScratch { states, sobol, .. } = scratch;
-        sobol_init_into(h0, n, spread, mix64(base ^ 0x5B0B), sobol, &mut states[..n * d]);
+    if perturb.owns_init() {
+        // The arm's invariant must hold from the first state: every branch
+        // starts at h0 plus the arm's OWN draw (never a Sobol offset).
+        let GuidedWidthScratch { states, noise, .. } = scratch;
+        for b in 0..n {
+            let row = &mut states[b * d..(b + 1) * d];
+            row.copy_from_slice(h0);
+            if b > 0 {
+                perturb.init_offset(row, noise, mix64(base ^ 0x1417 ^ ((b as u64) << 8)), spread);
+            }
+        }
+    } else {
+        let GuidedWidthScratch {
+            states,
+            sobol,
+            sobol_src,
+            ..
+        } = scratch;
+        sobol_init_into(
+            h0,
+            n,
+            spread,
+            mix64(base ^ 0x5B0B),
+            sobol_src,
+            sobol,
+            &mut states[..n * d],
+        );
     }
     for b in 0..n {
         scratch.w_stuck[b] = 0;
@@ -297,7 +324,13 @@ where
                 if eps.is_finite() && eps > 0.0 {
                     kicks[b] += 1;
                     let ks = kick_seed(h, b, t, kicks[b], base);
-                    apply_kick(h, ks, eps);
+                    if perturb.admits_kick() {
+                        apply_kick(h, ks, eps);
+                    } else {
+                        // Invariant-carrying arm: kick with its own draw.
+                        let s64 = u64::from_le_bytes(ks[..8].try_into().unwrap_or([0; 8]));
+                        perturb.perturb(h, delta, noise, s64, eps);
+                    }
                     report.kicks = report.kicks.saturating_add(1);
                 }
                 flips[b] = FlipDetector::new(tc.window);
@@ -310,12 +343,16 @@ where
                 generation[b] = generation[b].saturating_add(1);
                 h.copy_from_slice(h0);
                 let s = mix64(seed_bt ^ 0xE5A_4E5F);
-                for (c, chunk) in h.chunks_mut(8).enumerate() {
-                    let mut blk = [0.0f32; 8];
-                    let blk = &mut blk[..chunk.len()];
-                    blake3_noise_fill(mix64(s ^ c as u64), spread, blk);
-                    for (x, &e) in chunk.iter_mut().zip(blk.iter()) {
-                        *x += e;
+                if perturb.owns_init() {
+                    perturb.init_offset(h, noise, s, spread);
+                } else {
+                    for (c, chunk) in h.chunks_mut(8).enumerate() {
+                        let mut blk = [0.0f32; 8];
+                        let blk = &mut blk[..chunk.len()];
+                        blake3_noise_fill(mix64(s ^ c as u64), spread, blk);
+                        for (x, &e) in chunk.iter_mut().zip(blk.iter()) {
+                            *x += e;
+                        }
                     }
                 }
                 if let (Some(g), Some((j, sg))) = (&guidance, dir[b]) {

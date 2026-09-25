@@ -29,13 +29,22 @@ pub(crate) fn mix64(mut x: u64) -> u64 {
 /// `seed`; coordinates past `SOBOL_MAX_DIM` take the BLAKE3 source.
 /// `spread == 0` (or non-finite) makes every branch `center`, bit-exactly.
 ///
-/// `sobol_buf` must hold `(n − 1) · min(d, SOBOL_MAX_DIM)` floats.
-/// Deterministic in `(center, n, spread, seed)`; zero-allocation.
+/// `sobol` is a caller-owned source built once with
+/// `SobolQmc::new_multi(_, min(d, SOBOL_MAX_DIM))` — it is [`SobolQmc::reseed`]ed
+/// here, which is bit-identical to a fresh `new_multi(seed, ..)` without the
+/// allocating primitive-polynomial search. `sobol_buf` must hold
+/// `(n − 1) · min(d, SOBOL_MAX_DIM)` floats. Deterministic in
+/// `(center, n, spread, seed)`; zero-allocation.
+///
+/// # Panics
+///
+/// If `sobol.dim() != min(d, SOBOL_MAX_DIM)` (and a draw is needed).
 pub fn sobol_init_into(
     center: &[f32],
     n: usize,
     spread: f32,
     seed: u64,
+    sobol: &mut SobolQmc,
     sobol_buf: &mut [f32],
     out: &mut [f32],
 ) {
@@ -47,7 +56,8 @@ pub fn sobol_init_into(
         return;
     }
     let dd = d.min(SOBOL_MAX_DIM);
-    let mut sobol = SobolQmc::new_multi(seed, dd);
+    assert_eq!(sobol.dim(), dd, "sobol_init_into: Sobol source dim mismatch");
+    sobol.reseed(seed);
     let pts = &mut sobol_buf[..(n - 1) * dd];
     sobol.draw_nd(n - 1, pts);
     for b in 1..n {
@@ -57,9 +67,8 @@ pub fn sobol_init_into(
             row[i] += spread * (2.0 * p[i] - 1.0);
         }
         if d > dd {
-            // BLAKE3 tail for dimensions Sobol does not carry; the draw is
-            // already in [-1, 1], so scale by `spread` directly. Written into
-            // the unused Sobol-buffer tail would alias `pts`; add in place.
+            // BLAKE3 tail for dimensions Sobol does not carry: the draw is
+            // already in [-1, 1], so scale by `spread` and add in place.
             let tail = &mut row[dd..];
             let mut block = [0.0f32; 8];
             for (c, chunk) in tail.chunks_mut(8).enumerate() {
@@ -112,8 +121,9 @@ mod tests {
         let mut buf = [0.0f32; 64];
         let mut a = [0.0f32; 64];
         let mut b = [0.0f32; 64];
-        sobol_init_into(&c, 8, 0.4, 11, &mut buf, &mut a);
-        sobol_init_into(&c, 8, 0.4, 11, &mut buf, &mut b);
+        let mut src = SobolQmc::new_multi(0, 8);
+        sobol_init_into(&c, 8, 0.4, 11, &mut src, &mut buf, &mut a);
+        sobol_init_into(&c, 8, 0.4, 11, &mut src, &mut buf, &mut b);
         assert_eq!(&a[..8], &c);
         assert_eq!(a.map(f32::to_bits), b.map(f32::to_bits));
         for br in 1..8 {
@@ -129,7 +139,8 @@ mod tests {
         let c = [0.7f32; 5];
         let mut buf = [0.0f32; 40];
         let mut a = [9.0f32; 20];
-        sobol_init_into(&c, 4, 0.0, 3, &mut buf, &mut a);
+        let mut src = SobolQmc::new_multi(0, 5);
+        sobol_init_into(&c, 4, 0.0, 3, &mut src, &mut buf, &mut a);
         assert!(a.iter().all(|&x| x == 0.7));
     }
 
@@ -139,7 +150,8 @@ mod tests {
         let c = vec![0.0f32; d];
         let mut buf = vec![0.0f32; 3 * SOBOL_MAX_DIM];
         let mut a = vec![0.0f32; 4 * d];
-        sobol_init_into(&c, 4, 1.0, 5, &mut buf, &mut a);
+        let mut src = SobolQmc::new_multi(0, SOBOL_MAX_DIM);
+        sobol_init_into(&c, 4, 1.0, 5, &mut src, &mut buf, &mut a);
         let tail = &a[d + SOBOL_MAX_DIM..2 * d];
         assert!(tail.iter().any(|&x| x != 0.0));
         assert!(tail.iter().all(|&x| x.abs() <= 1.0));

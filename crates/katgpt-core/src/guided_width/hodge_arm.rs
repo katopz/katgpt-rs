@@ -29,7 +29,10 @@
 //! no evidence (GRAM's or ours) that belief failure modes involve mass drift.
 //! Never read the identity arm as a quality result. The arm refuses the μ≠0
 //! table term ([`Perturbation::admits_guidance`] is `false`): a table
-//! direction is not divergence-free and would break the invariant.
+//! direction is not divergence-free and would break the invariant — and for
+//! the same reason it owns the diversity init and the escape kick
+//! ([`Perturbation::owns_init`], [`Perturbation::admits_kick`]): neither a
+//! Sobol offset nor `apply_kick`'s isotropic unit vector is in `ker δ₁`.
 
 use crate::dec::{CellComplex, CochainField, codifferential_into};
 use crate::diversity::temp::blake3_noise_fill;
@@ -211,6 +214,14 @@ impl Perturbation for MassConserving<'_> {
     }
 
     fn admits_guidance(&self) -> bool {
+        false
+    }
+
+    fn owns_init(&self) -> bool {
+        true
+    }
+
+    fn admits_kick(&self) -> bool {
         false
     }
 }

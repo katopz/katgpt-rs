@@ -240,23 +240,9 @@ impl SobolQmc {
             *row = compute_direction_numbers(poly, degree);
         }
 
-        // Digital-shift scramble: one random u32 per dimension.
-        //
-        // Each scramble is the upper 32 bits of one `rng.next()` call (u64).
-        // Upper bits of xorshift64 have better statistical distribution
-        // than the lower bits (lower bits have shorter LFSR periods).
-        // (Phase 5 GOAT gate G1 catch: the original code OR'd two 32-bit
-        // halves from two separate draws — OR(a,b) is NOT uniform:
-        // P(bit=1) = 0.75, not 0.5 — which biased the Sobol output and broke
-        // marginal exactness. G1 fail rate dropped from 98% to ~1%.)
-        let mut scramble = [0u32; SOBOL_MAX_DIM];
-        for s in &mut scramble[..dim] {
-            *s = (rng.next() >> 32) as u32;
-            // Ensure nonzero (a zero scramble is valid but boring).
-            if *s == 0 {
-                *s = 0xDEAD_BEEF;
-            }
-        }
+        // Digital-shift scramble: one random u32 per dimension (see
+        // `draw_scramble` for the upper-bits / Phase-5 G1 rationale).
+        let scramble = draw_scramble(&mut rng, dim);
 
         Self {
             dim,
@@ -265,6 +251,24 @@ impl SobolQmc {
             direction_numbers,
             scramble,
         }
+    }
+
+    /// Re-seed in place: reset the sequence and redraw ONLY the digital-shift
+    /// scramble from `seed`. The direction numbers do not depend on the seed,
+    /// so the result is bit-identical to `SobolQmc::new_multi(seed, dim)` —
+    /// without re-running the primitive-polynomial search, which allocates
+    /// (`prime_factors_u64`). Zero-allocation; the per-decision form for hot
+    /// callers that keep one source in their scratch (Issue 895 T4).
+    pub fn reseed(&mut self, seed: u64) {
+        let mut rng = Rng::new(seed);
+        self.index = 0;
+        self.point = [0u32; SOBOL_MAX_DIM];
+        self.scramble = draw_scramble(&mut rng, self.dim);
+    }
+
+    /// Active dimensions.
+    pub fn dim(&self) -> usize {
+        self.dim
     }
 
     /// Multi-dimensional draw: fill `out` with `k` points, each `dim` f32s.
@@ -321,6 +325,28 @@ impl QmcSource for SobolQmc {
             *slot = u32_to_unit_f32(self.point[0] ^ self.scramble[0]);
         }
     }
+}
+
+/// Digital-shift scramble: one random u32 per dimension (shared by
+/// [`SobolQmc::new_multi`] and [`SobolQmc::reseed`] so the two are one draw).
+///
+/// Each scramble is the upper 32 bits of one `rng.next()` call (u64).
+/// Upper bits of xorshift64 have better statistical distribution
+/// than the lower bits (lower bits have shorter LFSR periods).
+/// (Phase 5 GOAT gate G1 catch: the original code OR'd two 32-bit
+/// halves from two separate draws — OR(a,b) is NOT uniform:
+/// P(bit=1) = 0.75, not 0.5 — which biased the Sobol output and broke
+/// marginal exactness. G1 fail rate dropped from 98% to ~1%.)
+fn draw_scramble(rng: &mut Rng, dim: usize) -> [u32; SOBOL_MAX_DIM] {
+    let mut scramble = [0u32; SOBOL_MAX_DIM];
+    for s in &mut scramble[..dim] {
+        *s = (rng.next() >> 32) as u32;
+        // Ensure nonzero (a zero scramble is valid but boring).
+        if *s == 0 {
+            *s = 0xDEAD_BEEF;
+        }
+    }
+    scramble
 }
 
 /// Map a u32 bit-pattern to a float in [0, 1) using upper 24 bits.

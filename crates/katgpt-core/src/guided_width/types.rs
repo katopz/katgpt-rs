@@ -4,6 +4,7 @@
 
 use crate::saddle_escape::FlipDetector;
 use crate::simd::fast_sigmoid;
+use crate::speculative::qmc::{SOBOL_MAX_DIM, SobolQmc};
 
 use super::table::{DirectionPosterior, DirectionTable};
 
@@ -310,6 +311,9 @@ pub struct GuidedWidthScratch {
     pub(crate) noise: Vec<f32>,
     /// Sobol draw buffer (`n × d`).
     pub(crate) sobol: Vec<f32>,
+    /// Cached Sobol source (`min(d, SOBOL_MAX_DIM)` dims), reseeded per
+    /// decision — built once here because its construction allocates.
+    pub(crate) sobol_src: SobolQmc,
     /// Last deterministic update norm per branch.
     pub(crate) residual: Vec<f32>,
     /// Latent values per branch.
@@ -345,6 +349,7 @@ impl GuidedWidthScratch {
             delta: vec![0.0; d],
             noise: vec![0.0; d],
             sobol: vec![0.0; n * d],
+            sobol_src: SobolQmc::new_multi(0, d.clamp(1, SOBOL_MAX_DIM)),
             residual: vec![0.0; n],
             values: vec![0.0; n],
             w_stuck: vec![0; n],

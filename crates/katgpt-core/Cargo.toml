@@ -2963,6 +2963,15 @@ name = "bench_894_differential_kv_eviction_goat"
 harness = false
 required-features = ["differential_kv_eviction"]
 
+# Issue 895 T7 — guided width rollouts GOAT (Bench 898; completes Plan 095's
+# pending width-vs-depth G1/G3). Release profile:
+#   cargo test -p katgpt-core --release --features guided_width_hodge,sense_composition \
+#     --test bench_898_guided_width_rollouts_goat -- --nocapture
+[[test]]
+name = "bench_898_guided_width_rollouts_goat"
+harness = false
+required-features = ["guided_width_hodge", "sense_composition"]
+
 # Issue 883 P2+P3+P4 — fitted K=V+ / V-reconstruction primitives GOAT:
 # G1 refund law + rotation exactness bound, G2 paired A/B, G3 λ=0 / kill
 # switch bit-identical, G4 0 allocs, P4 FLOP-law two-line check.
