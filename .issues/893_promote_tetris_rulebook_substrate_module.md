@@ -9,7 +9,7 @@ bitmask board sim), `examples/common/tetris_lookahead.rs` (bag/apply/fitter),
 and `examples/common/tetris_rulebook.rs` (16 rules as data, the
 Build/Downstack/Survive FSM, the `Genome` line + BLAKE3 id, eval) — is
 example-scoped code. Examples cannot be depended on: a consumer that needs to
-run the evaluator bit-identically (a private engine repo measuring through a
+run the evaluator bit-identically (a public engine repo measuring through a
 bin-only lane) has nothing to path-dep, and the only alternative is a copied,
 diverging second implementation — which would also break the bit-identity
 anchors themselves.
@@ -56,13 +56,14 @@ root moves at no new manifest cost.
       genome `68cae9d382014662` as its pinned REFERENCE genome. Evaluator
       *capabilities* (new rule types, features, FSM changes) may keep landing
       here; evolved genome *values* beyond the reference land only in the
-      private consumer — the public surface must not become a drip-feed leak
-      channel for the loop's output.
+      private improvement loop's home, shipped as signed artifacts — the
+      public surface must not become a drip-feed leak channel for the loop's
+      output.
 
 ## Non-goals
 
 The self-evolve search loop (enumeration / delta-gated climb driver),
 certification pipeline, evolved artifacts, vessels, and any tokenomics wiring
-are NOT this issue — they live in the private consumer and are deliberately
-out of scope here. This issue moves already-public code into a dependable
-shape and freezes it there.
+are NOT this issue — they live in the private improvement side and are
+deliberately out of scope here. This issue moves already-public code into a
+dependable shape and freezes it there.
