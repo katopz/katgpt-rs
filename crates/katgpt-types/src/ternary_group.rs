@@ -311,6 +311,31 @@ impl TernaryGroupWeights {
         cols: usize,
         snap_scales_to_pow2: bool,
     ) -> Self {
+        Self::quantize_with_group_scale(weights, rows, cols, |_g_start, group| {
+            let mut scale = mean_abs_scale(group);
+            if snap_scales_to_pow2 {
+                scale = snap_f32_to_pow2(scale);
+            }
+            scale
+        })
+    }
+
+    /// The one quantization pipeline every scale rule shares (Issue 886 P1
+    /// refactor — the baseline, `pot_scales` and `act_aware_fit` arms differ
+    /// ONLY in the closure). `group_scale(g_start, group)` returns the
+    /// pre-f16 scale for the group starting at column `g_start`; the f16
+    /// store, the threshold `0.5·scale` and the carry loop are identical for
+    /// every rule, so a rule that returns the mean-abs value produces the
+    /// legacy payload bit-for-bit (the G3 anchor).
+    pub(crate) fn quantize_with_group_scale<F>(
+        weights: &[f32],
+        rows: usize,
+        cols: usize,
+        mut group_scale: F,
+    ) -> Self
+    where
+        F: FnMut(usize, &[f32]) -> f32,
+    {
         assert_eq!(weights.len(), rows * cols, "weights slice must be rows*cols");
         let mut out = Self::new(rows, cols);
 
@@ -324,13 +349,7 @@ impl TernaryGroupWeights {
                 let g_end = (g_start + GROUP_SIZE).min(cols);
                 let group = &row[g_start..g_end];
 
-                // scale = mean(|group|); guard the all-zero group so the
-                // threshold stays finite and quantization yields all zeros.
-                let abs_sum: f32 = group.iter().map(|v| v.abs()).sum();
-                let mut scale = if abs_sum > 0.0 { abs_sum / group.len() as f32 } else { 1.0 };
-                if snap_scales_to_pow2 {
-                    scale = snap_f32_to_pow2(scale);
-                }
+                let scale = group_scale(g_start, group);
                 out.group_scale[group_base + g] = f16::from_f32(scale);
                 // Quantize against the f16-rounded scale the kernel will
                 // actually apply, not the f32 ideal — otherwise the carry
@@ -443,6 +462,17 @@ impl TernaryGroupWeights {
         blocks.shrink_to_fit();
         blocks
     }
+}
+
+/// The activation-blind baseline group scale: `mean(|group|)`, with the
+/// all-zero group guarded to 1.0 so the threshold stays finite and
+/// quantization yields all zeros. The exact expression the legacy pipeline
+/// used (same iterator sum, same divisor) — the Issue 886 G3 anchor.
+#[cfg(feature = "ternary_group_scale")]
+#[inline]
+pub(crate) fn mean_abs_scale(group: &[f32]) -> f32 {
+    let abs_sum: f32 = group.iter().map(|v| v.abs()).sum();
+    if abs_sum > 0.0 { abs_sum / group.len() as f32 } else { 1.0 }
 }
 
 /// Snap a positive f32 to the nearest power of two, clamped into the

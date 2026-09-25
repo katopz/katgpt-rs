@@ -119,6 +119,20 @@ bitcos = ["ternary_group_scale"]
 # (the construction it constrains).
 pot_scales = ["ternary_group_scale"]
 
+# Issue 886 P1 / Research 588 (AWQ, arXiv:2306.00978; llama.cpp imatrix
+# PR #4861): activation-aware group-scale fit on the Q2_0_g128 authoring
+# path — the (a) weighted-fit spelling. `quantize_from_f32_act_aware` takes
+# a per-input-channel activation diagonal as a plain &[f32] (collected by
+# katgpt-core `act_channel_moments`; no katgpt-core dep here) and either
+# (i) WeightedMeanAbs — closed form, uniform diagonal BIT-IDENTICAL to the
+# mean-abs baseline (G3, pinned by bytes), or (ii) WeightedSearch — the
+# imatrix-class 21-point grid + LS refit on the diagonal-weighted
+# reconstruction error through the real carry loop. Kernel-identical
+# payload (only the scale value moves). Measured in Bench 896 (G1 synthetic
+# output-error delta, either sign; the model-bound retention walk is
+# riir-infer Issue 014). OPT-IN — no production authoring consumer.
+act_aware_fit = ["ternary_group_scale"]
+
 # MaxSim late-interaction scoring (Plan 080, Research 073).
 maxsim = []
 

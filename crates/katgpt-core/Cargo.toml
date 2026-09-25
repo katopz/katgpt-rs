@@ -916,6 +916,23 @@ exact_mass_admit = []
 # no-default-consumer rule.
 fitted_anchor_tables = []
 
+# act_channel_moments (Issue 886 P0 / Research 588 AWQ+imatrix, 2026-09-25):
+# the activation-diagonal collector. `ActChannelMoments`: streaming
+# per-input-channel {Σ|x|, Σx²} (f64) + count per linear layer (per-layer
+# widths), observe/observe_batch alloc-free (G4, Bench 896's counting
+# allocator); `freeze()` → `ActChannelDiagonal` {mean|x| (AWQ s_X), E[x²]
+# (imatrix weight)} with a BLAKE3 commitment over a canonical LE image
+# (to_bytes/from_bytes verify; the StaticCalTable commit family, spelled
+# platform-independently). Same offline tapped forward as the 883 pass,
+# different tap points (linear INPUTS, not K/V outputs). Consumer:
+# katgpt-types `act_aware_fit` (plain &[f32] — no reverse dep). Zero new
+# deps (blake3 already non-optional). OPT-IN per the no-default-consumer
+# rule.
+act_channel_moments = []
+# act_aware_fit (Issue 886 P1): forwards katgpt-types' activation-aware
+# group-scale fit so Bench 896 can run collector → fit end to end. OPT-IN.
+act_aware_fit = ["katgpt-types/act_aware_fit", "ternary_group_scale"]
+
 # differential_anchor (Issue 882 P0 / Research 586, 2026-09-25): the
 # subtract arm of the attention-noise-control family (SSMax rescale-UP /
 # ASEntmax sparsify-DOWN shipped; Diff Transformer arXiv:2410.05258's
@@ -2817,6 +2834,17 @@ required-features = ["gold_share_probe", "sink_aware_attn"]
 name = "bench_886_differential_anchor_goat"
 harness = false
 required-features = ["differential_anchor"]
+
+# Issue 886 P0 + P1 modelless half (Bench 896): act_channel_moments collector
+# → katgpt-types act_aware_fit, end to end. G1 synthetic held-out output
+# error under planted heavy-channel distributions (recorded EITHER sign;
+# bench-local INT4 reference tier), G2 observe ns/elem + fit cost + refactor
+# no-regression (ab_median_ratio), G3 uniform committed diagonal ⇒ payload
+# bit-identical, G4 0 observe allocs + fit allocs == baseline. --release.
+[[test]]
+name = "bench_896_act_diagonal_quant_fit_goat"
+harness = false
+required-features = ["act_channel_moments", "act_aware_fit"]
 
 # Issue 887 (Research 589) — ladder_gate GOAT gate: G2 (probe-free ns-scale
 # O(1); retention path µs-scale, k64/k8 paired ratio bar 40× — linear scan)

@@ -90,6 +90,11 @@ pub mod bitcos;
 /// `Q2_0_g128` container (Issue 578, `ternary_group_scale` feature).
 #[cfg(feature = "ternary_group_scale")]
 pub mod ternary_group;
+/// Activation-aware (imatrix-spelling) group-scale fit for the `Q2_0_g128`
+/// authoring path — the diagonal is a plain `&[f32]` (Issue 886 P1,
+/// `act_aware_fit` feature).
+#[cfg(feature = "act_aware_fit")]
+pub mod ternary_group_act_aware;
 /// Ternary `{-1,0,+1}` packed 5-per-byte in base 3 — the 1.75 bits/weight
 /// footprint tier (Issue 582, `ternary_trit_pack` feature).
 #[cfg(feature = "ternary_trit_pack")]
@@ -113,6 +118,8 @@ pub use ternary_group::{
     TernaryBlockAoS, TernaryBlockContiguousWeights, TernaryFfnHook, TernaryGroupWeights,
     TernaryInputProjHook, TernaryMatvecHook,
 };
+#[cfg(feature = "act_aware_fit")]
+pub use ternary_group_act_aware::{ACT_AWARE_SEARCH_GRID, ActAwareScaleFit};
 #[cfg(feature = "ternary_trit_pack")]
 pub use ternary_trit::{
     TRIT_CODE_LIMIT, TRIT_LUT, TRIT_POW3, TRITS_PER_BYTE, TernaryTritWeights,

@@ -3469,6 +3469,14 @@ pub mod distance_abstain;
 #[cfg(feature = "fitted_anchor_tables")]
 pub mod fitted_anchor_table;
 
+/// Per-input-channel activation moments `{mean|x|, E[x²]}` per linear layer
+/// — the activation-diagonal collector for activation-aware weight-quant
+/// fitting (Issue 886 P0 / Research 588; consumer: katgpt-types
+/// `act_aware_fit`). BLAKE3-committed canonical table. Opt-in
+/// (`act_channel_moments`).
+#[cfg(feature = "act_channel_moments")]
+pub mod act_channel_moments;
+
 /// Differential anchor scoring (Issue 882 P0 / Research 586) — the
 /// subtract arm of the attention-noise-control family: `q̂ = q − λ·ā`, one
 /// axpy, λ=0 bit-identical; hub candidates lose their generic mass,

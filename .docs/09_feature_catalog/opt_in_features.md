@@ -4936,3 +4936,35 @@ per-decision latency.
 🔧 Feature flag: `chance_puct` (katgpt-core, root forward). **OPT-IN** — the
 sole consumer is the tetris example (`tetris_08_puct_goat`); promotion is
 Issue 892 T6's call.
+
+## 133. act_channel_moments + act_aware_fit — activation-diagonal weight-quant fitting (Issue 886 P0/P1 / Research 588)
+
+AWQ (arXiv:2306.00978) / llama.cpp imatrix class, the closed-form
+modelless counterpart of riir-train's `ZeroQatCalibrator` (GD-family
+finite-difference search at the same insertion point). **P0**
+`katgpt_core::act_channel_moments`: `ActChannelMoments` streams per-input-
+channel `{Σ|x|, Σx²}` (f64) + count per linear layer (per-layer widths),
+`observe`/`observe_batch` alloc-free; `freeze()` → `ActChannelDiagonal`
+{`mean|x|` (AWQ s_X), `E[x²]` (imatrix weight)} BLAKE3-committed over a
+canonical little-endian image (`to_bytes`/`from_bytes` verify; every
+single-byte flip refused). **P1** katgpt-types
+`TernaryGroupWeights::quantize_from_f32_act_aware(w, rows, cols, diag,
+fit)` — the diagonal is a plain `&[f32]` (no reverse dep):
+`WeightedMeanAbs` (closed form; uniform diagonal ⇒ payload bit-identical to
+`quantize_from_f32`, pinned by bytes) or `WeightedSearch` (21-point grid +
+weighted LS refit through the real carry loop). Kernel-identical payload —
+only the group-scale value moves.
+
+GOAT ([Bench 896](../../.benchmarks/896_act_diagonal_quant_fit_goat.md)):
+G1 synthetic held-out output error (recorded either sign): the blind
+search alone −20…−27%; the diagonal adds −54% over it on planted 1%×20
+heavy channels and −14% on a log-normal spread at ternary (INT4 bench-local
+reference −60% / −26.5%) — mechanism-verified on PTQ-of-dense fixtures,
+NOT gain-verified on the born-ternary Bonsai lane (riir-infer Issue 014).
+G2 observe 0.28–0.32 ns/element, WMA +12.5% fit cost, Search ≈22×,
+refactored baseline within ±0.5% of the pre-refactor loop; G3 PASS; G4 0
+observe allocs, fit allocs = baseline.
+
+🔧 Feature flags: `act_channel_moments` (katgpt-core) · `act_aware_fit`
+(katgpt-types, implies `ternary_group_scale`; forwarded by katgpt-core).
+**OPT-IN** — no production weight-quant authoring consumer.
