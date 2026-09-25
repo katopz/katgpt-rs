@@ -1,6 +1,6 @@
 # Plan 609 — Tetris next-piece preview, Phase 1 (Proposal 015; `laya-tetris-v4`)
 
-Status: **READY — owner confirmed Option B sequencing (2026-09-25); execution GATED on Issue 885's oracle + v3 fixture landing (verified IN PROGRESS: sim landed `1a05a9764`, 5/10 checked, oracle/fixture/consumer tail pending)**
+Status: **READY — Phase 1 UNBLOCKED 2026-09-25 (T1.1 gate OPEN: 885's oracle + v3 fixture landed); owner confirmed Option B sequencing**
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Proposal: [015 — Tetris next-piece preview](../.proposals/015_tetris_next_piece_preview_lane.md) — Claude verdict AGREE (round 3, session `7cd12b60`); this plan expands its Phase-1 sketch
@@ -20,7 +20,8 @@ katgpt-rs ONLY: the paired corpus, the v4 grammar, the two-arm oracle campaign, 
 
 ### Phase 1 — katgpt-rs (this plan's execution surface)
 
-- [ ] T1.1 **Precondition gate (blocking):** Issue 885's oracle step + `tests/fixtures/tetris_oracle_laya_en_v3.jsonl` + the `_meta` numerics-parity read are LANDED (check the file exists + the 885 checklist flipped). Record the v3 fixture digest in this plan's completion note — it is v4's drift baseline (the parity read is quoted, never re-derived).
+- [x] T1.1 **Precondition gate (blocking):** Issue 885's oracle step + `tests/fixtures/tetris_oracle_laya_en_v3.jsonl` + the `_meta` numerics-parity read are LANDED (check the file exists + the 885 checklist flipped). Record the v3 fixture digest in this plan's completion note — it is v4's drift baseline (the parity read is quoted, never re-derived).
+  - DONE 2026-09-25: fixture landed; **v3 fixture BLAKE3 `12035ebf43d0293c7ec00e716e72ee6a21686cc41a222938a81d0abd9316e804`, sha256 `eb67bc16c2c6b3732e7a2797d5344a22c3025ea5d3ade1b9e5f87f60da202bb3` — v4's drift baseline.** Parity read (quoted): 0/99 bit-exact, max |Δp| = 4e-6 (numerics moved + posture CPU→Metal); drift check PASS 120/2660; arena agreement unchanged vs v2 (13/120, ties 33→35); oracle 102 forwards / 2.2 s Metal. Provenance: `tests/fixtures/tetris_oracle_v3_README.md`.
 - [ ] T1.2 `examples/common/tetris_sim.rs`: paired next-piece authoring — for each of the 120 v3 boards, all 7 next pieces (840 states); `render_state_sentence` gains the v4 preview sentence ("The next piece is the {TETRIS_PIECE} piece." appended to both state templates, spread + flat). Next-piece assignment is the seeded-bag walk (deterministic, disclosed in `_meta`).
 - [ ] T1.3 `examples/common/grammar_tables.rs`: the `laya-tetris-v4` state grammar (5th slot reusing `TETRIS_PIECE`; option grammar UNCHANGED) + `verify_all_closed()` + the v4 decoders. Spot sentences stay byte-compatible with v3's renders (the preview lives in the state line only).
 - [ ] T1.4 `tetris_01_state_enum`: the v4 dump mode — two-arm manifest. **Arm A:** 120 boards, preview masked (two-line envelope, no preview line) + ONE duplicated board as the determinism check. **Arm B:** the paired ~840 states, preview line present. `_meta` discloses: bag policy, envelope arms, inherited drop rule (FromTop), baseline fixture digest.

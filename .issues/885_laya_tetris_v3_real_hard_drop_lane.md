@@ -1,6 +1,6 @@
 # Issue 885 — `laya-tetris-v3`: the real-hard-drop lane (Issue 884 path B)
 
-**Status:** IN PROGRESS — sim + join + JS port landed locally; oracle/fixture/head/wasm/demo pending.
+**Status:** oracle + v3 fixture LANDED in katgpt-rs (commit below); reflex serve + fixture_pins / site wasm + goldens / demo / docs+deploy+close pending (the reflex-side lane).
 
 Owner call (2026-09-25): do path B. Per Issue 878's rule it ships as a NEW grammar
 (`laya-tetris-v3`) with its own fixture and head; the pinned v2 fixture stays committed and
@@ -31,7 +31,7 @@ unchanged options inside the 3 fresh states are the numerics-parity read, record
 - [x] dev-dep `serde_json/float_roundtrip` — the default parser was 1 ULP off on 90/120 v2 lines
 - [x] fixture drift detector + arenas follow the fixture's own grammar (`fixture_rule`)
 - [x] reflex-site JS `DropRule`, site default v3; JS FROM_TOP == Rust v3 dump 2660/2660
-- [ ] oracle on the 3 changed states (riir-reflex `laya_oracle_batch`, M3 Metal) + join → `tests/fixtures/tetris_oracle_laya_en_v3.jsonl`
+- [x] oracle on the 3 changed states (riir-reflex `laya_oracle_batch`, M3 Metal) + join → `tests/fixtures/tetris_oracle_laya_en_v3.jsonl` — 3 fresh (102 forwards, 2.2 s Metal) + 117 carried verbatim; parity 0/99 bit-exact but max |Δp| = 4e-6 (recorded in `_meta`); fixture blake3 `12035ebf…`, sha256 `eb67bc16…`; drift check PASS 120/2660; arena agreement unchanged vs v2 (13/120, ties 33→35); README `tetris_oracle_v3_README.md`
 - [ ] riir-reflex: serve the v3 head; `fixture_pins()` hashes all three embedded fixtures (pins were length-only)
 - [ ] reflex-site: v3 golden sha256 pin, wasm-head re-gen (corpus blob + anchors), rebuild `arena_head.wasm`
 - [ ] re-record demo walks against a local v3 engine; head parity + demo check + demo smoke
