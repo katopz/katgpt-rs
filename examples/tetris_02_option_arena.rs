@@ -154,8 +154,14 @@ fn read_reading(states: &[(FixtureState, Recomputed)]) -> Reading {
         }
     }
 
-    // Strongest constant policy: always the majority oracle index.
-    let constant_index = *index_hist.iter().max_by_key(|(_, c)| **c).unwrap().0;
+    // Strongest constant policy: always the majority oracle index. Ties go
+    // to the LOWEST index — `index_hist` is a HashMap, so an unordered
+    // max_by_key printed 1 or 16 run to run on the v3 fixture (13/120 each).
+    let constant_index = *index_hist
+        .iter()
+        .max_by_key(|&(i, c)| (*c, std::cmp::Reverse(*i)))
+        .unwrap()
+        .0;
     let constant_agree = index_hist[&constant_index];
 
     Reading {

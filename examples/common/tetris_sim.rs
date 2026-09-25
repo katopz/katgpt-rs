@@ -36,32 +36,61 @@ use std::sync::OnceLock;
 pub const WIDTH: usize = 10;
 pub const HEIGHT: usize = 20;
 
-/// Cell grid, row 0 = top. `true` = occupied.
+/// Cell grid, row 0 = top, stored COLUMN-major as bitmasks: bit `r` of
+/// `cols[c]` set ⇔ `(r, c)` occupied. Heights are `trailing_zeros`, holes
+/// and transitions are popcounts, a line clear is a per-column bit
+/// compaction, and the FromTop landing masks are the storage itself — every
+/// value bit-identical to the `[[bool; WIDTH]; HEIGHT]` grid it replaced
+/// (pinned by `bitmap_board_matches_a_bool_grid_reference`).
 #[derive(Clone, PartialEq, Eq)]
 pub struct Board {
-    cells: [[bool; WIDTH]; HEIGHT],
+    cols: [u32; WIDTH],
+}
+
+/// All `HEIGHT` row bits of a column mask.
+const FULL_COL: u32 = (1u32 << HEIGHT) - 1;
+
+/// Drop row `r` from a column mask: rows above it (lower index) move down
+/// one, rows below stay, the top row comes in empty.
+#[inline]
+fn clear_row_bits(c: u32, r: usize) -> u32 {
+    let above = c & ((1u32 << r) - 1);
+    let below = c & !((1u32 << (r + 1)) - 1);
+    (above << 1) | below
 }
 
 impl Board {
     pub fn empty() -> Self {
-        Self {
-            cells: [[false; WIDTH]; HEIGHT],
-        }
+        Self { cols: [0; WIDTH] }
     }
 
+    #[inline]
     pub fn cell(&self, row: usize, col: usize) -> bool {
-        self.cells[row][col]
+        (self.cols[col] >> row) & 1 != 0
+    }
+
+    /// Mark `(row, col)` occupied.
+    #[inline]
+    pub fn set(&mut self, row: usize, col: usize) {
+        self.cols[col] |= 1u32 << row;
+    }
+
+    /// Per-column occupancy masks (bit `r` ⇔ row `r` occupied).
+    #[inline]
+    pub fn col_masks(&self) -> &[u32; WIDTH] {
+        &self.cols
     }
 
     /// Column height = occupied cells counted from the floor (0 for an
     /// empty column).
+    #[inline]
     pub fn col_height(&self, col: usize) -> usize {
-        for row in 0..HEIGHT {
-            if self.cells[row][col] {
-                return HEIGHT - row;
-            }
+        let c = self.cols[col];
+        if c == 0 {
+            0
+        } else {
+            HEIGHT - c.trailing_zeros() as usize
         }
-        0
     }
 
     pub fn heights(&self) -> [usize; WIDTH] {
@@ -73,66 +102,62 @@ impl Board {
     }
 
     pub fn hole_count(&self) -> usize {
-        let mut holes = 0;
-        for c in 0..WIDTH {
-            let mut seen = false;
-            for r in 0..HEIGHT {
-                if self.cells[r][c] {
-                    seen = true;
-                } else if seen {
-                    holes += 1;
-                }
-            }
-        }
-        holes
+        (0..WIDTH)
+            .map(|c| self.col_height(c) - self.cols[c].count_ones() as usize)
+            .sum()
     }
 
     /// Place `cells` (absolute (row, col) pairs). Rows are NOT cleared.
     pub fn place(&mut self, cells: &[(usize, usize)]) {
         for &(r, c) in cells {
-            self.cells[r][c] = true;
+            self.set(r, c);
         }
     }
 
-    /// Place `cells`, then clear complete rows in one bottom-up compaction
-    /// pass (identical result to `place` + `full_rows` + `clear_rows`, without
-    /// the intermediate `Vec`). Returns rows cleared.
+    /// Bitmask of complete rows (bit `r` ⇔ row `r` full).
+    #[inline]
+    fn full_mask(&self) -> u32 {
+        self.cols.iter().fold(FULL_COL, |m, &c| m & c)
+    }
+
+    /// Place `cells`, then clear complete rows — the same result as `place`,
+    /// then `full_rows`, then `clear_rows`, without the intermediate `Vec`.
+    /// Returns rows cleared.
     pub fn place_and_clear(&mut self, cells: &[(usize, usize)]) -> u32 {
-        for &(r, c) in cells {
-            self.cells[r][c] = true;
+        self.place(cells);
+        let full = self.full_mask();
+        if full == 0 {
+            return 0;
         }
-        let mut write = HEIGHT;
-        let mut cleared = 0u32;
-        for r in (0..HEIGHT).rev() {
-            if self.cells[r].iter().all(|&b| b) {
-                cleared += 1;
-            } else {
-                write -= 1;
-                if write != r {
-                    self.cells[write] = self.cells[r];
-                }
+        for c in &mut self.cols {
+            // Top-down: clearing row r never moves a lower full row.
+            let mut f = full;
+            while f != 0 {
+                let r = f.trailing_zeros() as usize;
+                *c = clear_row_bits(*c, r);
+                f &= f - 1;
             }
         }
-        for row in &mut self.cells[..write] {
-            *row = [false; WIDTH];
-        }
-        cleared
+        full.count_ones()
     }
 
     pub fn full_rows(&self) -> Vec<usize> {
-        (0..HEIGHT)
-            .filter(|&r| (0..WIDTH).all(|c| self.cells[r][c]))
-            .collect()
+        let mut f = self.full_mask();
+        let mut out = Vec::with_capacity(f.count_ones() as usize);
+        while f != 0 {
+            out.push(f.trailing_zeros() as usize);
+            f &= f - 1;
+        }
+        out
     }
 
     /// Clear `rows` (descending-independent: each cleared row pulls everything
     /// above it down by one).
     pub fn clear_rows(&mut self, rows: &[usize]) {
         for &r in rows {
-            for rr in (1..=r).rev() {
-                self.cells[rr] = self.cells[rr - 1];
+            for c in &mut self.cols {
+                *c = clear_row_bits(*c, r);
             }
-            self.cells[0] = [false; WIDTH];
         }
     }
 
@@ -141,7 +166,7 @@ impl Board {
         (0..HEIGHT)
             .map(|r| {
                 (0..WIDTH)
-                    .map(|c| if self.cells[r][c] { '#' } else { '.' })
+                    .map(|c| if self.cell(r, c) { '#' } else { '.' })
                     .collect()
             })
             .collect()
@@ -152,58 +177,47 @@ impl Board {
         let mut b = Self::empty();
         for (r, row) in rows.iter().enumerate().take(HEIGHT) {
             for (c, ch) in row.chars().enumerate().take(WIDTH) {
-                b.cells[r][c] = ch == '#';
+                if ch == '#' {
+                    b.set(r, c);
+                }
             }
         }
         b
     }
 
-    /// Fused single-scan board features (the search hot path): heights +
-    /// row/col transitions + holes + hole cover, integer-exact against the
-    /// per-feature scans (`heights`/`hole_count`/`f_row_trans`-shape walks).
-    /// Two passes over the 200-byte grid: one column-major, one row-major.
+    /// Fused board features (the search hot path): heights + row/col
+    /// transitions + holes + hole cover, integer-exact against the
+    /// per-feature cell walks (`scan_matches_the_per_feature_walks`).
     pub fn scan(&self) -> BoardScan {
         let mut heights = [0usize; WIDTH];
         let mut col_trans = 0u32;
         let mut holes = 0u32;
         let mut hole_cover = 0u32;
         for (c, hc) in heights.iter_mut().enumerate() {
-            let mut top: isize = -1;
-            let mut filled = 0u32;
-            let mut prev = false;
-            let mut filled_above = 0u32;
-            for r in 0..HEIGHT {
-                let cur = self.cells[r][c];
-                col_trans += u32::from(cur != prev);
-                prev = cur;
-                if cur {
-                    if top < 0 {
-                        top = r as isize;
-                    }
-                    filled += 1;
-                    filled_above += 1;
-                } else if top >= 0 {
-                    // A hole: everything above it covers it.
-                    hole_cover += filled_above;
-                }
+            let m = self.cols[c];
+            // Top edge counts as empty; bit r vs bit r−1 is one transition.
+            col_trans += ((m ^ (m << 1)) & FULL_COL).count_ones();
+            col_trans += u32::from((m >> (HEIGHT - 1)) & 1 == 0); // floor
+            if m == 0 {
+                continue;
             }
-            col_trans += u32::from(!prev); // floor (bottom cell empty → transition)
-            *hc = if top < 0 {
-                0
-            } else {
-                (HEIGHT as isize - top) as usize
-            };
-            holes += *hc as u32 - filled;
+            let top = m.trailing_zeros();
+            *hc = HEIGHT - top as usize;
+            holes += *hc as u32 - m.count_ones();
+            // Each hole below the top is covered by every filled cell above it.
+            let mut hm = !m & FULL_COL & !((1u32 << top) - 1);
+            while hm != 0 {
+                let r = hm.trailing_zeros();
+                hole_cover += (m & ((1u32 << r) - 1)).count_ones();
+                hm &= hm - 1;
+            }
         }
-        let mut row_trans = 0u32;
-        for r in 0..HEIGHT {
-            let mut prev = true; // wall
-            for c in 0..WIDTH {
-                let cur = self.cells[r][c];
-                row_trans += u32::from(cur != prev);
-                prev = cur;
-            }
-            row_trans += u32::from(!prev); // right wall
+        // Row transitions summed over rows = left wall + each adjacent
+        // column pair + right wall, each a popcount over the row bits.
+        let mut row_trans = (!self.cols[0] & FULL_COL).count_ones()
+            + (!self.cols[WIDTH - 1] & FULL_COL).count_ones();
+        for c in 0..WIDTH - 1 {
+            row_trans += (self.cols[c] ^ self.cols[c + 1]).count_ones();
         }
         BoardScan {
             heights,
@@ -475,16 +489,7 @@ pub fn hard_drop_with(
 /// equivalence tests below) — a plain heights shortcut is WRONG under
 /// overhangs (the shadow below a floating cell is open).
 fn from_top_rest(board: &Board, cells: &[(usize, usize)], col: usize) -> Option<u8> {
-    let mut masks = [0u32; WIDTH];
-    for (c, m) in masks.iter_mut().enumerate() {
-        let mut v = 0u32;
-        for r in 0..HEIGHT {
-            if board.cell(r, c) {
-                v |= 1 << r;
-            }
-        }
-        *m = v;
-    }
+    let masks = board.col_masks();
     let mut min_room = isize::MAX;
     for &(dy, dx) in cells {
         let below = masks[col + dx] & !((1u32 << dy) - 1); // rows ≥ dy
@@ -520,16 +525,7 @@ pub fn landing_options_with(board: &Board, piece: Piece, rule: DropRule) -> Vec<
             // FromTop rest row needs, per piece cell, the FIRST occupied row
             // at or below the cell's spawn row — a heights shortcut is wrong
             // under overhangs (the shadow below a floating cell is open).
-            let mut masks = [0u32; WIDTH];
-            for (c, m) in masks.iter_mut().enumerate() {
-                let mut v = 0u32;
-                for r in 0..HEIGHT {
-                    if board.cell(r, c) {
-                        v |= 1 << r;
-                    }
-                }
-                *m = v;
-            }
+            let masks = board.col_masks();
             for (ri, form) in rotations_static(piece).iter().enumerate() {
                 for col in 0..=(WIDTH - form.width) {
                     let mut min_room = isize::MAX;
@@ -1045,7 +1041,7 @@ mod tests {
                 cells.iter().all(|&(dy, dx)| {
                     let r = row + dy;
                     let c = col + dx;
-                    c < WIDTH && r < HEIGHT && !board.cells[r][c]
+                    c < WIDTH && r < HEIGHT && !board.cell(r, c)
                 })
             };
             if !fits_at(0) {
@@ -1073,7 +1069,7 @@ mod tests {
                     x ^= x >> 7;
                     x ^= x << 17;
                     if x % 100 < p {
-                        b.cells[r][c] = true;
+                        b.set(r, c);
                     }
                 }
             }
@@ -1156,7 +1152,7 @@ mod tests {
                 x ^= x >> 7;
                 x ^= x << 17;
                 if x % 100 < fill_pct {
-                    b.cells[r][c] = true;
+                    b.set(r, c);
                 }
             }
         }
@@ -1181,7 +1177,7 @@ mod tests {
                     x ^= x >> 7;
                     x ^= x << 17;
                     if x % 100 < p {
-                        b.cells[r][c] = true;
+                        b.set(r, c);
                     }
                 }
             }
@@ -1239,6 +1235,99 @@ mod tests {
             }
             assert_eq!(s.hole_cover as usize, cover, "hole_cover");
         }
+    }
+
+    /// The bitmap [`Board`] against an independent `[[bool; WIDTH]; HEIGHT]`
+    /// grid (the representation it replaced, re-implemented inline so it
+    /// shares no helper): `cell`, `heights`, `hole_count`, `full_rows`,
+    /// `place_and_clear` and `clear_rows` agree after every random move,
+    /// including multi-line and non-adjacent clears.
+    #[test]
+    fn bitmap_board_matches_a_bool_grid_reference() {
+        type Grid = [[bool; WIDTH]; HEIGHT];
+        fn grid_clear(g: &mut Grid) -> u32 {
+            let mut write = HEIGHT;
+            let mut cleared = 0;
+            for r in (0..HEIGHT).rev() {
+                if g[r].iter().all(|&b| b) {
+                    cleared += 1;
+                } else {
+                    write -= 1;
+                    g[write] = g[r];
+                }
+            }
+            for row in &mut g[..write] {
+                *row = [false; WIDTH];
+            }
+            cleared
+        }
+        fn same(b: &Board, g: &Grid) -> bool {
+            (0..HEIGHT).all(|r| (0..WIDTH).all(|c| b.cell(r, c) == g[r][c]))
+        }
+        let mut x = 0xD1B5_4A32_D192_ED03u64;
+        let mut next = move || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        let mut multi = 0u32;
+        for _ in 0..400 {
+            let mut b = Board::empty();
+            let mut g: Grid = [[false; WIDTH]; HEIGHT];
+            // Random fill: dense bottom rows so real clears happen.
+            for r in 0..HEIGHT {
+                let p = if r >= 12 { 92 } else { 20 };
+                for c in 0..WIDTH {
+                    if next() % 100 < p {
+                        b.set(r, c);
+                        g[r][c] = true;
+                    }
+                }
+            }
+            for _ in 0..30 {
+                // Place a random 4-cell set, then clear both ways.
+                let mut cells = [(0usize, 0usize); 4];
+                for cell in &mut cells {
+                    *cell = ((next() % HEIGHT as u64) as usize, (next() % WIDTH as u64) as usize);
+                }
+                let mut refg = g;
+                for &(r, c) in &cells {
+                    refg[r][c] = true;
+                }
+                let mut placed = b.clone();
+                placed.place(&cells);
+                let want_full: Vec<usize> =
+                    (0..HEIGHT).filter(|&r| refg[r].iter().all(|&v| v)).collect();
+                assert_eq!(placed.full_rows(), want_full, "full_rows");
+                let mut via_rows = placed.clone();
+                via_rows.clear_rows(&want_full);
+                let want = grid_clear(&mut refg);
+                multi += u32::from(want >= 2);
+                assert_eq!(b.place_and_clear(&cells), want, "cleared count");
+                assert!(same(&b, &refg), "place_and_clear grid");
+                assert!(via_rows == b, "clear_rows ≡ place_and_clear");
+                g = refg;
+                let h = b.heights();
+                for c in 0..WIDTH {
+                    let top = (0..HEIGHT).find(|&r| g[r][c]);
+                    assert_eq!(h[c], top.map_or(0, |t| HEIGHT - t), "height");
+                }
+                let holes: usize = (0..WIDTH)
+                    .map(|c| {
+                        let top = (0..HEIGHT).find(|&r| g[r][c]).unwrap_or(HEIGHT);
+                        (top..HEIGHT).filter(|&r| !g[r][c]).count()
+                    })
+                    .sum();
+                assert_eq!(b.hole_count(), holes, "holes");
+            }
+        }
+        assert!(multi > 50, "the walk must exercise multi-line clears ({multi})");
+        // Round trip through the dump format.
+        let b = garbage_like(3, 60);
+        let rows = b.to_strings();
+        let refs: Vec<&str> = rows.iter().map(String::as_str).collect();
+        assert!(Board::from_strings(&refs) == b, "from_strings ∘ to_strings");
     }
 
     #[test]

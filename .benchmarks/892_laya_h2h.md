@@ -288,5 +288,60 @@ What changed (no behavior change anywhere):
 
 The recorded champion numbers in the tables above are unchanged — this
 pass makes the SAME decisions ~8× faster. The reflex-site arena's
-"rulebook ~6.2 ms/piece" bar is now ~0.9 ms on this box (site lane
-regenerates on its own cadence).
+"rulebook ~6.2 ms/piece" bar was re-recorded at 0.795 ms/piece
+(reflex-site `731388c`, figure label katgpt-rs `5786b1436`).
+
+## Bitmap-board addendum (2026-09-25, same day) — another 2.4× (hybrid) / 5× (ply2), bit-identical play
+
+`Board` in `examples/common/tetris_sim.rs` is now stored column-major as
+`[u32; WIDTH]` bitmasks (bit `r` of `cols[c]` ⇔ `(r, c)` occupied) instead of
+`[[bool; WIDTH]; HEIGHT]`. The field is private and the public API is
+unchanged, so no caller moved. Every hot operation is now bit arithmetic:
+
+- heights = `HEIGHT − trailing_zeros`; holes = height − popcount;
+- column transitions = `popcount((m ^ (m << 1)) & FULL)` + the floor bit;
+  row transitions = left wall + Σ `popcount(cols[c] ^ cols[c+1])` + right
+  wall; hole cover = popcount of filled bits above each hole bit;
+- full rows = the AND of the ten columns; a clear is a per-column bit
+  compaction (`clear_row_bits`), top-down, one cleared row at a time;
+- the FromTop landing masks the previous pass built from 200 `cell()` reads
+  per call are now the storage itself (`Board::col_masks`).
+
+Interleaved A/B, same box, same build flags, the baseline binary built at
+`5786b1436` before any edit (`h2h --jobs 1 --games 6 --cap 300`, empty board,
+three alternating base/new pairs):
+
+| player | base ms/decision | bitmap ms/decision | speedup |
+|---|---|---|---|
+| rulebook-hybrid-d3 | 0.865 / 0.856 / 0.863 | 0.351 / 0.356 / 0.347 | **2.45×** |
+| ply2-shaped | 0.146 / 0.141 / 0.142 | 0.028 / 0.028 / 0.028 | **5.1×** |
+
+The 10-seed runs agree: hybrid 0.868 → 0.358 (empty), 0.825 → 0.345
+(18@75); ply2 0.140 → 0.028 / 0.135 → 0.028. Site walk (`tetris_09`, seed
+607 uniform, cap 300): 0.838 → 0.374 ms/decision. Box: M3 Max, AC power,
+powermode 2, loadavg 3.6–5.5 (sibling sessions active). The earlier "est.
+~1.5×" guess undershot, because the scan and the landing-mask build were
+both 200-cell walks that became ten popcounts.
+
+Bit-identity gates, every one run against the base binary:
+
+| gate | result |
+|---|---|
+| h2h per-seed pieces/lines/points, empty 1..=10 + 18@75 1..=10 (incl. the seed-8 12/3/120 fingerprint) | identical |
+| `tetris_01_state_enum` fixture regeneration, v2 and v3 | **byte-identical** dumps (1,113,251 / 1,113,238 B) |
+| `tetris_02` drift check, v2 / v3 fixtures (120 states / 2660 options) | PASS, output identical |
+| `tetris_04_preview_fit` (v4) and `decode_01_losslessness` | output identical |
+| `tetris_06 anchor` (rulebook ≡ Bench 891, `selftest` incl. `eval ≡ eval_with`) | 10/10, identical |
+| `tetris_09_site_walk` walk rows (sans ms) + summary | identical (20600 / 115 / 15) |
+| example test suites (10 binaries incl. the 14 sim tests) | all pass |
+
+New standing test `bitmap_board_matches_a_bool_grid_reference`: 400 random
+boards × 30 random placements against an inline `[[bool]]` grid sharing no
+helper (cell, heights, holes, `full_rows`, `place_and_clear`, `clear_rows`,
+dump round-trip), asserting > 50 multi-line clears occur. Proven to fire: a
+planted `| (c & 1)` in `clear_row_bits` reds it.
+
+Side fix found by the replay diff: `tetris_02`'s "constant-pick baseline"
+line printed index 1 or 16 run to run on the v3 fixture (both 13/120 — an
+unordered `max_by_key` over a `HashMap`). Ties now go to the lowest index;
+4/4 runs print 1. The agreement counts never changed.
