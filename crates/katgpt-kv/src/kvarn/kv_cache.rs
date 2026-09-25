@@ -520,6 +520,47 @@ impl KVarNKVCache {
 
     /// Dequantize value into pre-allocated buffer (zero-alloc hot path).
     pub fn dequantize_value_into(&mut self, layer: usize, pos: usize, out: &mut [f32]) {
+        self.dequantize_value_impl::<false>(layer, pos, out, &[]);
+    }
+
+    /// Dequantize value and add a per-element `bias` row in the SAME pass:
+    /// `out[i] = dequant(v)[i] + bias[i]` (zero-alloc hot path).
+    ///
+    /// The add is folded into each bit-width's dequant epilogue, so the row
+    /// is written once instead of dequant-then-add. It is a plain f32 `+`
+    /// after the unchanged dequant expression, NOT an FMA contraction, so
+    /// the result is bit-identical to `dequantize_value_into` followed by
+    /// `out[i] += bias[i]` (the trait default) — Issue 883 P1 G3. With the
+    /// Hadamard rotation on, the add must follow the inverse transform, so
+    /// that configuration takes the two-pass form (same bits).
+    pub fn dequantize_value_add_into(
+        &mut self,
+        layer: usize,
+        pos: usize,
+        out: &mut [f32],
+        bias: &[f32],
+    ) {
+        debug_assert_eq!(bias.len(), self.kv_dim);
+        if self.effective_hadamard && self.kv_dim.is_power_of_two() {
+            self.dequantize_value_impl::<false>(layer, pos, out, &[]);
+            for (o, &b) in out.iter_mut().zip(bias) {
+                *o += b;
+            }
+            return;
+        }
+        self.dequantize_value_impl::<true>(layer, pos, out, bias);
+    }
+
+    /// The value-dequant kernel; `BIAS` appends `+ bias[ch]` to every
+    /// element's epilogue (monomorphized away when `false`).
+    #[inline(always)]
+    fn dequantize_value_impl<const BIAS: bool>(
+        &mut self,
+        layer: usize,
+        pos: usize,
+        out: &mut [f32],
+        bias: &[f32],
+    ) {
         debug_assert_eq!(out.len(), self.kv_dim);
         let tile_idx = pos / self.tile_size;
         let pos_in_tile = pos % self.tile_size;
@@ -527,12 +568,22 @@ impl KVarNKVCache {
         let tile = &self.val_tiles[Self::tile_meta_idx(self.n_tiles, layer, tile_idx)];
         if tile.count == 0 {
             out.fill(0.0);
+            if BIAS {
+                // `0.0 + b`, exactly what the two-pass form computes.
+                for (o, &b) in out.iter_mut().zip(bias) {
+                    *o += b;
+                }
+            }
             return;
         }
 
         let bits = self.bits as usize;
         let kv_dim = self.kv_dim;
         let bpr = packed_bytes_per_row(kv_dim, self.bits);
+        // Pin both lengths to `kv_dim` once so the per-element `bias[k]` /
+        // `out[k]` indexing carries no bounds checks the plain path lacks.
+        let out = &mut out[..kv_dim];
+        let bias = if BIAS { &bias[..kv_dim] } else { bias };
 
         let row_off = pos_in_tile * bpr;
         let tile_off = self.val_tile_off(layer, tile_idx);
@@ -557,15 +608,26 @@ impl KVarNKVCache {
                 for i in 0..full_pairs {
                     let b = packed_row[i];
                     let q0 = (b & 0x0F) as f32;
-                    out[2 * i] = q0.mul_add(rtn_scale, rtn_zp_val) * s_col[2 * i] * var_row;
+                    out[2 * i] = with_bias::<BIAS>(
+                        q0.mul_add(rtn_scale, rtn_zp_val) * s_col[2 * i] * var_row,
+                        bias,
+                        2 * i,
+                    );
                     let q1 = (b >> 4) as f32;
-                    out[2 * i + 1] = q1.mul_add(rtn_scale, rtn_zp_val) * s_col[2 * i + 1] * var_row;
+                    out[2 * i + 1] = with_bias::<BIAS>(
+                        q1.mul_add(rtn_scale, rtn_zp_val) * s_col[2 * i + 1] * var_row,
+                        bias,
+                        2 * i + 1,
+                    );
                 }
                 if kv_dim & 1 == 1 {
                     let b = packed_row[full_pairs];
                     let q0 = (b & 0x0F) as f32;
-                    out[2 * full_pairs] =
-                        q0.mul_add(rtn_scale, rtn_zp_val) * s_col[2 * full_pairs] * var_row;
+                    out[2 * full_pairs] = with_bias::<BIAS>(
+                        q0.mul_add(rtn_scale, rtn_zp_val) * s_col[2 * full_pairs] * var_row,
+                        bias,
+                        2 * full_pairs,
+                    );
                 }
             }
             2 => {
@@ -593,10 +655,26 @@ impl KVarNKVCache {
                             let idx = row_base + g;
                             let scale = rtn_scales[idx];
                             let zp = rtn_zp[idx];
-                            out[4 * i] = ((b & 0x03) as f32).mul_add(scale, zp);
-                            out[4 * i + 1] = (((b >> 2) & 0x03) as f32).mul_add(scale, zp);
-                            out[4 * i + 2] = (((b >> 4) & 0x03) as f32).mul_add(scale, zp);
-                            out[4 * i + 3] = (((b >> 6) & 0x03) as f32).mul_add(scale, zp);
+                            out[4 * i] = with_bias::<BIAS>(
+                                ((b & 0x03) as f32).mul_add(scale, zp),
+                                bias,
+                                4 * i,
+                            );
+                            out[4 * i + 1] = with_bias::<BIAS>(
+                                (((b >> 2) & 0x03) as f32).mul_add(scale, zp),
+                                bias,
+                                4 * i + 1,
+                            );
+                            out[4 * i + 2] = with_bias::<BIAS>(
+                                (((b >> 4) & 0x03) as f32).mul_add(scale, zp),
+                                bias,
+                                4 * i + 2,
+                            );
+                            out[4 * i + 3] = with_bias::<BIAS>(
+                                (((b >> 6) & 0x03) as f32).mul_add(scale, zp),
+                                bias,
+                                4 * i + 3,
+                            );
                         }
                         // Tail: 0..=3 remaining values packed in the next byte,
                         // all in the last group.
@@ -612,7 +690,11 @@ impl KVarNKVCache {
                                 if k >= kv_dim {
                                     break;
                                 }
-                                out[k] = (((b >> sh) & 0x03) as f32).mul_add(scale, zp);
+                                out[k] = with_bias::<BIAS>(
+                                    (((b >> sh) & 0x03) as f32).mul_add(scale, zp),
+                                    bias,
+                                    k,
+                                );
                             }
                         }
                     } else {
@@ -623,13 +705,26 @@ impl KVarNKVCache {
                         let full_quads = kv_dim / 4;
                         for i in 0..full_quads {
                             let b = packed_row[i];
-                            out[4 * i] = ((b & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val);
-                            out[4 * i + 1] =
-                                (((b >> 2) & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val);
-                            out[4 * i + 2] =
-                                (((b >> 4) & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val);
-                            out[4 * i + 3] =
-                                (((b >> 6) & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val);
+                            out[4 * i] = with_bias::<BIAS>(
+                                ((b & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val),
+                                bias,
+                                4 * i,
+                            );
+                            out[4 * i + 1] = with_bias::<BIAS>(
+                                (((b >> 2) & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val),
+                                bias,
+                                4 * i + 1,
+                            );
+                            out[4 * i + 2] = with_bias::<BIAS>(
+                                (((b >> 4) & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val),
+                                bias,
+                                4 * i + 2,
+                            );
+                            out[4 * i + 3] = with_bias::<BIAS>(
+                                (((b >> 6) & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val),
+                                bias,
+                                4 * i + 3,
+                            );
                         }
                         let tail_start = 4 * full_quads;
                         if tail_start < kv_dim {
@@ -640,8 +735,12 @@ impl KVarNKVCache {
                                 if idx >= kv_dim {
                                     break;
                                 }
-                                out[idx] = (((tail_byte >> sh) & 0x03) as f32)
-                                    .mul_add(rtn_scale, rtn_zp_val);
+                                out[idx] = with_bias::<BIAS>(
+                                    (((tail_byte >> sh) & 0x03) as f32)
+                                        .mul_add(rtn_scale, rtn_zp_val),
+                                    bias,
+                                    idx,
+                                );
                             }
                         }
                     }
@@ -654,16 +753,29 @@ impl KVarNKVCache {
                     for i in 0..full_quads {
                         let b = packed_row[i];
                         let q0 = (b & 0x03) as f32;
-                        out[4 * i] = q0.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i] * var_row;
+                        out[4 * i] = with_bias::<BIAS>(
+                            q0.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i] * var_row,
+                            bias,
+                            4 * i,
+                        );
                         let q1 = ((b >> 2) & 0x03) as f32;
-                        out[4 * i + 1] =
-                            q1.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i + 1] * var_row;
+                        out[4 * i + 1] = with_bias::<BIAS>(
+                            q1.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i + 1] * var_row,
+                            bias,
+                            4 * i + 1,
+                        );
                         let q2 = ((b >> 4) & 0x03) as f32;
-                        out[4 * i + 2] =
-                            q2.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i + 2] * var_row;
+                        out[4 * i + 2] = with_bias::<BIAS>(
+                            q2.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i + 2] * var_row,
+                            bias,
+                            4 * i + 2,
+                        );
                         let q3 = ((b >> 6) & 0x03) as f32;
-                        out[4 * i + 3] =
-                            q3.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i + 3] * var_row;
+                        out[4 * i + 3] = with_bias::<BIAS>(
+                            q3.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i + 3] * var_row,
+                            bias,
+                            4 * i + 3,
+                        );
                     }
                     // Tail: 0..=3 remaining elements packed in the next byte.
                     // Only access packed_row[full_quads] if a tail actually exists.
@@ -677,7 +789,11 @@ impl KVarNKVCache {
                                 break;
                             }
                             let q = ((tail_byte >> sh) & 0x03) as f32;
-                            out[idx] = q.mul_add(rtn_scale, rtn_zp_val) * s_col[idx] * var_row;
+                            out[idx] = with_bias::<BIAS>(
+                                q.mul_add(rtn_scale, rtn_zp_val) * s_col[idx] * var_row,
+                                bias,
+                                idx,
+                            );
                         }
                     }
                 }
@@ -687,7 +803,11 @@ impl KVarNKVCache {
                 let rtn_zp_val = rtn_zp[pos_in_tile];
                 for ch in 0..kv_dim {
                     let q = packed_row[ch] as f32;
-                    out[ch] = q.mul_add(rtn_scale, rtn_zp_val) * s_col[ch] * var_row;
+                    out[ch] = with_bias::<BIAS>(
+                        q.mul_add(rtn_scale, rtn_zp_val) * s_col[ch] * var_row,
+                        bias,
+                        ch,
+                    );
                 }
             }
             _ => {
@@ -698,7 +818,11 @@ impl KVarNKVCache {
                 unpack_row(packed_row, bits, scratch);
                 for ch in 0..kv_dim {
                     let q = scratch[ch] as f32;
-                    out[ch] = q.mul_add(rtn_scale, rtn_zp_val) * s_col[ch] * var_row;
+                    out[ch] = with_bias::<BIAS>(
+                        q.mul_add(rtn_scale, rtn_zp_val) * s_col[ch] * var_row,
+                        bias,
+                        ch,
+                    );
                 }
             }
         }
@@ -1051,6 +1175,14 @@ impl KVarNKVCache {
     }
 }
 
+/// The `BIAS` epilogue of [`KVarNKVCache::dequantize_value_impl`]: `x + bias[k]`
+/// as a separate f32 add (never contracted into the preceding FMA — that is
+/// what keeps the fused read bit-identical to dequant-then-add).
+#[inline(always)]
+fn with_bias<const BIAS: bool>(x: f32, bias: &[f32], k: usize) -> f32 {
+    if BIAS { x + bias[k] } else { x }
+}
+
 impl katgpt_core::types::QuantizedKVCache for KVarNKVCache {
     fn store_key(&mut self, layer: usize, pos: usize, key: &[f32]) {
         self.store_key(layer, pos, key);
@@ -1066,6 +1198,17 @@ impl katgpt_core::types::QuantizedKVCache for KVarNKVCache {
 
     fn dequantize_value_into(&mut self, layer: usize, pos: usize, out: &mut [f32]) {
         self.dequantize_value_into(layer, pos, out);
+    }
+
+    #[inline]
+    fn dequantize_value_add_into(
+        &mut self,
+        layer: usize,
+        pos: usize,
+        out: &mut [f32],
+        bias: &[f32],
+    ) {
+        self.dequantize_value_add_into(layer, pos, out, bias);
     }
 
     fn reset(&mut self) {

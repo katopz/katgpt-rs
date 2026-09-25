@@ -299,6 +299,7 @@ fn main() {
     g1c_off_mean();
     g1d_sink();
     g3_bit_identity();
+    g3b_fold_bit_identity();
     g4_allocs();
     g2_kernel();
     let fails = FAILS.load(Ordering::Relaxed);
@@ -411,6 +412,75 @@ fn g3_bit_identity() {
                 format!("{diff} differing elements of {}", T * D),
             );
         }
+    }
+}
+
+/// G3b — a REAL (non-zero) table: the decorator's read and fused
+/// accumulate must equal the backend's plain dequant followed by the
+/// unfused `+ E[s]` (and `w · (x + m)`) BITWISE, whichever epilogue the
+/// backend uses for `dequantize_value_add_into`. Covers every bit-width
+/// arm plus the Hadamard configuration (whose add must follow the inverse
+/// transform).
+fn g3b_fold_bit_identity() {
+    println!("\nG3b — non-zero table: decorated read / accumulate vs unfused reference, bitwise");
+    let world = World::new(1.0, Arm::Plain, 0x0883_0033);
+    let (table, _) = fit(&world, 0xCA33);
+    let ho = held_out(&world, 0x433);
+    for &(bits, hadamard) in &[(2u8, false), (4, false), (8, false), (4, true)] {
+        let mk = || {
+            KVarNKVCache::with_config(&KVarNConfig {
+                n_layers: 1,
+                kv_dim: D,
+                max_seq_len: T,
+                bits,
+                tile_size: TILE,
+                hadamard,
+                ..KVarNConfig::default()
+            })
+        };
+        let mut dec = MeanRemovedValueCache::new(mk(), &table, T);
+        for p in 0..T {
+            dec.set_token(p, ho.toks[p]);
+            dec.store_value(0, p, &ho.vals[p * D..(p + 1) * D]);
+        }
+        let (mut got, mut want) = (vec![0.0f32; D], vec![0.0f32; D]);
+        let (mut acc_got, mut acc_want) = (vec![0.0f32; D], vec![0.0f32; D]);
+        let (mut diff_read, mut diff_acc, mut hit) = (0usize, 0usize, 0usize);
+        for p in 0..T {
+            let row = table.row(0, ho.toks[p]);
+            hit += usize::from(row.is_some());
+            dec.dequantize_value_into(0, p, &mut got);
+            dec.inner_mut().dequantize_value_into(0, p, &mut want);
+            let w = 1.0 / (1.0 + (p % 97) as f32);
+            for (k, (a, &x)) in acc_want.iter_mut().zip(&want).enumerate() {
+                *a += w * row.map_or(x, |e| x + e[k]);
+            }
+            if let Some(e) = row {
+                for (x, &m) in want.iter_mut().zip(e) {
+                    *x += m;
+                }
+            }
+            dec.accumulate_value(0, p, w, &mut acc_got);
+            diff_read += got
+                .iter()
+                .zip(&want)
+                .filter(|(x, y)| x.to_bits() != y.to_bits())
+                .count();
+        }
+        diff_acc += acc_got
+            .iter()
+            .zip(&acc_want)
+            .filter(|(x, y)| x.to_bits() != y.to_bits())
+            .count();
+        gate(
+            &format!("G3b bits={bits} hadamard={hadamard}"),
+            diff_read == 0 && diff_acc == 0 && hit > T / 2,
+            format!(
+                "read {diff_read} of {} differ, accumulate {diff_acc} of {D} differ ({hit} of {T} \
+                 positions hit a row)",
+                T * D
+            ),
+        );
     }
 }
 
@@ -550,5 +620,97 @@ fn g2_kernel() {
         },
     );
     r2.report("G2 report two-pass decorator read / plain");
+
+    // ── REPORT arms (Bench 895 addendum): the per-position floor and the
+    // next lever. None of these gate; they locate where the +x% lives.
+    //
+    // A/A: a second plain cache over the same data — the protocol's own
+    // floor on this box (the harness always runs a before b in a round).
+    let mut plain2 = kvarn(4);
+    // Lookup-only: a decorator whose table misses every token — it pays the
+    // per-position token → row resolution and nothing else.
+    let miss = FittedTokenTable::from_rows(1, D, vec![u32::MAX; U + 1], Vec::new());
+    let mut dmiss = MeanRemovedValueCache::new(kvarn(4), &miss, T);
+    for p in 0..T {
+        let v = &ho.vals[p * D..(p + 1) * D];
+        plain2.store_value(0, p, v);
+        dmiss.set_token(p, ho.toks[p]);
+        dmiss.store_value(0, p, v);
+    }
+    let r3 = ab_median_ratio(
+        21,
+        10,
+        3,
+        |i| ka += plain_pass(&mut plain, &w, i, &mut buf_a, &mut acc_a),
+        |i| kb += plain_pass(&mut plain2, &w, i, &mut buf_b, &mut acc_b),
+    );
+    r3.report("G2 report A/A control (second plain cache) / plain");
+    let r4 = ab_median_ratio(
+        21,
+        10,
+        3,
+        |i| ka += plain_pass(&mut plain, &w, i, &mut buf_a, &mut acc_a),
+        |i| {
+            acc_b.fill(0.0);
+            let s = 1.0 + (i % 3) as f32 * 1e-3;
+            for (p, &wv) in w.iter().enumerate() {
+                dmiss.accumulate_value(0, p, black_box(wv * s), &mut acc_b);
+            }
+            kb += black_box(acc_b[i % D]);
+        },
+    );
+    r4.report("G2 report lookup-only (miss-table accumulate_value) / plain");
+    // Deferred restore — the NEXT lever, by linearity of the aggregation:
+    //   Σ_p w_p·(v̂_p + E[s_p]) = Σ_p w_p·v̂_p + Σ_s (Σ_{p: s_p = s} w_p)·E[s]
+    // so the per-position work is one scalar bucket add, and the table rows
+    // are touched once per DISTINCT token at the end. Not bit-identical to
+    // the per-position form (the sum is reassociated); test-local only.
+    let toks = &ho.toks;
+    let mut wtok = vec![0.0f32; U + 1];
+    let r5 = ab_median_ratio(
+        21,
+        10,
+        3,
+        |i| ka += plain_pass(&mut plain, &w, i, &mut buf_a, &mut acc_a),
+        |i| {
+            acc_b.fill(0.0);
+            wtok.fill(0.0);
+            let s = 1.0 + (i % 3) as f32 * 1e-3;
+            for (p, &wv) in w.iter().enumerate() {
+                dec.inner_mut().dequantize_value_into(0, p, &mut buf_b);
+                let wp = black_box(wv * s);
+                for (a, &x) in acc_b.iter_mut().zip(&buf_b) {
+                    *a += wp * x;
+                }
+                wtok[toks[p] as usize] += wp;
+            }
+            for (t, &wt) in wtok.iter().enumerate() {
+                if wt == 0.0 {
+                    continue;
+                }
+                if let Some(row) = table.row(0, t as u32) {
+                    for (a, &m) in acc_b.iter_mut().zip(row) {
+                        *a += wt * m;
+                    }
+                }
+            }
+            kb += black_box(acc_b[i % D]);
+        },
+    );
+    r5.report("G2 report deferred restore (per-token weight bucket) / plain");
     black_box(ka + kb);
+}
+
+/// The plain G2 arm: KVarN dequant + axpy over every position.
+fn plain_pass(c: &mut KVarNKVCache, w: &[f32], i: usize, buf: &mut [f32], acc: &mut [f32]) -> f32 {
+    acc.fill(0.0);
+    let s = 1.0 + (i % 3) as f32 * 1e-3;
+    for (p, &wv) in w.iter().enumerate() {
+        c.dequantize_value_into(0, p, buf);
+        let wp = black_box(wv * s);
+        for (a, &x) in acc.iter_mut().zip(buf.iter()) {
+            *a += wp * x;
+        }
+    }
+    black_box(acc[i % D])
 }

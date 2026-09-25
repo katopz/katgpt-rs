@@ -313,14 +313,22 @@ impl<'t, C: QuantizedKVCache> MeanRemovedValueCache<'t, C> {
     }
 
     /// The fused decode-attention V step: `acc += w · (dequant(q_pos) +
-    /// E^V_l[s_pos])` — the backend dequantizes the stored residual into
-    /// the owned scratch, then ONE [`axpy_mean_restored`] pass restores the
-    /// mean and accumulates (no separate add pass over `out`). Zero-alloc.
+    /// E^V_l[s_pos])`. The mean restore rides the backend's OWN dequant
+    /// epilogue ([`QuantizedKVCache::dequantize_value_add_into`] — KVarN
+    /// folds it into each bit-width's inner loop; other backends take the
+    /// trait's dequant-then-add default), then one plain axpy accumulates.
+    /// Bit-identical to the pre-fold `axpy_mean_restored` form: the same
+    /// `x + m` then `w · (x + m)` per element. Zero-alloc.
     pub fn accumulate_value(&mut self, layer: usize, pos: usize, w: f32, acc: &mut [f32]) {
-        let row = self.row_at(layer, pos);
-        self.inner
-            .dequantize_value_into(layer, pos, &mut self.scratch);
-        axpy_mean_restored(acc, w, &self.scratch, row);
+        match self.row_at(layer, pos) {
+            None => self
+                .inner
+                .dequantize_value_into(layer, pos, &mut self.scratch),
+            Some(e) => self
+                .inner
+                .dequantize_value_add_into(layer, pos, &mut self.scratch, e),
+        }
+        axpy_mean_restored(acc, w, &self.scratch, None);
     }
 
     #[inline]
@@ -355,8 +363,10 @@ impl<C: QuantizedKVCache> QuantizedKVCache for MeanRemovedValueCache<'_, C> {
     }
 
     fn dequantize_value_into(&mut self, layer: usize, pos: usize, out: &mut [f32]) {
-        self.inner.dequantize_value_into(layer, pos, out);
-        add_token_mean_inplace(out, self.row_at(layer, pos));
+        match self.row_at(layer, pos) {
+            None => self.inner.dequantize_value_into(layer, pos, out),
+            Some(e) => self.inner.dequantize_value_add_into(layer, pos, out, e),
+        }
     }
 
     fn reset(&mut self) {
