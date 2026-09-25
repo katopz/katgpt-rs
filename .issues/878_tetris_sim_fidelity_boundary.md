@@ -61,3 +61,9 @@ states are fixture rows). Live-play agreement is therefore a DIFFERENT distribut
 the in-corpus 44/120 — the arena explain carries this sentence since reflex-site
 `e9973c0`. The generated bench table should carry the same caveat at its next
 regeneration (not done this session — the tables are riir-reflex harness output).
+
+## Addendum (2026-09-25) — a second fidelity gap, handled site-side
+
+`hard_drop` rests at the deepest collision-free row, so a piece can tunnel through a roof
+(3/2660 v2 options). Handled per this record's rule — live arena play filters tunnelled
+spots (reflex-site `c1fcf88`), corpus untouched. Record: HISTORY.md § Issue 884.

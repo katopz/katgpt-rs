@@ -1,3 +1,11 @@
+## Issue 884 (2026-09-25) — tetris_sim `hard_drop` tunnels through roofs: CLOSED (fix path A, site-side; corpus untouched)
+
+- **Trigger:** owner screenshot of reflex.gist.rs/arena, *"why partial 1 block not fall to the bottom? bug?"*. The floating remnant is **naive gravity** (a line clear shifts rows above by the cleared count, cells never cascade into gaps) — standard Tetris, not a bug.
+- **Real defect found while checking:** `examples/common/tetris_sim.rs::hard_drop` (and the JS port `hardDrop`) rests a piece at the DEEPEST collision-free row, scanning bottom-up, so under an overhang it passes through the roof into the cave. Probe: roof at row 17 cols 0..3, `O` at col 0 lands rows 18–19 (a real drop: 15–16). Pinned v2 corpus exposure: **3 of 2660 options**, 3 of 120 states.
+- **Decision (Claude verdict, owner-gated per 878):** path A. Live arena play filters spots unreachable from the top (`tetris_view.reachableFromTop` / `liveOptions`); recorded replays keep the pinned v2 option order; this repo's sim and fixture are UNCHANGED (Issue 878's never-mutate-v2 rule). Path B (fix `hard_drop` + regen) is admissible only as a NEW lane with its own fixture/head, per 878.
+- **Landed:** reflex-site `c1fcf88` (filter + three tests: O-under-roof two-sided, empty-board no-op, corpus count pinned at exactly 3; golden 2660/2660, demo smoke + demo check PASS), deployed to reflex.gist.rs (version `31744b04`; served assets verified to carry the change). `arena_prod_smoke` not run to completion — it requires a local engine, none was up.
+- ⚠ The pinned-corpus count (3) is a TEST now, so a v3 fixture that fixes `hard_drop` reds it — intended: it is the signal to drop the live filter.
+
 ## Issue 880 (2026-09-24) — calibrated-mass router gate, `exact_mass_admit` consumer lane (a): CLOSED (shipped opt-in, G2 FAIL by construction)
 
 Filed by the 4090 session from Bench 884's promotion candidates. It was implemented on the M3, because the lane is CPU-only and was waiting on the 4090 only for that box's harness window.
