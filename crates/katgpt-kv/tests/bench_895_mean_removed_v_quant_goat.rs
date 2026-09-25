@@ -24,9 +24,15 @@
 //!     T=4096 positions, 4-bit): fused `accumulate_value` vs the plain
 //!     KVarN dequant+axpy, paired interleave; bar ≤ 1.01 (the issue's
 //!     "fused dequant+add ≤ +1% kernel time"). The two-pass decorator read
-//!     (`dequantize_value_into` then axpy) is reported beside it.
+//!     (`dequantize_value_into` then axpy) is reported beside it, plus
+//!     three REPORT arms that locate the cost: an A/A control (the
+//!     protocol's floor on this box), a lookup-only miss-table arm (the
+//!     per-position token → row resolution alone), and the deferred
+//!     restore `Σ_p w_p·v̂_p + Σ_s W_s·E[s]` (the named next lever).
 //! G3  a table that misses every token, and an all-`+0.0` table, dequantize
 //!     bit-identically to the undecorated backend (bits 2 and 4).
+//! G3b a non-zero table: decorated read + accumulate bitwise vs the unfused
+//!     reference, bits 2/4/8 + Hadamard.
 //! G4  the decorator adds 0 allocations over the backend's own store+read
 //!     loop.
 //!
@@ -417,10 +423,11 @@ fn g3_bit_identity() {
 
 /// G3b — a REAL (non-zero) table: the decorator's read and fused
 /// accumulate must equal the backend's plain dequant followed by the
-/// unfused `+ E[s]` (and `w · (x + m)`) BITWISE, whichever epilogue the
-/// backend uses for `dequantize_value_add_into`. Covers every bit-width
-/// arm plus the Hadamard configuration (whose add must follow the inverse
-/// transform).
+/// unfused `+ E[s]` (and `w · (x + m)`) BITWISE. Covers every bit-width
+/// arm plus the Hadamard configuration. It is the gate any future fold of
+/// the add-back into a backend's dequant epilogue must pass (the
+/// bit-identical KVarN fold measured at `60f1e7baa` did; its FMA-contracted
+/// variant failed it on ~29% of elements — Bench 895 addendum).
 fn g3b_fold_bit_identity() {
     println!("\nG3b — non-zero table: decorated read / accumulate vs unfused reference, bitwise");
     let world = World::new(1.0, Arm::Plain, 0x0883_0033);
