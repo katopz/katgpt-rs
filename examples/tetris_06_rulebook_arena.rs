@@ -16,6 +16,8 @@
 //!
 //! Run: `cargo run --release --example tetris_06_rulebook_arena -- <cmd> [opts]`
 //! opts: `--games N --cap N --rows N --fill PCT --seed0 S --depth D --beam K`
+//! climb: `--iters N --delta10 D --test-seed0 S --test-games N --no-hold
+//! --fitness pieces|points`
 
 #[path = "common/tetris_sim.rs"]
 mod tetris_sim;
@@ -80,10 +82,15 @@ impl Score {
         }
     }
     /// Scalar fitness: survival first (pieces is its continuous proxy),
-    /// points as the tiebreak.
+    /// points as the tiebreak — or points first (`--fitness points`, the
+    /// scoring regime) with pieces as the tiebreak.
     fn fitness(&self) -> f64 {
         let g = self.games.max(1) as f64;
-        self.pieces as f64 / g + 1e-3 * self.points as f64 / g
+        if POINTS_FITNESS.load(std::sync::atomic::Ordering::Relaxed) {
+            self.points as f64 / g + 1e-3 * self.pieces as f64 / g
+        } else {
+            self.pieces as f64 / g + 1e-3 * self.points as f64 / g
+        }
     }
     fn row(&self) -> String {
         let g = self.games.max(1) as f64;
@@ -102,6 +109,10 @@ impl Score {
         )
     }
 }
+
+static POINTS_FITNESS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// `--no-hold`: the laya arena has no hold queue — the climb must not use it.
+static NO_HOLD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 const HEADER: &str = "surv   pieces   lines   points  tetr  hold  mode b/d/s";
 
@@ -295,18 +306,23 @@ fn cmd_enum(cfg: &Cfg, depth: u8, beam: u8) {
     // Marginal value of each owner rule: mean fitness with vs without.
     println!("\nmarginal effect per owner rule (mean over the 2^6 contexts of the other rules):");
     for (k, &id) in OWNER.iter().enumerate() {
-        let (mut on, mut off, mut n) = (0.0, 0.0, 0.0);
+        let (mut dp, mut dpts, mut dt, mut n) = (0.0, 0.0, 0.0, 0.0);
         for mask in 0u32..(1 << OWNER.len()) {
             if mask & (1 << k) == 0 {
-                on += scores[(mask | (1 << k)) as usize].fitness();
-                off += scores[mask as usize].fitness();
+                let (a, b) = (&scores[(mask | (1 << k)) as usize], &scores[mask as usize]);
+                let g = a.games.max(1) as f64;
+                dp += (a.pieces as f64 - b.pieces as f64) / g;
+                dpts += (a.points as f64 - b.points as f64) / g;
+                dt += (a.tetrises as f64 - b.tetrises as f64) / g;
                 n += 1.0;
             }
         }
         println!(
-            "  {:<12} {:>+8.1} pieces/g   ({})",
+            "  {:<12} {:>+8.1} pieces/g {:>+8.0} points/g {:>+6.2} tetrises/g   ({})",
             RULES[id as usize].key,
-            (on - off) / n,
+            dp / n,
+            dpts / n,
+            dt / n,
             RULES[id as usize].source
         );
     }
@@ -318,7 +334,11 @@ fn cmd_enum(cfg: &Cfg, depth: u8, beam: u8) {
 
 fn mutate(g: &Genome, rng: &mut fastrand::Rng) -> (Genome, String) {
     let mut m = g.clone();
-    let tog = toggleable(Physics::FromTop);
+    let no_hold = NO_HOLD.load(std::sync::atomic::Ordering::Relaxed);
+    let tog: Vec<RuleId> = toggleable(Physics::FromTop)
+        .into_iter()
+        .filter(|&id| !(no_hold && matches!(id, RuleId::HoldQueue | RuleId::HoldI)))
+        .collect();
     match rng.u32(0..10) {
         0 | 1 => {
             let id = tog[rng.usize(0..tog.len())];
@@ -356,6 +376,10 @@ fn cmd_climb(train: &Cfg, test: &Cfg, iters: u32, delta: f64, depth: u8, beam: u
     let mut g = Genome::full(Physics::FromTop);
     g.depth = depth;
     g.beam = beam;
+    if NO_HOLD.load(std::sync::atomic::Ordering::Relaxed) {
+        g.set(RuleId::HoldQueue, false);
+        g.set(RuleId::HoldI, false);
+    }
     let mut best = score_genome(&g, train);
     println!("climb start {} fitness {:.1} :: {HEADER}\n  {}", g.id(), best.fitness(), best.row());
     let mut rng = fastrand::Rng::with_seed(892);
@@ -383,6 +407,10 @@ fn cmd_climb(train: &Cfg, test: &Cfg, iters: u32, delta: f64, depth: u8, beam: u
         let mut f = Genome::full(Physics::FromTop);
         f.depth = depth;
         f.beam = beam;
+        if NO_HOLD.load(std::sync::atomic::Ordering::Relaxed) {
+            f.set(RuleId::HoldQueue, false);
+            f.set(RuleId::HoldI, false);
+        }
         f
     };
     for (name, gg) in [("bench891 ply2-shaped", &anchor), ("rulebook full (defaults)", &full), ("climb champion", &g)] {
@@ -416,6 +444,15 @@ fn main() {
         seed0: opt("--seed0", 1),
     };
     let depth = opt("--depth", 2) as u8;
+    let flag = |k: &str| args.iter().any(|a| a == k);
+    POINTS_FITNESS.store(
+        args.iter()
+            .position(|a| a == "--fitness")
+            .and_then(|i| args.get(i + 1))
+            .is_some_and(|v| v == "points"),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    NO_HOLD.store(flag("--no-hold"), std::sync::atomic::Ordering::Relaxed);
     let beam = opt("--beam", 6) as u8;
     println!(
         "== tetris_06_rulebook_arena :: {cmd} :: games {} cap {} garbage {} rows @ {}% seeds {}.. ==",

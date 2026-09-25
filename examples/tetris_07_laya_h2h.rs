@@ -42,6 +42,8 @@
 mod tetris_sim;
 #[path = "common/tetris_lookahead.rs"]
 mod tetris_lookahead;
+#[path = "common/tetris_rulebook.rs"]
+mod tetris_rulebook;
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -66,11 +68,38 @@ fn player_by_name(name: &str) -> Option<PlayerFn> {
         "ply1-classic" => |b, c, n| pick(b, c, n, Player::Ply1Classic),
         "ply1-shaped" => |b, c, n| pick(b, c, n, Player::Ply1Shaped),
         "ply2-shaped" => |b, c, n| pick(b, c, n, Player::Ply2Shaped),
+        // Issue 892 T4: the rulebook SCORE champion (9-1 stack + tetris
+        // bonus + flat top, climbed on points, no hold — the arena has none).
+        "rulebook-points" => |b, c, n| {
+            static G: OnceLock<tetris_rulebook::Genome> = OnceLock::new();
+            let g = G.get_or_init(tetris_rulebook::Genome::champion_points);
+            tetris_rulebook::pick_no_hold(g, b, c, n)
+        },
+        // Same genome at depth 3 (beam 6 prior-pruned, the moka trick). The
+        // harness signature carries no bag state, so the piece after the
+        // preview is taken as uniform over a fresh bag here (the arena's
+        // game loop uses the exact 7-bag remainder).
+        "rulebook-points-d3" => |b, c, n| {
+            static G: OnceLock<tetris_rulebook::Genome> = OnceLock::new();
+            let g = G.get_or_init(|| {
+                let mut g = tetris_rulebook::Genome::champion_points();
+                g.depth = 3;
+                g
+            });
+            tetris_rulebook::pick_no_hold(g, b, c, n)
+        },
         _ => return None,
     })
 }
 
-const PLAYER_NAMES: &[&str] = &["laya", "ply1-classic", "ply1-shaped", "ply2-shaped"];
+const PLAYER_NAMES: &[&str] = &[
+    "laya",
+    "ply1-classic",
+    "ply1-shaped",
+    "ply2-shaped",
+    "rulebook-points",
+    "rulebook-points-d3",
+];
 
 // ── The laya client (the arena's laya lane, over raw HTTP/1.1) ───────────
 

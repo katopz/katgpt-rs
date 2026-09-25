@@ -599,6 +599,20 @@ impl Genome {
     }
 }
 
+/// The SCORE champion (Issue 892 T4): delta-gated climb, no hold, empty
+/// board, fitness = points; 22/150 mutations accepted. Held-out (seeds
+/// 101..=120, cap 1000): 64,682 points/g · 44.7 tetrises/g · 20/20 survival
+/// vs Bench 891 ply2-shaped 17,412 · 0.10 · 20/20. The climb DISABLED
+/// `lines`, `row_trans` and `deep_well` and kept `nine_one` + `tetris` +
+/// `flat`: per-line reward and deep-well urgency fight the 9-1 well.
+pub const CHAMPION_POINTS_LINE: &str = "tetris-rulebook-v1 en=0x17bc d=2 b=6 sh=11 dh=1 w=lines:5/8/12;row_trans:-3.2/-3.2/-3.2;col_trans:-7.44/-9.3/-9.3;holes:-9.875/-12/-7.9;wells:-2.72/-4.25/-4.25;max_h:-0.1/-0.1/-2;deep_well:-2/-2.5/-2;nine_one:5/0.64/0;tetris:30/0/0;flat:-1.25/-0.625/-0.5;cover:-0.5/-2/-0.625;hold_i:6/0/0";
+
+impl Genome {
+    pub fn champion_points() -> Self {
+        Self::from_line(CHAMPION_POINTS_LINE).expect("champion line parses")
+    }
+}
+
 // ── Search ───────────────────────────────────────────────────────────────
 
 /// A decision: optionally swap with hold, then place option `index` of
@@ -741,6 +755,22 @@ pub fn decide(g: &Genome, v: &View) -> Option<Decision> {
     best.map(|(d, _)| d)
 }
 
+/// The harness-signature adapter (`fn(&Board, cur, next) -> Option<usize>`,
+/// `tetris_07_laya_h2h`): no hold, and no bag knowledge — exact for
+/// `plies() <= 2`; at depth 3 the unknown piece is taken as uniform over a
+/// fresh bag (an approximation the game-loop path does not need).
+pub fn pick_no_hold(g: &Genome, board: &Board, cur: Piece, next: Piece) -> Option<usize> {
+    let view = View {
+        board,
+        cur,
+        next,
+        held: None,
+        hold_ready: false,
+        bag_remaining: &[],
+    };
+    decide(g, &view).map(|d| d.index)
+}
+
 // ── The game loop (shared by the arena and the head-to-head) ─────────────
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -818,12 +848,18 @@ pub fn selftest() {
     }
     let keys: std::collections::HashSet<_> = RULES.iter().map(|r| r.key).collect();
     assert_eq!(keys.len(), N_RULES, "rule keys must be unique");
-    for g in [Genome::full(Physics::FromTop), Genome::bench891_ply2_shaped()] {
+    for g in [
+        Genome::full(Physics::FromTop),
+        Genome::bench891_ply2_shaped(),
+        Genome::champion_points(),
+    ] {
         let line = g.to_line();
         let back = Genome::from_line(&line).expect("genome line must parse");
         assert_eq!(back, g, "genome line must round-trip: {line}");
         assert_eq!(back.id(), g.id());
     }
+    // The recorded champion's id is pinned (a drifted line is a new genome).
+    assert_eq!(Genome::champion_points().id(), "ed5aa14b7d68472e");
     // Physics is part of the rule: T-spin inert under FromTop, live under
     // soft-drop physics.
     let ts = &RULES[RuleId::TSpin as usize];
