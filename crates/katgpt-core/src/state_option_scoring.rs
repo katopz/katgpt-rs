@@ -597,10 +597,10 @@ pub mod head {
         /// A tiny grouped corpus: `groups` decision sets each with `per`
         /// options, target = planted linear head + a group-specific offset
         /// (the correlated-within-group structure the hold-out must guard).
-        fn grouped_corpus(
-            groups: usize,
-            per: usize,
-        ) -> (Vec<[f64; 3]>, Vec<f64>, Vec<usize>, Vec<usize>, Vec<usize>) {
+        /// `(rows, targets, state_offsets, group_offsets, argmaxes)`.
+        type GroupedCorpus = (Vec<[f64; 3]>, Vec<f64>, Vec<usize>, Vec<usize>, Vec<usize>);
+
+        fn grouped_corpus(groups: usize, per: usize) -> GroupedCorpus {
             const PLANTED: [f64; 2] = [1.0, -2.0];
             let mut rows = Vec::new();
             let mut targets = Vec::new();

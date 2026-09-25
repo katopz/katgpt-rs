@@ -1222,8 +1222,8 @@ mod tests {
             // hole cover vs the rulebook walk (filled above each hole).
             let h = s.heights;
             let mut cover = 0usize;
-            for c in 0..WIDTH {
-                let top = HEIGHT - h[c];
+            for (c, &hc) in h.iter().enumerate() {
+                let top = HEIGHT - hc;
                 let mut filled_above = 0usize;
                 for r in top..HEIGHT {
                     if b.cell(r, c) {
@@ -1276,12 +1276,12 @@ mod tests {
             let mut b = Board::empty();
             let mut g: Grid = [[false; WIDTH]; HEIGHT];
             // Random fill: dense bottom rows so real clears happen.
-            for r in 0..HEIGHT {
+            for (r, row) in g.iter_mut().enumerate() {
                 let p = if r >= 12 { 92 } else { 20 };
-                for c in 0..WIDTH {
+                for (c, cell) in row.iter_mut().enumerate() {
                     if next() % 100 < p {
                         b.set(r, c);
-                        g[r][c] = true;
+                        *cell = true;
                     }
                 }
             }
