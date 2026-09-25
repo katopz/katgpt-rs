@@ -67,9 +67,25 @@ use grammar_tables::{
 };
 
 // ── Published anchors (the structured arms this run must reproduce) ─────
+//
+// ⛔ ONE ANCHOR RE-PINNED 2026-09-25 (Plan 609 T1.5's G3 check, the
+// Issue-884 follow-through): `TETRIS_HEAD_ANCHOR` was originally fitted
+// from p_clean values parsed by serde_json's DEFAULT parser — measured 1
+// ULP off on ~75% of fixture lines. The Issue-884 join added the dev-dep
+// `float_roundtrip` feature (exact parsing — simply correct), which changed
+// every example's parsed targets, and the tetris structured fit is the one
+// whose weight BYTES moved: 65409c14… → b3c91ee0… (measured at the parent
+// commit 1a05a9764 — decode_01 has been red since that commit landed; its
+// in-corpus/LOO agreement numbers never moved, 36/35, only the digest).
+// The flappy v2/v3 + lanes anchors MEASURED identical under both parsers
+// (this run asserts them and passes). The old digest below is the
+// parser-bug-era record; the new one is the exact-parse anchor.
+// Cross-repo implication for the fixture_pins lane: a consumer fitting
+// from these fixtures must parse with float_roundtrip to land on the
+// same head bytes.
 
 const TETRIS_HEAD_ANCHOR: &str =
-    "65409c14fd7573c6ea821d2d32ab9aa44cbda2f59c707759db2df39870fa2e66";
+    "b3c91ee05bde4086c3760eb917a3470884c9f47c951764bd63eb40d830083729";
 const FLAPPY_HEAD_PREFIX: &str = "4ac0a13c";
 const LANES_HEAD_PREFIX: &str = "7d3f1d8e";
 // Issue 876 / Bench 882: the v3 render-widening fixture's heads (full digests
@@ -489,9 +505,9 @@ fn main() {
          the task's — the delta below measures the RENDER, not the decoder."
     );
 
-    verify_all_closed().expect("closed-space proof over all five grammar tables");
+    verify_all_closed().expect("closed-space proof over the grammar tables");
     println!(
-        "closed-space proof: 6/6 tables verify_closed over their full fill \
+        "closed-space proof: 7/7 tables verify_closed over their full fill \
          products (cap {}) — PASS",
         grammar_tables::CLOSED_SPACE_CAP
     );
