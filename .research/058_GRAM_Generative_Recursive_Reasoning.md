@@ -1,5 +1,7 @@
 # Research 58: GRAM — Generative Recursive Reasoning
 
+> **SUPERSEDED (2026-09-25) by [Research 590](590_GRAM_Generative_Recursive_Reasoning.md)** — same paper, re-distilled at the per-NPC belief-host altitude this note never examined. The DDTree/logit-lane verdict below (STRONG VALIDATION, elf_sde+bandit+bt_rank cover that lane) **STANDS**; §8.3's "don't make guided noise default" **STANDS**. Overturned, scoped: §7.1's `SdeConfig.guided`-only form and §8.3's "no new feature flags" — for the belief host only (reasons in 590 §Relation-to-058). Action table close-out: §7.1 → superseded by katgpt-rs Issue 895; §7.2 → Plan 095 (GOAT PENDING 1/3, completed via Issues 895/1008 gates); §7.3 → carried to riir-train Plan 419 (R9).
+
 **Paper:** GRAM: Generative Recursive Reasoning (arXiv:2605.19376)
 **Authors:** Baek, Jo, Kim, Ren, Bengio, Ahn (KAIST, Mila, NYU)
 **Date:** May 2026

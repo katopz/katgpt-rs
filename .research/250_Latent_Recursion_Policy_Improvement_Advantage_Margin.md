@@ -199,3 +199,5 @@ SDPG currently needs oracle replay data (teacher Q-values from winning games). D
 - Jolicoeur-Martineau, "Less is More: Recursive Reasoning with Tiny Networks," 2025. [arxiv:2510.04871](https://arxiv.org/abs/2510.04871)
 - Wang et al., "Hierarchical Reasoning Model," 2025. [arxiv:2506.21734](https://arxiv.org/abs/2506.21734)
 - Sutton et al., "Reinforcement Learning: An Introduction," 1998. (policy improvement theorem)
+
+> **Follow-up (2026-09-25):** the *stochastic* sibling of this paper — Baek et al., "Generative Recursive Reasoning" [arxiv:2605.19376](https://arxiv.org/abs/2605.19376) — distilled in [Research 590](590_GRAM_Generative_Recursive_Reasoning.md): guided (μ≠0) width rollouts, mass-conserving perturbation, decode-free latent selection → Issues 895 (katgpt-rs) / 1008 (riir-ai) + riir-train Plan 419.
