@@ -1,6 +1,6 @@
 # Bench 892 — live laya vs candidate Tetris head-to-head on identical seeds (Issue 892 T5)
 
-**Status: BASELINE RECORDED (before rulebook) — laya 0/20 survival in every regime (54.7 pieces/g empty, 31.8 at 10@75 garbage, 24.7 at 16@85); ply1-classic and ply2-shaped (Bench 891 champion) 20/20 at cap in all three; laya protocol verified by an exact re-trace of the arena's recorded laya (Rust) game (60/60 argmax, 520 pts / 8 lines / 60 pieces). "After" section pending the rulebook champion (T4).**
+**Status: COMPLETE (before + after) — AFTER: the rulebook HYBRID champion (depth 3, 9-1/tetris in Build, Bench-891 weights in Downstack/Survive) beats laya on 60/60 seeds and out-scores it 92× (empty, 39,358 vs 428 pts/g), 119× (10@75, 35,142 vs 295) and 299× (18@75 cap 1000, 65,861 vs 220), and beats the Bench-891 ply2-shaped champion 19/20 vs 18/20 survival at 4.0× points on the hardest band. BEFORE: laya 0/60 survival; ply1-classic / ply2-shaped 120/120. laya protocol verified by an exact re-trace of the arena's recorded laya (Rust) game (60/60 argmax).**
 
 Example: `examples/tetris_07_laya_h2h.rs`. Players are
 `fn(&Board, cur: Piece, next: Piece) -> Option<usize>` (index into
@@ -153,9 +153,9 @@ the cap on 20/20; most points ply1-classic 18 · ply2-shaped 2.
   are points only, and 1-ply classic out-scores 2-ply shaped (the Bench-891
   shaping trades immediate scoring for safety these boards do not demand).
   For the "After" comparison, the discriminating survival band is Bench 891's
-  **18 rows @ 85%, cap 1000** (ply1 10/20 vs ply2 18/20), where laya dies in
-  ~15 pieces — run laya-inclusive h2h here for the laya delta, and the 18@85
-  band candidate-only for the champion delta.
+  18 rows, cap 1000 (ply1 10/20 vs ply2 18/20) — at **75%** fill, not the
+  85% Bench 891's prose states: its table reproduces exactly at 75%, and 85%
+  is EASIER (Issue 892 T0, measured). The After run uses 18@75.
 - laya's mean on empty boards (54.7) sits between the recorded arena Rust
   game (60) and its worst seeds (35); the Python v2 reference 70 is one game
   under different drop physics.
@@ -174,6 +174,10 @@ $H --verify-walk ../reflex-site/arena/demo_oracle.json
 $H --player laya,ply1-classic,ply2-shaped --games 20 --cap 500
 $H --player laya,ply1-classic,ply2-shaped --games 20 --cap 500 --garbage-rows 10 --garbage-fill 75
 $H --player laya,ply1-classic,ply2-shaped --games 20 --cap 1000 --garbage-rows 16 --garbage-fill 85
+# After
+$H --player rulebook-hybrid-d3 --games 20 --cap 500
+$H --player laya,ply2-shaped,rulebook-points-d3,rulebook-hybrid-d3 --games 20 --cap 500 --garbage-rows 10 --garbage-fill 75
+$H --player laya,ply2-shaped,rulebook-points-d3,rulebook-hybrid-d3 --games 20 --cap 1000 --garbage-rows 18 --garbage-fill 75
 ```
 
 Flags: `--url` (default `127.0.0.1:7392`), `--concurrency` (default 6, the
@@ -181,5 +185,46 @@ arena's), `--seed-start` (default 1). Per-seed progress goes to stderr.
 
 ## After (rulebook champion)
 
-_Pending Issue 892 T4 — add the champion as one arm in `player_by_name` and
-re-run the same seeds._
+Lead session, 2026-09-25. Same harness, same seeds `1..=20`, same engine
+(riir-reflex `a56d850`, metal). Box: M3 Max, AC power, load average
+2.8–8.2 during the runs (quiet relative to the baseline), memory 90% free.
+New arms (`c84d9e8e2`): `rulebook-points-d3` (the score champion,
+`ed5aa14b7d68472e`, depth 3) and `rulebook-hybrid-d3` (the hybrid,
+`68cae9d382014662`) — see `.benchmarks/892_tetris_rulebook_arena.md`.
+⚠ Through this harness's `fn(&Board, cur, next)` signature the depth-3
+players take the piece after the preview as uniform over a FRESH bag (no bag
+state crosses the signature); the arena's game loop uses the exact 7-bag
+remainder. Local candidates run seeds in parallel (`--jobs`, results
+identical by determinism; ms/decision is per-thread time).
+
+| regime | player | survived | pieces/g | lines/g | points/g | ms/decision | sole most-points seeds |
+|---|---|---|---|---|---|---|---|
+| empty, cap 500 | laya (baseline run) | 0/20 | 54.7 | 6.8 | 428 | 768.6 | 0 |
+| | ply2-shaped | 20/20 | 500 | 198.1 | 8,684 | 0.54 | 0 |
+| | rulebook-points (d2) | 20/20 | 500 | 195.9 | 31,883 | 0.27 | 4 |
+| | rulebook-points-d3 | 20/20 | 500 | 196.3 | 37,403 | 11.5 | 16 |
+| | **rulebook-hybrid-d3** | 20/20 | 500 | 195.6 | **39,358** | 8.6 | (own run) |
+| garbage 10@75, cap 500 | laya | 0/20 | 31.8 | 5.0 | 295 | 387.0 | 0 |
+| | ply2-shaped | 20/20 | 500 | 205.7 | 9,135 | 0.37 | 0 |
+| | rulebook-points-d3 | 20/20 | 500 | 203.8 | 33,987 | 7.7 | 6 |
+| | **rulebook-hybrid-d3** | 20/20 | 500 | 203.9 | **35,142** | 7.8 | **14** |
+| garbage 18@75, cap 1000 | laya | 0/20 | 11.4 | 3.4 | 220 | 287.6 | 0 |
+| | ply2-shaped | 18/20 | 900.5 | 370.5 | 16,339 | 0.36 | 0 |
+| | rulebook-points-d3 | 18/20 | 901.6 | 369.8 | 62,111 | 7.3 | 11 |
+| | **rulebook-hybrid-d3** | **19/20** | **950.6** | **389.8** | **65,861** | 7.6 | 9 |
+
+(The empty-board laya/ply2/rulebook-points rows are from the first After run
+on the same seeds; the hybrid was added in a second run — laya is
+deterministic, so its row does not change. laya ms/forward in the After
+runs: 114–116 ms at 6 in flight.)
+
+Readings:
+- **vs laya:** every rulebook player reaches the cap on every seed laya
+  plays; the hybrid scores 92× / 119× / 299× laya's points at ~2–3% of its
+  per-decision latency, with no model forward at all.
+- **vs the Bench 891 champion:** 3.8–4.5× points in every regime, and +1
+  survival (19/20 vs 18/20) on the hardest band.
+- **hybrid vs score champion:** the FSM is what buys survival — same Build
+  weights, but Downstack/Survive fall back to the survival weights: 19/20 vs
+  18/20 at 18@75 and +6% points; per-seed points are split (hybrid 14–6 at
+  10@75, score champion 11–9 at 18@75).

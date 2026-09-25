@@ -1,6 +1,6 @@
 # Bench 891 — the depth-2 lookahead player POC (owner directive 2026-09-25: "1 step ahead of laya")
 
-**Status: POC COMPLETE — under hostile garbage (18 rows @ 85% fill, n=20 games): ply2-shaped survives 18/20 games at 901 pieces/g vs ply1-classic 10/20 at 511 — depth-2 next-piece lookahead ~doubles survival; the owner's deep-well shaping adds +1 survival on its own (11/20); on empty boards every player saturates (eval quality dominates, search depth is second-order when nothing threatens).**
+**Status: POC COMPLETE — under hostile garbage (18 rows @ **75%** fill — corrected from "85%", Issue 892 T0; n=20 games): ply2-shaped survives 18/20 games at 901 pieces/g vs ply1-classic 10/20 at 511 — depth-2 next-piece lookahead ~doubles survival; the owner's deep-well shaping adds +1 survival on its own (11/20); on empty boards every player saturates (eval quality dominates, search depth is second-order when nothing threatens).**
 
 Example: `examples/tetris_05_lookahead_poc.rs` (`cargo run --release --example tetris_05_lookahead_poc -- <games> <cap> <garbage_rows>`).
 
@@ -12,13 +12,13 @@ Example: `examples/tetris_05_lookahead_poc.rs` (`cargo run --release --example t
 | ply1-shaped | 1-ply + the owner's shaping: a well deeper than 2 left open costs −2 × (depth−2)² — *fill it with whatever piece fits now; the I may never come* |
 | ply2-shaped ("the reflexer candidate") | depth-2 exhaustive: every current placement × every next-piece placement (~900 evaluated continuations per decision, µs-tier), + shaping. "Not blocking the next-next piece" is native — a blocking placement scores through its own worst forced continuation |
 
-Common: `FromTop` physics (real hard drop, the v3 lane), guideline 7-bag (seeded, same sequence per seed for every player), guideline scoring, `garbage_board(seed, rows, 75..85%)` start.
+Common: `FromTop` physics (real hard drop, the v3 lane), guideline 7-bag (seeded, same sequence per seed for every player), guideline scoring, `garbage_board(seed, rows, 75)` start. ⚠ Corrected by Issue 892 T0 (`1bbde0ac9`): this record said "85%"; the committed code ran 75% and the table reproduces exactly at 75% — at 85% the same seeds read 18/20 · 18/20 · 20/20 (85% fill is EASIER).
 
 ## Results
 
 **Empty board (cap 2000–5000): saturated.** All players survive every game at ~0.4 lines/piece — the classic eval alone never dies; search depth and shaping have nothing to bite on. points/g ordering (classic 91.5k > shaped 91.3k > 2-ply 88.2k per 5 games @5000) shows the shaping trades a little immediate scoring for safety it doesn't need there.
 
-**Hostile garbage — 18 rows @ 85% fill, cap 1000:**
+**Hostile garbage — 18 rows @ 75% fill, cap 1000:**
 
 | player | survived (n=20) | pieces/g | lines/g |
 |---|---|---|---|
@@ -28,7 +28,7 @@ Common: `FromTop` physics (real hard drop, the v3 lane), guideline 7-bag (seeded
 
 At n=10 same configuration: 5/10 · 6/10 · 9/10 (517/612/901 pieces/g) — stable.
 
-**Death wall:** 20 rows @ 85% is unwinnable for all three (0/10 — the field reaches the spawn zone before any landing matters). The informative stress band is 14–18 rows.
+**Death wall:** 20 rows @ 75% is unwinnable for all three (0/10 — the field reaches the spawn zone before any landing matters). The informative stress band is 14–18 rows.
 
 ## Context (the arena the user pointed at — reflex-site T12, engine `00aa6221`)
 
@@ -40,6 +40,10 @@ fitted modelless head **140 pts / 3 lines / 46 pieces** · laya **660 pts / 11 l
 - **Lookahead pays exactly where the owner predicted**: under threat (deep wells, garbage), not on empty boards. "Try every next-next combination so you don't block the next next one" = +80% pieces survived at 18 rows.
 - **Shaping pays, small**: +1 survival alone (11/20 vs 10/20), and it composes with lookahead.
 - **MCTS not needed at depth 2**: exhaustive is stronger (no sampling error) at ~900 evals/decision. riir-ai's MCTS runtime becomes relevant only at depth ≥3 — and the legal direction would be riir-ai consuming a promoted katgpt-core primitive, never the reverse (boundary).
+
+## Follow-up
+
+Issue 892 (`.benchmarks/892_tetris_rulebook_arena.md`, `.benchmarks/892_laya_h2h.md`): the strategy rulebook + hybrid FSM champion supersedes ply2-shaped as the lane's champion (4× points, +1 survival at 18@75); the laya head-to-head (step 1 below) is DONE.
 
 ## Next steps (offered, not landed)
 

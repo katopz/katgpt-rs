@@ -9163,3 +9163,43 @@ removed per the noise-reduction rule; the durable record is Bench 884.
 - Naming defense (load-bearing, from the verdict round): `exact_mass_admit`
   ≠ `gate_sigmoid_topk` — one token apart, opposite mass semantics; both
   module docs state the split.
+
+## Issue 892 (2026-09-25) — tetris strategy RULEBOOK (ruliology surface) + chance-node PUCT + laya head-to-head: the hybrid FSM champion out-scores laya 92–299× and Bench 891 4×: CLOSED
+
+Owner directive after Bench 891: encode the owner's Tetris technique list
+(9-1 stack, keep the top flat, hold queue, watch the preview, rotate both
+ways, downstack misdrops, T-spins) "ruliology as possible" for later
+self-evolve, transplant the moka+PUCT trick, and run the laya head-to-head
+before and after. Issue file removed per the noise-reduction rule; the
+durable records are `.benchmarks/892_tetris_rulebook_arena.md`,
+`.benchmarks/892_laya_h2h.md` and `.benchmarks/892_chance_puct_goat.md`.
+
+- **T0** `1bbde0ac9` — `examples/common/tetris_lookahead.rs` extracted;
+  tetris_05 byte-identical. Bench 891's "85%" garbage fill MEASURED to be a
+  prose error: its table reproduces at 75% (85% is easier) — corrected in
+  place.
+- **T1/T2** `1d03ec07c` — `examples/common/tetris_rulebook.rs`: 16 rules as
+  data (KG triple, source clause, physics precondition, per-mode weights,
+  feature), a Build/Downstack/Survive FSM, a `Genome` line with a BLAKE3 id
+  (the self-evolve surface). T-spin recorded INAPPLICABLE under the
+  arena's top hard drop, rotate-both NATIVE. `tetris_06_rulebook_arena`:
+  anchor (reproduces Bench 891 per seed 20/20), 2^7 enumeration + Pareto +
+  marginals, delta-gated climb, eval.
+- **T3** `13dcc660e` (sibling session) — `katgpt-core::chance_puct`, opt-in:
+  sigmoid-normalised prior, top_k, value leaf, sampled chance nodes, no
+  sign flip; G1 6/6, G4 0 allocs; beats depth-2 only at 19@75 (21 → 30/60)
+  at 5–150× latency → stays opt-in.
+- **T4** `45b9ff27b`, `c84d9e8e2` — score champion (`ed5aa14b7d68472e`,
+  climbed; it switched OFF lines/row_trans/deep_well — the 9-1 stack
+  emerged) and the HYBRID (`68cae9d382014662`: score weights in Build,
+  Bench-891 weights in Downstack/Survive, depth 3 beam 6). Fresh seeds:
+  survival equal to the survival parent (22/60 · 35/40 · 20/20) at 4.0–4.7×
+  points; 60.6 tetrises/g on an empty board.
+- **T5** `9c472531f` (sibling session) + the After run — laya 0/60 survival;
+  hybrid 60/60 seeds, 92× / 119× / 299× laya's points at 1–3% of its
+  latency, 19/20 vs Bench 891's 18/20 at 18@75.
+- **T6** — PROMOTED: the hybrid genome is the lane's champion; DEMOTED:
+  Bench 891 ply2-shaped → anchor/reference; opt-in: `chance_puct`.
+  Negatives recorded: always-on downstack (−37 pieces/g at 19@75), no-hold
+  survival climb (did not generalise), 9-1/tetris at default weights
+  (inert). Hold (+390 pieces/g) is illegal in the laya arena — sim-only.
