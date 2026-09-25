@@ -613,6 +613,21 @@ impl Genome {
     }
 }
 
+/// The HYBRID champion (Issue 892 T4) — the FSM doing its job: the score
+/// champion's 9-1 / tetris / flat-top weights in `Build`, Bench 891's
+/// survival weights verbatim in `Downstack` and `Survive` (per-mode weight
+/// 0 = the rule is off in that mode), depth 3 beam 6. Thresholds chosen
+/// from a 6-point (sh, dh) sweep; validated on FRESH seeds in Bench 892.
+/// 19@75 n=60: 28/60 (= Bench-891 weights at depth 3) at 34,023 pts/g
+/// (4.0×); empty board: 79,652 pts/g · 59.9 tetrises/g.
+pub const CHAMPION_HYBRID_LINE: &str = "tetris-rulebook-v1 en=0x17ff d=3 b=6 sh=12 dh=3 w=lines:0/5/5;row_trans:0/-3.2/-3.2;col_trans:-7.44/-9.3/-9.3;holes:-9.875/-7.9/-7.9;wells:-2.72/-3.4/-3.4;max_h:-0.1/-0.1/-0.1;deep_well:0/-2/-2;nine_one:5/0/0;tetris:30/0/0;flat:-1.25/0/0;cover:-0.5/0/0;hold_i:6/0/0";
+
+impl Genome {
+    pub fn champion_hybrid() -> Self {
+        Self::from_line(CHAMPION_HYBRID_LINE).expect("hybrid line parses")
+    }
+}
+
 // ── Search ───────────────────────────────────────────────────────────────
 
 /// A decision: optionally swap with hold, then place option `index` of
@@ -852,6 +867,7 @@ pub fn selftest() {
         Genome::full(Physics::FromTop),
         Genome::bench891_ply2_shaped(),
         Genome::champion_points(),
+        Genome::champion_hybrid(),
     ] {
         let line = g.to_line();
         let back = Genome::from_line(&line).expect("genome line must parse");
@@ -860,6 +876,7 @@ pub fn selftest() {
     }
     // The recorded champion's id is pinned (a drifted line is a new genome).
     assert_eq!(Genome::champion_points().id(), "ed5aa14b7d68472e");
+    assert_eq!(Genome::champion_hybrid().id(), "68cae9d382014662");
     // Physics is part of the rule: T-spin inert under FromTop, live under
     // soft-drop physics.
     let ts = &RULES[RuleId::TSpin as usize];

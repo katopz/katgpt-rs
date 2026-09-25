@@ -88,6 +88,13 @@ fn player_by_name(name: &str) -> Option<PlayerFn> {
             });
             tetris_rulebook::pick_no_hold(g, b, c, n)
         },
+        // The hybrid champion: 9-1/tetris in Build, Bench 891 weights in
+        // Downstack/Survive, depth 3 (same fresh-bag approximation).
+        "rulebook-hybrid-d3" => |b, c, n| {
+            static G: OnceLock<tetris_rulebook::Genome> = OnceLock::new();
+            let g = G.get_or_init(tetris_rulebook::Genome::champion_hybrid);
+            tetris_rulebook::pick_no_hold(g, b, c, n)
+        },
         _ => return None,
     })
 }
@@ -99,6 +106,7 @@ const PLAYER_NAMES: &[&str] = &[
     "ply2-shaped",
     "rulebook-points",
     "rulebook-points-d3",
+    "rulebook-hybrid-d3",
 ];
 
 // ── The laya client (the arena's laya lane, over raw HTTP/1.1) ───────────
@@ -353,6 +361,10 @@ fn main() {
             (*n, f)
         })
         .collect();
+    let jobs: usize = arg(&args, "--jobs").map_or_else(
+        || std::thread::available_parallelism().map_or(4, |n| (n.get() / 2).max(1)),
+        |s| s.parse().unwrap(),
+    );
     let seeds: Vec<u64> = (seed0..seed0 + games).collect();
     let start = if rows > 0 {
         format!("garbage {rows} rows @ {fill}% fill")
@@ -369,13 +381,42 @@ fn main() {
     for (name, f) in &players {
         let rt0 = (LAYA_RT_US.load(Ordering::Relaxed), LAYA_RT_N.load(Ordering::Relaxed));
         let mut row = Vec::with_capacity(seeds.len());
-        for &seed in &seeds {
-            let g = play(seed, *f, cap, rows, fill);
-            eprintln!(
-                "  {name:<14} seed {seed:>3}: {:>4} pieces {:>4} lines {:>6} pts",
-                g.pieces, g.lines, g.points
-            );
-            row.push(g);
+        if *name == "laya" || jobs <= 1 {
+            // laya: sequential games (its own `--concurrency` in-flight
+            // forwards are the parallelism — the arena's shape).
+            for &seed in &seeds {
+                let g = play(seed, *f, cap, rows, fill);
+                eprintln!(
+                    "  {name:<14} seed {seed:>3}: {:>4} pieces {:>4} lines {:>6} pts",
+                    g.pieces, g.lines, g.points
+                );
+                row.push(g);
+            }
+        } else {
+            // Local candidates: seeds in parallel (`--jobs`); every game is
+            // independent and deterministic, so results are identical to the
+            // sequential loop — only wall time and per-decision CPU
+            // contention differ (ms/decision is per-thread time).
+            let chunk = seeds.len().div_ceil(jobs);
+            let mut out: Vec<Option<Game>> = vec![None; seeds.len()];
+            std::thread::scope(|sc| {
+                for (ss, oo) in seeds.chunks(chunk).zip(out.chunks_mut(chunk)) {
+                    let f = *f;
+                    sc.spawn(move || {
+                        for (&seed, o) in ss.iter().zip(oo.iter_mut()) {
+                            *o = Some(play(seed, f, cap, rows, fill));
+                        }
+                    });
+                }
+            });
+            for (&seed, g) in seeds.iter().zip(out) {
+                let g = g.expect("every seed played");
+                eprintln!(
+                    "  {name:<14} seed {seed:>3}: {:>4} pieces {:>4} lines {:>6} pts",
+                    g.pieces, g.lines, g.points
+                );
+                row.push(g);
+            }
         }
         let dn = LAYA_RT_N.load(Ordering::Relaxed) - rt0.1;
         if dn > 0 {
