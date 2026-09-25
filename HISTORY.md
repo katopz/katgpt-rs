@@ -1,3 +1,31 @@
+## Issue 895 (2026-09-25) — guided width rollouts on the belief host (GRAM re-distill, Research 590): CLOSED (T1–T7 + T9 landed opt-in; G1 FAILED, demote TRIGGERED, no promotion; T8 handed to riir-ai Issue 1008)
+
+- **Shipped:** katgpt-core, opt-in `guided_width_rollouts` + `guided_width_hodge`, at `a4421939f` / `ae7b13320` ([Bench 898](.benchmarks/898_guided_width_rollouts_goat.md)).
+  - T1: structured perturbation. Arm (a) is transversal on the [f32;8] belief. Arm (b) is coexact∪harmonic ε on 2D cochain fields.
+  - T2: a stagnation-sigmoid σ_t.
+  - T3: the decode-free `latent_value` scorer (self-consistency + convergence residual).
+  - T4: Sobol/BLAKE3 diversity init + farthest-point selection.
+  - T5: a success-SVD direction table, built on `thin_svd_into` because katgpt-canon would be a package cycle, with Beta reweight and BLAKE3 freeze.
+  - T6: trap-kill-reallocate, consuming `saddle_escape`.
+  - Substrate helpers added rather than copied, each pinned bit-identical: `blake3_noise_fill`, `select_diverse_subset_in_place`, `SobolQmc::reseed`.
+- **Bench 898 fixture:** graph 3-colouring, 128 instances per family, 8×16 against 1×128 steps.
+- **G1 FAILED:** width beats depth on MULTI by +0.117 ± 0.049 and loses on SINGLE by −0.188 ± 0.036.
+- **Pre-stated demote TRIGGERED:** on branch-valid rate, the table ties zero-mean on MULTI (+0.001 ± 0.014) and loses on SINGLE (−0.025 ± 0.012). **The guided table is off-by-default forever: closed-negative.** It is recorded in negative_results §43.
+- **Pass arms:**
+  - E9: MULTI coverage 0.59 → 3.32 solutions.
+  - Mass arm: 0 non-zero divergences in 2500 draws.
+  - G2: 14.9 µs/decision, with K linear at 2.00×.
+  - G3: σ=0 / N=1 are bit-identical to `evolve_belief`.
+  - G4: 0 allocs.
+- **Measured findings:**
+  - The decode-free selector is the bottleneck: at least one branch is valid 98–99% of the time, but a valid one is selected only 70–75% of the time.
+  - T6 trap-kill costs 4.7 pp on both families; the flip detector reads exploration noise as a trap.
+  - Transversal and isotropic noise are indistinguishable on this fixture.
+  - The table's +1.50 coverage gain was not the pre-registered metric. Reopening needs a new fixture with coverage pre-registered.
+- **T9: no promotion.** 058 §8.3's no-default call stands.
+- **Plan 095** is now GOAT PENDING 2/3. Its G1 passes; its G3 needs a stochastic arena domain.
+- **T8 consumer wiring** belongs to riir-ai Issue 1008. The DDTree host stays out of scope (058's covered verdict).
+
 ## Issue 897 (2026-09-25) — katgpt-kv's KVarN `static_cal_tables` branches were gated on an undeclared feature and named a missing module: CLOSED (deleted, not wired; `unexpected_cfgs` allow removed; a second instance, `memory_soup_dtree`, restored)
 
 - **Shipped (`f3e3a4f56`).** T1 decided **DELETE** on evidence, not preference. Removed: `KVarNConfig::static_cal`, the cache field, both `quantize_*_tile` static-cal branches (the `not(static_cal_tables)` arms become unconditional), and 3 init sites (`eval.rs`, 2 tests). The default build, and every build with only declared features, is unchanged by construction — the code compiled nowhere.
