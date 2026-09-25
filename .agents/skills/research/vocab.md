@@ -103,7 +103,34 @@ Papers about adaptive blending, mixture coefficients, ensemble weighting, baseli
 
 **Rule:** a paper whose core mechanism is FITTING a coefficient structurally matches every hand-pinned constant implementing the same convex combination. Coverage requires reading the **containing expression** (the §3.6 granularity rule in the main skill) — and checking whether the outcome stream it would be fit against already fires.
 
-## 7. Unified decision rule — substrate-as-instantiation vs mechanism-as-value
+## 7. Standing inference-substrate vocabulary (MANDATORY for quant/kernel/loader/encoder papers — riir-infer)
+
+Papers about quantization formats, kernel ports, checkpoint loaders, or encoder forwards describe mechanisms whose substrate home is now `riir-infer` (public, carved from riir-ai 2026-09-22). Grep BOTH sets before any "already ships" / routing verdict in this space:
+
+| Paper vocabulary | Codebase vocabulary (riir-infer) |
+|---|---|
+| "quantization format" / "weight-only quant" / "GPTQ/AWQ/EXL3-class" | `quant/` module, the EXL3-trellis lane (CPU reference = oracle + fast arm + `riir-infer-gpu` kernels), GDN quant certification (`deltanet/`) |
+| "dequant kernel" / "fused dequant-GEMM" | `simd/` dequant forwards, fused dequant-matmul, dequant-in-register |
+| "checkpoint loader" / "GGUF/safetensors" / "tokenizer" | `gguf_loader.rs`, `safetensors_loader.rs`, `tokenizer.rs` (BPE vs SentencePiece selection) |
+| "architecture port" / "model forward" | `transformer/`, `gemma_layer.rs`, `llama_layer.rs`, `ternary_layer.rs`, `rope.rs`, `wall.rs` |
+| "rotation" / "Hadamard" / "incoherence processing" | the Bonsai2 rotation lane (`bonsai2_hadamard`) |
+| "kernel port" / "backend port" / "Metal/CUDA/Triton port" | the laya lane discipline: flat `Vec<f32>` ops, `crates/riir-infer-laya` MSL kernels, `crates/riir-infer-gpu` (wgpu/CubeCL), `laya-riir-cuda` |
+| "bit-identical port" / "parity gate" / "golden forward" | the G5 gate: top-1 ≥ 99.9% + p-drift ≤ 1e-3 vs frozen captures, per checkpoint, BEFORE any published number |
+
+## 8. Standing decision-serving vocabulary (MANDATORY for calibration/abstention/selective-prediction/serving papers — riir-reflex)
+
+Papers about calibrated decision serving, abstention, selective prediction, or comparison arenas have a concrete public home: `riir-reflex` (public 2026-09-23). Grep BOTH sets before any novelty or routing verdict in this space:
+
+| Paper vocabulary | Codebase vocabulary (riir-reflex) |
+|---|---|
+| "selective prediction" / "abstention" / "reject option" | the `noul` answer, fused abstain (calibration score + `CorpusDistanceGate`), abstention first-class in `decision_wire` |
+| "confidence calibration" / "temperature scaling" / "conformal" | `SigmoidGateCalibrator`, sigmoid normalization (never softmax), per-suite fitted birth thresholds (harness cal-slice percentile) |
+| "corpus as model" / "retrieval-augmented zero-shot" / "non-parametric classifier" | `Lz4FlexDrafter` corpus-is-the-model option scoring, `pick_domain` corpus routing over hashed-feature embedding (`embed.rs`) |
+| "decision API" / "typed decision endpoint" | `decision_wire` (`choice`/`score`/`noul`), stdio line-JSON + HTTP edge (`serve.rs`), `game_heads.rs` fitted serving heads |
+| "comparison arena" / "benchmark harness" / "leaderboard" | `harness/` (9 dataset suites, corpus-cap + `--cal-select-cap` levers), `lanes/` (laya CPU/Metal/CUDA, CLM, GLiNER, AgentJev) |
+| "distribution shift probe" / "OOD rig" | pair-head A/B probes, held-out rig policies, G5 parity gating every published laya number |
+
+## 9. Unified decision rule — substrate-as-instantiation vs mechanism-as-value
 
 This rule prevents false-PASS/false-redirect across four paper classes (R418 hardware + R368 LLM + R300 database + Flow Sampling training-math):
 
@@ -114,7 +141,7 @@ This rule prevents false-PASS/false-redirect across four paper classes (R418 har
   - **Flow Sampling training-math:** closed-form drift / conditional score / Riemannian correction / regression target (training loop is instantiation, dllm + Latent Field Steering + freeze/thaw is ours).
 - **Value = substrate-fabrication-advance itself** (new transistor geometry, new query optimizer algorithm, new optimizer like Muon, new loss function, new RL algorithm, semantic code generation) → no modelless analog → PASS or → riir-train.
 
-## 8. Worked examples
+## 10. Worked examples
 
 **DiPOD paper → riir-ai code:** paper-vocabulary grep misses `latent_functor/reestimation.rs` which ships DiPOD's "interleave self-distillation when ELBO drifts" as "coherence-driven re-estimation scheduler when coherence < tau_reest". Vocabulary translation is the only defense — notes framing can use codebase vocabulary that paper-vocabulary grep misses on BOTH layers.
 
