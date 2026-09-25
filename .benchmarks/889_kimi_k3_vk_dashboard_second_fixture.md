@@ -6,7 +6,7 @@
 GOAT gates** — this fixture exists to say, before anything is built, that the
 architecture lacks the mechanism 883's products retrofit (trap 4). The
 mechanism-bearing fixture for P1/P2/P3 remains gemma-2-2b-it (riir-infer
-Bench 003: mean ρ(V−K)=0.49, go/no-go GO).
+Bench 004: mean ρ(V−K)=0.49, go/no-go GO).
 
 **Box:** 4090 workstation (i7-13700K, Windows 11, AC power, CPU lane — GPU
 idle, no compute consumers; no concurrent cargo during the recorded runs).
@@ -53,7 +53,7 @@ Top-10 n_s: [5013, 4459, 3755, 3448, 2794, 2292, 2261, 1426, 1011, 1008].
    0.475/0.452/0.462; layer 7: 0.559/0.612/0.598). In MLA, V−K =
    (W_UV−W_UK)·c is a linear function of the SAME latent that produces K
    and V — so token identity explains the residual at essentially the same
-   rate as the signals themselves. On gemma-2 (Bench 003) K and V come from
+   rate as the signals themselves. On gemma-2 (Bench 004) K and V come from
    INDEPENDENT matrices applied to the same hidden state; the aggregates
    land in the same 0.45–0.61 range for the opposite reason. **Same ρ
    magnitude, opposite product applicability — the exact distinction trap 4
@@ -104,5 +104,5 @@ new `LayeredVkCalibration` row-map/residual gates).
 Opt-in (`kimi_k3_loader` + `fitted_anchor_tables` root forward — new).
 Dashboard-only, measurement-only, no default feature changes, no
 production-path changes. Issue 883 P0 is now FULLY landed (gemma half =
-riir-infer Bench 003; Kimi half = this bench); P1–P4 proceed on the
+riir-infer Bench 004; Kimi half = this bench); P1–P4 proceed on the
 gemma fixture per the go/no-go GO.

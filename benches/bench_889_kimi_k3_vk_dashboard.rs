@@ -1,5 +1,5 @@
 //! Issue 883 P0 — the Kimi-K3 dashboard-only second fixture: the MLA/KDA
-//! R² dashboard on real weights (the gemma-2 half is riir-infer Bench 003;
+//! R² dashboard on real weights (the gemma-2 half is riir-infer Bench 004;
 //! this is the fixture-class-null territory twin, 883 trap 4).
 //!
 //! **Tap definition (the MLA wrinkle).** Kimi-K3-0.40B is a hybrid: 6 KDA
@@ -363,7 +363,7 @@ fn main() {
          (production MLA serving), even that question dissolves — the absorbed path never \
          materializes K/V either.\n",
     );
-    out.push_str("\nMEASUREMENT-ONLY (P0 law): no quality claim. The nulls above are fixture-class (trap 4), never model-class; gemma-2-2b-it (Bench 003, riir-infer) is the mechanism-bearing fixture for P1/P2/P3.\n");
+    out.push_str("\nMEASUREMENT-ONLY (P0 law): no quality claim. The nulls above are fixture-class (trap 4), never model-class; gemma-2-2b-it (Bench 004, riir-infer) is the mechanism-bearing fixture for P1/P2/P3.\n");
 
     print!("{out}");
     if let Some(p) = report_path {

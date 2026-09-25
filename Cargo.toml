@@ -1152,7 +1152,7 @@ required-features = ["kimi_k3_loader", "latent_trajectory_geometry"]
 harness = false
 
 # Issue 883 P0 second fixture — the Kimi-K3 MLA/KDA R² dashboard
-# (dashboard-only; the gemma-2 half is riir-infer Bench 003). Taps the two
+# (dashboard-only; the gemma-2 half is riir-infer Bench 004). Taps the two
 # MLA layers' up-projected K/V (w_uk·c vs w_uv·c) replayed exactly from the
 # cached latents after each chunk — zero production-forward changes; KDA
 # layers are documented fixture-class nulls (no KV cache). Measurement-only
