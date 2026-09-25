@@ -20,6 +20,7 @@ riir-llm
 riir-mmorpg-examples
 riir-neuron-db
 riir-reflex
+riir-reflexer
 riir-shader
 riir-train
 riir-viewbridge
