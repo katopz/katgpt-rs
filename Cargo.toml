@@ -175,6 +175,10 @@ getrandom_04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] 
 # inside the leaf.
 
 [dev-dependencies]
+# Exact float parsing for examples/tests (Issue 884): the tetris oracle join reads
+# P(clean) back from JSON, and serde_json's default parser is off by 1 ULP on ~75% of
+# them (measured: 90/120 v2 fixture lines). Dev-only, so library consumers are untouched.
+serde_json = { version = "1", features = ["float_roundtrip"] }
 ratatui = "0.29"
 crossterm = "0.28"
 tempfile = "3"

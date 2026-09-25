@@ -48,7 +48,7 @@ mod tetris_fixture;
 use katgpt_core::state_option_scoring::CentroidTable;
 use tetris_fixture::{
     EMBED_DIM, FixtureState, Piece, Recomputed, default_fixture, dellacherie_pick, embed,
-    load_fixture_states, play_game,
+    fixture_rule, load_fixture_states, play_game,
 };
 
 /// The substrate's route scale (riir-reflex `ROUTE_SCALE`). The argmax is
@@ -214,6 +214,7 @@ fn main() {
 
     // ── Parse + drift-check ──────────────────────────────────────────
     let states = load_fixture_states(&fixture_path);
+    let rule = fixture_rule(&states);
     let n_options: usize = states.iter().map(|(f, _)| f.options.len()).sum();
     println!(
         "drift check: PASS — {} states / {n_options} options recompute byte-identically",
@@ -346,7 +347,7 @@ fn main() {
         let mut per_game: Vec<u32> = Vec::with_capacity(games);
         let mut placements = 0usize;
         for stream in &streams {
-            let (c, n) = play_game(policy, stream);
+            let (c, n) = play_game(policy, stream, rule);
             total += c;
             placements += n;
             per_game.push(c);

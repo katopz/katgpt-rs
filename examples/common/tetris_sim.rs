@@ -244,39 +244,94 @@ fn fits(board: &Board, cells: &[(usize, usize)], row: usize, col: usize) -> bool
     })
 }
 
-/// Hard drop down column `col`: rest at the deepest valid row. None when
-/// the piece does not fit at any row (top-out).
-pub fn hard_drop(board: &Board, cells: &[(usize, usize)], col: usize) -> Option<Placement> {
-    let mut rest: Option<usize> = None;
-    for row in (0..HEIGHT).rev() {
-        if fits(board, cells, row, col) {
-            rest = Some(row);
-            break;
+/// How a piece comes to rest in a column — the one axis the v2 and v3
+/// fixtures differ on (katgpt-rs Issue 884). The sentence grammar, feature
+/// arithmetic and option ORDER are shared; only the rest row differs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DropRule {
+    /// `laya-tetris-v2` (pinned): rest at the DEEPEST collision-free row,
+    /// scanning bottom-up — under an overhang the piece passes through the
+    /// roof into the cave below (3 of 2660 v2 options).
+    DeepestFit,
+    /// `laya-tetris-v3`: a real hard drop — spawn at the top of the column,
+    /// descend while the next row is free, stop at the first collision.
+    /// A column whose top row is blocked has no landing (top-out there).
+    FromTop,
+}
+
+impl DropRule {
+    /// The grammar id a dump built under this rule is stamped with.
+    pub fn grammar_id(self) -> &'static str {
+        match self {
+            Self::DeepestFit => GRAMMAR_ID,
+            Self::FromTop => GRAMMAR_ID_V3,
         }
     }
-    rest.map(|row| Placement {
+
+    /// Inverse of [`grammar_id`](Self::grammar_id); `None` for an unknown id.
+    pub fn from_grammar(id: &str) -> Option<Self> {
+        match id {
+            GRAMMAR_ID => Some(Self::DeepestFit),
+            GRAMMAR_ID_V3 => Some(Self::FromTop),
+            _ => None,
+        }
+    }
+}
+
+/// Hard drop down column `col` under the pinned v2 rule
+/// ([`DropRule::DeepestFit`]). None when the piece fits at no row.
+pub fn hard_drop(board: &Board, cells: &[(usize, usize)], col: usize) -> Option<Placement> {
+    hard_drop_with(board, cells, col, DropRule::DeepestFit)
+}
+
+/// Hard drop down column `col` under `rule`. None when there is no landing.
+pub fn hard_drop_with(
+    board: &Board,
+    cells: &[(usize, usize)],
+    col: usize,
+    rule: DropRule,
+) -> Option<Placement> {
+    let rest = match rule {
+        DropRule::DeepestFit => (0..HEIGHT).rev().find(|&row| fits(board, cells, row, col)),
+        DropRule::FromTop => {
+            if !fits(board, cells, 0, col) {
+                return None;
+            }
+            let mut row = 0;
+            while row + 1 < HEIGHT && fits(board, cells, row + 1, col) {
+                row += 1;
+            }
+            Some(row)
+        }
+    }?;
+    Some(Placement {
         rot: 0, // caller owns the rotation index
         col,
-        row,
+        row: rest,
         cells: {
             let mut v: Vec<(usize, usize)> =
-                cells.iter().map(|&(dy, dx)| (row + dy, col + dx)).collect();
+                cells.iter().map(|&(dy, dx)| (rest + dy, col + dx)).collect();
             v.sort_unstable();
             v
         },
     })
 }
 
-/// Enumerate every distinct hard-drop landing for `piece` on `board`, in
-/// pinned order: rotation ascending, then column ascending. This is the
-/// option ORDER the fixture freezes — the oracle's and the arena's argmax
-/// index both refer to it.
+/// Enumerate every distinct hard-drop landing for `piece` on `board` under
+/// the pinned v2 rule ([`DropRule::DeepestFit`]), in pinned order: rotation
+/// ascending, then column ascending. This is the option ORDER the fixture
+/// freezes — the oracle's and the arena's argmax index both refer to it.
 pub fn landing_options(board: &Board, piece: Piece) -> Vec<Placement> {
+    landing_options_with(board, piece, DropRule::DeepestFit)
+}
+
+/// [`landing_options`] under an explicit drop rule (same pinned order).
+pub fn landing_options_with(board: &Board, piece: Piece, rule: DropRule) -> Vec<Placement> {
     let mut out = Vec::with_capacity(34);
     for (ri, cells) in piece.rotations().iter().enumerate() {
         let width = cells.iter().map(|&(_, dx)| dx).max().unwrap_or(0) + 1;
         for col in 0..=(WIDTH - width) {
-            if let Some(mut p) = hard_drop(board, cells, col) {
+            if let Some(mut p) = hard_drop_with(board, cells, col, rule) {
                 p.rot = ri;
                 out.push(p);
             }
@@ -431,6 +486,11 @@ pub fn dellacherie_score(f: &OutcomeFeatures) -> f32 {
 
 /// Grammar identity stamped into every dump record.
 pub const GRAMMAR_ID: &str = "laya-tetris-v2";
+
+/// The v3 grammar id: the v2 sentence grammar under a real hard drop
+/// ([`DropRule::FromTop`], katgpt-rs Issue 884). Sentences are unchanged;
+/// the option set differs wherever v2 tunnelled through a roof.
+pub const GRAMMAR_ID_V3: &str = "laya-tetris-v3";
 
 /// The per-spot question, world-anchored (never "what should I do" — the
 /// wording lesson from laya's own page). P(clean) is the oracle signal.
@@ -680,6 +740,44 @@ mod tests {
         let cells = Piece::O.rotations()[0].clone();
         let p = hard_drop(&Board::empty(), &cells, 0).unwrap();
         assert_eq!(p.row, HEIGHT - 2);
+    }
+
+    #[test]
+    fn from_top_stops_on_a_roof_where_v2_tunnels() {
+        // Roof at row 17 cols 0..3 over an empty cave (Issue 884 probe).
+        let mut b = Board::empty();
+        b.place(&[(17, 0), (17, 1), (17, 2), (17, 3)]);
+        let cells = Piece::O.rotations()[0].clone();
+        let v2 = hard_drop(&b, &cells, 0).unwrap();
+        let v3 = hard_drop_with(&b, &cells, 0, DropRule::FromTop).unwrap();
+        assert_eq!(v2.row, 18, "v2 tunnels into the cave");
+        assert_eq!(v3.row, 15, "v3 rests on the roof");
+        // Open column: both rules agree (the floor).
+        let open = hard_drop_with(&b, &cells, 5, DropRule::FromTop).unwrap();
+        assert_eq!(open.row, hard_drop(&b, &cells, 5).unwrap().row);
+    }
+
+    #[test]
+    fn from_top_rules_agree_on_every_empty_board_spot_and_top_out_is_none() {
+        for piece in Piece::ALL {
+            let a = landing_options(&Board::empty(), piece);
+            let b = landing_options_with(&Board::empty(), piece, DropRule::FromTop);
+            assert_eq!(a.len(), b.len());
+            assert!(a.iter().zip(&b).all(|(x, y)| x.row == y.row && x.cells == y.cells));
+        }
+        // A blocked top row: no v3 landing in that column.
+        let mut b = Board::empty();
+        b.place(&[(0, 0), (1, 0)]);
+        let cells = Piece::O.rotations()[0].clone();
+        assert!(hard_drop_with(&b, &cells, 0, DropRule::FromTop).is_none());
+    }
+
+    #[test]
+    fn drop_rule_grammar_ids_round_trip() {
+        for rule in [DropRule::DeepestFit, DropRule::FromTop] {
+            assert_eq!(DropRule::from_grammar(rule.grammar_id()), Some(rule));
+        }
+        assert_eq!(DropRule::from_grammar("laya-tetris-v1"), None);
     }
 
     #[test]

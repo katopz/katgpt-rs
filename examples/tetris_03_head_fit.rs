@@ -30,7 +30,7 @@ use std::path::PathBuf;
 
 use katgpt_core::state_option_scoring::head::{FittedHead, HeadFitter};
 use tetris_fixture::{
-    Piece, Recomputed, default_fixture, dellacherie_pick, load_fixture_states, outcome_features,
+    Piece, Recomputed, default_fixture, dellacherie_pick, fixture_rule, load_fixture_states, outcome_features,
     play_game,
 };
 
@@ -114,6 +114,7 @@ fn main() {
 
     // ── Parse + drift-check (the shared detector) ────────────────────────
     let states = load_fixture_states(&fixture_path);
+    let rule = fixture_rule(&states);
     let n_options: usize = states.iter().map(|(f, _)| f.options.len()).sum();
     println!(
         "drift check: PASS — {} states / {n_options} options recompute byte-identically",
@@ -399,7 +400,7 @@ fn main() {
         let mut per_game: Vec<u32> = Vec::with_capacity(games);
         let mut placements = 0usize;
         for stream in &streams {
-            let (c, npl) = play_game(policy, stream);
+            let (c, npl) = play_game(policy, stream, rule);
             total += c;
             placements += npl;
             per_game.push(c);

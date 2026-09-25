@@ -27,8 +27,8 @@ pub mod tetris_sim;
 #[allow(unused_imports)]
 pub use hash_embed::{EMBED_DIM, embed};
 pub use tetris_sim::{
-    Board, Piece, dellacherie_score, landing_options, outcome_features, render_spot_sentence,
-    render_state_sentence,
+    Board, DropRule, Piece, dellacherie_score, landing_options_with, outcome_features,
+    render_spot_sentence, render_state_sentence,
 };
 
 pub fn default_fixture() -> PathBuf {
@@ -40,7 +40,6 @@ pub fn default_fixture() -> PathBuf {
 #[derive(Deserialize)]
 pub struct FixtureState {
     pub state_id: String,
-    #[allow(dead_code)]
     pub grammar: String,
     pub state_sentence: String,
     pub board: Vec<String>,
@@ -104,9 +103,13 @@ pub fn piece_from_id(id: &str) -> Piece {
 /// (pinned order: rot/col/row/cells), outcome features (exact), and both
 /// sentence layers (the closed grammar). Returns the recomputed state.
 pub fn recompute_and_verify(st: &FixtureState) -> Result<Recomputed, String> {
+    // The drop rule is part of the grammar (v2 DeepestFit, v3 FromTop —
+    // Issue 884): recompute under the rule the fixture was dumped with.
+    let rule = DropRule::from_grammar(&st.grammar)
+        .ok_or_else(|| format!("{}: unknown grammar {:?}", st.state_id, st.grammar))?;
     let board = Board::from_strings(&st.board.iter().map(String::as_str).collect::<Vec<_>>());
     let piece = piece_from_id(&st.piece);
-    let options = landing_options(&board, piece);
+    let options = landing_options_with(&board, piece, rule);
     if options.len() != st.options.len() {
         return Err(format!(
             "{}: option count drifted (fixture {}, recomputed {})",
@@ -182,13 +185,31 @@ pub fn load_fixture_states(path: &PathBuf) -> Vec<(FixtureState, Recomputed)> {
 
 // ── Shared play loop + the classic policy ────────────────────────────────
 
-/// One game under `policy` over a pre-generated piece stream; returns
-/// (lines cleared, placements). Top-out or stream exhaustion ends it.
-pub fn play_game(policy: &dyn Fn(&Recomputed) -> usize, pieces: &[Piece]) -> (u32, usize) {
+/// The one drop rule every state of a loaded fixture shares (panics on a
+/// mixed or unknown-grammar fixture — the drift detector's standing).
+pub fn fixture_rule(states: &[(FixtureState, Recomputed)]) -> DropRule {
+    let first = states.first().expect("fixture has no states");
+    let rule = DropRule::from_grammar(&first.0.grammar).expect("unknown grammar");
+    assert!(
+        states.iter().all(|(f, _)| f.grammar == first.0.grammar),
+        "fixture mixes grammars"
+    );
+    rule
+}
+
+/// One game under `policy` over a pre-generated piece stream, landing
+/// pieces under `rule` (pass [`fixture_rule`] so live play matches the
+/// fixture's grammar); returns (lines cleared, placements). Top-out or
+/// stream exhaustion ends it.
+pub fn play_game(
+    policy: &dyn Fn(&Recomputed) -> usize,
+    pieces: &[Piece],
+    rule: DropRule,
+) -> (u32, usize) {
     let mut board = Board::empty();
     let mut cleared = 0u32;
     for (n, &piece) in pieces.iter().enumerate() {
-        let options = landing_options(&board, piece);
+        let options = landing_options_with(&board, piece, rule);
         if options.is_empty() {
             return (cleared, n); // top-out
         }
