@@ -81,7 +81,7 @@ flowchart TB
     end
     subgraph R2["decide"]
         direction LR
-        V["score each end board<br/>with the rulebook"] --> G["average over the<br/>unknown piece ·<br/>best over the plan"] --> P["play the best<br/>first move<br/>~0.8 ms"]
+        V["score each end board<br/>with the rulebook"] --> G["average over the<br/>unknown piece ·<br/>best over the plan"] --> P["play the best<br/>first move<br/>~0.35 ms"]
     end
     C --> V
 ```
