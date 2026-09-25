@@ -2224,6 +2224,15 @@ pub use saddle_escape::{
     FlipDetector, HaltOutcome, SaddleEscapeGate, TrapConfig, TrapObservables, apply_kick,
 };
 
+// Issue 895 / Research 590 (GRAM re-distill, arXiv:2605.19376) — guided
+// width rollouts on the belief host: N×K stochastic hypotheses over a
+// deterministic refinement step (transversal / mass-conserving ε,
+// stagnation-gated σ, success-SVD μ≠0 table, decode-free selection,
+// trap-kill-reallocate). Consumes diversity::temp, saddle_escape, qmc,
+// thin_svd_into, best_belief — forks none. Opt-in (Bench 898 verdict).
+#[cfg(feature = "guided_width_rollouts")]
+pub mod guided_width;
+
 // Issue 746 Row 2 (arXiv:2609.11801 "Thinking with Looped Flows", Eq 18
 // minus the denoiser) — marginal-calibrated backtrack for interpolant
 // flow states: transport the CURRENT state to an earlier confidence level
@@ -2775,8 +2784,8 @@ pub use paired_loss::{
 pub mod diversity;
 #[cfg(feature = "temp_loss_fingerprint")]
 pub use diversity::temp::{
-    LossKernel, extrapolated_snapshot_schedule, lipschitz_gradient_bound, pairwise_bound,
-    perturbed_loss_vector, select_diverse_subset,
+    LossKernel, blake3_noise_fill, extrapolated_snapshot_schedule, lipschitz_gradient_bound,
+    pairwise_bound, perturbed_loss_vector, select_diverse_subset, select_diverse_subset_in_place,
 };
 // Plan 367 Fusion C — QMC variant of `extrapolated_snapshot_schedule`.
 // Low-discrepancy noise coverage → more diverse loss vectors per unit K.

@@ -170,14 +170,44 @@ fn extrapolated_snapshot_schedule_with_noise(
 /// platforms and runs (quorum-reproducibility, G4).
 #[inline]
 fn blake3_noise(seed: u64, sigma: f32) -> f32 {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(&seed.to_le_bytes());
-    let hash = hasher.finalize();
-    let bytes = hash.as_bytes();
-    let u = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-    // Map u32 uniformly to [-1, 1], then scale by sigma.
-    let normalized = (u as f32 / u32::MAX as f32) * 2.0 - 1.0;
-    normalized * sigma
+    // Coordinate 0 of block 0 of `blake3_noise_fill` — the SAME hash input
+    // (`seed` bytes only) and the same u32 → [-1, 1] map, so this scalar
+    // form and the vector fill are one ε source, never two.
+    let mut out = [0.0f32; 1];
+    blake3_noise_fill(seed, sigma, &mut out);
+    out[0]
+}
+
+/// Vector form of the scalar ε source: fill `out` with deterministic
+/// zero-mean uniform noise in `[-sigma, +sigma]`, one BLAKE3 hash per block
+/// of 8 coordinates (32 bytes = 8 × u32).
+///
+/// Block 0 hashes `seed.to_le_bytes()` alone — so `out[0]` is exactly the
+/// scalar `blake3_noise(seed, sigma)` (pinned by a unit test) — and block
+/// `b ≥ 1` hashes `seed ‖ b`. Same `(seed, sigma, out.len())` ⇒ bit-identical
+/// output on every platform (scalar sequential map, no SIMD reassociation).
+///
+/// Zero-allocation. Consumed by the guided width rollouts
+/// (`crate::guided_width`, Issue 895) as the per-(branch, step) ε source,
+/// where the scalar form would cost one hash per coordinate.
+#[inline]
+pub fn blake3_noise_fill(seed: u64, sigma: f32, out: &mut [f32]) {
+    for (block, chunk) in out.chunks_mut(8).enumerate() {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&seed.to_le_bytes());
+        if block > 0 {
+            hasher.update(&(block as u64).to_le_bytes());
+        }
+        let hash = hasher.finalize();
+        let bytes = hash.as_bytes();
+        for (i, slot) in chunk.iter_mut().enumerate() {
+            let o = i * 4;
+            let u = u32::from_le_bytes([bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]]);
+            // Map u32 uniformly to [-1, 1], then scale by sigma.
+            let normalized = (u as f32 / u32::MAX as f32) * 2.0 - 1.0;
+            *slot = normalized * sigma;
+        }
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -439,6 +469,36 @@ pub fn select_diverse_subset_into(
     min_dist_workspace: &mut Vec<f32>,
     is_selected_workspace: &mut Vec<bool>,
 ) -> Vec<usize> {
+    select_diverse_subset_in_place(
+        loss_vectors,
+        k_subset,
+        scratch,
+        min_dist_workspace,
+        is_selected_workspace,
+    );
+    scratch[..k_subset].to_vec()
+}
+
+/// The allocation-free core of [`select_diverse_subset_into`]: the same
+/// greedy farthest-point (max-min L∞) selection, written into
+/// `scratch[..k_subset]` with no returned `Vec`.
+///
+/// Zero-allocation when both workspaces already hold capacity `>= n`
+/// (they are `clear()` + `resize(n)`'d, which never reallocates within
+/// capacity). [`select_diverse_subset_into`] delegates here, so the two are
+/// one algorithm — bit-identical selections by construction. Consumed by the
+/// guided width rollouts' returned-set selection (Issue 895 T4).
+///
+/// # Panics
+///
+/// Same contract as [`select_diverse_subset_into`].
+pub fn select_diverse_subset_in_place(
+    loss_vectors: &[&[f32]],
+    k_subset: usize,
+    scratch: &mut [usize],
+    min_dist_workspace: &mut Vec<f32>,
+    is_selected_workspace: &mut Vec<bool>,
+) {
     let n = loss_vectors.len();
     assert!(k_subset >= 1 && k_subset <= n, "k_subset must be in [1, n]");
     assert!(
@@ -451,7 +511,7 @@ pub fn select_diverse_subset_into(
     if k_subset == 1 {
         // Trivial: any single candidate. Pick index 0 by convention.
         selected[0] = 0;
-        return selected.to_vec();
+        return;
     }
 
     // Resize workspaces to n (reusing capacity across calls).
@@ -516,8 +576,6 @@ pub fn select_diverse_subset_into(
         }
         count += 1;
     }
-
-    selected.to_vec()
 }
 
 /// Find the pair `(i, j)` with maximal L_inf distance among all candidates.
@@ -1635,5 +1693,46 @@ mod tests {
             assert_eq!(loss_vecs1[i], loss_vecs2[i], "loss_vec[{i}] differs");
         }
         assert_eq!(selected1, selected2, "selected subset differs across runs");
+    }
+
+    /// Issue 895: the vector ε source is the scalar one, coordinate for
+    /// coordinate — block 0 reproduces the pre-refactor inline formula.
+    #[test]
+    fn blake3_noise_fill_block0_is_the_scalar_source() {
+        for seed in [0u64, 1, 42, u64::MAX, 0x9E37_79B9_7F4A_7C15] {
+            let mut h = blake3::Hasher::new();
+            h.update(&seed.to_le_bytes());
+            let b = *h.finalize().as_bytes();
+            let u = u32::from_le_bytes([b[0], b[1], b[2], b[3]]);
+            let reference = ((u as f32 / u32::MAX as f32) * 2.0 - 1.0) * 0.37;
+            assert_eq!(blake3_noise(seed, 0.37).to_bits(), reference.to_bits());
+            let mut v = [0.0f32; 19];
+            blake3_noise_fill(seed, 0.37, &mut v);
+            assert_eq!(v[0].to_bits(), reference.to_bits());
+            let mut w = [0.0f32; 19];
+            blake3_noise_fill(seed, 0.37, &mut w);
+            assert_eq!(v.map(f32::to_bits), w.map(f32::to_bits), "not reproducible");
+            assert!(v.iter().all(|x| x.abs() <= 0.37 + 1e-7));
+            // Blocks differ (block 1 hashes seed ‖ 1).
+            assert_ne!(v[..8], v[8..16]);
+        }
+    }
+
+    /// Issue 895: the in-place core selects exactly what the Vec-returning
+    /// wrapper selects.
+    #[test]
+    fn select_diverse_subset_in_place_matches_wrapper() {
+        let rows: Vec<Vec<f32>> = (0..12)
+            .map(|i| (0..6).map(|j| ((i * 7 + j * 3) % 11) as f32 * 0.1).collect())
+            .collect();
+        let refs: Vec<&[f32]> = rows.iter().map(|r| r.as_slice()).collect();
+        for k in 1..=12 {
+            let mut s1 = vec![0usize; k];
+            let wrapped = select_diverse_subset(&refs, k, &mut s1);
+            let mut s2 = vec![0usize; k];
+            let (mut md, mut sel) = (Vec::with_capacity(12), Vec::with_capacity(12));
+            select_diverse_subset_in_place(&refs, k, &mut s2, &mut md, &mut sel);
+            assert_eq!(wrapped, s2, "k={k}");
+        }
     }
 }

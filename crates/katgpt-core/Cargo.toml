@@ -416,6 +416,32 @@ cadence_gate = []
 # promotion owner-gated per the 525/Bench-834 precedent.
 saddle_escape = ["gain_cost_halt"]
 
+# guided_width_rollouts (Issue 895 / Research 590 GRAM re-distill,
+# arXiv:2605.19376; Bench 898 completes Plan 095's pending width-vs-depth
+# G1/G3): N parallel hypotheses of K steps over a caller-supplied
+# deterministic refinement step (the belief host's `evolve_belief`),
+# perturbed by a pluggable ε arm — T1(a) transversal `σ_t·P_⊥ v` for dense
+# latents — with T2 stagnation-gated variance σ_max·sigmoid(α(w−w₀)), T3
+# decode-free latent scorer (self-consistency + convergence residual +
+# frozen direction; NO reward needed — BanditPruner stands where one
+# exists), T4 Sobol init + farthest-point returned set, T5 success-SVD
+# direction table (thin_svd_into, the kernel katgpt-canon's
+# fit_joint_svd_pair delegates to) + Beta posterior + BLAKE3 freeze/thaw,
+# T6 trap-kill-reallocate (saddle_escape FlipDetector + apply_kick; freed
+# budget → width). Kill switch N≤1 / σ_max=0 ≡ the incumbent loop
+# bit-identically; table-absent ≡ isotropic+transversal bit-identically.
+# Zero-alloc with caller-owned scratch, BLAKE3-deterministic, NaN-safe.
+# OPT-IN: Research 058 §8.3's no-guided-default call governs (Bench 898 T9
+# verdict). The belief-host adapter compiles with `sense_composition`.
+guided_width_rollouts = ["saddle_escape", "subspace_phase_gate", "qmc_sampling", "temp_loss_fingerprint", "best_belief"]
+# guided_width_hodge (Issue 895 T1(b)): mass-conserving ε for COCHAIN belief
+# fields (2D zone maps, d=2) — ε = δ₂ψ + Σ c_h z_h built inside
+# coexact ⊕ harmonic on a power-of-two grid, so belief_mass_divergence(ε)
+# == 0.0 EXACTLY in f32 (by construction, no projection solve) — plus the
+# codifferential circulation escape probe. Architectural invariant only
+# (no quality claim). Opt-in.
+guided_width_hodge = ["guided_width_rollouts", "dec_operators"]
+
 # marginal_rewind (Issue 746 Row 2, arXiv:2609.11801 "Thinking with Looped
 # Flows", Eq 18 minus the denoiser): calibrated noise-backtrack for
 # interpolant flow states — transport the CURRENT state to an earlier
