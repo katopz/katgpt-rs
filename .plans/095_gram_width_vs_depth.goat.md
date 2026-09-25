@@ -1,4 +1,5 @@
 # Plan 095: GRAM Width-vs-Depth GOAT Proof
+**Status:** GOAT PENDING 2/3 — G2 PASS (prior); **G1 PASS via [Bench 898](../.benchmarks/898_guided_width_rollouts_goat.md)** (Issue 895 T7: width 8×16 vs depth 1×128 at equal compute, +14.1 pp selected on the multi-solution colouring family); **G3 NOT PROVEN** (single-solution family is a tie at best, width loses at 8×16; arena domains Go/Bomber/FFT still unmeasured — next lane riir-ai Issue 1008 T5).
 
 > **Parent**: Research 58 (GRAM Generative Recursive Reasoning)
 > **Depends**: Plan 079 (elf_sde ✅), Plan 030 (bandit ✅), Plan 080 (bt_rank ✅)
@@ -11,7 +12,7 @@
 - [x] T2: Run width sweep K=[1,5,10,20] with fixed depth T=4 on draft config ✅ (infrastructure-complete; needs real game arenas for full GOAT proof)
 - [x] T3: Run depth sweep T=[1,4,8,16] with fixed width K=1 on draft config ✅ (infrastructure-complete; needs real game arenas for full GOAT proof)
 - [x] T4: Run width×depth matrix on draft config ✅ (infrastructure-complete; needs Bomber arena for game-domain proof)
-- [x] T5: GOAT verdict: infrastructure validated ✅ (GOAT PENDING 1/3 — G2 passed, G1/G3 need stochastic game domains)
+- [x] T5: GOAT verdict: infrastructure validated ✅ (GOAT PENDING 1/3 — G2 passed, G1/G3 need stochastic game domains) → **2/3 on 2026-09-25**: G1 PASS via Bench 898 (Issue 895), G3 not proven (see Status)
 - [x] T6: Update Research 58 with GOAT results, README.md benchmark section
 
 ## Objective

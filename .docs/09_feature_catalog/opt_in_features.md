@@ -5093,3 +5093,55 @@ loaded box, 3 runs):
 (katgpt-spectral). Both are **OPT-IN**. There is no production consumer yet.
 The rerank wiring and an oracle-anchored eval consumer are the promotion
 evidence still owed.
+## 137. guided_width_rollouts + guided_width_hodge — GRAM guided width on the belief host (Issue 895 / Research 590)
+
+N parallel hypotheses of K steps each, run over a caller-supplied deterministic
+refinement step. For the belief host that step is `evolve_belief`, used as-is
+through `guided_width::belief_host`. Selection is decode-free, and every piece
+consumes shipped substrate:
+
+- **T1(a)** `Transversal`: `ε = σ_t·P_⊥ v`, drawn from the BLAKE3 ε source
+  (`diversity::temp::blake3_noise_fill`).
+- **T1(b)** `hodge_arm::MassConserving`: `ε = δ₂ψ + Σ c_h z_h`, built inside
+  coexact ⊕ harmonic on a power-of-two grid. That makes
+  `belief_mass_divergence(ε) == 0.0` exactly in f32, by construction. It owns
+  its init and kick, and it refuses the table term.
+- **T2** `StagnationGate`: `σ_t = σ_max·sigmoid(α(w_stuck − w₀))`.
+- **T3** `latent_value_into`: self-consistency + convergence residual + a
+  frozen direction. It is sigmoid-only and ranking-only, never a calibrated
+  probability.
+- **T4** `sobol_init_into` (cached `SobolQmc`, zero-alloc `reseed`) and
+  `diverse_set_into` (the TEMP farthest-point core).
+- **T5** `DirectionTable`: a success-SVD via `thin_svd_into`, with BLAKE3
+  freeze/thaw and a `DirectionPosterior` ranked by `best_belief_score`.
+- **T6** trap-kill-reallocate: `saddle_escape::FlipDetector` over a pre-decode
+  belief key plus `apply_kick`. A spent branch is re-spawned as a new
+  hypothesis. `DivergenceProbe` supplies the codifferential circulation signal.
+
+The kill switch (N ≤ 1 or σ_max = 0) runs the incumbent loop verbatim. A
+missing table takes the isotropic+transversal path, bit-identically.
+
+Gates ([Bench 898](../../.benchmarks/898_guided_width_rollouts_goat.md), M3
+Max, AC, heavily loaded box, 5 runs, deterministic G1). The fixture is graph
+3-colouring, equal compute 8×16 vs 1×128:
+
+- **G1 FAILED (pre-stated):** width beats depth on MULTI (≥ 4 completions),
+  selected **+0.117 ± 0.049** with coverage 0.59 → 3.32. It LOSES on SINGLE
+  (unique completion), **−0.188 ± 0.036**.
+- **Demote condition TRIGGERED:** the T5 table ties on MULTI and loses on
+  SINGLE (branch-valid), so guided stays off-by-default forever
+  (closed-negative). Its MULTI coverage lift of +1.50 ± 0.11 is recorded,
+  not decision-bearing.
+- **E9:** a measured delta on both families. The feature is not inert.
+- **Mass arm:** 0 of 2500 draws had non-zero divergence. Branch divergence
+  drift is 1.34e-7, against 0.86 for the transversal arm.
+- **G2:** 14.9 µs per belief decision at N = 8, K = 16 (bar ≤ 50), and
+  t(2K)/t(K) = 2.00.
+- **G3:** kill switch bitwise.
+- **G4:** 0 allocs.
+- **Plan 095:** G1 PASS (+14.1 pp); G3 not proven (SINGLE ties).
+
+🔧 Feature flags: `guided_width_rollouts` and `guided_width_hodge` (implies
+`dec_operators`), both katgpt-core. Both are **OPT-IN**, and the T9 verdict
+is no promotion. The belief-host adapter compiles with `sense_composition`.
+The consumer is riir-ai Issue 1008.

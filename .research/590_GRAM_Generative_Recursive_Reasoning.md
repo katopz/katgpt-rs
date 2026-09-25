@@ -1,6 +1,6 @@
 # Research 590: GRAM — Generative Recursive Reasoning (re-distilled at the belief-host altitude)
 
-**Status:** ACTIVE — **SUPERSEDES [Research 058](058_GRAM_Generative_Recursive_Reasoning.md)** (same paper, arXiv:2605.19376, first distilled 2026-07; this note re-distills at the per-NPC belief-host altitude 058 never examined and overturns two of its standing calls — see §Relation to 058). Modelless track **Gain** (katgpt-rs Issue 895 + riir-ai Issue 1008) · training track **Gain, low priority** (riir-train Plan 419, envelope-fit SECONDARY; absorbs 058 §7.3).
+**Status:** ACTIVE — **SUPERSEDES [Research 058](058_GRAM_Generative_Recursive_Reasoning.md)** (same paper, arXiv:2605.19376, first distilled 2026-07; this note re-distills at the per-NPC belief-host altitude 058 never examined and overturns two of its standing calls — see §Relation to 058). Modelless track **Gain** (katgpt-rs Issue 895 + riir-ai Issue 1008; **Issue 895 landed opt-in 2026-09-25 — Bench 898: G1 FAIL on the single-solution family, guided-table demote condition TRIGGERED (closed-negative), no promotion; see §GOAT ledger**) · training track **Gain, low priority** (riir-train Plan 419, envelope-fit SECONDARY; absorbs 058 §7.3).
 
 **Source:** arXiv:2605.19376 "Generative Recursive Reasoning" — Baek, Jo, Kim, Ren, Bengio, Ahn (KAIST / Mila / NYU / UdeM, 2026). Website: <https://ahn-ml.github.io/gram-website/>. v2 PDF read (ELBO Eq. 13/14, LPRM A.2, ACT A.1, ablation Tables 1/3, cost Table 7). 058 (written 2026-07, independently from the paper) is a second source: its figures (93.96, 99.7/50.27, 99.05) agree with the v2 extraction — headline reconciliation: 058 leads with the **base** 93.96 Sudoku number, this note leads with the **width-scaled** 97.0 (N=20) number; both appear in both papers' tables, no disagreement.
 
@@ -87,6 +87,27 @@ GRAM makes recursive latent reasoning **stochastic and wide**: each high-level t
 - G1 equal-compute width-vs-depth **on BOTH families**: a multi-solution/structured family (where GRAM's guidance wins) AND a single-solution/uniform family (where GRAM's zero-mean wins, 94.88 vs 93.96) — pre-stated demote condition: if the direction table loses or ties on BOTH families, the guidance stays off-by-default forever (closed-negative, recorded). Mass-divergence ≡ 0 arm for the Hodge arm (exact identity). This gate IS Plan 095's pending G1/G3 completion — cite 095.
 - G2 O(K) parallel latency, per-NPC budget in the 20 Hz slice; G3 kill-switch bit-identity (`σ=0`/`N=1` ≡ incumbent); G4 zero-alloc, BLAKE3-seeded deterministic noise.
 - Promotion only on modelless gain; `guided_width_rollouts` opt-in at every layer.
+
+### GOAT ledger — Bench 898 (Issue 895 T7/T9, 2026-09-25)
+
+[Bench 898](../.benchmarks/898_guided_width_rollouts_goat.md). The substrate is `a4421939f`, and the GOAT target plus two fixes is `ae7b13320`. The fixture is graph 3-colouring, with 128 test instances per family at equal compute 8×16 vs 1×128, selected decode-free:
+
+| gate | MULTI (≥ 4 completions) | SINGLE (unique) | verdict |
+|---|---|---|---|
+| G1 width Z − depth D (selected) | +0.117 ± 0.049 WIN | −0.188 ± 0.036 LOSS | **FAIL** (pre-stated) |
+| E9 delta over the deterministic arm | coverage +2.73 | selected −0.188 | PASS (not inert) |
+| demote: table G − Z (branch-valid) | +0.001 ± 0.014 TIE | −0.025 ± 0.012 LOSS | **TRIGGERED** |
+| mass arm `belief_mass_divergence(ε) ≡ 0` | 0 / 2500 non-zero; branch drift 1.34e-7 | — | PASS |
+| G2 / G3 / G4 | 14.9 µs @ N8K16, t(2K)/t(K) 2.00 / bitwise / 0 allocs | — | PASS |
+
+- **The demote condition fired.** The direction table (μ≠0) lost or tied on both families, so **guided stays off-by-default forever (closed-negative)**. §8.3 of 058 now stands on a measurement.
+- The table's MULTI coverage lift (+1.50 ± 0.11) is recorded as non-decision-bearing. Reopening this needs a NEW fixture with coverage pre-registered.
+- **T9: no promotion.** `guided_width_rollouts` and `guided_width_hodge` stay opt-in. Zero-mean width gains only on MULTI, and the promotion rule needs both families.
+- **What the run taught (feed to riir-ai Issue 1008):**
+  - The decode-free selector is the bottleneck: oracle any-valid is 0.99 / 0.98 against selected 0.70 / 0.75.
+  - T6 kill-and-respawn costs −4.7 pp, because the flip detector reads exploration noise as a trap.
+  - Transversal ≡ isotropic under the stagnation gate: the noise fires where û = 0.
+- **Plan 095:** G1 PASS (+14.1 pp MULTI). G3 is not proven, because SINGLE is a tie and the arena domains are unmeasured. That puts 095 at GOAT PENDING **2/3**.
 
 ## Caveats
 

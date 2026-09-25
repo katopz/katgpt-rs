@@ -942,3 +942,30 @@ doc carries the numbers + the reopen trigger, and
 ~1.00 control now). NaN input documented out-of-contract (already
 platform-inconsistent in the incumbent: scalar sticky, `avx2_max` heals via
 maxps-SRC2, NEON heals).
+
+## 43. GRAM guided direction table on the belief host — DEMOTE CONDITION TRIGGERED, closed-negative (Issue 895 T5/T7)
+
+The μ≠0 fill of GRAM (arXiv:2605.19376) on the belief host was built as the
+T5 success-SVD direction table: an outcome-weighted `thin_svd_into` over
+logged successful Δh, with a Beta posterior, BLAKE3 freeze/thaw, and guidance
+`κ·σ·s_b·d_j` at init and per step. It was gated in
+[Bench 898](../../.benchmarks/898_guided_width_rollouts_goat.md) against the
+zero-mean width arm, on both GRAM families, with a demote condition
+PRE-STATED in Research 590:
+
+| family | G − Z branch-valid (decision metric) | verdict |
+|---|---|---|
+| MULTI (graph colouring, ≥ 4 completions) | +0.001 ± 0.014 | TIE |
+| SINGLE (unique completion) | −0.025 ± 0.012 | LOSS |
+
+**Disposition:** it lost or tied on both families, so guided stays
+**off-by-default forever**. Research 058 §8.3's no-guided-default call now
+has a measurement behind it.
+
+- The table code ships opt-in inside `guided_width_rollouts` as reusable
+  substrate. A missing table is bit-identical to the zero-mean path.
+- The table's MULTI coverage lift, **+1.50 ± 0.11** distinct valid solutions,
+  is real. It was not the pre-stated metric, so it is recorded, not
+  decision-bearing.
+- **Reopen trigger:** a NEW fixture whose pre-registration names coverage as
+  the decision metric. This run must not be re-read with a different metric.
