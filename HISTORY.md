@@ -1,3 +1,48 @@
+## Issue 896 (2026-09-25) — KVarN's raw tile buffer was shared across layers, and the in-progress tile dequantized to zeros (2-bit keys panicked): CLOSED (fixed under `kvarn`; layer-major bit-identical; no consumer's published quality figure carried it)
+
+- **Shipped (`62fd22b5f`), T1 option (a):** `KVarNKVCache` supports interleaved multi-layer (decode-order) stores.
+  - `key_buffer` / `val_buffer` are now one raw tile per layer: `n_layers × kv_dim × tile_size` f32 each, allocated once in `with_config`. Store and dequant stay 0-alloc; the hot path gains one `layer * raw_tile_len` offset.
+  - Memory: +`(n_layers − 1) × kv_dim × tile_size × 8` bytes over the old shared pair. For example, at 26 layers × kv_dim 1024 × tile 128 that is ~27 MB, up from ~1 MB.
+  - T2: `TileMeta` gains `quantized`, set by `quantize_*_tile` and cleared by `reset()`. `key_col_view` / `value_row_view` return `None` unless the tile is quantized, so a previous sequence's scales are unreachable after `reset()`.
+  - `dequantize_*_into` serve a non-quantized tile EXACTLY from the layer's raw buffer (`read_raw_key` / `read_raw_value`), at every bit width. There is no inverse transform, because the raw values precede Hadamard, var-norm and RTN. An unstored slot reads 0.
+- **Layer-major pin (T1):** the 894 verbatim-oracle test (`src/kvarn/dequant_oracle_tests.rs`, n_layers 2, layer-major) still compares every quantized read against the pre-894 loops: **960 cases, 10,427,200 elements, 0 differing bits**.
+  - In-progress positions used to be skipped wherever the old code panicked. They are now asserted to equal the stored input bitwise. That is why the element count moved from 10,407,928.
+- **T3 (`src/kvarn/issue_896_tests.rs`):**
+  - Decode-order stores at n_layers {2, 3} × bits {2, 3, 4, 8} × every (skip_varn, group) mode × Hadamard on/off × kv_dim {16, 37} × three tile geometries: a partial last tile quantized at `max_seq − 1`, full tiles plus a trailing in-progress tile, and full tiles only.
+  - After EVERY position, every stored position of every layer is read (K and V). Quantized tiles are compared with the same cache fed layer-major, and in-progress tiles with the input. Result: **240 cases, 21,687,600 elements, 0 differing bits**. The quantized-state transition is asserted too.
+  - Also: full-tile-then-partial at n_layers {1, 2, 3}; `reset()` then a partial tile (exact reads, no views, unstored slots read 0; the re-quantized tiles are bitwise equal to a fresh cache); and both measured probes as named tests.
+  - Revert-probed: all six tests red on the pre-fix `kv_cache.rs`. The probes red on their data assertions: L0 served L1's data, and the in-progress value read returned zeros.
+- **T4, consumers:**
+  - **Sibling repos: none.** `KVarNKVCache` / `KVarNConfig` are constructed nowhere in `riir-*`, `seal-*` or `sealm-toolkit`. riir-ai `riir-gpu/src/kvarn/*` imports only the stateless free functions (`rtn_quantize_rows`, `pack_value` / `unpack_value`, `packed_bytes_per_row`, `variance_normalize`, Hadamard), which are unchanged. riir-infer's decode loop, which uses decode order and reads in-progress tiles, runs on `TurboQuantKVCache`. No sibling issues were filed.
+  - **katgpt-rs: no quality figure carried either finding.** Every in-tree KVarN test, bench and example is single-layer, and reads only quantized tiles:
+    - `bench_694` stores n = 64 = tile.
+    - `bench_894` / `bench_895` use T = 4096, i.e. full tiles, and a partial last tile quantized at `max_seq − 1`.
+    - `pseudo_decode_eval` sets `max_seq = seq_len`.
+    - `static_cal_goat` and `octpq_kvarn_fusion` use free functions only.
+  - The one reader of in-progress tiles is `examples/kvarn_goat_proof.rs` Phase 5, an info-only "full pipeline" timing that stores p and then reads p.
+    - Re-run in `--release`, interleaved base/fixed, 3 each: full pipeline **2.66 / 2.56 / 3.08 → 2.58 / 2.68 / 2.67 µs**.
+    - The GOAT figures are identical (4-bit cosine 0.9979, accumulation ratio 1.0129, all PASS), and the non-timing output is byte-identical.
+  - `benches/kv_cache_flatten_bench.rs` (kvarn row) re-stores 64 positions per iteration, so its tile quantizes after two iterations and the timed dequant reads a quantized tile. It is unaffected by reading, and was not re-run.
+- **Perf (no regression):** Bench 894 GOAT and bench_895, `--release`, pre-fix and fixed binaries run interleaved, 3 rounds each. Every 894 gate PASSES on both.
+  - Figures below are the new-kernel arm (µs per 4096-position pass) and the new/old ratio, pre-fix → fixed.
+
+  | arm | pre-fix | fixed |
+  |---|---|---|
+  | value 4-bit | 147.8 / 146.7 / 146.5 µs; 0.4067 / 0.4059 / 0.4061 | 146.7 / 157.4 / 146.7 µs; 0.4100 / 0.4088 / 0.4081 |
+  | value 2-bit | 194.9 / 192.2 / 197.4; 0.6919 / 0.6863 / 0.6912 | 189.8 / 191.1 / 192.2; 0.6830 / 0.6848 / 0.6855 |
+  | value 8-bit | 121.0 / 125.4 / 126.5; 0.8090 / 0.8077 / 0.8052 | 118.8 / 117.8 / 117.8; 0.7762 / 0.7751 / 0.7739 |
+  | key 4-bit | 493.6 / 481.8 / 486.4; 0.7684 / 0.7702 / 0.7719 | 492.4 / 487.9 / 486.6; 0.7756 / 0.7740 / 0.7715 |
+  | key 2-bit | 547.0 / 527.9 / 525.5; 0.9027 / 0.8937 / 0.8972 | 513.6 / 530.0 / 512.5; 0.9019 / 0.9083 / 0.8928 |
+  | key 8-bit | 459.7 / 461.8 / 458.1; 0.7315 / 0.7292 / 0.7268 | 456.7 / 459.1 / 460.3; 0.7284 / 0.7308 / 0.7314 |
+  | 895 P1 G2 fused/plain | 1.1222 / 1.1175 / 1.1325, plain 134.7 / 135.6 / 137.6 µs | 1.1109 / 1.1161 / 1.1094, plain 135.6 / 137.2 / 139.2 µs |
+
+  - Read honestly: the value 4-bit ratio drifted +0.6% (0.4059–0.4067 → 0.4081–0.4100) in all 3 rounds. The new arm's absolute time did not move (apart from one 157.4 µs outlier), and the ratio sits far inside the ≤ 0.90 bar.
+  - The 895 plain pass reads +1.1%, within its own round spread. The 895 G2 FAIL is Issue 883's recorded failure, present identically pre-fix; every other 895 gate passes on both.
+  - Box: M3 Max, AC power, 100% ("finishing charge"), powermode 2, load 16.4–19.3, free 2.7–3.4 GiB, swap 1070 / 2048 MiB.
+- **Checks:** `cargo clippy -p katgpt-kv -D warnings` is clean at default, `kvarn`, `kvarn,fitted_value_tables` and `kvarn,targeted_precision`, each with `--lib` and `--all-targets`. The root kvarn consumers (`kvarn_goat_proof`, `kvarn_thinking_demo`, `octpq_kvarn_fusion`, `chiaroscuro_03_collapse_discovery`, `static_cal_goat`, `kv_cache_flatten_bench`) are clippy-clean. katgpt-kv lib tests (`--test-threads=1`): 33 / 33 / 37 pass at `kvarn` / `+fitted_value_tables` / `+targeted_precision`.
+- **Found while closing, filed as [Issue 897](.issues/897_katgpt_kv_static_cal_tables_cfg_names_an_undeclared_feature.md):** katgpt-kv's KVarN `static_cal_tables` branches are gated on a feature katgpt-kv does not declare, and name a `crate::static_cal` module it does not have. `#![allow(unexpected_cfgs)]` hides this, so the path is compiled by nothing.
+- **Residual, pre-existing and unchanged:** `TileMeta::count` is a store COUNTER, not a slot map. Re-storing a position without `reset()` (a rollback or overwrite) double-counts and can quantize a tile early. This is out of scope here, because the `QuantizedKVCache` contract has no overwrite semantics.
+
 ## Issue 883 (2026-09-25) — fitted token-value tables (K=V+ retrofit, mean-removed V quant, V-cache halving): CLOSED (P0–P4 landed opt-in; two primitive-level G2 bars FAILED and are recorded; the model-bound half is riir-infer Issue 013)
 
 Source: Research 587 (Memory Attention, arXiv:2609.28399). This is the V-side twin of Issue 882.
@@ -52,7 +97,7 @@ Source: Research 587 (Memory Attention, arXiv:2609.28399). This is the V-side tw
   - The report arms are deferred restore +2.6–3.6% and lookup-only +2.1–2.8%.
   - Box: load 13.9–14.0, free 2.5–3.5 GiB, same power state as above. All other P1 gates pass.
   - These figures are for the Issue 883 owner to record there.
-- **Found while closing, filed as [Issue 896](.issues/896_kvarn_tile_buffer_shared_across_layers_and_partial_tile_reads.md), not fixed here, and behaviour unchanged by 894 (the oracle matches it bit for bit):**
+- **Found while closing, filed as Issue 896 (closed at `62fd22b5f`; see § Issue 896 above), not fixed here, and behaviour unchanged by 894 (the oracle matches it bit for bit):**
   - One raw tile buffer is shared across layers, so decode-order multi-layer stores quantize the last layer's data into every layer. Measured: L0 serves L1's values.
   - The in-progress tile dequantizes to zeros, and 2-bit key reads there panic.
 ## Issue 882 (2026-09-25) — differential anchor scoring (common-mode rejection on score surfaces we own): CLOSED (P0–P4 landed, all opt-in; promotion owed to consumers)
