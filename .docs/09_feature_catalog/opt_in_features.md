@@ -4901,3 +4901,38 @@ What 8-bit costs: ~0.75% context-conditional TV, and ~3% at 6-bit.
 ppl and needle@64K quality gate is riir-infer Issue 011 (the consumer), and
 promotion waits on it.
 
+## 132. chance_puct — chance-node PUCT for single-player stochastic games (Issue 892 T3)
+
+The moka trick (Bench 205: 74% → 98% vs greedy Moka) transplanted from
+two-player Go to games with draws: a policy PRIOR pruned to `top_k`, a VALUE
+at the leaf, no rollouts, most-visited root. Prior = `σ((s_i − mean)/T)`
+normalised over the kept set (sigmoid, never softmax; `T` auto = std of the
+kept scores). Value = `σ((v − root.value())/scale)`, terminal loss = 0,
+**no sign flip** (single player — the negamax flip is the Q-sign bug class
+this must not inherit), `Q` = mean backup. Chance nodes are **sampled ∝ p**
+per simulation from a caller-seeded `fastrand::Rng` (the mean backup
+converges to the expectation without paying the chance branching factor
+per simulation); a chance node expands for free, so each simulation costs
+one decision expansion. `katgpt-core::mcts` (UCB1 + rollouts, the variant
+Bench 205 measured at ≈0%) is untouched.
+
+Pieces: `ChanceGame` (decision `actions`/`apply`, chance
+`outcomes`/`resolve`, `value`, `is_terminal`), `ChancePuctConfig`
+(`budget` 400, `c_puct` 1.5, `top_k` 8, `prior_temp`/`value_scale` auto),
+`ChancePuct::search → ChancePuctPick { action, index, visits, q }`, arena +
+scratch reused (0 allocs in a warm search). Tetris adapter:
+`examples/common/tetris_puct.rs` (`pick_puct`, bag-aware chance over the
+next preview).
+
+GOAT ([Bench 892](../../.benchmarks/892_chance_puct_goat.md)): G1 6/6 arms
+(expectation-not-max gamble, two-sided; terminal = 0; top_k pruning;
+most-visited tie-break; seeded determinism — a Q-sign-flip perturbation reds
+5/6); G2 478–668 ns/sim search overhead; G4 0 allocs; G3 vs the Bench 891
+depth-2 exhaustive champion at garbage 19 rows @ 75%, n=60: survival
+21/60 → 26 (b100) · 27 (b400) · 30 (b1600), per-seed W/T/L 9/50/1 at b1600
+(sign p≈0.02); every easier regime saturates both players; 5–150× the
+per-decision latency.
+
+🔧 Feature flag: `chance_puct` (katgpt-core, root forward). **OPT-IN** — the
+sole consumer is the tetris example (`tetris_08_puct_goat`); promotion is
+Issue 892 T6's call.

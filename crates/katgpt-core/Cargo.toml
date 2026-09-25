@@ -999,6 +999,17 @@ habituation_filter = []
 # first consumer's GOAT (the 873/874/875 precedent).
 ladder_gate = []
 
+# chance_puct (Issue 892 T3, 2026-09-25): chance-node PUCT for single-player
+# stochastic games — the moka trick (Bench 205) transplanted: sigmoid prior
+# (never softmax) pruned to top_k, sigmoid-squashed value leaf (NO sign flip),
+# chance nodes sampled ∝ p from a caller-seeded fastrand::Rng, most-visited
+# root, arena + scratch reused (0 allocs in the search loop on a heap-free
+# game). Consumer: examples/common/tetris_puct.rs (tetris_08_puct_goat).
+# Bench 892: G1/G2/G4 PASS; G3 beats depth-2 exhaustive at garbage 19@75
+# (n=60 survival 21 → 30 at b1600), ties elsewhere, 5–150× latency. OPT-IN —
+# sole consumer is an example; promotion is Issue 892 T6's call.
+chance_puct = []
+
 # state_option_scoring (Plan 607 T1, 2026-09-22): per-option centroid-cosine
 # scoring over a fixed option table + the pinned lowest-index argmax — the
 # game-decision lane's scoring primitive, upstreamed from riir-reflex Issue
@@ -2814,6 +2825,14 @@ required-features = ["differential_anchor"]
 name = "bench_887_ladder_gate_goat"
 harness = false
 required-features = ["ladder_gate"]
+
+# Issue 892 T3 — chance_puct GOAT gate: G2 (µs/decision at budgets
+# 100/400/1600 on a heap-free synthetic game, best_of_us + black_box on
+# args AND result) + G4 (0 allocs in a warm search).
+[[test]]
+name = "bench_892_chance_puct_goat"
+harness = false
+required-features = ["chance_puct"]
 
 # Issue 882 P1 — streaming attention-SNR accumulators GOAT gate (G1a
 # exactness vs f64 incl. the rising-max rescale path, G1b retrieval proxy +

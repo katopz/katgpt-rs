@@ -3521,6 +3521,15 @@ pub mod habituation_filter;
 #[cfg(feature = "ladder_gate")]
 pub mod ladder_gate;
 
+/// Chance-node PUCT for single-player stochastic games (Issue 892 T3) —
+/// the moka trick (Bench 205) transplanted: sigmoid prior (never softmax)
+/// pruned to `top_k`, sigmoid-squashed value leaf with NO sign flip,
+/// chance nodes sampled ∝ p from a caller-seeded `fastrand::Rng`,
+/// most-visited root. `katgpt-core::mcts` (UCB1 + rollouts) is untouched.
+/// Opt-in (`chance_puct`).
+#[cfg(feature = "chance_puct")]
+pub mod chance_puct;
+
 /// Exact-mass sigmoid admission (Issue 879 / Research 584, arXiv:2609.25518
 /// "Matryoshka attribution") — the calibrated-mass "sigmoid top-k": bisect
 /// τ until Σσ((s−τ)/T) = k, emit the soft mask mᵢ = σ((sᵢ−τ)/T). Sum-to-k,
