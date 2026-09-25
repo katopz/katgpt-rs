@@ -2,7 +2,7 @@
 
 > **Source:** Jiale Kang, "Memory Attention", [arXiv:2609.28399](https://arxiv.org/abs/2609.28399), 2026-09-23 (single-author, v1, FLA-framework experiments).
 > **Date:** 2026-09-24
-> **Status:** Active — dual-track Gain. Modelless arm: [Issue 883](../.issues/883_fitted_value_anchor_tables.md). Training arm: [riir-train Plan 418](../../riir-train/.plans/418_memory_attention_recipes_secondary.md) (SECONDARY, queued).
+> **Status:** Active — dual-track Gain. Modelless arm: [Issue 883](../.issues/883_fitted_value_anchor_tables.md) — **P0 LANDED 2026-09-25**: the shared `katgpt-core/src/fitted_anchor_table.rs` substrate + the gemma-2-2b-it dashboard (riir-infer Bench 004: mean ρ_l(V)=0.48 / ρ(K)=0.50 / ρ_l(V−K)=0.49 @120k tokens — **go/no-go reads GO for P1/P2/P3**) + the Kimi-K3 dashboard-only fixture (Bench 889, MLA ρ≈0.52–0.60; KDA fixture-class null); P1–P4 open. Training arm: [riir-train Plan 418](../../riir-train/.plans/418_memory_attention_recipes_secondary.md) (SECONDARY, queued).
 > **Related Research:** 165 (Q-K=V projection sharing — the K/V-redundancy evidence), 511 (Memory Layers at Scale — the lookup-capacity family + our PKM legality precedent), 452 (RoVE — the in-tree inverse-RoPE consumer), 487 (massive activations — sink tokens are the degenerate per-token-mean outlier), 159 (KVarN), 586 (differential scoring — the Q-side twin), 278 (Engram fusion).
 > **Related Plans:** riir-train 417 (the SECONDARY-queue precedent), 418 (this paper's training arm); katgpt-rs Plan 557 (RoVE retrofit PoC, pending — the retrofit precedent).
 > **Cross-ref (riir-ai / riir-infer):** riir-infer `gguf_loader.rs` `attention_k_eq_v` (the loader-level V-optional seam, Gemma-4); riir-ai serving league tg128 (the P3 consumer cell).
@@ -95,7 +95,7 @@ Public (katgpt-rs): the fitted-table estimator, variance laws, cache laws, the R
 
 - [x] Issue 883 filed (modelless arm: R² dashboard → P1 quant → P2 retrofit → P3 cache halving) — filed in THIS change; the commit carrying this note is its record.
 - [x] riir-train Plan 418 filed (E0–E5 portfolio, SECONDARY, E3 owner-gated) — same commit.
-- [ ] Issue 882 P0 shares the table-builder substrate with 883 P0 — implement once, consume twice.
+- [x] Issue 882 P0 shares the table-builder substrate with 883 P0 — LANDED 2026-09-25 as `katgpt-core/src/fitted_anchor_table.rs` (`StreamingMeanTable`, opt-in `fitted_anchor_tables`; Bench 886 G4) with both consumers wired: 882 `differential_anchor.rs` + 883 riir-infer `vk_calibration`.
 
 ## 5. References
 
