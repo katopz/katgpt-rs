@@ -1,3 +1,27 @@
+## Issue 894 (2026-09-25) — KVarN dequant loops were scalar (bounds-checked indexing); rewritten as bit-identical zips: CLOSED (GOAT PASS, ships under `kvarn`)
+
+- **Shipped (`bf7d37244`):**
+  - The per-bit-width loops of `KVarNKVCache::{dequantize_value_into, dequantize_key_into}` moved to `crates/katgpt-kv/src/kvarn/dequant.rs`. They now use `zip` / `as_chunks` / an exact-length strided iterator over slices cut to the loop length.
+  - Every per-element op and its order is unchanged, with no reassociation and `mul_add` only where it already was. That covers value 4-bit, value 2-bit (grouped, ungrouped, var-norm), value 8-bit, and the same shapes for keys (T2). The generic-bits fallbacks are unchanged.
+  - The public read-only `KVarNValueRowView` / `KVarNKeyColView` (`value_row_view` / `key_col_view`) is the oracle seam.
+  - There is no new flag: this is a pure kernel change riding `kvarn`.
+- **T1, bit-identity against the pre-894 loops** (kept verbatim in `crates/katgpt-kv/tests/common/kvarn_dequant_oracle.rs`):
+  - Coverage: bits {2, 3, 4, 8} × every `(skip_varn, group_size)` mode, including the ones `with_config` never selects × 12 `kv_dim`s, odd and even × full, partial and unquantized tiles × Hadamard on/off × K and V.
+  - Result: **960 cases, 10,407,928 elements, 0 differing bits**, in debug and release.
+  - Revert-probed: reassociating one multiply reds it.
+- **T3, GOAT** ([Bench 895 Addendum II](.benchmarks/895_fitted_value_table_primitives_goat.md#addendum-ii--2026-09-25-issue-894-landed-vectorized-kvarn-dequant-and-p1-g2-re-measured-on-it); `crates/katgpt-kv/tests/bench_894_kvarn_dequant_zip_goat.rs`):
+  - G3: 12/12 bitwise. G4: 0 allocs.
+  - G2: paired interleaved new/old on the plain dequant+axpy pass, T=4096, kv_dim 128, `--release`, 3 runs. **Value 4-bit: 0.4077 / 0.4064 / 0.4065, i.e. 2.46× faster** (373–387 → 151–152 µs; bar ≤ 0.90).
+  - The other arms are no-regression gated and are all faster: value 2-bit 1.45–1.47×, value 8-bit 1.23–1.25×, key 4-bit 1.30×, key 2-bit 1.11–1.12×, key 8-bit 1.37–1.38×. A/A was +0.1–0.4%.
+  - Box: M3 Max, AC power, 100% charged, powermode 2, load 16.5–17.6, free 3.7–4.1 GiB, swap 1070 / 2048 MiB.
+- **T4, Issue 883 P1 G2 on the new kernel** (`bench_895_mean_removed_v_quant_goat`, 3 runs): fused/plain **1.1285 / 1.1333 / 1.1333, FAIL** against the unchanged ≤ +1% bar.
+  - The plain pass is now 138–146 µs, down from 436–510. The fused add-back's absolute cost is about the same (~18 µs vs ~23 µs), so its share of the ratio grew from +4.8% to +13%, as predicted.
+  - The report arms are deferred restore +2.6–3.6% and lookup-only +2.1–2.8%.
+  - Box: load 13.9–14.0, free 2.5–3.5 GiB, same power state as above. All other P1 gates pass.
+  - These figures are for the Issue 883 owner to record there.
+- **Found while closing, filed as [Issue 896](.issues/896_kvarn_tile_buffer_shared_across_layers_and_partial_tile_reads.md), not fixed here, and behaviour unchanged by 894 (the oracle matches it bit for bit):**
+  - One raw tile buffer is shared across layers, so decode-order multi-layer stores quantize the last layer's data into every layer. Measured: L0 serves L1's values.
+  - The in-progress tile dequantizes to zeros, and 2-bit key reads there panic.
 ## Issue 882 (2026-09-25) — differential anchor scoring (common-mode rejection on score surfaces we own): CLOSED (P0–P4 landed, all opt-in; promotion owed to consumers)
 
 Source: Research 586 (Diff Transformer, arXiv:2410.05258). Each primitive below landed opt-in in katgpt-rs, and each has a GOAT bench.

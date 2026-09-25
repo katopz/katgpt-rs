@@ -1,6 +1,6 @@
 # Bench 895 — fitted token-value table primitives (Issue 883 P1–P4, primitive half)
 
-**Status:** P1/P2/P3 primitives LANDED, **OPT-IN**. G1/G3/G4 pass on every arm. **Two G2 bars FAILED and are recorded as failed:** P1's fused dequant+restore costs +4.8–5.2% against a ≤ +1% bar, and P3's reconstruct-from-K costs 14–15× against a ≤ 1.00× bar. P2 G2 passes. P1 G2 was re-attempted with the dequant-fold lever and **still fails** (see the addendum at the end; the original figures below are unchanged). This bench makes no model-level quality claim; that half is riir-infer Issue 013.
+**Status:** P1/P2/P3 primitives LANDED, **OPT-IN**. G1/G3/G4 pass on every arm. **Two G2 bars FAILED and are recorded as failed:** P1's fused dequant+restore costs +4.8–5.2% against a ≤ +1% bar, and P3's reconstruct-from-K costs 14–15× against a ≤ 1.00× bar. P2 G2 passes. P1 G2 was re-attempted with the dequant-fold lever and **still fails** (see the addendum at the end; the original figures below are unchanged). Issue 894 then landed the vectorized KVarN dequant (`bf7d37244`, bit-identical, value 4-bit **2.46×**); on that kernel P1 G2 re-measures at **+12.9–13.3%**, still FAIL (Addendum II). This bench makes no model-level quality claim; that half is riir-infer Issue 013.
 
 - **Issue:** [883](../.issues/883_fitted_value_anchor_tables.md) · **Research:** [587](../.research/587_Memory_Attention_Fitted_Token_Value_Tables.md) · **Substrate:** Bench 886 (`fitted_anchor_table.rs`, P0) · **Model-bound G1:** riir-infer Issue 013
 - **Features:** `fitted_value_tables` (P1+P2, implies `fitted_anchor_tables`) · `fitted_v_reconstruct` (P3, implies `fitted_value_tables` + `position_group_action`). katgpt-kv forwards `fitted_value_tables` so P1 is gated against the real KVarN backend.
@@ -149,7 +149,7 @@ G3, G3b and G4 all pass: 0 differing elements and 0 allocations. The fold is exa
   - Bit-identity: it **breaks G3b** at bits 4 and 8, with 154,225 and 153,932 of 524,288 read elements differing, and 89 and 105 of 128 accumulate elements. The 2-bit and Hadamard arms stay bitwise, because their epilogues have no trailing multiply to contract.
   - A ULP bound was not pinned, because the variant loses on both axes. For the record, per element the difference is bounded by `½ε·(|rnd(t·v)| + |u| + |f|)` (ε = `f32::EPSILON`), where `u` is the unfused result and `f` the fused one.
 - **Zip-vectorized 4-bit loop.** The 4-bit full-pair loop was rewritten as `chunks_exact` zips with no bounds checks, keeping the same per-element ops in the same order. G3b passes on the new kernel.
-  - **The plain pass drops from 494–531 µs to 156–162 µs, i.e. 3.2× faster.** This is a finding in its own right: the shipped KVarN 4-bit value dequant is scalar. It is filed as its own issue: [Issue 894](../.issues/894_kvarn_value_dequant_4bit_scalar_loop.md).
+  - **The plain pass drops from 494–531 µs to 156–162 µs, i.e. 3.2× faster.** This is a finding in its own right: the shipped KVarN 4-bit value dequant is scalar. It was filed as Issue 894, now closed and landed: see [HISTORY.md § Issue 894](../HISTORY.md) and Addendum II below.
   - On that kernel, though, the fold costs **1.2777 / 1.2779 / 1.2889** (free 1.20 / 0.94 / 1.10 GiB, load 38.0 / 35.7 / 37.3). Deferred restore costs +3.1–3.3% and lookup-only +1.6–3.5%.
   - The effect runs against the bar: vectorizing the backend shrinks the denominator, so every per-position cost the restore adds becomes a larger share of it.
 
@@ -170,3 +170,37 @@ This reproduces the original +4.8–5.2% at a heavier load, with the A/A floor a
   - The remaining scalar add belongs in the consumer's softmax-weight loop, which already walks every position. That is the model-level decode kernel, i.e. riir-infer Issue 013.
   - This lever is **not bit-identical**, because it reassociates the sum. A ship candidate must pin a stated bound, for example the recursive-summation bound `2γ_{T+2}·Σ_p |w_p|(|v̂_p| + |E[s_p]|)`, and must keep the miss / E=0 path bitwise.
 - **The lever that was tried is demoted.** P1 stays OPT-IN, and the G2 bar is unchanged.
+
+## Addendum II — 2026-09-25: Issue 894 landed (vectorized KVarN dequant), and P1 G2 re-measured on it
+
+**Verdict: the kernel rewrite PASSES its own GOAT and ships under `kvarn` (no new flag). P1 G2 still FAILS, now at +12.9–13.3%.** The bar stays at ≤ +1%.
+
+**What landed (`bf7d37244`).** The per-bit-width dequant loops of `KVarNKVCache::{dequantize_value_into, dequantize_key_into}` moved to `crates/katgpt-kv/src/kvarn/dequant.rs`. They walk the same elements with `zip` / `as_chunks` / an exact-length strided iterator over slices cut to the loop length, so no access keeps a bounds check. Every per-element op and its order is unchanged (`fma(q, scale, zp) · s_a · s_b`, left-associated, `mul_add` exactly where it was). That covers all rewritten arms: value 4-bit, value 2-bit grouped / ungrouped / var-norm, value 8-bit, and the same four shapes on the key side. The generic-bits fallbacks are unchanged. The methods now build a public read-only `KVarNValueRowView` / `KVarNKeyColView` and pass it to the kernel. That view is the seam through which the oracle, the pre-894 loops kept verbatim in `crates/katgpt-kv/tests/common/kvarn_dequant_oracle.rs`, sees exactly the inputs the shipped kernel sees.
+
+**T1 — bit-identity, old vs new (`src/kvarn/dequant_oracle_tests.rs`). PASS.** The oracle covers bits {2, 3, 4, 8}, where 3 is the unchanged fallback. It crosses them with every `(skip_varn, group_size)` mode, including var-norm-on 2-bit and var-norm-off 4/8-bit, which `with_config` never selects and are reached through a `cfg(test)` setter. Those are crossed with 12 `kv_dim`s (1, 2, 3, 5, 7, 36–39, 64, 128, 130), with full, partial-last and counted-but-unquantized tiles, with Hadamard on/off, and with both value rows and key columns. **960 cases, 10,407,928 elements, 0 differing bits** (`to_bits`) in both debug and release. It was revert-probed: reassociating one multiply reds it. Positions whose OLD read panics (grouped 2-bit on an unquantized tile's empty metadata) are skipped by an explicit precondition, because the new code panics under the same condition.
+
+**T3 — GOAT gate (`crates/katgpt-kv/tests/bench_894_kvarn_dequant_zip_goat.rs`, `required-features = ["kvarn"]`).**
+
+- **G3** is a bitwise check over the modes `with_config` produces: bits {2, 4, 8} × Hadamard × kv_dim {128, 37} × a partial tile, K+V. **12/12 PASS**, 0 differing.
+- **G4** checks allocations on the shipped K+V dequant. **0 allocs** at bits 2, 4 and 8.
+- **G2** is a paired interleaved `ab_median_ratio` of new/old on the plain decode pass (T=4096, kv_dim 128, dequant + axpy), 21 rounds × 10 iters, 3 warm-up, `--release`, with `black_box` on the position, the output buffer, the view, the weight and the accumulator sink. Both arms read one shared cache.
+- **Box state** (same for all three runs): M3 Max, AC power, battery 100% charged, `powermode 2`, swap 1070.44 / 2048 MiB. Per-run free RAM (`vm_stat`) and 1-minute load:
+
+| run | free / load | **value 4-bit** (bar ≤ 0.90) | old → new µs | value 2-bit | value 8-bit | key 4-bit | key 2-bit | key 8-bit | A/A |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 4.11 GiB / 17.6 | **0.4077** (2.45×) | 387.1 → 151.0 | 0.6901 | 0.8108 | 0.7708 | 0.8964 | 0.7271 | 1.0023 |
+| 2 | 3.70 GiB / 16.5 | **0.4064** (2.46×) | 372.8 → 151.5 | 0.6867 | 0.8031 | 0.7686 | 0.8971 | 0.7258 | 1.0043 |
+| 3 | 3.81 GiB / 16.5 | **0.4065** (2.46×) | 380.4 → 151.9 | 0.6815 | 0.8054 | 0.7695 | 0.8989 | 0.7312 | 1.0014 |
+
+Every other rewritten arm is gated as no-regression (≤ 1.05), and all pass, 1.11–1.47× faster. **ALL GATES PASS, 3/3.** The issue's probe measured 3.2× at load 35–38, against a 494–531 µs old arm. Here the old arm is 373–387 µs at load 16–17, and the new arm reads 151–152 µs in both. The speedup is smaller because the old arm is faster on a quieter box, not because the new kernel is slower.
+
+**T4 — Issue 883 P1 G2 on the new kernel (`bench_895_mean_removed_v_quant_goat`, same `a24112aa7` decorator, 3 runs). FAIL 3/3; bar unchanged.** Box: M3 Max, AC, 100% charged, `powermode 2`, swap 1070.44 / 2048 MiB.
+
+| run | free / load | **fused / plain** (plain µs) | two-pass read | A/A | lookup-only | deferred |
+|---|---|---|---|---|---|---|
+| 1 | 2.47 GiB / 14.0 | **1.1285** (137.9) | 1.3048 | 0.9925 | 1.0278 | 1.0262 |
+| 2 | 3.45 GiB / 13.9 | **1.1333** (145.8) | 1.3141 | 0.9919 | 1.0218 | 1.0356 |
+| 3 | 3.46 GiB / 13.9 | **1.1333** (137.9) | 1.3079 | 0.9859 | 1.0214 | 1.0351 |
+
+Every other P1 gate still passes, and G3 / G3b are bitwise on the new kernel. The plain pass dropped from 436–510 µs to 138–146 µs. The fused epilogue's absolute added cost stayed about the same (~18 µs per pass now, ~23 µs before), so its share of the ratio grew 2.7×: +4.8% became +12.9–13.3%. That is the interaction Issue 894 T4 predicted. The deferred restore (+2.6–3.6%) and lookup-only (+2.1–2.8%) report arms both still sit above +1%. The next lever is unchanged: move the scalar per-position add into the consumer's softmax-weight loop (riir-infer Issue 013).
+
