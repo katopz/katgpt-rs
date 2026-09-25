@@ -2,7 +2,7 @@
 
 > **Source:** "AWQ: Activation-aware Weight Quantization for On-Device LLM Compression and Acceleration" — Lin*, Tang*, Tang†, Yang†, Chen, Wang, Xiao, Dang, Gan, Han (MIT / SJTU / NVIDIA / Tsinghua; MIT-IBM). [arXiv:2306.00978](https://arxiv.org/abs/2306.00978) (v6). **MLSys 2024 Best Paper Award.** Code: [mit-han-lab/llm-awq](https://github.com/mit-han-lab/llm-awq).
 > **Date:** 2026-09-25
-> **Status:** DONE — verdict **Gain** (this note + [Issue 886](../.issues/886_activation_diagonal_weight_quant_fit.md) — renumbered 885→886 at commit time: concurrent allocation with the tetris lane `1a05a976`; **no plan** — the stack has no live weight-quant *authoring* consumer; the note discharges riir-clippy Research 192 walk-10's pending quant-lane citation).
+> **Status:** DONE — verdict **Gain** (this note + Issue 886 (closed 2026-09-25, HISTORY.md § Issue 886) — renumbered 885→886 at commit time: concurrent allocation with the tetris lane `1a05a976`; **no plan** — the stack has no live weight-quant *authoring* consumer; the note discharges riir-clippy Research 192 walk-10's pending quant-lane citation).
 > **Related Research:** 467 (RRQ — our own modelless weight-only PTQ; AWQ sits in its "don't take" table), 502 (AVQ2 — the quality-vs-bits doctrine + PTQ-ternary negative controls), 463 (moka quant-error lever audit — "GPTQ/AWQ all use learned corrections" novelty denial), 586 (SmoothQuant/outlier lineage prior-art mention), 083 (asymmetric KV quant — K-side × weight-quant error coupling).
 > **Cross-ref:** riir-train Research 086 + Plan 378 (outlier collapse — the only AWQ-*mechanism* row in the corpus pre-this-note) · riir-ai Research 085 (outlier-collapse twin) · riir-clippy Research 192 (walk-10 row 19, arXiv 2609.21450 — **citation obligation discharged below**) · katgpt-rs Issue 883 (the calibration-pass substrate family this rides) · riir-ai Plan 100 / riir-infer `quant/` (the k-quant consume lane).
 > **Classification:** Public.
@@ -109,7 +109,7 @@ Published evidence is consistent: at ≤3 bits, per-channel scaling alone is **n
 
 ## 5. What we do about it
 
-[Issue 886](../.issues/886_activation_diagonal_weight_quant_fit.md): the activation-diagonal fitting substrate (moment collector + weighted-fit + optional α-rescale, feature-gated, G3 bit-identity when the diagonal is uniform, G1 by per-family retention walk per the lossy-surface law) — filed against the authoring paths that exist, with the honest 2-bit negative prior and the consumer lanes (LoTA merge, future GGUF writer) named as P2. No plan until a consumer opens.
+Issue 886 (closed 2026-09-25, HISTORY.md § Issue 886): the activation-diagonal fitting substrate (moment collector + weighted-fit + optional α-rescale, feature-gated, G3 bit-identity when the diagonal is uniform, G1 by per-family retention walk per the lossy-surface law) — filed against the authoring paths that exist, with the honest 2-bit negative prior and the consumer lanes (LoTA merge, future GGUF writer) named as P2. No plan until a consumer opens.
 
 > **Related (added at verdict round 1):** riir-train `zero_qat.rs` — the nearest weight-side shipped cousin (see §2.3).
 

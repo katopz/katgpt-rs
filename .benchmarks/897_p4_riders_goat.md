@@ -2,7 +2,7 @@
 
 **Status:** COMPLETE at the primitive level. All gates pass on all 3 runs. One pre-registered bar FAILED (G1b-1 at α = 3) and was re-specified before the re-run; both results are recorded.
 
-These are the two modelless riders of [Issue 882](../.issues/882_differential_anchor_scoring.md) P4. The P4 m_Y instrument itself is riir-infer `dc0e5a9`, with its first reading at riir-infer `fb51821`. It is not claimed here.
+These are the two modelless riders of Issue 882 (closed 2026-09-25, HISTORY.md § Issue 882) P4. The P4 m_Y instrument itself is riir-infer `dc0e5a9`, with its first reading at riir-infer `fb51821`. It is not claimed here.
 
 | rider | feature (crate) | GOAT target |
 |---|---|---|

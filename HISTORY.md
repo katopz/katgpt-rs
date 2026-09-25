@@ -1,3 +1,63 @@
+## Issue 882 (2026-09-25) — differential anchor scoring (common-mode rejection on score surfaces we own): CLOSED (P0–P4 landed, all opt-in; promotion owed to consumers)
+
+Source: Research 586 (Diff Transformer, arXiv:2410.05258). Each primitive below landed opt-in in katgpt-rs, and each has a GOAT bench.
+
+- **P0 `differential_anchor` + shared substrate `fitted_anchor_table`** ([Bench 886](.benchmarks/886_differential_anchor_goat.md)):
+  - G1: 24/24 hub-world recovery at λ\*=0.55. G2: the axpy costs 0.031 µs. G3: bit-pinned. G4: 0 allocs.
+  - **Measured law:** the mean-sim skewness is invariant under a mean-query anchor. The hubness statistic is therefore the top-1 WIN-COUNT distribution (CSLS k-occurrence).
+  - **Rider:** riir-clippy healer rerank (`7f27de9d`, Bench 102 there) was NOT promoted. It gained +1/138, heal rate was exactly flat, and win-count skewness ROSE. Hubness is not that socket's defect.
+- **P1 `attention_snr`**, `c0628f4de` ([Bench 887](.benchmarks/887_attention_snr_goat.md)): exact streaming entropy and participation ratio inside the online-softmax loop. G2 cost is +0.4–1.1%, and G3 is bit-identical.
+- **P2 `row_logit_floor`**, `dea5d9ec1` ([Bench 888](.benchmarks/888_row_logit_floor_goat.md)):
+  - **Measured law:** the clamp is a FLOOR `max(l, m_r − w)`. `w = ln(n/ε)` guarantees the floor budget.
+  - The model-bound ppl / needle@64K half is riir-infer Issue 011.
+- **P3 `differential_kv_eviction`**, `f4926c44a` ([Bench 894](.benchmarks/894_differential_kv_eviction_goat.md)):
+  - **Retrieval, synthetic hub-heavy needle fixture:**
+
+    | Cache budget | Differential | λ=0 max-recent | Shipped usage-rate |
+    |---|---|---|---|
+    | 25% | 0.945 | 0.680 | **0.000** |
+    | 50% | 0.977 | 0.758 | **0.000** |
+
+    The shipped usage-rate score retrieves nothing at either budget.
+  - **Trap 4** is pinned as a negative: 1.35–1.47× the baseline's error under shift.
+  - **Sink trap:** it fires only at λ > 1, so the sink gate is re-specified at λ=1.5. The pre-registered λ ≤ 1 bar FAILED and is recorded.
+  - **Fix en route:** the stable sort in `select_evict_into` allocated at 4096 keys. It is now an unstable sort with an index tie-break, and the output is unchanged.
+  - The model-bound needle@64K half is riir-infer Issue 012.
+- **P4:**
+  - **Instrument:** the m_Y instrument is riir-infer `dc0e5a9`. First reading `fb51821`: retrieval head L10H5 puts 0.928 on the needle, and m_Y moves ≤ 0.0009 under the floor.
+  - **Modelless riders** landed at `c8d22abb9` ([Bench 897](.benchmarks/897_p4_riders_goat.md)).
+  - **`canonical_context`:** permutation spread is 0 bitwise. It makes position bias constant, not absent.
+  - **`affinity_deflation`** (katgpt-spectral):
+    - It is gated on stable rank (θ\*=1.1, chosen by grid) and pinned by a healthy-matrix negative: deflating anyway costs 1.000 → 0.812.
+    - The pre-registered α=3 lift bar FAILED (+0.072 against +0.25). It was re-specified at α=8: 0.586 → 1.000.
+- **Promotion is owed to consumers.** Each needs its consumer's GOAT first:
+  - riir-infer Issues 011/012 for P2/P3;
+  - an oracle-anchored eval sorting through `canonical_context`;
+  - an M×M rerank-affinity stage, which katgpt-attn-match's `rerank` doesn't build today;
+  - riir-ai Issue 1006 (habituation consumer).
+
+## Issue 886 (2026-09-25) — activation-diagonal weight-quant fitting (AWQ/imatrix-class substrate): CLOSED (P0 + P1 modelless half landed opt-in; model-bound half handed off; P2 deferred)
+
+Source: Research 588 (AWQ, arXiv:2306.00978).
+
+- **P0 `act_channel_moments`** (katgpt-core), `0fb2254d9` ([Bench 896](.benchmarks/896_act_diagonal_quant_fit_goat.md)):
+  - A streaming per-input-channel `{mean|x|, E[x²]}` accumulator at 0.28–0.32 ns/element, with 0 allocs.
+  - `freeze()` produces a BLAKE3-committed canonical LE table, and every byte flip is refused.
+- **P1 modelless half, `act_aware_fit`** (katgpt-types): `quantize_from_f32_act_aware(w, rows, cols, diag, fit)`.
+  - The diagonal is a plain slice, so there is no katgpt-core dep.
+  - The quantizer core was refactored to a per-group scale closure. The refactored baseline is within ±0.5%, and the payload is identical.
+  - G3: a uniform diagonal gives a bit-identical payload.
+  - **Synthetic G1** (held-out output error):
+    - The blind search alone gives −20…−27%.
+    - The diagonal adds −54% on 1% heavy channels at 20× and −14% on a log-normal spread at ternary. The INT4 reference is −60% / −26.5%.
+    - `E[x²]` beats `mean|x|` as the weight.
+  - **Honest prior NOT settled:** the fixture is PTQ-of-dense with independent channels, while Bonsai is born-ternary and Hadamard-rotated.
+- **Handed off:** the real-checkpoint per-family retention walk goes to riir-infer Issue 014 (`14dd5ae`). It compares against mean-abs, the blind-search control, and the `ZeroQatCalibrator` class.
+- **Deferred `[-]`, reopen when a consumer opens — P2, the (b) AWQ α-rescale spelling:**
+  - GGUF-writer recipe section;
+  - riir-train LoTA merge-weighting saturation A/B;
+  - the diagonal-vs-weight outlier-collapse tripwire (riir-train Issue 503 P3's complement).
+
 ## Issue 887 (2026-09-25) — `ladder_gate` streak-gated advancement + corrective backtracking FSM: CLOSED (GOAT PASS, stays opt-in)
 
 - **Shipped:** `crates/katgpt-core/src/ladder_gate.rs`, opt-in `ladder_gate = []`, at `ba7fb89ba`. Source: Research 589 / arXiv:2609.19717 (ATC). A stage advances only after m consecutive evals at or above τ, and a single eval below τ resets the streak. The retention path gates each ADVANCE and retreats to the SHALLOWEST failing stage (argmin j). A malformed probe slice fails closed to stage 1. Nothing demotes automatically.
