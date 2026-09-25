@@ -23,7 +23,7 @@
 | [`speculative_decoding.md`](speculative_decoding.md) | DDTree marginal-distribution trees, DFlash fast marginal prediction, Leviathan verification, D2F discrete-diffusion forcing |
 | [`spechop.md`](spechop.md) | SpecHop — continuous multi-hop speculation pipeline (Plan 131, feature `spechop`) |
 | [`mtp_threshold.md`](mtp_threshold.md) | MTP threshold guide — when multi-token-prediction drafts are worth accepting (Plan 055 + Plan 117) |
-| [`kv_compression.md`](kv_compression.md) | KV cache compression research & alternatives (TurboQuant → SpectralQuant → OCTOPUS) |
+| [`kv_compression.md`](kv_compression.md) | KV cache compression research & alternatives (TurboQuant → SpectralQuant → OCTOPUS → KVarN), plus the fitted token-value tables (§7: mean-removed V quant, K=V+, V-cache halving, Issue 883 / Bench 895) |
 | [`progressive_mcgs.md`](progressive_mcgs.md) | Progressive MCGS — Monte Carlo graph search with reference edges |
 | [`spectral_pencil.md`](spectral_pencil.md) | The affine matrix pencil scalar gate `f(x)=λk(A₀+ΣxᵢAᵢ)` — shape-by-construction, exact attribution, γk≥½ seeded init (Issue 676, Research 495) |
 

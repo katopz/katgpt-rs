@@ -177,3 +177,23 @@ let cache = TurboQuantKVCache::new_asymmetric(&config);
 
 📁 `src/types.rs` — `AsymmetricKVConfig` · `src/benchmark/mod.rs` — `bench_asymmetric_cross_method()` · `crates/katgpt-quant/src/turboquant/kv_cache.rs` — `new_asymmetric()`
 🔧 Feature flag: `asymmetric_kv` (opt-in, depends on `turboquant`)
+
+---
+
+## 7. Fitted Token-Value Tables — Mean-Removed V, K=V+, V-Cache Halving
+
+## 🧮 Fitted Token-Value Tables (Issue 883, Research 587, Bench 895)
+
+**Core idea:** fit per-(layer, token) mean tables once, closed-form, on a frozen checkpoint (the P0 `fitted_anchor_tables` calibration pass), then use them three ways. The quantizer, the rotation, and the table builder are all consumed from existing modules; none is new.
+
+- **P1 — token-mean-removed V quant.** `MeanRemovedValueCache<C>` wraps **any** `QuantizedKVCache` backend. It stores `q(V − E^V_l[s])` and reads the dequantized value plus the table row. Removing the mean cannot increase residual variance (law of total variance). On KVarN, the dashboard prediction `quant-MSE ratio = 1 − ρ_V` holds within ±5% at 2, 4, and 8 bits.
+  - Sinks are absorbed by the table rather than exempted.
+  - **Caveat, measured:** at 2 bits, an off-mean occurrence of a bimodal token has 3.8× higher quant error, because grouped RTN scales by range.
+  - The fused restore costs +5%, which misses its +1% bar.
+- **P2 — fitted K=V+.** `v_from_k_plus` = `K + λ·E_l[s]`, with `W_V` deleted. It refunds a fraction `(2λ − λ²)·ρ(V−K)` of the residual energy that `V := K` sharing drops; that law is exact on synthetic data. λ=0 is bitwise identical to `V := K`.
+- **P3 — V-cache halving.** `reconstruct_v_from_rope_k` = `G(−θp)·K̂ + λE`, computed from the cached post-RoPE K with one inverse rotation (error within 1.8ε).
+  - **Cache law:** the droppable fraction is `n_v/(n_kv + n_v)`. That is exactly ½ for every grouped-KV architecture, because GQA scales both K and V.
+  - **Storage dial:** a top-K table costs `P(K) = b_w·L·K·d_v` bytes.
+  - The shipped `RopeAction` is transcendental-bound, so P3 decode is 14–15× slower. A cheap-angle rotation kernel is still missing.
+
+🔧 Feature flags: `fitted_value_tables` (P1+P2) · `fitted_v_reconstruct` (P3). Both are **OPT-IN**. The model-level half (gemma-2-2b PPL, retention walk, NIAH, tg128) is riir-infer Issue 013.

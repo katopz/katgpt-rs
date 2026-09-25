@@ -68,6 +68,11 @@ still_kv = []
 # Requires spectral substrate transitively via targeted_precision.
 kvarn = []
 
+# Issue 883 P1 (Research 587): forwards katgpt-core's fitted_value_tables so
+# the token-mean-removed V-quant decorator can be gated against the REAL
+# KVarN backend (Bench 895 G1/G2/G3/G4 — tests/bench_895_mean_removed_v_quant_goat.rs).
+fitted_value_tables = ["katgpt-core/fitted_value_tables"]
+
 # Targeted Precision Budget — per-head bit allocation (Plan 227 Phase 2).
 # Used only by kvarn; promoted to top-level module here for visibility.
 targeted_precision = []
@@ -129,6 +134,15 @@ required-features = ["mi_probe"]
 [[test]]
 name = "radix_prefix_cache_tests"
 required-features = ["radix_prefix_cache"]
+
+# Issue 883 P1 — token-mean-removed V quant over the KVarN backend GOAT:
+# G1 dashboard-predicted vs measured quant-MSE drop (+ absmax caveat + sink
+# arms), G2 fused dequant+restore paired A/B, G3 miss / E=0 bit-identical,
+# G4 0 extra allocs.
+[[test]]
+name = "bench_895_mean_removed_v_quant_goat"
+harness = false
+required-features = ["kvarn", "fitted_value_tables"]
 
 # Issue 800 Arm B1 — lock-free slot-flip PoC bench. harness = false: the PoC
 # prints its own results table + the B2 decision-gate verdict (it is not a

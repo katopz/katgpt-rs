@@ -994,6 +994,29 @@ attention_snr = ["ssmax_temperature", "tiled_attention"]
 # OPT-IN.
 row_logit_floor = []
 
+# fitted_value_tables (Issue 883 P1+P2 / Research 587, 2026-09-25): the
+# frozen per-(layer, token) table product of the P0 calibration substrate
+# (`FittedTokenTable::from_calibration`, James–Stein-shrunk at freeze;
+# untracked token ⇒ `None` ⇒ the consumer's plain path) + two consumers.
+# P1 token-mean-removed V quant: `MeanRemovedValueCache<C>` decorates ANY
+# existing `QuantizedKVCache` backend (KVarN, TurboQuant, …) — stores
+# q(V − E^V_l[s]), reads dequant + E^V_l[s]; fused attention-V epilogue
+# `axpy_mean_restored`. P2 fitted K=V+ retrofit: `v_from_k_plus` = K +
+# λ·E_l[s] (λ=0 / miss = the V:=K copy, bit-identical). Plus the P4 laws
+# (`v_projection_flops`, `storage_bytes`, `v_cache_fraction`). Bench 895.
+# Model-bound G1 (gemma-2-2b PPL / retention walk / NIAH) is riir-infer
+# Issue 013. Zero deps; hot paths alloc-free. OPT-IN (no model-level
+# quality claim here). Implies fitted_anchor_tables (the table source).
+fitted_value_tables = ["fitted_anchor_tables"]
+
+# fitted_v_reconstruct (Issue 883 P3 / Research 587, 2026-09-25): V-cache
+# halving by reconstruction — `reconstruct_v_from_rope_k` = G(−θp)·K̂ +
+# λ·E_l[s] from the cached post-RoPE K via ONE
+# `PositionGroupAction::apply_inverse_at` per head (never a round-trip,
+# trap 2) + the `VReadPath::FullCache` kill switch (bit-identical copy).
+# Bench 895. OPT-IN. Implies fitted_value_tables + position_group_action.
+fitted_v_reconstruct = ["fitted_value_tables", "position_group_action"]
+
 # habituation_filter (riir-ai Issue 1006 T1 / Research 586, 2026-09-25): the
 # subtract arm of the attention-noise-control family transplanted from the
 # score axis to the TIME axis — habituation, respond to CHANGES not
@@ -2901,6 +2924,14 @@ required-features = ["row_logit_floor"]
 name = "bench_894_differential_kv_eviction_goat"
 harness = false
 required-features = ["differential_kv_eviction"]
+
+# Issue 883 P2+P3+P4 — fitted K=V+ / V-reconstruction primitives GOAT:
+# G1 refund law + rotation exactness bound, G2 paired A/B, G3 λ=0 / kill
+# switch bit-identical, G4 0 allocs, P4 FLOP-law two-line check.
+[[test]]
+name = "bench_895_fitted_value_table_goat"
+harness = false
+required-features = ["fitted_v_reconstruct"]
 
 # (kept as a [[bench]]-shaped gate; the 813 precedent puts GOAT gates in
 # tests/ with harness=false and a required-features row — the cfg-gated

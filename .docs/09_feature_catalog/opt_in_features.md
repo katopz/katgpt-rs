@@ -5006,3 +5006,31 @@ M3 Max, loaded box, 4 runs):
 🔧 Feature flag: `differential_kv_eviction` (katgpt-core, implies
 `kv_sink_window`). **OPT-IN**. The model-bound needle@64K gate is riir-infer
 Issue 012 (the consumer), and promotion waits on it.
+## 135. fitted_value_tables / fitted_v_reconstruct — fitted token-value tables (Issue 883 P1–P4 / Research 587)
+
+These are the V-side consumers of the shared `fitted_anchor_tables` substrate. `FittedTokenTable::from_calibration` freezes the P0 per-(layer, token) means, James–Stein-shrunk. An untracked token has no row, and every consumer then falls back to its plain path.
+
+- **P1:** `MeanRemovedValueCache<C: QuantizedKVCache>` decorates any in-tree KV backend. It stores `q(V − E^V_l[s])` and reads `dequant + E^V_l[s]`. The fused read is `accumulate_value` / `axpy_mean_restored`.
+- **P2:** `v_from_k_plus` = `K + λ·E_l[s]`, with λ = 0 or a missing row falling back to the `V := K` copy.
+- **P3** (`fitted_v_reconstruct`): `reconstruct_v_from_rope_k` = `G(−θp)·K̂ + λE`, with one `apply_inverse_at` per head and never a round-trip. The `VReadPath::FullCache` kill switch reads the stored V instead.
+- **P4 laws:** `v_projection_flops`, `storage_bytes`, `v_cache_fraction`.
+
+Gates ([Bench 895](../../.benchmarks/895_fitted_value_table_primitives_goat.md), M3 Max, AC, loaded box, 3 runs):
+
+- **P1 G1a:** KVarN quant-MSE ratio vs the dashboard's `1 − ρ_V` agrees within ±5% on all 9 cells (2/4/8 bits × ρ 0.25/0.5/0.75).
+- **P1 G1c:** the absmax caveat is recorded. At 2 bits, off-mean rows show 3.8× more quant error.
+- **P1 G1d:** sinks are absorbed (0.05–0.09×).
+- **P1 G2 FAILED:** the fused restore costs +4.8–5.2% against a ≤ +1% bar.
+- **P2 G1:** the refund law `1 − (2λ − λ²)·ρ(V−K)` holds within 0.11%.
+- **P2 G2:** K+λE costs 0.001× the W_V GEMV it deletes.
+- **P3 G1:** exact to within 1.8ε (bound 8ε) up to position 131071.
+- **P3 G2 FAILED:** 14–15× slower, because `RopeAction` computes sin/cos per read.
+- **G3:** every kill switch is bitwise.
+- **G4:** 0 allocs.
+
+🔧 Feature flags:
+
+- `fitted_value_tables` (katgpt-core; implies `fitted_anchor_tables`; forwarded by katgpt-kv)
+- `fitted_v_reconstruct` (katgpt-core; implies `fitted_value_tables` + `position_group_action`)
+
+Both are **OPT-IN**. The model-bound G1 (gemma-2-2b PPL, retention walk, NIAH, tg128) is riir-infer Issue 013.
