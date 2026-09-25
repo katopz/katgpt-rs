@@ -27,11 +27,12 @@ Apply Gemma 4 QAT's fundamental insight (*optimize for the precision you'll depl
 - [x] Add `static_cal_tables` feature flag to `Cargo.toml` (opt-in, NOT default)
 - [x] Register `#[cfg(feature = "static_cal_tables")] pub mod static_cal` in `lib.rs`
 - [x] Implement calibration pass: run 10-20 representative prompts through model, record per-head activation statistics
-- [x] Wire into KVarN: when `static_cal_tables` enabled, use static scales instead of Sinkhorn iterations
+- [-] ~~Wire into KVarN: when `static_cal_tables` enabled, use static scales instead of Sinkhorn iterations~~ — **RETRACTED (Issue 897, 2026-09-25).** Compiled at root from 25aca61b1 until the Issue 015 extraction (b61a34f7b), then dead (undeclared katgpt-kv feature + missing `crate::static_cal`); deleted, not re-wired: katgpt-kv -> katgpt-attn is a cargo package cycle, and the branch reduces to plain RTN (per-row scale absorbed by per-row RTN), losing to Sinkhorn on quant-MSE in 66/72 cells. See HISTORY.md § Issue 897.
 - [x] Add River Valley trigger for recalibration: when RV signal detects distribution shift, re-run calibration
 - [x] Write `tests/static_cal_goat.rs` benchmark:
   - Before: KVarN with Sinkhorn (4-8 iterations per decode)
   - After: KVarN with static scales
+  - ⚠ Issue 897: as shipped, the test measures a table LOOKUP vs one Sinkhorn normalize of a 128x128 tile — never a KVarN path; the "100% latency" is the cost of a no-op.
   - Measure: decode latency, perplexity delta, calibration time
 - [x] GOAT gate: if latency improves ≥5% and perplexity delta < 0.1, mark for default-ON
 
@@ -115,7 +116,7 @@ Apply Gemma 4 QAT's fundamental insight (*optimize for the precision you'll depl
 
 | Phase | Expected Gain | Risk | Default Policy |
 |-------|--------------|------|----------------|
-| SCT (Static Cal) | 10-15% decode speedup | Calibration quality on new domains | ✅ **GOAT proved 100% latency → default-ON** |
+| SCT (Static Cal) | 10-15% decode speedup | Calibration quality on new domains | ✅ **GOAT proved 100% latency → default-ON** — ⚠ Issue 897: lookup-vs-Sinkhorn microbench only; the KVarN wiring was dead and is deleted, so the flag changes no KVarN numerics |
 | TPB (Targeted Precision) | 2-5% perplexity at same cache | Sensitivity analysis accuracy | ✅ **GOAT proved 21.3% ppl → default-ON** |
 | Modality Pruning | 20-40% for simple queries | Query classification accuracy | ✅ **GOAT proved 97.6% latency → default-ON** |
 | PASD (Draft Awareness) | 5-10% acceptance rate | Boundary computation overhead | ✅ **GOAT proved 12.5% acceptance, 0.12% overhead → default-ON** |

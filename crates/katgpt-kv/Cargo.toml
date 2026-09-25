@@ -103,6 +103,14 @@ drift_segment = []
 # `segment_checkpoint_demo` requires it for the ssc branch.
 ssc_spec_draft = ["segment_checkpoint"]
 
+# Memory-Soup DDTree branch merging — opt-in sub-module of segment_checkpoint
+# (Plan 223b / Plan 226). Gates `pub mod memory_soup;` in
+# segment_checkpoint/mod.rs. Root forwards this from its `memory_soup_dtree`
+# feature. Issue 897 T2: the flag was never declared here after the Proposal
+# 003 Phase 5 move (70d418b8e), so the module compiled nowhere — surfaced by
+# removing the crate-wide `#![allow(unexpected_cfgs)]`.
+memory_soup_dtree = ["segment_checkpoint"]
+
 # Async Q/DQ Overlap — double-buffered KV dequantize for GPU pipeline
 # (Plan 227 Phase 6). The `inference_router` dep stays in the ROOT feature
 # forward (`async_qdq_overlap = ["katgpt-kv/async_qdq_overlap", "inference_router"]`)

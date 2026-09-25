@@ -543,7 +543,7 @@ nf_flow = ["nf_flow_score", "nf_flow_gate", "nf_flow_budget"]  # NFCoT parent fe
 nf_flow_mux = ["nf_flow_score", "mux_pruner"]  # NFCoT FlowMUX — flow scoring for MUX trajectories (Plan 229 T6, default OFF)
 nf_flow_fold = ["nf_flow_score", "chain_fold"]  # NFCoT FlowFold — confidence-gated chain folding (Plan 229 T7, default OFF)
 hardware_aware_scheduler = []  # Hardware-Aware Prefix Scheduler — multi-request verification budget allocator (Plan 339, Issue 003, DSpark §3.2.2). Opt-in until a real multi-request batch caller exercises the synthetic GOAT gate.
-static_cal_tables = ["katgpt-attn/static_cal_tables"]  # Static Calibration Tables — pre-computed per-head attention scales (Plan 227 Phase 1, GOAT 100% latency, default-ON)
+static_cal_tables = ["katgpt-attn/static_cal_tables"]  # Static Calibration Tables — pre-computed per-head attention scales, standalone katgpt-attn table (Plan 227 Phase 1, default-ON). The static_cal_goat "100% latency" figure is a table LOOKUP vs a Sinkhorn normalize of one 128x128 tile — it never runs a KVarN quantize path. NOT wired into KVarN: that branch was dead since the Issue 015 extraction (b61a34f7b) and was deleted by Issue 897 (katgpt-kv -> katgpt-attn is a package cycle, and a per-row scale before per-row RTN is absorbed — the branch measured equal to plain RTN up to f32 rounding, max |d| 1.2e-4, losing to Sinkhorn on quant-MSE in 66/72 cells). KVarN numerics are unchanged by this flag.
 targeted_precision = ["katgpt-kv/targeted_precision"]  # Targeted Precision Budget — per-head bit allocation for quantization (Plan 227 Phase 2, GOAT 21.3% ppl, default-ON)
 modality_pruned_load = ["katgpt-core/modality_pruned_load"]  # Modality-Pruned Context Loading — query classifier + pipeline selection (Plan 227 Phase 3, GOAT 97.6% latency simple queries, default-ON). Phase 12 (2026-07-04): module moved to katgpt-core; root forwards.
 channel_simd_align = ["katgpt-core/channel_simd_align"]  # Channel SIMD Alignment — cache-line-padded weight storage for SIMD throughput (Plan 227 Phase 5). Phase 10 (2026-07-04): module moved to katgpt-core; root forwards.
@@ -598,7 +598,7 @@ regime_transition = ["and_or_dtree", "bandit", "decision_trace", "fol_constraint
 segment_checkpoint = ["katgpt-kv/segment_checkpoint"]  # ON BY DEFAULT — core GRM segment caching (Plan 223b). Phase 5: moved to katgpt-kv (Proposal 003).
 drift_segment = ["katgpt-kv/drift_segment"]  # Opt-in — DriftSegmentStore training-free drift-segmented multi-state memory (Issue 652 / Research 482, arXiv:2606.10650 modelless). GOAT PASS Bench 635 (2026-08-15); consumers landed (riir-ai npc_episodic Bench 675 + neuron-db wake-merge policy Bench 480) — promotion candidate at next re-gate.
 ssc_spec_draft = ["segment_checkpoint", "regime_transition", "katgpt-kv/ssc_spec_draft"]  # Opt-in — SSC sparse speculative drafting
-memory_soup_dtree = ["segment_checkpoint", "regime_transition"]  # Opt-in — experimental DDTree branch merging
+memory_soup_dtree = ["segment_checkpoint", "regime_transition", "katgpt-kv/memory_soup_dtree"]  # Opt-in — experimental DDTree branch merging. Issue 897 T2: the katgpt-kv forward was missing since the Proposal 003 Phase 5 move (70d418b8e), so `segment_checkpoint::memory_soup` compiled nowhere; restored.
 # Memory Soup LoRA Artifact Importer (Plan 253 T19 G5).
 # Standalone MSP0 binary format parser for riir-gpu's exported Memory Soup
 # artifacts. Uses only std + blake3 (no riir-gpu dependency). Default-OFF.

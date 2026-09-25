@@ -50,10 +50,6 @@ pub struct KVarNConfig {
     /// Enable only if profiling shows error correlation across channels in
     /// your specific model.
     pub hadamard: bool,
-    /// Optional static calibration table (Plan 227 Phase 1).
-    /// When set, replaces Sinkhorn iterations with O(1) lookup.
-    #[cfg(feature = "static_cal_tables")]
-    pub static_cal: Option<crate::static_cal::StaticCalTable>,
     /// Optional per-head precision budget (Plan 227 Phase 2).
     /// When set, uses per-head bit-width instead of uniform.
     #[cfg(feature = "targeted_precision")]
@@ -70,8 +66,6 @@ impl Default for KVarNConfig {
             tile_size: 128,
             var_norm: VarNormConfig::default(),
             hadamard: false,
-            #[cfg(feature = "static_cal_tables")]
-            static_cal: None,
             #[cfg(feature = "targeted_precision")]
             precision_budget: None,
         }
@@ -191,12 +185,12 @@ pub struct KVarNKVCache {
     scratch_rtn_packed: Vec<u8>,
     /// VarianceNormScales scratch: s_col output (length = max(kv_dim, tile_size)).
     /// Holds the col-scale vector written by variance_normalize_into and the
-    /// static-cal/skip_varn fill paths, replacing the per-call vec![1.0; cols]
+    /// skip_varn fill path, replacing the per-call vec![1.0; cols]
     /// allocation in the skip_varn branch.
     scratch_var_s_col: Vec<f32>,
     /// VarianceNormScales scratch: s_row output (length = max(kv_dim, tile_size)).
-    /// Holds the row-scale vector written by variance_normalize_into / static_cal
-    /// / skip_varn, replacing the per-call vec![1.0; rows] allocation.
+    /// Holds the row-scale vector written by variance_normalize_into / skip_varn,
+    /// replacing the per-call vec![1.0; rows] allocation.
     scratch_var_s_row: Vec<f32>,
     // ── Scalar config (usize: 8 bytes each) ──
     /// Current write position.
@@ -232,9 +226,6 @@ pub struct KVarNKVCache {
     effective_hadamard: bool,
     /// Sub-channel group size for RTN quantization (at 2-bit: 32, otherwise 0 = full row).
     group_size: usize,
-    /// Optional static calibration table for O(1) scale lookup.
-    #[cfg(feature = "static_cal_tables")]
-    static_cal: Option<crate::static_cal::StaticCalTable>,
     /// Optional per-head precision budget for non-uniform quantization.
     #[cfg(feature = "targeted_precision")]
     precision_budget: Option<PrecisionBudget>,
@@ -364,8 +355,6 @@ impl KVarNKVCache {
             skip_varn: cfg.bits <= 2,
             effective_hadamard: cfg.hadamard,
             group_size: if cfg.bits <= 2 { 4 } else { 0 },
-            #[cfg(feature = "static_cal_tables")]
-            static_cal: cfg.static_cal.clone(),
             #[cfg(feature = "targeted_precision")]
             precision_budget: cfg.precision_budget.clone(),
         }
@@ -662,51 +651,6 @@ impl KVarNKVCache {
             }
 
             // Step 1: Variance normalization — write s_col/s_row directly into scratch.
-            //   Static cal tables: O(1) lookup replaces Sinkhorn iterations (Plan 227 Phase 1)
-            #[cfg(feature = "static_cal_tables")]
-            if let Some(ref cal) = self.static_cal {
-                // Use static per-head scales instead of iterative Sinkhorn.
-                let s_row = &mut self.scratch_var_s_row[..rows];
-                for ch in 0..rows {
-                    s_row[ch] = cal.get_scale(layer, ch);
-                }
-                // s_col = ones (no column scaling).
-                self.scratch_var_s_col[..cols].fill(1.0);
-                // Apply static scales to tile (reciprocal-multiply: one division per row,
-                // not per element — vectorizer-friendly inner loop).
-                for ch in 0..rows {
-                    let inv_scale = 1.0 / s_row[ch];
-                    let row_off = ch * cols;
-                    for t in 0..cols {
-                        tile_data[row_off + t] *= inv_scale;
-                    }
-                }
-            } else if self.skip_varn {
-                self.scratch_var_s_col[..cols].fill(1.0);
-                self.scratch_var_s_row[..rows].fill(1.0);
-            } else {
-                let config = VarNormConfig {
-                    tile_size: self.tile_size,
-                    ..Default::default()
-                };
-                variance_normalize_into_scales(
-                    tile_data, rows, cols, &config,
-                    &mut self.varn_cur[..rows * cols],
-                    &mut self.varn_col_s[..cols],
-                    &mut self.varn_row_s[..rows],
-                    &mut self.varn_mean[..cols],
-                    &mut self.varn_inv_row[..rows],
-                    &mut self.varn_inv_col[..cols],
-                    &mut self.varn_log_s_col[..cols],
-                    &mut self.varn_log_s_row[..rows],
-                    &mut self.varn_log_s_col_best[..cols],
-                    &mut self.varn_log_s_row_best[..rows],
-                    &mut self.scratch_var_s_col[..cols],
-                    &mut self.scratch_var_s_row[..rows],
-                );
-            }
-
-            #[cfg(not(feature = "static_cal_tables"))]
             if self.skip_varn {
                 self.scratch_var_s_col[..cols].fill(1.0);
                 self.scratch_var_s_row[..rows].fill(1.0);
@@ -820,47 +764,6 @@ impl KVarNKVCache {
             }
 
             // Step 1: Variance normalization — write s_col/s_row directly into scratch.
-            //   Static cal tables: O(1) lookup replaces Sinkhorn iterations (Plan 227 Phase 1)
-            #[cfg(feature = "static_cal_tables")]
-            if let Some(ref cal) = self.static_cal {
-                let s_row = &mut self.scratch_var_s_row[..rows];
-                for ch in 0..rows {
-                    s_row[ch] = cal.get_scale(layer, ch);
-                }
-                self.scratch_var_s_col[..cols].fill(1.0);
-                for ch in 0..rows {
-                    let inv_scale = 1.0 / s_row[ch];
-                    let row_off = ch * cols;
-                    for t in 0..cols {
-                        tile_data[row_off + t] *= inv_scale;
-                    }
-                }
-            } else if self.skip_varn {
-                self.scratch_var_s_col[..cols].fill(1.0);
-                self.scratch_var_s_row[..rows].fill(1.0);
-            } else {
-                let config = VarNormConfig {
-                    tile_size: self.tile_size,
-                    ..Default::default()
-                };
-                variance_normalize_into_scales(
-                    tile_data, rows, cols, &config,
-                    &mut self.varn_cur[..rows * cols],
-                    &mut self.varn_col_s[..cols],
-                    &mut self.varn_row_s[..rows],
-                    &mut self.varn_mean[..cols],
-                    &mut self.varn_inv_row[..rows],
-                    &mut self.varn_inv_col[..cols],
-                    &mut self.varn_log_s_col[..cols],
-                    &mut self.varn_log_s_row[..rows],
-                    &mut self.varn_log_s_col_best[..cols],
-                    &mut self.varn_log_s_row_best[..rows],
-                    &mut self.scratch_var_s_col[..cols],
-                    &mut self.scratch_var_s_row[..rows],
-                );
-            }
-
-            #[cfg(not(feature = "static_cal_tables"))]
             if self.skip_varn {
                 self.scratch_var_s_col[..cols].fill(1.0);
                 self.scratch_var_s_row[..rows].fill(1.0);
@@ -1336,8 +1239,6 @@ mod tests {
                 ..Default::default()
             },
             hadamard: false,
-            #[cfg(feature = "static_cal_tables")]
-            static_cal: None,
             #[cfg(feature = "targeted_precision")]
             precision_budget: None,
         }
@@ -1657,8 +1558,6 @@ mod tests {
             tile_size: 128,
             var_norm: VarNormConfig::default(),
             hadamard: false,
-            #[cfg(feature = "static_cal_tables")]
-            static_cal: None,
             #[cfg(feature = "targeted_precision")]
             precision_budget: None,
         };

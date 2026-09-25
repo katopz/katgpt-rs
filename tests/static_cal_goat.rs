@@ -1,7 +1,11 @@
 //! GOAT benchmark for Static Calibration Tables (Plan 227 Phase 1).
 //!
-//! Measures: decode latency with Sinkhorn (before) vs static scales (after),
-//! perplexity delta, calibration convergence.
+//! Measures: the cost of a `StaticCalTable` scale LOOKUP vs one Sinkhorn
+//! `variance_normalize` of a 128x128 tile, cosine of the two scale vectors,
+//! and calibration convergence. It never runs a KVarN quantize path —
+//! `kvarn` is in `required-features` only for the Sinkhorn baseline import.
+//! The KVarN static-cal branch this was meant to gate was dead code from the
+//! Issue 015 extraction (b61a34f7b) and was deleted by Issue 897 (HISTORY.md).
 
 use katgpt_attn::static_cal::{HeadStats, StaticCalTable};
 

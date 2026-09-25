@@ -36,8 +36,6 @@
 //! all existing call sites in `tests/`, `examples/`, and `src/` consumers
 //! (`fold`, `attn_match`).
 
-#![allow(unexpected_cfgs)]
-
 #[cfg(feature = "cs_kv_probe")]
 pub mod cs_kv_probe;
 #[cfg(feature = "kv_share")]

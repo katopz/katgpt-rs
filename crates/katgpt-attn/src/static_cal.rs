@@ -1,5 +1,8 @@
 //! Static Calibration Tables — pre-computed per-head attention scales.
-//! Replaces runtime Sinkhorn iterations with O(1) lookup.
+//! O(1) per-head scale lookup. NOT a KVarN Sinkhorn replacement: the KVarN
+//! branch that consumed this was dead since the Issue 015 extraction and was
+//! deleted by Issue 897 — a per-row scale ahead of KVarN's per-row RTN is
+//! absorbed by the RTN min/max, so it reduces to plain RTN (HISTORY.md).
 //!
 //! Inspired by Gemma 4 QAT: "optimize for the precision you'll deploy at."
 //! Feature-gated behind `static_cal_tables`.
