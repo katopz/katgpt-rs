@@ -38,12 +38,9 @@
 //!     --verify-walk ../reflex-site/arena/demo_oracle.json
 //! ```
 
-#[path = "common/tetris_sim.rs"]
-mod tetris_sim;
-#[path = "common/tetris_lookahead.rs"]
-mod tetris_lookahead;
-#[path = "common/tetris_rulebook.rs"]
-mod tetris_rulebook;
+use katgpt_tetris::sim as tetris_sim;
+use katgpt_tetris::lookahead as tetris_lookahead;
+use katgpt_tetris::rulebook as tetris_rulebook;
 
 use std::io::{Read, Write};
 use std::net::TcpStream;

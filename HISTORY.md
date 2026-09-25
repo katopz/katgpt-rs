@@ -9203,3 +9203,42 @@ durable records are `.benchmarks/892_tetris_rulebook_arena.md`,
   Negatives recorded: always-on downstack (−37 pieces/g at 19@75), no-hold
   survival climb (did not generalise), 9-1/tetris at default weights
   (inert). Hold (+390 pieces/g) is illegal in the laya arena — sim-only.
+
+
+## Issue 893 (2026-09-25) — the tetris substrate promoted from `examples/common/` into the leaf crate `katgpt-tetris`: CLOSED
+
+P0 of the reflexer baseline (riir-train Research 457). Placement decided at
+plan time: a new leaf crate `crates/katgpt-tetris` (NOT a katgpt-core feature
+module) — keeps katgpt-core's primitive surface clean, gives the future public
+consumer (riir-reflexer) a precise path dep, opt-in by existence. Deps:
+`rayon`, `blake3`, `fastrand` (the lookahead's bag/garbage RNG — discovered by
+compile, not by the filing grep).
+
+- **T1/T4** — `tetris_sim.rs` → `src/sim.rs` BYTE-IDENTICAL (0 line changes);
+  `tetris_lookahead.rs` → `src/lookahead.rs` (1 rewrite: `crate::tetris_sim::`
+  → `crate::sim::`); `tetris_rulebook.rs` → `src/rulebook.rs` (3 rewrites,
+  same class). Nine importers rewired `#[path] mod` → use-alias
+  (`use katgpt_tetris::sim as tetris_sim;`) — every example body, and
+  `grammar_tables.rs`'s `crate::tetris_sim` refs, untouched.
+  `tetris_fixture.rs` re-pointed (`pub use katgpt_tetris::sim as tetris_sim;`).
+  The three originals DELETED — one copy from day one. `tetris_02`/`tetris_03`
+  needed no edits (they consume via the fixture).
+- **T2 (G1 bit-identity)** — base-vs-new protocol (detached HEAD worktree
+  binary, base first validated against every recorded doc value): h2h
+  per-seed fingerprints byte-identical both regimes (seed-8 18@75 =
+  `12 pcs/3 lines/120 pts`); fixture replay v2/v3/v4 byte-identical at the
+  recorded 1,113,251 / 1,113,238 B, drift-check 120 states / 2660 options;
+  tetris_04 flip 75/120, spot-only 383/840 vs crossed 332/840; decode_01
+  lossless anchor 300/300; tetris_09 summary `300·115·15·20600` (bag
+  `300·114·19·24420`); tetris_06 anchor 10/10 (independently re-verified at
+  review); `eval ≡ eval_with` bit-pin held; 14/14 crate tests + example
+  suites green.
+- **T3 (G2)** — interleaved B,N,B,N at the h2h geometry, ms/decision: base
+  0.322–0.344, new 0.321–0.332 (both regimes) — no regression vs the recorded
+  ~0.35 reference. Box state: AC, load 4.33, 3 concurrent (goal-salience soak
+  + caffeinate + one agent). The opt-in question is moot in the crate shape —
+  nothing but example dev-deps consumes it.
+- **T5 (forward freeze)** — `Genome::champion_hybrid()` ships as the pinned
+  REFERENCE genome, id `68cae9d382014662` asserted by crate test; evaluator
+  capabilities may keep landing, evolved VALUES land in the private
+  improvement loop's home, never here.

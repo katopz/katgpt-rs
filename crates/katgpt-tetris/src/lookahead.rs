@@ -11,7 +11,7 @@
 
 #![allow(dead_code)] // each example consumes a different slice
 
-use crate::tetris_sim::{Board, DropRule, HEIGHT, Piece, WIDTH, landing_options_with};
+use crate::sim::{Board, DropRule, HEIGHT, Piece, WIDTH, landing_options_with};
 
 // ── Terminal-board evaluation (shared; disclosed) ────────────────────────
 

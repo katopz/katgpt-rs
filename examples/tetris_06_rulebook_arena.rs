@@ -19,12 +19,9 @@
 //! climb: `--iters N --delta10 D --test-seed0 S --test-games N --no-hold
 //! --fitness pieces|points`
 
-#[path = "common/tetris_sim.rs"]
-mod tetris_sim;
-#[path = "common/tetris_lookahead.rs"]
-mod tetris_lookahead;
-#[path = "common/tetris_rulebook.rs"]
-mod tetris_rulebook;
+use katgpt_tetris::sim as tetris_sim;
+use katgpt_tetris::lookahead as tetris_lookahead;
+use katgpt_tetris::rulebook as tetris_rulebook;
 
 use std::time::Instant;
 use tetris_lookahead::{apply, garbage_board, pick, Bag, Player};

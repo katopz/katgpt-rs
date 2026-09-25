@@ -38,12 +38,9 @@
 //! ```
 //! Merge + verify: `reflex-site/scripts/merge_rulebook_walk.mjs walk.json`.
 
-#[path = "common/tetris_lookahead.rs"]
-mod tetris_lookahead;
-#[path = "common/tetris_rulebook.rs"]
-mod tetris_rulebook;
-#[path = "common/tetris_sim.rs"]
-mod tetris_sim;
+use katgpt_tetris::lookahead as tetris_lookahead;
+use katgpt_tetris::rulebook as tetris_rulebook;
+use katgpt_tetris::sim as tetris_sim;
 
 use serde_json::{Value, json};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};

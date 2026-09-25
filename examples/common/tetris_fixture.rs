@@ -18,8 +18,7 @@ use std::path::PathBuf;
 
 #[path = "hash_embed.rs"]
 pub mod hash_embed;
-#[path = "tetris_sim.rs"]
-pub mod tetris_sim;
+pub use katgpt_tetris::sim as tetris_sim;
 
 // re-export facade: each arena consumer takes what it needs (tetris_02
 // embeds sentences, tetris_03 reads structured features), so unused warns

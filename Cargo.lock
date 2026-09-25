@@ -2127,6 +2127,7 @@ dependencies = [
  "katgpt-sparse",
  "katgpt-spectral",
  "katgpt-speculative",
+ "katgpt-tetris",
  "katgpt-tokenizer",
  "katgpt-transformer",
  "katgpt-validator",
@@ -2222,6 +2223,15 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "katgpt-tetris"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "fastrand",
+ "rayon",
 ]
 
 [[package]]

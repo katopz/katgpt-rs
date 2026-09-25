@@ -28,8 +28,8 @@
 
 #![allow(dead_code)] // each example consumes a different slice
 
-use crate::tetris_lookahead::{Bag, LINES_SCORE, apply};
-use crate::tetris_sim::{Board, BoardScan, DropRule, HEIGHT, Piece, WIDTH, landing_options_with};
+use crate::lookahead::{Bag, LINES_SCORE, apply};
+use crate::sim::{Board, BoardScan, DropRule, HEIGHT, Piece, WIDTH, landing_options_with};
 use rayon::prelude::*;
 
 // ── Vocabulary ────────────────────────────────────────────────────────────
@@ -1011,7 +1011,7 @@ pub fn selftest() {
     // per-feature walk) over boards with holes, overhangs, wells and tall
     // stacks, under every mode and genome.
     {
-        use crate::tetris_lookahead::garbage_board;
+        use crate::lookahead::garbage_board;
         let mut boards = vec![
             Board::empty(),
             garbage_board(7, 18, 75),

@@ -23,10 +23,8 @@
 //! 660 pts / 11 lines / 70 pieces @ p50 394 ms per piece. This POC is the
 //! search-based answer.
 
-#[path = "common/tetris_sim.rs"]
-mod tetris_sim;
-#[path = "common/tetris_lookahead.rs"]
-mod tetris_lookahead;
+use katgpt_tetris::sim as tetris_sim;
+use katgpt_tetris::lookahead as tetris_lookahead;
 
 use tetris_lookahead::{
     apply, garbage_board, pick, Bag, Player, LINES_SCORE, W_COL_TRANS, W_DEEP_WELL, W_HOLES,

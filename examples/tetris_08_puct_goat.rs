@@ -16,12 +16,10 @@
 //! Run: `cargo run --release --features chance_puct --example tetris_08_puct_goat
 //!       [-- <games=20> <cap=1000> <threads=8> <budgets=100,400,1600> <regimes=16:75,18:75>]`
 
-#[path = "common/tetris_lookahead.rs"]
-mod tetris_lookahead;
+use katgpt_tetris::lookahead as tetris_lookahead;
 #[path = "common/tetris_puct.rs"]
 mod tetris_puct;
-#[path = "common/tetris_sim.rs"]
-mod tetris_sim;
+use katgpt_tetris::sim as tetris_sim;
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};

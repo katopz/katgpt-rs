@@ -36,8 +36,7 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
-#[path = "common/tetris_sim.rs"]
-mod tetris_sim;
+use katgpt_tetris::sim as tetris_sim;
 
 use tetris_sim::{
     Board, DropRule, Piece, SPOT_QUESTION, GRAMMAR_ID_V4, dellacherie_score,

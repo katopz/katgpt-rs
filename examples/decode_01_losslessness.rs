@@ -36,8 +36,7 @@
 
 #![allow(dead_code)]
 
-#[path = "common/tetris_sim.rs"]
-mod tetris_sim;
+use katgpt_tetris::sim as tetris_sim;
 #[path = "common/flappy_sim.rs"]
 mod flappy_sim;
 #[path = "common/lanes_sim.rs"]
