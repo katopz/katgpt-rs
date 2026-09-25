@@ -2,7 +2,7 @@
 
 **Status:** P1/P2/P3 primitives LANDED, **OPT-IN**. G1/G3/G4 pass on every arm. **Two G2 bars FAILED and are recorded as failed:** P1's fused dequant+restore costs +4.8–5.2% against a ≤ +1% bar, and P3's reconstruct-from-K costs 14–15× against a ≤ 1.00× bar. P2 G2 passes. P1 G2 was re-attempted with the dequant-fold lever and **still fails** (see the addendum at the end; the original figures below are unchanged). Issue 894 then landed the vectorized KVarN dequant (`bf7d37244`, bit-identical, value 4-bit **2.46×**); on that kernel P1 G2 re-measures at **+12.9–13.3%**, still FAIL (Addendum II). This bench makes no model-level quality claim; that half is riir-infer Issue 013.
 
-- **Issue:** [883](../.issues/883_fitted_value_anchor_tables.md) · **Research:** [587](../.research/587_Memory_Attention_Fitted_Token_Value_Tables.md) · **Substrate:** Bench 886 (`fitted_anchor_table.rs`, P0) · **Model-bound G1:** riir-infer Issue 013
+- **Issue:** 883 (closed 2026-09-25, HISTORY.md § Issue 883) · **Research:** [587](../.research/587_Memory_Attention_Fitted_Token_Value_Tables.md) · **Substrate:** Bench 886 (`fitted_anchor_table.rs`, P0) · **Model-bound G1:** riir-infer Issue 013
 - **Features:** `fitted_value_tables` (P1+P2, implies `fitted_anchor_tables`) · `fitted_v_reconstruct` (P3, implies `fitted_value_tables` + `position_group_action`). katgpt-kv forwards `fitted_value_tables` so P1 is gated against the real KVarN backend.
 - **Targets:**
   - `crates/katgpt-kv/tests/bench_895_mean_removed_v_quant_goat.rs` (P1; required-features `kvarn`, `fitted_value_tables`)

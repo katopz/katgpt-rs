@@ -1,3 +1,36 @@
+## Issue 883 (2026-09-25) — fitted token-value tables (K=V+ retrofit, mean-removed V quant, V-cache halving): CLOSED (P0–P4 landed opt-in; two primitive-level G2 bars FAILED and are recorded; the model-bound half is riir-infer Issue 013)
+
+Source: Research 587 (Memory Attention, arXiv:2609.28399). This is the V-side twin of Issue 882.
+
+- **P0 — the dashboard.** `fitted_anchor_table.rs` + `LayeredVkCalibration` shipped with Bench 886.
+  - Gemma model side: riir-infer `vk_calibration`, Bench 004. Mean ρ_l(V−K) = 0.49 over 120k tokens on gemma-2-2b-it, which reads GO.
+  - Kimi-K3 second fixture: Bench 889 (`ba82bad60`). MLA gives ρ(V) ≈ ρ(K) ≈ ρ(V−K) ≈ 0.52–0.60, the one-latent signature. That is a fixture-class null.
+- **P1–P3 primitives:** `0b768e95d`, `crates/katgpt-core/src/fitted_value_table.rs`, opt-in `fitted_value_tables` + `fitted_v_reconstruct` ([Bench 895](.benchmarks/895_fitted_value_table_primitives_goat.md)).
+  - P1 `MeanRemovedValueCache<C: QuantizedKVCache>`:
+    - The dashboard's `1 − ρ_V` predicts the KVarN quant-MSE ratio within ±5% on 9/9 cells.
+    - The absmax caveat is real at 2 bits: off-mean rows get 3.8× worse.
+    - Sinks are absorbed.
+  - P2 `v_from_k_plus`: the refund law `1 − (2λ − λ²)·ρ(V−K)` holds to within 0.11%. G2 costs 0.001× the W_V GEMV it deletes.
+  - P3 `reconstruct_v_from_rope_k`:
+    - Exact to 1.83ε up to position 131071.
+    - Round-trip drift is pinned (8.3e-6 after 64 round-trips).
+  - G1/G3/G4 PASS on every arm.
+- **P4 — laws.** The FLOP law `d_v·(2d−1)` matches the measured count exactly. The saving is byte-shaped (18–20 GFLOP/s at 36–39 GB/s). The storage dial and the `n_v/(n_kv+n_v)` law are written up in `.docs/02_inference/kv_compression.md` §7.
+- **FAILED G2 bars, NOT weakened:**
+  - **P1 fused restore:**
+    - The first measurement was +4.8–5.2% against a ≤ +1% bar.
+    - Folding the restore into KVarN's dequant (`60f1e7baa`, reverted `a24112aa7`) made it WORSE: +13.9–14.2%.
+    - After Issue 894 made the plain pass 2.46× faster, it reads +12.9–13.3%. The absolute cost barely moved, but it is now a larger share of a smaller pass.
+    - The floor is the per-position token→row lookup, +2.1–2.8%.
+    - The next lever is the deferred restore by linearity, +1.5–3.6% test-local. The last per-position add belongs in the consumer's softmax-weight loop.
+  - **P3:** 14–15× slower with `RopeAction`, which computes sin/cos per read. A table-driven action is still 1.6× slower.
+  - Both levers now live on the real decode path as riir-infer Issue 013 T4.
+- **Convention trap found:** riir-infer's gemma-2 RoPE is half-split (NeoX), while `RopeAction` is interleaved. The consumer must pass a half-split `PositionGroupAction`, or it gets silent corruption.
+- **Side findings:**
+  - Issue 894: the KVarN dequant kernels were scalar and bounds-checked. They are now 1.11–2.46× faster and bit-identical.
+  - Issue 896: KVarN's shared raw tile buffer corrupts interleaved multi-layer stores, and the in-progress tile reads as zeros. riir-infer 013 T1 needs that fix first.
+- **Promotion** waits on riir-infer 013 T1–T3 passing and the loser demoted.
+
 ## Issue 894 (2026-09-25) — KVarN dequant loops were scalar (bounds-checked indexing); rewritten as bit-identical zips: CLOSED (GOAT PASS, ships under `kvarn`)
 
 - **Shipped (`bf7d37244`):**
