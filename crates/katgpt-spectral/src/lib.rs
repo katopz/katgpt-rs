@@ -86,6 +86,13 @@ pub mod ica_lens;
 #[cfg(feature = "spectral_rewire")]
 pub mod spectral_rewire;
 
+// Issue 882 P4 rider (b) (Research 586, Bench 897): rank-1 spectral deflation
+// `A′ = A − λ(A v₁)v₁ᵀ` of a rerank-stage M×M candidate affinity, gated on
+// stable rank `‖A‖_F²/σ₁² < θ` (deflate only a COLLAPSED matrix — the
+// anti-help trap). Consumes `spectral_retract::power_iter_step`. Opt-in.
+#[cfg(feature = "affinity_deflation")]
+pub mod affinity_deflation;
+
 #[cfg(all(feature = "spectral_quant", feature = "maxsim"))]
 pub use forward::par_maxsim_score_spectralquant;
 pub use forward::{

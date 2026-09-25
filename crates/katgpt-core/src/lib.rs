@@ -3505,6 +3505,14 @@ pub mod attention_snr;
 #[cfg(feature = "row_logit_floor")]
 pub mod row_logit_floor;
 
+/// Canonical context assembly (Issue 882 P4 rider (a) / Research 586) — a
+/// deterministic total order over retrieved/context items (BLAKE3 content key
+/// or caller key, index tie-break; or score-descending with content-key
+/// tie-break) so an order-sensitive eval's permutation spread is 0 by
+/// construction. Zero-alloc, NaN-safe. Opt-in (`canonical_context`).
+#[cfg(feature = "canonical_context")]
+pub mod canonical_context;
+
 /// Fitted token-value tables (Issue 883 P1–P3 / Research 587) — the frozen
 /// per-(layer, token) table product of the P0 calibration substrate and its
 /// three consumers: P1 token-mean-removed V quant over ANY

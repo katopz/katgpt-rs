@@ -994,6 +994,18 @@ attention_snr = ["ssmax_temperature", "tiled_attention"]
 # OPT-IN.
 row_logit_floor = []
 
+# canonical_context (Issue 882 P4 rider (a) / Research 586, 2026-09-25):
+# canonical context assembly for oracle-anchored evals — sort retrieved /
+# context items by a stable content key (BLAKE3 digest via content_key, or
+# a caller Ord key) with an index tie-break, or score-descending
+# (float_order::desc, NaN last) with a content-key tie-break, so an
+# order-sensitive scorer's permutation spread is 0 BY CONSTRUCTION. Total
+# order ⇒ sort_unstable_by yields a unique sequence, in place (0 allocs);
+# returns the adjacent-tie count (ties == 0 ⇒ invariance needs no content
+# assumption). Makes position bias CONSTANT, does not remove it. Zero new
+# deps (blake3 already non-optional). OPT-IN; Bench 897 G1a.
+canonical_context = []
+
 # fitted_value_tables (Issue 883 P1+P2 / Research 587, 2026-09-25): the
 # frozen per-(layer, token) table product of the P0 calibration substrate
 # (`FittedTokenTable::from_calibration`, James–Stein-shrunk at freeze;
@@ -4049,3 +4061,12 @@ required-features = ["exact_mass_admit"]
 [[test]]
 name = "exact_mass_admit_g4_alloc"
 required-features = ["exact_mass_admit"]
+
+# Issue 882 P4 rider (a) — canonical context assembly GOAT (Bench 897):
+# G1a permutation spread of an order-sensitive scorer 0 under canonical
+# assembly vs > 0 without, idempotence, G2 sort cost (best-of + paired vs
+# plain assembly), G3 feature-off path untouched, G4 0 allocs.
+[[test]]
+name = "bench_897_canonical_context_goat"
+harness = false
+required-features = ["canonical_context"]

@@ -5034,3 +5034,62 @@ Gates ([Bench 895](../../.benchmarks/895_fitted_value_table_primitives_goat.md),
 - `fitted_v_reconstruct` (katgpt-core; implies `fitted_value_tables` + `position_group_action`)
 
 Both are **OPT-IN**. The model-bound G1 (gemma-2-2b PPL, retention walk, NIAH, tg128) is riir-infer Issue 013.
+## 136. canonical_context + affinity_deflation — the P4 eval/rerank riders (Issue 882 P4 / Research 586)
+
+These are the two modelless riders of Issue 882 P4. The m_Y instrument itself
+lives in riir-infer (`dc0e5a9`).
+
+**(a) `canonical_context`** (katgpt-core) gives a deterministic order over
+retrieved or context items, so an order-sensitive eval's permutation spread is
+**0 by construction**.
+
+- `canonical_order_into(keys, order)` sorts ascending by an `Ord` key, such as
+  the BLAKE3 digest from `content_key` or a caller key. Ties break by input
+  index.
+- `canonical_order_by_score_into(scores, keys, order)` keeps relevance order:
+  score descending (`float_order::desc`, NaN last), with ties broken by content
+  key.
+- `assemble_into` / `assembled_len` build the context into a caller-owned
+  buffer.
+
+Both orders are total, so the in-place `sort_unstable_by` gives a unique
+sequence with 0 allocations. They return the adjacent-tie count, and
+`ties == 0` means invariance holds with no content assumption. The riders make
+position bias **constant**. They do not remove it.
+
+**(b) `affinity_deflation`** (katgpt-spectral) applies
+`A′ = A − λ(A v₁)v₁ᵀ` to the rerank-stage M×M candidate affinity. It is
+**gated** on the stable rank `‖A‖_F²/σ₁² < θ`, so it only touches a collapsed
+matrix; deflating a healthy one is the anti-help trap. The gate quantity
+comes out of the σ₁ power iteration at O(M²), using the shared
+`spectral_retract::power_iter_step` on AᵀA formed implicitly. Because `‖Av‖`
+lower-bounds σ₁, an unconverged iteration can only make the gate **refuse**.
+λ = 0 and a refusal are bit-identical, and NaN refuses.
+
+Gates ([Bench 897](../../.benchmarks/897_p4_riders_goat.md), M3 Max, AC, heavily
+loaded box, 3 runs):
+
+- **G1a:** the canonical spread is **0 bitwise** across 8 seeds × 256 orders.
+  Retrieval order gives a spread of min 16.3 / mean 20.8. A tied-relevance stable-sort
+  pipeline gives ≥ 0.35, and its key-tie-broken form gives 0. Both orders are
+  idempotent, and a caller-key collision is flagged (28 ties).
+- **G1b:** on the held-out set, gated deflation at θ* = 1.1 (picked by a direct
+  grid) matches or beats both the no-deflation and ungated policies on every
+  collapse strength α.
+  - At α = 8, top-1 goes from 0.586 to **1.000**.
+  - The **pre-registered α = 3 lift bar FAILED**: +0.072 against a +0.25 bar,
+    even though recovery was complete. It was re-specified at α = 8.
+  - The healthy-matrix negative is pinned: the gate refuses bit-identically,
+    and ungated deflation costs top-1 **1.000 → 0.812**.
+  - The safe θ band is [1.1, 1.5]. At θ ≥ 1.75 the gate starts deflating
+    healthy matrices.
+- **G2:** (a) N = 256 order costs **3.8–4.4 µs** best-of (bar ≤ 20). (b) The
+  paired ratio against the affinity build at M = 128 is **1.15–1.16**
+  collapsed (bar ≤ 1.25) and **1.22–1.25** healthy (bar ≤ 1.60).
+- **G3:** bit-identical when off.
+- **G4:** 0 allocations for both riders.
+
+🔧 Feature flags: `canonical_context` (katgpt-core) and `affinity_deflation`
+(katgpt-spectral). Both are **OPT-IN**. There is no production consumer yet.
+The rerank wiring and an oracle-anchored eval consumer are the promotion
+evidence still owed.

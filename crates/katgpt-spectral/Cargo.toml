@@ -163,6 +163,19 @@ gaussianity_agreement = ["katgpt-core/gaussianity_probe"]
 # in [0.27, 0.58], far below the SAR threshold > 0.8). Stays cold-tier only.
 spectral_rewire = ["katgpt-core/subspace_phase_gate"]
 
+# affinity_deflation (Issue 882 P4 rider (b) / Research 586, 2026-09-25):
+# rank-1 spectral deflation A′ = A − λ·σ₁·u₁·v₁ᵀ = A − λ(A v₁)v₁ᵀ on a
+# rerank-stage M×M candidate affinity, GATED on effective rank — the stable
+# rank ‖A‖_F²/σ₁², which falls out of the σ₁ power iteration at O(M²) (no
+# eigendecomposition) — deflate only when srank < θ, i.e. a COLLAPSED matrix
+# (deflating a healthy one removes its strongest real cluster: the anti-help
+# trap, pinned as a measured negative in Bench 897). Power iteration on AᵀA
+# formed implicitly via the shared spectral_retract::power_iter_step; ‖Av‖
+# lower-bounds σ₁ at every iterate, so non-convergence can only make the gate
+# REFUSE. λ = 0 / refusal bit-identical; NaN refuses; caller-owned scratch,
+# 0 allocs. θ by direct grid evaluation, never GD. OPT-IN.
+affinity_deflation = []
+
 # Plan 423 Phase 3 — Spectral Rewiring GOAT gate bench (G1–G6).
 # std::time::Instant + harness=false + self-contained CountingAllocator
 # (criterion is not a katgpt-rs dev-dep; matches the repo bench convention).
@@ -223,3 +236,14 @@ required-features = ["gaussianity_agreement"]
 [[test]]
 name = "bench_455_quantile_balance_goat"
 required-features = ["quantile_balance_router"]
+
+# Issue 882 P4 rider (b) — rank-1 spectral deflation GOAT (Bench 897):
+# G1b planted common-mode + block recovery, healthy-matrix negative arm
+# (gate refuses; ungated deflation hurts), θ grid by direct evaluation, G2
+# paired A/B vs the affinity build, G3 λ=0 / refusal bit-identical, G4 0
+# allocs. Separate binary so the counting allocator is binary-unique.
+[[test]]
+name = "bench_897_affinity_deflation_goat"
+path = "tests/bench_897_affinity_deflation_goat.rs"
+harness = false
+required-features = ["affinity_deflation", "river_valley"]
