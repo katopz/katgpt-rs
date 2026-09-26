@@ -1605,6 +1605,14 @@ required-features = ["lt2_looped", "lt2_deep_stability"]
 # G1b determinism/canary/monotone signature, G1 holdout calibration or the
 # G1-flat passing negative, R9 retuned-vs-transferred, G2 cost + provenance,
 # G4 zero-alloc probe path. Bench 899.
+# Plan 610 GOAT gate — arm_drift_alignment (Research 591): G1 planted drift +
+# negative control + scale invariance, G2 incumbent discrimination, G3 paired
+# loop A/B, G4 zero-alloc + interleaved cost. Bench 900.
+[[test]]
+name = "plan_610_arm_drift_alignment_goat"
+path = "tests/plan_610_arm_drift_alignment_goat.rs"
+required-features = ["arm_drift_alignment"]
+
 [[test]]
 name = "issue_898_kl_depth_goat"
 path = "tests/issue_898_kl_depth_goat.rs"

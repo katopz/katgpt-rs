@@ -296,15 +296,16 @@ impl<const D: usize> DerivativeCuriosity<D> {
         Col: CollapseSignal,
     {
         // ── Step 1: Sample k candidates (also observes preferences) ───────
-        // We reuse the same steady-state-no-alloc pattern as CgspLoop::cycle:
-        // resize the candidate buffer to k (no-op once warm), then let the
-        // conjecturer overwrite slots in place. cdf_scratch is cleared
+        // Same steady-state-no-alloc pattern as CgspLoop::cycle: ensure_len
+        // sizes the candidate buffer to k (no-op once warm), then the
+        // conjecturer overwrites slots in place. cdf_scratch is cleared
         // because PoolConjecturer rebuilds it from scratch each call.
+        // (Plan 610 G4: the previous `resize(k, Candidate::new(Direction::
+        // zeros(dim), ..))` BUILT its default — one 4·dim-byte heap Vec per
+        // cycle — even when the resize was a no-op.)
         scratch.cdf_scratch.clear();
         let k = config.k;
-        let dim = target.dim();
-        let default_candidate = Candidate::new(Direction::zeros(dim), usize::MAX);
-        scratch.candidates.resize(k, default_candidate);
+        scratch.ensure_len(k, target.dim());
 
         // sample_candidates is the CuriosityConjecturer entry point; it
         // internally calls observe_interestingness(bandit.priorities()).

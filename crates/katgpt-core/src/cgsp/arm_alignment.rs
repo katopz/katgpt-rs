@@ -86,6 +86,16 @@
 //! synced. Only the bounded scalars `r̃_k ∈ [0.5, 1)` may cross the sync
 //! boundary, under the same contract as `DerivativeCuriosity`.
 //!
+//! ## Measured (Bench 900) — GOAT FAIL, stays opt-in
+//!
+//! G1 planted-drift AUC 0.783 / held-out 0.602, below the 0.8 bar. The
+//! negative control passes (0.395). κ = 0 invariance passes; κ = 0.1 fails.
+//! The G3 loop A/B wins (230 vs 349 cycles against a matched-uniform bonus)
+//! but REVERSES when the better family has a zero pull centroid (+108
+//! cycles). The first-moment pull `m` cannot see mass moving onto `±e_i`
+//! pairs, so that shift reads as drift away from the coherent family.
+//! Redesign: Issue 899 (second-moment kernel, null-normalized).
+//!
 //! ## Cost
 //!
 //! `O(n_arms · dim)` to form `m` (one SIMD axpy per arm with non-zero
@@ -396,9 +406,9 @@ impl<const D: usize> TrajectoryAlignedCuriosity<D> {
     {
         scratch.cdf_scratch.clear();
         let k = config.k;
-        scratch
-            .candidates
-            .resize(k, Candidate::new(Direction::zeros(target.dim()), usize::MAX));
+        // `ensure_len`, not `resize(k, Candidate::new(Direction::zeros(..)))`:
+        // the resize default is BUILT (one heap Vec) even when it is unused.
+        scratch.ensure_len(k, target.dim());
         self.sample_candidates(
             target,
             bandit.priorities(),
@@ -542,7 +552,10 @@ mod tests {
             a.precondition(&d, &mut ua);
             b.precondition(&d2, &mut ub);
             for j in 0..4 {
-                assert!((ua[j] - ub[j]).abs() < 1e-5, "t={t} j={j}: {ua:?} vs {ub:?}");
+                assert!(
+                    (ua[j] - ub[j]).abs() < 1e-5,
+                    "t={t} j={j}: {ua:?} vs {ub:?}"
+                );
             }
         }
     }
@@ -560,7 +573,10 @@ mod tests {
             a.precondition(&d, &mut ua);
             b.precondition(&d2, &mut ub);
             for j in 0..4 {
-                assert!((ua[j] - ub[j]).abs() < 1e-5, "t={t} j={j}: {ua:?} vs {ub:?}");
+                assert!(
+                    (ua[j] - ub[j]).abs() < 1e-5,
+                    "t={t} j={j}: {ua:?} vs {ub:?}"
+                );
             }
         }
     }
@@ -606,7 +622,12 @@ mod tests {
         let s: Vec<f32> = pool.iter().map(|g| tac.score_direction(g)).collect();
         for &on in &[0usize, 1, 4] {
             for &off in &[2usize, 3] {
-                assert!(s[on] > s[off], "arm {on} ({}) !> arm {off} ({})", s[on], s[off]);
+                assert!(
+                    s[on] > s[off],
+                    "arm {on} ({}) !> arm {off} ({})",
+                    s[on],
+                    s[off]
+                );
             }
         }
     }
@@ -643,7 +664,8 @@ mod tests {
     #[test]
     fn cycle_aligned_finite_and_recovers_from_collapse() {
         let pool: Vec<Direction> = (0..8).map(|i| axis(8, i, 1.0)).collect();
-        let mut tac: TrajectoryAlignedCuriosity<8> = TrajectoryAlignedCuriosity::new(pool.clone(), 5);
+        let mut tac: TrajectoryAlignedCuriosity<8> =
+            TrajectoryAlignedCuriosity::new(pool.clone(), 5);
         let mut bandit = VecBandit {
             prios: (0..8).map(|i| if i == 3 { 1.0 } else { 0.0 }).collect(),
         };
@@ -658,7 +680,12 @@ mod tests {
             let r = tac.cycle_aligned(&target, &mut bandit, &mut scratch, &mut collapse, &config);
             triggered |= r.collapse_triggered;
             assert!(r.stats.mean_r_synth.is_finite(), "cycle {cycle}");
-            assert!(bandit.priorities().iter().all(|p| p.is_finite() && *p >= 0.0));
+            assert!(
+                bandit
+                    .priorities()
+                    .iter()
+                    .all(|p| p.is_finite() && *p >= 0.0)
+            );
             max_h = max_h.max(entropy_nats(bandit.priorities()));
         }
         assert!(triggered, "collapse never fired");
