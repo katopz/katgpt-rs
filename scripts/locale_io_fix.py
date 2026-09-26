@@ -60,6 +60,39 @@ ALWAYS_TEXT = {"TextIOWrapper"}
 _MODE_CHARS = set("rwxat+U")
 
 
+# Where each admitted form takes `encoding` POSITIONALLY. `p.read_text("utf-8")`
+# is exactly as pinned as `p.read_text(encoding="utf-8")`, and a keyword-only
+# test both FLAGS it and makes `repair()` append a second `encoding=` — a
+# `TypeError: got multiple values for argument 'encoding'` at run time (found
+# on reflex-site's `test_publish_bench.py` the day that repo joined).
+_ENCODING_POS = {
+    "read_text": 0,             # Path.read_text(encoding, errors, newline)
+    "write_text": 1,            # Path.write_text(data, encoding, ...)
+    "open": 2,                  # Path.open(mode, buffering, encoding)
+    "NamedTemporaryFile": 2,    # (mode, buffering, encoding, ...)
+    "TemporaryFile": 2,
+    "SpooledTemporaryFile": 3,  # (max_size, mode, buffering, encoding)
+    "fdopen": 3,                # os.fdopen(fd, mode, buffering, encoding)
+    "TextIOWrapper": 1,         # (buffer, encoding, ...)
+}
+_BUILTIN_OPEN_ENCODING_POS = 3  # open(file, mode, buffering, encoding)
+
+
+def _positional_encoding(node: ast.Call, pos: int) -> bool:
+    """Does `node` pass an encoding at positional index `pos`?
+
+    A literal `None` there IS the locale default, so it does not count. A
+    `*args` splat at or before `pos` is UNKNOWN and counts as supplied — the
+    same conservative stance `sites()` takes for a `**kwargs` splat.
+    """
+    for i, a in enumerate(node.args):
+        if isinstance(a, ast.Starred):
+            return True
+        if i == pos:
+            return not (isinstance(a, ast.Constant) and a.value is None)
+    return False
+
+
 def _binary(node: ast.Call) -> bool:
     mode = ""
     if len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
@@ -128,6 +161,10 @@ def sites(src: str) -> list[ast.Call]:
         if any(k.arg == "encoding" for k in node.keywords):
             continue
         if any(k.arg is None for k in node.keywords):   # **kwargs — UNKNOWN
+            continue
+        pos = (_ENCODING_POS[attr] if attr in _ENCODING_POS
+               else _BUILTIN_OPEN_ENCODING_POS)
+        if _positional_encoding(node, pos):
             continue
         out.append(node)
     return out
@@ -220,6 +257,20 @@ def selftest() -> list[str]:
     # already explicit
     one('p.write_text(x, encoding="utf-8")\n', 0)
     one('open(p, encoding="latin-1")\n', 0)
+    # a POSITIONAL encoding is as explicit as the keyword — flagging it
+    # made repair() append a second `encoding=`, a TypeError at run time
+    # (reflex-site `test_publish_bench.py`, the day that repo joined)
+    one('p.read_text("utf-8")\n', 0)
+    one('p.write_text(x, "utf-8")\n', 0)
+    one('open(p, "w", -1, "utf-8")\n', 0)
+    one('p.open("w", -1, "utf-8")\n', 0)
+    one('tempfile.NamedTemporaryFile("w", -1, "utf-8")\n', 0)
+    # … at the RIGHT index: write_text's arg 0 is the DATA, open's arg 1 the mode
+    one('p.write_text("utf-8")\n', 1, 'p.write_text("utf-8", encoding="utf-8")')
+    one('open(p, "w")\n', 1, 'open(p, "w", encoding="utf-8")')
+    # a literal None IS the locale default; a *args splat is UNKNOWN
+    one('p.read_text(None)\n', 1)
+    one('open(*a)\n', 0)
     # a trailing comma must not become a double comma
     one('p.write_text(\n    x,\n)\n', 1, None, ',,')
     # a `)` on its own line: the kwarg joins the last ARGUMENT, never the
@@ -239,7 +290,7 @@ def selftest() -> list[str]:
         'p.write_text(open(q, encoding="utf-8").read(), encoding="utf-8")')
     # other methods named alike are untouched
     one('p.write_bytes(x)\n', 0)
-    one('sock.read_text(x)\n', 1)   # duck-typed: the name IS the population
+    one('sock.read_text()\n', 1)   # duck-typed: the name IS the population
 
     # ── Issue 830: the forms that are not one of those three names ──
     # `.open` with a literal TEXT mode is in the class …
