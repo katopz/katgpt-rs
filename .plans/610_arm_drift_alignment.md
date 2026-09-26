@@ -1,6 +1,6 @@
 # Plan 610 — `arm_drift_alignment`: per-arm trajectory-aligned curiosity gate for cgsp
 
-**Status:** PLANNED — opt-in feature `arm_drift_alignment`, promote to default only on GOAT pass. Research: `katgpt-rs/.research/591_Trajectory_Aligned_Curiosity.md` (arXiv:2609.30063 extraction); guide: `riir-ai/.research/389_Trajectory_Aligned_Curiosity_Guide.md`.
+**Status:** IN PROGRESS (T1–T2 landed 2026-09-26; gates pre-registered above) — opt-in feature `arm_drift_alignment`, promote to default only on GOAT pass. Research: `katgpt-rs/.research/591_Trajectory_Aligned_Curiosity.md` (arXiv:2609.30063 extraction); guide: `riir-ai/.research/389_Trajectory_Aligned_Curiosity_Guide.md`.
 
 ## Pinned shape (before code)
 
@@ -10,6 +10,23 @@
 - Exposes `last_alignment_scores()` (per-arm, for logging + G2/G3 readouts) and `last_interestingness()` (mean, compatibility with the existing telemetry).
 - Zero-alloc: fixed-size arrays + caller scratch; no Solver call; bit-identical when the flag is off.
 - Module docs must state the honest caveat: behavioral drift ↔ parameter movement is an assumption until the riir-train-side bridge correlation is measured (Plan 420 T3's checkpoints can host it).
+
+## Design correction (2026-09-26, before code)
+
+Research 591 wrote the drift as `TemporalDerivativeKernel::observe(&pref_buf)`, the derivative of the **priority vector**, which is indexed by ARM. The candidate direction `ĝ_k` is indexed by LATENT coordinate, so `⟨ĝ_k, û⟩` is dimensionally meaningless unless the pool is the identity basis. The shipped form takes the derivative of the **priority-weighted mean pull** `m = Σ_j p_j g_j`, which lives in the candidates' space. EMAs are linear, so for a fixed pool this equals `Σ_j (fast_j − slow_j)·g_j`: the incumbent's per-arm derivative, projected through the pool. Consequences:
+- Cost is `O(n_arms·dim)` per observation, not the plan's `O(k·dim)`. The G4 bar "≤ 2× `observe_interestingness`" was derived on the arm-space premise. It is kept as written and measured honestly.
+- The preconditioner alone is sign-like: any consistently drifting coordinate is inflated to unit weight. A relative floor `κ·max_j s_j` (default `κ = 0.1`, one decade) bounds that. Per-coordinate invariance is exact at `κ = 0` only; global invariance holds for every `κ`.
+- `s_j` = EMA of `|d_j|` as the research table says (a first moment, not an RMS). Homogeneous degree 1, so the κ=0 invariance is exact.
+
+## Pre-registered gate fixture + bars (written before any gate ran)
+
+Common: dim 16; pool of 16 arms. The drifting family F is 8 arms at `e0 + 0.2·N(0,I)`, normalized. The stationary family S is 8 arms at `±e1..±e4`: orthogonal to the drift axis, zero centroid. 16 seeds.
+- **G1 planted drift:** 200 steps. Raw weights start at 1; the 4 drivers `F[0..4]` ramp `+0.02/step`; every weight gets additive `N(0, 0.02)` noise, clamped `≥ 0.01`, then normalized. Scores are averaged over steps 100–199. Bars: mean AUC(F vs S) ≥ 0.8 **and** mean held-out AUC(`F[4..8]` vs S) ≥ 0.8. `F[4..8]` have static own priorities.
+- **G1 negative control:** same pool, no ramp, weights `1 + N(0, 0.1)` i.i.d. per step. Bar: `|mean AUC − 0.5| ≤ 0.15`.
+- **G1 scale invariance:** the G1 drift sequence rescaled per coordinate by `s_j ~ U[0.5, 2]`, 16 draws. Bars: κ = 0 → `max|û − û'| ≤ 1e-4` at every step; κ = 0.1 → AUC change ≤ 0.02 and Kendall τ of the 16 per-arm scores ≥ 0.9.
+- **G2 discrimination:** the incumbent `DerivativeCuriosity` gives one score per cycle, so its AUC is 0.5 by construction (recorded; trivial). The own-arm drift magnitude `|fast_j − slow_j|` of the priority vector must score held-out AUC < 0.8. The pre-stated expectation is ≈ 0.5, because the held-out arms' own priorities move only through renormalization, exactly like S. Characterization rows, not gates: preconditioner off (`û = d/‖d‖`) on the negative control; κ = 0 on G1; an S family with non-zero centroid (`+e1..+e8`).
+- **G3 loop A/B:** 32 paired seeds. `k = 4` samples per cycle. `p ← p + η·r`, then renormalize, with `η = 0.05` and `r = r_ext + λ·2(s − 0.5)` at `λ = 0.5`. Extrinsic Bernoulli per sample: `p = 0.20` for F, `p = 0.10` for S; the draw is keyed on (seed, cycle, slot), common random numbers. Arms: (A) aligned per-arm; (B) global-norm `DerivativeCuriosity`; (C) matched-uniform bonus, i.e. the aligned conjecturer rewarding every sample with the mean score (same magnitude, no differentiation); (D) extrinsic only. Primary readout: cycles until F holds ≥ 0.75 of the priority mass, capped at 600. PASS = A beats C **and** B with paired 95% CIs excluding 0. Otherwise the demotion clause applies. Secondary readout: extrinsic reward accumulated over 300 cycles. Pin: aligned sampling is bit-identical to a bare `PoolConjecturer` with the same seed (scoring is a pure side channel).
+- **G4:** 0 allocations over 1000 warm `cycle_aligned` calls. ns per `sample_candidates` ≤ 2× `DerivativeCuriosity::sample_candidates` (interleaved median-of-ratios, `--release`). The plan's literal "≤ 2× `observe_interestingness`" is also printed.
 
 ## Tasks
 

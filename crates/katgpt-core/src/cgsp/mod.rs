@@ -32,6 +32,10 @@
 //! let result = loop_.cycle(&target, &mut scratch);
 //! ```
 
+// Per-arm trajectory-aligned curiosity gate (Plan 610, Research 591).
+// Opt-in until the Plan 610 GOAT gate passes.
+#[cfg(feature = "arm_drift_alignment")]
+pub mod arm_alignment;
 pub mod conjecturer;
 #[cfg(feature = "temporal_deriv")]
 pub mod derivative_curiosity;
@@ -47,6 +51,8 @@ pub mod types;
 pub mod dual_pool;
 
 // Convenience re-exports — flat namespace for callers.
+#[cfg(feature = "arm_drift_alignment")]
+pub use arm_alignment::{DriftPreconditioner, TrajectoryAlignedCuriosity, alignment_score};
 pub use conjecturer::PoolConjecturer;
 #[cfg(feature = "temporal_deriv")]
 pub use derivative_curiosity::DerivativeCuriosity;
