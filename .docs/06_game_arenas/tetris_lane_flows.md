@@ -40,7 +40,7 @@ piece — no preview, no plan. Records: katgpt-rs `.benchmarks/892_laya_h2h.md`.
 
 ```mermaid
 %% file: tetris_flow_modelless.svg
-%% aria: KatGPT modelless lane: the same spot sentence is decoded back into board features, scored by a small linear head fitted on laya's recorded answers, and the highest score is played, in microseconds inside WebAssembly
+%% aria: Reflex · modelless lane: the same spot sentence is decoded back into board features, scored by a small linear head fitted on laya's recorded answers, and the highest score is played, in microseconds inside WebAssembly
 flowchart LR
     S["spot sentence<br/>(same as laya's)"] --> D["decode to features<br/>holes · flat · height<br/>side · clears"]
     D --> H["linear head<br/>fitted on laya's<br/>recorded answers"]
@@ -73,7 +73,7 @@ rulebook.
 
 ```mermaid
 %% file: tetris_flow_rulebook.svg
-%% aria: Reflexer, the rulebook search: try every spot for the falling piece, every spot for the preview piece keeping the best six, then every piece still left in the bag; score each end board with the strategy rulebook, average over the unknown piece, take the best plan, and play its first move, in under a millisecond
+%% aria: Reflex · rulebook search: try every spot for the falling piece, every spot for the preview piece keeping the best six, then every piece still left in the bag; score each end board with the strategy rulebook, average over the unknown piece, take the best plan, and play its first move, in under a millisecond
 flowchart TB
     subgraph R1["look ahead"]
         direction LR
