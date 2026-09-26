@@ -52,6 +52,21 @@ Same fixture as Bench 900 (dim 16, F 8 at `e0 + 0.2·N`, S at `±e1..±e4`, 16/3
 
 **Honest-null clause:** if the redesign fails G1 or the reversed-reward gate, record it in Research 591 and retire guide 389 P2 until a new mechanism exists. Do not re-tune κ, β or the EMA rates after seeing results.
 
+## Measured so far (interim; the full record goes to Bench 901)
+
+- **v1, as pre-registered:** G1 PASS (0.963 / held-out 0.926), negative control **FAIL** (0.949), G3 forward PASS, reversed PASS, G4 2.02× (FAIL by 0.02).
+- **Defect found:** the kernel's zero-init EMAs leave a common-mode upward drift that is still 5% unsettled at step 100 (slow α = 0.03). `C·d` reads it in proportion to row sum, which favors dense clusters. That is an implementation defect, not a tunable. Repair: warm-start both EMAs on the first observation. Prediction stated before the run: noise AUC falls toward 0.5.
+- **Perf:** `z` is now evaluated lazily per scored arm. The values are bit-identical (every gate number matched) and G4 drops from 2.02× to 1.74×.
+- **v1 + warm start:** G1 **FAIL** (0.816 / held-out 0.633), negative control **FAIL** in the other direction (0.186, S favored), G3 forward PASS (−66 cycles vs SecondUniform), reversed PASS (−68). So v1's G1 PASS was largely the transient.
+- **Why S is favored under noise:** simplex shares are negatively correlated (`Σ d = 0`), so the i.i.d. denominator `√Σ C_kj² v_j` over-states the null variance of dense rows.
+
+## v2 pre-registration (2026-09-26, before any v2 run)
+
+**Simplex-correct null.** The shares are `s = w / Σw`, so `δs = J·δw` with `J = (I − s·1ᵀ)/W`. The null variance of `C_k·d` is then `Σ_j c̃_kj² v_j` with `c̃_k = C_k − (s·C_k)·1`, the row centered by its share-weighted mean. Because `Σ_j d_j = 0` on the simplex, the numerator `C_k·d = c̃_k·d` is **unchanged**; only the denominator changes:
+`den² = Σ C_kj² v_j − 2 m_k Σ C_kj v_j + m_k² Σ v_j`, with `m_k = s·C_k`. Still `O(n)` per scored arm.
+
+Warm start stays on. The bars, β_z = 1, the EMA rates and the fixture are all unchanged. This is the **third** variant measured on this fixture, and Bench 901 reports all three.
+
 ## Tasks
 
 - [ ] T1 — `SecondMomentAlignment` (or a `DriftSummary` strategy on `TrajectoryAlignedCuriosity`, whichever keeps one sampler): fixed per-arm state, `C` built at construction, zero-alloc observe and score. Unit tests: `±e_i` visibility; unit null variance on i.i.d. noise.
