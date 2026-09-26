@@ -785,14 +785,19 @@ one, and not over-capture either (riir-ai's `go_bonsai_cache_test.bin` and
 `test_egl_roundtrip.bin` are `#[test]` bodies writing a fixed filename, the
 shape that produced this repo's own five-at-once *"File too small for header"*
 failures). Ceiling a **RATCHET at measured**, `instrument_reachability`'s
-answer for its reason: a wall would demand 98 repairs in ten trees this session
-does not own, and a cross-repo repair is not landed until it is COMMITTED in
-the sibling with a cited SHA (Issue 798). ⛔ It carries **no `min_rs_files`
-column** — the third sweep to delegate that identical `tracked_files(repo,
-"*.rs")` walk — and the delegation is ASSERTED, not assumed: a pinned repo that
-loses its non-zero row in `orphaned_attr_drift_floors.txt` reds, and a
-delegated file it cannot PARSE is refused rather than read as an empty dict,
-which would turn the assertion into the no-op it exists to prevent. katgpt-rs's
+answer for its reason: a wall would demand 98 repairs in ten trees this
+session does not own, and a cross-repo repair is not landed until it is
+COMMITTED in the sibling with a cited SHA (Issue 798). ⛔ It carries **no
+`min_rs_files` column** — the third sweep to delegate that identical
+`tracked_files(repo, "*.rs")` walk — and the delegation is ASSERTED, not
+assumed: a pinned repo that loses its non-zero row in
+`orphaned_attr_drift_floors.txt` reds, and a delegated file it cannot PARSE is
+refused rather than read as an empty dict, which would turn the assertion into
+the no-op it exists to prevent. ⛔ One MEASURED exception (Issue 902): a zero
+row is accepted while `sweep_population.zero_walk_floor_accepted` measures ZERO
+tracked `.rs` in that repo — md-only by construction, re-measured every run,
+the acceptance printed, never a standing amnesty; the first `.rs` to land reds
+exactly as a zeroed row on a code repo does. katgpt-rs's
 row asserts the GATE'S VERDICT rather than restating a count this sweep derives
 from the same `scan()`, so a stale membership row reds here too. Repair half:
 `scripts/shared_temp_path_fix.py` (the `locale_io_fix.py` pattern — idempotent,
@@ -2497,7 +2502,14 @@ scripts/len_derived_drift_sweep.py --canary         # the 12 adversary arms
   `tracked_files(repo, "*.rs")` call over the identical population, and they
   already disagree with each other about the number. The delegation is
   **asserted** — the sweep reds if any repo it pins loses its non-zero row
-  there.
+  there — with ONE measured exception (Issue 902): a repo born md-only has a
+  TRUTHFUL zero row, so the assertion accepts it only while
+  `sweep_population.zero_walk_floor_accepted` measures ZERO tracked `.rs` in
+  that repo (the ONE walk, re-measured every run, the acceptance printed); the
+  first `.rs` to land reds exactly as a zeroed row on a code repo does. The
+  measurement also catches the stale premise in the other direction:
+  riir-reflexer was registered md-only 2026-09-25 and had 16 tracked `.rs` by
+  the time the exception shipped — the row was re-pinned in the same commit.
 
 ## An item can be dead on a platform NO lane compiles — `scripts/platform_dead_code_audit.py`
 
