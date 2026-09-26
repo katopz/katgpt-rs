@@ -4,6 +4,8 @@
 **Authors**: Marc Finzi*, Shikai Qiu*, Yiding Jiang, Pavel Izmailov, J. Zico Kolter, Andrew Gordon Wilson (CMU / NYU)
 **Verdict**: ✅ High Value — directly validates our modelless distillation, G-Zero self-play, and data selection pipeline; provides theoretical framework for `ScreeningPruner::relevance()` upgrade
 
+> **PASS-Redirects (synthesis):** Cowsik, Dolev, Li, De Luca, Cohen, Goodman, Levine [arXiv:2609.30063 "Self-Play Pretraining with Zero Data"] — uses epiplexity (S_T growth across generator checkpoints) as the generator-health instrument for a self-play pretraining loop (their Fig. 3), two years after this note shipped it as a data-selection pruner; full distill + fusion at `riir-train/.research/458` and `katgpt-rs/.research/591`.
+
 ---
 
 ## Core Concepts
