@@ -91,7 +91,10 @@ pub use position::{GridMap, GridPos, Position, soft_cost};
 pub use warm_start::{WarmStartCache, WarmStartScheme};
 
 #[cfg(feature = "lacam_escalation")]
-pub use lacam::{EscalationBudget, lacam_escalation_step};
+pub use lacam::{
+    CensusDepthRow, CensusLimits, CensusReport, EscalationBudget, lacam_constraint_tree_census,
+    lacam_escalation_step,
+};
 
 // ─────────────────────────────────────────────────────────────────────
 // CostFn trait — pluggable seam #1 (Plan 440 T1.2)

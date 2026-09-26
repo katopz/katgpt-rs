@@ -608,3 +608,648 @@ fn is_collision_free<P: Position>(moves: &[P], config: &JointConfig<P>) -> bool 
     }
     true
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Constraint-tree census (riir-ai Issue 1010 T1 — measurement-only).
+//
+// Counts, per constraint-tree depth: the constraint chains expanded, how
+// many admit a collision-free completion (live), how many are dead, and
+// how many DISTINCT joint configurations the live chains collapse to.
+// This is the pre-build duplicate-work measurement for the merged-frontier
+// arm: chains/consumers that re-derive the same configuration are exactly
+// the merge opportunity (and the dead share is what a modelless judge
+// could prune). Reuses the shipped tree mechanics verbatim (`Constraint`,
+// `get_new_config`, `is_collision_free`) so the census cannot drift from
+// the search it measures; the only behavioral difference is that it does
+// NOT early-return on the first success (production stops there).
+// ─────────────────────────────────────────────────────────────────────
+
+/// Exploration bounds for [`lacam_constraint_tree_census`].
+#[derive(Clone, Copy, Debug)]
+pub struct CensusLimits {
+    /// Maximum constraint-chain depth to explore. Chains AT this depth are
+    /// expanded; their children are not pushed. Capped at the escalation's
+    /// own depth semantics (`min(max_depth, stuck.len())` when
+    /// `target_stuck_agents`, else the agent count).
+    pub max_depth: usize,
+    /// Maximum total chains to expand — the deterministic runaway bound.
+    /// When hit, [`CensusReport::truncated`] is set (the tree was larger
+    /// than measured).
+    pub max_chains: usize,
+}
+
+impl Default for CensusLimits {
+    fn default() -> Self {
+        Self {
+            max_depth: 6,
+            max_chains: 50_000,
+        }
+    }
+}
+
+/// Per-depth census row: one level of the constraint tree.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CensusDepthRow {
+    /// Constraint-tree depth (0 = the empty root constraint).
+    pub depth: usize,
+    /// Constraint chains expanded at this depth.
+    pub chains: usize,
+    /// Chains whose expansion produced a collision-free joint action.
+    pub live: usize,
+    /// Chains that admit no collision-free completion in the one-step tree:
+    /// recursive PIBT rejected (some agent stuck — the ANY-agent-stuck
+    /// quantifier) or the produced action failed the vertex/edge check.
+    /// Connectivity ("goal unreachable") is deliberately NOT part of this
+    /// dead test — it is a separate optional pruner.
+    pub dead: usize,
+    /// Distinct joint configurations (agent-indexed next-position vectors)
+    /// among this depth's live chains — the merge-key space at this depth.
+    pub distinct_configs: usize,
+}
+
+impl CensusDepthRow {
+    /// Dead share at this depth in `[0, 1]` (0.0 when nothing was expanded).
+    pub fn dead_share(&self) -> f64 {
+        if self.chains == 0 {
+            return 0.0;
+        }
+        self.dead as f64 / self.chains as f64
+    }
+
+    /// Path-compression ratio at this depth: live chains per distinct
+    /// configuration (1.0 = every chain yields its own config; 0.0 when no
+    /// chain was live — the ratio is undefined for an all-dead depth).
+    pub fn compression(&self) -> f64 {
+        if self.distinct_configs == 0 {
+            return 0.0;
+        }
+        self.live as f64 / self.distinct_configs as f64
+    }
+}
+
+/// Full census of one escalation state's constraint tree.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CensusReport {
+    /// One row per explored depth, `0..=max_depth`.
+    pub rows: Vec<CensusDepthRow>,
+    /// Total chains expanded across all depths.
+    pub total_chains: usize,
+    /// Total live chains (collision-free completion found).
+    pub total_live: usize,
+    /// Total dead chains.
+    pub total_dead: usize,
+    /// Distinct configurations across ALL depths of this state (the union
+    /// key space a merged-frontier arm would store for this expansion).
+    pub distinct_configs_global: usize,
+    /// Stuck agents from the greedy PIBT pass — the escalation trigger.
+    /// `0` means the tree was never entered (greedy fast path).
+    pub stuck_agents: usize,
+    /// Depth at which the FIRST live chain was found in BFS order — i.e.
+    /// where the shipped early-return (`lacam_escalation_step`) stops.
+    /// `None` when no chain was live within the census bounds.
+    pub first_live_depth: Option<usize>,
+    /// True when `CensusLimits::max_chains` was hit before the tree was
+    /// fully explored.
+    pub truncated: bool,
+}
+
+impl CensusReport {
+    /// Whether the constraint tree was entered at all (`stuck >= 1`).
+    pub fn tree_entered(&self) -> bool {
+        self.stuck_agents >= MIN_STUCK_FOR_LACAM
+    }
+
+    /// Overall dead share in `[0, 1]` (0.0 when nothing was expanded).
+    pub fn dead_share(&self) -> f64 {
+        if self.total_chains == 0 {
+            return 0.0;
+        }
+        self.total_dead as f64 / self.total_chains as f64
+    }
+
+    /// Overall path-compression ratio: live chains per distinct
+    /// configuration (0.0 when nothing was live).
+    pub fn compression(&self) -> f64 {
+        if self.distinct_configs_global == 0 {
+            return 0.0;
+        }
+        self.total_live as f64 / self.distinct_configs_global as f64
+    }
+}
+
+/// Census the LaCAM constraint tree for one escalation state (Issue 1010
+/// T1 — duplicate-work measurement, no search behavior change).
+///
+/// Mirrors [`lacam_escalation_step`] phase-for-phase — same greedy trigger,
+/// same expansion order, same child generation, same `get_new_config` +
+/// collision check — except it never early-returns: every chain within the
+/// census bounds is expanded and counted. All randomness flows through the
+/// caller-supplied seeded `rng`; no global state is touched.
+#[allow(clippy::too_many_arguments)]
+pub fn lacam_constraint_tree_census<P, H>(
+    config: &JointConfig<P>,
+    guidance: &Guidance<P>,
+    goals: &[P],
+    priorities: &[f32],
+    hindrance: &mut H,
+    flow_field: &dyn FlowField<P>,
+    neighbors_fn: Option<&super::pibt::NeighborFn<P>>,
+    rng: &mut fastrand::Rng,
+    budget: EscalationBudget,
+    limits: CensusLimits,
+) -> CensusReport
+where
+    P: Position,
+    H: HindranceEstimator<P>,
+{
+    let n = config.n_agents();
+    let order = compute_priority_order(n, priorities);
+
+    // Phase A: greedy PIBT — the same escalation trigger the search uses.
+    let no_backers = vec![false; n];
+    let (_greedy_moves, stuck) = greedy_pibt_pass(
+        config,
+        guidance,
+        goals,
+        hindrance,
+        flow_field,
+        neighbors_fn,
+        rng,
+        &order,
+        &no_backers,
+    );
+
+    let mut report = CensusReport {
+        stuck_agents: stuck.len(),
+        ..CensusReport::default()
+    };
+    if !report.tree_entered() {
+        return report; // greedy fast path — the tree does not exist this tick
+    }
+
+    // Mirror the escalation's expansion order + depth semantics exactly.
+    let expansion_order: Vec<usize> = if budget.target_stuck_agents {
+        stuck.iter().map(|a| a.0 as usize).collect()
+    } else {
+        order.clone()
+    };
+    let expansion_depth_cap = if budget.target_stuck_agents {
+        budget.max_depth.min(expansion_order.len())
+    } else {
+        n
+    };
+    let census_depth_cap = limits.max_depth.min(expansion_depth_cap);
+
+    let mut queue = ConstraintQueue::<P>::with_capacity(1024);
+    queue.push(Constraint::empty());
+
+    let mut current_to_agent: HashMap<P, usize> = HashMap::with_capacity(n);
+    for (i, pos) in config.positions.iter().enumerate() {
+        current_to_agent.entry(pos.clone()).or_insert(i);
+    }
+
+    let mut chains_per_depth = vec![0usize; census_depth_cap + 1];
+    let mut live_per_depth = vec![0usize; census_depth_cap + 1];
+    let mut dead_per_depth = vec![0usize; census_depth_cap + 1];
+    let mut distinct_per_depth: Vec<HashSet<Vec<P>>> =
+        (0..=census_depth_cap).map(|_| HashSet::new()).collect();
+    let mut distinct_global: HashSet<Vec<P>> = HashSet::new();
+
+    while let Some(constraint) = queue.pop() {
+        if report.total_chains >= limits.max_chains {
+            report.truncated = true;
+            break;
+        }
+        let depth = constraint.depth();
+
+        // Push children FIRST — mirrors the shipped loop (children are
+        // queued regardless of this chain's expansion outcome).
+        if depth < census_depth_cap {
+            let i = expansion_order[depth];
+            let current = config.pos(AgentId(i as u32));
+            let neighbors: Vec<P> = if let Some(f) = neighbors_fn {
+                f(current)
+            } else {
+                current.neighbors()
+            };
+            // Fisher-Yates shuffle with seeded rng (same as the escalation).
+            let mut shuffled: Vec<P> = neighbors;
+            for k in (1..shuffled.len()).rev() {
+                let j = rng.usize(0..=k);
+                shuffled.swap(k, j);
+            }
+            for cell in shuffled {
+                queue.push(constraint.child(i, cell));
+            }
+        }
+
+        // Expand this chain: forced assignments + recursive PIBT, then the
+        // vertex/edge check. Live = collision-free completion exists.
+        chains_per_depth[depth] += 1;
+        report.total_chains += 1;
+        match get_new_config(
+            config,
+            &constraint,
+            guidance,
+            goals,
+            hindrance,
+            flow_field,
+            neighbors_fn,
+            rng,
+            &order,
+            &current_to_agent,
+        ) {
+            Ok(moves) if is_collision_free(&moves, config) => {
+                live_per_depth[depth] += 1;
+                report.total_live += 1;
+                if report.first_live_depth.is_none() {
+                    report.first_live_depth = Some(depth);
+                }
+                distinct_per_depth[depth].insert(moves.clone());
+                distinct_global.insert(moves);
+            }
+            _ => {
+                dead_per_depth[depth] += 1;
+                report.total_dead += 1;
+            }
+        }
+    }
+
+    report.distinct_configs_global = distinct_global.len();
+    report.rows = (0..=census_depth_cap)
+        .map(|d| CensusDepthRow {
+            depth: d,
+            chains: chains_per_depth[d],
+            live: live_per_depth[d],
+            dead: dead_per_depth[d],
+            distinct_configs: distinct_per_depth[d].len(),
+        })
+        .collect();
+    report
+}
+
+#[cfg(test)]
+mod census_tests {
+    use super::*;
+    use crate::multi_agent_path::NeighborFn;
+    use crate::multi_agent_path::local_guidance::LocalGuidanceSource;
+    use crate::multi_agent_path::{
+        BlockingCount, GridMap, GridPos, GuidanceConfig, NoFlow, SpaceTimeGuidance,
+    };
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
+
+    /// Aggregated per-depth counters across many census states (ticks).
+    #[derive(Default)]
+    struct DepthAgg {
+        chains: usize,
+        live: usize,
+        dead: usize,
+        /// Σ of per-state distinct counts (per-expansion-state distinctness,
+        /// summed — NOT a cross-state dedup; states are unrelated).
+        distinct: usize,
+    }
+
+    struct WorkloadAgg {
+        rows: Vec<DepthAgg>,
+        total_chains: usize,
+        total_live: usize,
+        total_dead: usize,
+        distinct_sum: usize,
+        /// Census states explored (ticks where the tree was entered).
+        states: usize,
+        tree_entered_ticks: usize,
+        max_stuck: usize,
+        first_live_hist: BTreeMap<usize, usize>,
+        truncated_any: bool,
+    }
+
+    impl WorkloadAgg {
+        fn new(max_depth: usize) -> Self {
+            Self {
+                rows: (0..=max_depth).map(|_| DepthAgg::default()).collect(),
+                total_chains: 0,
+                total_live: 0,
+                total_dead: 0,
+                distinct_sum: 0,
+                states: 0,
+                tree_entered_ticks: 0,
+                max_stuck: 0,
+                first_live_hist: BTreeMap::new(),
+                truncated_any: false,
+            }
+        }
+
+        fn push(&mut self, r: &CensusReport) {
+            if !r.tree_entered() {
+                return; // greedy fast path this tick — no tree, nothing to count
+            }
+            self.tree_entered_ticks += 1;
+            self.max_stuck = self.max_stuck.max(r.stuck_agents);
+            self.states += 1;
+            self.total_chains += r.total_chains;
+            self.total_live += r.total_live;
+            self.total_dead += r.total_dead;
+            self.distinct_sum += r.distinct_configs_global;
+            self.truncated_any |= r.truncated;
+            if let Some(d) = r.first_live_depth {
+                *self.first_live_hist.entry(d).or_insert(0) += 1;
+            }
+            for row in &r.rows {
+                let agg = &mut self.rows[row.depth];
+                agg.chains += row.chains;
+                agg.live += row.live;
+                agg.dead += row.dead;
+                agg.distinct += row.distinct_configs;
+            }
+        }
+
+        fn print(&self, name: &str, grid: &str, agents: usize, ticks: usize) {
+            println!(
+                "workload={name} grid={grid} agents={agents} ticks_simulated={ticks} \
+                 tree_entered={}/{} census_states={} max_stuck={} truncated={}",
+                self.tree_entered_ticks,
+                ticks,
+                self.states,
+                self.max_stuck,
+                self.truncated_any,
+            );
+            if self.states == 0 {
+                println!("  (greedy fast path on every tick — constraint tree never entered)");
+                return;
+            }
+            // NOTE: per-depth compression is structurally 1.0 — two chains at
+            // the same depth differ in a forced cell, so their configs differ
+            // at that agent. The merge-relevant collapse is CROSS-DEPTH and is
+            // therefore read off the TOTAL line only (live chains vs the
+            // distinct-config union). Collapse is measured under the shipped
+            // rng tiebreaks (a same-semantics chain whose PIBT epsilons flip a
+            // near-tie counts as a distinct config — the honest, exploitable
+            // number).
+            println!("  depth | chains |   live |   dead | dead%   | distinct*");
+            for (d, agg) in self.rows.iter().enumerate() {
+                if agg.chains == 0 {
+                    continue;
+                }
+                println!(
+                    "  {d:>5} | {a:>6} | {l:>6} | {x:>6} | {:>6.1}% | {ds:>9}",
+                    100.0 * agg.dead as f64 / agg.chains as f64,
+                    a = agg.chains,
+                    l = agg.live,
+                    x = agg.dead,
+                    ds = agg.distinct,
+                );
+            }
+            let compr_total = if self.distinct_sum == 0 {
+                0.0
+            } else {
+                self.total_live as f64 / self.distinct_sum as f64
+            };
+            let c_le2: usize = self.rows.iter().take(3).map(|a| a.chains).sum();
+            let d_le2: usize = self.rows.iter().take(3).map(|a| a.dead).sum();
+            let dead_le2 = if c_le2 == 0 {
+                0.0
+            } else {
+                100.0 * d_le2 as f64 / c_le2 as f64
+            };
+            println!(
+                "  TOTAL: chains={} live={} dead={} dead-share={:.1}% distinct*={} compression={:.2}x | dead-share(≤depth2)={:.1}% | first-live-depth hist {:?}",
+                self.total_chains,
+                self.total_live,
+                self.total_dead,
+                100.0 * self.total_dead as f64 / self.total_chains.max(1) as f64,
+                self.distinct_sum,
+                compr_total,
+                dead_le2,
+                self.first_live_hist,
+            );
+        }
+    }
+
+    /// Simulate `ticks` ticks with the production one-step search and census
+    /// every tick's constraint tree (dedicated seeded census RNG per tick —
+    /// the census never perturbs the simulated state).
+    #[allow(clippy::too_many_arguments)]
+    fn run_census_workload(
+        map: &GridMap,
+        starts: Vec<GridPos>,
+        goals: Vec<GridPos>,
+        guidance_cfg: GuidanceConfig,
+        ticks: usize,
+        sim_seed: u64,
+        limits: CensusLimits,
+    ) -> WorkloadAgg {
+        let n = starts.len();
+        let mut guidance = SpaceTimeGuidance::new(guidance_cfg).with_neighbors({
+            let m = map.clone();
+            move |p| m.passable_neighbors(p)
+        });
+        let mut hindrance = BlockingCount::new();
+        let priorities = vec![1.0f32; n];
+        let map_arc = Arc::new(map.clone());
+        let neighbor_fn = move |p: &GridPos| map_arc.passable_neighbors(p);
+
+        let mut agg = WorkloadAgg::new(limits.max_depth);
+        let mut current = JointConfig::new(starts);
+        let mut sim_rng = fastrand::Rng::with_seed(sim_seed);
+
+        for tick in 0..ticks {
+            let mut scratch: Guidance<GridPos> = Vec::new();
+            guidance.compute_guidance(&current, &goals, &mut scratch);
+            let nf: &NeighborFn<GridPos> = &neighbor_fn;
+
+            // Census FIRST on this tick's state, with its own rng stream.
+            let mut census_rng = fastrand::Rng::with_seed(101_000 + tick as u64);
+            let report = lacam_constraint_tree_census(
+                &current,
+                &scratch,
+                &goals,
+                &priorities,
+                &mut hindrance,
+                &NoFlow,
+                Some(nf),
+                &mut census_rng,
+                EscalationBudget::default(),
+                limits,
+            );
+            agg.push(&report);
+
+            // Then advance the simulated state with the production search.
+            let action = lacam_escalation_step(
+                &current,
+                &scratch,
+                &goals,
+                &priorities,
+                &mut hindrance,
+                &NoFlow,
+                Some(nf),
+                &mut sim_rng,
+                EscalationBudget::default(),
+            );
+            current = JointConfig::new(action.moves);
+        }
+        agg
+    }
+
+    fn census_verdict(agg: &WorkloadAgg) -> String {
+        if agg.states == 0 {
+            return "N/A (constraint tree never entered)".to_string();
+        }
+        let compr = if agg.distinct_sum == 0 {
+            0.0
+        } else {
+            agg.total_live as f64 / agg.distinct_sum as f64
+        };
+        let c_le2: usize = agg.rows.iter().take(3).map(|a| a.chains).sum();
+        let d_le2: usize = agg.rows.iter().take(3).map(|a| a.dead).sum();
+        let dead_le2 = if c_le2 == 0 {
+            0.0
+        } else {
+            d_le2 as f64 / c_le2 as f64
+        };
+        let compr_ok = compr >= 3.0;
+        let dead_ok = dead_le2 >= 0.5;
+        let legs = format!(
+            "compr={compr:.2}x (>=3x:{compr_ok}) dead<=d2={:.1}% (>=50%:{dead_ok})",
+            100.0 * dead_le2
+        );
+        let verdict = match (compr_ok, dead_ok) {
+            (true, true) => "GO",
+            (false, false) => "NEGATIVE",
+            _ => "MIXED",
+        };
+        format!("{verdict} [{legs}]")
+    }
+
+    /// Issue 1010 T1 — constraint-tree duplicate-work census over three
+    /// representative workloads. Prints the tables (read with `--nocapture`);
+    /// asserts only structural sanity (the census is non-vacuous on the
+    /// congested workload), never the GO/NEGATIVE gate itself.
+    #[test]
+    fn constraint_tree_census_tables() {
+        println!("=== LaCAM constraint-tree census — riir-ai Issue 1010 T1 ===");
+        println!("mode: production default budget (paper-faithful BFS over priority order)");
+
+        // W1 — open map, 10 agents (shape of tests.rs `test_throughput_sanity`).
+        let w1 = run_census_workload(
+            &GridMap::empty(10, 10),
+            (0..10).map(|i| GridPos::new(i, 0)).collect(),
+            (0..10).map(|i| GridPos::new(i, 9)).collect(),
+            GuidanceConfig {
+                w_phi: 5,
+                alpha: 2.0,
+                rounds: 2,
+                max_expansions: 0,
+            },
+            30,
+            123,
+            CensusLimits {
+                max_depth: 5,
+                max_chains: 20_000,
+            },
+        );
+        w1.print("open10", "10x10", 10, 30);
+
+        // W2 — congested bottleneck, 60 agents (shape of bench_453's G6c
+        // scenario: 20x20, wall at x=10, 6-cell gap rows 7..=12).
+        let mut map = GridMap::empty(20, 20);
+        for y in 0..20 {
+            if !(7..=12).contains(&y) {
+                map.set_wall(10, y);
+            }
+        }
+        let left: Vec<GridPos> = (0..20)
+            .flat_map(|y| (0..10).map(move |x| GridPos::new(x, y)))
+            .filter(|p| map.is_passable(p.x, p.y))
+            .collect();
+        let right: Vec<GridPos> = (0..20)
+            .flat_map(|y| (11..20).map(move |x| GridPos::new(x, y)))
+            .filter(|p| map.is_passable(p.x, p.y))
+            .collect();
+        let starts: Vec<GridPos> = left.iter().take(60).cloned().collect();
+        let goals: Vec<GridPos> = (0..60).map(|i| right[i % right.len()]).collect();
+        let w2 = run_census_workload(
+            &map,
+            starts,
+            goals,
+            GuidanceConfig {
+                w_phi: 5,
+                alpha: 1.0,
+                rounds: 2,
+                max_expansions: 0,
+            },
+            40,
+            7,
+            CensusLimits {
+                max_depth: 5,
+                max_chains: 20_000,
+            },
+        );
+        w2.print("bottleneck60", "20x20-gap6", 60, 40);
+        // Non-vacuousness floor: the congested workload MUST exercise the tree.
+        assert!(
+            w2.states > 0,
+            "bottleneck60 census is vacuous — constraint tree never entered"
+        );
+        assert!(w2.total_chains > 0);
+
+        // W3 — 1-wide corridor deadlock, 2 agents (shape of tests.rs
+        // `test_deadlock_corridor_falls_back_to_wait`).
+        let w3 = run_census_workload(
+            &GridMap::empty(3, 1),
+            vec![GridPos::new(0, 0), GridPos::new(2, 0)],
+            vec![GridPos::new(2, 0), GridPos::new(0, 0)],
+            GuidanceConfig::default(),
+            10,
+            7,
+            CensusLimits {
+                max_depth: 3,
+                max_chains: 1_000,
+            },
+        );
+        w3.print("corridor2", "3x1", 2, 10);
+
+        println!("=== census gate read (compression ≥3x AND dead-share≤d2 ≥50% => GO) ===");
+        for (name, agg) in [("open10", &w1), ("bottleneck60", &w2), ("corridor2", &w3)] {
+            println!("  {name}: {}", census_verdict(agg));
+        }
+
+        // Determinism: identical seeds must reproduce identical aggregates.
+        let mut map = GridMap::empty(20, 20);
+        for y in 0..20 {
+            if !(7..=12).contains(&y) {
+                map.set_wall(10, y);
+            }
+        }
+        let left: Vec<GridPos> = (0..20)
+            .flat_map(|y| (0..10).map(move |x| GridPos::new(x, y)))
+            .filter(|p| map.is_passable(p.x, p.y))
+            .collect();
+        let right: Vec<GridPos> = (0..20)
+            .flat_map(|y| (11..20).map(move |x| GridPos::new(x, y)))
+            .filter(|p| map.is_passable(p.x, p.y))
+            .collect();
+        let w2_rerun = run_census_workload(
+            &map,
+            left.iter().take(60).cloned().collect(),
+            (0..60).map(|i| right[i % right.len()]).collect(),
+            GuidanceConfig {
+                w_phi: 5,
+                alpha: 1.0,
+                rounds: 2,
+                max_expansions: 0,
+            },
+            40,
+            7,
+            CensusLimits {
+                max_depth: 5,
+                max_chains: 20_000,
+            },
+        );
+        assert_eq!(w2.total_chains, w2_rerun.total_chains);
+        assert_eq!(w2.total_live, w2_rerun.total_live);
+        assert_eq!(w2.total_dead, w2_rerun.total_dead);
+        assert_eq!(w2.distinct_sum, w2_rerun.distinct_sum);
+        assert_eq!(w2.states, w2_rerun.states);
+    }
+}
