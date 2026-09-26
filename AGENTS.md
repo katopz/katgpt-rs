@@ -3113,8 +3113,8 @@ directory, not command line; a lock-based check cannot work (cargo releases
 
 ## Lint healing — `cargo heal` before manual fixes (adopted 2026-08-24)
 
-Mechanical clippy findings (format-arg inlining, `match_bool`, `map_or`,
-capacity, `needless_return`, …) are fixed by the riir-clippy healer FIRST,
+Mechanical clippy findings (`needless_return`, `unnecessary_map_or`,
+capacity, `collapsible_if`, …) are fixed by the riir-clippy healer FIRST,
 manual second:
 
 ```bash
@@ -3132,13 +3132,16 @@ cargo heal --fix --write --verify --verify-args "--features <set>" <paths>  # ga
   edits. Feature-gated code needs `--verify-args "--features <set>"` (a
   default-features check compiles gated files empty — a green check proves
   nothing about them).
-- ⚠ **Allow-by-default lints need `--groups` here** (riir-clippy Issue 135):
-  `match_bool`, `map_unwrap_or`, `uninlined_format_args`, `doc_markdown` and
-  the rest of the pedantic/nursery fix set are healed ONLY where the target
-  crate enables the lint or its group (`[lints.clippy]`, inherited
-  `[workspace.lints.clippy]`, crate-root/file `#![warn(clippy::…)]`) —
-  otherwise skipped loudly. katgpt-rs enables no pedantic group, so healing
-  those classes takes `cargo heal --fix --groups pedantic <paths>`.
+- **The healer fixes only what THIS repo's clippy reports** (riir-clippy
+  Issue 135). Pedantic/nursery lints (`match_bool`, `map_unwrap_or`,
+  `uninlined_format_args`, `doc_markdown`, …) are healed only where the
+  target crate enables the lint or its group (`[lints.clippy]`, inherited
+  `[workspace.lints.clippy]`, crate-root/file `#![warn(clippy::…)]`), and
+  are otherwise skipped with a `lint-level: skipped …` line. katgpt-rs
+  enables none of them (checked 2026-09-26: no manifest, crate root, script,
+  workflow or full-gate `-D` flag). Its clippy never reports them, so a skip
+  here is correct, not lost coverage. `--groups pedantic` exists for a
+  deliberate style pass; it is not part of the routine heal.
 - The healer is deliberately SILENT on documented divergence classes
   (comment-guarded matches, array-literal defaults, named-arg renames,
   nested macro args) — those stay manual; see the `cargo-heal` skill
