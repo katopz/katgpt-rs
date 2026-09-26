@@ -2291,6 +2291,14 @@ pub mod convergence_cadence;
 #[cfg(feature = "cadence_gate")]
 pub use convergence_cadence::{CadenceConfig, CadenceVerdict, ConvergenceCadence};
 
+// Issue 898 — KL effective depth probe (arXiv:2609.19107, Research 592):
+// offline logit-lens KL profile, effective depth, write-fraction spectrum,
+// loop flatness, executed-depth histogram and the holdout threshold
+// calibration for the looped runtime's hand-tuned depth knobs. Pure
+// functions over caller slices; fed by `LoopDeepRun::capture_logits`.
+#[cfg(feature = "kl_depth_probe")]
+pub mod loop_depth_probe;
+
 // Issue 740 — Regime probes for frozen predictors (Research 541, arXiv:2604.26841
 // UDDMs-as-associative-memories): per-position conditional entropy (shared
 // logsumexp kernel with breakeven/fidelity), two-sample entropy-gap detector,

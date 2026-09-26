@@ -787,11 +787,11 @@ cache.advance_pos(pos);
                 run.stats.state_non_finite_at = Some(run.stats.snapshots_taken - 1);
             }
             if run.capture_states {
-                run.stats.state_snapshots.push(x.to_vec());
+                run.stats.push_state(x);
             }
-            if run.check_logits {
-                // Logit-finite tripwire: one extra `lm_head` matmul per
-                // snapshot, opt-in (`check_logits`). Scratch grown once,
+            if run.check_logits || run.capture_logits {
+                // Logit-finite tripwire / Issue 898 logit lens: one extra
+                // `lm_head` matmul per snapshot, opt-in. Scratch grown once,
                 // reused thereafter.
                 run.logit_scratch.resize(config.vocab_size, 0.0);
                 standard_lm_head(
@@ -801,10 +801,14 @@ cache.advance_pos(pos);
                     config.vocab_size,
                     n,
                 );
-                if run.stats.logits_non_finite_at.is_none()
+                if run.check_logits
+                    && run.stats.logits_non_finite_at.is_none()
                     && run.logit_scratch.iter().any(|l| !l.is_finite())
                 {
                     run.stats.logits_non_finite_at = Some(run.stats.snapshots_taken - 1);
+                }
+                if run.capture_logits {
+                    run.stats.push_logits(&run.logit_scratch);
                 }
             }
         }

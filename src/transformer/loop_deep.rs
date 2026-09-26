@@ -54,6 +54,17 @@ pub struct LoopDeepStats {
     /// Test/probe fuel: tangential/radial decomposition, direction-drift
     /// diagnostics, multiplier estimation.
     pub state_snapshots: Vec<Vec<f32>>,
+    /// Issue 898 — readout logits at each snapshot, flattened with stride
+    /// [`Self::logit_stride`] (only when `capture_logits`). Logit-lens fuel
+    /// for `katgpt_core::loop_depth_probe` (KL profile vs the final readout).
+    /// Read through [`Self::logit_snapshot`] / [`Self::logit_snapshots`].
+    pub logit_snapshot_buf: Vec<f32>,
+    /// Row length of `logit_snapshot_buf` (the vocab size; 0 until the first
+    /// capture).
+    pub logit_stride: usize,
+    /// Inner buffers retired by [`Self::clear`], reused by the next
+    /// `capture_states` snapshot so steady-state capture allocates nothing.
+    spare_states: Vec<Vec<f32>>,
 }
 
 impl LoopDeepStats {
@@ -64,11 +75,47 @@ impl LoopDeepStats {
         self.state_norms.clear();
         self.state_non_finite_at = None;
         self.logits_non_finite_at = None;
-        // `clear` on the outer Vec would DROP the inner buffers and force
-        // re-allocation on the next capture; reuse them instead.
-        for s in &mut self.state_snapshots {
-            s.clear();
+        // Retire the inner buffers to the spare pool rather than dropping
+        // them (re-allocation on the next capture) or clearing them in place
+        // (Issue 898: that left the OUTER length intact, so the next call's
+        // snapshots were appended after empty stale entries).
+        self.spare_states.append(&mut self.state_snapshots);
+        self.logit_snapshot_buf.clear();
+    }
+
+    /// Record one state snapshot, reusing a retired buffer when available.
+    pub(crate) fn push_state(&mut self, x: &[f32]) {
+        let mut buf = self.spare_states.pop().unwrap_or_default();
+        buf.clear();
+        buf.extend_from_slice(x);
+        self.state_snapshots.push(buf);
+    }
+
+    /// Record one logit snapshot (row length fixed by the first call).
+    pub(crate) fn push_logits(&mut self, logits: &[f32]) {
+        self.logit_stride = logits.len();
+        self.logit_snapshot_buf.extend_from_slice(logits);
+    }
+
+    /// Number of captured logit snapshots.
+    pub fn logit_snapshot_count(&self) -> usize {
+        match self.logit_stride {
+            0 => 0,
+            s => self.logit_snapshot_buf.len() / s,
         }
+    }
+
+    /// Logits captured at snapshot `i`, or `None` when out of range.
+    pub fn logit_snapshot(&self, i: usize) -> Option<&[f32]> {
+        let s = self.logit_stride;
+        (i < self.logit_snapshot_count()).then(|| &self.logit_snapshot_buf[i * s..(i + 1) * s])
+    }
+
+    /// Every captured logit snapshot, in loop order.
+    pub fn logit_snapshots(&self) -> impl Iterator<Item = &[f32]> {
+        // `max(1)` keeps `chunks_exact` total before the first capture (the
+        // buffer is empty then, so it yields nothing either way).
+        self.logit_snapshot_buf.chunks_exact(self.logit_stride.max(1))
     }
 }
 
@@ -88,6 +135,10 @@ pub struct LoopDeepRun {
     /// finiteness (the logit-finite tripwire; one `lm_head` matmul per
     /// snapshot, opt-in).
     pub check_logits: bool,
+    /// Issue 898 — also copy the readout logits at each snapshot into
+    /// `stats.logit_snapshot_buf` (the logit lens; shares the tripwire's
+    /// `lm_head` matmul). Off by default; `false` is bit-identical.
+    pub capture_logits: bool,
     /// Collected stats (read after the call).
     pub stats: LoopDeepStats,
     /// Scratch for the logit tripwire (grown once, then reused). The only
@@ -113,6 +164,7 @@ impl LoopDeepRun {
             snapshot_every,
             capture_states: false,
             check_logits: true,
+            capture_logits: false,
             stats: LoopDeepStats::default(),
             logit_scratch: Vec::new(),
             #[cfg(feature = "lt2_deep_stability")]

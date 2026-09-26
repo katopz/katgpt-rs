@@ -399,6 +399,10 @@ cond_audit = ["stale_residual"]
 # `b18b7b2bb`) + T3 (mmorpg Issue 054 L2 consumer, riir-ai `681786288` +
 # mmorpg `8c99624`) LANDED; promotion per the no-default-consumer rule.
 cadence_gate = []
+# Issue 898 — KL effective depth probe (Research 592, arXiv:2609.19107): offline
+# logit-lens KL profile + effective depth, write-fraction spectrum, loop
+# flatness, executed-depth histogram, holdout threshold calibration. Opt-in.
+kl_depth_probe = []
 
 # saddle_escape (Plan 593 / Research 546, arXiv:2609.04963 "Fractal basins trap
 # latent reasoning"): three-way Continue / Halt{Converged} / Halt{Trapped} /

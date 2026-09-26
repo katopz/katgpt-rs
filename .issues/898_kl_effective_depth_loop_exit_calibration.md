@@ -1,6 +1,6 @@
 # Issue 898: KL Effective Depth — Measured Exit Calibration for the Looped Runtime
 
-**Status:** Open — unassigned, normal katgpt-rs work item
+**Status:** Open — instrument half LANDED 2026-09-26 ([Bench 899](../.benchmarks/899_kl_effective_depth_goat.md), commit in the Tasks list): G1 PASS on 3 micro fixtures (holdout ±1 loop 1.000/0.969/0.844, fit 1.0 nat interior after the first grid hit its edge), lens premise + kill-switch + G1b + G4 PASS, no Config default justified (calibrated p95 exit 2/6/4 of 8 — checkpoint-dependent). Remaining: the contingent BO arm only, BLOCKED on a BO-trained checkpoint (riir-train `.plans/421` Phase 4).
 **Source:** [arXiv:2609.19107](https://arxiv.org/abs/2609.19107) "How Model Growth, Recursion, and Boundary Operators Influence Scaling Exponents" — distillation: [`.research/592`](../.research/592_Loop_Growth_Scaling_Exponents.md)
 **Class:** poc + optimization (measurement instrument + config calibration)
 **Cousins:** Plan 428 (`loop_stability_fix` — the Norm(h) half of the boundary operator, shipped), Plan 304 (`gain_cost_halt`), Research 273 / the ELT any-time-exit implementation in `forward_looped` (the Issue-035 work landed as code + Research 273; the issue file was removed per the noise-reduction rule), Issue 568 (injection NO TRANSFER — hazards the contingent arm below, record: `negative_results.md` §22)
@@ -41,3 +41,16 @@ Also recorded (testable prior, not a default): the paper's K*=4 growth target �
 ## Validation
 
 Probe determinism on frozen fixtures (byte-identical per-layer KL vectors); calibration holdout arm above; every existing looped gate (`goat_108_lt2_looped`, `issue_035_any_time_lt2_dispatch`, `goat_428`, `issue_717_*`) green with the feature off.
+
+## Tasks
+
+- [x] T1 KL effective depth probe — `katgpt_core::loop_depth_probe` (`kl_from_logits`, `kl_profile`, `effective_depth`), fed by `LoopDeepRun::capture_logits` (shares the Issue-717 tripwire matmul). Lens premise measured bit-exact: loop-τ snapshot == exit-at-(τ+1) readout at pos 0.
+- [x] T2 Loop-flatness score — `spread`; loss-vs-k spread 0.45 / 0.88 / 0.80 nats on the three fixtures (Bench 899).
+- [x] T3 Write-fraction spectrum — `write_fractions` + `stall_onset`. ⛔ Finding: on these fixtures the state keeps writing 25–52 % of its norm on the step that settles the argmax, and the stable-gate fixtures never stall at ε=1e-3, so no write-fraction ε finds the readout's exit (a halt that tracks the readout has to measure in logit space).
+- [x] T4 Executed-depth histogram — `DepthHistogram<N>` (fixed buckets, allocation-free).
+- [x] G1 holdout calibration — `agreement_exit` oracle + `fit_threshold` (half A) + `holdout_hit_rate` (half B). STRUCTURED branch, PASS.
+- [x] R9 retuned vs transferred — reported; the negative control could not tell the arms apart (all three fits land on 1.0 nat — the threshold transfers, the exit depth does not).
+- [x] G1b / G2 / G4 / kill-switch — see Bench 899. G4 surfaced and fixed a latent Issue-717 `LoopDeepStats::clear()` defect (stale empty entries under `capture_states`).
+- [x] Validation — `goat_108_lt2_looped` 11/11, `issue_035_any_time_lt2_dispatch` 13/13, `goat_428_loop_stability` 1/1, `issue_717_*` 3/3 + 5/5 green with the feature off.
+- [x] Output — calibrated defaults: **none changed** (checkpoint-dependent; `loop_max = 0` → "use loop_mode's count" stands). Feature stays opt-in (a measurement instrument, not a promotion candidate).
+- [ ] Contingent BO arm — BLOCKED on a BO-trained checkpoint (riir-train `.plans/421` Phase 4); Issue 568's `riir-poc/loop_injection_poc.rs` stays the regression check.
