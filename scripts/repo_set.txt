@@ -5,6 +5,7 @@
 # scripts/skill_repo_set_gate.py FAILS on the workstation if this drifts.
 katgpt-rs
 katgpt-web
+reflex-site
 riir-ai
 riir-auth
 riir-chain

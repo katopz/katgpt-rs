@@ -110,4 +110,5 @@ mmorpg-remake                30            100              0
 # DEFINITION changed reads that drop as a catastrophe.
 riir-reflex                   8              7              0  # observed 2026-09-21: joined the workspace 2026-09-21 (Plan 603 T1.1 registration, owner-delegated repo birth); cfg_sites re-pinned 9->7 same session from the sweep's own measurement (the gate's outer-#[cfg] counter does not count #![cfg]-gated TARGET headers the way the first hand count did — 7 is the measured outer-site count over the 8 tracked .rs)
 riir-reflexer 0 0 0  # observed 2026-09-25: born public today (Research 457 P1 registration); md-only, no code yet; no .rs
+reflex-site 8 12 0  # observed 2026-09-26: joined the contract set today (BOUNDARY.md at reflex-site 89fa39c; findings repaired at 5eb0ae9/466e331/afdacd6 before pinning); 8 .rs (wasm-head), 12 cfg sites, 0 orphaned
 riir-infer                    52             302            0 # observed 2026-09-22: joined the workspace 2026-09-22 (riir-ai Issue 998 / reflex Issue 008 carve — Proposal 041 T-B fired)

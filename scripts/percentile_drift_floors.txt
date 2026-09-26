@@ -107,4 +107,5 @@ mmorpg-remaster       248      2    0      0       0     0  # Issue 842: 335 -> 
 mmorpg-remake                   15      0    0      0       0     0
 riir-reflex                  8      0    0      0       0     0  # observed 2026-09-21: joined the workspace 2026-09-21 (Plan 603 T1.1 registration, owner-delegated repo birth)
 riir-reflexer 0 0 0 0 0 0  # observed 2026-09-25: born public today (Research 457 P1 registration); md-only, no code yet; no .rs
+reflex-site 8 0 0 0 0 0  # observed 2026-09-26: joined the contract set today (BOUNDARY.md at reflex-site 89fa39c; findings repaired at 5eb0ae9/466e331/afdacd6 before pinning); 8 .rs, no percentile sites
 riir-infer                   52     0    0      0       0     0 # observed 2026-09-22: joined the workspace 2026-09-22 (riir-ai Issue 998 / reflex Issue 008 carve — Proposal 041 T-B fired)
