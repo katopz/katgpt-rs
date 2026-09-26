@@ -68,6 +68,17 @@ checks it: every repo it pins must still carry a NON-ZERO `min_rs_files` row in
 `orphaned_attr_drift_floors.txt`, and the sweep reds if that column is ever
 dropped or zeroed. Delegation asserted, not trusted.
 
+⛔ One MEASURED exception (Issue 902): a repo born md-only — no tracked `.rs`
+at all (riir-instinct) — has a TRUTHFUL zero row, and reding on it forever is
+the cries-wolf state Issue 793 forbids. The zero row is accepted only while
+`tracked_walk` (the ONE walk, Issue 777) measures ZERO tracked `.rs` in that
+repo, re-measured EVERY run; the first `.rs` to land reds exactly as a zeroed
+row on a code repo does. The acceptance prints, it is never silent. (It also
+catches the stale premise in the other direction: riir-reflexer was registered
+md-only 2026-09-25, but its vessel workspace had landed 16 tracked `.rs` by the
+time this shipped — the measurement refused the zero row and the rows were
+re-pinned in the same commit.)
+
 What this sweep owns that no other one can
 -------------------------------------------
 `min_kernels` and `min_binds`, the PARSE floors. They move when the classifier
@@ -144,7 +155,8 @@ sys.path.insert(0, str(HERE))
 # sweep and the report can never disagree about what any bucket MEANS.
 import len_derived_binding_audit as lda  # noqa: E402
 from skill_repo_set_gate import derive_repos as derive_repo_names  # noqa: E402
-from sweep_population import population_verdict, pin_row_exempt  # noqa: E402
+from sweep_population import (  # noqa: E402
+    population_verdict, pin_row_exempt, zero_walk_floor_accepted)
 from worktree_state import (  # noqa: E402
     HeadDelta, deferral_line, delta_of, dirty_in_population, head_tree,
     sweep_advisory)
@@ -709,7 +721,7 @@ def canary() -> int:
     results = []
 
     def arm(name, want_rc, want_text, pins=None, eyes=None, delg=None,
-            classify=None, argv=("--no-stability",)):
+            classify=None, argv=("--no-stability",), zero_ok=None):
         global PINS, EYES, DELEGATED_WALK_PINS
         PINS, EYES, DELEGATED_WALK_PINS = td / "p.txt", td / "e.txt", td / "d.txt"
         PINS.write_text(pins if pins is not None else pins_src, encoding="utf-8")
@@ -717,6 +729,16 @@ def canary() -> int:
         DELEGATED_WALK_PINS.write_text(
             delg if delg is not None else delg_src, encoding="utf-8")
         lda.classify_workspace = classify or (lambda repos: base)
+        real_zero = globals()["zero_walk_floor_accepted"]
+        if zero_ok is not None:
+            # Issue-902 wiring arms only: no real repo on any box is md-only
+            # forever, so the acceptance side is stubbed and the predicate's
+            # own arms live in sweep_population.selftest. Arm 8 below stays on
+            # the REAL predicate — a zeroed row on a code repo must still red
+            # through the measurement, which is the direction that must never
+            # loosen.
+            globals()["zero_walk_floor_accepted"] = (
+                lambda repo: (True, "stub: 0 tracked .rs (canary)"))
         # ⛔ The Issue-822 provenance seam is STUBBED here, and the cost is why
         # (measured: the first run of this canary took >120s and was killed).
         # Every arm re-enters `main()`, so without this each one materialises a
@@ -734,6 +756,7 @@ def canary() -> int:
         finally:
             PINS, EYES, DELEGATED_WALK_PINS = real
             lda.classify_workspace = real_classify
+            globals()["zero_walk_floor_accepted"] = real_zero
             globals()["adjudicate"] = real_adj
             globals()["adjudicate_arms"] = real_arms
         ok = rc == want_rc and want_text in out
@@ -747,10 +770,12 @@ def canary() -> int:
     # 0. the unperturbed baseline must be GREEN, or every red below is vacuous.
     arm("baseline green", 0, "len-derived sweep PASSED")
 
-    # 1-2. the two parse floors, one per non-vacuous repo.
+    # 1-2. the two parse floors, one per non-vacuous repo. (Arm 1's anchor
+    #      moved with the 2026-09-26 riir-ai re-pin: 6 measured kernels,
+    #      floor typed above it.)
     arm("min_kernels floor reds", 1, "parse FLOOR breached",
-        pins=sub(pins_src, "riir-ai                         23         78",
-                 "riir-ai                         44         78"))
+        pins=sub(pins_src, "riir-ai                          6         10",
+                 "riir-ai                         99         10"))
     arm("min_binds floor reds", 1, "join FLOOR breached",
         pins=sub(pins_src, "riir-train                       5         11",
                  "riir-train                       5         22"))
@@ -775,23 +800,38 @@ def canary() -> int:
         classify=with_capacity)
 
     # 5-7. the EYES pin: membership in BOTH directions, then the count WITHIN
-    #      one address — the half a membership set cannot see.
+    #      one address — the half a membership set cannot see. (Anchors moved
+    #      to the riir-infer addresses with the carve re-pin, 2026-09-26.)
     arm("new EYES address reds", 1, f"NEW {EYES_BUCKET}",
         eyes=sub(eyes_src,
-                 "riir-ai crates/riir-gpu/src/gemv_geglu_f16_cubecl.rs "
+                 "riir-infer crates/riir-infer-gpu/src/gemv_geglu_f16_cubecl.rs "
                  "gemv_geglu_plane_f16 weight_gate_handle 1\n", ""))
     arm("stale EYES row reds", 1, "no longer reported",
-        eyes=eyes_src + "riir-ai crates/riir-gpu/src/ghost.rs k h 1\n")
+        eyes=eyes_src + "riir-infer crates/riir-infer-gpu/src/ghost.rs k h 1\n")
     arm("EYES count move reds", 1, "count at a pinned address moved",
-        eyes=sub(eyes_src, "gemv_geglu_plane_f16 weight_gate_handle 1",
+        eyes=sub(eyes_src,
+                 "gemv_geglu_plane_f16 weight_gate_handle 1",
                  "gemv_geglu_plane_f16 weight_gate_handle 2"))
 
     # 8-9. the delegated walk floor, and the reader that must REFUSE rather
-    #      than return {} — an empty dict turns arm 8 green forever.
+    #      than return {} — an empty dict turns arm 8 green forever. Arm 8
+    #      runs the REAL Issue-902 predicate: riir-ai has tracked Rust, so the
+    #      measurement must refuse the zero row — the "code repo with a zeroed
+    #      row reds" direction, live.
     arm("delegation break reds", 1, "walk floor DELEGATION broken",
         delg=sub(delg_src, "riir-ai                  1500           5000",
                  "riir-ai                     0           5000"))
     arm("unreadable delegation refused", 2, "unreadable", delg="riir-ai\n")
+
+    # 8b. the measured md-only exception (Issue 902): a ZERO row on a repo
+    #     that measures no Rust is ACCEPTED, and the acceptance PRINTS. The
+    #     predicate is stubbed (see arm()'s zero_ok note); the un-stubbed
+    #     half is arm 8 above, and sweep_population.selftest arms the
+    #     predicate itself against synthetic trees.
+    arm("md-only zero row accepted", 0, "zero walk floor ACCEPTED",
+        delg=sub(delg_src, "riir-ai                  1500           5000",
+                 "riir-ai                     0           5000"),
+        zero_ok=True)
 
     # 10. an empty pins file is refused, never read as "nothing to check".
     arm("empty pins refused", 2, "declares NO repos", pins="# nothing\n")
@@ -865,6 +905,7 @@ def main(argv: list[str]) -> int:
         return 2
 
     rep = lda.classify_workspace(repo_paths)
+    repo_paths_by_name = {p.name: p for p in repo_paths}
     # Issue 822 T5j — the DISPLAY reads the worktree (it is what the files say
     # today); every CEILING, every FLOOR and the EYES membership wall read what
     # a commit of these checkouts would produce. `jrep` falls back to the
@@ -891,6 +932,7 @@ def main(argv: list[str]) -> int:
         tot_find += findings
         tot_unres += unres
         tot_binds += nb
+        notes: list[str] = []
 
         # ⛔ The EYES membership wall reads HEAD too, and it is the DESTRUCTIVE
         # direction that makes it matter: a pinned row the worktree happens to
@@ -924,12 +966,20 @@ def main(argv: list[str]) -> int:
                     + "; ".join(f"{v}={bk[v]}" for v in FINDING_BUCKETS if bk.get(v)))
             # The delegated axis, asserted (see the docstring). A repo pinned
             # here with no non-zero `.rs` walk floor anywhere has NO blindness
-            # detector at all once its kernel/bind floors are 0.
+            # detector at all once its kernel/bind floors are 0 — unless the
+            # repo has no Rust at all, in which case the zero row is truthful
+            # and MEASURED every run (Issue 902), never a standing amnesty.
             if delegated.get(name, 0) <= 0:
-                flags.append(
-                    f"walk floor DELEGATION broken: this sweep carries no "
-                    f"min_rs_files column because {DELEGATED_WALK_PINS.name} "
-                    f"floors it, and that file has no non-zero row for {name}")
+                ok, note = zero_walk_floor_accepted(repo_paths_by_name[name])
+                if ok:
+                    notes.append(
+                        f"zero walk floor ACCEPTED — {note}")
+                else:
+                    flags.append(
+                        f"walk floor DELEGATION broken: this sweep carries no "
+                        f"min_rs_files column because {DELEGATED_WALK_PINS.name} "
+                        f"floors it, and that file has no non-zero row for "
+                        f"{name} ({note})")
 
         status = "✗" if flags else ("·" if (findings or bk.get(EYES_BUCKET)) else "✓")
         wbk = wt_per.get(name, {})
@@ -948,6 +998,8 @@ def main(argv: list[str]) -> int:
         for f in flags:
             bad = True
             print(f"      ✗ {f}")
+        for n_line in notes:
+            print(f"      · {name}: {n_line}")
         for v in FINDING_BUCKETS:
             for b in rep.binds:
                 if b.repo == name and b.verdict == v:

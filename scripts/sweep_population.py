@@ -60,6 +60,7 @@ import console_safe  # noqa: E402
 # open under the on-disk spellings. The seam below is the one copy of that
 # resolution; importing the codec it delegates to.
 import repo_alias  # noqa: E402
+import tracked_walk  # noqa: E402
 
 console_safe.apply()
 
@@ -113,6 +114,44 @@ def open_repo(name: str, workspace: Path) -> Path:
     itself must never reach stdout (repo_alias's own rule).
     """
     return Path(workspace) / repo_alias.disk(name)
+
+
+def zero_walk_floor_accepted(repo: Path) -> tuple[bool, str]:
+    """Is a ZERO delegated `min_rs_files` row truthful? (Issue 902)
+
+    Two sweeps (`len_derived_drift_sweep`, `shared_temp_path_drift_sweep`)
+    carry no walk floor of their own: they delegate that axis to
+    `orphaned_attr_drift_floors.txt` and ASSERT every pinned repo has a
+    non-zero row there — a repo whose row is dropped or zeroed has no
+    blindness detector at all. A repo born md-only (riir-instinct) has a
+    TRUTHFUL zero row, and the assertion read it as a finding forever — a
+    sweep that always reds on a correct repo, the cries-wolf state Issue 793
+    forbids.
+
+    Measured, never declared: the same instrument the delegated column
+    describes (`tracked_walk.tracked_files`, the ONE walk, Issue 777) counts
+    the repo's tracked `*.rs`, and the zero row is accepted only while that
+    count is zero. The moment a `.rs` file lands — staged (the index counts;
+    that is the first half of landing), or merely present on a non-repo tree
+    (the fallback counts) — the row MUST be raised, and this returns False so
+    the sweeps red exactly as they did before. A zero row is therefore never
+    a standing amnesty; it is a measured statement about THIS checkout,
+    re-measured every run. (The measured exception is also how the predicate
+    caught its first stale premise: riir-reflexer was registered md-only
+    2026-09-25 and its row was truthful that day, but its vessel workspace
+    had landed 16 tracked `.rs` by the time this shipped — the predicate
+    refused the zero row and the rows were re-pinned in the same commit.)
+
+    Returns `(accepted, note)`; the caller prints the note either way, so the
+    acceptance is visible on a GREEN run, never inferred from a missing flag.
+    """
+    files, _excluded = tracked_walk.tracked_files(repo, "*.rs")
+    n = len(files)
+    if n == 0:
+        return True, ("0 tracked .rs at this checkout — md-only repo, the "
+                      "zero row is truthful (measured by tracked_walk, not "
+                      "declared)")
+    return False, f"{n} tracked .rs at this checkout"
 
 
 def population_verdict(pins, present) -> tuple[list[str], list[str], int]:
@@ -345,6 +384,71 @@ def selftest() -> list[str]:
                   "output — the alias content must never leak to stdout")
         finally:
             repo_alias._loaded = saved_loaded
+
+        # ── zero_walk_floor_accepted (Issue 902) ───────────────────────────
+        # Synthetic trees, because the predicate's whole job is MEASURING a
+        # repo, and a stub would test the stub. Both branches of the ONE walk
+        # are exercised: the tracked (index) branch on a git repo, and the
+        # fallback over a plain tree. The non-Rust arm is also what keeps the
+        # first arm honest — a walk that counted every file would have
+        # refused md-only too.
+        import subprocess
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            t = Path(td)
+            md_only = t / "md-only"
+            md_only.mkdir()
+            (md_only / "README.md").write_text("# md only\n", encoding="utf-8")
+            ok, note = zero_walk_floor_accepted(md_only)
+            check(ok and "0 tracked .rs" in note,
+                  f"an md-only tree must be accepted: {ok} {note!r}")
+
+            gains_rust = t / "gains-rust"
+            (gains_rust / "src").mkdir(parents=True)
+            (gains_rust / "src" / "lib.rs").write_text("fn f() {}\n",
+                                                       encoding="utf-8")
+            ok, note = zero_walk_floor_accepted(gains_rust)
+            check(not ok and "1 tracked .rs" in note,
+                  f"a tree with .rs must refuse its zero row: {ok} {note!r}")
+
+            docs_only = t / "docs-only"
+            docs_only.mkdir()
+            (docs_only / "README.md").write_text("# md\n", encoding="utf-8")
+            (docs_only / "spec.lean").write_text(
+                "theorem t : True := trivial\n", encoding="utf-8")
+            ok, note = zero_walk_floor_accepted(docs_only)
+            check(ok, f"non-Rust files must not refuse the zero row: "
+                      f"{ok} {note!r}")
+
+            # The tracked branch: a STAGED .rs in a git repo refuses even
+            # though nothing is committed — `git ls-files` reads the index,
+            # and staging is the first half of landing.
+            staged = t / "staged-rs"
+            staged.mkdir()
+            subprocess.run(["git", "-C", str(staged), "init", "-q"],
+                           check=True, capture_output=True)
+            (staged / "lib.rs").write_text("fn f() {}\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(staged), "add", "lib.rs"],
+                           check=True, capture_output=True)
+            ok, note = zero_walk_floor_accepted(staged)
+            check(not ok,
+                  f"a STAGED .rs must refuse the zero row: {ok} {note!r}")
+
+            # And the git-repo md-only shape itself: a repo whose index is
+            # empty except docs takes the tracked branch and is accepted.
+            md_repo = t / "md-repo"
+            md_repo.mkdir()
+            subprocess.run(["git", "-C", str(md_repo), "init", "-q"],
+                           check=True, capture_output=True)
+            (md_repo / "BOUNDARY.md").write_text("# contract\n",
+                                                 encoding="utf-8")
+            subprocess.run(["git", "-C", str(md_repo), "add", "BOUNDARY.md"],
+                           check=True, capture_output=True)
+            ok, note = zero_walk_floor_accepted(md_repo)
+            check(ok and "0 tracked .rs" in note,
+                  f"a git repo with no tracked .rs must be accepted: "
+                  f"{ok} {note!r}")
     finally:
         if saved is None:
             os.environ.pop(PARTIAL_MARKER, None)
@@ -368,9 +472,11 @@ def main() -> int:
     print(f"✓ sweep_population selftest — {_N_ASSERTIONS} assertion(s), "
           "COUNTED not typed: complete population clean, UNSEEN without the "
           "marker, DEFERRED with it (naming repo + marker), UNREGISTERED reds "
-          "under the marker, snapshot widens an empty pin set, and the "
+          "under the marker, snapshot widens an empty pin set, the "
           f"{KNOWN_EXTRA_MARKER} axis both ways (named extras excused and "
-          "disclosed, unnamed ones still red, stale entries red)")
+          "disclosed, unnamed ones still red, stale entries red), and the "
+          "Issue-902 zero-walk-floor predicate (md-only accepted both walk "
+          "branches, non-Rust ignored, staged and present .rs refuse)")
     return 0
 
 

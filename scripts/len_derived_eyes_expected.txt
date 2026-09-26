@@ -39,9 +39,21 @@
 # caller's own loud bug and not this audit's class.
 #
 # Measured 2026-09-14 over 16 of 20 repos: 4 addresses, 1 row each, all riir-ai.
+# Re-addressed 2026-09-26 (Issue 902 landing, same commit): the carve moved the
+# gemv + deltanet rotation kernel families to riir-infer crates/riir-infer-gpu
+# (riir-ai `c75cb735ee` / `c261956bea`, riir-infer `0643575`) — the 4 gemv rows
+# are the SAME binds at their new paths, and the 4 fwht rows are the deltanet
+# forward family's rotation binds, provenance read: the callers bind
+# `TernaryDeltanetGpuForward` struct fields (`self.norm_x`, `self.rot_scratch`,
+# `self.ffn_hidden`, `self.recurrent_out`, `self.attn_out`) — persistent
+# activation buffers, the exact class this list eyes.
 #
 # <repo>  <file>                                            <kernel>                         <handle>                 <n>
-riir-ai crates/riir-gpu/src/gemv_geglu_f16_cubecl.rs gemv_geglu_plane_f16 weight_gate_handle 1
-riir-ai crates/riir-gpu/src/gemv_geglu_f16_cubecl.rs gemv_geglu_plane_f16 weight_up_handle 1
-riir-ai crates/riir-gpu/src/gemv_ternary_residual_cubecl.rs gemv_ternary_residual_rowtiled8 input_handle 1
-riir-ai crates/riir-gpu/src/gemv_ternary_residual_cubecl.rs gemv_ternary_residual_rowtiled8 residual_output_handle 1
+riir-infer crates/riir-infer-gpu/src/gemv_geglu_f16_cubecl.rs gemv_geglu_plane_f16 weight_gate_handle 1
+riir-infer crates/riir-infer-gpu/src/gemv_geglu_f16_cubecl.rs gemv_geglu_plane_f16 weight_up_handle 1
+riir-infer crates/riir-infer-gpu/src/gemv_ternary_residual_cubecl.rs gemv_ternary_residual_rowtiled8 input_handle 1
+riir-infer crates/riir-infer-gpu/src/gemv_ternary_residual_cubecl.rs gemv_ternary_residual_rowtiled8 residual_output_handle 1
+riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs fwht_forward_copy_f32 dst_handle 1
+riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs fwht_forward_copy_f32 src_handle 1
+riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs fwht_rotate_forward_f32 x_handle 1
+riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs fwht_rotate_inverse_f32 x_handle 1

@@ -60,7 +60,16 @@ a fourth copy is a fourth number to re-pin on ordinary churn. The delegation is
 sweep pins must still carry a NON-ZERO `min_rs_files` row in the file it
 delegates to, and a delegated file it cannot PARSE is UNREADABLE rather than an
 empty dict — a silent empty dict turns the assertion into a no-op, which is
-exactly the failure it exists to prevent.
+precisely the failure it exists to prevent.
+
+⛔ One MEASURED exception (Issue 902): a repo born md-only — no tracked `.rs`
+at all — has a TRUTHFUL zero row, and reding on it forever is the cries-wolf
+state Issue 793 forbids. The zero row is accepted only while `tracked_walk`
+(the ONE walk, Issue 777) measures ZERO tracked `.rs` in that repo, re-measured
+EVERY run; the first `.rs` to land reds exactly as a zeroed row on a code repo
+does. The acceptance prints, it is never silent. The predicate lives once, in
+`sweep_population.zero_walk_floor_accepted`, so the two delegating sweeps can
+never disagree about what a zero row MEANS.
 
 The two floors that remain fail differently:
 
@@ -104,7 +113,8 @@ console_safe.apply()
 
 import shared_temp_path_gate as stp  # noqa: E402
 from skill_repo_set_gate import derive_repos  # noqa: E402
-from sweep_population import open_repo, pin_row_exempt, population_verdict  # noqa: E402
+from sweep_population import (  # noqa: E402
+    open_repo, pin_row_exempt, population_verdict, zero_walk_floor_accepted)
 from worktree_state import head_delta, sweep_advisory  # noqa: E402
 
 # The repo that owns the membership pin — derived, never typed.
@@ -335,7 +345,8 @@ def canary() -> int:
     g = globals()
     saved = {k: g[k] for k in
              ("classify", "adjudicate", "derive_repos", "self_verdict",
-              "sweep_advisory", "PINS", "DELEGATED_WALK_PINS")}
+              "sweep_advisory", "PINS", "DELEGATED_WALK_PINS",
+              "zero_walk_floor_accepted")}
 
     names = sorted(derive_repos(WORKSPACE))
     if not names:
@@ -353,7 +364,8 @@ def canary() -> int:
     fails: list[str] = []
 
     def arm(label: str, want_rc: int, want_txt: str, *,
-            n_temp=99, pins=None, delg=None, repos=None, self_fails=None):
+            n_temp=99, pins=None, delg=None, repos=None, self_fails=None,
+            zero_ok=None):
         g["classify"] = lambda repo: (list(R), n_temp, 9)
         # No git in the fixture: every row is COMMITTED, which is the arm's
         # subject. The three-way split has its own arms in `worktree_state`.
@@ -361,6 +373,14 @@ def canary() -> int:
             "D", (), {"head": list(rs), "uncommitted": [], "masked": []})()
         g["self_verdict"] = lambda repo: list(self_fails or [])
         g["sweep_advisory"] = lambda *a, **k: []
+        if zero_ok is not None:
+            # Issue-902 wiring arm only: the acceptance side is stubbed
+            # because no real repo here is md-only. Arm 7 below stays on the
+            # REAL predicate — a zeroed row on a code repo must still red
+            # through the measurement — and the predicate's own arms live in
+            # sweep_population.selftest.
+            g["zero_walk_floor_accepted"] = (
+                lambda repo: (True, "stub: 0 tracked .rs (canary)"))
         if repos is not None:
             g["derive_repos"] = lambda ws: list(repos)
         with tempfile.TemporaryDirectory() as td:
@@ -376,6 +396,7 @@ def canary() -> int:
                 rc = main([], run_selftest=False)
             out = buf.getvalue()
         g["derive_repos"] = saved["derive_repos"]
+        g["zero_walk_floor_accepted"] = saved["zero_walk_floor_accepted"]
         if rc != want_rc:
             fails.append(f"{label}: rc {rc} != {want_rc}\n{out}")
         elif want_txt not in out:
@@ -422,9 +443,18 @@ def canary() -> int:
         pins=base_pins + "repo-zz 1 0\n")
     n_arms += 1
     # 7. the DELEGATION: a pinned repo with no non-zero walk floor there.
+    #    Runs the REAL Issue-902 predicate — names[0] has tracked Rust, so
+    #    the measurement must refuse the zero row ("code repo with a zeroed
+    #    row reds", the direction that must never loosen).
     arm("delegation break reds", 1, "walk floor DELEGATION broken",
         delg=f"{names[0]} 0 2 0\n" + "".join(
             f"{n} 1500 2 0\n" for n in names[1:])); n_arms += 1
+    # 7b. the measured md-only exception (Issue 902): a ZERO row on a repo
+    #     that measures no Rust is ACCEPTED, and the acceptance PRINTS. The
+    #     predicate is stubbed here (see arm()'s zero_ok note).
+    arm("md-only zero row accepted", 0, "zero walk floor ACCEPTED",
+        delg=f"{names[0]} 0 2 0\n" + "".join(
+            f"{n} 1500 2 0\n" for n in names[1:]), zero_ok=True); n_arms += 1
     # 8. and a delegated file it cannot PARSE is refused, never an empty dict —
     # a silent {} turns arm 7's assertion into a no-op.
     arm("unreadable delegation refused", 2, "unreadable",
@@ -528,6 +558,7 @@ def main(argv: list[str], run_selftest: bool = True) -> int:
 
         row = pins.get(name)
         flags: list[str] = []
+        notes: list[str] = []
         if row is None:
             # Issue 821: an acknowledged known-extra owes no pin row.
             if not pin_row_exempt(name):
@@ -539,12 +570,19 @@ def main(argv: list[str], run_selftest: bool = True) -> int:
                     f"site(s) < {row['min_temp_sites']} — the PREDICATE went "
                     f"blind over an unchanged walk, and then every ceiling "
                     f"passes vacuously")
-            # The delegated axis, asserted (see the module docstring).
+            # The delegated axis, asserted (see the module docstring). The
+            # zero row is MEASURED (Issue 902): accepted only while the repo
+            # has no tracked Rust at all, never a standing amnesty.
             if delegated.get(name, 0) <= 0:
-                flags.append(
-                    f"walk floor DELEGATION broken: {name} has no non-zero "
-                    f"min_rs_files row in {DELEGATED_WALK_PINS.name} — this "
-                    f"sweep carries no walk floor of its own and now has none")
+                ok, note = zero_walk_floor_accepted(repo)
+                if ok:
+                    notes.append(f"zero walk floor ACCEPTED — {note}")
+                else:
+                    flags.append(
+                        f"walk floor DELEGATION broken: {name} has no non-zero "
+                        f"min_rs_files row in {DELEGATED_WALK_PINS.name} — this "
+                        f"sweep carries no walk floor of its own and now has "
+                        f"none ({note})")
             if len(delta.head) > row["max_fixed"]:
                 flags.append(
                     f"fixed {len(delta.head)} committed > pinned "
@@ -583,6 +621,8 @@ def main(argv: list[str], run_selftest: bool = True) -> int:
         for f in flags:
             bad = True
             print(f"    ⛔ {f}")
+        for n_line in notes:
+            print(f"    · {name}: {n_line}")
 
     lines, deferred, pv_fail = population_verdict(set(pins), set(names))
     for line in lines:
