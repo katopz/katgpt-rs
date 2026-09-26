@@ -16,6 +16,7 @@ riir-deployer
 riir-esp32
 riir-game-sdk
 riir-infer
+riir-instinct
 riir-kat
 riir-llm
 riir-mmorpg-examples
