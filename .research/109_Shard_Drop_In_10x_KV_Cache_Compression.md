@@ -244,3 +244,5 @@ Per the decision matrix, game-specific tuning is private. Shard itself is public
 - QJL: Zandieh et al., AAAI 2025, arXiv:2406.03482
 - RoFormer / RoPE: Su et al., arXiv:2104.09864
 - Lloyd-Max: Lloyd 1982, Max 1960 (our existing `codebook.rs`)
+
+> **PASS-Redirects (synthesis):** Imprint [github.com/ashhart/Imprint](https://github.com/ashhart/Imprint) v0.1 (2026-09-26 distill) — persisted KV-state profiles for repeated-context prefill elimination (compute-once/restore-many across process restarts, exact-prefix matching, per-model checksummed blobs). PASS — no stack consumer for cross-restart KV persistence; in-process prefix reuse ships (radix_prefix/Qwen38PrefixCache); full redirect + reopen triggers on Research 489.

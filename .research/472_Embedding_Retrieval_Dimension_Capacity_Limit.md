@@ -280,3 +280,5 @@ online budget, refuted by the benchmark that promoted the feature. Re-justified 
 - neuron-db: Plan 323 (`Bm25Index`), Plan 324 (`DenseEmbedIndex`), Plan 325 (`KgTripleIndex`)
 - riir-ai: Plan 524 (`riir-rag` facade), Plan 526 (GraphRAG fusion)
 - Sigmoid bottleneck: Grivas et al. AAAI 2024 [2310.10443](https://arxiv.org/abs/2310.10443); Bangachev et al. [2509.18552](https://arxiv.org/abs/2509.18552); KG rank bottleneck [2506.22271](https://arxiv.org/abs/2506.22271)
+
+> **PASS-Redirects (synthesis):** FBDM [arXiv:2609.29350] (2026-09-26 distill) — image-SSL flow matching against an ETF-style reference frame with K′ directions exceeding the flow dimension d* (capacity-limited per-center assignment). PASS — training surface out of scope; the K′>d frame-capacity observation is recorded here as the dimension-capacity class's training-side cousin (our retrieval/routing capacity limits are inference-side); full redirect on Research 453.
