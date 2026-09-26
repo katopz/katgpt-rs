@@ -32,6 +32,14 @@ r̃_k   = sigmoid(β · |z_k|)
 - **Cost:** `O(n)` per candidate after an `O(n²)` matrix-vector product per observation. At 16 arms that is 256 FMAs, comparable to the current `O(n·dim)` pull. At 64 arms it is 4096, the same as the current pull at dim 64.
 - **Off-pool candidates** (perturbation on) need `⟨ĝ_k, g_j⟩²` for all `j`, which costs `O(n·dim)` per candidate. Pool-indexed candidates use `C` directly.
 
+## Pre-registration amendment (2026-09-26, before any run)
+
+- **β_z = 1** for the z-score form. `z` is in null-standard-deviation units and `fast_sigmoid` returns exactly 1.0 above 40, so β = 4 would tie every arm with `|z| > 10` and blind the rank-AUC. At β_z = 1 a 2σ excursion maps to `sigmoid(2) ≈ 0.88`, the same point the first-moment form reaches at `|cos| = 0.5` with β = 4.
+- **Priorities are simplex-normalized** (`p / Σp`) before the kernel. `renormalize_priorities` rescales to max = 1, and every max change would otherwise inject a common-mode drift proportional to `p_j`.
+- **`v_j`** uses the existing `DEFAULT_SCALE_ALPHA = 0.05`. The first observation only primes it.
+- **Pool-indexed candidates** read `z` at their arm, since the reward goes to that arm. Off-pool candidates compute the kernel on the fly.
+- **Implementation:** a `DriftSummary` strategy (`FirstMomentDrift`, `SecondMomentDrift`) behind one `TrajectoryAlignedCuriosity<S>` sampler.
+
 ## Pre-registered bars
 
 Same fixture as Bench 900 (dim 16, F 8 at `e0 + 0.2·N`, S at `±e1..±e4`, 16/32 seeds). The shipped first-moment form stays as the comparison arm.
