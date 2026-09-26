@@ -2,7 +2,7 @@
 
 **Status:** GOAT **FAIL** on 2 of 6 pre-registered bars (G1 held-out 0.766 < 0.8; G4 2.07× > 2.0). It passes the other four: G1 F-vs-S, the negative control, G3 forward and G3 reversed. It is the only drift summary that stays sound in the loop in both directions. It is now `TrajectoryAlignedCuriosity`'s default summary, and the feature stays opt-in.
 
-**Date:** 2026-09-26 · **Issue:** [899](../.issues/899_second_moment_null_normalized_drift_alignment.md) · **Parent:** [Plan 610](../.plans/610_arm_drift_alignment.md), [Bench 900](900_arm_drift_alignment_goat.md) · **Test:** `tests/plan_610_arm_drift_alignment_goat.rs` (`issue_899_*`, `characterization_first_moment_preconditioner_off_loop`)
+**Date:** 2026-09-26 · **Issue:** 899 ([HISTORY.md](../HISTORY.md)) · **Parent:** [Plan 610](../.plans/610_arm_drift_alignment.md), [Bench 900](900_arm_drift_alignment_goat.md) · **Test:** `tests/plan_610_arm_drift_alignment_goat.rs` (`issue_899_*`, `characterization_first_moment_preconditioner_off_loop`)
 
 **Box state:** M3 Max on AC power, 87% memory free, loadavg **18.7** / 15.9 / 10.7 at the final run (sibling sessions building). Release profile, `--test-threads=1`. G4 is an interleaved median-of-ratios, so load cancels within each pair. It measured 2.07–2.08× in four runs across load levels (rounds 1.94–2.19).
 

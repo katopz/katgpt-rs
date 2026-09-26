@@ -1,3 +1,15 @@
+## Issue 899 (2026-09-26) — second-moment, null-normalized drift alignment (the Plan 610 redesign): CLOSED (negative on 2 of 6 bars; became the default summary inside opt-in `arm_drift_alignment`; no promotion)
+
+- **Shipped:** katgpt-core `DriftSummary` strategy (`FirstMomentDrift`, `SecondMomentDrift`) behind one `TrajectoryAlignedCuriosity<S>` at `3485ec59e` ([Bench 901](.benchmarks/901_second_moment_drift_alignment.md)); pre-registrations at `099b9d4a6` / `b1615393d`, all before the run they govern.
+- **Mechanism:** score arm `k` in ARM space through the pool's squared-cosine kernel `C_kj = ⟨ĝ_k, ĝ_j⟩²` on the incumbent's own per-arm derivative, z-scored against the i.i.d.-arm-noise null. Squared cosines add where the first moment's `±e_i` pairs cancel (Bench 900 defect 1); the null is basis-free where the axis-aligned preconditioner was not (defect 2).
+- **Three variants on one fixture, all reported; stopped there to avoid fitting it:**
+  - v1 as pre-registered: G1 0.963 / held-out 0.926, noise control **FAIL** 0.949. The pass was mostly the kernel's zero-init EMA transient (common-mode drift read in proportion to row sum ⇒ dense-cluster bias).
+  - v1 + warm start: G1 **FAIL** 0.816 / 0.633, noise **FAIL** the other way (0.186). Simplex shares are negatively correlated, so the i.i.d. denominator over-states dense rows' null variance.
+  - v2 (simplex-centered null `c̃_k = C_k − (s·C_k)·1`, numerator unchanged since `Σd = 0`): G1 0.883 PASS, **held-out 0.766 FAIL**, noise 0.559 PASS, G3 forward −79 and reversed −63 cycles vs its matched-uniform bonus (both PASS), **G4 2.07× FAIL** (bar 2.0×).
+- **Verdict:** the only summary loop-sound in both directions, so it is the feature's default summary; the feature stays opt-in. Honest-null clause applied: riir-ai guide 389 P2 stays retired.
+- **Promotion criterion (owner-delegated verdict, 2026-09-26):** planted-truth G1 held-out is NOT replaced by loop gates. The loop win is measured on the same fixture the three variants were chosen on, so it is the weaker generalization evidence; swapping the criterion after seeing which bar passed is the post-hoc move the pre-registration exists to prevent. Loop soundness in BOTH reward directions is ADDED as a mandatory bar for curiosity-class primitives (necessary, not sufficient) — Bench 900's first-moment form passed G3 forward and lost the reversed direction by +108 cycles.
+- **Side fixes:** `DerivativeCuriosity::cycle_curiosity` allocated once per cycle despite its alloc-free claim (now `ensure_len`, gated at 0); Bench 900's "un-normalized score is a density prior under noise (1.000)" was the same zero-init transient — 0.525 warm-started, addendum in Bench 900.
+
 ## Issue 895 (2026-09-25) — guided width rollouts on the belief host (GRAM re-distill, Research 590): CLOSED (T1–T7 + T9 landed opt-in; G1 FAILED, demote TRIGGERED, no promotion; T8 handed to riir-ai Issue 1008)
 
 - **Shipped:** katgpt-core, opt-in `guided_width_rollouts` + `guided_width_hodge`, at `a4421939f` / `ae7b13320` ([Bench 898](.benchmarks/898_guided_width_rollouts_goat.md)).

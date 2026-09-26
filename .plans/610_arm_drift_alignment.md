@@ -41,3 +41,4 @@ Common: dim 16; pool of 16 arms. The drifting family F is 8 arms at `e0 + 0.2·N
 ## Demotion clause
 
 If G3 reads flat (aligned ≈ global-norm ≈ uniform at matched budget), record the negative in Research 591 with raw numbers, keep the feature opt-in, and mark the guide's P2 fusion as refuted-at-current-budget — do not re-tune silently and do not promote.
+- [x] T8 — promotion-criterion verdict (owner-delegated, 2026-09-26): planted-truth G1 held-out stays the promotion bar for curiosity-class primitives; loop soundness in BOTH reward directions is ADDED as a mandatory bar (necessary, not sufficient), never a substitute. The loop win was measured on the fixture the Issue 899 variants were chosen on, and swapping the criterion after seeing which bar passed is the post-hoc move pre-registration forbids. No promotion; guide 389 P2 stays retired. Record: HISTORY.md § Issue 899.
