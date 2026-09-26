@@ -4,3 +4,5 @@ Call skills research for paper or distill if related to infer
 - [ ] 2211.15841
 - [ ] distill https://github.com/ashhart/Imprint
 - [ ] distill https://github.com/Niko1221/Strata
+- [ ] 2505.03335
+- [ ] 2609.29350
