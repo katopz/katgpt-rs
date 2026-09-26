@@ -45,9 +45,12 @@ katgpt-rs ONLY: the paired corpus, the v4 grammar, the two-arm oracle campaign, 
 
 **G1 verdict 2026-09-25: FAIL — the crossed-head integration below is CLOSED on this evidence. What remains consumer-side is the FIDELITY surface only: the next-piece render/UI (the v4 sentence) and, if wanted, the two-line serving path (the envelope is proven; the head behind it is not promoted). The fixture_pins four-hash pin should include the v4 fixture digest.**
 
-- [ ] riir-reflex (FIDELITY ONLY — no crossed head): optional two-line tetris serving path + `fixture_pins()` four-hash (v2/v3/v4/flappy-v3); parser note: fitting from these fixtures requires `serde_json/float_roundtrip` to land on the katgpt-rs-side head bytes (Bench 890 G3 finding). **Must NOT touch the `Embedder`** (issue 030's blast-radius law). The crossed-head config knob + G1 within-board gate are DROPPED (G1 failed).
-- [ ] reflex-site: next-piece render + UI box (fidelity) — re-recorded walks + wasm regen only if the serve path changes; golden sha256 pins; deploy.
-- [ ] Arena republish: batch with Issue 030 lever 4's pending clean-window rerun if timing overlaps (the publisher refuses drifted modelless accuracy — one merged host).
+- [x] riir-reflex (FIDELITY ONLY — no crossed head): optional two-line tetris serving path + `fixture_pins()` four-hash (v2/v3/v4/flappy-v3); parser note: fitting from these fixtures requires `serde_json/float_roundtrip` to land on the katgpt-rs-side head bytes (Bench 890 G3 finding). **Must NOT touch the `Embedder`** (issue 030's blast-radius law). The crossed-head config knob + G1 within-board gate are DROPPED (G1 failed).
+  - DONE (riir-reflex Issue 031, `a56d850`): `fixture_pins()` hashes every embedded fixture against its pin; the unserved tetris v3/v4 fixtures are pinned test-side (`12035ebf…` / `18e6b260…`, missing file FAILS); the `serde_json/float_roundtrip` note is in the `game_heads` module doc. The optional two-line serving path was NOT built: with the crossed head refused, it would serve the spot head, which cannot consume the preview.
+- [-] reflex-site: next-piece render + UI box (fidelity) — re-recorded walks + wasm regen only if the serve path changes; golden sha256 pins; deploy.
+  - DEFERRED 2026-09-26 (Claude verdict): riir-reflex serves v3 only and v4 is unserved by design, so the serve path is unchanged and neither trigger fires (no walk re-record, no wasm regen). A next-piece UI box would show the player a preview that no served head reads, which misrepresents what the modelless lane decides on. Reopen if a head that consumes the preview is ever promoted (a new G1 PASS on the board-grouped holdout).
+- [x] Arena republish: batch with Issue 030 lever 4's pending clean-window rerun if timing overlaps (the publisher refuses drifted modelless accuracy — one merged host).
+  - DONE (riir-reflex Bench 041, `ae80abc`): the table was republished after Issue 030 lever 4 (Bench 040), with the m3 laya lanes and both hosts' modelless rows in one run. No v4 row, since v4 is not served.
 
 ### Explicitly out of scope (per Proposal 015)
 
