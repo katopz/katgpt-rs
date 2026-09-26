@@ -32,9 +32,10 @@ use katgpt_core::cgsp::loop_::renormalize_priorities;
 use katgpt_core::cgsp::traits::{CuriosityConjecturer, HintDeltaBandit};
 use katgpt_core::cgsp::types::{Candidate, Direction, Priority, Target};
 use katgpt_core::cgsp::{
-    DerivativeCuriosity, DriftPreconditioner, PoolConjecturer, TrajectoryAlignedCuriosity,
-    alignment_score,
+    DerivativeCuriosity, DriftPreconditioner, DriftSummary, FirstMomentDrift, PoolConjecturer,
+    SecondMomentDrift, TrajectoryAlignedCuriosity, alignment_score,
 };
+use katgpt_core::simd::simd_fused_decay_write;
 use katgpt_core::temporal_deriv::TemporalDerivativeKernel;
 
 const DIM: usize = 16;
@@ -143,16 +144,36 @@ fn noise_trajectory(seed: u64) -> Vec<[f32; N_ARMS]> {
 
 /// Mean per-arm aligned score over steps `READ_FROM..` via the shipped type.
 fn aligned_scores(pool: &[Direction], traj: &[[f32; N_ARMS]], kappa: f32) -> [f32; N_ARMS] {
-    let mut tac: TrajectoryAlignedCuriosity<DIM> =
-        TrajectoryAlignedCuriosity::new(pool.to_vec(), 0)
-            .with_beta(BETA)
-            .with_preconditioner(DEFAULT_SCALE_ALPHA, kappa);
+    let summary = FirstMomentDrift::<DIM>::new()
+        .with_beta(BETA)
+        .with_preconditioner(DEFAULT_SCALE_ALPHA, kappa);
+    let mut tac = TrajectoryAlignedCuriosity::with_summary(pool.to_vec(), 0, summary);
     let mut acc = [0.0f32; N_ARMS];
     for (t, p) in traj.iter().enumerate() {
         tac.observe_drift(p);
         if t >= READ_FROM {
             for (a, g) in acc.iter_mut().zip(pool) {
-                *a += tac.score_direction(g);
+                *a += tac.summary().score_direction(g);
+            }
+        }
+    }
+    acc.map(|a| a / (STEPS - READ_FROM) as f32)
+}
+
+/// Mean per-arm score of the Issue 899 second-moment summary.
+fn second_scores(pool: &[Direction], traj: &[[f32; N_ARMS]]) -> [f32; N_ARMS] {
+    let mut sm: SecondMomentDrift<N_ARMS> = SecondMomentDrift::for_pool(pool);
+    let cands: Vec<Candidate> = pool
+        .iter()
+        .enumerate()
+        .map(|(k, g)| Candidate::new(g.clone(), k))
+        .collect();
+    let mut acc = [0.0f32; N_ARMS];
+    for (t, p) in traj.iter().enumerate() {
+        sm.observe(p, pool);
+        if t >= READ_FROM {
+            for (a, c) in acc.iter_mut().zip(&cands) {
+                *a += sm.score(c, pool);
             }
         }
     }
@@ -163,12 +184,20 @@ fn aligned_scores(pool: &[Direction], traj: &[[f32; N_ARMS]], kappa: f32) -> [f3
 fn drift_sequence(pool: &[Direction], traj: &[[f32; N_ARMS]]) -> Vec<[f32; DIM]> {
     let mut kernel: TemporalDerivativeKernel<DIM> = TemporalDerivativeKernel::default();
     traj.iter()
-        .map(|p| {
+        .enumerate()
+        .map(|(t, p)| {
+            // Same SIMD axpy as the shipped summary, so the replay pin is
+            // bit-exact rather than tolerance-bound.
             let mut m = [0.0f32; DIM];
             for (&w, g) in p.iter().zip(pool) {
-                for (mj, gj) in m.iter_mut().zip(&g.coords) {
-                    *mj += w * gj;
+                if w != 0.0 {
+                    simd_fused_decay_write(&mut m, 1.0, &g.coords, w);
                 }
+            }
+            // Warm start, as the shipped summary does (Issue 899).
+            if t == 0 {
+                kernel.fast = m;
+                kernel.slow = m;
             }
             kernel.observe(&m)
         })
@@ -371,9 +400,23 @@ fn g1_negative_control_pure_noise_is_flat() {
     println!(
         "  preconditioner OFF    AUC(F vs S) mean {m_off:.3} sd {sd_off:.3}  (characterization)"
     );
+    // Measured-verdict pins (Bench 900 addendum). With the zero-init
+    // transient removed (Issue 899 warm start), the preconditioned form FAILS
+    // the negative control: axis-aligned scaling inflates the coordinates only
+    // F's directions touch. Preconditioner off is flat. The first Bench 900
+    // run read these the other way round (0.395 / 1.000), transient-driven.
+    let on_pass = (m_on - 0.5).abs() <= 0.15;
+    println!(
+        "  preconditioned verdict: {}",
+        if on_pass { "PASS" } else { "FAIL" }
+    );
     assert!(
-        (m_on - 0.5).abs() <= 0.15,
-        "negative control FAIL: noise AUC {m_on:.3}"
+        !on_pass,
+        "negative-control verdict changed — update Bench 900"
+    );
+    assert!(
+        (m_off - 0.5).abs() <= 0.15,
+        "P-off noise AUC moved: {m_off:.3}"
     );
 }
 
@@ -418,7 +461,18 @@ fn g1_scale_invariance_contract() {
     println!("  κ=0    max|û − û'|        {worst_k0:.2e}  (bar ≤ 1e-4)");
     println!("  κ=0.1  max |ΔAUC|         {worst_dauc:.4}  (bar ≤ 0.02)");
     println!("  κ=0.1  min Kendall τ      {worst_tau:.3}  (bar ≥ 0.9)");
-    assert!(worst_k0 <= 1e-4, "κ=0 invariance FAIL: {worst_k0}");
+    // Pin (Bench 900 addendum): exact at κ = 0 only while every coordinate's
+    // drift is far above the absolute epsilon. With the warm start, untouched
+    // coordinates sit at float noise, where `SCALE_EPS` breaks homogeneity.
+    let k0_pass = worst_k0 <= 1e-4;
+    println!(
+        "  κ=0 pre-registered verdict: {}",
+        if k0_pass { "PASS" } else { "FAIL" }
+    );
+    assert!(
+        !k0_pass,
+        "κ=0 invariance verdict changed — update Bench 900"
+    );
     // Measured-verdict pin (Bench 900): the relative floor breaks the
     // per-coordinate contract at κ = 0.1 (a rescaling moves coordinates
     // across the floor). The module docs scope the contract to κ = 0.
@@ -459,13 +513,14 @@ fn replay_matches_shipped_type() {
     let pool = build_pool(3, true);
     let traj = planted_trajectory(3);
     let drift = drift_sequence(&pool, &traj);
-    let mut tac: TrajectoryAlignedCuriosity<DIM> = TrajectoryAlignedCuriosity::new(pool.clone(), 0);
+    let mut tac: TrajectoryAlignedCuriosity<FirstMomentDrift<DIM>> =
+        TrajectoryAlignedCuriosity::new(pool.clone(), 0);
     let mut p: DriftPreconditioner<DIM> = DriftPreconditioner::default();
     let mut u = [0.0f32; DIM];
     for (q, d) in traj.iter().zip(&drift) {
         tac.observe_drift(q);
         p.precondition(d, &mut u);
-        for (j, (a, b)) in tac.drift_direction().iter().zip(&u).enumerate() {
+        for (j, (a, b)) in tac.summary().drift_direction().iter().zip(&u).enumerate() {
             assert!((a - b).abs() < 1e-5, "replay diverged at coord {j}");
         }
     }
@@ -486,6 +541,12 @@ enum Arm {
     GlobalNorm,
     MatchedUniform,
     ExtrinsicOnly,
+    /// Issue 899: second-moment per-arm bonus.
+    Second,
+    /// Issue 899: second-moment conjecturer, every sample gets its mean score.
+    SecondUniform,
+    /// Post-hoc: first moment with the preconditioner off (κ → ∞).
+    FirstOff,
 }
 
 struct VecBandit {
@@ -509,7 +570,8 @@ impl HintDeltaBandit for VecBandit {
 }
 
 enum Conj {
-    Aligned(TrajectoryAlignedCuriosity<DIM>),
+    First(TrajectoryAlignedCuriosity<FirstMomentDrift<DIM>>),
+    Second(TrajectoryAlignedCuriosity<SecondMomentDrift<N_ARMS>>),
     Global(DerivativeCuriosity<N_ARMS>),
 }
 
@@ -525,7 +587,23 @@ fn run_loop_with(arm: Arm, seed: u64, reversed: bool) -> (usize, f32) {
     let pool = build_pool(seed, true);
     let mut conj = match arm {
         Arm::GlobalNorm => Conj::Global(DerivativeCuriosity::new(pool.clone(), seed)),
-        _ => Conj::Aligned(TrajectoryAlignedCuriosity::new(pool.clone(), seed).with_beta(BETA)),
+        Arm::Second | Arm::SecondUniform => Conj::Second(TrajectoryAlignedCuriosity::with_summary(
+            pool.clone(),
+            seed,
+            SecondMomentDrift::for_pool(&pool),
+        )),
+        Arm::FirstOff => Conj::First(TrajectoryAlignedCuriosity::with_summary(
+            pool.clone(),
+            seed,
+            FirstMomentDrift::new()
+                .with_beta(BETA)
+                .with_preconditioner(DEFAULT_SCALE_ALPHA, 1e6),
+        )),
+        _ => Conj::First(TrajectoryAlignedCuriosity::with_summary(
+            pool.clone(),
+            seed,
+            FirstMomentDrift::new().with_beta(BETA),
+        )),
     };
     let target = Target::new(pool[0].clone());
     let mut bandit = VecBandit {
@@ -536,7 +614,8 @@ fn run_loop_with(arm: Arm, seed: u64, reversed: bool) -> (usize, f32) {
     let (mut acquired, mut ext_total) = (G3_CAP, 0.0f32);
     for c in 0..G3_CAP {
         match &mut conj {
-            Conj::Aligned(t) => t.sample_candidates(&target, &bandit.prios, &mut cands, &mut cdf),
+            Conj::First(t) => t.sample_candidates(&target, &bandit.prios, &mut cands, &mut cdf),
+            Conj::Second(t) => t.sample_candidates(&target, &bandit.prios, &mut cands, &mut cdf),
             Conj::Global(g) => g.sample_candidates(&target, &bandit.prios, &mut cands, &mut cdf),
         }
         for (slot, cand) in cands.iter().enumerate() {
@@ -551,8 +630,10 @@ fn run_loop_with(arm: Arm, seed: u64, reversed: bool) -> (usize, f32) {
                 0.0
             };
             let bonus = match (&conj, arm) {
-                (Conj::Aligned(t), Arm::Aligned) => t.last_alignment_scores()[slot],
-                (Conj::Aligned(t), Arm::MatchedUniform) => t.last_interestingness(),
+                (Conj::First(t), Arm::Aligned | Arm::FirstOff) => t.last_alignment_scores()[slot],
+                (Conj::First(t), Arm::MatchedUniform) => t.last_interestingness(),
+                (Conj::Second(t), Arm::Second) => t.last_alignment_scores()[slot],
+                (Conj::Second(t), Arm::SecondUniform) => t.last_interestingness(),
                 (Conj::Global(g), _) => g.last_interestingness(),
                 _ => 0.5,
             };
@@ -693,7 +774,7 @@ fn g3_characterization_reversed_reward() {
 fn g3_pin_sampling_bit_identical_to_pool_conjecturer() {
     let pool = build_pool(11, true);
     let target = Target::new(pool[0].clone());
-    let mut tac: TrajectoryAlignedCuriosity<DIM> =
+    let mut tac: TrajectoryAlignedCuriosity<FirstMomentDrift<DIM>> =
         TrajectoryAlignedCuriosity::new(pool.clone(), 99);
     let mut bare = PoolConjecturer::new(pool, 99);
     let (mut ca, mut cb) = (
@@ -729,7 +810,8 @@ fn g4_cycle_aligned_is_alloc_free_when_warm() {
     );
 
     let pool = build_pool(1, true);
-    let mut tac: TrajectoryAlignedCuriosity<DIM> = TrajectoryAlignedCuriosity::new(pool.clone(), 1);
+    let mut tac: TrajectoryAlignedCuriosity<FirstMomentDrift<DIM>> =
+        TrajectoryAlignedCuriosity::new(pool.clone(), 1);
     let mut bandit = VecBandit {
         prios: vec![1.0 / N_ARMS as f32; N_ARMS],
     };
@@ -754,7 +836,7 @@ fn g4_cycle_aligned_is_alloc_free_when_warm() {
 
     // The incumbent's Solver-free cycle carried a per-cycle resize-default
     // allocation until Plan 610 G4 found it (same shape, fixed alongside).
-    let mut dc: DerivativeCuriosity<N_ARMS> = DerivativeCuriosity::new(pool, 1);
+    let mut dc: DerivativeCuriosity<N_ARMS> = DerivativeCuriosity::new(pool.clone(), 1);
     for _ in 0..100 {
         let _ = dc.cycle_curiosity(&target, &mut bandit, &mut scratch, &mut collapse, &config);
     }
@@ -769,6 +851,28 @@ fn g4_cycle_aligned_is_alloc_free_when_warm() {
         "cycle_curiosity allocated {count} times ({bytes} B) over 1000 warm cycles"
     );
     println!("[G4] 1000 warm DerivativeCuriosity::cycle_curiosity calls: 0 allocations");
+
+    // Issue 899: the second-moment summary (its n×n kernels are built before
+    // the counter is reset — construction is the only allocation it makes).
+    let mut tac2 = TrajectoryAlignedCuriosity::with_summary(
+        pool.clone(),
+        1,
+        SecondMomentDrift::<N_ARMS>::for_pool(&pool),
+    );
+    for _ in 0..100 {
+        let _ = tac2.cycle_aligned(&target, &mut bandit, &mut scratch, &mut collapse, &config);
+    }
+    reset_alloc_stats();
+    for _ in 0..1000 {
+        let r = tac2.cycle_aligned(&target, &mut bandit, &mut scratch, &mut collapse, &config);
+        std::hint::black_box(r.stats.mean_r_synth);
+    }
+    let (count, bytes) = get_alloc_stats();
+    assert_eq!(
+        count, 0,
+        "second-moment cycle_aligned allocated {count} times ({bytes} B)"
+    );
+    println!("[G4] 1000 warm second-moment cycle_aligned calls: 0 allocations");
 }
 
 #[test]
@@ -777,7 +881,15 @@ fn g4_cost_vs_incumbent() {
     let target = Target::new(pool[0].clone());
     let traj = planted_trajectory(2);
     let mut dc: DerivativeCuriosity<N_ARMS> = DerivativeCuriosity::new(pool.clone(), 2);
-    let mut tac: TrajectoryAlignedCuriosity<DIM> = TrajectoryAlignedCuriosity::new(pool, 2);
+    let mut tac: TrajectoryAlignedCuriosity<FirstMomentDrift<DIM>> =
+        TrajectoryAlignedCuriosity::new(pool.clone(), 2);
+    let mut tac2 = TrajectoryAlignedCuriosity::with_summary(
+        pool.clone(),
+        2,
+        SecondMomentDrift::<N_ARMS>::for_pool(&pool),
+    );
+    let mut cc = vec![Candidate::new(Direction::zeros(DIM), usize::MAX); 4];
+    let mut fc = Vec::with_capacity(N_ARMS);
     let mut ca = vec![Candidate::new(Direction::zeros(DIM), usize::MAX); 4];
     let mut cb = ca.clone();
     let (mut fa, mut fb) = (Vec::with_capacity(N_ARMS), Vec::with_capacity(N_ARMS));
@@ -813,16 +925,200 @@ fn g4_cost_vs_incumbent() {
         |i| sink_a += dc.observe_interestingness(std::hint::black_box(&traj[i % STEPS])),
         |i| sink_b += tac.observe_drift(std::hint::black_box(&traj[i % STEPS])),
     );
-    std::hint::black_box((sink_a, sink_b));
+    let (mut sink_c, mut sink_d) = (0.0f32, 0.0f32);
+    let (mut cd, mut fd) = (ca.clone(), Vec::with_capacity(N_ARMS));
+    let sample2 = ab_timing::ab_median_ratio(
+        31,
+        2000,
+        500,
+        |i| {
+            dc.sample_candidates(
+                &target,
+                std::hint::black_box(&traj[i % STEPS]),
+                &mut cd,
+                &mut fd,
+            );
+            sink_c += dc.last_interestingness() + cd[0].pool_index as f32;
+        },
+        |i| {
+            tac2.sample_candidates(
+                &target,
+                std::hint::black_box(&traj[i % STEPS]),
+                &mut cc,
+                &mut fc,
+            );
+            sink_d += tac2.last_interestingness() + cc[0].pool_index as f32;
+        },
+    );
+    std::hint::black_box((sink_a, sink_b, sink_c, sink_d));
     println!(
         "\n═══ Plan 610 G4 — cost (a = incumbent, b = aligned; {N_ARMS} arms × dim {DIM}) ═══"
     );
     sample.report("sample_candidates");
     observe.report("observe only     ");
+    sample2.report("second-moment sample_candidates (Issue 899)");
     #[cfg(not(debug_assertions))]
     assert!(
         sample.median <= 2.0,
         "G4 FAIL: aligned sample_candidates {:.3}× incumbent (bar ≤ 2.0×)",
         sample.median
     );
+    // Measured-verdict pin (Bench 901): the simplex-centered null costs four
+    // SIMD row dots per scored arm and lands at ~2.07×, just over the bar.
+    #[cfg(not(debug_assertions))]
+    assert!(
+        sample2.median > 2.0 && sample2.median < 3.0,
+        "Issue 899 G4 verdict moved ({:.3}×) — update Bench 901",
+        sample2.median
+    );
+}
+
+// ── Issue 899 — the second-moment, null-normalized redesign ─────────────
+
+#[test]
+fn issue_899_second_moment_gates() {
+    // G1 + negative control, same fixture and seeds as Bench 900.
+    let (mut all, mut held, mut noise) = (vec![], vec![], vec![]);
+    for seed in 0..SEEDS {
+        let pool = build_pool(seed, true);
+        let s = second_scores(&pool, &planted_trajectory(seed));
+        all.push(auc_f_vs_s(&s));
+        held.push(auc_heldout(&s));
+        noise.push(auc_f_vs_s(&second_scores(&pool, &noise_trajectory(seed))));
+    }
+    let (m_all, m_held, m_noise) = (mean_sd(&all).0, mean_sd(&held).0, mean_sd(&noise).0);
+
+    // G3 forward (F better) and reversed (S better), 32 paired seeds.
+    let arms = [
+        Arm::Second,
+        Arm::GlobalNorm,
+        Arm::SecondUniform,
+        Arm::ExtrinsicOnly,
+    ];
+    let mut fwd: Vec<Vec<f64>> = vec![vec![]; 4];
+    let mut rev: Vec<Vec<f64>> = vec![vec![]; 4];
+    for seed in 0..G3_SEEDS {
+        for (i, &arm) in arms.iter().enumerate() {
+            fwd[i].push(run_loop_with(arm, seed, false).0 as f64);
+            rev[i].push(run_loop_with(arm, seed, true).0 as f64);
+        }
+    }
+    assert_eq!(run_loop(Arm::Second, 5), run_loop(Arm::Second, 5));
+
+    println!("\n═══ Issue 899 — second-moment, null-normalized ({SEEDS}/{G3_SEEDS} seeds) ═══");
+    println!(
+        "  G1 AUC(F vs S)      mean {m_all:.3}  min {:.3}  (bar ≥ 0.8)",
+        fmin(&all)
+    );
+    println!(
+        "  G1 AUC(held-out F)  mean {m_held:.3}  min {:.3}  (bar ≥ 0.8)",
+        fmin(&held)
+    );
+    println!(
+        "  noise AUC(F vs S)   mean {m_noise:.3}  sd {:.3}  (bar |m−0.5| ≤ 0.15)",
+        mean_sd(&noise).1
+    );
+    for (label, cyc) in [("forward (F better)", &fwd), ("reversed (S better)", &rev)] {
+        println!("  G3 {label}:");
+        for (i, arm) in arms.iter().enumerate() {
+            let censored = cyc[i].iter().filter(|&&c| c >= G3_CAP as f64).count();
+            println!(
+                "    {:<14} cycles-to-acquire mean {:>6.1} (censored {censored})",
+                format!("{arm:?}"),
+                mean_sd(&cyc[i]).0
+            );
+        }
+        for (j, name) in [
+            (1usize, "GlobalNorm"),
+            (2, "SecondUniform"),
+            (3, "ExtrinsicOnly"),
+        ] {
+            let (m, lo, hi) = paired_ci(&cyc[0], &cyc[j]);
+            println!("    Second − {name:<14} Δcycles {m:+7.1} [{lo:+7.1}, {hi:+7.1}]");
+        }
+    }
+    let g1 = m_all >= 0.8 && m_held >= 0.8;
+    let neg = (m_noise - 0.5).abs() <= 0.15;
+    let (_, _, hi_gn) = paired_ci(&fwd[0], &fwd[1]);
+    let (_, _, hi_mu) = paired_ci(&fwd[0], &fwd[2]);
+    let g3_fwd = hi_gn < 0.0 && hi_mu < 0.0;
+    let (_, lo_rev, _) = paired_ci(&rev[0], &rev[2]);
+    let g3_rev = lo_rev <= 0.0;
+    let v = |b: bool| if b { "PASS" } else { "FAIL" };
+    println!(
+        "  verdicts: G1 {}  negative {}  G3-forward {}  G3-reversed {}",
+        v(g1),
+        v(neg),
+        v(g3_fwd),
+        v(g3_rev)
+    );
+    for c in fwd.iter().chain(rev.iter()) {
+        assert!(c.iter().all(|x| x.is_finite()));
+    }
+    // Measured-verdict pins (Bench 901, v2 simplex-centered null + warm start).
+    assert!(
+        !g1,
+        "Issue 899 G1 verdict changed (held-out was 0.766) — update Bench 901"
+    );
+    assert!(
+        neg,
+        "Issue 899 negative control regressed — update Bench 901"
+    );
+    assert!(g3_fwd, "Issue 899 G3-forward regressed — update Bench 901");
+    assert!(g3_rev, "Issue 899 G3-reversed regressed — update Bench 901");
+}
+
+#[test]
+fn characterization_first_moment_preconditioner_off_loop() {
+    // Post-hoc (Bench 901): κ → ∞ makes the floor dominate every coordinate,
+    // so `û → d/‖d‖` exactly — the preconditioner-off form, which passes G1
+    // and the negative control once the transient is gone. Does it survive
+    // the loop in both directions?
+    let arms = [Arm::FirstOff, Arm::GlobalNorm, Arm::MatchedUniform];
+    let mut fwd: Vec<Vec<f64>> = vec![vec![]; 3];
+    let mut rev: Vec<Vec<f64>> = vec![vec![]; 3];
+    for seed in 0..G3_SEEDS {
+        for (i, &arm) in arms.iter().enumerate() {
+            fwd[i].push(run_loop_with(arm, seed, false).0 as f64);
+            rev[i].push(run_loop_with(arm, seed, true).0 as f64);
+        }
+    }
+    println!("\n═══ Characterization — first moment, preconditioner OFF (κ→∞) ═══");
+    for (label, cyc) in [("forward", &fwd), ("reversed", &rev)] {
+        let (m, lo, hi) = paired_ci(&cyc[0], &cyc[2]);
+        let (g, glo, ghi) = paired_ci(&cyc[0], &cyc[1]);
+        println!(
+            "  {label:<8} FirstOff {:>6.1}  − MatchedUniform {m:+7.1} [{lo:+7.1}, {hi:+7.1}]  − GlobalNorm {g:+7.1} [{glo:+7.1}, {ghi:+7.1}]",
+            mean_sd(&cyc[0]).0
+        );
+    }
+    let (_, lo_rev, _) = paired_ci(&rev[0], &rev[2]);
+    // Pin: the first moment's spread-family blindness is structural, not a
+    // preconditioner artifact — it still loses when S is the better family.
+    assert!(
+        lo_rev > 0.0,
+        "P-off reversed-reward sign changed — update Bench 901"
+    );
+}
+
+#[test]
+fn issue_899_pin_sampling_bit_identical() {
+    let pool = build_pool(11, true);
+    let target = Target::new(pool[0].clone());
+    let mut tac = TrajectoryAlignedCuriosity::with_summary(
+        pool.clone(),
+        99,
+        SecondMomentDrift::<N_ARMS>::for_pool(&pool),
+    );
+    let mut bare = PoolConjecturer::new(pool, 99);
+    let mut ca = vec![Candidate::new(Direction::zeros(DIM), usize::MAX); 4];
+    let mut cb = ca.clone();
+    let (mut fa, mut fb) = (Vec::new(), Vec::new());
+    for p in planted_trajectory(11).iter() {
+        tac.sample_candidates(&target, p, &mut ca, &mut fa);
+        bare.sample_candidates(&target, p, &mut cb, &mut fb);
+        for (x, y) in ca.iter().zip(&cb) {
+            assert_eq!(x.pool_index, y.pool_index);
+        }
+    }
 }

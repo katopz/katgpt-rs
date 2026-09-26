@@ -19,6 +19,19 @@
 //! docs call the lost per-arm differentiation "the key semantic loss". This
 //! gate keeps the direction and scores each arm against it.
 //!
+//! ## Two drift summaries (Issue 899)
+//!
+//! The sampler is generic over a [`DriftSummary`]:
+//! - [`SecondMomentDrift`] is the default and the preferred summary. It reads
+//!   the per-arm share derivative through the pool's squared-cosine kernel,
+//!   z-scored against a simplex-correct null. Bench 901: loop-sound in both
+//!   directions; G1 held-out 0.766 and G4 2.07× miss their bars.
+//! - [`FirstMomentDrift`] is the Plan 610 form documented below. Bench 900 /
+//!   901: it amplifies drift toward coherent clusters and loses badly when
+//!   the better family is spread. It is kept as the comparison arm.
+//!
+//! Neither passes every GOAT bar, so the feature stays opt-in.
+//!
 //! ## Why the drift lives in LATENT space (a Plan 610 correction)
 //!
 //! Research 591 wrote the drift as `TemporalDerivativeKernel::observe(&pref_buf)`.
@@ -86,15 +99,20 @@
 //! synced. Only the bounded scalars `r̃_k ∈ [0.5, 1)` may cross the sync
 //! boundary, under the same contract as `DerivativeCuriosity`.
 //!
-//! ## Measured (Bench 900) — GOAT FAIL, stays opt-in
+//! ## Measured (Bench 900, corrected by the Bench 900 addendum + Bench 901)
 //!
-//! G1 planted-drift AUC 0.783 / held-out 0.602, below the 0.8 bar. The
-//! negative control passes (0.395). κ = 0 invariance passes; κ = 0.1 fails.
-//! The G3 loop A/B wins (230 vs 349 cycles against a matched-uniform bonus)
-//! but REVERSES when the better family has a zero pull centroid (+108
-//! cycles). The first-moment pull `m` cannot see mass moving onto `±e_i`
-//! pairs, so that shift reads as drift away from the coherent family.
-//! Redesign: Issue 899 (second-moment kernel, null-normalized).
+//! The first moment below is a GOAT FAIL:
+//! - G1 planted-drift AUC is 0.789, held-out 0.605.
+//! - With the kernel warm-started, the preconditioned form also FAILS the
+//!   negative control (0.869), while the preconditioner-off form passes it
+//!   (0.525). The preconditioner is refuted.
+//! - In the loop it wins toward a coherent family (−130 cycles vs a
+//!   matched-uniform bonus) and LOSES by +108 when the better family has a
+//!   zero pull centroid. That is structural: the pull cannot see mass moving
+//!   onto `±e_i` pairs.
+//!
+//! Use [`SecondMomentDrift`], the default, which is loop-sound in both
+//! directions.
 //!
 //! ## Cost
 //!
@@ -112,6 +130,9 @@ use crate::cgsp::types::{
 };
 use crate::simd::{simd_dot_f32, simd_fused_decay_write};
 use crate::temporal_deriv::TemporalDerivativeKernel;
+
+mod second_moment;
+pub use second_moment::{DEFAULT_Z_BETA, SecondMomentDrift};
 
 /// Default β for the per-arm alignment sigmoid. `|cos| = 0.5` maps to
 /// `sigmoid(2) ≈ 0.88`; `|cos| = 0` maps to the neutral `0.5`.
@@ -218,21 +239,33 @@ pub fn alignment_score(direction: &[f32], u_hat: &[f32], beta: f32) -> f32 {
     sigmoid(beta * cos.abs())
 }
 
-/// Per-arm trajectory-aligned curiosity conjecturer (Plan 610).
+/// How a [`TrajectoryAlignedCuriosity`] summarizes the bandit's drift and
+/// scores one candidate against it (strategy; Issue 899).
 ///
-/// Wraps a [`PoolConjecturer`] for sampling, the way [`DerivativeCuriosity`]
-/// does, so the sampling distribution stays the CGSP reference.
-///
-/// # Type parameter
+/// Implementations own their own fixed-size state and their own β, because
+/// the score's natural scale differs: a cosine for [`FirstMomentDrift`], a
+/// null z-score for [`SecondMomentDrift`].
+pub trait DriftSummary {
+    /// Absorb the current priority table. `pool` is the frozen direction pool,
+    /// in the same order as `priorities`. Returns a drift magnitude for
+    /// telemetry. Must not allocate once warm.
+    fn observe(&mut self, priorities: &[Priority], pool: &[Direction]) -> f32;
+
+    /// Score one sampled candidate, in `[0.5, 1)`. `0.5` is neutral.
+    fn score(&self, candidate: &Candidate, pool: &[Direction]) -> f32;
+
+    /// Zero all temporal state (entity respawn / session restart).
+    fn reset(&mut self);
+}
+
+/// Plan 610's shipped summary: the preconditioned drift of the
+/// priority-weighted mean pull `m = Σ_j p_j g_j` (see the [module docs](self)).
+/// Bench 900 GOAT FAIL; kept as Issue 899's comparison arm.
 ///
 /// `D` is the LATENT dimension bound: it MUST be `>=` the pool directions'
-/// dimension. That differs from `DerivativeCuriosity`, where `D` bounds the
-/// arm count. Padded coordinates stay zero and contribute nothing.
-///
-/// [`DerivativeCuriosity`]: crate::cgsp::DerivativeCuriosity
-#[derive(Debug)]
-pub struct TrajectoryAlignedCuriosity<const D: usize = DEFAULT_POOL_SIZE> {
-    pool_conjecturer: PoolConjecturer,
+/// dimension. Padded coordinates stay zero and contribute nothing.
+#[derive(Clone, Debug)]
+pub struct FirstMomentDrift<const D: usize = DEFAULT_POOL_SIZE> {
     kernel: TemporalDerivativeKernel<D>,
     precond: DriftPreconditioner<D>,
     beta: f32,
@@ -240,33 +273,20 @@ pub struct TrajectoryAlignedCuriosity<const D: usize = DEFAULT_POOL_SIZE> {
     pull_buf: [f32; D],
     /// Unit preconditioned drift `û` (zero when there is no drift).
     u_hat: [f32; D],
-    /// Raw `‖d‖₂` of the most recent observation (telemetry).
-    last_drift_norm: f32,
-    /// Per-candidate alignment scores from the most recent scoring call.
-    scores: Vec<f32>,
-    /// Mean of `scores` (compat with `DerivativeCuriosity` telemetry).
-    last_interestingness: f32,
+    /// First observation seen (the kernel is warm-started on it).
+    primed: bool,
 }
 
-impl<const D: usize> TrajectoryAlignedCuriosity<D> {
-    /// Build over a frozen direction pool. `seed` seeds the inner sampler.
-    /// Kernel defaults to the 10:1 fast/slow ratio (`0.3 / 0.03`).
-    pub fn new(pool: Vec<Direction>, seed: u64) -> Self {
-        debug_assert!(
-            pool.iter().all(|g| g.dim() <= D),
-            "pool direction dimension exceeds D={D}"
-        );
-        let k_hint = pool.len().min(DEFAULT_POOL_SIZE);
+impl<const D: usize> FirstMomentDrift<D> {
+    /// 10:1 kernel (`0.3 / 0.03`), default preconditioner, β = 4.
+    pub fn new() -> Self {
         Self {
-            pool_conjecturer: PoolConjecturer::new(pool, seed),
             kernel: TemporalDerivativeKernel::default(),
             precond: DriftPreconditioner::default(),
             beta: DEFAULT_ALIGN_BETA,
             pull_buf: [0.0; D],
             u_hat: [0.0; D],
-            last_drift_norm: 0.0,
-            scores: Vec::with_capacity(k_hint),
-            last_interestingness: 0.5,
+            primed: false,
         }
     }
 
@@ -295,11 +315,132 @@ impl<const D: usize> TrajectoryAlignedCuriosity<D> {
         self
     }
 
+    /// Current unit preconditioned drift direction `û` (zero if none).
+    #[inline]
+    pub fn drift_direction(&self) -> &[f32; D] {
+        &self.u_hat
+    }
+
+    /// Score one arbitrary latent direction against the current drift.
+    #[inline]
+    pub fn score_direction(&self, direction: &Direction) -> f32 {
+        alignment_score(&direction.coords, &self.u_hat, self.beta)
+    }
+}
+
+impl<const D: usize> Default for FirstMomentDrift<D> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<const D: usize> DriftSummary for FirstMomentDrift<D> {
+    /// Rebuild the mean pull, advance the kernel and the preconditioner.
+    /// Returns raw `‖d‖₂`.
+    fn observe(&mut self, priorities: &[Priority], pool: &[Direction]) -> f32 {
+        debug_assert_eq!(
+            priorities.len(),
+            pool.len(),
+            "priority vector length must equal the pool size"
+        );
+        self.pull_buf.fill(0.0);
+        for (&p, g) in priorities.iter().zip(pool.iter()) {
+            if p != 0.0 {
+                let n = g.coords.len().min(D);
+                // decay = 1 turns the fused decay-write into a SIMD axpy.
+                simd_fused_decay_write(&mut self.pull_buf[..n], 1.0, &g.coords[..n], p);
+            }
+        }
+        // Warm-start on the first observation (Issue 899): from the kernel's
+        // zero init, `m` reads as drifting from 0 to its mean for ~100 steps
+        // (slow α = 0.03), a drift along the pool's dense directions.
+        if !self.primed {
+            self.kernel.fast = self.pull_buf;
+            self.kernel.slow = self.pull_buf;
+            self.primed = true;
+        }
+        let d = self.kernel.observe(&self.pull_buf);
+        let norm = simd_dot_f32(&d, &d, D).max(0.0).sqrt();
+        self.precond.precondition(&d, &mut self.u_hat);
+        norm
+    }
+
+    #[inline]
+    fn score(&self, candidate: &Candidate, _pool: &[Direction]) -> f32 {
+        alignment_score(&candidate.direction.coords, &self.u_hat, self.beta)
+    }
+
+    fn reset(&mut self) {
+        self.kernel.reset();
+        self.precond.reset();
+        self.pull_buf = [0.0; D];
+        self.u_hat = [0.0; D];
+        self.primed = false;
+    }
+}
+
+/// Per-arm trajectory-aligned curiosity conjecturer (Plan 610, Issue 899).
+///
+/// Wraps a [`PoolConjecturer`] for sampling, the way [`DerivativeCuriosity`]
+/// does, so the sampling distribution stays the CGSP reference. It is
+/// bit-identical to a bare `PoolConjecturer` with the same seed, and the
+/// [`DriftSummary`] `S` only adds scores as a side channel.
+///
+/// [`DerivativeCuriosity`]: crate::cgsp::DerivativeCuriosity
+#[derive(Debug)]
+pub struct TrajectoryAlignedCuriosity<S: DriftSummary = SecondMomentDrift> {
+    pool_conjecturer: PoolConjecturer,
+    summary: S,
+    /// Drift magnitude from the most recent observation (telemetry).
+    last_drift_norm: f32,
+    /// Per-candidate alignment scores from the most recent scoring call.
+    scores: Vec<f32>,
+    /// Mean of `scores` (compat with `DerivativeCuriosity` telemetry).
+    last_interestingness: f32,
+}
+
+impl<const A: usize> TrajectoryAlignedCuriosity<SecondMomentDrift<A>> {
+    /// Build with the Issue 899 second-moment summary: the preferred summary,
+    /// and the only one loop-sound in both directions (Bench 901).
+    pub fn second_moment(pool: Vec<Direction>, seed: u64) -> Self {
+        let summary = SecondMomentDrift::for_pool(&pool);
+        Self::with_summary(pool, seed, summary)
+    }
+}
+
+impl<S: DriftSummary + Default> TrajectoryAlignedCuriosity<S> {
+    /// Build over a frozen direction pool with a default-constructed summary.
+    /// `seed` seeds the inner sampler.
+    pub fn new(pool: Vec<Direction>, seed: u64) -> Self {
+        Self::with_summary(pool, seed, S::default())
+    }
+}
+
+impl<S: DriftSummary> TrajectoryAlignedCuriosity<S> {
+    /// Build over a frozen direction pool with an explicit summary (needed for
+    /// summaries that precompute over the pool, e.g. [`SecondMomentDrift`]).
+    pub fn with_summary(pool: Vec<Direction>, seed: u64, summary: S) -> Self {
+        let k_hint = pool.len().min(DEFAULT_POOL_SIZE);
+        Self {
+            pool_conjecturer: PoolConjecturer::new(pool, seed),
+            summary,
+            last_drift_norm: 0.0,
+            scores: Vec::with_capacity(k_hint),
+            last_interestingness: 0.5,
+        }
+    }
+
     /// Enable perturbation on the inner sampler (see `PoolConjecturer`).
     #[inline]
     pub fn with_perturbation(mut self, magnitude: f32) -> Self {
         self.pool_conjecturer = self.pool_conjecturer.with_perturbation(magnitude);
         self
+    }
+
+    /// The drift summary (read-only; telemetry and summary-specific reads).
+    #[inline]
+    pub fn summary(&self) -> &S {
+        &self.summary
     }
 
     /// Per-candidate scores from the most recent
@@ -316,52 +457,28 @@ impl<const D: usize> TrajectoryAlignedCuriosity<D> {
         self.last_interestingness
     }
 
-    /// Raw `‖d‖₂` from the most recent observation.
+    /// Drift magnitude from the most recent observation.
     #[inline]
     pub fn last_drift_norm(&self) -> f32 {
         self.last_drift_norm
     }
 
-    /// Current unit preconditioned drift direction `û` (zero if none).
-    #[inline]
-    pub fn drift_direction(&self) -> &[f32; D] {
-        &self.u_hat
-    }
-
-    /// Observe the bandit's priorities: rebuild the mean pull, advance the
-    /// derivative kernel and the preconditioner. Returns raw `‖d‖₂`.
-    ///
-    /// # Panics (debug only)
-    ///
-    /// Panics if `priorities.len()` differs from the pool size.
+    /// Observe the bandit's priorities through the summary. Returns its drift
+    /// magnitude.
     pub fn observe_drift(&mut self, priorities: &[Priority]) -> f32 {
         let pool = self.pool_conjecturer.pool_directions();
-        debug_assert_eq!(
-            priorities.len(),
-            pool.len(),
-            "priority vector length must equal the pool size"
-        );
-        self.pull_buf.fill(0.0);
-        for (&p, g) in priorities.iter().zip(pool.iter()) {
-            if p != 0.0 {
-                let n = g.coords.len().min(D);
-                // decay = 1 turns the fused decay-write into a SIMD axpy.
-                simd_fused_decay_write(&mut self.pull_buf[..n], 1.0, &g.coords[..n], p);
-            }
-        }
-        let d = self.kernel.observe(&self.pull_buf);
-        self.last_drift_norm = simd_dot_f32(&d, &d, D).max(0.0).sqrt();
-        self.precond.precondition(&d, &mut self.u_hat);
+        self.last_drift_norm = self.summary.observe(priorities, pool);
         self.last_drift_norm
     }
 
-    /// Score `candidates` against the current drift direction. The buffer is
-    /// reused in place: zero allocations once its capacity reaches `k`.
+    /// Score `candidates` against the current drift. The buffer is reused in
+    /// place: zero allocations once its capacity reaches `k`.
     pub fn score_candidates(&mut self, candidates: &[Candidate]) -> &[f32] {
+        let pool = self.pool_conjecturer.pool_directions();
         self.scores.clear();
         let mut sum = 0.0f32;
         for c in candidates {
-            let s = alignment_score(&c.direction.coords, &self.u_hat, self.beta);
+            let s = self.summary.score(c, pool);
             sum += s;
             self.scores.push(s);
         }
@@ -372,18 +489,16 @@ impl<const D: usize> TrajectoryAlignedCuriosity<D> {
         &self.scores
     }
 
-    /// Score one arbitrary direction against the current drift (read-only).
+    /// Score one candidate against the current drift (read-only).
     #[inline]
-    pub fn score_direction(&self, direction: &Direction) -> f32 {
-        alignment_score(&direction.coords, &self.u_hat, self.beta)
+    pub fn score_candidate(&self, candidate: &Candidate) -> f32 {
+        self.summary
+            .score(candidate, self.pool_conjecturer.pool_directions())
     }
 
-    /// Reset kernel, preconditioner and telemetry (respawn / restart).
+    /// Reset the summary and telemetry (respawn / restart).
     pub fn reset(&mut self) {
-        self.kernel.reset();
-        self.precond.reset();
-        self.pull_buf = [0.0; D];
-        self.u_hat = [0.0; D];
+        self.summary.reset();
         self.last_drift_norm = 0.0;
         self.scores.clear();
         self.last_interestingness = 0.5;
@@ -443,7 +558,7 @@ impl<const D: usize> TrajectoryAlignedCuriosity<D> {
     }
 }
 
-impl<const D: usize> CuriosityConjecturer for TrajectoryAlignedCuriosity<D> {
+impl<S: DriftSummary> CuriosityConjecturer for TrajectoryAlignedCuriosity<S> {
     /// Observe the drift, delegate sampling to the inner `PoolConjecturer`,
     /// then score the sampled candidates (read via `last_alignment_scores`).
     fn sample_candidates(
@@ -610,7 +725,8 @@ mod tests {
         // Priority mass moves onto arm 0 (+e0). Arms on ±e0 (0, 1, 4) are
         // involved in the drift; arms on ±e1 (2, 3) are not. Arm 4's own
         // priority never changes except through renormalization.
-        let mut tac: TrajectoryAlignedCuriosity<4> = TrajectoryAlignedCuriosity::new(pool5(), 1);
+        let mut tac: TrajectoryAlignedCuriosity<FirstMomentDrift<4>> =
+            TrajectoryAlignedCuriosity::new(pool5(), 1);
         let mut p = [0.2f32; 5];
         for _ in 0..30 {
             p[0] += 0.02;
@@ -619,7 +735,10 @@ mod tests {
             tac.observe_drift(&q);
         }
         let pool = pool5();
-        let s: Vec<f32> = pool.iter().map(|g| tac.score_direction(g)).collect();
+        let s: Vec<f32> = pool
+            .iter()
+            .map(|g| tac.summary().score_direction(g))
+            .collect();
         for &on in &[0usize, 1, 4] {
             for &off in &[2usize, 3] {
                 assert!(
@@ -634,7 +753,8 @@ mod tests {
 
     #[test]
     fn scores_track_candidate_order_and_mean() {
-        let mut tac: TrajectoryAlignedCuriosity<4> = TrajectoryAlignedCuriosity::new(pool5(), 3);
+        let mut tac: TrajectoryAlignedCuriosity<FirstMomentDrift<4>> =
+            TrajectoryAlignedCuriosity::new(pool5(), 3);
         let target = Target::new(axis(4, 0, 1.0));
         let mut out = vec![Candidate::new(Direction::zeros(4), usize::MAX); 3];
         let mut cdf = Vec::new();
@@ -642,7 +762,7 @@ mod tests {
         let scores = tac.last_alignment_scores().to_vec();
         assert_eq!(scores.len(), 3);
         for (c, s) in out.iter().zip(&scores) {
-            assert!((tac.score_direction(&c.direction) - s).abs() < 1e-7);
+            assert!((tac.summary().score_direction(&c.direction) - s).abs() < 1e-7);
             assert!((0.5..1.0).contains(s), "score out of range: {s}");
         }
         let mean = scores.iter().sum::<f32>() / 3.0;
@@ -651,20 +771,24 @@ mod tests {
 
     #[test]
     fn reset_clears_state() {
-        let mut tac: TrajectoryAlignedCuriosity<4> = TrajectoryAlignedCuriosity::new(pool5(), 3);
+        let mut tac: TrajectoryAlignedCuriosity<FirstMomentDrift<4>> =
+            TrajectoryAlignedCuriosity::new(pool5(), 3);
+        // The first observation only warm-starts the kernel (zero drift).
         tac.observe_drift(&[0.6, 0.1, 0.1, 0.1, 0.1]);
+        assert_eq!(tac.last_drift_norm(), 0.0);
+        tac.observe_drift(&[0.1, 0.6, 0.1, 0.1, 0.1]);
         assert!(tac.last_drift_norm() > 0.0);
         tac.reset();
         assert_eq!(tac.last_drift_norm(), 0.0);
-        assert_eq!(tac.drift_direction(), &[0.0; 4]);
+        assert_eq!(tac.summary().drift_direction(), &[0.0; 4]);
         assert!(tac.last_alignment_scores().is_empty());
-        assert!(tac.precond.scale().iter().all(|&s| s == 0.0));
+        assert!(tac.summary.precond.scale().iter().all(|&s| s == 0.0));
     }
 
     #[test]
     fn cycle_aligned_finite_and_recovers_from_collapse() {
         let pool: Vec<Direction> = (0..8).map(|i| axis(8, i, 1.0)).collect();
-        let mut tac: TrajectoryAlignedCuriosity<8> =
+        let mut tac: TrajectoryAlignedCuriosity<FirstMomentDrift<8>> =
             TrajectoryAlignedCuriosity::new(pool.clone(), 5);
         let mut bandit = VecBandit {
             prios: (0..8).map(|i| if i == 3 { 1.0 } else { 0.0 }).collect(),

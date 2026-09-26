@@ -1,6 +1,6 @@
 # Bench 900 — `arm_drift_alignment` GOAT gate (Plan 610)
 
-**Status:** GOAT **FAIL** — the feature stays opt-in. G1 missed both pre-registered bars. G3 passed as pre-registered, but a post-hoc control shows the win is geometry-specific. The redesign is filed as Issue 899.
+**Status:** GOAT **FAIL** — the feature stays opt-in. ⚠ **Read the Addendum:** the kernel's zero-init transient (found in Issue 899) was repaired, and three readings below changed. Finding 1's "preconditioner off = cluster-density prior" was an artifact of that transient. G1 missed both pre-registered bars. G3 passed as pre-registered, but a post-hoc control shows the win is geometry-specific. The redesign is filed as Issue 899.
 
 **Date:** 2026-09-26 · **Plan:** [610](../.plans/610_arm_drift_alignment.md) · **Research:** [591](../.research/591_Trajectory_Aligned_Curiosity.md) · **Guide:** riir-ai `.research/389` · **Test:** `tests/plan_610_arm_drift_alignment_goat.rs`
 
@@ -81,3 +81,27 @@ The hypothesis to test is a **second-moment, null-normalized** score. Take the p
 - The null normalization is what the per-coordinate preconditioner was meant to do, but it is basis-free, which addresses finding 1.
 
 Reproduce: `cargo test --release --features arm_drift_alignment --test plan_610_arm_drift_alignment_goat -- --nocapture --test-threads=1`
+
+## Addendum (2026-09-26, Issue 899): the zero-init transient, corrected
+
+Issue 899 found that the temporal derivative kernel's EMAs start at 0. The slow EMA (α = 0.03) is still 5% unsettled at step 100, so the read window (steps 100–199) sees a common-mode drift of the pull `m` from 0 toward its mean, which lies along the pool's dense direction `e0`. Both summaries now warm-start the kernel on the first observation. Re-measured with every other input unchanged:
+
+| Row | Pre-registered run (above) | After warm start |
+|---|---|---|
+| G1 AUC(F vs S) / held-out | 0.783 / 0.602 | 0.789 / 0.605 — still **FAIL** |
+| Negative control, preconditioned | 0.395 PASS | **0.869 FAIL** |
+| Preconditioner OFF, noise AUC | 1.000 | **0.525** (flat) |
+| Preconditioner OFF, G1 | 1.000 / 1.000 | 1.000 / 1.000 |
+| κ = 0 invariance | 2.1e-7 PASS | **2.6e-2 FAIL** |
+| κ = 0.1 invariance ΔAUC / τ | 0.156 / 0.672 FAIL | 0.219 / 0.672 FAIL |
+| G3 forward, Aligned − MatchedUniform | −119.1 | −130.2 [−158.5, −101.9] — PASS |
+| Reversed reward, Aligned − MatchedUniform | +108.0 | +108.1 [+82.1, +134.2] — still loses |
+| G4 `sample_candidates` | 1.57× | 1.67× (loadavg 18.7) — PASS |
+
+**Corrections to the verdict section above:**
+- **Finding 1 was wrong in its first half.** Preconditioner off is **not** a cluster-density prior: its 1.000 under noise was the transient drifting along `e0`. Once the transient is repaired, it passes both G1 and the negative control. The preconditioned form **fails** the negative control (0.869). Axis-aligned scaling inflates the coordinates that only F's directions touch (their noise components), and S's single-axis directions have no weight there. So the per-coordinate preconditioner is **refuted outright**: it fails every row the unpreconditioned form passes.
+- **κ = 0 exactness is conditional.** It holds only while every coordinate's drift is far above `SCALE_EPS`. Untouched coordinates at float noise break homogeneity.
+- **Finding 2 stands, and it is structural.** Bench 901's post-hoc loop row runs preconditioner-off (κ → ∞, `û = d/‖d‖`): 116 cycles forward, but 597.6 reversed (+131.5 vs MatchedUniform). The first moment cannot see drift toward a spread family, whatever the preconditioner does.
+- **Finding 3 stands.**
+
+The test now pins the post-repair verdicts. The pre-registered numbers above are kept as the historical record of what that run produced.

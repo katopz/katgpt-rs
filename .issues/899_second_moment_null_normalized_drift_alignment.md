@@ -1,6 +1,6 @@
 # Issue 899: Second-moment, null-normalized drift alignment (the Plan 610 redesign)
 
-**Status:** Open — filed 2026-09-26 from [Bench 900](../.benchmarks/900_arm_drift_alignment_goat.md) (Plan 610 GOAT FAIL). The bars below are pre-registered; no code has been written for this issue yet.
+**Status:** CLOSED — negative on 2 of 6 bars ([Bench 901](../.benchmarks/901_second_moment_drift_alignment.md), 2026-09-26). v2 (simplex-centered null + warm start): G1 F-vs-S 0.883 PASS, **held-out 0.766 FAIL**, negative control 0.559 PASS, G3 forward −79 and reversed −63 cycles vs its own uniform bonus (both PASS), **G4 2.07× FAIL**. It is the only summary that stays sound in the loop in both directions, so it became `TrajectoryAlignedCuriosity`'s default summary. The feature stays opt-in and the honest-null clause is applied (guide 389 P2 stays retired). Filed from [Bench 900](../.benchmarks/900_arm_drift_alignment_goat.md).
 **Class:** poc (redesign of an opt-in primitive against its own failed gate)
 **Parent:** [Plan 610](../.plans/610_arm_drift_alignment.md) · [Research 591](../.research/591_Trajectory_Aligned_Curiosity.md) · riir-ai `.research/389` (guide; P2 is refuted at the current design)
 
@@ -69,6 +69,6 @@ Warm start stays on. The bars, β_z = 1, the EMA rates and the fixture are all u
 
 ## Tasks
 
-- [ ] T1 — `SecondMomentAlignment` (or a `DriftSummary` strategy on `TrajectoryAlignedCuriosity`, whichever keeps one sampler): fixed per-arm state, `C` built at construction, zero-alloc observe and score. Unit tests: `±e_i` visibility; unit null variance on i.i.d. noise.
-- [ ] T2 — run the Bench 900 fixture against the bars above as a new arm in `tests/plan_610_arm_drift_alignment_goat.rs`, keeping the first-moment rows as the comparison.
-- [ ] T3 — record the result: Bench 901, Research 591 status, guide 389 P2. Promote the redesign only if every bar passes; otherwise apply the honest-null clause.
+- [x] T1 — `SecondMomentAlignment` (or a `DriftSummary` strategy on `TrajectoryAlignedCuriosity`, whichever keeps one sampler): fixed per-arm state, `C` built at construction, zero-alloc observe and score. Unit tests: `±e_i` visibility; unit null variance on i.i.d. noise.
+- [x] T2 — run the Bench 900 fixture against the bars above as a new arm in `tests/plan_610_arm_drift_alignment_goat.rs`, keeping the first-moment rows as the comparison.
+- [x] T3 — record the result: Bench 901, Research 591 status, guide 389 P2. Promote the redesign only if every bar passes; otherwise apply the honest-null clause.

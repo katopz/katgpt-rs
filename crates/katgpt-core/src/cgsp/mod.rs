@@ -52,7 +52,10 @@ pub mod dual_pool;
 
 // Convenience re-exports — flat namespace for callers.
 #[cfg(feature = "arm_drift_alignment")]
-pub use arm_alignment::{DriftPreconditioner, TrajectoryAlignedCuriosity, alignment_score};
+pub use arm_alignment::{
+    DriftPreconditioner, DriftSummary, FirstMomentDrift, SecondMomentDrift,
+    TrajectoryAlignedCuriosity, alignment_score,
+};
 pub use conjecturer::PoolConjecturer;
 #[cfg(feature = "temporal_deriv")]
 pub use derivative_curiosity::DerivativeCuriosity;

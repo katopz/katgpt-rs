@@ -1,6 +1,6 @@
 # Plan 610 — `arm_drift_alignment`: per-arm trajectory-aligned curiosity gate for cgsp
 
-**Status:** GOAT FAIL — stays opt-in ([Bench 900](../.benchmarks/900_arm_drift_alignment_goat.md), 2026-09-26). G1 AUC 0.783 / held-out 0.602 < 0.8. G3 PASS (230 vs 349 cycles vs matched-uniform) but reverses when the better family has a zero pull centroid (+108 cycles). Redesign → Issue 899. Original: opt-in feature `arm_drift_alignment`, promote to default only on GOAT pass. Research: `katgpt-rs/.research/591_Trajectory_Aligned_Curiosity.md` (arXiv:2609.30063 extraction); guide: `riir-ai/.research/389_Trajectory_Aligned_Curiosity_Guide.md`.
+**Status:** GOAT FAIL — stays opt-in ([Bench 900](../.benchmarks/900_arm_drift_alignment_goat.md), 2026-09-26). G1 AUC 0.783 / held-out 0.602 < 0.8. G3 PASS (230 vs 349 cycles vs matched-uniform) but reverses when the better family has a zero pull centroid (+108 cycles). Redesign → Issue 899, **closed negative on 2 of 6 bars** ([Bench 901](../.benchmarks/901_second_moment_drift_alignment.md)): the second-moment summary is loop-sound in both directions but misses G1 held-out (0.766) and G4 (2.07×). The Bench 900 addendum corrects the transient-driven readings. Original: opt-in feature `arm_drift_alignment`, promote to default only on GOAT pass. Research: `katgpt-rs/.research/591_Trajectory_Aligned_Curiosity.md` (arXiv:2609.30063 extraction); guide: `riir-ai/.research/389_Trajectory_Aligned_Curiosity_Guide.md`.
 
 ## Pinned shape (before code)
 
