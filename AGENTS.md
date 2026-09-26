@@ -3132,6 +3132,13 @@ cargo heal --fix --write --verify --verify-args "--features <set>" <paths>  # ga
   edits. Feature-gated code needs `--verify-args "--features <set>"` (a
   default-features check compiles gated files empty — a green check proves
   nothing about them).
+- ⚠ **Allow-by-default lints need `--groups` here** (riir-clippy Issue 135):
+  `match_bool`, `map_unwrap_or`, `uninlined_format_args`, `doc_markdown` and
+  the rest of the pedantic/nursery fix set are healed ONLY where the target
+  crate enables the lint or its group (`[lints.clippy]`, inherited
+  `[workspace.lints.clippy]`, crate-root/file `#![warn(clippy::…)]`) —
+  otherwise skipped loudly. katgpt-rs enables no pedantic group, so healing
+  those classes takes `cargo heal --fix --groups pedantic <paths>`.
 - The healer is deliberately SILENT on documented divergence classes
   (comment-guarded matches, array-literal defaults, named-arg renames,
   nested macro args) — those stay manual; see the `cargo-heal` skill
