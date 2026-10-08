@@ -148,6 +148,16 @@ mla_attention = ["dep:katgpt-kv", "katgpt-kv/shard_kv"]
 # modelless-by-mandate — this is the training-time reference consumed by
 # riir-train, never on the production inference path. Opt-in, default-off.
 mla_backward = ["mla_attention"]
+# Issue 926 — weight-absorbed MLA decode (DeepSeek-V2 §2.1 absorption; the
+# external price tag is arXiv:2610.07940 §5.2: reconstruct-based latent
+# attention runs at 7–18% of full-cache throughput, the absorbed read at
+# 28–59×, at equal quality). Per step per head: q_abs = W_UKᵀ·q_c ONCE, scores
+# read the latent directly, values accumulate in latent space with ONE W_UV
+# up-projection — the per-token W_UK/W_UV reconstruction (O(seq)·(d_h+d_v)·d_c
+# FLOPs) drops to O(seq)·2·d_c. Implies `mla_attention`; the reconstruct path
+# stays compiled as the spec-match reference + runtime kill-switch
+# (`KATGPT_MLA_RECONSTRUCT=1`). Opt-in until the bench-926 G2 gate.
+mla_absorbed = ["mla_attention"]
 # KDA (Kimi Delta Attention) — Kimi Linear (arxiv 2510.26692) §3-4.
 # Implements the per-token decode forward for KDA linear attention. The
 # recurrent kernel is REUSED from `gdn2_attention` (Gdn2GateConfig::Kda);
@@ -323,6 +333,19 @@ required-features = ["pyramid_topk"]
 [[test]]
 name = "bench_612_alloc_check"
 required-features = ["pyramid_topk"]
+
+# Issue 926 — absorbed-decode G1: absorbed vs reconstruct at the spec-match
+# bar (fp reassociation only; the reconstruct path is itself f64-verified in
+# `mla_g1_spec_match`, so the pair composes).
+[[test]]
+name = "mla_absorbed_spec_match"
+required-features = ["mla_absorbed"]
+
+# Issue 926 — absorbed-decode G4: steady-state decode allocates nothing (own
+# binary: the CountingAllocator must not pick up parallel tests).
+[[test]]
+name = "mla_absorbed_alloc_check"
+required-features = ["mla_absorbed"]
 
 # Issue 925 — LoT-fitted extent pooling as a routing summary operator
 # (probe). Needs the pyramid slot (real-tensor protocol + argtopk) AND the

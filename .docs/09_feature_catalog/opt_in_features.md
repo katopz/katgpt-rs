@@ -1138,6 +1138,10 @@ The substrate primitives it composes each have their own GOAT gates (GDN2/KDA Pl
 
 > **Backward (BPTT) path:** see [§76](#76-kimi-k3-analytic-backward--training-reference-gradient-pass) for the analytic gradient pass (`kimi_k3_backward` + per-primitive `kda_backward` / `mla_backward` / `moe_backward`). Training-time reference consumed by riir-train; NOT a production inference path.
 
+## MLA Absorbed Decode (Issue 926, arXiv:2610.07940)
+
+**Status: opt-in** — `mla_absorbed` (katgpt-attn `mla_absorbed = ["mla_attention"]` + root forward). Weight-absorbed MLA decode (DeepSeek-V2 §2.1 absorption): per step per head `q_abs = W_UKᵀ·q_c` ONCE, scores read the latent directly, values accumulate in latent space as ONE transpose matvec over the cached `[seq × d_c]` matrix with a single `W_UV` up-projection — replacing the per-token `W_UK`/`W_UV` reconstruction. Bench 926 (GOAT): G1 absorbed/recon ≤ 8.9e-8 (tol 1e-4/1e-3), G2 **23.9–54× wall-clock** over seq {1K, 4K, 16K} (ratio stable; absolutes provisional under sibling box load — quiet-box re-pin recorded in the bench file before promotion), G3 217 root lib tests + all reference gates green, G4 0 allocs. The reconstruct path stays compiled as the spec-match reference; the kimi decode lane routes through `mla_forward_token_dispatched` (kill-switch `KATGPT_MLA_RECONSTRUCT=1`). League models do not run the MLA path — kimi lane only. 📖 [Bench 926](../../.benchmarks/926_mla_absorbed_decode_goat.md).
+
 ## 34. QGF — Q-Guided Flow Test-Time Gradient Guidance (Plan 268)
 
 Distilled from [arXiv:2606.11087](https://arxiv.org/abs/2606.11087) — Zhou et al., *Q-Guided Flow*. Test-time Q-gradient guidance for any `SpeculativeGenerator`: steers discrete generation toward higher expected Q by tilting logits `p' = p_t + (1/β)·∇Q`. No continuous diffusion, no flow-matching training, no BPTT — pure inference-time steering.

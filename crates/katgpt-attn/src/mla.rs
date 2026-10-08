@@ -62,6 +62,8 @@
 //! For Kimi-K3-0.40B: `(128 + 32) = 160` elements/token/layer vs `1024` for MHA.
 
 use katgpt_core::simd::{simd_dot_f32, simd_matmul_rows};
+#[cfg(feature = "mla_absorbed")]
+use katgpt_core::simd::simd_transpose_matvec_into;
 use katgpt_kv::shard_kv::rope::RopeFreqs;
 
 // ─── Config ─────────────────────────────────────────────────────────────────
@@ -399,6 +401,13 @@ pub struct MlaForwardScratch {
     pub(crate) gate_buf: Vec<f32>, // [d]
     // Output
     pub(crate) output: Vec<f32>, // [d]
+    // Issue 926 absorbed-decode scratch (compiled only under `mla_absorbed`):
+    // per-head absorbed queries `[d_c * n_h]` + one latent accumulator `[d_c]`.
+    // Pre-allocated here so the absorbed hot path allocates nothing per step.
+    #[cfg(feature = "mla_absorbed")]
+    pub(crate) q_abs: Vec<f32>,   // [d_c * n_h]
+    #[cfg(feature = "mla_absorbed")]
+    pub(crate) lat_acc: Vec<f32>, // [d_c]
 }
 
 impl MlaForwardScratch {
@@ -417,6 +426,10 @@ impl MlaForwardScratch {
             scores: vec![0.0; max_seq],
             gate_buf: vec![0.0; config.hidden_size],
             output: vec![0.0; config.hidden_size],
+            #[cfg(feature = "mla_absorbed")]
+            q_abs: vec![0.0; config.kv_lora_rank * n_h],
+            #[cfg(feature = "mla_absorbed")]
+            lat_acc: vec![0.0; config.kv_lora_rank],
         }
     }
 
@@ -480,53 +493,29 @@ pub(crate) fn rmsnorm_inplace(x: &mut [f32], gamma: &[f32], eps: f32) {
     }
 }
 
-/// Single-token MLA forward pass (decode path).
+/// Shared decode prologue (Steps 1–2): down-projections + latent RMSNorms +
+/// query up-projections + RoPE on the per-head rope queries.
 ///
-/// Computes one step of MLA attention:
-/// 1. Down/up-projections on the current hidden state `h`
-/// 2. Applies decoupled RoPE to the rope query + shared rope key
-/// 3. Caches the compressed KV latent + shared rope key
-/// 4. Attends to all cached tokens (content dot product + rope dot product)
-/// 5. Output projection (with optional output gate)
-///
-/// # Arguments
-/// - `config` — MLA dimensions
-/// - `weights` — weight matrices
-/// - `cache` — KV cache (appended to; `cache.seq_len` is the new token's position)
-/// - `scratch` — pre-allocated scratch buffers (reused across calls)
-/// - `rope_freqs` — RoPE frequency table (must match `config.qk_rope_head_dim`)
-/// - `h` — input hidden state `[hidden_size]`
-///
-/// # Returns
-/// A slice into `scratch.output` of length `hidden_size`.
-pub fn mla_forward_token<'s>(
+/// Used VERBATIM by both decode paths — the reconstruct reference
+/// ([`mla_forward_token`]) and the weight-absorbed variant
+/// ([`mla_forward_token_absorbed`], Issue 926) — so the pair cannot drift on
+/// their shared prefix. Moved out of the reference fn byte-for-byte; the
+/// spec-match + grad-check suites pin the reference.
+fn mla_decode_prologue(
     config: &MlaConfig,
     weights: &MlaWeights,
-    cache: &mut MlaKVCache,
-    scratch: &'s mut MlaForwardScratch,
+    scratch: &mut MlaForwardScratch,
     rope_freqs: &mut RopeFreqs,
     h: &[f32],
-) -> &'s mut [f32] {
+    pos: usize,
+) {
     let d = config.hidden_size;
     let d_c = config.kv_lora_rank;
     let d_qc = config.q_lora_rank;
     let d_h = config.d_h();
     let d_r = config.d_r();
-    let v_h = config.v_head_dim;
     let n_h = config.n_heads;
     debug_assert_eq!(h.len(), d, "hidden state dim mismatch");
-
-    // The position of the token being processed = current cache length.
-    let pos = cache.seq_len;
-
-    // ── Step 1: Down-projections + latent RMSNorm ──────────────────────────
-    // Actual model path (Research 330 §2):
-    //   c_q_raw  = q_a_proj(h)         → q_a_layernorm(c_q_raw)  → q_b_proj
-    //   c_kv_raw = kv_a_proj_with_mqa(h)[..d_c] → kv_a_layernorm → kv_b_proj
-    //
-    // We compute W_DKV and W_KR separately (they're the de-fused rows of
-    // kv_a_proj_with_mqa). The norm is applied in-place to the scratch latents
-    // BEFORE up-projection and caching.
 
     // c_kv_raw = W_DKV · h   [d_c]  (KV latent compression)
     simd_matmul_rows(&mut scratch.c_kv, &weights.w_dkv, h, d_c, d);
@@ -546,7 +535,6 @@ pub fn mla_forward_token<'s>(
         config.rms_norm_eps,
     );
 
-    // ── Step 2: Query up-projections (from normed c_q) ──────────────────────
     // q_c = W_UQ · c_q   [d_h * n_h]  (content query — NO RoPE)
     simd_matmul_rows(
         &mut scratch.q_c,
@@ -567,8 +555,133 @@ pub fn mla_forward_token<'s>(
     if !config.use_nope {
         apply_decoupled_rope(rope_freqs, &mut scratch.q_r, d_r, n_h, pos);
     }
+}
 
-    // ── Step 3: Key/value up-projections (from normed c_kv) ─────────────────
+/// Shared decode midfix (Steps 4–5): shared rope key projection + RoPE, then
+/// caching of the normed latent + rope key. Used verbatim by both decode
+/// paths (see [`mla_decode_prologue`]).
+fn mla_decode_rope_key_and_cache(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    cache: &mut MlaKVCache,
+    scratch: &mut MlaForwardScratch,
+    rope_freqs: &mut RopeFreqs,
+    h: &[f32],
+    pos: usize,
+) {
+    let d = config.hidden_size;
+    let d_r = config.d_r();
+
+    // k_r_raw = W_KR · h   [d_r]  (shared across all heads — NOT normed;
+    // the rope key is the tail of kv_a_proj_with_mqa output, outside kv_a_norm)
+    simd_matmul_rows(&mut scratch.k_r, &weights.w_kr, h, d_r, d);
+    // Apply RoPE to the shared key (n_heads=1 — it's shared), unless use_nope.
+    if !config.use_nope {
+        apply_decoupled_rope(rope_freqs, &mut scratch.k_r, d_r, 1, pos);
+    }
+
+    // ── Step 5: Cache the normed latent + shared rope key ───────────────
+    // c_kv is ALREADY normed (Step 1); the attention loop up-projects directly.
+    cache.append(&scratch.c_kv, &scratch.k_r);
+}
+
+/// Shared decode epilogue (Steps 7–8): the Kimi-K3 output gate (applied to
+/// `attn_out` BEFORE the output projection) + `W_O`. Used verbatim by both
+/// decode paths (see [`mla_decode_prologue`]).
+fn mla_decode_epilogue<'s>(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    scratch: &'s mut MlaForwardScratch,
+    h: &[f32],
+) -> &'s mut [f32] {
+    let d = config.hidden_size;
+    let v_h = config.v_head_dim;
+    let n_h = config.n_heads;
+    let proj_size = v_h * n_h;
+
+    // ── Step 7: Output gate (Kimi-K3 extension) — BEFORE o_proj ────────
+    // The actual model applies the gate to attn_output (shape [v_h*n_h]) BEFORE
+    // the output projection, not after. g_proj has shape [v_h*n_h, d].
+    //   g = sigmoid(g_proj · h)   [v_h*n_h]
+    //   attn_output *= g
+    // Then o_proj maps the gated attn_output back to [d].
+    if config.use_output_gate
+        && let Some(ref w_g) = weights.w_g
+    {
+        // gate = sigmoid(g_proj · h)  [v_h*n_h]
+        simd_matmul_rows(&mut scratch.gate_buf, w_g, h, proj_size, d);
+        // zip over the two pre-sliced prefixes: same element order and the same
+        // `1/(1+exp(-x))` expression per element → bit-identical, minus the two
+        // bounds checks per element.
+        for (o, &gb) in scratch.attn_out[..proj_size]
+            .iter_mut()
+            .zip(scratch.gate_buf[..proj_size].iter())
+        {
+            let g = 1.0 / (1.0 + (-gb).exp());
+            *o *= g;
+        }
+    }
+
+    // ── Step 8: Output projection ──────────────────────────────────────
+    // u = W_O · gated_attn_out   [d]
+    simd_matmul_rows(
+        &mut scratch.output,
+        &weights.w_o,
+        &scratch.attn_out,
+        d,
+        proj_size,
+    );
+
+    &mut scratch.output[..d]
+}
+
+/// Single-token MLA forward pass (decode path) — the RECONSTRUCT reference.
+///
+/// Computes one step of MLA attention:
+/// 1. Down/up-projections on the current hidden state `h`
+/// 2. Applies decoupled RoPE to the rope query + shared rope key
+/// 3. Caches the compressed KV latent + shared rope key
+/// 4. Attends to all cached tokens (content dot product + rope dot product)
+/// 5. Output projection (with optional output gate)
+///
+/// This is the per-token up-projection form: every cached token's
+/// `k_c_j = W_UK·c_kv_j` / `v_c_j = W_UV·c_kv_j` is rebuilt at attention time
+/// (O(seq)·(d_h+v_h)·d_c FLOPs per step). It stays compiled in every feature
+/// posture as the spec-match reference — [`mla_forward_token_absorbed`] is the
+/// algebraically-identical absorbed variant, [`mla_forward_token_dispatched`]
+/// the runtime router.
+///
+/// # Arguments
+/// - `config` — MLA dimensions
+/// - `weights` — weight matrices
+/// - `cache` — KV cache (appended to; `cache.seq_len` is the new token's position)
+/// - `scratch` — pre-allocated scratch buffers (reused across calls)
+/// - `rope_freqs` — RoPE frequency table (must match `config.qk_rope_head_dim`)
+/// - `h` — input hidden state `[hidden_size]`
+///
+/// # Returns
+/// A slice into `scratch.output` of length `hidden_size`.
+pub fn mla_forward_token<'s>(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    cache: &mut MlaKVCache,
+    scratch: &'s mut MlaForwardScratch,
+    rope_freqs: &mut RopeFreqs,
+    h: &[f32],
+) -> &'s mut [f32] {
+    let d_c = config.kv_lora_rank;
+    let d_h = config.d_h();
+    let d_r = config.d_r();
+    let v_h = config.v_head_dim;
+    let n_h = config.n_heads;
+
+    // The position of the token being processed = current cache length.
+    let pos = cache.seq_len;
+
+    // ── Steps 1–2 (shared prologue) ────────────────────────────────
+    mla_decode_prologue(config, weights, scratch, rope_freqs, h, pos);
+
+    // ── Step 3: Key/value up-projections (reconstruct-only) ─────────────
     // These compute the current token's k_c/v_c (overwritten in the attention
     // loop below — kept for structural clarity).
     simd_matmul_rows(
@@ -586,18 +699,8 @@ pub fn mla_forward_token<'s>(
         d_c,
     );
 
-    // ── Step 4: Shared decoupled RoPE key ──────────────────────────────────
-    // k_r_raw = W_KR · h   [d_r]  (shared across all heads — NOT normed;
-    // the rope key is the tail of kv_a_proj_with_mqa output, outside kv_a_norm)
-    simd_matmul_rows(&mut scratch.k_r, &weights.w_kr, h, d_r, d);
-    // Apply RoPE to the shared key (n_heads=1 — it's shared), unless use_nope.
-    if !config.use_nope {
-        apply_decoupled_rope(rope_freqs, &mut scratch.k_r, d_r, 1, pos);
-    }
-
-    // ── Step 5: Cache the normed latent + shared rope key ───────────────────
-    // c_kv is ALREADY normed (Step 1); the attention loop up-projects directly.
-    cache.append(&scratch.c_kv, &scratch.k_r);
+    // ── Steps 4–5: shared rope key + cache append (midfix) ─────────────
+    mla_decode_rope_key_and_cache(config, weights, cache, scratch, rope_freqs, h, pos);
 
     // ── Step 6: Attention (per head) ───────────────────────────────────────
     // For each head h:
@@ -686,41 +789,164 @@ pub fn mla_forward_token<'s>(
         }
     }
 
-    // ── Step 7: Output gate (Kimi-K3 extension) — BEFORE o_proj ───────────
-    // The actual model applies the gate to attn_output (shape [v_h*n_h]) BEFORE
-    // the output projection, not after. g_proj has shape [v_h*n_h, d].
-    //   g = sigmoid(g_proj · h)   [v_h*n_h]
-    //   attn_output *= g
-    // Then o_proj maps the gated attn_output back to [d].
-    let proj_size = v_h * n_h;
-    if config.use_output_gate
-        && let Some(ref w_g) = weights.w_g
-    {
-        // gate = sigmoid(g_proj · h)  [v_h*n_h]
-        simd_matmul_rows(&mut scratch.gate_buf, w_g, h, proj_size, d);
-        // zip over the two pre-sliced prefixes: same element order and the same
-        // `1/(1+exp(-x))` expression per element → bit-identical, minus the two
-        // bounds checks per element.
-        for (o, &gb) in scratch.attn_out[..proj_size]
-            .iter_mut()
-            .zip(scratch.gate_buf[..proj_size].iter())
+    // ── Steps 7–8: shared output gate + projection (epilogue) ───────
+    mla_decode_epilogue(config, weights, scratch, h)
+}
+
+/// Weight-absorbed single-token MLA decode (Issue 926 — DeepSeek-V2 §2.1
+/// absorption; external evidence arXiv:2610.07940 §5.2).
+///
+/// Algebraically IDENTICAL to [`mla_forward_token`], reassociated to remove
+/// the per-token up-projections. Per step per head:
+///
+/// 1. `q_abs_h = W_UK[h]ᵀ · q_c_h` — once per step (8,192 FLOPs at the kimi
+///    geometry), so the content score reads the latent directly:
+///    `q_c·(W_UK·c_kv_j) ≡ (W_UKᵀ·q_c)·c_kv_j`.
+/// 2. Scores: `content = q_abs_h·c_kv_j` (d_c dot) + the UNCHANGED rope dot
+///    `q_r_h·k_r_j`.
+/// 3. Softmax: same form as the reference (subtract max, exp, sum).
+/// 4. Values: the latent-space accumulator `s_h = Σ_j w_j·c_kv_j` is ONE
+///    transpose matvec over the cached `[seq × d_c]` latent matrix
+///    ([`simd_transpose_matvec_into`] — NEON/AVX2/wasm32 paths), then
+///    `o_h = W_UV[h]·s_h` once per step. The softmax weights are applied to
+///    `s_h` AFTER the accumulation (d_c multiplies) instead of per token.
+///
+/// At the kimi_k3_0_40b geometry (d_h=64, d_c=128, v_h=64, n_h=16, seq=4096)
+/// this drops the attention step from ~1.09 GFLOPs of up-projection work to
+/// ~0.017 GFLOPs (~60×) per decode step; the k_r rope dot, the Kimi output
+/// gate, and the `use_nope` structure are untouched, and the 6.4× cache
+/// footprint win is preserved (the rejected alternative — caching
+/// up-projected k_c/v_c — grows the cache to ≈MHA size and is recorded in
+/// Issue 926 so nobody reopens it).
+///
+/// The reconstruct path is NOT changed by this fn and remains the
+/// spec-match reference; G1 = the absorbed/reconstruct pair within the
+/// existing 1e-4 (1e-3 full-dims) bar (`tests/mla_absorbed_spec_match.rs`).
+#[cfg(feature = "mla_absorbed")]
+pub fn mla_forward_token_absorbed<'s>(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    cache: &mut MlaKVCache,
+    scratch: &'s mut MlaForwardScratch,
+    rope_freqs: &mut RopeFreqs,
+    h: &[f32],
+) -> &'s mut [f32] {
+    let d_c = config.kv_lora_rank;
+    let d_h = config.d_h();
+    let d_r = config.d_r();
+    let v_h = config.v_head_dim;
+    let n_h = config.n_heads;
+
+    // The position of the token being processed = current cache length.
+    let pos = cache.seq_len;
+
+    // ── Steps 1–2 (shared prologue) ────────────────────────────────
+    mla_decode_prologue(config, weights, scratch, rope_freqs, h, pos);
+
+    // ── Step 3: SKIPPED — the reconstruct path's k_c/v_c up-projections are
+    // dead work there (k_c is overwritten before read, v_c never read in the
+    // attention loop) and the absorbed path never materializes k_c/v_c at all.
+
+    // ── Steps 4–5: shared rope key + cache append (midfix) ─────────────
+    mla_decode_rope_key_and_cache(config, weights, cache, scratch, rope_freqs, h, pos);
+
+    // ── Step 6: ABSORBED attention (per head) ────────────────────────────
+    let scale = config.attn_scale();
+    let seq = cache.seq_len;
+
+    for head in 0..n_h {
+        // q_abs_h = W_UK[h]ᵀ · q_c_h — once per step per head. The head slice
+        // is row-major [d_h × d_c]; the transpose matvec zeroes `q_abs[..d_c]`
+        // then accumulates the row-major matrix transposed against q_c_h.
+        simd_transpose_matvec_into(
+            &mut scratch.q_abs[..d_c],
+            &weights.w_uk[head * d_h * d_c..(head + 1) * d_h * d_c],
+            &scratch.q_c[head * d_h..(head + 1) * d_h],
+            d_h,
+            d_c,
+        );
+        let q_abs_h = &scratch.q_abs[..d_c];
+        let q_r_h = &scratch.q_r[head * d_r..(head + 1) * d_r];
+
+        // Scores: content dot over the latent (d_c) + the unchanged rope dot.
+        let scores = &mut scratch.scores[..seq];
+        let mut max_score = f32::NEG_INFINITY;
+        for (j, score_slot) in scores.iter_mut().enumerate().take(seq) {
+            let c_kv_j = cache.latent_kv_at(j);
+            let k_r_j = cache.rope_key_at(j);
+
+            let content_dot = simd_dot_f32(q_abs_h, c_kv_j, d_c);
+            let rope_dot = simd_dot_f32(q_r_h, k_r_j, d_r);
+            let score = (content_dot + rope_dot) * scale;
+            *score_slot = score;
+            if score > max_score {
+                max_score = score;
+            }
+        }
+
+        // Softmax (numerically stable: subtract max) — same form as the
+        // reference. Weights stay UNNORMALIZED here; the single inv_sum
+        // scaling happens on the latent accumulator below.
+        let mut sum_exp = 0.0f32;
+        for s in scores.iter_mut().take(seq) {
+            *s = (*s - max_score).exp();
+            sum_exp += *s;
+        }
+        let inv_sum = 1.0 / sum_exp;
+
+        // Values: s_h = Σ_j exp_j · c_kv_j = Latents[seq × d_c]ᵀ · exp — ONE
+        // SIMD pass over the cached latent matrix (the cache IS the matrix,
+        // row-major by construction), then the single W_UV up-projection.
         {
-            let g = 1.0 / (1.0 + (-gb).exp());
-            *o *= g;
+            let s_acc = &mut scratch.lat_acc[..d_c];
+            simd_transpose_matvec_into(s_acc, &cache.latent_kv[..seq * d_c], scores, seq, d_c);
+            for v in s_acc.iter_mut() {
+                *v *= inv_sum;
+            }
+            // o_h = W_UV[h] · s_h
+            let o_h = &mut scratch.attn_out[head * v_h..(head + 1) * v_h];
+            simd_matmul_rows(
+                o_h,
+                &weights.w_uv[head * v_h * d_c..(head + 1) * v_h * d_c],
+                s_acc,
+                v_h,
+                d_c,
+            );
         }
     }
 
-    // ── Step 8: Output projection ──────────────────────────────────────────
-    // u = W_O · gated_attn_out   [d]
-    simd_matmul_rows(
-        &mut scratch.output,
-        &weights.w_o,
-        &scratch.attn_out,
-        d,
-        proj_size,
-    );
+    // ── Steps 7–8: shared output gate + projection (epilogue) ───────
+    mla_decode_epilogue(config, weights, scratch, h)
+}
 
-    &mut scratch.output[..d]
+/// Runtime decode entry for model runners (Issue 926).
+///
+/// Routes to the weight-absorbed path ([`mla_forward_token_absorbed`]) when
+/// compiled with the `mla_absorbed` feature, unless `KATGPT_MLA_RECONSTRUCT=1`
+/// forces the reconstruct reference (read once, first call — the kill-switch
+/// posture of the feature-flag discipline). WITHOUT the feature this is a
+/// transparent forward to [`mla_forward_token`]: default builds are behavior-
+/// and byte-identical, and the training/backward paths call the reference
+/// directly regardless.
+pub fn mla_forward_token_dispatched<'s>(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    cache: &mut MlaKVCache,
+    scratch: &'s mut MlaForwardScratch,
+    rope_freqs: &mut RopeFreqs,
+    h: &[f32],
+) -> &'s mut [f32] {
+    #[cfg(feature = "mla_absorbed")]
+    {
+        static RECONSTRUCT_FORCED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        let forced = *RECONSTRUCT_FORCED.get_or_init(|| {
+            std::env::var("KATGPT_MLA_RECONSTRUCT").is_ok_and(|v| v == "1")
+        });
+        if !forced {
+            return mla_forward_token_absorbed(config, weights, cache, scratch, rope_freqs, h);
+        }
+    }
+    mla_forward_token(config, weights, cache, scratch, rope_freqs, h)
 }
 
 #[cfg(test)]

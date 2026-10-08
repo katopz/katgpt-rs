@@ -44,7 +44,9 @@
 use katgpt_attn::gdn2::kda_forward::{
     KdaConfig, KdaForwardScratch, KdaLayerCache, KdaWeights, kda_forward_token,
 };
-use katgpt_attn::mla::{MlaConfig, MlaForwardScratch, MlaKVCache, MlaWeights, mla_forward_token};
+use katgpt_attn::mla::{
+    MlaConfig, MlaForwardScratch, MlaKVCache, MlaWeights, mla_forward_token_dispatched,
+};
 use katgpt_core::types::math::rmsnorm_with_gamma_eps;
 use katgpt_kv::shard_kv::rope::RopeFreqs;
 use katgpt_transformer::attn_res::{
@@ -288,7 +290,9 @@ pub fn kimi_decoder_layer_forward(
             let Some(rf) = rope_freqs else {
                 panic!("MLA attention requires rope_freqs");
             };
-            mla_forward_token(mla_cfg, mla_w, cache, scratch, rf, scratch_hidden)
+            // Issue 926: routes to the absorbed path under `mla_absorbed`
+            // (kill-switch `KATGPT_MLA_RECONSTRUCT=1`); reconstruct otherwise.
+            mla_forward_token_dispatched(mla_cfg, mla_w, cache, scratch, rf, scratch_hidden)
         }
         (KimiAttentionConfig::Kda(kda_cfg), KimiAttentionWeights::Kda(kda_w)) => {
             let KimiAttentionState::Kda(cache) = attn_state else {

@@ -1,6 +1,6 @@
 # Issue 926: MLA decode absorbs nothing — per-token W_UK/W_UV up-projection on the hot path
 
-**Status:** OPEN — P1 optimization (kimi lane only — the 0.40B is test-arch per owner rule and league models don't run MLA); externally evidenced by arXiv:2610.07940 (Research 608); fix is modelless algebra, feature-flagged, GOAT-gated.
+**Status:** LANDED 2026-10-08 (opt-in, commit pending) — T1–T4 of the fix sketch DONE: `mla_absorbed` feature (leaf `mla_absorbed = ["mla_attention"]` + root forward), `mla_forward_token_absorbed` (absorbed q + latent value accumulation via the in-tree `simd_transpose_matvec_into` substrate), `mla_forward_token_dispatched` wired into the kimi decode lane with kill-switch `KATGPT_MLA_RECONSTRUCT=1`. The reference fn's shared steps moved to verbatim helpers (`mla_decode_prologue`/`_rope_key_and_cache`/`_epilogue`) so both paths cannot drift on the prefix. GOAT: G1 PASS (absorbed/recon ≤ 8.9e-8, tol 1e-4/1e-3 — 7 tests), G2 PASS-provisional (**23.9–54× wall-clock** over seq {1K,4K,16K}; ratio stable at 1K ±3%, absolutes load-contaminated by a sibling build — quiet-box re-pin pending before promotion), G3 PASS (217 root lib tests + reference/grad-check/layer_diff/phase6/bench-consumer gates green; default posture byte-identical), G4 PASS (0 allocs, 256 steady-state steps). Bench record: `.benchmarks/926_mla_absorbed_decode_goat.md`. NOT promoted — the quiet-box re-pin is the promotion gate. Open items: the secondary scope (`dash_attn/flashmemory_sparse.rs::mla_forward_token_flashmemory` same-shape fix) DEFERRED to a follow-up; the reconstruct path's dead Step 3 (k_c overwritten before read, v_c never read) noted as a future microcleanup, not done here.
 
 ## Context
 
@@ -28,11 +28,11 @@ Per decode step at seq tokens:
 
 ## Fix sketch
 
-1. Feature flag `mla_absorbed` (opt-in first; promote on measured G2 gain per Feature Flag Discipline; reconstruct path STAYS as the spec-match reference + kill-switch).
-2. Absorbed query: `q_abs_h = W_UK[h]ᵀ·q_c_h` once per step per head (scratch: one d_c buffer per head, or reuse the existing scratch pattern).
-3. Scores: content part `q_abs_h·c_kv_j` (simd_dot over d_c) + unchanged rope part `q_r·k_r_j`.
-4. Values: latent-space accumulator `s_h += w_j·c_kv_j` per head, then `o_h = W_UV[h]·s_h` once.
-5. Same fix for the selected-block path in `dash_attn/flashmemory_sparse.rs::mla_forward_token_flashmemory` (same reconstruct shape; secondary scope).
+- [x] 1. Feature flag `mla_absorbed` (opt-in first; promote on measured G2 gain per Feature Flag Discipline; reconstruct path STAYS as the spec-match reference + kill-switch). — Landed: leaf + root features, kill-switch `KATGPT_MLA_RECONSTRUCT=1` in the dispatched router.
+- [x] 2. Absorbed query: `q_abs_h = W_UK[h]ᵀ·q_c_h` once per step per head (scratch: `q_abs` `[d_c·n_h]` pre-allocated in `MlaForwardScratch`, populated via the in-tree `simd_transpose_matvec_into` NEON/AVX2/wasm32 substrate).
+- [x] 3. Scores: content part `q_abs_h·c_kv_j` (simd_dot over d_c) + unchanged rope part `q_r·k_r_j`.
+- [x] 4. Values: latent-space accumulator `s_h += w_j·c_kv_j` per head (ONE transpose matvec over the `[seq × d_c]` cached latent matrix, weights applied after via the single `inv_sum` scaling), then `o_h = W_UV[h]·s_h` once.
+- [-] 5. Same fix for the selected-block path in `dash_attn/flashmemory_sparse.rs::mla_forward_token_flashmemory` (same reconstruct shape; secondary scope) — DEFERRED to a follow-up: the primary G2 lane is the dense decode path measured here; the flashmemory lane has its own bench consumers (021–025, 685) and deserves its own paired A/B under the same feature before touching it.
 
 **Scope law: BOTH halves are required for G2 to mean anything.** Absorbing only W_UK (scores) leaves the O(seq) W_UV up-projection in place — half the FLOPs stay and the bench under-reports. Steps 2–4 ship together or not at all.
 
@@ -42,10 +42,10 @@ Per decode step at seq tokens:
 
 ## Gates (GOAT)
 
-- **G1:** existing `crates/katgpt-attn/tests/mla_g1_spec_match.rs` passes at its 1e-4 tolerance vs the reconstruct reference (fp reassociation only — no quality debate exists; the bar is the existing spec-match).
-- **G2:** decode latency/tok-s vs seq {1K, 4K, 16K} on the reconstruct-vs-absorbed pair, `--release`, `black_box` both arms, `scripts/bench_preflight.sh` provenance line quoted. Promote to default only on measured gain.
-- **G3:** no regression on the KDA lane, the trajectory benches (Bench 012/014/015/686 consumers of the kimi path), and every existing gate row.
-- **G4:** alloc-free hot path (scratch reuse; no per-token allocation — the accumulator is one d_c vector per head).
+- [x] **G1:** existing `crates/katgpt-attn/tests/mla_g1_spec_match.rs` passes at its 1e-4 tolerance vs the reconstruct reference (fp reassociation only — no quality debate exists; the bar is the existing spec-match). — Reference re-passes 8/8 (default AND mla_backward postures) + grad-check 4/4; NEW `tests/mla_absorbed_spec_match.rs` 7/7 (absorbed vs reconstruct ≤ 8.9e-8).
+- [x] **G2:** decode latency/tok-s vs seq {1K, 4K, 16K} on the reconstruct-vs-absorbed pair, `--release`, `black_box` both arms, `scripts/bench_preflight.sh` provenance line quoted. Promote to default only on measured gain. — **23.9× (1K, stable ±3%) / 37–53× (4K) / 36–54× (16K)** across 4 runs; interleaved pairs, medians; box-state disclosed (sibling build load 14–42 during the run — absolutes provisional, ratio load-robust). `benches/bench_926_mla_absorbed_decode.rs`. Quiet-box re-pin pending before promotion (runbook in the bench record).
+- [x] **G3:** no regression on the KDA lane, the trajectory benches (Bench 012/014/015/686 consumers of the kimi path), and every existing gate row. — 217 root lib tests under the feature; layer_diff + g4_alloc_free + phase6 green; bench_012 + bench_889 compile; default posture byte-identical (router = transparent forward); backward/training calls the reference directly, structurally unaffected.
+- [x] **G4:** alloc-free hot path (scratch reuse; no per-token allocation — the accumulator is one d_c vector per head). — `tests/mla_absorbed_alloc_check.rs`: 256 steady-state steps, 0 allocations, counter canary green.
 
 ## Caveats (named up front)
 

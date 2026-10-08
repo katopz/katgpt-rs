@@ -660,6 +660,7 @@ similarity_inference = ["katgpt-core/similarity_inference"]  # Similarity Infere
 # ── Kimi-K3 native support (Proposal 032) ───────────────────────────────
 # Substrate primitive forwarders (each gates a leaf crate module):
 mla_attention = ["katgpt-attn/mla_attention"]  # Multi-head Latent Attention (DeepSeek-V2 §2.1 + Kimi-K3 output gate). Proposal 032 Phase 2.
+mla_absorbed = ["katgpt-attn/mla_absorbed"]  # Issue 926 — weight-absorbed MLA decode: per-step q_abs = W_UKᵀ·q_c once per head + latent-space value accumulation with ONE W_UV up-projection (O(seq)·2·d_c vs the reconstruct path's O(seq)·(d_h+v_h)·d_c). Implies the leaf's mla_attention; the reconstruct path stays compiled as the spec-match reference + kill-switch (`KATGPT_MLA_RECONSTRUCT=1`). Opt-in until the bench-926 G2 gate; the kimi decode lane routes through `mla_forward_token_dispatched`.
 kda_linear = ["katgpt-attn/kda_linear"]  # KDA linear attention (Kimi Linear, arxiv 2510.26692). Proposal 032 Phase 4. Reuses gdn2 kernel.
 transformer_moe = ["katgpt-transformer/transformer_moe"]  # Transformer-level MoE (DeepSeek-V3 §3.3 noaux_tc + sigmoid router + latent MoE + SiTU experts). Proposal 032 Phase 3.
 transformer_attn_res = ["katgpt-transformer/transformer_attn_res"]  # Attention Residual Block (Kimi-K3 block-residual softmax mixing). Proposal 032 §5.
@@ -1174,6 +1175,16 @@ harness = false
 name = "bench_889_kimi_k3_vk_dashboard"
 path = "benches/bench_889_kimi_k3_vk_dashboard.rs"
 required-features = ["kimi_k3_loader", "fitted_anchor_tables"]
+harness = false
+
+# Issue 926 — the absorbed-vs-reconstruct decode GOAT gate (G2): kimi_k3_0_40b
+# dims, random weights, seq {1K, 4K, 16K}, interleaved A/B pairs (median over
+# pairs — the sequential-AB box-state law), black_box on both arms.
+# Measurement-only for the default build (required-features keeps it out).
+[[bench]]
+name = "bench_926_mla_absorbed_decode"
+path = "benches/bench_926_mla_absorbed_decode.rs"
+required-features = ["mla_absorbed"]
 harness = false
 
 # riir-train Issue 407 T4 precondition — K3 pause-token logit-divergence
