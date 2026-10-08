@@ -9,6 +9,8 @@
 > **Cross-ref (riir-chain):** Research 002 (K-Prior LatCal Commitment Bridge) — the committed-phase angle variant
 > **Cross-ref (riir-neuron-db):** Research 008 (Shard Structural Retrieval Guide) — the spectral/spatial shard-half retrieval variant
 > **Classification:** Public
+>
+> **PASS-Redirects (synthesis, added 2026-10-08):** Listopad [arXiv:2509.09691 "Wave-Based Semantic Memory with Resonance-Based Retrieval: A Phase-Aware Alternative to Vector Embedding Stores"] — the phase-family retrieval cousin of this note's rotation gate: complex waveforms ψ=A·e^iϕ with similarity S = ½β(1+β·cos_h), R = 2√(E1E2)/(E1+E2). PASS: cos_h is Plate's FHRR similarity and β·cos_h is soft Dice (V-Net arXiv:1606.04797) — published components; on the real-vector compat path (phase ∈ {0,π}) the score is order-equivalent to cosine for equal-norm candidates; evaluation circular (procedurally-constructed phases). The workspace already ships the algebraic superset — Research 299's `geometric_product` (default-on) carries both the inner (real) half the paper uses and the wedge (imaginary) half it discards.
 
 ---
 
