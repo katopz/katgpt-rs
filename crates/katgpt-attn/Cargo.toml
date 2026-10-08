@@ -323,3 +323,10 @@ required-features = ["pyramid_topk"]
 [[test]]
 name = "bench_612_alloc_check"
 required-features = ["pyramid_topk"]
+
+# Issue 925 — LoT-fitted extent pooling as a routing summary operator
+# (probe). Needs the pyramid slot (real-tensor protocol + argtopk) AND the
+# shipped HGA rival (`MixedRopeSummarizer` via the `hga` forward).
+[[test]]
+name = "issue_925_procrustes_probe"
+required-features = ["pyramid_topk", "hga"]

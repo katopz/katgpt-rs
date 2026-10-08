@@ -969,3 +969,34 @@ has a measurement behind it.
   decision-bearing.
 - **Reopen trigger:** a NEW fixture whose pre-registration names coverage as
   the decision metric. This run must not be re-read with a different metric.
+
+## 44. LoT-Fitted Extent Pooling (routing summary operator) — kill criterion fired (Issue 925)
+
+The LoT paper's (arXiv:2610.05816) fitted extent-pooling stack — orthogonal
+Procrustes W (Eq. 14) + RMS rescale (Eq. 15) — as a BLOCK-ROUTING summary
+operator, fitted per layer on Issue 908 real tensors to align block means
+with query-marginalized attention centroids. Measured in
+[Bench 925](../../.benchmarks/925_lot_fitted_pooling_probe.md) on the
+Bench 612 protocol (mean/lse arms reproduce 612 EXACTLY) with
+leave-one-(layer, head)-out folds:
+
+| posture | fit − mean (kill row) | fit − mixed_rope | verdict |
+|---|---|---|---|
+| committed (64 fam) | −0.0625 (sd 0.0991) | +0.1191 | NO-GAIN vs mean |
+| full (128 fam) | −0.0098 (sd 0.1533) | +0.2021 | NO-GAIN vs mean |
+
+**Disposition:** no feature, no promotion — the fourth negative in this
+slot's summary-operator family (MSA, HGA, PISA, fitted). The fit WORKS
+(in-sample centroid alignment improves ~10–15%) and does not transfer to
+routing; the paper's Eq. 15 rescale is a no-op here (≤0.006). The literal
+key→mean fit is identity BY THEOREM (PSD scatter ⇒ W = I on the data's
+range), recorded so nobody measures it. `mixed_rope` sits 18–21 pp below
+plain Mean on real post-RoPE tensors — a Plan 397-lineage side finding,
+not decision-bearing here.
+
+- The probe harness ships as `issue_925_procrustes_probe` (features
+  `pyramid_topk,hga`); `pyramid_topk` itself stays opt-in (Bench 612).
+- **Reopen trigger:** the Bonsai PQ2_0 ternary whole-model capture lane
+  existing (issue 925's follow-up) — and a fit target beyond linear
+  operators (this run bounds the linear family, not fitted pooling in
+  general).
