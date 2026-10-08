@@ -53,8 +53,23 @@
 //! (katgpt-rs Issue 826): the mean-of-latent centroid is the pooled-summary
 //! class SAS (arXiv:2609.13141) measured destroying needle retrieval at
 //! 64K–128K; perf-only validation is not promotion evidence.
+//!
+//! # Issue 926 secondary scope — absorbed decode on this path
+//!
+//! The same weight absorption that landed for the dense decode lane
+//! (`mla.rs::mla_forward_token_absorbed`) applies to the selected-block path
+//! behind `mla_absorbed`: per step per head `q_abs = W_UKᵀ·q_c` ONCE, scores
+//! read the cached latent directly, values accumulate in latent space over the
+//! SELECTED rows with ONE `W_UV` up-projection. Block SELECTION is unchanged —
+//! both decode paths share the prefix (Steps 1–6) verbatim, so absorption
+//! changes only HOW the selected latent rows are read, never WHICH rows are
+//! selected. Kill-switch `KATGPT_MLA_RECONSTRUCT=1` forces the reconstruct
+//! reference under the feature; default (feature-off) builds are
+//! behavior- and byte-identical.
 
 use katgpt_core::simd::{simd_add_inplace, simd_dot_f32, simd_matmul_rows, simd_scale_inplace};
+#[cfg(feature = "mla_absorbed")]
+use katgpt_core::simd::{simd_transpose_matvec_acc, simd_transpose_matvec_into};
 use katgpt_kv::shard_kv::rope::RopeFreqs;
 
 use crate::mla::{MlaConfig, MlaForwardScratch, MlaKVCache, MlaWeights};
@@ -1259,23 +1274,39 @@ impl DualEncoderIndexer {
 // Sparse MLA forward
 // ---------------------------------------------------------------------------
 
-/// Sparse MLA forward using FlashMemory block selection.
+/// Sparse MLA forward using FlashMemory block selection — the DECODE ENTRY
+/// (runtime router, Issue 926 secondary scope).
+///
+/// Routes to the weight-absorbed path
+/// ([`mla_forward_token_flashmemory_absorbed`]) when compiled with the
+/// `mla_absorbed` feature, unless `KATGPT_MLA_RECONSTRUCT=1` forces the
+/// reconstruct reference (read once, first call — the same kill-switch
+/// posture as the dense lane's `mla_forward_token_dispatched`). WITHOUT the
+/// feature this is a transparent forward to
+/// [`mla_forward_token_flashmemory_reconstruct`]: default builds are
+/// behavior- and byte-identical.
 ///
 /// This is the Phase 1 mechanism: attention is computed only over tokens in
 /// selected blocks. The softmax denominator covers only selected tokens.
+/// Block SELECTION is identical on both paths by construction — both share
+/// [`flashmemory_decode_prefix`] VERBATIM — so absorption changes only HOW the
+/// selected latent rows are read (scores via the absorbed query, values via a
+/// latent-space accumulator), never WHICH rows are selected.
 ///
 /// **Correctness contract:** for tokens in selected blocks, the attention
-/// computation is bit-identical to the dense path (`mla_forward_token`). The
-/// only difference is that tokens in non-selected blocks receive zero attention
-/// weight. This is the standard sparse attention contract — it's lossy by
-/// design (that's the memory reduction), but the selected-token computation
-/// is exact.
+/// computation matches the dense path (`mla_forward_token`) — bit-identical on
+/// the reconstruct path, and within the 1e-4 absorbed spec bar (fp
+/// reassociation only) on the absorbed path. The only difference is that
+/// tokens in non-selected blocks receive zero attention weight. This is the
+/// standard sparse attention contract — it's lossy by design (that's the
+/// memory reduction), but the selected-token computation is exact.
 ///
 /// **Safety net:** if no blocks are selected for a head (all scores below
 /// threshold), the head falls back to attending the MOST RECENT block only
 /// (recency bias — the FlashMemory paper notes this as the natural fallback
 /// for "nothing relevant found" queries). This prevents division-by-zero in
-/// softmax and gives the model a sensible default.
+/// softmax and gives the model a sensible default. The fallback is identical
+/// on both paths.
 ///
 /// # Arguments
 /// * `step` — the current decode step (for periodic refresh scheduling).
@@ -1292,12 +1323,51 @@ pub fn mla_forward_token_flashmemory<'s>(
     selector: &mut FlashMemorySelector,
     step: usize,
 ) -> &'s mut [f32] {
+    #[cfg(feature = "mla_absorbed")]
+    {
+        static RECONSTRUCT_FORCED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        let forced = *RECONSTRUCT_FORCED.get_or_init(|| {
+            std::env::var("KATGPT_MLA_RECONSTRUCT").is_ok_and(|v| v == "1")
+        });
+        if !forced {
+            return mla_forward_token_flashmemory_absorbed(
+                config, weights, cache, scratch, rope_freqs, h, block_cache, selector, step,
+            );
+        }
+    }
+    mla_forward_token_flashmemory_reconstruct(
+        config, weights, cache, scratch, rope_freqs, h, block_cache, selector, step,
+    )
+}
+
+/// Shared flashmemory decode prefix (Steps 1–6): down/up-projections + latent
+/// RMSNorms + rope queries + the shared rope key + cache append + block
+/// centroid rebuild + block selection. Used VERBATIM by both the reconstruct
+/// reference ([`mla_forward_token_flashmemory_reconstruct`]) and the
+/// weight-absorbed variant ([`mla_forward_token_flashmemory_absorbed`], Issue
+/// 926 secondary scope) so the pair cannot drift on the prefix — which is what
+/// makes block SELECTION definitionally identical on both paths.
+///
+/// Returns `(seq, selection)`: the post-append cache length (the attention
+/// span) and the per-head selected blocks (borrowed from `selector`; the
+/// selection is valid until the next refresh).
+#[allow(clippy::too_many_arguments)]
+fn flashmemory_decode_prefix<'a>(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    cache: &mut MlaKVCache,
+    scratch: &mut MlaForwardScratch,
+    rope_freqs: &mut RopeFreqs,
+    h: &[f32],
+    block_cache: &mut FlashMemoryBlockCache,
+    selector: &'a mut FlashMemorySelector,
+    step: usize,
+) -> (usize, &'a PerHeadSelection) {
     let d = config.hidden_size;
     let d_c = config.kv_lora_rank;
     let d_qc = config.q_lora_rank;
     let d_h = config.d_h();
     let d_r = config.d_r();
-    let v_h = config.v_head_dim;
     let n_h = config.n_heads;
     debug_assert_eq!(h.len(), d, "hidden state dim mismatch");
 
@@ -1338,6 +1408,60 @@ pub fn mla_forward_token_flashmemory<'s>(
         apply_decoupled_rope(rope_freqs, &mut scratch.q_r, d_r, n_h, pos);
     }
 
+    simd_matmul_rows(&mut scratch.k_r, &weights.w_kr, h, d_r, d);
+    if !config.use_nope {
+        apply_decoupled_rope(rope_freqs, &mut scratch.k_r, d_r, 1, pos);
+    }
+
+    // ── Step 5: Cache the normed latent + shared rope key ──────────────────
+    cache.append(&scratch.c_kv, &scratch.k_r);
+
+    // ── Step 5b: Rebuild block centroids (includes the just-appended token) ─
+    block_cache.rebuild_from_cache(cache, weights);
+
+    // ── Step 6: FlashMemory block selection ────────────────────────────
+    let seq = cache.seq_len;
+    let selection = selector.select(&scratch.q_c, block_cache, scale, step);
+    (seq, selection)
+}
+
+/// Single-token sparse MLA forward — the RECONSTRUCT reference (flashmemory
+/// lane). Stays compiled in EVERY feature posture as the spec-match reference
+/// and the `KATGPT_MLA_RECONSTRUCT=1` kill-switch fallback; the absorbed
+/// variant ([`mla_forward_token_flashmemory_absorbed`], Issue 926 secondary
+/// scope) is the algebraically-identical reassociation of Step 7.
+///
+/// Per selected token j, `k_c_j = W_UK[h]·c_kv_j` and `v_c_j = W_UV[h]·c_kv_j`
+/// are rebuilt at attention time — O(selected)·(d_h+v_h)·d_c FLOPs per step,
+/// the same per-token up-projection shape the dense reference had before
+/// Issue 926. (The current-token k_c/v_c projections below are dead work kept
+/// for structural parity with the dense reference — k_c is overwritten before
+/// read and v_c is never read in the attention loop; the dense lane noted the
+/// same microcleanup.)
+#[allow(clippy::too_many_arguments)]
+pub fn mla_forward_token_flashmemory_reconstruct<'s>(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    cache: &mut MlaKVCache,
+    scratch: &'s mut MlaForwardScratch,
+    rope_freqs: &mut RopeFreqs,
+    h: &[f32],
+    block_cache: &mut FlashMemoryBlockCache,
+    selector: &mut FlashMemorySelector,
+    step: usize,
+) -> &'s mut [f32] {
+    let d_c = config.kv_lora_rank;
+    let d_h = config.d_h();
+    let d_r = config.d_r();
+    let v_h = config.v_head_dim;
+    let n_h = config.n_heads;
+
+    let (seq, selection) = flashmemory_decode_prefix(
+        config, weights, cache, scratch, rope_freqs, h, block_cache, selector, step,
+    );
+    let scale = config.attn_scale();
+
+    // ── Step 3: Key/value up-projections (reconstruct-only) ────────────
     simd_matmul_rows(
         &mut scratch.k_c,
         &weights.w_uk,
@@ -1353,22 +1477,8 @@ pub fn mla_forward_token_flashmemory<'s>(
         d_c,
     );
 
-    simd_matmul_rows(&mut scratch.k_r, &weights.w_kr, h, d_r, d);
-    if !config.use_nope {
-        apply_decoupled_rope(rope_freqs, &mut scratch.k_r, d_r, 1, pos);
-    }
-
-    // ── Step 5: Cache the normed latent + shared rope key ──────────────────
-    cache.append(&scratch.c_kv, &scratch.k_r);
-
-    // ── Step 5b: Rebuild block centroids (includes the just-appended token) ─
-    block_cache.rebuild_from_cache(cache, weights);
-
-    // ── Step 6: FlashMemory block selection ────────────────────────────────
-    let seq = cache.seq_len;
-    let selection = selector.select(&scratch.q_c, block_cache, scale, step);
-
-    // ── Step 7: Sparse attention per head ──────────────────────────────────
+    // ── Step 7: Sparse attention per head (reconstruct: per-token
+    //    up-projection) ──────────────────────────────────────────────────
     for head in 0..n_h {
         let q_c_h = &scratch.q_c[head * d_h..(head + 1) * d_h];
         let q_r_h = &scratch.q_r[head * d_r..(head + 1) * d_r];
@@ -1463,9 +1573,24 @@ pub fn mla_forward_token_flashmemory<'s>(
         }
     }
 
-    // ── Step 8: Output gate + output projection ────────────────────────────
-    // Identical to the dense MLA forward.
+    // ── Step 8: Output gate + output projection (shared epilogue) ──────
+    flashmemory_decode_epilogue(config, weights, scratch, h)
+}
+
+/// Shared flashmemory decode epilogue (Step 8): the Kimi-K3 output gate
+/// (applied to `attn_out` BEFORE the output projection) + `W_O`. Used verbatim
+/// by both flashmemory decode paths (see [`flashmemory_decode_prefix`]).
+fn flashmemory_decode_epilogue<'s>(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    scratch: &'s mut MlaForwardScratch,
+    h: &[f32],
+) -> &'s mut [f32] {
+    let d = config.hidden_size;
+    let v_h = config.v_head_dim;
+    let n_h = config.n_heads;
     let proj_size = v_h * n_h;
+
     if config.use_output_gate
         && let Some(ref w_g) = weights.w_g
     {
@@ -1488,6 +1613,162 @@ pub fn mla_forward_token_flashmemory<'s>(
     );
 
     &mut scratch.output[..d]
+}
+
+/// Weight-absorbed single-token sparse MLA decode (Issue 926 SECONDARY scope —
+/// DeepSeek-V2 §2.1 absorption on the selected-block path; external evidence
+/// arXiv:2610.07940 §5.2).
+///
+/// Algebraically IDENTICAL to [`mla_forward_token_flashmemory_reconstruct`],
+/// reassociated to remove the per-selected-token up-projections. The block
+/// SELECTION is byte-identical by construction (both paths share
+/// [`flashmemory_decode_prefix`]); absorption changes only how the selected
+/// latent rows are READ:
+///
+/// 1. `q_abs_h = W_UK[h]ᵀ · q_c_h` — once per step per head (via the in-tree
+///    `simd_transpose_matvec_into` NEON/AVX2/wasm32 substrate), so the content
+///    score reads the latent directly:
+///    `q_c·(W_UK·c_kv_j) ≡ (W_UKᵀ·q_c)·c_kv_j`.
+/// 2. Scores over the SELECTED tokens only: `content = q_abs_h·c_kv_j` (d_c
+///    dot) + the UNCHANGED rope dot `q_r_h·k_r_j`.
+/// 3. Softmax over selected tokens: same form as the reference (subtract max,
+///    exp, sum). The normalization is SOFTMAX — as in the dense lane, the
+///    house sigmoid rule governs latent-space weighting gates, not attention
+///    normalization.
+/// 4. Values: the latent accumulator `s_h = Σ_j exp_j·c_kv_j` runs over the
+///    SELECTED latent rows as ONE accumulating transpose matvec per contiguous
+///    selected block ([`simd_transpose_matvec_acc`] — the blocks are ascending
+///    and disjoint, so each block's packed score slice lines up with its
+///    latent row run), the single `inv_sum` scaling lands on `s_h` ONCE, and
+///    `o_h = W_UV[h]·s_h` up-projects once per step per head.
+///
+/// Unselected tokens keep zero attention weight (the sparse contract), and the
+/// fallback-to-most-recent-block safety net is identical to the reference.
+/// The reconstruct path's dead Step-3 k_c/v_c projections are skipped (the
+/// absorbed path never materializes k_c/v_c at all — same as the dense
+/// primary).
+///
+/// G1 = the absorbed/reconstruct flashmemory pair within the existing 1e-4
+/// (1e-3 full-dims) bar (`tests/mla_flashmemory_absorbed_spec_match.rs`); G4
+/// = zero steady-state allocation (`tests/mla_flashmemory_absorbed_alloc_check.rs`).
+#[cfg(feature = "mla_absorbed")]
+#[allow(clippy::too_many_arguments)]
+pub fn mla_forward_token_flashmemory_absorbed<'s>(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    cache: &mut MlaKVCache,
+    scratch: &'s mut MlaForwardScratch,
+    rope_freqs: &mut RopeFreqs,
+    h: &[f32],
+    block_cache: &mut FlashMemoryBlockCache,
+    selector: &mut FlashMemorySelector,
+    step: usize,
+) -> &'s mut [f32] {
+    let d_c = config.kv_lora_rank;
+    let d_h = config.d_h();
+    let d_r = config.d_r();
+    let v_h = config.v_head_dim;
+    let n_h = config.n_heads;
+
+    let (seq, selection) = flashmemory_decode_prefix(
+        config, weights, cache, scratch, rope_freqs, h, block_cache, selector, step,
+    );
+    let scale = config.attn_scale();
+
+    // ── Step 7: ABSORBED sparse attention per head ───────────────────
+    for head in 0..n_h {
+        // q_abs_h = W_UK[h]ᵀ · q_c_h — once per step per head. The head slice
+        // is row-major [d_h × d_c]; the transpose matvec zeroes `q_abs[..d_c]`
+        // then accumulates the row-major matrix transposed against q_c_h.
+        simd_transpose_matvec_into(
+            &mut scratch.q_abs[..d_c],
+            &weights.w_uk[head * d_h * d_c..(head + 1) * d_h * d_c],
+            &scratch.q_c[head * d_h..(head + 1) * d_h],
+            d_h,
+            d_c,
+        );
+        let q_abs_h = &scratch.q_abs[..d_c];
+        let q_r_h = &scratch.q_r[head * d_r..(head + 1) * d_r];
+
+        let selected_blocks = &selection.blocks_per_head[head];
+
+        // Fallback: identical to the reconstruct path (most recent block).
+        // Uses a stack array (no heap allocation — G4 alloc-free steady state).
+        let mut fallback = [0usize; 1];
+        let blocks_to_attend: &[usize] = if selected_blocks.is_empty() {
+            fallback[0] = block_cache.n_active_blocks().saturating_sub(1);
+            &fallback[..]
+        } else {
+            selected_blocks
+        };
+
+        // First pass: scores over the SELECTED tokens only — content dot over
+        // the latent (d_c) + the unchanged rope dot.
+        let scores = &mut scratch.scores[..seq];
+        let mut n_scored = 0usize;
+        let mut max_score = f32::NEG_INFINITY;
+
+        for &block_idx in blocks_to_attend {
+            let (tok_start, tok_end) = block_cache.block_token_range(block_idx, seq);
+            for tok in tok_start..tok_end {
+                let c_kv_j = cache.latent_kv_at(tok);
+                let k_r_j = cache.rope_key_at(tok);
+
+                let content_dot = simd_dot_f32(q_abs_h, c_kv_j, d_c);
+                let rope_dot = simd_dot_f32(q_r_h, k_r_j, d_r);
+                let score = (content_dot + rope_dot) * scale;
+                scores[n_scored] = score;
+                n_scored += 1;
+                if score > max_score {
+                    max_score = score;
+                }
+            }
+        }
+
+        // Softmax over selected tokens only (numerically stable) — same form
+        // as the reference. Weights stay UNNORMALIZED here; the single inv_sum
+        // scaling happens on the latent accumulator below.
+        let mut sum_exp = 0.0f32;
+        for s in scores.iter_mut().take(n_scored) {
+            *s = (*s - max_score).exp();
+            sum_exp += *s;
+        }
+        let inv_sum = 1.0 / sum_exp;
+
+        // Second pass: s_h = Σ_j exp_j · c_kv_j over the SELECTED latent rows
+        // — one ACCUMULATING transpose matvec per contiguous selected block
+        // (blocks are ascending + disjoint, so each block's packed score slice
+        // lines up with its latent row run; the accumulator is zeroed once).
+        let s_acc = &mut scratch.lat_acc[..d_c];
+        s_acc.fill(0.0);
+        let mut score_idx = 0usize;
+        for &block_idx in blocks_to_attend {
+            let (tok_start, tok_end) = block_cache.block_token_range(block_idx, seq);
+            let rows = tok_end - tok_start;
+            let block_weights = &scores[score_idx..score_idx + rows];
+            let block_latents = &cache.latent_kv[tok_start * d_c..tok_end * d_c];
+            simd_transpose_matvec_acc(s_acc, block_latents, block_weights, rows, d_c);
+            score_idx += rows;
+        }
+        debug_assert_eq!(score_idx, n_scored, "packed score/latent row misalignment");
+        // The single inv_sum scaling (d_c multiplies, once per head).
+        for v in s_acc.iter_mut() {
+            *v *= inv_sum;
+        }
+
+        // o_h = W_UV[h] · s_h — once per step per head.
+        let o_h = &mut scratch.attn_out[head * v_h..(head + 1) * v_h];
+        simd_matmul_rows(
+            o_h,
+            &weights.w_uv[head * v_h * d_c..(head + 1) * v_h * d_c],
+            s_acc,
+            v_h,
+            d_c,
+        );
+    }
+
+    // ── Step 8: Output gate + output projection (shared epilogue) ──────
+    flashmemory_decode_epilogue(config, weights, scratch, h)
 }
 
 // ---------------------------------------------------------------------------

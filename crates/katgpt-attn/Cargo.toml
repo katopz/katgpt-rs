@@ -347,6 +347,23 @@ required-features = ["mla_absorbed"]
 name = "mla_absorbed_alloc_check"
 required-features = ["mla_absorbed"]
 
+# Issue 926 SECONDARY scope — flashmemory absorbed-decode G1: absorbed vs
+# reconstruct flashmemory at the spec-match bar (fp reassociation only). Needs
+# BOTH features: the fn lives behind `flashmemory_sparse`, the absorbed math
+# behind `mla_absorbed` — either alone compiles this target to nothing (the
+# Issue-713 green-zero rule; the whole-file `#![cfg(all(...))]` protects the
+# count, this row protects the reader).
+[[test]]
+name = "mla_flashmemory_absorbed_spec_match"
+required-features = ["mla_absorbed", "flashmemory_sparse"]
+
+# Issue 926 SECONDARY scope — flashmemory absorbed-decode G4: steady-state
+# sparse decode allocates nothing (own binary: the CountingAllocator must not
+# pick up parallel tests). Same two-feature posture as the G1 row above.
+[[test]]
+name = "mla_flashmemory_absorbed_alloc_check"
+required-features = ["mla_absorbed", "flashmemory_sparse"]
+
 # Issue 925 — LoT-fitted extent pooling as a routing summary operator
 # (probe). Needs the pyramid slot (real-tensor protocol + argtopk) AND the
 # shipped HGA rival (`MixedRopeSummarizer` via the `hga` forward).
