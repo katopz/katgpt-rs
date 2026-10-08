@@ -29,6 +29,8 @@
 #![allow(clippy::too_many_arguments)]
 
 use crate::d2f::{D2fBlockResult, D2fDecodeConfig};
+#[cfg(feature = "entropy_bounded_commit")]
+use crate::d2f::{D2fEbScratch, d2f_commit_set_eb};
 use crate::d2f_context::D2fContext;
 use crate::{ForwardContext, forward};
 use katgpt_core::traits::{NoPruner, NoScreeningPruner};
@@ -316,6 +318,19 @@ fn fill_with_anchors(
     let max_steps = decode_config.denoise_steps;
     let tau_conf = decode_config.confidence_threshold;
     let _temperature = decode_config.temperature;
+    // Issue 917 T2, cousin lane (feature `entropy_bounded_commit`): the EB
+    // pass-commit policy is armed by `eb_gamma >= 0`; the negative default
+    // keeps the incumbent τ branch byte-identical. The proxy reads the raw
+    // pass-start logits row this lane's forward wrote (the incumbent's
+    // best_prob is pruner-screened + relevance-weighted and is NOT re-checked
+    // armed — membership in the EB set is the decision). The DBTM commit
+    // floor (Issue 811) composes unchanged: armed, only EB-selected
+    // positions sample, so the floor's candidates are the EB pass's
+    // proposals.
+    #[cfg(feature = "entropy_bounded_commit")]
+    let eb_armed = decode_config.eb_gamma >= 0.0;
+    #[cfg(feature = "entropy_bounded_commit")]
+    let mut eb_scratch = D2fEbScratch::new(block_size);
 
     // Initialize: prompt + anchor-prefilled tokens
     let mut tokens: Vec<usize> = prompt.to_vec();
@@ -350,10 +365,45 @@ fn fill_with_anchors(
             block_size,
         );
 
+        // Issue 917 T2 (cousin lane): armed, the pass commit set is fixed
+        // ONCE per pass from the pass-start logits; the already-committed
+        // count comes from the pass-start masked count. Disarmed (default),
+        // the legacy loop-top counting runs unchanged.
+        #[cfg(feature = "entropy_bounded_commit")]
+        let mut n_confident = if eb_armed {
+            let (_, masked) = d2f_commit_set_eb(
+                &dctx.logits_flat,
+                &tokens,
+                block_start,
+                seq_len,
+                mask,
+                vocab,
+                &mut eb_scratch,
+                decode_config.eb_gamma,
+                decode_config.eb_max_commit,
+            );
+            (seq_len - block_start) - masked
+        } else {
+            0
+        };
+        #[cfg(not(feature = "entropy_bounded_commit"))]
         let mut n_confident = 0usize;
 
         for p in block_start..seq_len {
-            // Skip positions that are already filled (anchors or previously denoised)
+            // Skip positions that are already filled (anchors or previously
+            // denoised). Issue 917 T2 (cousin lane): armed, unselected
+            // positions (already committed OR held for a later pass) are
+            // skipped without sampling.
+            #[cfg(feature = "entropy_bounded_commit")]
+            if eb_armed {
+                if !eb_scratch.is_selected(p - block_start) {
+                    continue;
+                }
+            } else if tokens[p] != mask {
+                n_confident += 1;
+                continue;
+            }
+            #[cfg(not(feature = "entropy_bounded_commit"))]
             if tokens[p] != mask {
                 n_confident += 1;
                 continue;
@@ -431,7 +481,13 @@ fn fill_with_anchors(
                 round_candidates.push((p, best_prob, best_token));
             }
 
-            if best_prob >= tau_conf && best_token != mask {
+            // Issue 917 T2 (cousin lane): armed, membership in the pass's
+            // EB set IS the decision; disarmed, the incumbent τ test.
+            #[cfg(feature = "entropy_bounded_commit")]
+            let accept = eb_armed || best_prob >= tau_conf;
+            #[cfg(not(feature = "entropy_bounded_commit"))]
+            let accept = best_prob >= tau_conf;
+            if accept && best_token != mask {
                 tokens[p] = best_token;
                 n_confident += 1;
             }

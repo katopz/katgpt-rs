@@ -77,27 +77,14 @@ impl D2fEbScratch {
 
 /// The D2F pass commit set under the EB-Sampler policy (Issue 917 T2).
 ///
-/// Collects the still-masked positions of `tokens[block_start..seq_len]`,
-/// computes each one's entropy via
-/// [`katgpt_core::entropy_bounded_commit::position_stats`] on the SAME
-/// logits row the τ path samples, and runs the T1 residual scan: the
-/// commit set is the largest `(NaN-last, entropy, index)`-ordered prefix
-/// with `Σ H − max H ≤ gamma`, under a hard `max_commit` cap (`γ = +∞`
-/// with a cap of `k` reproduces the fixed-width-k policy — the T3
-/// comparator). The error proxy is fixed to [`ErrorProxy::Entropy`], the
-/// class source's primary.
+/// Unfiltered form — every still-masked position of
+/// `tokens[block_start..seq_len]` is a candidate. See
+/// [`d2f_commit_set_eb_where`] for the eligibility-filtered generalization
+/// (the set-diffusion lane's gen-step window).
 ///
 /// Returns `(committed, masked)` — the commit count and the still-masked
-/// count at pass start (the decode loops derive the already-committed
-/// count from `masked`). The set rides `scratch`: `is_selected(p −
-/// block_start)` for each committed position.
-///
-/// Returns `(0, masked)` when nothing can commit — no masked positions, a
-/// NaN or negative `gamma`, or every candidate non-finite-entropy (a
-/// garbage config never commits; mirrors the incumbent's `NaN ≥ τ` =
-/// false).
-///
-/// Zero allocation: `scratch` must be sized `≥ seq_len − block_start`.
+/// count at pass start. Zero allocation: `scratch` must be sized
+/// `≥ seq_len − block_start`.
 pub fn d2f_commit_set_eb(
     logits_flat: &[f32],
     tokens: &[usize],
@@ -109,11 +96,55 @@ pub fn d2f_commit_set_eb(
     gamma: f32,
     max_commit: usize,
 ) -> (usize, usize) {
+    d2f_commit_set_eb_where(
+        logits_flat,
+        tokens,
+        block_start,
+        seq_len,
+        mask,
+        vocab,
+        |_| true,
+        scratch,
+        gamma,
+        max_commit,
+    )
+}
+
+/// The eligibility-filtered form of [`d2f_commit_set_eb`] (Issue 917 T2,
+/// cousin lanes): a masked position is a candidate only when
+/// `eligible(p − block_start)` is true, so the γ residual budget is spent
+/// over exactly the set the pass may commit (the set-diffusion lane's
+/// `gen_step ≤ current_step` window — ineligible positions never consume
+/// budget). Everything else — the proxy, the order, the residual, the cap,
+/// the scratch layout — is identical to the unfiltered form.
+///
+/// Returns `(committed, masked)` — the commit count and the MASKED-
+/// AND-ELIGIBLE count at pass start (a masked-but-ineligible position
+/// counts in neither). The set rides `scratch`: `is_selected(p −
+/// block_start)` for each committed position. Returns `(0, masked)` when
+/// nothing can commit — no masked eligible positions, a NaN or negative
+/// `gamma`, or every candidate non-finite-entropy (mirrors the incumbent's
+/// `NaN ≥ τ` = false).
+pub fn d2f_commit_set_eb_where(
+    logits_flat: &[f32],
+    tokens: &[usize],
+    block_start: usize,
+    seq_len: usize,
+    mask: usize,
+    vocab: usize,
+    mut eligible: impl FnMut(usize) -> bool,
+    scratch: &mut D2fEbScratch,
+    gamma: f32,
+    max_commit: usize,
+) -> (usize, usize) {
     let rel_positions = seq_len - block_start;
     let mut masked = 0usize;
     for p in block_start..seq_len {
         if tokens[p] == mask {
             let rel = p - block_start;
+            if !eligible(rel) {
+                continue;
+            }
             // T1 indexes entropy/key BY CANDIDATE VALUE — the candidates
             // here are relative positions, so the per-position arrays are
             // rel-indexed (slot order diverges from rel order as soon as a

@@ -64,6 +64,9 @@
 
 use katgpt_types::Rng;
 
+#[cfg(feature = "entropy_bounded_commit")]
+use crate::d2f::{D2fEbScratch, d2f_commit_set_eb_where};
+
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -96,6 +99,21 @@ pub struct SetDiffusionConfig {
     /// Sampling temperature. 0.0 = greedy (argmax), 1.0 = raw softmax,
     /// >1.0 = flatter (more diverse).
     pub temperature: f32,
+    /// Issue 917 T2, cousin lane (feature `entropy_bounded_commit`): the
+    /// EB-Sampler joint-error budget γ (nats) for the per-pass commit policy
+    /// over the ELIGIBLE masked positions — the largest entropy-ordered
+    /// prefix with `Σ H − max H ≤ γ` commits per pass (the D2F policy,
+    /// [`crate::d2f`]). Negative = DISARMED: the incumbent τ branch runs
+    /// byte-identical. UNCALIBRATED — no set-diffusion number exists; the
+    /// lane A/B (Issue 917 G2/G3) is deferred on a trained checkpoint.
+    #[cfg(feature = "entropy_bounded_commit")]
+    pub eb_gamma: f32,
+    /// Issue 917 T2, cousin lane: hard per-pass cap on EB commits
+    /// (`usize::MAX` = uncapped). `γ = +∞` with a cap of `k` reproduces the
+    /// fixed-width-k commit policy. Read only when the feature is on and
+    /// `eb_gamma ≥ 0`.
+    #[cfg(feature = "entropy_bounded_commit")]
+    pub eb_max_commit: usize,
 }
 
 impl Default for SetDiffusionConfig {
@@ -106,6 +124,12 @@ impl Default for SetDiffusionConfig {
             denoise_steps: 8,
             confidence_threshold: 0.7,
             temperature: 1.0,
+            // Issue 917 T2: negative γ = DISARMED — the τ branch runs
+            // byte-identical until a caller arms the EB policy.
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         }
     }
 }
@@ -250,6 +274,15 @@ pub fn set_diffusion_decode<F: SetCausalForwardFn>(
     let tau_conf = config.confidence_threshold;
     let temperature = config.temperature;
     let max_inner = config.denoise_steps;
+    // Issue 917 T2, cousin lane (feature `entropy_bounded_commit`): the EB
+    // pass-commit policy is armed by `eb_gamma >= 0`; the negative default
+    // keeps the incumbent τ branch byte-identical. The commit set is built
+    // per pass over the ELIGIBLE masked positions only (the gen-step
+    // window), so ineligible positions never consume the γ budget.
+    #[cfg(feature = "entropy_bounded_commit")]
+    let eb_armed = config.eb_gamma >= 0.0;
+    #[cfg(feature = "entropy_bounded_commit")]
+    let mut eb_scratch = D2fEbScratch::new(decode_len);
 
     // Total token buffer: prompt + decode region (all initially masked).
     let prompt_len = prompt.len();
@@ -294,6 +327,25 @@ pub fn set_diffusion_decode<F: SetCausalForwardFn>(
             let logits = forward.forward_set_causal(&tokens, &full_gen_steps);
             forward_passes += 1;
 
+            // Issue 917 T2 (cousin lane): armed, the pass commit set is
+            // fixed ONCE per pass from the pass-start logits over the
+            // eligible window; only selected positions are sampled below.
+            #[cfg(feature = "entropy_bounded_commit")]
+            if eb_armed {
+                d2f_commit_set_eb_where(
+                    &logits,
+                    &tokens,
+                    prompt_len,
+                    tokens.len(),
+                    mask,
+                    vocab,
+                    |rel| gen_step_at(rel) <= current_step,
+                    &mut eb_scratch,
+                    config.eb_gamma,
+                    config.eb_max_commit,
+                );
+            }
+
             let mut n_committed_this_pass = 0u32;
             let mut n_eligible_masked = 0u32;
 
@@ -306,6 +358,12 @@ pub fn set_diffusion_decode<F: SetCausalForwardFn>(
                     continue; // Not yet eligible (revealed at a later gen-step).
                 }
                 n_eligible_masked += 1;
+                // Issue 917 T2 (cousin lane): armed, positions outside the
+                // pass's EB commit set are skipped without sampling.
+                #[cfg(feature = "entropy_bounded_commit")]
+                if eb_armed && !eb_scratch.is_selected(di) {
+                    continue;
+                }
 
                 // Read logits for this position.
                 let logits_start = p * vocab;
@@ -315,7 +373,14 @@ pub fn set_diffusion_decode<F: SetCausalForwardFn>(
                 let (chosen_token, chosen_prob) =
                     sample_token(logits_p, mask, vocab, temperature, rng);
 
-                if chosen_prob >= tau_conf && chosen_token != mask {
+                // Issue 917 T2 (cousin lane): armed, membership in the
+                // pass's EB set IS the decision; disarmed, the incumbent τ
+                // test.
+                #[cfg(feature = "entropy_bounded_commit")]
+                let accept = eb_armed || chosen_prob >= tau_conf;
+                #[cfg(not(feature = "entropy_bounded_commit"))]
+                let accept = chosen_prob >= tau_conf;
+                if accept && chosen_token != mask {
                     tokens[p] = chosen_token;
                     n_committed_this_pass += 1;
                     // Plan 602 T1.3: record the pass (0-based — the counter
@@ -719,6 +784,10 @@ mod tests {
             denoise_steps: 4,
             confidence_threshold: 0.5,
             temperature: 1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let gen_steps = vec![0u32, 0, 1, 1]; // Block-causal, block_size=2.
         let mut rng = Rng::new(42);
@@ -748,6 +817,10 @@ mod tests {
             denoise_steps: 4,
             confidence_threshold: 0.5,
             temperature: 1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let prompt = vec![10, 20, 30];
         let gen_steps = vec![0u32, 0];
@@ -774,6 +847,10 @@ mod tests {
             denoise_steps: 2,
             confidence_threshold: 0.5,
             temperature: 1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let gen_steps = vec![0u32, 0];
         let mut rng = Rng::new(7);
@@ -806,6 +883,10 @@ mod tests {
             denoise_steps: 2,
             confidence_threshold: 0.5,
             temperature: 1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let gen_steps = vec![0u32, 1, 2, 3]; // Strict singleton ordering.
         let mut rng = Rng::new(42);
@@ -834,6 +915,10 @@ mod tests {
             denoise_steps: 8,
             confidence_threshold: 0.5,
             temperature: 1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let gen_steps = vec![0u32, 0, 0, 0]; // MDLM (all one step).
         let mut rng = Rng::new(42);
@@ -874,6 +959,10 @@ mod tests {
             denoise_steps: 4,
             confidence_threshold: 0.5,
             temperature: 0.0, // Greedy.
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let gen_steps = vec![0u32, 0];
         let mut rng = Rng::new(42);
@@ -940,6 +1029,10 @@ mod tests {
             denoise_steps,
             confidence_threshold: 0.99, // Very high → hard to commit.
             temperature: 1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let gen_steps = vec![0u32, 1, 2]; // 3 gen-steps.
         let mut rng = Rng::new(42);
@@ -984,6 +1077,10 @@ mod tests {
             denoise_steps: 2,
             confidence_threshold: 0.3, // Low — random model, be lenient.
             temperature: 0.0,          // Greedy for determinism.
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let gen_steps = vec![0u32, 0, 1, 1]; // Block-causal, block_size=2.
         let mut rng = Rng::new(42);
@@ -1208,6 +1305,10 @@ mod tests {
             denoise_steps: 4,
             confidence_threshold: 0.5,
             temperature: 1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let schedule = PositionOffsetSchedule::new(0.5);
         let mut rng = Rng::new(42);
@@ -1236,6 +1337,10 @@ mod tests {
             denoise_steps: 4,
             confidence_threshold: 0.5,
             temperature: 1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let prompt = vec![5, 6, 7];
         let schedule = PositionOffsetSchedule::new(0.25);
@@ -1265,6 +1370,10 @@ mod tests {
             denoise_steps: 2,
             confidence_threshold: 0.5,
             temperature: 0.0, // Greedy for determinism.
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let schedule = PositionOffsetSchedule::new(0.5);
 
@@ -1298,6 +1407,10 @@ mod tests {
             denoise_steps: 2,
             confidence_threshold: 0.5,
             temperature: 1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let schedule = PositionOffsetSchedule::ar();
         let mut rng = Rng::new(7);
@@ -1328,6 +1441,10 @@ mod tests {
                 denoise_steps: 4,
                 confidence_threshold: 0.5,
                 temperature: 1.0,
+                #[cfg(feature = "entropy_bounded_commit")]
+                eb_gamma: -1.0,
+                #[cfg(feature = "entropy_bounded_commit")]
+                eb_max_commit: usize::MAX,
             };
             let gen_steps = vec![0u32, 0, 1, 1];
             let mut rng = Rng::new(42);
@@ -1357,6 +1474,10 @@ mod tests {
                 denoise_steps: 2,
                 confidence_threshold: 0.99,
                 temperature: 1.0,
+                #[cfg(feature = "entropy_bounded_commit")]
+                eb_gamma: -1.0,
+                #[cfg(feature = "entropy_bounded_commit")]
+                eb_max_commit: usize::MAX,
             };
             let gen_steps = vec![0u32, 0, 1, 1];
             let mut rng = Rng::new(7);
@@ -1386,6 +1507,10 @@ mod tests {
                 denoise_steps: 3,
                 confidence_threshold: 0.5,
                 temperature: 1.0,
+                #[cfg(feature = "entropy_bounded_commit")]
+                eb_gamma: -1.0,
+                #[cfg(feature = "entropy_bounded_commit")]
+                eb_max_commit: usize::MAX,
             };
             let gen_steps = vec![0u32, 0, 1, 1];
             let mut rng = Rng::new(3);

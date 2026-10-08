@@ -245,6 +245,10 @@ pub fn bench_ar_ness_w_sweep() -> Vec<BenchResult> {
         denoise_steps: 8,
         confidence_threshold: 0.5,
         temperature: 0.0, // greedy — the only randomness is the ordering
+        #[cfg(feature = "entropy_bounded_commit")]
+        eb_gamma: -1.0,
+        #[cfg(feature = "entropy_bounded_commit")]
+        eb_max_commit: usize::MAX,
     };
 
     let ws = [0.1f32, 0.3, 0.5, 0.7, 0.9, 1.0];

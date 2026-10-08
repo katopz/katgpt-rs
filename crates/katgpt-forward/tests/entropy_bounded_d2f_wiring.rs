@@ -394,3 +394,217 @@ fn d2f_eb_disarmed_matches_legacy_tau_decode() {
     let b = synthetic_decode(&decode_config);
     assert_eq!(a.tokens, b.tokens, "the disarmed (legacy) decode is deterministic");
 }
+
+// ── Cousin lanes (Issue 917 T2, 2026-10-08): eligibility filter, ──
+// ── set-diffusion end-to-end, flashar anchor-fill end-to-end.     ──
+//
+// The cousin modules are themselves feature-gated (`flashar_anchor`,
+// `set_diffusion`), so these tests ride `all(entropy_bounded_commit,
+// <module feature>)` and stay OUT of this target's required-features row —
+// the main-lane tests above keep running under the feature alone, and the
+// cousins join under --all-features (or the explicit pair).
+
+/// A deterministic synthetic set-causal forward: every position's row is
+/// `one_hot_logits` on a fixed target — strong signal, zero entropy, no
+/// checkpoint, no network.
+#[cfg(all(feature = "entropy_bounded_commit", feature = "set_diffusion"))]
+struct CousinForward {
+    vocab: usize,
+}
+
+#[cfg(all(feature = "entropy_bounded_commit", feature = "set_diffusion"))]
+mod set_diffusion_cousins {
+    use super::*;
+    use katgpt_forward::d2f::d2f_commit_set_eb_where;
+    use katgpt_forward::set_diffusion::{SetCausalForwardFn, set_diffusion_decode, SetDiffusionConfig};
+
+    impl SetCausalForwardFn for CousinForward {
+        fn forward_set_causal(&self, tokens: &[usize], _gen_steps: &[u32]) -> Vec<f32> {
+            let mut logits = Vec::with_capacity(tokens.len() * self.vocab);
+            for (p, &t) in tokens.iter().enumerate() {
+                let target = if t == MASK { (p + 1) % self.vocab } else { t % self.vocab };
+                logits.extend_from_slice(&one_hot_logits(self.vocab, target));
+            }
+            logits
+        }
+    }
+
+    #[test]
+    fn d2f_commit_set_where_spends_budget_only_over_eligible() {
+        // Rows 0..4 sharp (zero entropy), row 3 INELIGIBLE, γ = 0: the
+        // zero-entropy eligible rows all fit the budget exactly as if the
+        // ineligible row did not exist — it never consumes budget and is
+        // never selected.
+        let n = 5usize;
+        let mut flat = Vec::new();
+        for p in 0..n {
+            flat.extend_from_slice(&one_hot_logits(VOCAB, p + 1));
+        }
+        let tokens = vec![MASK; n];
+        let mut scratch = D2fEbScratch::new(n);
+        let (k, masked) = d2f_commit_set_eb_where(
+            &flat,
+            &tokens,
+            0,
+            n,
+            MASK,
+            VOCAB,
+            |rel| rel != 3,
+            &mut scratch,
+            0.0,
+            usize::MAX,
+        );
+        assert_eq!(masked, n - 1, "masked counts MASKED-AND-ELIGIBLE only");
+        assert_eq!(k, n - 1);
+        let sel = selected_positions(&scratch, k, n);
+        assert!(!sel.contains(&3), "the ineligible row is never selected");
+
+        // The unfiltered form over the same rows commits all five at γ = 0 —
+        // the filter is the only difference.
+        let mut scratch2 = D2fEbScratch::new(n);
+        let (k_all, _) =
+            d2f_commit_set_eb(&flat, &tokens, 0, n, MASK, VOCAB, &mut scratch2, 0.0, usize::MAX);
+        assert_eq!(k_all, n);
+
+        // A γ the ELIGIBLE budget cannot afford stays confined to the one
+        // eligible flat row even though the ineligible rows are sharp:
+        // budget is spent over candidates only.
+        let mut flat_flat = Vec::new();
+        for _ in 0..n {
+            flat_flat.extend_from_slice(&[0.0f32; VOCAB]); // flat → entropy ln 16 each
+        }
+        let mut scratch3 = D2fEbScratch::new(n);
+        let (k1, m1) = d2f_commit_set_eb_where(
+            &flat_flat,
+            &tokens,
+            0,
+            n,
+            MASK,
+            VOCAB,
+            |rel| rel == 2,
+            &mut scratch3,
+            0.1,
+            usize::MAX,
+        );
+        assert_eq!((k1, m1), (1, 1), "the single eligible flat row commits its singleton");
+    }
+
+    #[test]
+    fn set_diffusion_eb_armed_decodes_and_is_deterministic() {
+        // Block-causal gen_steps [0, 0, 1, 1] with a zero-entropy
+        // strong-signal forward: armed (γ = 0), the pass set is built over
+        // the ELIGIBLE window (policy-level pin above) and every selected
+        // position commits — the region fully decodes within the step
+        // budget and the decode is deterministic across seeds.
+        let config = SetDiffusionConfig {
+            mask_token: MASK,
+            vocab_size: VOCAB,
+            denoise_steps: 4,
+            confidence_threshold: 0.99,
+            temperature: 0.0,
+            eb_gamma: 0.0, // ARMED (the mod is feature-gated: the fields exist)
+            eb_max_commit: usize::MAX,
+        };
+        let gen_steps: Vec<u32> = vec![0, 0, 1, 1];
+        let forward = CousinForward { vocab: VOCAB };
+        let mut rng = Rng::new(917);
+        let result = set_diffusion_decode(&forward, &config, &[], &gen_steps, &mut rng);
+        assert!(
+            result.converged,
+            "the EB no-stall floor must decode the whole region"
+        );
+        assert!(result.tokens.iter().all(|&t| t != MASK), "no position left masked");
+        let mut rng2 = Rng::new(917);
+        let result2 = set_diffusion_decode(&forward, &config, &[], &gen_steps, &mut rng2);
+        assert_eq!(result.tokens, result2.tokens, "EB set-diffusion decode is deterministic");
+    }
+
+    #[test]
+    fn set_diffusion_eb_armed_ignores_unreachable_tau() {
+        // τ = 1.1 stalls the incumbent pass; armed, the EB policy replaces
+        // the τ test and the region still decodes (the property the
+        // flag-off lane lacks), with the set built over the eligible window.
+        let config = SetDiffusionConfig {
+            mask_token: MASK,
+            vocab_size: VOCAB,
+            denoise_steps: 4,
+            confidence_threshold: 1.1,
+            temperature: 1.0,
+            eb_gamma: 0.0,
+            eb_max_commit: usize::MAX,
+        };
+        let gen_steps: Vec<u32> = vec![0, 0, 0, 0]; // MDLM: everything eligible at once
+        let forward = CousinForward { vocab: VOCAB };
+        let mut rng = Rng::new(5);
+        let result = set_diffusion_decode(&forward, &config, &[], &gen_steps, &mut rng);
+        assert!(result.converged, "armed EB must decode where τ = 1.1 stalls");
+    }
+
+    #[test]
+    fn set_diffusion_eb_disarmed_matches_legacy_tau_decode() {
+        // The disarmed cousin posture (eb_gamma = −1.0, the Default) runs
+        // the incumbent τ branch: τ = 0 commits every eligible position at
+        // its first pass — byte-identical to the flag-off lane by
+        // construction.
+        let config = SetDiffusionConfig {
+            mask_token: MASK,
+            vocab_size: VOCAB,
+            denoise_steps: 4,
+            confidence_threshold: 0.0,
+            temperature: 0.0,
+            eb_gamma: -1.0, // explicit disarmed (the Default value)
+            eb_max_commit: usize::MAX,
+        };
+        let gen_steps: Vec<u32> = vec![0, 0, 1, 1];
+        let forward = CousinForward { vocab: VOCAB };
+        let mut rng = Rng::new(917);
+        let result = set_diffusion_decode(&forward, &config, &[], &gen_steps, &mut rng);
+        assert!(result.converged);
+        assert_eq!(
+            result.forward_passes, 2,
+            "τ = 0: one pass per block, two blocks — the legacy shape"
+        );
+    }
+}
+
+#[cfg(all(feature = "entropy_bounded_commit", feature = "flashar_anchor"))]
+mod flashar_cousins {
+    use super::*;
+    use katgpt_forward::flashar_anchor::anchor_fill_with_prefilled;
+
+    #[test]
+    fn flashar_eb_armed_fills_and_is_deterministic() {
+        // The anchor-fill cousin lane, armed (γ = 0): a block fully
+        // denoises within the step budget through the anchor seam — the
+        // no-stall floor — and the decode is deterministic across runs.
+        let config = Config::micro_dllm();
+        let decode_config = D2fDecodeConfig {
+            denoise_steps: 8,
+            eb_gamma: 0.0, // ARMED
+            ..D2fDecodeConfig::with_block_size(4)
+        };
+        let run = || {
+            let mut rng = Rng::new(42);
+            let weights = TransformerWeights::new(&config, &mut rng);
+            let mut ctx = D2fContext::new(&config);
+            let anchors = vec![config.mask_token; 4]; // all-mask = the plain fill baseline
+            anchor_fill_with_prefilled(
+                &mut ctx,
+                &weights,
+                &config,
+                &decode_config,
+                &anchors,
+                &mut rng,
+                None, // no DBTM budget: the EB policy is the only commit rule
+            )
+        };
+        let a = run();
+        assert_eq!(
+            a.state,
+            D2fBlockState::FullyActivated,
+            "the EB no-stall floor must denoise the block through the anchor seam"
+        );
+        let b = run();
+        assert_eq!(a.tokens, b.tokens, "EB anchor-fill is deterministic under a fixed seed");
+    }
+}

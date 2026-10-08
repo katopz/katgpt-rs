@@ -2361,7 +2361,7 @@ pub fn d2f_decode_block_soft(
 #[cfg(feature = "entropy_bounded_commit")]
 mod entropy_bounded;
 #[cfg(feature = "entropy_bounded_commit")]
-pub use entropy_bounded::{D2fEbScratch, d2f_commit_set_eb};
+pub use entropy_bounded::{D2fEbScratch, d2f_commit_set_eb, d2f_commit_set_eb_where};
 
 #[cfg(test)]
 mod tests;
