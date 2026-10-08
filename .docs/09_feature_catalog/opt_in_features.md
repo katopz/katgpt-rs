@@ -5369,9 +5369,25 @@ parallel commit under a factorized proposal.
   γ ≤ 0.3 rides the safe fixed-k=1 end. 12 lane tests + G4 alloc check +
   brute-force Σ−max agreement (500 seeded cases × 3 proxies). Re-exported at
   `katgpt_rs::speculative::entropy_bounded`.
-- Promotion pending Issue 917 T2 + the lane G2/G3: the D2F τ_conf A/B stays
-  blocked on the trained checkpoint (riir-train Plan 437, owner-gated 4090
-  windows); the γ dial is uncalibrated until that lane A/B runs.
+- **T2 decode wiring LANDED 2026-10-08** (opt-in, same feature): the two-level
+  gate lives in `katgpt-forward` — `d2f_commit_set_eb_where(..., eligible,
+  ...)` is the eligibility-filtered join (the unfiltered
+  `d2f_commit_set_eb` delegates with `|_| true`; the γ budget is spent only
+  over the pass-commitable set), and both decode cousins arm the same gate
+  (`eb_gamma ≥ 0` armed, negative = disarmed, flag-off byte-identical):
+  `flashar_anchor::fill_with_anchors` + `set_diffusion::set_diffusion_decode`
+  (`SetDiffusionConfig` carries the cfg-gated `eb_gamma`/`eb_max_commit`
+  pair). Wiring tests 9 → 14 (eligibility-filter budget pin, armed /
+  unreachable-τ / disarmed-legacy-shape, flashar armed anchor-fill +
+  determinism); cousin sections gated on `all(commit, module-feature)` inside
+  the file so the target's `required-features` row is unchanged. Gates: clippy
+  green at default / feature / feature+cousins postures; 205/155/131 lib tests
+  at those postures.
+- Promotion pending the lane G2/G3 A/B only: the D2F τ_conf A/B stays blocked
+  on the trained checkpoint (riir-train Plan 437 Phase 4, owner-gated 4090
+  windows); the γ dial is uncalibrated until that lane A/B runs. T2 wiring is
+  complete; the riir-side `gemma2_d2f` GPU model-forward commit policy is the
+  one unwired lane, a future slice only if the A/B wants it.
 
 ## 142. gmm_support — Density-Ratio Support Gate (Plan 618 / Research 604, arXiv:2610.02126)
 

@@ -2,7 +2,7 @@
 
 **Status:** GOAT G1/G2/G3/G4 PASS (2026-10-07) — lands OPT-IN (`escalation_guard = []`, katgpt-core). NOT PROMOTED: no consumer-measured gain exists yet — the consumers land separately (riir-refine's Plan-202 R1 escalation-manifest half; the instinct/rethink migration onto the shared receipt tiers). Feature Flag Discipline: promotion needs a consumer-measured gain.
 
-Owner: [Issue 923](../.issues/923_escalation_guard_shared_primitive.md) · Plan: [riir-refine Plan 202 R1](../../riir-refine/.plans/202_decision_stack_arsenal_alignment.md) (round-3 AGREE implementation baseline). Extracted from riir-rethink's ESC lane (`EscRateGuard` / `kill_switch_decode` / the `ESC:think|cheap|demoted` tiers) — one definition at the lowest shared dep.
+Owner: Issue 923 (closed 2026-10-07, file removed — record in [HISTORY.md](../HISTORY.md)) · Plan: [riir-refine Plan 202 R1](../../riir-refine/.plans/202_decision_stack_arsenal_alignment.md) (round-3 AGREE implementation baseline). Extracted from riir-rethink's ESC lane (`EscRateGuard` / `kill_switch_decode` / the `ESC:think|cheap|demoted` tiers) — one definition at the lowest shared dep.
 
 ## Box state (the G2 rule)
 
