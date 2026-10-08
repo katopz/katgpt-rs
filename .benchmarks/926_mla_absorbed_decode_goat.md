@@ -84,6 +84,8 @@ CARGO_TARGET_DIR=/tmp/katgpt-926-root cargo bench -p katgpt-rs \
 # (feature → default in the dispatched router) is a separate commit gated on it.
 ```
 
+⛔ **Window status (2026-10-08 ~20:45):** the precondition is NOT met again — the Issue-920 T1 census restarted on this box at 19:27 (nice-19, ~24 h run holds the memory-bandwidth floor; load 31 with sibling builds). The re-pin runs in the NEXT quiet window after the census lands (~2026-10-09 late evening). If `/tmp/katgpt-926-root` was cleared meanwhile, rebuild with the same command + `--no-run` first.
+
 ### G3 — no regression (PASS)
 
 - `cargo test -p katgpt-rs --lib --features mla_absorbed,kimi_k3` → 217 passed, 0 failed.
@@ -118,3 +120,27 @@ fixed cache length (rewind pattern) → **0 allocations**.
   modelless — pure algebra — so the promotion path is open once numbers are
   clean; the rejected alternative of caching up-projected k_c/v_c is recorded
   in Issue 926 so nobody reopens it).
+
+## Secondary scope — flashmemory_sparse absorbed decode (2026-10-08, `ea0c60e41`)
+
+The same absorption applied to the selected-block lane
+(`mla_forward_token_flashmemory`), opt-in under the SAME `mla_absorbed`
+feature, dispatched router + `KATGPT_MLA_RECONSTRUCT=1` kill-switch shared:
+
+- Steps 1–6 verbatim into `flashmemory_decode_prefix` (block selection
+  definitionally identical both paths); reconstruct reference kept pub +
+  byte-verbatim as the spec-match oracle.
+- Absorbed: per-head `q_abs` once; latent-space scores; latent accumulator
+  via ONE transpose matvec PER CONTIGUOUS SELECTED BLOCK (the sparse read is
+  the point — a dense matvec over all seq rows would re-read unselected
+  tokens), single `inv_sum`, one `W_UV` up-projection. Zero-alloc from the
+  existing scratch.
+- G1 8/8 (pos=0 bit-identical, worst 8.94e-8 vs 1e-4/1e-3); G4 0 allocs /
+  256 steps; clippy green at 4 postures; katgpt-attn lib 176/176; root lib
+  `mla_absorbed,kimi_k3` 217/217; all 6 flashmemory bench consumers compile.
+- **Flashmemory G2 paired A/B: PENDING** — runs in a quiet window under the
+  same discipline (interleaved pairs, medians, box-state provenance), after
+  or alongside the primary re-pin; NOT a promotion blocker for the dense
+  lane. Until measured, the flashmemory absorbed path carries the same
+  FLOP-model expectation (~60× fewer up-projection FLOPs at large seq) with
+  no wall-clock claim.
