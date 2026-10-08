@@ -130,6 +130,24 @@ pub struct D2fDecodeConfig {
     /// Potential: 4× throughput (16 steps → 4 steps with maintained quality).
     /// Default: off (opt-in until GOAT proof).
     pub multistep: bool,
+    /// Issue 917 T2 (feature `entropy_bounded_commit`): the EB-Sampler
+    /// joint-error budget γ (nats) for the pass commit policy — the largest
+    /// entropy-ordered prefix with `Σ H − max H ≤ γ` commits per pass
+    /// (arXiv:2505.24857). **Negative (the default) DISARMS the policy**:
+    /// the incumbent `confidence_threshold` branch runs byte-identical;
+    /// `≥ 0` arms it. UNCALIBRATED on this lane — the wiring default is the
+    /// T1 primitive's budget, not a calibration (the Bench-917 oracle dial,
+    /// flat over [0, 0.3], was the oracle lane, not D2F); the lane A/B
+    /// (Issue 917 G2/G3) is deferred on a trained checkpoint (riir-train
+    /// Plan 437 Phase 4). Read only when the feature is on.
+    #[cfg(feature = "entropy_bounded_commit")]
+    pub eb_gamma: f32,
+    /// Issue 917 T2 (feature `entropy_bounded_commit`): hard per-pass cap
+    /// on EB commits (`usize::MAX` = uncapped). `γ = +∞` with a cap of `k`
+    /// reproduces the fixed-width-k commit policy. Read only when the
+    /// feature is on and `eb_gamma ≥ 0`.
+    #[cfg(feature = "entropy_bounded_commit")]
+    pub eb_max_commit: usize,
 }
 
 impl Default for D2fDecodeConfig {
@@ -145,6 +163,12 @@ impl Default for D2fDecodeConfig {
             greedy_draft: false,
             schedule: ScheduleKind::default(),
             multistep: false,
+            // Issue 917 T2: negative γ = DISARMED — the τ branch runs
+            // byte-identical until a caller arms the EB policy.
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         }
     }
 }
@@ -678,6 +702,14 @@ fn d2f_decode_block_prompt_q_core(
     let max_steps = decode_config.denoise_steps;
     let tau_conf = decode_config.confidence_threshold;
     let temperature = decode_config.temperature;
+    // Issue 917 T2 (feature `entropy_bounded_commit`): the EB pass-commit
+    // policy is armed by `eb_gamma ≥ 0`; the negative default keeps the
+    // incumbent τ branch byte-identical. The scratch is sized once per
+    // decode and reused every pass (zero per-pass allocation).
+    #[cfg(feature = "entropy_bounded_commit")]
+    let eb_armed = decode_config.eb_gamma >= 0.0;
+    #[cfg(feature = "entropy_bounded_commit")]
+    let mut eb_scratch = D2fEbScratch::new(block_size);
 
     // Pre-compute schedule-aware multistep ratios from log-SNR (Plan 079 T16).
     // For uniform schedules, all r_i = 1.0 (identical to Plan 078 behavior).
@@ -763,10 +795,45 @@ fn d2f_decode_block_prompt_q_core(
             step,
         );
 
+        // Issue 917 T2: armed, the pass commit set is fixed ONCE per pass
+        // from the same post-blend logits the τ path samples; only selected
+        // positions are visited below and the already-committed count comes
+        // from the pass-start masked count. Disarmed (default), the legacy
+        // loop-top counting runs unchanged.
+        #[cfg(feature = "entropy_bounded_commit")]
+        let mut n_confident = if eb_armed {
+            let (_, masked) = d2f_commit_set_eb(
+                &dctx.logits_flat,
+                &tokens,
+                block_start,
+                seq_len,
+                mask,
+                vocab,
+                &mut eb_scratch,
+                decode_config.eb_gamma,
+                decode_config.eb_max_commit,
+            );
+            (seq_len - block_start) - masked
+        } else {
+            0
+        };
+        #[cfg(not(feature = "entropy_bounded_commit"))]
         let mut n_confident = 0usize;
 
         for p in block_start..seq_len {
-            // Only denoise positions that are still masked
+            // Only denoise positions that are still masked. Issue 917 T2:
+            // armed, unselected positions (already committed OR held for a
+            // later pass) are skipped without sampling.
+            #[cfg(feature = "entropy_bounded_commit")]
+            if eb_armed {
+                if !eb_scratch.is_selected(p - block_start) {
+                    continue;
+                }
+            } else if tokens[p] != mask {
+                n_confident += 1;
+                continue;
+            }
+            #[cfg(not(feature = "entropy_bounded_commit"))]
             if tokens[p] != mask {
                 n_confident += 1;
                 continue;
@@ -852,8 +919,15 @@ fn d2f_decode_block_prompt_q_core(
                 )
             };
 
-            // Confidence remasking: only keep if confident enough
-            if chosen_prob >= tau_conf && chosen_token != mask {
+            // Confidence remasking: only keep if confident enough. Issue
+            // 917 T2: armed, membership in the pass's EB set IS the decision
+            // (fixed at pass start from the same logits); the sampled token
+            // must still not be the mask.
+            #[cfg(feature = "entropy_bounded_commit")]
+            let accept = eb_armed || chosen_prob >= tau_conf;
+            #[cfg(not(feature = "entropy_bounded_commit"))]
+            let accept = chosen_prob >= tau_conf;
+            if accept && chosen_token != mask {
                 tokens[p] = chosen_token;
                 n_confident += 1;
                 // Plan 602 T1.3: record the denoise step at which this
@@ -987,6 +1061,13 @@ pub fn d2f_decode_block_with_prompt_with_sampler(
     let max_steps = decode_config.denoise_steps;
     let tau_conf = decode_config.confidence_threshold;
     let temperature = decode_config.temperature;
+    // Issue 917 T2 (feature `entropy_bounded_commit`): the EB pass-commit
+    // policy is armed by `eb_gamma ≥ 0`; the negative default keeps the
+    // incumbent accept seams byte-identical.
+    #[cfg(feature = "entropy_bounded_commit")]
+    let eb_armed = decode_config.eb_gamma >= 0.0;
+    #[cfg(feature = "entropy_bounded_commit")]
+    let mut eb_scratch = D2fEbScratch::new(block_size);
 
     // Pre-compute schedule-aware multistep ratios from log-SNR (Plan 079 T16).
     let multistep_ratios = if decode_config.multistep {
@@ -1033,9 +1114,41 @@ pub fn d2f_decode_block_with_prompt_with_sampler(
             std::mem::swap(&mut dctx.prev_logits_flat, &mut dctx.prev_prev_logits_flat);
         }
 
+        // Issue 917 T2: armed, the pass commit set is fixed ONCE per pass
+        // from the same post-blend logits; only selected positions are
+        // visited below. Disarmed (default), the legacy loop-top counting
+        // runs unchanged.
+        #[cfg(feature = "entropy_bounded_commit")]
+        let mut n_confident = if eb_armed {
+            let (_, masked) = d2f_commit_set_eb(
+                &dctx.logits_flat,
+                &tokens,
+                block_start,
+                seq_len,
+                mask,
+                vocab,
+                &mut eb_scratch,
+                decode_config.eb_gamma,
+                decode_config.eb_max_commit,
+            );
+            (seq_len - block_start) - masked
+        } else {
+            0
+        };
+        #[cfg(not(feature = "entropy_bounded_commit"))]
         let mut n_confident = 0usize;
 
         for p in block_start..seq_len {
+            #[cfg(feature = "entropy_bounded_commit")]
+            if eb_armed {
+                if !eb_scratch.is_selected(p - block_start) {
+                    continue;
+                }
+            } else if tokens[p] != mask {
+                n_confident += 1;
+                continue;
+            }
+            #[cfg(not(feature = "entropy_bounded_commit"))]
             if tokens[p] != mask {
                 n_confident += 1;
                 continue;
@@ -1100,7 +1213,13 @@ pub fn d2f_decode_block_with_prompt_with_sampler(
             // Plan 116 T3: Adaptive confidence via trained sampler.
             // When sampler is available, use per-position features to decide
             // accept/reject instead of the fixed tau_conf threshold.
+            // Issue 917 T2: the armed EB pass set takes precedence —
+            // membership IS the decision and the accept seams below are not
+            // consulted (the trained sampler stays the disarmed posture's
+            // seam).
             let accept = match sampler {
+                #[cfg(feature = "entropy_bounded_commit")]
+                _ if eb_armed => true,
                 Some(s) => {
                     let features = SamplerFeatures::from_logits(
                         logits_p,
@@ -1587,6 +1706,11 @@ impl<'a> D2fPipeline<'a> {
         let max_steps = self.decode_config.denoise_steps;
         let tau_conf = self.decode_config.confidence_threshold;
         let temperature = self.decode_config.temperature;
+        // Issue 917 T2 (feature `entropy_bounded_commit`): the EB pass-commit
+        // policy is armed by `eb_gamma ≥ 0`; the negative default keeps the
+        // incumbent τ branch byte-identical.
+        #[cfg(feature = "entropy_bounded_commit")]
+        let eb_armed = self.decode_config.eb_gamma >= 0.0;
         let vocab = self.config.vocab_size;
         let mut ctx = D2fContext::new(self.config);
         #[cfg(feature = "probe_guidance")]
@@ -1608,6 +1732,10 @@ impl<'a> D2fPipeline<'a> {
         // via mem::take, leaving an empty Vec for the next iteration.
         let mut sample_exp_buf: Vec<f32> = Vec::with_capacity(vocab);
         let mut confidence_history: Vec<f32> = Vec::with_capacity(max_steps);
+        // Issue 917 T2: EB pass-commit scratch — sized once per pipeline,
+        // reused across passes and blocks.
+        #[cfg(feature = "entropy_bounded_commit")]
+        let mut eb_scratch = D2fEbScratch::new(block_size);
 
         for block_idx in 0..n_blocks {
             let remaining = self.total_len.saturating_sub(block_idx * block_size);
@@ -1690,9 +1818,41 @@ impl<'a> D2fPipeline<'a> {
                     step,
                 );
 
+                // Issue 917 T2: armed, the pass commit set is fixed ONCE
+                // per pass from the same post-blend logits; only selected
+                // positions are visited below. Disarmed (default), the
+                // legacy loop-top counting runs unchanged.
+                #[cfg(feature = "entropy_bounded_commit")]
+                let mut n_confident = if eb_armed {
+                    let (_, masked) = d2f_commit_set_eb(
+                        &ctx.logits_flat,
+                        &seq_tokens,
+                        block_start,
+                        seq_len,
+                        mask,
+                        vocab,
+                        &mut eb_scratch,
+                        self.decode_config.eb_gamma,
+                        self.decode_config.eb_max_commit,
+                    );
+                    (seq_len - block_start) - masked
+                } else {
+                    0
+                };
+                #[cfg(not(feature = "entropy_bounded_commit"))]
                 let mut n_confident = 0usize;
 
                 for p in block_start..seq_len {
+                    #[cfg(feature = "entropy_bounded_commit")]
+                    if eb_armed {
+                        if !eb_scratch.is_selected(p - block_start) {
+                            continue;
+                        }
+                    } else if seq_tokens[p] != mask {
+                        n_confident += 1;
+                        continue;
+                    }
+                    #[cfg(not(feature = "entropy_bounded_commit"))]
                     if seq_tokens[p] != mask {
                         n_confident += 1;
                         continue;
@@ -1750,7 +1910,13 @@ impl<'a> D2fPipeline<'a> {
                         )
                     };
 
-                    if chosen_prob >= tau_conf && chosen_token != mask {
+                    // Issue 917 T2: armed, membership in the pass's EB set
+                    // IS the decision; disarmed, the incumbent τ test.
+                    #[cfg(feature = "entropy_bounded_commit")]
+                    let accept = eb_armed || chosen_prob >= tau_conf;
+                    #[cfg(not(feature = "entropy_bounded_commit"))]
+                    let accept = chosen_prob >= tau_conf;
+                    if accept && chosen_token != mask {
                         seq_tokens[p] = chosen_token;
                         n_confident += 1;
                     }
@@ -2189,6 +2355,13 @@ pub fn d2f_decode_block_soft(
         state: D2fBlockState::FullyActivated,
     }
 }
+
+// Issue 917 T2: the EB-Sampler pass commit policy for the decode loops
+// (feature-gated; consumed from katgpt-core, never reimplemented).
+#[cfg(feature = "entropy_bounded_commit")]
+mod entropy_bounded;
+#[cfg(feature = "entropy_bounded_commit")]
+pub use entropy_bounded::{D2fEbScratch, d2f_commit_set_eb};
 
 #[cfg(test)]
 mod tests;

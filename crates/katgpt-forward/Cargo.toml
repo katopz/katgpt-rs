@@ -370,6 +370,19 @@ decode_order_metrics = ["katgpt-core/decode_order_metrics"]
 # probe_guidance build without dllm would compile the feature to nothing.
 probe_guidance = ["dllm", "katgpt-speculative/probe_artifact", "katgpt-core/probe_guidance"]
 
+# Issue 917 T2 (2026-10-08): EB-Sampler commit policy for the D2F decode
+# loops — the per-pass commit set is the largest entropy-ordered prefix with
+# `Σ H − max H ≤ γ` (arXiv:2505.24857) instead of the per-position
+# `chosen_prob ≥ τ_conf` test. Consumes katgpt-core/entropy_bounded_commit
+# (the T1 primitive) via `d2f::d2f_commit_set_eb`; armed per-config by
+# `D2fDecodeConfig.eb_gamma ≥ 0` (the default −1.0 keeps the τ branch
+# byte-identical — the feature alone changes no decode). UNCALIBRATED: the
+# lane A/B (Issue 917 G2/G3) is deferred on a trained D2F checkpoint
+# (riir-train Plan 437 Phase 4). Implies `dllm` — the wiring lives inside
+# the dllm-gated d2f module, so a build without dllm would compile the
+# feature to nothing (the probe_guidance precedent).
+entropy_bounded_commit = ["dllm", "katgpt-core/entropy_bounded_commit"]
+
 # Weaver inference-only logit corrector (Issue 131, Plan 433). Gates the
 # `dflash_predict_with_weaver` wrapper that combines DFlash predict + Weaver
 # marginal correction in a single call. Forwards to katgpt-speculative so the
@@ -393,3 +406,11 @@ required-features = ["structured_reads"]
 [[test]]
 name = "structured_read_goat"
 required-features = ["structured_reads"]
+
+# Issue 917 T2 — D2F EB wiring gates (pass-commit policy + end-to-end decode
+# over synthetic weights). The `#![cfg]` + required-features pair is the T3
+# convention: the row protects the READER (a bare run skips the target, no
+# green zero), the attribute protects the COUNT.
+[[test]]
+name = "entropy_bounded_d2f_wiring"
+required-features = ["entropy_bounded_commit"]
