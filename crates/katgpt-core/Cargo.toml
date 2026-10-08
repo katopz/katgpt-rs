@@ -1438,6 +1438,16 @@ hint_regret = ["best_belief"]
 # (exit-risk guarantee) → the Report-the-Floor rule applies at its GOAT.
 # Opt-in pending the Bench 681 verdict.
 risk_control_exit = []
+# state_probe (Plan 621 Phase 1 / Research 609 FlyBy arXiv:2609.34327,
+# 2026-10-08): the decision-layer probe kernel — pass-fraction V̂,
+# Miller–Madow answer entropy Ĥ, and the Wilson interval on V̂ CONSUMED
+# from hint_regret (no third CI copy; the qmc bootstrap twin is recorded
+# there). Plain counts in, plain floats out — reflex-free by construction;
+# NOT calibrated UQ (Report-the-Floor binds at consumer re-gate). Implies
+# hint_regret because the CI substrate lives there (the probe_guidance
+# precedent: a feature that needs a gated substrate implies it). Opt-in;
+# Phase-2 classifier + Phase-3 escalation gate build on this.
+state_probe = ["hint_regret"]
 # distributional_steering (Plan 577 / Research 505 "Mean-Field
 # Distributional Steering" arXiv:2608.08770, 2026-08-24): population
 # steering toward a measure-defined target — MeasureReward first-variation
@@ -2430,6 +2440,26 @@ required-features = ["hint_regret"]
 [[test]]
 name = "bench_576_hint_regret_alloc_check"
 required-features = ["hint_regret"]
+
+# Plan 621 Phase 1 — state_probe fixtures: T1.2 Miller–Madow fixture + the
+# blake3 output-bytes pin + the substrate-DRY and edge pins.
+[[test]]
+name = "state_probe_t1"
+required-features = ["state_probe"]
+
+# Plan 621 Phase 1 G4 — zero-alloc steady state (probe kernel).
+# Single-fn binary (the bench_576_hint_regret_alloc_check convention).
+[[test]]
+name = "state_probe_t1_alloc_check"
+required-features = ["state_probe"]
+
+# Plan 621 Phase 1 G2 — state_probe micro-bench: bound math < 1 µs/call at
+# release (T1.4); harness = false (the bench_039 pattern — asserted bar,
+# black-boxed inputs, cargo-bench release posture).
+[[bench]]
+name = "bench_621_state_probe"
+harness = false
+required-features = ["state_probe"]
 
 # Plan 575 Phase 2 — risk_control_exit GOAT gate: G1 risk-hold across 40
 # validation/test resplits (+ naive no-correction violation contrast),

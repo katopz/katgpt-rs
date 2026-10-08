@@ -221,6 +221,16 @@ pub use best_belief::{best_belief_score, best_belief_scores, select_best_belief}
 // collapse), riir-train Plan 346 arena opponent selection.
 #[cfg(feature = "hint_regret")]
 pub mod hint_regret;
+// state_probe — the FlyBy decision-layer probe kernel (Plan 621 Phase 1,
+// Research 609, arXiv:2609.34327): V̂ pass-fraction + Miller–Madow answer
+// entropy + the Wilson interval CONSUMED from hint_regret::gate (no third
+// CI copy). Plain ensemble counts in, plain floats out — reflex-free by
+// construction; NOT calibrated UQ (Report-the-Floor binds at a consumer's
+// re-gate). Phase-2 bottleneck classifier + Phase-3 escalation gate build
+// on this; consumers: riir-refine Issue 156 (rescue mining), riir-instinct
+// EscalateSpec.
+#[cfg(feature = "state_probe")]
+pub mod state_probe;
 // risk_control_exit — modelless dual-threshold compute-exit (Plan 575,
 // Research 494, "Conformal Thinking" arXiv:2602.03814): stop-when-confident
 // upper threshold + parametric stop-when-not-progressing lower schedule,

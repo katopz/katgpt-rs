@@ -1,6 +1,6 @@
 # Plan 621: State Probe + Bottleneck-Gated Escalation (`state_probe`, `escalation_probe_gate`)
 
-> **Status:** Active — Phase 1 not started; feature-flagged, promotion follows the GOAT gates (never precedes them)
+> **Status:** Active — Phase 1 (T1.1–T1.4) LANDED 2026-10-08 (opt-in `state_probe`, katgpt-core only; Phase 2 not started; feature-flagged, promotion follows the GOAT gates (never precedes them)
 **Date:** 2026-10-08
 **Research:** [katgpt-rs/.research/609_FlyBy_Execution_Knowledge_Bottleneck_Gate.md](../.research/609_FlyBy_Execution_Knowledge_Bottleneck_Gate.md)
 **Source paper:** [arXiv:2609.34327](https://arxiv.org/abs/2609.34327) — FlyBy (KAIST 2026); decision layer only, zero training
@@ -17,10 +17,14 @@ Ship the modelless decision layer of FlyBy: a probe kernel (`V̂`, Miller-Madow 
 
 ### Tasks
 
-- [ ] **T1.1** `state_probe.rs`: `ProbeInput { pass_count: u32, n: u32, histogram: &[u16] }` → `ProbeEstimate { v_hat, h_mm, wilson_lo, wilson_hi }`; consume `hint_regret::gate::wilson_score_ci`; zero-alloc; feature `state_probe` (default-off).
-- [ ] **T1.2** Miller-Madow fixture: uniform multinomial K=4/N=32 within tolerance of the exact expectation; monotone in added successes; BLAKE3-stable output bytes.
-- [ ] **T1.3** G4 alloc gate: fixed arrays, `alloc_delta` pattern (bench_039 precedent).
-- [ ] **T1.4** G2 micro-bench: bound math ≤1 µs/call at release.
+- [x] **T1.1** `state_probe.rs`: `ProbeInput { pass_count: u32, n: u32, histogram: &[u16] }` → `ProbeEstimate { v_hat, h_mm, wilson_lo, wilson_hi }`; consume `hint_regret::gate::wilson_score_ci`; zero-alloc; feature `state_probe` (default-off).
+  - **LANDED 2026-10-08** — `crates/katgpt-core/src/state_probe.rs`; feature `state_probe = ["hint_regret"]` (implies the CI substrate's feature — the probe_guidance/dllm precedent; a build without it would compile the module to nothing). `probe()` + `miller_madow_entropy()` both `#[inline]`, borrows the caller's histogram, no collections. K′ = NONZERO bins (observed-support Miller-1955/Grassberger reading — doc'd; coincides with Research 609's alphabet form on the fixture's fully-populated case; empty slice = answers-not-tracked → h_mm 0). Wilson CONSUMED from `hint_regret::wilson_score_ci` (bit-identity pinned by test). NOT-calibrated-UQ caveat in the module doc.
+- [x] **T1.2** Miller-Madow fixture: uniform multinomial K=4/N=32 within tolerance of the exact expectation; monotone in added successes; BLAKE3-stable output bytes.
+  - **LANDED 2026-10-08** — `tests/state_probe_t1.rs` (9 tests; `#![cfg]` + `required-features` row — no green zero). ⚠ Fixture correction during landing: the plan's "within tolerance of the exact expectation" is about the MEAN over draws — a single all-equal histogram is the H_emp MAXIMUM (ln K + (K−1)/(2N)), not a typical draw; the fixture Monte-Carlos 20,000 seed-pinned splitmix64 draws (E[h_mm] within 5e-3 of ln 4) + a separate exact formula-identity pin on the all-equal draw (ln 4 + 3/64, 1e-12). Monotone-in-agreement (7-step strict decrease) + blake3 output-bytes pin (`dc33cba1…1601f`, to_bits canonical serialization) + substrate bit-identity + n=0/degenerate/single-pass edges + the K′-not-K support pin all green.
+- [x] **T1.3** G4 alloc gate: fixed arrays, `alloc_delta` pattern (bench_039 precedent).
+  - **LANDED 2026-10-08** — `tests/state_probe_t1_alloc_check.rs` (single-fn binary, the bench_576 convention): 10,000 probe calls, varying pass-count through a black_boxed base (defeats LLVM hoisting of the pure kernel), **0 allocs**; `assert_counter_is_live()` canary armed.
+- [x] **T1.4** G2 micro-bench: bound math ≤1 µs/call at release.
+  - **LANDED 2026-10-08** — `benches/bench_621_state_probe.rs` (`harness = false`, the bench_039 pattern — asserted bar, black-boxed inputs per call, cargo-bench release posture; no profile-cfg games). **167 ns/call median-of-10k** (probe() full kernel = the entropy scan; Wilson is ~free), **~6× under the 1 µs bar**. Box state: M3 Max, shared box (hyperthink T1 capture running at nice-19, sibling session building katgpt-attn) — the headroom makes the claim load-robust; cargo bench is release by construction.
 
 ## Phase 2 — Bottleneck classifier
 

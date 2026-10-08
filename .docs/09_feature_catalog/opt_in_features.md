@@ -5484,3 +5484,32 @@ Substrate: `crates/katgpt-core/src/lattice_memory/` (`types.rs` vocabulary,
 `address.rs` E2LSH, `bump.rs` the 3-tap LUT) + `crates/katgpt-core/src/
 lsh_seed.rs` (the shared seed discipline). Pure stdlib + fastrand,
 wasm32-clean; zero new deps.
+
+## 144. state_probe — FlyBy decision-layer probe kernel (Plan 621 Phase 1 / Research 609)
+
+Feature `state_probe` (opt-in; implies `hint_regret` — the Wilson CI
+substrate lives there, no third CI copy). arXiv:2609.34327 (FlyBy, KAIST
+2026), decision layer only, zero training. Source file:
+`crates/katgpt-core/src/state_probe.rs`.
+
+- **`ProbeInput`** — plain ensemble outcome over one decision state:
+  `pass_count`, `n`, and the answer `histogram` (`&[u16]`; empty slice =
+  answers-not-tracked). The kernel never samples — reflex-free by
+  construction.
+- **`probe(input, z) -> ProbeEstimate`** — `V̂ = pass_count / n`; the
+  Miller–Madow answer entropy `Ĥ = H_emp + (K′−1)/(2N)` in nats (K′ =
+  NONZERO bins, the observed-support reading of Miller 1955 — empty bins
+  overstate the correction, Grassberger 2003 §3.2; coincides with the
+  alphabet form on a fully populated histogram, which Research 609's
+  fixture is); the Wilson interval CONSUMED from
+  `hint_regret::gate::wilson_score_ci`.
+- **NOT calibrated UQ** — a binomial CI on the ensemble pass-rate, nothing
+  more; Report-the-Floor binds at any consumer that treats it as
+  calibrated uncertainty.
+- **Phase 1 gates (measured 2026-10-08)**: T1.2 unbiasedness — E[h_mm] over
+  20k seed-pinned uniform multinomial draws within 5e-3 of ln 4; blake3
+  output-bytes pin; G4 0 allocs over 10k calls (counting allocator,
+  canary-armed); G2 167 ns/call median-of-10k < 1 µs bar at release
+  (bench_621, M3 Max, shared box disclosed). Phase 2 (bottleneck
+  classifier) + Phase 3 (escalation gate) pending — no consumer wiring
+  until their gates pass.
