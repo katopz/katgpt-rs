@@ -1285,6 +1285,18 @@ template_decode = []
 # riir-ai PoC (T2.1) — the paper's domain evidence does NOT auto-transfer.
 event_state_windows = []
 
+# escalation_probe_gate (Plan 621 Phase 3, 2026-10-10): the cost-aware
+# escalation selection utility U = I[pred-success]·(1−λ·Ĉ) over
+# {stay-local, escalate(d)} — gain_cost_halt's scissors law generalized,
+# FlyBy's reward shape preserved (cost multiplies on predicted success
+# ONLY; the subtractive form is the recorded λ=0.2 cost-centering failure).
+# The corpus-distance signal is consumer-supplied (kernel stays
+# reflex-free); the λ=0 reduction is the incumbent pred-success rule (G3
+# anchor). Implies state_probe (the Phase-2 classifier feeds the gate).
+# OPT-IN pending Phase 4's healer-lane eval (the Super-GOAT label) — the
+# consumer seam adapters are T3.2 composition, consumer-side.
+escalation_probe_gate = ["state_probe"]
+
 # decision_wire (Plan 603 T1.2): the Jev/laya-compatible decision wire
 # contract — DecisionRequest/DecisionResponse over the choice/score/noul
 # vocabulary (Research 562/574/576), with abstention as a first-class
@@ -2484,6 +2496,18 @@ required-features = ["hint_regret"]
 [[test]]
 name = "state_probe_t1"
 required-features = ["state_probe"]
+
+# Plan 621 Phase 2 — T2.2 planted-p G1 fixtures + T2.3 the N-sweep
+# monotone-flip disclosure law (seeded binomial draws, no global RNG).
+[[test]]
+name = "state_probe_t2_classify"
+required-features = ["state_probe"]
+
+# Plan 621 Phase 2/3 G4 — zero-alloc steady state for the adaptive
+# classifier + the escalation gate (caller-owned flip log, slice ladder).
+[[test]]
+name = "escalation_probe_gate_alloc_check"
+required-features = ["escalation_probe_gate"]
 
 # Plan 621 Phase 1 G4 — zero-alloc steady state (probe kernel).
 # Single-fn binary (the bench_576_hint_regret_alloc_check convention).

@@ -352,6 +352,14 @@ pub mod state_option_scoring;
 // wrapper here). Opt-in pending G1–G4 + the Phase-2 riir-ai PoC.
 #[cfg(feature = "event_state_windows")]
 pub mod event_state_window;
+// escalation_probe_gate — the cost-aware escalation selection utility
+// (Plan 621 Phase 3): U = I[pred-success]·(1−λ·Ĉ) over {stay-local,
+// escalate(d)}, the scissors law generalized; FlyBy's asymmetry is
+// structural (failing escalation scores 0, productive stay scores 1).
+// Consumer-supplied corpus distance — reflex-free. Opt-in pending Phase
+// 4's healer-lane eval; implies state_probe (the classifier feeds it).
+#[cfg(feature = "escalation_probe_gate")]
+pub mod escalation_probe_gate;
 // template_decode — bounded template decode over CLOSED sentence grammars
 // (Plan 607 T2). A table of literal/slot templates with closed fill
 // vocabularies; decode returns (template, fill indices) and REFUSES

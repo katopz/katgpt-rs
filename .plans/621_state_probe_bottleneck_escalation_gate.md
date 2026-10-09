@@ -1,6 +1,6 @@
 # Plan 621: State Probe + Bottleneck-Gated Escalation (`state_probe`, `escalation_probe_gate`)
 
-> **Status:** Active — Phase 1 (T1.1–T1.4) LANDED 2026-10-08 (opt-in `state_probe`, katgpt-core only; Phase 2 not started; feature-flagged, promotion follows the GOAT gates (never precedes them)
+> **Status:** Active — Phase 1 (T1.1–T1.4) LANDED 2026-10-08 (opt-in `state_probe`, katgpt-core only); **Phase 2 (T2.1–T2.3) + Phase 3 kernel (T3.1/T3.3/T3.4) LANDED 2026-10-10** (opt-in `escalation_probe_gate` implies `state_probe`; G3/G4 green, truth tables pinned); T3.2 seam adapters are CONSUMER-side composition (refine Issue 156 + the reflex/instinct ESC seams — not this repo); Phase 4 healer-lane eval pending (the Super-GOAT label); feature-flagged, promotion follows the GOAT gates (never precedes them)
 **Date:** 2026-10-08
 **Research:** [katgpt-rs/.research/609_FlyBy_Execution_Knowledge_Bottleneck_Gate.md](../.research/609_FlyBy_Execution_Knowledge_Bottleneck_Gate.md)
 **Source paper:** [arXiv:2609.34327](https://arxiv.org/abs/2609.34327) — FlyBy (KAIST 2026); decision layer only, zero training
@@ -30,18 +30,25 @@ Ship the modelless decision layer of FlyBy: a probe kernel (`V̂`, Miller-Madow 
 
 ### Tasks
 
-- [ ] **T2.1** `classify()`: knowledge-like ⟺ `wilson_hi < ε`; adaptive-N stopping (interval straddles ε → continue; N_max cap); every classification flip disclosed **with its interval width**.
-- [ ] **T2.2** G1 fixtures: planted p ∈ {0, 0.05, 0.2} — p=0 declared knowledge-like within N≤64 at δ; p=0.2 never; p=0.5 either-but-disclosed.
-- [ ] **T2.3** Reclassification N-sweep test (N ∈ {8,16,32,64}): flips are MONOTONE (0→positive only), every flip reported with width. The paper's 28/76 is calibration context in Research 609 — never a fixture assertion.
+- [x] **T2.1** `classify()`: knowledge-like ⟺ `wilson_hi < ε`; adaptive-N stopping (interval straddles ε → continue; N_max cap); every classification flip disclosed **with its interval width**.
+  → **LANDED 2026-10-10** — `state_probe.rs` Phase-2 section: `classify()` (NaN bounds fail closed into Undetermined — never a decisive class from a corrupt interval), `AdaptiveClassifier` driver (caller-owned flip-log slice, zero-alloc; records every flip INCLUDING Undetermined→decisive — Undetermined IS the flip origin per T2.3 — with `at_n`/`from`/`to`/`interval_width`; a full log drops further flips, caller's sizing duty, pinned by test), `AdaptiveDecision::{Settled,Continue,CappedUndetermined}` (the cap falls back to the conservative non-knowledge-like reading).
+- [x] **T2.2** G1 fixtures: planted p ∈ {0, 0.05, 0.2} — p=0 declared knowledge-like within N≤64 at δ; p=0.2 never; p=0.5 either-but-disclosed.
+  → `tests/state_probe_t2_classify.rs` (6 tests): p=0 settles KL within N=64 with the flip DISCLOSED; p=0.05 never Productive (settle N is draw-dependent — E[k]=3.2@N=64 keeps wilson_hi above ε on a k=5 draw; the seed-robust properties pinned instead); p=0.2 never KL at N∈{8..128} and reaches Productive by 64/128; p=0.5 settles Productive through disclosed flips only.
+- [x] **T2.3** Reclassification N-sweep test (N ∈ {8,16,32,64}): flips are MONOTONE (0→positive only), every flip reported with width. The paper's 28/76 is calibration context in Research 609 — never a fixture assertion.
+  → the sweep test walks 4 planted states × the N grid: ≤1 flip per state, Undetermined is the ONLY flip origin (a decisive revert is the failure), disclosed count == observed count, every entry carries width > 0.
 
 ## Phase 3 — Escalation gate wiring
 
 ### Tasks
 
-- [ ] **T3.1** `escalation_probe_gate.rs` (feature `escalation_probe_gate`, implies `state_probe`): utility `U = I[pred-success]·(1 − λ·Ĉ)` over `{stay, escalate(d)}` — `gain_cost_halt` scissors law generalized; corpus-distance signal is CONSUMER-SUPPLIED (kernel stays reflex-free).
-- [ ] **T3.2** Seam adapters: `modelless_cap` comparison (riir-refine consumer) + `EscalateSpec` margin (riir-instinct consumer) — composition, not replacement; the cap gate remains the fallback path.
-- [ ] **T3.3** G3: probe-off / λ=0 → incumbent decision byte-identical.
-- [ ] **T3.4** G1 truth table: a failing escalation never out-scores a cheaper success; utility monotone in λ (higher λ ⇒ weakly fewer escalations).
+- [x] **T3.1** `escalation_probe_gate.rs` (feature `escalation_probe_gate`, implies `state_probe`): utility `U = I[pred-success]·(1 − λ·Ĉ)` over `{stay, escalate(d)}` — `gain_cost_halt` scissors law generalized; corpus-distance signal is CONSUMER-SUPPLIED (kernel stays reflex-free).
+  → **LANDED 2026-10-10** — the multiplicative reward shape (Research 609 §2.4: cost multiplies on predicted success ONLY; the subtractive form is the recorded λ=0.2 cost-centering failure); `stay_utility` = I[¬KL] (Ĉ=0), `escalate_utility` = I[r_d≥r_min]·clamp(1−λ·Ĉ_d, 0, 1) (a discount, never negative), `gate()` = escalate iff KL ∧ some U_esc > 0, ties to the LOWEST index, stay otherwise. FlyBy's asymmetry is STRUCTURAL: failing escalation scores 0; a productive state's stay scores 1 ≥ any U_esc ≤ 1. NaN λ/prior/bounds fail closed to StayLocal.
+- [-] **T3.2** Seam adapters: `modelless_cap` comparison (riir-refine consumer) + `EscalateSpec` margin (riir-instinct consumer) — composition, not replacement; the cap gate remains the fallback path.
+  → DEFERRED to the consumer repos by design (T3.2 is composition IN the consumers; katgpt-rs is upstream of both and cannot host the seams). riir-refine Issue 156 owns the rescue-predicate adapter (T5.2's consumer); the instinct ESC seam is post-split Rethink-side for the encoder lane. The kernel-side λ=0 reduction the adapters compose WITH is pinned (T3.3).
+- [x] **T3.3** G3: probe-off / λ=0 → incumbent decision byte-identical.
+  → `lambda_zero_is_the_incumbent_pred_success_rule`: at λ=0 the cost multipliers strip to 1 and the gate equals the pred-success-only rule on a 3-case grid (KL→escalate, Undetermined→conservative stay, Productive→stay) + the bare-indicator utility pins. Probe-off is structural: the module compiles away without `state_probe` (the feature implication), and the default build carries neither (G3 default lib 2141 passed 0 failed, unchanged).
+- [x] **T3.4** G1 truth table: a failing escalation never out-scores a cheaper success; utility monotone in λ (higher λ ⇒ weakly fewer escalations).
+  → `failing_escalation_never_outscores_a_cheaper_success` (r_d < r_min ⇒ never escalates; productive stay out-scores a passing escalation) + `utility_monotone_in_lambda_weakly_fewer_escalations` (the pinned depth sequence [3,1,1,1,1,1,1] over λ ∈ {0..2}: λ=0's all-1.0 tie takes the lowest index, λ>0 re-ranks to the near corpus, discounted-out depths never return).
 
 ## Phase 4 — Healer-lane evaluation (the G1 that decides the label)
 

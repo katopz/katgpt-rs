@@ -108,3 +108,162 @@ pub fn miller_madow_entropy(histogram: &[u16]) -> f64 {
     let h_emp = n.ln() - sum_c_ln_c / n;
     h_emp + (k_nonzero as f64 - 1.0) / (2.0 * n)
 }
+
+// ── Phase 2: the bottleneck classifier (T2.1–T2.3) ───────────────────────
+
+/// The bottleneck class of one decision state (Plan 621 Phase 2).
+///
+/// FlyBy's split: *execution* bottlenecks are recoverable by more local
+/// sampling/refinement (the ensemble's pass rate is measurably nonzero);
+/// *knowledge* bottlenecks require external information — more local
+/// continuations consolidate mass onto already-reachable solutions and
+/// cannot help. The classifier reads ONLY the Wilson interval on the
+/// measured pass rate, never a verbalized confidence (Research 609's
+/// design-law table, row 4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProbeClass {
+    /// `wilson_hi < ε` — even the OPTIMISTIC bound on the pass rate is below
+    /// the bar: the state is knowledge-like. Escalation is the only rescue.
+    KnowledgeLike,
+    /// The interval straddles ε — undetermined at this N. Adaptive stopping
+    /// says: keep sampling (up to the caller's `n_max` cap).
+    Undetermined,
+    /// `wilson_lo ≥ ε` — decisively execution-reachable: the local path is
+    /// predicted to succeed; escalation would be waste.
+    Productive,
+}
+
+impl ProbeClass {
+    /// `true` iff this is the knowledge-like class (the escalate signal).
+    #[inline]
+    #[must_use]
+    pub const fn is_knowledge_like(self) -> bool {
+        matches!(self, Self::KnowledgeLike)
+    }
+}
+
+/// The per-N classification rule (T2.1): knowledge-like ⟺ `wilson_hi < ε`;
+/// productive ⟺ `wilson_lo ≥ ε`; otherwise the interval straddles the bar.
+/// NaN bounds compare false into [`ProbeClass::Undetermined`] — a corrupt
+/// interval never produces a decisive class.
+#[inline]
+#[must_use]
+pub fn classify(e: &ProbeEstimate, epsilon: f64) -> ProbeClass {
+    if e.wilson_hi < epsilon {
+        ProbeClass::KnowledgeLike
+    } else if e.wilson_lo >= epsilon {
+        ProbeClass::Productive
+    } else {
+        ProbeClass::Undetermined
+    }
+}
+
+/// One disclosed classification flip (T2.1/T2.3): every flip carries the N
+/// it happened at and the interval width that decided it — a flip without
+/// its width is the uncalibrated-confidence smell the design law bans.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ClassFlip {
+    /// The ensemble size at which the class flipped.
+    pub at_n: u32,
+    /// The class held before this observation.
+    pub from: ProbeClass,
+    /// The class held after it.
+    pub to: ProbeClass,
+    /// `wilson_hi − wilson_lo` at the flip — the width that decided it.
+    pub interval_width: f64,
+}
+
+/// The adaptive-N stopping decision for one observation (T2.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdaptiveDecision {
+    /// A decisive class was reached — stop sampling.
+    Settled(ProbeClass),
+    /// Undetermined and `n < n_max` — the caller should keep sampling.
+    Continue,
+    /// Undetermined at `n ≥ n_max` — the cap. The caller falls back to the
+    /// CONSERVATIVE non-knowledge-like reading (never escalates on a guess:
+    /// an undetermined pass rate might still be productive).
+    CappedUndetermined,
+}
+
+/// The adaptive classifier driver (T2.1): the caller re-probes at growing
+/// N (it owns the ensemble), feeding each [`ProbeEstimate`] to
+/// [`observe`](Self::observe); the tracker stops at the first decisive
+/// class, records every flip WITH its interval width into the caller-owned
+/// log slice (zero-alloc), and refuses to flip between decisive classes
+/// (KnowledgeLike ↔ Productive without passing through Undetermined is
+/// impossible by the rule's geometry — `wilson_hi < ε` and
+/// `wilson_lo ≥ ε` are disjoint — and an interval that WIDENS back over ε
+/// across N is treated as a new Undetermined, never a reverse flip).
+#[derive(Debug)]
+pub struct AdaptiveClassifier<'a> {
+    epsilon: f64,
+    n_max: u32,
+    flips: &'a mut [ClassFlip],
+    flips_len: usize,
+    last: Option<ProbeClass>,
+}
+
+impl<'a> AdaptiveClassifier<'a> {
+    /// `flips` is the caller-owned disclosure log (a full log drops further
+    /// flips on the floor — the plan's disclosure duty is the caller's to
+    /// size; 4 entries covers n_max/n_min doubling from 8 to 128).
+    #[must_use]
+    pub fn new(epsilon: f64, n_max: u32, flips: &'a mut [ClassFlip]) -> Self {
+        Self {
+            epsilon,
+            n_max,
+            flips,
+            flips_len: 0,
+            last: None,
+        }
+    }
+
+    /// Flips recorded so far (in observation order).
+    #[inline]
+    #[must_use]
+    pub fn flips(&self) -> &[ClassFlip] {
+        &self.flips[..self.flips_len]
+    }
+
+    /// The last decisive class seen, if any.
+    #[inline]
+    #[must_use]
+    pub const fn settled_class(&self) -> Option<ProbeClass> {
+        self.last
+    }
+
+    /// Feed one observation at ensemble size `n`.
+    #[must_use]
+    pub fn observe(&mut self, e: &ProbeEstimate, n: u32) -> AdaptiveDecision {
+        let class = classify(e, self.epsilon);
+        if let Some(prev) = self.last
+            && prev != class
+        {
+            // Disclosure duty: every flip carries its width — including
+            // Undetermined→decisive (Undetermined IS the flip origin per
+            // T2.3's monotone law). A full log drops the record
+            // (caller-sized; documented in `new`).
+            if self.flips_len < self.flips.len() {
+                self.flips[self.flips_len] = ClassFlip {
+                    at_n: n,
+                    from: prev,
+                    to: class,
+                    interval_width: e.wilson_hi - e.wilson_lo,
+                };
+                self.flips_len += 1;
+            }
+        }
+        self.last = Some(class);
+        match class {
+            ProbeClass::KnowledgeLike | ProbeClass::Productive => AdaptiveDecision::Settled(class),
+            ProbeClass::Undetermined => {
+                if n >= self.n_max {
+                    AdaptiveDecision::CappedUndetermined
+                } else {
+                    AdaptiveDecision::Continue
+                }
+            }
+        }
+    }
+}
