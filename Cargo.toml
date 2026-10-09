@@ -707,6 +707,15 @@ kimi_k3_loader = ["kimi_k3", "dep:safetensors", "dep:base64", "dep:fancy-regex",
 # NOTE: currently requires kimi_k3_loader because KimiK3ModelWeights lives
 # in the loader module. A future refactor could split the weights struct out.
 kimi_k3_backward = ["kimi_k3_loader", "katgpt-attn/mla_backward", "katgpt-attn/kda_backward", "katgpt-transformer/moe_backward"]
+# Delay-architecture forward/backward pair (riir-train Issue 482 / Plan 452):
+# dense_delay (δd∈{0,1} — the FFN site reads the layer-entry anchor under δd=1)
+# + expert_delay (δe — routed experts route off the pre-dense anchor and
+# inject δe layers later, past-the-end flushed into the final residual).
+# Screening-scale CPU reference + G0 bit-identity gate (δ0/δe0 == the standard
+# forward; backward within the 1-ULP split-reassociation band pinned by
+# `moe_backward_token_split`). OPT-IN, training-only — never on the
+# production inference path.
+delay_arch = ["kimi_k3_backward"]
 # FlashMemory-style periodic sparse attention for MLA (Issue 584 Phase 1).
 # Implements the lookahead periodic sparse selection from FlashMemory-DeepSeek-V4
 # (arXiv:2606.09079, Research 436) adapted for Multi-head Latent Attention.

@@ -1343,7 +1343,10 @@ pub fn attn_res_backward(
 /// Backward through dense SiTU FFN: `down_proj(SiTU(gate_proj(h), up_proj(h)))`.
 ///
 /// Returns dL/d(h) and accumulates weight gradients.
-fn dense_situ_ffn_backward(
+///
+/// `pub(crate)`: consumed by the delay-arch backward (Issue 482 / Plan 452,
+/// `kimi_k3::delay`) — same crate, no public-API widening.
+pub(crate) fn dense_situ_ffn_backward(
     expert: &SwiGluExpertWeights,
     saved: &DenseFfnSavedActivations,
     d_output: &[f32],

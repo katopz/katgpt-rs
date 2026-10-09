@@ -926,7 +926,6 @@ pub fn moe_backward_token_split(
     grads: &mut MoeGradients,
 ) {
     let d = config.d();
-    let use_latent_moe = config.routed_expert_hidden_size.is_some();
 
     debug_assert_eq!(d_shared.len(), d);
     debug_assert_eq!(d_routed.len(), d);
@@ -934,9 +933,50 @@ pub fn moe_backward_token_split(
     debug_assert_eq!(dh_routed_out.len(), d);
 
     // Shared first — preserves the fused path's accumulation order into `grads`.
-    shared_experts_backward(config, weights, saved, d_shared, dh_shared_out, grads);
+    moe_backward_shared_stream(config, weights, saved, d_shared, dh_shared_out, grads);
+    moe_backward_routed_stream(config, weights, saved, d_routed, dh_routed_out, grads);
+}
 
-    if use_latent_moe {
+/// Shared-stream-ONLY backward (delay-arch consumer, Issue 482 / Plan 452).
+///
+/// Thin pub seam over the private shared-experts backward: runs only the
+/// always-on shared expert(s) against `d_shared` (the gradient at the SHARED
+/// stream's injection site), accumulating weight grads and `dL/d(shared_in)`
+/// into `dh_shared_out`. The delay architecture consumes this when the shared
+/// stream injects at a different layer than the routed stream (`δe > 0`);
+/// [`moe_backward_token_split`] remains the one-call form when both streams
+/// inject together. Op order inside is identical to the fused path's shared
+/// section — calling shared-then-routed reproduces the fused accumulation.
+pub fn moe_backward_shared_stream(
+    config: &MoeConfig,
+    weights: &MoeWeights,
+    saved: &MoeSavedActivations,
+    d_shared: &[f32],
+    dh_shared_out: &mut [f32],
+    grads: &mut MoeGradients,
+) {
+    shared_experts_backward(config, weights, saved, d_shared, dh_shared_out, grads);
+}
+
+/// Routed-stream-ONLY backward (delay-arch consumer, Issue 482 / Plan 452).
+///
+/// Thin pub seam over the private routed backward (latent or non-latent
+/// path): runs router + top-k experts + latent projections against `d_routed`
+/// (the gradient at the ROUTED stream's injection site — possibly δe layers
+/// after the source layer, or the final flush), accumulating weight grads and
+/// `dL/d(routed_in)` into `dh_routed_out`. Reads the routed input through
+/// [`MoeSavedActivations::routed_h`]. The delay architecture consumes this
+/// when the walk reaches the routed stream's injection layer, which is not
+/// the source layer under `δe > 0`.
+pub fn moe_backward_routed_stream(
+    config: &MoeConfig,
+    weights: &MoeWeights,
+    saved: &MoeSavedActivations,
+    d_routed: &[f32],
+    dh_routed_out: &mut [f32],
+    grads: &mut MoeGradients,
+) {
+    if config.routed_expert_hidden_size.is_some() {
         moe_backward_latent(config, weights, saved, d_routed, dh_routed_out, grads);
     } else {
         moe_backward_nonlatent(config, weights, saved, d_routed, dh_routed_out, grads);

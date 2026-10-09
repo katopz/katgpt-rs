@@ -42,6 +42,15 @@ pub mod checkpoint;
 #[cfg(feature = "kimi_k3_loader")]
 pub mod model;
 
+/// Delay-architecture forward + analytic backward (riir-train Issue 482 /
+/// Plan 452): `DelayArchConfig { dense_delay, expert_delay }` — the pre-dense
+/// routing anchor + delayed expert-output injection over the split-stream MoE
+/// substrate (`moe_forward_token_split`). G0 law: δ0/δe0 is BIT-IDENTICAL to
+/// the standard forward; the backward matches within the 1-ULP split
+/// reassociation band. Training-time CPU reference, opt-in.
+#[cfg(feature = "delay_arch")]
+pub mod delay;
+
 pub use decoder_layer::{
     KimiAttentionConfig, KimiAttentionScratch, KimiAttentionState, KimiAttentionWeights,
     KimiDecoderLayerConfig, KimiDecoderLayerWeights, KimiFfnConfig, KimiFfnScratch, KimiFfnWeights,

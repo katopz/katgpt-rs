@@ -2504,6 +2504,7 @@ This is a **training-time reference**, NOT a production inference path — consu
 | `mla_backward` (katgpt-attn) | `mla/backward.rs` | MLA analytic backward (C4). Cross-token composition gradient check relaxed for finite-diff tolerance. |
 | `moe_backward` (katgpt-transformer) | transformer MoE | MoE FFN analytic backward (C4). |
 | `kimi_k3_backward` (root) | `src/kimi_k3/backward.rs` | Full-model composition: `kimi_k3_forward_token_saved` (forward with activation capture) + `kimi_k3_backward_sequence` + `attn_res_backward` + `dense_situ_ffn_backward` + `situ_backward` + `KimiK3ModelGradients`. Implies `kimi_k3_loader` + the three per-primitive backward features. |
+| `delay_arch` (root) | `src/kimi_k3/delay.rs` | Delay-architecture forward/backward pair (riir-train Issue 482 / Plan 452): `DelayArchConfig { dense_delay δd∈{0,1}, expert_delay δe }` — the pre-dense routing anchor (routed experts route off `Norm(x_in^ℓ)` and inject δe layers later; tail flush into the final residual) over the split-stream MoE substrate (`moe_forward_token_split` / the `moe_backward_{shared,routed}_stream` seams). G0 gate: δ0/δe0 BIT-IDENTICAL to the standard forward; backward within the 1-ULP split-reassociation band; per-arm finite-difference checks (δd=1/δe=0, δd=0/δe=2, δd=1/δe=2 all PASS, max 4.26%). Training-time screening reference, never a production inference path. |
 
 ### Gradient check results
 
