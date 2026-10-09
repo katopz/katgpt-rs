@@ -82,6 +82,11 @@
 # --features compression_drafter --lib, --test-threads=2) = the 2074
 # decision_wire-era baseline + the lz4 module's feature-gated tests + the
 # 2 score_into parity/determinism tests (Plan 603 T1.3 substrate half).
+# The runetrace row: measured 2161/0/8 2026-10-09 (M3, --features runetrace
+# --lib, --test-threads=2) — the runetrace module's 20 tests (Plan 624 /
+# seal-remake Proposal 005 Phase 2 T2.1) are INVISIBLE at default features
+# (same green-zero class as decision_wire); the floor = the current
+# default-visible count (2141) + 20.
 #
 # --test-threads=2 is deliberate (the riir-train 507 precedent): a weekly
 # red on runner-load noise from a timing-sensitive test would be alarm
@@ -154,6 +159,7 @@ katgpt-core:2079:pool_admission
 katgpt-core:2097:dying
 katgpt-core:2085:state_option_scoring
 katgpt-core:2074:template_decode
+katgpt-core:2161:runetrace
 katgpt-core:2158:escalation_guard
 katgpt-dec:249:pca_global
 katgpt-dec:257:loop_straightness

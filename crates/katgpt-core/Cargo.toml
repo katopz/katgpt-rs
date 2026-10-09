@@ -1278,6 +1278,25 @@ template_decode = []
 # Proposal 014 Phase-1 engine; promotion rides the GOAT gate.
 decision_wire = []
 
+# runetrace (seal-remake Proposal 005 Phase 2 T2.1 / katgpt-rs Plan 624):
+# the scene-as-text format — RunetraceDoc { version, tick, scene, entities }
+# with per-entity glyph-led condition rows + parent-indexed DAG rows, a
+# BYTE-DETERMINISTIC canonical text render (shortest-round-trip float
+# spelling pinned at one site) and a BLAKE3 digest over that text (the
+# lab_trace discipline, one layer up). The SIBLING of decision_wire: the
+# wire carries typed questions OUT to a decision lane; runetrace carries
+# the live scene IN as deterministic text (human debug panels, LLM
+# reasoning lanes, sleep-time consolidation digests). Raw stays raw —
+# never a sync surface, never parsed back into game truth. COLD PATH by
+# construction (renderer allocates; producers stay alloc-free). Zero new
+# deps (serde + blake3 + postcard already non-optional). Golden text
+# byte-pins + serde (json + postcard) round-trips + fail-closed structural
+# validation ride in the module, gate-covered by the katgpt-core:runetrace
+# test-gate row. OPT-IN per the no-default-consumer rule — the consumers
+# are the seal-remake panels and the instinct/rethink lanes (Proposal 005
+# Phases 3-4); promotion rides the GOAT gate.
+runetrace = []
+
 # calibration_staleness (Issue 841 §B-3, 2026-09-19): the freeze/thaw seam's
 # missing invalidation rule. A calibration head — a Platt (T, b) pair, a
 # per-head attention scale table, a conformal residual pool — is fitted

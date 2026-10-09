@@ -3760,6 +3760,17 @@ pub mod legal_token_set;
 #[cfg(feature = "decision_wire")]
 pub mod decision_wire;
 
+/// Runetrace — the scene-as-text format (seal-remake Proposal 005, Plan
+/// 624): every entity's strategy as a glyph-led pseudo-code condition +
+/// DAG block, rendered BYTE-DETERMINISTICALLY (pinned float spelling,
+/// fixed field order) with a BLAKE3 digest over the canonical text. The
+/// SIBLING of `decision_wire` for the scene-in / judgment-out shape —
+/// panels, LLM reasoning lanes, and sleep-time consolidation read it;
+/// raw stays raw (never a sync surface). Cold path by construction;
+/// opt-in (`runetrace`).
+#[cfg(feature = "runetrace")]
+pub mod runetrace;
+
 /// Permanent attention sinks + a bounded KV window (Issue 841) — a
 /// deterministic RAM ceiling for decode. Composes with `kv_eviction`'s
 /// selector rather than replacing it. Opt-in (`kv_sink_window`).
