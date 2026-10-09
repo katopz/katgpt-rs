@@ -25,7 +25,7 @@
 # file-object class and found 11 more sites; the `repaired` SHAs below carry
 # both passes where a repo needed both.
 katgpt-rs               60    450    0
-riir-ai                  8      0   0    # repaired 4df109c65
+riir-ai                 12     33   0    # repaired 4df109c65; +6 sites (dflash2_fidelity: compare/torch/essay_cell) repaired 2026-10-09 dc37d0693 (katgpt-rs 928 wave 4); floors raised to measured ~60% (py=21/io=55)
 riir-auth                0      0    0
 riir-chain               3      0    0    # repaired bebf78a
 riir-refine                     17      50   0    # repaired 638fa224, 54b999de; +2 sites (plan159 pack scratch writes) repaired 2026-10-09 c126f441 (katgpt-rs 928 wave 2); floors raised to measured ~60% (py=28/io=84)

@@ -2,6 +2,24 @@ Compacted 2026-10-06: every `##` heading kept verbatim, one compact entry per
 record (≤2 short lines); the full pre-compaction text is in git history.
 Operational rules live in `AGENTS.md`; removed issue files: git history.
 
+## Issue 928 (2026-10-09 → closed 2026-10-09) — cross-repo drift-sweep debt: seal-std registration census + 4-wave repair: CLOSED — console/locale/instrument sweeps ALL GREEN family-wide (file removed per noise-reduction)
+
+The seal-std registration census (`c007cf543`) surfaced committed sibling drift
+across the contract set; four same-day waves closed it. W1 (katgpt-rs):
+instrument floors re-measured, the load-bearing green-zero test targets armed.
+W2 (4 quiet repos): riir-shader `1f2a195`, riir-refine `c126f441` (the CRLF lesson
+— EOL-preserving repairs), riir-train `45fc7799`, riir-reflex `00b4ee1` —
+80 consoles + 35 locale sites. W3 (seal-remake `b69ee61`): 10 CROSS citations
+qualified, hot-repo instrument rows re-pinned at stable HEADs (riir-ai's
+artifact_boundary.py = a real gate findable from NO root, wiring stays that
+repo's owners' call), len_derived stability pin class landed (`8bc96908c`,
+canaries 15/15). W4 (sessions ended): riir-ai `dc37d0693` + riir-rethink
+`25074d7` — the last 7 consoles + 6 locale sites. End state: console 252/252
+defended over 28 repos, locale 0/1345, instrument exit 0 — the drift family
+fully defended workspace-wide. Successors: Issues 920/926/929 (quiet-box
+lanes), the elementwise_cubecl shape-parameterization root fix (the
+len_derived pin's retirement condition).
+
 ## Issue 922 (2026-10-07 → closed 2026-10-07) — loop-straightness monitor family, the DEC-native stalemate signal (LiFT modelless residue): CLOSED — primitive half landed, GOAT ALL PASS (file removed per noise-reduction)
 
 Landed same-day: katgpt-dec `loop_straightness` (opt-in; katgpt-core + root

@@ -116,7 +116,7 @@
 #                       min_scripts  min_population  max_undefended
 katgpt-rs                       44              55               0
 katgpt-web                      0               0               0  # observed 2026-09-18: no scripts/*.py
-riir-ai                          4               3               0
+riir-ai                          9               7               0  # floors raised + re-measured 2026-10-09 (katgpt-rs 928 wave 4): the 4 probe/gate consoles (989_replay_ref, artifact_boundary, probe_b10, probe_persisting_l2) defended at dc37d0693 — undefended 4 -> 0. min floors from measured walk=15/pop=12 (~60%).
 riir-auth                        0               0               0
 riir-chain                       1               0               0
 riir-refine                     15              14               0  # floors raised + re-measured 2026-10-09 (katgpt-rs 928 wave 2): the 7 pack-probe consoles defended at c126f441 — undefended 7 -> 0. min floors from measured walk=25/pop=24 (~60%).
@@ -151,4 +151,4 @@ riir-reflexer 0 0 0  # observed 2026-09-25: born public today (Research 457 P1 r
 reflex-site 6 5 0  # observed 2026-09-26: joined the contract set today (BOUNDARY.md at reflex-site 89fa39c; findings repaired at 5eb0ae9/466e331/afdacd6 before pinning); 6 scripts/*.py, 5 print non-ASCII, all 5 defended
 riir-instinct 0 0 0  # observed 2026-09-26: born private today (riir-ai Proposal 047 P1 registration); md-only, no code yet; no scripts/*.py
 riir-infer                        0               0               0 # observed 2026-09-22: joined the workspace 2026-09-22 (riir-ai Issue 998 / reflex Issue 008 carve — Proposal 041 T-B fired)
-riir-rethink 1 1 0  # observed 2026-10-03: born private today (the moat split, riir-ai Proposal 052); 1 scripts/*.py (encoder_load_ab.py) printing non-ASCII with neither stream defended — rides the seed, NOT repaired at registration (write scope ends at this repo's scripts/); ceiling stays 0 per the ratchet rule (never raised), the action is one line in riir-rethink
+riir-rethink 3 2 0  # observed 2026-10-03: born private today (the moat split, riir-ai Proposal 052); 1 scripts/*.py (encoder_load_ab.py) printing non-ASCII with neither stream defended — rides the seed, NOT repaired at registration (write scope ends at this repo's scripts/); ceiling stays 0 per the ratchet rule (never raised), the action is one line in riir-rethink. First re-measure 2026-10-09 (katgpt-rs 928 wave 4): the 3 egemma consoles defended at 25074d7 — floors from measured walk=5/pop=4.
