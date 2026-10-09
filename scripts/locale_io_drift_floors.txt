@@ -28,7 +28,7 @@ katgpt-rs               60    450    0
 riir-ai                  8      0   0    # repaired 4df109c65
 riir-auth                0      0    0
 riir-chain               3      0    0    # repaired bebf78a
-riir-refine              5      0   0    # repaired 638fa224, 54b999de
+riir-refine                     17      50   0    # repaired 638fa224, 54b999de; +2 sites (plan159 pack scratch writes) repaired 2026-10-09 c126f441 (katgpt-rs 928 wave 2); floors raised to measured ~60% (py=28/io=84)
 riir-dapps               1      0    0
 riir-game-sdk            0      0    0
 riir-kat                 0      0    0
@@ -36,8 +36,8 @@ riir-llm                 0      0    0  # observed 2026-09-18: joined the worksp
 seal-std                 0      0    0  # observed 2026-10-09: joined the workspace 2026-10-07; no .py
 riir-mmorpg-examples     2      0    0    # repaired 36005d2
 riir-neuron-db           0      0    0
-riir-shader              2      0    0    # repaired 7a65dd4
-riir-train              60      0   0    # repaired 39d0b8d4, 15db2c67
+riir-shader              8      6    0    # repaired 7a65dd4; +8 sites (bake/thumb/out lanes) repaired 2026-10-09 1f2a195 (katgpt-rs 928 wave 2); floors raised to measured ~60% (py=14/io=10)
+riir-train              60    110   0    # repaired 39d0b8d4, 15db2c67; +4 sites (plan441 corpus io) repaired 2026-10-09 45fc7799 (katgpt-rs 928 wave 2); min_io raised 0 -> 110 (~60% of measured io=183; min_py stays 60)
 riir-viewbridge          0      0    0
 katgpt-web               0      0    0
 mmorpg-editor            0      0    0
@@ -46,7 +46,7 @@ mmorpg-remaster          0      0    0
 riir-dao                 0      0    0
 riir-deployer            0      0    0
 riir-esp32               0      0    0
-riir-reflex            0      0    0  # observed 2026-09-21: joined the workspace 2026-09-21 (Plan 603 T1.1 registration, owner-delegated repo birth)
+riir-reflex             20     38    0  # observed 2026-09-21: joined the workspace 2026-09-21 (Plan 603 T1.1 registration, owner-delegated repo birth). First re-measure 2026-10-09 (katgpt-rs 928 wave 2): 21 sites (ane_convert 13, bench-006 probes 2, compare/jevmem/probe_orig 6) repaired 00b4ee1; floors from measured py=34/io=63 (~60%)
 riir-reflexer 0 0 0  # observed 2026-09-25: born public today (Research 457 P1 registration); md-only, no code yet; no .py
 reflex-site 6 19 0  # observed 2026-09-26: joined the contract set today (BOUNDARY.md at reflex-site 89fa39c; findings repaired at 5eb0ae9/466e331/afdacd6 before pinning); 4 locale sites repaired at 5eb0ae9; 5 positional-encoding false positives fixed in locale_io_fix.sites
 riir-instinct 0 0 0  # observed 2026-09-26: born private today (riir-ai Proposal 047 P1 registration); md-only, no code yet; no .py

@@ -1,6 +1,6 @@
 # Issue 928 — cross-repo drift-sweep debt: the 2026-10-09 seal-std registration census + the same-day 928 repair wave
 
-**Status:** PARTIAL — the 10-09 wave-1 unit landed (the census rows + every quiet-repo row the fresh re-runs surfaced); the volume rows in five repos and the sibling-hot repos remain, ledgered below
+**Status:** PARTIAL — wave 2 LANDED for every QUIET repo (2026-10-09: riir-train/refine/reflex/shader console+locale repaired to 0; infer+instinct+shader+reflex+refine+train instrument floors re-pinned at measured with per-row adjudication). Remaining: the four sibling-hot repos (mmorpg-remake, riir-ai, riir-dapps, riir-rethink) — re-measure + repair when their sessions end — and the len_derived design question.
 
 The seal-std registration (katgpt-rs `c007cf543`) ran all ~20 cross-repo drift
 sweeps and surfaced committed sibling drift. The original census captured 9
@@ -35,34 +35,36 @@ reflex-site. Floor moves: cfg_gated game-sdk silent 31→0; citation
 mmorpg-editor in_local 0→1; citation shader in_local 0→2 (all with cited
 sibling commits, in the katgpt-rs wave-1 commit).
 
-## Remaining — the wave-2 ledger (measured 2026-10-09 post-wave-1)
+## Wave 2 — LANDED 2026-10-09 (the quiet-repo volume rows; commits `Session: dapps-121-followup/katgpt-928`)
 
-### Volume rows in quiet repos (the next unit; read rows before any pin move)
+Repairs (console defence = the wave-1 backslashreplace idiom, line-ending-preserving, py_compile-gated; locale = `scripts/locale_io_fix.py`):
 
-| repo | instrument_unreach (pin→measured) | console | locale |
+| repo | console | locale | repair commit |
 |---|---|---|---|
-| riir-train | 65 → **79** | 53 → **61** | 0 → **4** |
-| riir-refine | 11 → **24** | 0 → **7** | 0 → **2** |
-| riir-reflex | 0 → **14** | 0 → **11** | 0 → **21** |
-| riir-shader | 2 → **12** | 0 → **1** | 0 → **8** |
-| riir-rethink | 1 → **5** | 0 → **3** | — |
-| riir-ai | 7 → **15** | 0 → **4** | 0 → **6** |
-| riir-dapps | 1 → **2** | ✓ | ✓ |
-| riir-infer | 0 → **7** | ✓ | ✓ |
+| riir-shader | 1 defended | 8 sites / 7 files | `1f2a195` |
+| riir-refine | 7 defended | 2 sites / 1 file | `c126f441` |
+| riir-train | 61 defended | 4 sites / 1 file | `45fc7799` |
+| riir-reflex | 11 defended | 21 sites / 6 files | `00b4ee1` |
 
-(locale/console repairs: `scripts/locale_io_fix.py` + the backslashreplace
-idiom; instrument rows: wire real instruments into a root or re-pin the
-plan-scoped one-off class DELIBERATELY, citing the sibling commit — the
-floors header's read-before-pin law.)
+Instrument floors re-pinned AT MEASURED (read-before-pin adjudication in the row comments, adding commits cited):
 
-### Sibling-hot at wave-1 time (coordinate before touching)
+| repo | pin → measured | class |
+|---|---|---|
+| riir-train | 65 → 79 | +14 plan/issue one-offs (the repo's own adjudicated class) |
+| riir-refine | 11 → 24 | +13 mining pack/freeze probes (the Issue-837 class) |
+| riir-reflex | 0 → 14 | first re-measure since birth; issue/bench lane probes |
+| riir-shader | 2 → 12 | bake/thumb one-offs documented in README (not a root — the mmorpg-editor precedent) |
+| riir-infer | 0 → 7 | plan616/617/618 probes (consoles defended in wave 1) |
+| riir-instinct | 0 → 3 | one-task artifacts recorded only in HISTORY.md |
 
-- **mmorpg-remake (seal-remake)** — Runetrace/player-style session live:
-  citation CROSS **10** (9 distinct decisions: Issue 190, Plans 299/300/301/311
-  ×2, 317, 323, Issue 186 [repeat], Issue 897) + instrument 7 → **8** +
-  console 2. Its 3 dirty population files were the Issue-797 advisory.
-- **riir-ai** beyond the cfg rows — locale 6 + console 4 + instrument +8:
-  the games-mmorpg WIP session owned the tree; re-measure when quiet.
+Post-wave-2 verdicts: **console + locale sweeps green in every repaired repo** (undefended 0, locale 0); instrument green everywhere except the four sibling-hot repos. min floors raised to ~60% of measured everywhere they were birth-stale (reflex 0/0/0 → 15/12/0 etc.). ⚠ The CRLF lesson: the first console-defence pass converted four CRLF probe files to LF (splitlines+join) — the amended `c126f441` preserves line endings; the shared_temp_path_fix.py design law (ending-preserving repairs) applies to session tools too.
+
+## Remaining — wave 3 (sibling-hot; re-measure when their sessions end)
+
+- **mmorpg-remake (seal-remake)** — instrument 7→8 + console 2 + citation CROSS 10.
+- **riir-ai** — instrument 7→15 + console 4 + locale 6 (the games-mmorpg WIP owned the tree at wave-1 time).
+- **riir-dapps** — instrument 1→2 (the vessel-bench session).
+- **riir-rethink** — instrument 1→5 + console 3 (the issue-025 T3 session).
 
 ### Instrument findings (katgpt-rs lane)
 
@@ -71,6 +73,8 @@ floors header's read-before-pin law.)
   — a partial-clone box would report a WRONG bucket. Needs a design decision
   (caller-side shape parameterization, or a partial-clone-safe pin class);
   not mechanical.
+
+## The superseded wave-2 ledger (measured 2026-10-09 post-wave-1; now landed)
 
 ## The class law (unchanged)
 

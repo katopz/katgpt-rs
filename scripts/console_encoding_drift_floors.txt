@@ -119,7 +119,8 @@ katgpt-web                      0               0               0  # observed 20
 riir-ai                          4               3               0
 riir-auth                        0               0               0
 riir-chain                       1               0               0
-riir-refine                      3               3               0
+riir-refine                     15              14               0  # floors raised + re-measured 2026-10-09 (katgpt-rs 928 wave 2): the 7 pack-probe consoles defended at c126f441 — undefended 7 -> 0. min floors from measured walk=25/pop=24 (~60%).
+riir-shader                      6               0               0  # floors raised + re-measured 2026-10-09 (katgpt-rs 928 wave 2): thumb_source_check defended at 1f2a195 — undefended 1 -> 0. min_scripts from measured walk=11 (~60%); min_pop stays 0 (pop=1 — a population floor there would red on a legitimate glyph cleanup).
 riir-dao                         0               0               0  # observed 2026-09-18: no scripts/*.py
 riir-dapps                       0               0               0
 riir-deployer                    0               0               0  # observed 2026-09-18: no scripts/*.py
@@ -131,7 +132,7 @@ seal-std                         0               0               0  # observed 2
 riir-mmorpg-examples             0               0               0
 riir-neuron-db                   0               0               0
 riir-shader                      1               0               0
-riir-train                      34              31              53
+riir-train                      46              40               0  # undefended 61 -> 0 2026-10-09 (katgpt-rs 928 wave 2): all 61 plan/issue-probe consoles defended at 45fc7799 — the ratchet lowered at measured; min floors from walk=77/pop=68.
 riir-viewbridge                  0               0               0
 mmorpg-editor                 1               1               0
 mmorpg-remaster             0               0               0
@@ -145,7 +146,7 @@ mmorpg-remake                      3               2               4
 # platform_dead_code_drift_floors, subprocess_encoding_drift_floors,
 # orphaned_attr_drift_floors, wasm32_surface_drift_floors and
 # len_derived_drift_floors.
-riir-reflex                       0               0               0  # observed 2026-09-21: joined the workspace 2026-09-21 (Plan 603 T1.1 registration, owner-delegated repo birth)
+riir-reflex                      15              12               0  # observed 2026-09-21: joined the workspace 2026-09-21 (Plan 603 T1.1 registration, owner-delegated repo birth). First re-measure 2026-10-09 (katgpt-rs 928 wave 2): the 11 lane-probe consoles defended at 00b4ee1 — floors from measured walk=25/pop=20, undefended 0.
 riir-reflexer 0 0 0  # observed 2026-09-25: born public today (Research 457 P1 registration); md-only, no code yet; no scripts/*.py
 reflex-site 6 5 0  # observed 2026-09-26: joined the contract set today (BOUNDARY.md at reflex-site 89fa39c; findings repaired at 5eb0ae9/466e331/afdacd6 before pinning); 6 scripts/*.py, 5 print non-ASCII, all 5 defended
 riir-instinct 0 0 0  # observed 2026-09-26: born private today (riir-ai Proposal 047 P1 registration); md-only, no code yet; no scripts/*.py
