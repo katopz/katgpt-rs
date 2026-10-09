@@ -36,10 +36,20 @@ use katgpt_core::types::math::rmsnorm_with_gamma_eps;
 ///
 /// Populated by [`moe_forward_token_with_saved`]. All tensors are owned
 /// snapshots taken AFTER the forward completes.
+///
+/// [`moe_forward_token_split`] (delay-arch training, Issue 482 / Plan 452)
+/// populates the same struct with `h` = the SHARED stream's input and
+/// `h_routed` = `Some(routed input)` — the routed backward pieces read the
+/// routed input through [`MoeSavedActivations::routed_h`], which falls back
+/// to `h` for the fused path.
 #[derive(Clone)]
 pub struct MoeSavedActivations {
     /// Input hidden state `h`. `[d]`.
     pub h: Vec<f32>,
+    /// Routed-stream input `[d]` — `Some` iff populated by
+    /// [`moe_forward_token_split`] with a routed input different from `h`.
+    /// Fused-path consumers never read this directly.
+    pub h_routed: Option<Vec<f32>>,
     /// Router logits `[N_r]`.
     pub router_logits: Vec<f32>,
     /// Sigmoid scores `[N_r]`.
@@ -81,6 +91,15 @@ pub struct MoeSavedActivations {
     pub shared_act_out: Vec<f32>,
     /// Shared expert output (down_proj result). `[d]`.
     pub shared_output: Vec<f32>,
+}
+
+impl MoeSavedActivations {
+    /// The routed stream's input hidden state — `h_routed` when the split
+    /// forward populated it, `h` otherwise (fused path: same input).
+    #[inline]
+    pub fn routed_h(&self) -> &[f32] {
+        self.h_routed.as_deref().unwrap_or(&self.h)
+    }
 }
 
 // ─── Gradients ──────────────────────────────────────────────────────────────
@@ -409,6 +428,7 @@ pub fn moe_forward_token_with_saved(
 
         let saved = MoeSavedActivations {
             h,
+            h_routed: None,
             router_logits: scratch.router_logits[..n_r].to_vec(),
             sigmoid_scores: scratch.sigmoid_scores[..n_r].to_vec(),
             topk_indices: scratch.topk_indices[..k_r].to_vec(),
@@ -458,6 +478,7 @@ pub fn moe_forward_token_with_saved(
 
         let saved = MoeSavedActivations {
             h,
+            h_routed: None,
             router_logits: scratch.router_logits[..n_r].to_vec(),
             sigmoid_scores: scratch.sigmoid_scores[..n_r].to_vec(),
             topk_indices: scratch.topk_indices[..k_r].to_vec(),
@@ -479,6 +500,272 @@ pub fn moe_forward_token_with_saved(
 
         (hidden_out, saved)
     }
+}
+
+/// Split-stream MoE forward for delay-arch training (Issue 482 / Plan 452).
+///
+/// Same math as [`moe_forward_token_with_saved`], but the SHARED stream
+/// (always-on experts) reads `shared_in` while the ROUTED stream (router +
+/// top-k experts + latent projections) reads `routed_in`. The two stream
+/// outputs are returned SEPARATELY so the caller controls their injection
+/// sites (the pre-dense routing anchor / expert-delay arms feed the routed
+/// stream the layer-input residual and inject its output δe layers later).
+///
+/// Bit-identity pin: with `shared_in == routed_in`, `shared_out + routed_out`
+/// (summed shared-first) equals the fused output bit-identically on the
+/// latent path (the Kimi family; each stream's internal op order is
+/// unchanged). The non-latent path reassociates the per-expert accumulation
+/// — pinned by tolerance in the test, not by construction.
+///
+/// The returned `MoeSavedActivations` carries `h = shared_in` and
+/// `h_routed = Some(routed_in)`; consume it with
+/// [`moe_backward_token_split`].
+pub fn moe_forward_token_split(
+    weights: &MoeWeights,
+    config: &MoeConfig,
+    shared_in: &[f32],
+    routed_in: &[f32],
+    scratch: &mut MoeForwardScratch,
+) -> (Vec<f32>, Vec<f32>, MoeSavedActivations) {
+    let n_r = config.n_routed();
+    let k_r = config.k_routed();
+    let d = config.d();
+    let d_ffn = config.d_ffn();
+    let d_moe = config.d_moe();
+    let d_ffn_shared = config.d_ffn_shared();
+    let use_latent_moe = config.routed_expert_hidden_size.is_some();
+    let d_expert = if use_latent_moe { d_moe } else { d };
+
+    debug_assert_eq!(shared_in.len(), d);
+    debug_assert_eq!(routed_in.len(), d);
+
+    // ── Shared expert forward on `shared_in` (capturing intermediates) ──
+    let shared = &weights.shared_experts[0];
+    let shared_gate_inter_buf = &mut scratch.expert_intermediate[..d_ffn_shared];
+    let shared_up_buf = &mut scratch.expert_up[..d_ffn_shared];
+    let shared_out = &mut scratch.expert_output[..d];
+    simd_matmul_rows(
+        shared_gate_inter_buf,
+        &shared.gate_proj,
+        shared_in,
+        d_ffn_shared,
+        d,
+    );
+    simd_matmul_rows(shared_up_buf, &shared.up_proj, shared_in, d_ffn_shared, d);
+    let shared_gate_inter: Vec<f32> = shared_gate_inter_buf.to_vec();
+    let shared_up_inter: Vec<f32> = shared_up_buf.to_vec();
+    situ_inplace(
+        shared_gate_inter_buf,
+        shared_up_buf,
+        config.situ_beta,
+        config.situ_linear_beta,
+    );
+    let shared_act_out: Vec<f32> = shared_gate_inter_buf.to_vec();
+    simd_matmul_rows(
+        shared_out,
+        &shared.down_proj,
+        shared_gate_inter_buf,
+        d,
+        d_ffn_shared,
+    );
+    let shared_output: Vec<f32> = shared_out.to_vec();
+
+    // ── Router + routed experts on `routed_in` ──
+    // 1. Router logits
+    simd_matmul_rows(
+        &mut scratch.router_logits[..n_r],
+        &weights.router_weight,
+        routed_in,
+        n_r,
+        d,
+    );
+
+    // 2/3. Sigmoid + biased scores
+    for e in 0..n_r {
+        let s = katgpt_core::sigmoid(scratch.router_logits[e]);
+        scratch.sigmoid_scores[e] = s;
+        scratch.biased_scores[e] = s + weights.e_score_correction_bias[e];
+    }
+
+    // 4. Top-K selection
+    select_topk_indices(
+        &scratch.biased_scores[..n_r],
+        k_r,
+        &mut scratch.topk_indices[..k_r],
+    );
+
+    // 5. Renormalize
+    let mut topk_sum = 0.0f32;
+    for k in 0..k_r {
+        let idx = scratch.topk_indices[k];
+        topk_sum += scratch.sigmoid_scores[idx];
+    }
+    if topk_sum < 1.0e-20 {
+        let uniform = 1.0 / (k_r as f32);
+        for k in 0..k_r {
+            scratch.topk_weights[k] = uniform;
+        }
+    } else if config.renormalize {
+        let inv = 1.0 / topk_sum;
+        for k in 0..k_r {
+            let idx = scratch.topk_indices[k];
+            scratch.topk_weights[k] = scratch.sigmoid_scores[idx] * inv;
+        }
+    } else {
+        for k in 0..k_r {
+            let idx = scratch.topk_indices[k];
+            scratch.topk_weights[k] = scratch.sigmoid_scores[idx];
+        }
+    }
+
+    // Routed experts (capturing per-selected-expert intermediates)
+    let mut expert_gate_inter = vec![0.0f32; k_r * d_ffn];
+    let mut expert_up_inter = vec![0.0f32; k_r * d_ffn];
+    let mut expert_act_out = vec![0.0f32; k_r * d_ffn];
+    let mut expert_outputs = vec![0.0f32; k_r * d_expert];
+
+    // Latent-path saved locals (populated only in the latent branch below —
+    // must be snapshotted BEFORE the optional norm mutates latent_output,
+    // matching the fused path's save points).
+    let mut routed_latent_hidden_snap: Option<Vec<f32>> = None;
+    let mut routed_latent_prenorm: Vec<f32> = Vec::new();
+    let mut routed_latent_norm_inv_rms: Option<f32> = None;
+
+    let routed_out: Vec<f32> = if use_latent_moe {
+        // h_latent = routed_expert_down_proj · routed_in
+        simd_matmul_rows(
+            &mut scratch.latent_hidden,
+            weights.routed_expert_down_proj.as_ref().unwrap(),
+            routed_in,
+            d_moe,
+            d,
+        );
+        let latent_hidden_snap = scratch.latent_hidden.clone();
+        routed_latent_hidden_snap = Some(latent_hidden_snap);
+
+        scratch.latent_output[..d_moe].fill(0.0);
+        for k in 0..k_r {
+            let idx = scratch.topk_indices[k];
+            let w = scratch.topk_weights[k];
+            let expert = &weights.experts[idx];
+            let gate_buf = &mut scratch.expert_intermediate[..d_ffn];
+            let up_buf = &mut scratch.expert_up[..d_ffn];
+            let out_buf = &mut scratch.expert_output[..d_moe];
+
+            simd_matmul_rows(
+                gate_buf,
+                &expert.gate_proj,
+                &scratch.latent_hidden,
+                d_ffn,
+                d_moe,
+            );
+            simd_matmul_rows(up_buf, &expert.up_proj, &scratch.latent_hidden, d_ffn, d_moe);
+
+            expert_gate_inter[k * d_ffn..(k + 1) * d_ffn].copy_from_slice(gate_buf);
+            expert_up_inter[k * d_ffn..(k + 1) * d_ffn].copy_from_slice(up_buf);
+
+            situ_inplace(gate_buf, up_buf, config.situ_beta, config.situ_linear_beta);
+            expert_act_out[k * d_ffn..(k + 1) * d_ffn].copy_from_slice(gate_buf);
+
+            simd_matmul_rows(out_buf, &expert.down_proj, gate_buf, d_moe, d_ffn);
+            expert_outputs[k * d_expert..(k + 1) * d_expert].copy_from_slice(out_buf);
+
+            for (lo, eo) in scratch
+                .latent_output
+                .iter_mut()
+                .zip(out_buf.iter())
+                .take(d_moe)
+            {
+                *lo += w * *eo;
+            }
+        }
+
+        routed_latent_prenorm = scratch.latent_output.clone();
+
+        let latent_norm_inv_rms = if config.latent_moe_use_norm
+            && let Some(ref norm_w) = weights.routed_expert_norm_weight
+        {
+            let sum_sq = simd_sum_sq(&scratch.latent_output[..d_moe], d_moe);
+            let mean_sq = sum_sq / d_moe as f32;
+            let inv_rms = 1.0 / (mean_sq + config.rms_norm_eps).sqrt();
+            rmsnorm_with_gamma_eps(
+                &mut scratch.latent_output,
+                norm_w,
+                config.rms_norm_eps as f64,
+            );
+            Some(inv_rms)
+        } else {
+            None
+        };
+        routed_latent_norm_inv_rms = latent_norm_inv_rms;
+
+        // routed_out = up_proj · latent_output (the routed stream's total)
+        let mut routed = vec![0.0f32; d];
+        simd_matmul_rows(
+            &mut routed,
+            weights.routed_expert_up_proj.as_ref().unwrap(),
+            &scratch.latent_output,
+            d,
+            d_moe,
+        );
+        routed
+    } else {
+        // Non-latent: routed_out = sum_k w_k · expert_out_k on `routed_in`
+        let mut routed = vec![0.0f32; d];
+        for k in 0..k_r {
+            let idx = scratch.topk_indices[k];
+            let w = scratch.topk_weights[k];
+            let expert = &weights.experts[idx];
+            let gate_buf = &mut scratch.expert_intermediate[..d_ffn];
+            let up_buf = &mut scratch.expert_up[..d_ffn];
+            let out_buf = &mut scratch.expert_output[..d];
+
+            simd_matmul_rows(gate_buf, &expert.gate_proj, routed_in, d_ffn, d);
+            simd_matmul_rows(up_buf, &expert.up_proj, routed_in, d_ffn, d);
+
+            expert_gate_inter[k * d_ffn..(k + 1) * d_ffn].copy_from_slice(gate_buf);
+            expert_up_inter[k * d_ffn..(k + 1) * d_ffn].copy_from_slice(up_buf);
+
+            situ_inplace(gate_buf, up_buf, config.situ_beta, config.situ_linear_beta);
+            expert_act_out[k * d_ffn..(k + 1) * d_ffn].copy_from_slice(gate_buf);
+
+            simd_matmul_rows(out_buf, &expert.down_proj, gate_buf, d, d_ffn);
+            expert_outputs[k * d_expert..(k + 1) * d_expert].copy_from_slice(out_buf);
+
+            for (ro, eo) in routed.iter_mut().zip(out_buf.iter()).take(d) {
+                *ro += w * *eo;
+            }
+        }
+        routed
+    };
+
+    // The caller gets the shared stream's output; `saved` keeps its own copy
+    // (the fused path makes the same clone when seeding `hidden_out`).
+    let shared_out_ret = shared_output.clone();
+
+    let saved = MoeSavedActivations {
+        h: shared_in.to_vec(),
+        h_routed: Some(routed_in.to_vec()),
+        router_logits: scratch.router_logits[..n_r].to_vec(),
+        sigmoid_scores: scratch.sigmoid_scores[..n_r].to_vec(),
+        topk_indices: scratch.topk_indices[..k_r].to_vec(),
+        topk_weights: scratch.topk_weights[..k_r].to_vec(),
+        topk_sum,
+        latent_hidden: routed_latent_hidden_snap,
+        expert_outputs,
+        d_expert,
+        latent_output_prenorm: routed_latent_prenorm,
+        latent_norm_inv_rms: routed_latent_norm_inv_rms,
+        expert_gate_inter,
+        expert_up_inter,
+        expert_act_out,
+        shared_gate_inter,
+        shared_up_inter,
+        shared_act_out,
+        shared_output,
+    };
+
+    (shared_out_ret, routed_out, saved)
 }
 
 // ─── Backward ───────────────────────────────────────────────────────────────
@@ -505,7 +792,6 @@ pub fn moe_backward_token(
     grads: &mut MoeGradients,
 ) {
     let d = config.d();
-    let d_ffn_shared = config.d_ffn_shared();
     let use_latent_moe = config.routed_expert_hidden_size.is_some();
 
     debug_assert_eq!(d_output.len(), d);
@@ -514,6 +800,36 @@ pub fn moe_backward_token(
     // dL/d(hidden_out) splits into dL/d(y_routed) + dL/d(shared_output)
     // hidden_out = y_routed + shared_output
     // So dL/d(y_routed) = d_output, dL/d(shared_output) = d_output.
+
+    shared_experts_backward(config, weights, saved, d_output, dh_out, grads);
+
+    // ── Routed experts backward ──────────────────────────────────────
+    if use_latent_moe {
+        moe_backward_latent(config, weights, saved, d_output, dh_out, grads);
+    } else {
+        moe_backward_nonlatent(config, weights, saved, d_output, dh_out, grads);
+    }
+}
+
+/// Shared-expert-stream backward (extracted from `moe_backward_token` —
+/// Issue 482 / Plan 452: the delay-arch split calls it with its own stream
+/// gradient so the shared stream can be trained against a DIFFERENT input
+/// and injection site than the routed stream). Pure code move; the fused
+/// path passes the fused `d_output`/`dh_out`, preserving op order.
+///
+/// Reads `saved.h` as the shared stream's input (the split forward stores
+/// the shared input there).
+#[allow(clippy::needless_range_loop)]
+fn shared_experts_backward(
+    config: &MoeConfig,
+    weights: &MoeWeights,
+    saved: &MoeSavedActivations,
+    d_output: &[f32],
+    dh_out: &mut [f32],
+    grads: &mut MoeGradients,
+) {
+    let d = config.d();
+    let d_ffn_shared = config.d_ffn_shared();
 
     // ── Shared expert backward ───────────────────────────────────────────
     // shared_output = down_proj · SiTU(gate_proj · h, up_proj · h)
@@ -575,12 +891,55 @@ pub fn moe_backward_token(
         // No saved activations for s>0 — skip (gradient for these experts is zero).
         // This is acceptable because Kimi-K3-0.40B and 4B-A2B both have N_s=1.
     }
+}
 
-    // ── Routed experts backward ──────────────────────────────────────────
+/// Split-stream MoE backward (Issue 482 / Plan 452) — the consumer of
+/// [`moe_forward_token_split`].
+///
+/// The two streams receive their OWN upstream gradients and deposit their
+/// input-gradients into SEPARATE buffers, because in the delay architecture
+/// they read different inputs and inject at different layers:
+/// - `d_shared` is `dL/d(shared_out)` at the shared stream's injection site
+///   (layer ℓ); `dh_shared_out` accumulates `dL/d(shared_in)`.
+/// - `d_routed` is `dL/d(routed_out)` at the routed stream's injection site
+///   (layer ℓ+δe or the final flush); `dh_routed_out` accumulates
+///   `dL/d(routed_in)`.
+///
+/// Bit-identity pin: with `d_shared == d_routed == d_output` and zeroed dh
+/// buffers, `grads` is bit-identical to [`moe_backward_token`] (same
+/// accumulation order into the same buffer) and `dh_shared_out +
+/// dh_routed_out` matches the fused `dh_out` within f32 reassociation ULPs —
+/// the fused interleaves the three input-gradient contributions into ONE
+/// buffer (`(0+shared)+down_proj+router`) while the split sums two buffers
+/// (`shared + (down_proj+router)`); `(s+d)+r` vs `s+(d+r)` legitimately
+/// differ by the last ULP. Pinned by tolerance in the test, with the exact
+/// bound recorded there.
+#[allow(clippy::too_many_arguments)]
+pub fn moe_backward_token_split(
+    config: &MoeConfig,
+    weights: &MoeWeights,
+    saved: &MoeSavedActivations,
+    d_shared: &[f32],
+    d_routed: &[f32],
+    dh_shared_out: &mut [f32],
+    dh_routed_out: &mut [f32],
+    grads: &mut MoeGradients,
+) {
+    let d = config.d();
+    let use_latent_moe = config.routed_expert_hidden_size.is_some();
+
+    debug_assert_eq!(d_shared.len(), d);
+    debug_assert_eq!(d_routed.len(), d);
+    debug_assert_eq!(dh_shared_out.len(), d);
+    debug_assert_eq!(dh_routed_out.len(), d);
+
+    // Shared first — preserves the fused path's accumulation order into `grads`.
+    shared_experts_backward(config, weights, saved, d_shared, dh_shared_out, grads);
+
     if use_latent_moe {
-        moe_backward_latent(config, weights, saved, d_output, dh_out, grads);
+        moe_backward_latent(config, weights, saved, d_routed, dh_routed_out, grads);
     } else {
-        moe_backward_nonlatent(config, weights, saved, d_output, dh_out, grads);
+        moe_backward_nonlatent(config, weights, saved, d_routed, dh_routed_out, grads);
     }
 }
 
@@ -769,7 +1128,7 @@ fn moe_backward_latent(
     simd_outer_product_acc(
         grads.routed_expert_down_proj.as_mut().unwrap(),
         &d_h_latent,
-        &saved.h,
+        saved.routed_h(),
         d_moe,
         d,
     );
@@ -854,8 +1213,8 @@ fn moe_backward_nonlatent(
             config.situ_linear_beta,
         );
 
-        simd_outer_product_acc(&mut expert_grad.gate_proj, &d_gate, &saved.h, d_ffn, d);
-        simd_outer_product_acc(&mut expert_grad.up_proj, &d_up, &saved.h, d_ffn, d);
+        simd_outer_product_acc(&mut expert_grad.gate_proj, &d_gate, saved.routed_h(), d_ffn, d);
+        simd_outer_product_acc(&mut expert_grad.up_proj, &d_up, saved.routed_h(), d_ffn, d);
 
         simd_transpose_matvec_acc(dh_out, &expert.gate_proj, &d_gate, d_ffn, d);
         simd_transpose_matvec_acc(dh_out, &expert.up_proj, &d_up, d_ffn, d);
@@ -942,13 +1301,14 @@ fn router_backward(
     // router_logits[e] = dot(router_weight[e], h)
     // dL/d(router_weight[e]) += d_router_logits[e] * h
     // dh_out += router_weight[e]^T · d_router_logits
+    let routed_h = saved.routed_h();
     for e in 0..n_r {
         let dl = d_router_logits[e];
         if dl != 0.0 {
             // dL/d(router_weight[e]) += dl * h
             let row_off = e * d;
             for c in 0..d {
-                grads.router_weight[row_off + c] += dl * saved.h[c];
+                grads.router_weight[row_off + c] += dl * routed_h[c];
             }
             // dh_out += dl * router_weight[e]
             for c in 0..d {
@@ -1058,5 +1418,228 @@ fn situ_backward(
             d_gate[i] = da * d_act_dg;
             d_up[i] = da * d_act_du;
         }
+    }
+}
+
+// ─── Tests (split-stream forward/backward — Issue 482 / Plan 452) ────────────
+
+#[cfg(test)]
+mod split_tests {
+    use super::*;
+    use crate::moe::{MoeConfig, MoeForwardScratch, MoeWeights};
+
+    /// Small LATENT config (the Kimi family shape) for fast tests.
+    fn latent_cfg() -> MoeConfig {
+        MoeConfig {
+            num_experts: 4,
+            num_shared_experts: 1,
+            num_experts_per_token: 2,
+            moe_intermediate_size: 8,
+            hidden_size: 32,
+            use_sigmoid_router: true,
+            renormalize: true,
+            routed_expert_hidden_size: Some(16),
+            latent_moe_use_norm: true,
+            rms_norm_eps: 1e-5,
+            situ_beta: 4.0,
+            situ_linear_beta: Some(25.0),
+        }
+    }
+
+    /// Small NON-latent config.
+    fn nonlatent_cfg() -> MoeConfig {
+        MoeConfig {
+            routed_expert_hidden_size: None,
+            latent_moe_use_norm: false,
+            ..latent_cfg()
+        }
+    }
+
+    fn test_input(d: usize, salt: f32) -> Vec<f32> {
+        (0..d)
+            .map(|i| ((i as f32 * 0.37 + salt) * 0.1).sin())
+            .collect()
+    }
+
+    fn assert_vecs_identical(a: &[f32], b: &[f32], what: &str) {
+        assert_eq!(a.len(), b.len(), "{what}: length");
+        for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
+            assert_eq!(x.to_bits(), y.to_bits(), "{what}: element {i}: {x} vs {y}");
+        }
+    }
+
+    fn assert_vecs_close(a: &[f32], b: &[f32], tol: f32, what: &str) {
+        assert_eq!(a.len(), b.len(), "{what}: length");
+        for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
+            assert!((x - y).abs() <= tol, "{what}: element {i}: {x} vs {y} (tol {tol})");
+        }
+    }
+
+    /// G0 forward pin: equal inputs → shared_out + routed_out (summed
+    /// shared-first) is BIT-IDENTICAL to the fused output on the latent path.
+    #[test]
+    fn split_forward_matches_fused_latent_bit_identical() {
+        let config = latent_cfg();
+        let weights = MoeWeights::random(&config, 42);
+        let h = test_input(config.d(), 1.0);
+        let mut fused_scratch = MoeForwardScratch::new(&config);
+        let mut split_scratch = MoeForwardScratch::new(&config);
+
+        let (fused_out, _fused_saved) =
+            moe_forward_token_with_saved(&weights, &config, &h, &mut fused_scratch);
+        let (shared_out, routed_out, split_saved) =
+            moe_forward_token_split(&weights, &config, &h, &h, &mut split_scratch);
+
+        // Shared-first sum (the fused computes hidden_out = shared; += routed).
+        let mut sum = shared_out.clone();
+        for (s, r) in sum.iter_mut().zip(routed_out.iter()) {
+            *s += *r;
+        }
+        assert_vecs_identical(&sum, &fused_out, "latent split forward sum");
+
+        // The saved activations' routed input must round-trip.
+        assert_eq!(split_saved.h_routed.as_deref(), Some(h.as_slice()));
+    }
+
+    /// Non-latent forward: same streams equal → tolerance match only (the
+    /// per-expert accumulation reassociates; documented in the fn docs).
+    #[test]
+    fn split_forward_matches_fused_nonlatent_close() {
+        let config = nonlatent_cfg();
+        let weights = MoeWeights::random(&config, 43);
+        let h = test_input(config.d(), 2.0);
+        let mut fused_scratch = MoeForwardScratch::new(&config);
+        let mut split_scratch = MoeForwardScratch::new(&config);
+
+        let (fused_out, _) = moe_forward_token_with_saved(&weights, &config, &h, &mut fused_scratch);
+        let (shared_out, routed_out, _) =
+            moe_forward_token_split(&weights, &config, &h, &h, &mut split_scratch);
+
+        let mut sum = shared_out.clone();
+        for (s, r) in sum.iter_mut().zip(routed_out.iter()) {
+            *s += *r;
+        }
+        assert_vecs_close(&sum, &fused_out, 1e-5, "nonlatent split forward sum");
+    }
+
+    /// G0 backward pin: equal-input forward + equal stream gradients → the
+    /// split backward's `grads` are BIT-IDENTICAL to the fused backward, and
+    /// the summed dh matches within f32 reassociation ULPs (the fused folds
+    /// shared→down_proj→router into one buffer; the split sums two buffers —
+    /// `(s+d)+r` vs `s+(d+r)`, a last-ULP difference by construction).
+    #[test]
+    fn split_backward_matches_fused_latent_bit_identical() {
+        let config = latent_cfg();
+        let weights = MoeWeights::random(&config, 44);
+        let h = test_input(config.d(), 3.0);
+        let d_output = test_input(config.d(), 4.0);
+        let mut scratch = MoeForwardScratch::new(&config);
+
+        // Fused
+        let (_, fused_saved) = moe_forward_token_with_saved(&weights, &config, &h, &mut scratch);
+        let mut fused_grads = MoeGradients::zeros_like(&weights);
+        let mut fused_dh = vec![0.0f32; config.d()];
+        moe_backward_token(
+            &config,
+            &weights,
+            &fused_saved,
+            &d_output,
+            &mut fused_dh,
+            &mut fused_grads,
+        );
+
+        // Split (fresh forward — deterministic w.r.t. scratch state)
+        let (_, _, split_saved) =
+            moe_forward_token_split(&weights, &config, &h, &h, &mut scratch);
+        let mut split_grads = MoeGradients::zeros_like(&weights);
+        let mut dh_shared = vec![0.0f32; config.d()];
+        let mut dh_routed = vec![0.0f32; config.d()];
+        moe_backward_token_split(
+            &config,
+            &weights,
+            &split_saved,
+            &d_output,
+            &d_output,
+            &mut dh_shared,
+            &mut dh_routed,
+            &mut split_grads,
+        );
+        let mut dh_sum = dh_shared.clone();
+        for (s, r) in dh_sum.iter_mut().zip(dh_routed.iter()) {
+            *s += *r;
+        }
+
+        // dh: reassociation tolerance — measured 1 ULP; bound at a few ULPs
+        // (rel 1e-6) to stay immune to codegen while catching real defects.
+        for (i, (x, y)) in dh_sum.iter().zip(fused_dh.iter()).enumerate() {
+            assert!(
+                (x - y).abs() <= 1e-6 * (1.0 + y.abs()),
+                "latent split backward dh: element {i}: {x} vs {y}"
+            );
+        }
+        assert_vecs_identical(
+            &split_grads.router_weight,
+            &fused_grads.router_weight,
+            "latent split backward router grads",
+        );
+        for (sg, fg) in split_grads.experts.iter().zip(fused_grads.experts.iter()) {
+            assert_vecs_identical(&sg.gate_proj, &fg.gate_proj, "expert gate grads");
+            assert_vecs_identical(&sg.up_proj, &fg.up_proj, "expert up grads");
+            assert_vecs_identical(&sg.down_proj, &fg.down_proj, "expert down grads");
+        }
+        for (sg, fg) in split_grads
+            .shared_experts
+            .iter()
+            .zip(fused_grads.shared_experts.iter())
+        {
+            assert_vecs_identical(&sg.gate_proj, &fg.gate_proj, "shared gate grads");
+            assert_vecs_identical(&sg.up_proj, &fg.up_proj, "shared up grads");
+            assert_vecs_identical(&sg.down_proj, &fg.down_proj, "shared down grads");
+        }
+        assert_vecs_identical(
+            split_grads.routed_expert_down_proj.as_ref().unwrap(),
+            fused_grads.routed_expert_down_proj.as_ref().unwrap(),
+            "latent down_proj grads",
+        );
+        assert_vecs_identical(
+            split_grads.routed_expert_up_proj.as_ref().unwrap(),
+            fused_grads.routed_expert_up_proj.as_ref().unwrap(),
+            "latent up_proj grads",
+        );
+    }
+
+    /// Split with DIFFERENT stream inputs: smoke — runs, finite, and the
+    /// routed stream's dh lands in its own buffer (non-zero for a generic
+    /// upstream gradient).
+    #[test]
+    fn split_different_inputs_smoke() {
+        let config = latent_cfg();
+        let weights = MoeWeights::random(&config, 45);
+        let shared_in = test_input(config.d(), 5.0);
+        let routed_in = test_input(config.d(), 6.0);
+        let d_output = test_input(config.d(), 7.0);
+        let mut scratch = MoeForwardScratch::new(&config);
+
+        let (shared_out, routed_out, saved) =
+            moe_forward_token_split(&weights, &config, &shared_in, &routed_in, &mut scratch);
+        assert!(shared_out.iter().all(|v| v.is_finite()));
+        assert!(routed_out.iter().all(|v| v.is_finite()));
+
+        let mut grads = MoeGradients::zeros_like(&weights);
+        let mut dh_shared = vec![0.0f32; config.d()];
+        let mut dh_routed = vec![0.0f32; config.d()];
+        moe_backward_token_split(
+            &config,
+            &weights,
+            &saved,
+            &d_output,
+            &d_output,
+            &mut dh_shared,
+            &mut dh_routed,
+            &mut grads,
+        );
+        assert!(dh_shared.iter().any(|v| *v != 0.0));
+        assert!(dh_routed.iter().any(|v| *v != 0.0));
+        assert!(grads.router_weight.iter().any(|v| *v != 0.0));
     }
 }
