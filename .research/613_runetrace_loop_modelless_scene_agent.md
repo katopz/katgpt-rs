@@ -1,6 +1,7 @@
 # Research 613 — The Runetrace Loop: a modelless scene agent from shipped GOAT primitives
 
 **Status:** DESIGN — fusion over shipped substrate (no new primitive); the composition is the contribution. Feeds seal-remake Proposal 005 Phase 4 (the instinct/rethink lane). Quality claims UNPROVEN until the lane's G-gates run (§6). Verdict: **AGREE** after 2 rounds (2026-10-09) — sub-agent reviewer path (`request_verdict` claude backend rate-limited until 22:00 ICT; the §5-documented equal fallback; 4 REVISE bullets discharged: ignition Bench 666, GOAT-blanket scoped, KARC Issue-866 QUALIFY + Bench 849, §8 harness homed instinct-side).
+**EXECUTED (first lane): instinct Plan 010, `ffdc9a8` (2026-10-09)** — the modelless loop + G1/G2 harness landed behind `runetrace_loop` (G1 byte-determinism PASS; G2 136 µs/decision @ 32 entities; the Ext-seat serve wiring + rethink arm + hosted leg stay deferred).
 
 **Date:** 2026-10-09
 **Provoked by:** owner ask — "apply all tactics: karc, elo, leo duel leo, shallow-reasoning looped transform, reflex, instinct, all GOAT, on top of Runetrace; think novel, e2e agent + latent-space first."
