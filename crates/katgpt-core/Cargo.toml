@@ -453,6 +453,12 @@ cadence_gate = []
 # logit-lens KL profile + effective depth, write-fraction spectrum, loop
 # flatness, executed-depth histogram, holdout threshold calibration. Opt-in.
 kl_depth_probe = []
+# Issue 929 — loop-alignment probe (Research 614, arXiv:2607.00341 DiscoLoop):
+# per-loop state-vs-decode alignment cosine + margin, AUROC/bootstrap CI, and
+# the two-hop composition fixture generator. Opt-in measurement instrument.
+# Implies `margin_gate`: the probe's top1−top2 read is `margin_split` — one
+# top-2 implementation, not two.
+loop_alignment_probe = ["margin_gate"]
 
 # saddle_escape (Plan 593 / Research 546, arXiv:2609.04963 "Fractal basins trap
 # latent reasoning"): three-way Continue / Halt{Converged} / Halt{Trapped} /

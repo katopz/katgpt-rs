@@ -2358,6 +2358,14 @@ pub use convergence_cadence::{CadenceConfig, CadenceVerdict, ConvergenceCadence}
 #[cfg(feature = "kl_depth_probe")]
 pub mod loop_depth_probe;
 
+// Issue 929 — loop-alignment probe (Research 614, arXiv:2607.00341 DiscoLoop):
+// state-vs-decode-manifold alignment `cos(H, W[v̂])` + decode margin per loop
+// iteration, the deterministic AUROC/bootstrap readout, and the paper §2
+// two-hop fixture generator (in-context rendering for pretrained probes).
+// Pure measurement — no forward-path coupling, allocation-free probe read.
+#[cfg(feature = "loop_alignment_probe")]
+pub mod loop_alignment_probe;
+
 // Issue 740 — Regime probes for frozen predictors (Research 541, arXiv:2604.26841
 // UDDMs-as-associative-memories): per-position conditional entropy (shared
 // logsumexp kernel with breakeven/fidelity), two-sample entropy-gap detector,
