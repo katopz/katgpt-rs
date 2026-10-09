@@ -342,6 +342,16 @@ pub mod evidence_tripwire;
 // Plan 607 GOAT (bench_876 T1 + bench_878 T3).
 #[cfg(feature = "state_option_scoring")]
 pub mod state_option_scoring;
+// event_state_windows — the TWS distillation (Plan 623 Phase 1): the
+// two-sided sigmoid event-anchored state window (settle transition excluded
+// from both states) + the identity-free population state summary (order
+// statistics over a caller-sorted scratch buffer, zero-alloc). Consumes
+// only always-on substrate (simd::fast_sigmoid + stats::nearest_rank — the
+// percentile-of-record, its tail supports carried verbatim). Δ is a
+// parameter (settling_ticks is the caller's wiring-time derivation, not a
+// wrapper here). Opt-in pending G1–G4 + the Phase-2 riir-ai PoC.
+#[cfg(feature = "event_state_windows")]
+pub mod event_state_window;
 // template_decode — bounded template decode over CLOSED sentence grammars
 // (Plan 607 T2). A table of literal/slot templates with closed fill
 // vocabularies; decode returns (template, fill indices) and REFUSES

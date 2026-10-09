@@ -1,7 +1,7 @@
 # Plan 623: Event-State Window Primitive — Event-Anchored Sigmoid Segmentation + Identity-Free Population Summary
 
 **Date:** 2026-10-08
-**Status:** Active — Phase 1 pending
+**Status:** Active — Phase 1 LANDED 2026-10-10 (G1–G4 ALL PASS, bench 931, opt-in per plan; load-caveated G2 — trainer-active box, quiet re-run at Phase-2 finalization); Phase 2 (riir-ai PoC) pending
 **Research:** [katgpt-rs/.research/611_TWS_Event_State_Windows_Identity_Free_Population_Tokens.md](../.research/611_TWS_Event_State_Windows_Identity_Free_Population_Tokens.md) · [riir-ai/.research/396_crowd_regime_tokens_event_state_guide.md](../../riir-ai/.research/396_crowd_regime_tokens_event_state_guide.md)
 **Source paper:** [arXiv:2610.03001](https://arxiv.org/abs/2610.03001) — Bae & Cha, "Neural Data Needs Semantic Tokenization" (TWS)
 **Target:** `katgpt-rs/crates/katgpt-core/src/event_state_window.rs` (new module) + Cargo feature `event_state_windows`
@@ -24,14 +24,16 @@ The paper's evidence this is worth a feature flag: event-anchored boundaries vs 
 
 ### Tasks
 
-- [ ] **T1.1** Create `crates/katgpt-core/src/event_state_window.rs` with the two functions above; feature `event_state_windows = []` in katgpt-core `Cargo.toml`; module gated `#[cfg(feature = "event_state_windows")]`.
-- [ ] **T1.2** G1 correctness tests (closed-form):
-  - partition-of-unity: for K adjacent states with shared boundaries, `Σ_k w_k(t) ≈ 1` *inside states* and `< 1` exactly on the excluded transitions (the transition belongs to no state — pin the exclusion with a literal test at `t ∈ [b, b+Δ)`).
-  - permutation invariance, **bit-identical f32**: compute ALL statistics (mean, spread, quantiles) over the **sorted** scratch buffer — the sort is already paid for the quantiles, and summation over a fixed (sorted) order is permutation-invariant by construction. (Summing in input order is NOT: f32 addition is non-associative.)
-  - γ→0 limit: window → hard indicator on `[b_prev+Δ, b_next)`; γ→∞ → flat (degenerate) — both pinned.
-- [ ] **T1.3** G2 latency bench (`--release` mandatory), **with a baseline arm**: fixed-window aggregation (the incumbent shape — same statistics over a fixed `[t−W, t)` window, no event anchoring) as the comparison, so the claim is relative (event-anchored ≤ fixed-window + ε) and does not drift with box load. Absolute bars: per-call window eval ≤ 20 ns; summary over N=10k members ≤ 100 µs (the R311 shape). Zero heap allocation (G4 counting allocator canary).
-- [ ] **T1.4** Property test: fuzz boundaries for `b_next + Δ_next > b_prev + Δ_prev` violations — malformed boundary sequences must return the zero window, never panic.
-- [ ] **T1.5** Run `scripts/full_gate.sh` posture relevant to the crate (`cargo clippy -p katgpt-core --all-targets --features event_state_windows`); `cargo refine` before manual lint fixes.
+- [x] **T1.1** Create `crates/katgpt-core/src/event_state_window.rs` with the two functions above; feature `event_state_windows = []` in katgpt-core `Cargo.toml`; module gated `#[cfg(feature = "event_state_windows")]`.
+  → LANDED 2026-10-10: flat module (the state_option_scoring shape), root-feature forward added; consumes ONLY always-on substrate (simd::fast_sigmoid ±40-saturation + stats::nearest_rank — the percentile-of-record, tail supports carried in `StateSummary.supports`); Δ stays a parameter per line 19 (no settling_ticks dep, no feature implication).
+- [x] **T1.2** G1 correctness tests (closed-form):
+  → 10/10 inline tests (bench 931 G1 section): partition-of-unity + exclusion pin + γ limits (exact 0/1 via fast_sigmoid saturation; the σ(0)=0.5 edge points pinned as the ambiguous class) + permutation BIT-identity (sorted-order fold) + closed form + NaN/empty/single shapes.
+- [x] **T1.3** G2 latency bench (`--release` mandatory), **with a baseline arm**:
+  → bench 931: window 6 ns p99 (bar 20); summary N=10k 98.3 µs p50 (bar 100 µs) with the fixed-window baseline arm; anchoring delta +500 ns — PASS under documented trainer load (re-run quiet at Phase 2). First run's per-call Instant pairs read the timer quantum (p50 0 ns/p99 100 ns) — batched 256/sample.
+- [x] **T1.4** Property test: fuzz boundaries for `b_next + Δ_next > b_prev + Δ_prev` violations — malformed boundary sequences must return the zero window, never panic.
+  → 20k-iteration LCG fuzz (exact-zero on every malformed combo incl. NaN/inf/γ≤0/inverted support; >15k live-path samples bounded [0,1]). Note: b_next=+inf is the VALID terminal shape, not malformed.
+- [x] **T1.5** Run `scripts/full_gate.sh` posture relevant to the crate (`cargo clippy -p katgpt-core --all-targets --features event_state_windows`); `cargo refine` before manual lint fixes.
+  → clippy clean at the feature posture (all-targets); default lib 2141 passed 0 failed; refine 0 edits (compile-gated).
 
 ## Phase 2 — Consumer PoC (riir-ai side; runs after Phase 1 lands — the go/no-go gate, not deferrable)
 

@@ -1272,6 +1272,19 @@ state_option_scoring = ["distance_abstain"]
 # need not score).
 template_decode = []
 
+# event_state_windows (Plan 623 Phase 1, 2026-10-10): the TWS distillation
+# (Research 611 / arXiv:2610.03001) — (a) the two-sided sigmoid event-anchored
+# state window w(t) = σ((t−(b_prev+Δ))/γ)·σ((b_next−t)/γ) with the settle
+# transition [b_prev, b_prev+Δ) excluded from both states, and (b) the
+# identity-free population state summary (mean/spread/10-25-50-75-90
+# nearest-rank quantiles with tail supports over a caller-sorted scratch
+# buffer, zero-alloc). Consumes ONLY always-on substrate (simd::fast_sigmoid,
+# stats::nearest_rank — no feature implications). Δ stays a parameter by
+# design (no derive_settle_offset wrapper — callers use settling_ticks(β,ε)
+# at wiring time; Plan 623 line 19). OPT-IN pending G1–G4 + the Phase-2
+# riir-ai PoC (T2.1) — the paper's domain evidence does NOT auto-transfer.
+event_state_windows = []
+
 # decision_wire (Plan 603 T1.2): the Jev/laya-compatible decision wire
 # contract — DecisionRequest/DecisionResponse over the choice/score/noul
 # vocabulary (Research 562/574/576), with abstention as a first-class
@@ -4299,12 +4312,30 @@ name = "bench_876_state_option_scoring_goat"
 harness = false
 required-features = ["state_option_scoring"]
 
+# Plan 623 T1.3/T1.4 — the event_state_windows GOAT gate (G1 closed-form
+# window limits re-pinned at the bench posture, G2 latency: per-call window
+# eval ≤ 20 ns + N=10k summary ≤ 100 µs, the fixed-window baseline arm, tail
+# supports printed, black_box loud-zero defense). The G4 alloc gate is the
+# separate event_state_window_alloc_check binary (the *_alloc_check
+# convention).
+[[bench]]
+name = "bench_931_event_state_window_goat"
+harness = false
+required-features = ["event_state_windows"]
+
 # Plan 607 T1 G4 — zero-alloc steady state for CentroidTable::new + pick +
 # score_into. Separate single-fn binary (the bench-655 convention: parallel
 # tests share the global counting allocator).
 [[test]]
 name = "state_option_scoring_alloc_check"
 required-features = ["state_option_scoring"]
+
+# Plan 623 T1.3 G4 — zero-alloc steady state for population_state_summary
+# (N=10k, pre-allocated scratch) + the window-eval loop. Separate single-fn
+# binary (the bench-655 convention).
+[[test]]
+name = "event_state_window_alloc_check"
+required-features = ["event_state_windows"]
 
 # Plan 607 T3 — the corpus-fitted head GOAT gate (G1a planted-fit ranking
 # with the near-tie redraw, G1b reflex floors, G2 p99-per-decision-SET with
