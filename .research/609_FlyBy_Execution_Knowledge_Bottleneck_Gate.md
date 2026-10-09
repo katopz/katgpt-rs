@@ -53,6 +53,8 @@ knowledge-like ⟺ `V_LCB(N, δ) < ε` — one inequality over the consumed boun
 
 `b0 = 0 ∧ bd ≥ 3` → a state-level rescue exemplar — the `traj_store` Certified-tier shape (no-fix fails, fix verifies), and a local pre-filter for reflex's corpus-synthesis acceptance. **AUGMENTS the network-oracle agreement VETO, never replaces it**: the veto's cross-model agreement remains the authority; the local predicate can only narrow the candidate set (same-model self-consistency is weaker evidence than independent agreement).
 
+**LANDED 2026-10-08** — refine `cf34f6c8` (substrate `src/rescue_mine.rs` + arm-H tallies + `--misses` rescue band + the G1 truth-table tests) and reflex `86fe38a` (OPT-IN `--synth-rescue-prefilter`, default OFF); measured yield honest-EMPTY locally, the FlyBy 95/800 comparison awaits the first ARMED arm-H run (owner-gated). riir-refine Issue 156 closed 2026-10-09 (`308be448`) — the durable record is riir-refine HISTORY.md.
+
 ### 2.7 The fusion (what none of the parts gives alone)
 
 **probe (measured local-continuation ineffectiveness) ⊗ corpus-coverage distance (`CorpusDistanceGate`) → bottleneck class → tier selection.** Corpus distance makes "knowledge bottleneck" *measurable at serve time* (coverage); the probe makes "local continuation is futile" *measured* rather than self-reported. No prior art consumes this pair (§6); no shipped module does (§5).
