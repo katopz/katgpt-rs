@@ -14,7 +14,12 @@
 - **Public modelless inference primitives** (`katgpt-core` + member crates) —
   the public funnel per Research 003. No training, no backprop, no gradient
   descent; runtime weight mutations limited to freeze/thaw, deterministic
-  raw/lora hot-swap, latent-space updates.
+  raw/lora hot-swap, latent-space updates. Includes the zero-dep wire-format
+  modules: `decision_wire` (choice/score/noul, v1 frozen additive-only) and
+  `runetrace` (the scene-as-text DOC model + byte-deterministic renderer +
+  BLAKE3 digest, Plan 624 — the format half of seal-remake Proposal 005,
+  ACCEPTED 2026-10-09; consumers: riir-ai Plan 626 producers, the Phase 3
+  panels, the Phase 4 instinct lane per Research 613).
 - **Spec-driven constrained assignment solver** (`katgpt-assign`, Plan 620 /
   Research 607 — the OSDI'24 Rebalancer distillation): objects → containers
   under capacity/balance/movement specs over an integer expression DAG with
