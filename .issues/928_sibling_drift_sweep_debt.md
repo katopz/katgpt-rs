@@ -61,8 +61,12 @@ Post-wave-2 verdicts: **console + locale sweeps green in every repaired repo** (
 
 ## Remaining — wave 3 (sibling-hot; re-measure when their sessions end)
 
-- **mmorpg-remake (seal-remake)** — instrument 7→8 + console 2 + citation CROSS 10.
-- **riir-ai** — instrument 7→15 + console 4 + locale 6 (the games-mmorpg WIP owned the tree at wave-1 time).
+- ~~mmorpg-remake (seal-remake)~~ — **DONE 2026-10-09** (`b69ee61`): the ten CROSS citations qualified
+  (owners verified via git history: seal-game-editor issues 190/186 + plans 299/300/301/311/317/323;
+  riir-ai issue 897 the opt-level substrate fork), the two poc consoles defended,
+  instrument re-pinned 7→8 (+inspect_glb_plants, 035431a) and console ratchet lowered 4→0.
+- **riir-ai** — instrument 7→15 + locale 6 (the vessel session owns the tree — untracked
+  `dapp_vessel.rs` live in crates/riir-mcp-client at wave-3 time; console 4 too).
 - **riir-dapps** — instrument 1→2 (the vessel-bench session).
 - **riir-rethink** — instrument 1→5 + console 3 (the issue-025 T3 session).
 

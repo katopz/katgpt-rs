@@ -136,7 +136,7 @@ riir-train                      46              40               0  # undefended
 riir-viewbridge                  0               0               0
 mmorpg-editor                 1               1               0
 mmorpg-remaster             0               0               0
-mmorpg-remake                      3               2               4
+mmorpg-remake                      5               3               0  # ratchet lowered 4 -> 0 2026-10-09 (katgpt-rs 928 wave 3): the two poc-check consoles defended at seal-remake b69ee61; min floors from measured walk=8/pop=5 (~60%).
 #
 # ⚠ FOUR rows are missing and this box cannot measure them: katgpt-web,
 # riir-dao, riir-deployer, riir-esp32 are not checked out here (16 of 20).
