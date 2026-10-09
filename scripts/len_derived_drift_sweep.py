@@ -603,7 +603,8 @@ def selftest() -> list[str]:
     #    flip PAIR keyed line-free, and malformed rows must REFUSE, never
     #    read as an empty pin set (an empty set here would green every
     #    cross-repo dependence the moment the file rots).
-    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as tf:
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False,
+                                 encoding="utf-8") as tf:
         tf.write("r f k h drop1:A->UNRESOLVED\n"
                  "r g k2 h2 drop2:C->UNRESOLVED,drop3:E->UNRESOLVED\n")
         st_path = Path(tf.name)
@@ -623,7 +624,8 @@ def selftest() -> list[str]:
             ("r f k h drop:no-arrow", True),    # no -> inside the pair
             ("r f k h drop:UNRESOLVED->EXACT-UPSTREAM", True),  # the direction law
         ):
-            with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as bf:
+            with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False,
+                                         encoding="utf-8") as bf:
                 bf.write(malformed + chr(10))
                 bp = Path(bf.name)
             refused = False
