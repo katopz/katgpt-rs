@@ -125,6 +125,14 @@ is derived from the run (today `{riir-ai, riir-train}`), so a new cross-repo
 edge joins the check by EXISTING rather than by somebody remembering to add it.
 `--no-stability` skips it when only the pins are being re-measured.
 
+An ANNOUNCED flip that has been READ and adjudicated becomes a PIN, not a
+standing red: `len_derived_stability_expected.txt` (Issue 928 wave 3) holds
+the adjudicated class by MEMBERSHIP — direction enforced conservative
+(resolved -> UNRESOLVED; a partial box may never be pinned into a bucket it
+cannot see), reds in BOTH directions (a NEW flip is a new cross-repo
+dependence; a pinned flip that stops flipping retires its row). The canary
+arms 11/11b/11c pin all three behaviours.
+
 Why this is NOT in scripts/docs_gate.sh's CHECKS
 ------------------------------------------------
 Identical to the other thirteen sweeps: CI has one checkout, the siblings are
@@ -165,6 +173,9 @@ REPO_ROOT = HERE.parent
 WORKSPACE = REPO_ROOT.parent
 PINS = HERE / "len_derived_drift_floors.txt"
 EYES = HERE / "len_derived_eyes_expected.txt"
+# Known, adjudicated CROSS-REPO VERDICT flips (the stability axis) — see
+# the file's own header for why a flip can be PINNED rather than repaired.
+STABILITY = HERE / "len_derived_stability_expected.txt"
 # The file whose `min_rs_files` column this sweep DELEGATES its walk floor to.
 DELEGATED_WALK_PINS = HERE / "orphaned_attr_drift_floors.txt"
 
@@ -186,6 +197,44 @@ def parse_pins(path: Path) -> dict[str, dict[str, int]]:
             raise ValueError(
                 f"malformed pin row (want {1 + len(FIELDS)} fields): {raw!r}")
         rows[parts[0]] = dict(zip(FIELDS, (int(v) for v in parts[1:])))
+    return rows
+
+
+def parse_stability(path: Path) -> dict[tuple[str, str, str, str], dict[str, tuple[str, str]]]:
+    """(repo, file, kernel, handle) -> {dropped_repo: (was, now)}.
+
+    The stability pin class (katgpt-rs Issue 928): a flip whose DIRECTION is
+    conservative (resolved -> UNRESOLVED, never the reverse) and whose root
+    fix lives in sibling kernel code can be ADJUDICATED rather than left
+    standing red — but only by MEMBERSHIP, with the flip pair recorded, so a
+    NEW cross-repo dependence still reds and a pinned flip that disappears
+    forces its row's retirement in the same commit.
+
+    ⛔ The direction law is ENFORCED, not advisory: a row whose partial-box
+    verdict (`now`) is anything but UNRESOLVED refuses to parse. A partial
+    box reporting UNRESOLVED asks for a per-row read (safe); a partial box
+    reporting a RESOLVED bucket it cannot see would be a false clean — the
+    exact failure this pin class must never be able to certify.
+    """
+    rows: dict[tuple[str, str, str, str], dict[str, tuple[str, str]]] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) != 5:
+            raise ValueError(f"malformed stability pin row (want 5 fields): {raw!r}")
+        repo, file_, kernel, handle, spec = parts
+        flips: dict[str, tuple[str, str]] = {}
+        for pair in spec.split(","):
+            drop, arrow = pair.split(":", 1)
+            was, now = arrow.split("->")
+            if now != "UNRESOLVED":
+                raise ValueError(
+                    f"non-conservative flip pinned (a partial box would report "
+                    f"a RESOLVED bucket it cannot see): {raw!r}")
+            flips[drop] = (was, now)
+        rows[(repo, file_, kernel, handle)] = flips
     return rows
 
 
@@ -550,6 +599,47 @@ def selftest() -> list[str]:
     fails: list[str] = []
     bs = chr(92)  # a literal backslash, the separator the audit emits on Windows
 
+    # 0. the stability pin parser (Issue 928): a row must parse to the
+    #    flip PAIR keyed line-free, and malformed rows must REFUSE, never
+    #    read as an empty pin set (an empty set here would green every
+    #    cross-repo dependence the moment the file rots).
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as tf:
+        tf.write("r f k h drop1:A->UNRESOLVED\n"
+                 "r g k2 h2 drop2:C->UNRESOLVED,drop3:E->UNRESOLVED\n")
+        st_path = Path(tf.name)
+    try:
+        st = parse_stability(st_path)
+        if st != {
+            ("r", "f", "k", "h"): {"drop1": ("A", "UNRESOLVED")},
+            ("r", "g", "k2", "h2"): {"drop2": ("C", "UNRESOLVED"),
+                                 "drop3": ("E", "UNRESOLVED")},
+        }:
+            fails.append(f"stability parse broke: {st}")
+        bad_rows = 0
+        for malformed, must_refuse in (
+            ("r f k h", True),               # too few fields
+            ("r f k h drop:A->B extra", True),  # too many fields
+            ("r f k h drop:A->UNRESOLVED", False),  # fine — the control row
+            ("r f k h drop:no-arrow", True),    # no -> inside the pair
+            ("r f k h drop:UNRESOLVED->EXACT-UPSTREAM", True),  # the direction law
+        ):
+            with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as bf:
+                bf.write(malformed + chr(10))
+                bp = Path(bf.name)
+            refused = False
+            try:
+                parse_stability(bp)
+            except ValueError:
+                refused = True
+            finally:
+                bp.unlink()
+            if refused != must_refuse:
+                bad_rows += 1
+        if bad_rows:
+            fails.append(f"stability parse accept/refuse logic wrong: {bad_rows}")
+    finally:
+        st_path.unlink()
+
     class _B:
         def __init__(self, repo, file, line, kernel, handle, verdict, reason=""):
             self.repo, self.file, self.line = repo, file, line
@@ -693,13 +783,14 @@ def canary() -> int:
     import copy
     import io
 
-    global PINS, EYES, DELEGATED_WALK_PINS
+    global PINS, EYES, DELEGATED_WALK_PINS, STABILITY
 
     td = Path(tempfile.mkdtemp())
     pins_src = PINS.read_text(encoding="utf-8")
     eyes_src = EYES.read_text(encoding="utf-8")
     delg_src = DELEGATED_WALK_PINS.read_text(encoding="utf-8")
-    real = (PINS, EYES, DELEGATED_WALK_PINS)
+    stab_src = STABILITY.read_text(encoding="utf-8")
+    real = (PINS, EYES, DELEGATED_WALK_PINS, STABILITY)
 
     # One classification, reused: every arm is about the PIN ARITHMETIC, not
     # about re-measuring the tree — 12 walks at ~8s would make the adversary
@@ -721,11 +812,13 @@ def canary() -> int:
     results = []
 
     def arm(name, want_rc, want_text, pins=None, eyes=None, delg=None,
-            classify=None, argv=("--no-stability",), zero_ok=None):
-        global PINS, EYES, DELEGATED_WALK_PINS
+            stab=None, classify=None, argv=("--no-stability",), zero_ok=None):
+        global PINS, EYES, DELEGATED_WALK_PINS, STABILITY
         PINS, EYES, DELEGATED_WALK_PINS = td / "p.txt", td / "e.txt", td / "d.txt"
+        STABILITY = td / "s.txt"
         PINS.write_text(pins if pins is not None else pins_src, encoding="utf-8")
         EYES.write_text(eyes if eyes is not None else eyes_src, encoding="utf-8")
+        STABILITY.write_text(stab if stab is not None else stab_src, encoding="utf-8")
         DELEGATED_WALK_PINS.write_text(
             delg if delg is not None else delg_src, encoding="utf-8")
         lda.classify_workspace = classify or (lambda repos: base)
@@ -754,7 +847,7 @@ def canary() -> int:
         try:
             rc, out = run(argv)
         finally:
-            PINS, EYES, DELEGATED_WALK_PINS = real
+            PINS, EYES, DELEGATED_WALK_PINS, STABILITY = real
             lda.classify_workspace = real_classify
             globals()["zero_walk_floor_accepted"] = real_zero
             globals()["adjudicate"] = real_adj
@@ -848,6 +941,40 @@ def canary() -> int:
         return rep
 
     arm("cross-repo flip reds", 1, "CROSS-REPO VERDICT", classify=cross, argv=())
+
+    # 11b. a pinned flip that stops flipping is STALE and must red — the
+    #      retirement law (drop the row in the commit that changed the
+    #      resolution), not a green the pin grants forever.
+    arm("stale stability pin reds", 1, "STABILITY PIN STALE", argv=(),
+        stab=stab_src + "riir-infer crates/ghost.rs k h riir-ai:A->UNRESOLVED\n")
+
+    # 11c. the CONSERVATIVE direction, pinned, GREENS: a flip a full box
+    #      resolves and a partial box demotes to UNRESOLVED is exactly the
+    #      adjudicated class — the pin must silence it without silencing a
+    #      NEW flip (arm 11 above stays red under the same stab file).
+    #      Anchored on the PRODUCTION pin rows themselves (the elementwise
+    #      pair): deterministic, and a missing anchor means the production
+    #      stability file is stale — the loud failure is the correct verdict.
+    def cross_conservative(repos):
+        rep = copy.deepcopy(base)
+        if not any(p.name == "riir-ai" for p in repos):
+            hit = False
+            for b in rep.binds:
+                if (b.repo == "riir-infer" and b.handle_expr == "input_handle"
+                        and b.kernel in ("sigmoid_f32", "silu_f32")
+                        and "elementwise_cubecl" in b.file
+                        and b.verdict == "EXACT-UPSTREAM"):
+                    b.verdict = "UNRESOLVED"
+                    hit = True
+            if not hit:
+                raise AssertionError(
+                    "arm 11c anchor missing: no EXACT-UPSTREAM elementwise "
+                    "input_handle in base — the production stability pin is "
+                    "stale, drop its rows")
+        return rep
+
+    arm("pinned stability flip greens", 0, "pinned stability flip",
+        classify=cross_conservative, argv=())
 
     print(f"\n{sum(results)}/{len(results)} canary arm(s) PASSED")
     return 0 if all(results) else 2
@@ -1038,23 +1165,46 @@ def main(argv: list[str]) -> int:
     # ── the cross-repo stability axis (see the docstring) ───────────────────
     if stability:
         base = verdict_map(rep)
+        # The flip keys must be LINE-FREE (a line-numbered pin reds on every
+        # edit above it — the eyes-file law), so re-attach the kernel name
+        # the verdict_map key drops.
+        kernel_of = {(b.repo, norm(b.file), b.line, b.handle_expr): b.kernel
+                     for b in rep.binds}
+        stability_pins = parse_stability(STABILITY)
         suppliers = cross_repo_suppliers(rep, names)
-        flips_total = 0
+        flips_total = pinned_flips = 0
+        seen_pin_rows: set[tuple[str, str, str, str]] = set()
         for drop in suppliers:
             subset = [p for p in repo_paths if p.name != drop]
             alt = verdict_map(lda.classify_workspace(subset))
             flips = [(k, base[k], alt[k]) for k in alt
                      if k in base and base[k] != alt[k]]
-            flips_total += len(flips)
             for k, was, now in flips:
+                flips_total += 1
+                key = (k[0], k[1], kernel_of.get(k, "?"), k[3])
+                pin = stability_pins.get(key, {}).get(drop)
+                if pin == (was, now):
+                    pinned_flips += 1
+                    seen_pin_rows.add(key)
+                    print(f"  · pinned stability flip: dropping {drop} flips "
+                          f"{k[0]}/{k[1]}:{k[2]} {k[3]}  {was} -> {now} "
+                          f"(adjudicated — see len_derived_stability_expected.txt)")
+                    continue
                 bad = True
                 print(f"⛔ CROSS-REPO VERDICT: dropping {drop} flips "
                       f"{k[0]}/{k[1]}:{k[2]} {k[3]}  {was} -> {now}. A verdict "
                       f"in a PRESENT repo now depends on an ABSENT one — "
                       f"DEFERRED does not cover this, and a partial-clone run "
-                      f"would report a WRONG bucket, not a missing one.")
+                      f"would report a WRONG bucket, not a missing one. "
+                      f"Adjudicate it in len_derived_stability_expected.txt "
+                      f"(conservative direction only) or fix the caller.")
+        for key in sorted(set(stability_pins) - seen_pin_rows):
+            bad = True
+            print(f"⛔ STABILITY PIN STALE: {' '.join(key)} no longer flips — "
+                  f"drop the row in the commit that changed the resolution")
         print(f"  stability: {len(suppliers)} supplier repo(s) "
-              f"({', '.join(suppliers)}) · {flips_total} verdict flip(s)")
+              f"({', '.join(suppliers)}) · {flips_total} verdict flip(s) "
+              f"({pinned_flips} pinned / {flips_total - pinned_flips} NEW)")
     else:
         print("  stability: SKIPPED (--no-stability) — the cross-repo axis was "
               "not measured on this run")

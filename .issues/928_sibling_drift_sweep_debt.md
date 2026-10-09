@@ -72,11 +72,19 @@ Post-wave-2 verdicts: **console + locale sweeps green in every repaired repo** (
 
 ### Instrument findings (katgpt-rs lane)
 
-- **len_derived stability**: dropping riir-ai flips 2 riir-infer verdicts
-  (`elementwise_cubecl.rs:617/:652` input_handle EXACT-UPSTREAM → UNRESOLVED)
-  — a partial-clone box would report a WRONG bucket. Needs a design decision
-  (caller-side shape parameterization, or a partial-clone-safe pin class);
-  not mechanical.
+- ~~**len_derived stability**~~ — **RESOLVED 2026-10-09 (wave 3, the design decision made)**:
+  the partial-clone-safe PIN CLASS. `len_derived_stability_expected.txt` holds
+  adjudicated flips by MEMBERSHIP, line-free, with the flip pair recorded; the
+  DIRECTION LAW is enforced in the parser (a partial box may only ever be pinned
+  into UNRESOLVED — never a resolved bucket it cannot see); reds BOTH directions
+  (new flip = new cross-repo dependence; retired flip = drop the row). Canary
+  arms 11/11b/11c pin all three behaviours (15/15). The two measured rows
+  (elementwise_cubecl sigmoid_f32/silu_f32 input_handle, resolved through a
+  riir-ai caller that landed after the 09-14 zero-flip measurement) are pinned
+  with the root fix NAMED as the retirement condition: caller-side shape
+  parameterization — the kernels take the element count as a launch parameter
+  instead of deriving it from input_handle's declared len (a riir-infer +
+  riir-ai change, deferred while the riir-ai tree is hot).
 
 ## The superseded wave-2 ledger (measured 2026-10-09 post-wave-1; now landed)
 

@@ -1,0 +1,47 @@
+# Known, adjudicated CROSS-REPO VERDICT flips for scripts/len_derived_drift_sweep.py's
+# stability axis — pinned by MEMBERSHIP, reds in BOTH directions.
+#
+# Format, 5 whitespace-separated fields:
+#
+#   <repo> <file> <kernel> <handle> <spec>
+#
+# where <spec> is one or more `drop:was->now` pairs, comma-separated (the same
+# address flipping under two different drops is two pairs).
+#
+# ── why a flip can be PINNED at all ─────────────────────────────────────────
+# The stability axis exists because HALF C resolves a wrapper parameter's
+# provenance through WORKSPACE callers, so a partial checkout can change the
+# verdict of a row in a repo that IS present. The sweep must ANNOUNCE every
+# such dependence (the docstring's law) — and an ANNOUNCEMENT that is read and
+# adjudicated becomes a PIN, not a standing red.
+#
+# Admission criteria (both required, measured not assumed):
+#
+# 1. The DIRECTION is conservative: resolved -> UNRESOLVED. A partial-clone
+#    box then reports "provenance unknown, read the row" — never a false
+#    clean. The reverse direction (UNRESOLVED -> EXACT-*) may NOT be pinned:
+#    that is a partial box claiming a resolution it cannot see.
+# 2. The root fix is a sibling kernel-code change (caller-side shape
+#    parameterization — the kernel takes the dimension as a parameter instead
+#    of deriving it from the bound buffer's declared size). Pinned here with
+#    the fix named; the pin retires in the commit that lands it.
+#
+# ── why membership, and why line-free ───────────────────────────────────────
+# Same laws as len_derived_eyes_expected.txt: a count goes green on the day
+# one row is adjudicated and another regresses; a line-numbered pin reds on
+# every edit above it. Reds in BOTH directions — a NEW flip is a new
+# cross-repo dependence (real news), and a pinned flip that stops flipping is
+# a resolution that changed (drop the row in that commit).
+#
+# ── the rows ────────────────────────────────────────────────────────────────
+# Found 2026-10-09 (katgpt-rs Issue 928 wave 3): the elementwise_cubecl
+# sigmoid/silu input handles resolve EXACT-UPSTREAM through a caller in
+# riir-ai. The 2026-09-14 founding measurement measured 0 flips workspace-
+# wide; this edge landed after it. Direction conservative (EXACT-UPSTREAM ->
+# UNRESOLVED). Root fix: sigmoid_f32/silu_f32 take the element count as a
+# launch parameter instead of deriving it from input_handle's declared len
+# (a riir-infer + riir-ai change; deferred while the riir-ai tree is hot).
+#
+#                      repo        file                                    kernel       handle        spec
+riir-infer crates/riir-infer-gpu/src/elementwise_cubecl.rs sigmoid_f32 input_handle riir-ai:EXACT-UPSTREAM->UNRESOLVED
+riir-infer crates/riir-infer-gpu/src/elementwise_cubecl.rs silu_f32   input_handle riir-ai:EXACT-UPSTREAM->UNRESOLVED
