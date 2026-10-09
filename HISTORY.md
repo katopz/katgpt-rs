@@ -16,9 +16,14 @@ repo's owners' call), len_derived stability pin class landed (`8bc96908c`,
 canaries 15/15). W4 (sessions ended): riir-ai `dc37d0693` + riir-rethink
 `25074d7` — the last 7 consoles + 6 locale sites. End state: console 252/252
 defended over 28 repos, locale 0/1345, instrument exit 0 — the drift family
-fully defended workspace-wide. Successors: Issues 920/926/929 (quiet-box
-lanes), the elementwise_cubecl shape-parameterization root fix (the
-len_derived pin's retirement condition).
+fully defended workspace-wide. Same session (wave 4 tail): the elementwise_cubecl
+shape-parameterization ROOT FIX landed (riir-infer `02e7a65` — sigmoid/silu bound
+by the EXPLICIT params[0]=n, the copy_f32_grid2d idiom, oversized-binding sentinel
+test; both stability rows retired at katgpt-rs `d956bf716`, canary 15/15), riding
+the repair of the vendored wgpu-hal metal adapter's u64/usize E0308 (which had
+broken every macOS cubecl_runtime build since 3564a72 — the metal arm never
+compiled on the author's CUDA lane). Successors: Issues 920/926/929 (quiet-box
+lanes).
 
 ## Issue 922 (2026-10-07 → closed 2026-10-07) — loop-straightness monitor family, the DEC-native stalemate signal (LiFT modelless residue): CLOSED — primitive half landed, GOAT ALL PASS (file removed per noise-reduction)
 
