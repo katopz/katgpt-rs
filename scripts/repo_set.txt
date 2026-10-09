@@ -30,3 +30,4 @@ riir-viewbridge
 mmorpg-editor
 mmorpg-remaster
 mmorpg-remake
+seal-std

@@ -97,6 +97,7 @@ riir-esp32                     1      0    0      0       0     0
 riir-game-sdk                160      0    0      0       0     0
 riir-kat                    15      0    0      0       0     0  # observed 2026-09-12: 26 .rs, 0 sites
 riir-llm                       1      0    0      0       0     0  # observed 2026-09-18: joined the workspace 2026-09-18; 1 .rs, 0 percentile sites
+seal-std                       1      0    0      0       0     0  # observed 2026-10-09: joined the workspace 2026-10-07; 1 .rs, 0 percentile sites
 riir-mmorpg-examples          40      0    0      0       0     0
 riir-neuron-db               125      6    0      0       0     0
 riir-shader                 27      0    0      0       0     0  # observed 2026-09-12: 46 .rs, 0 sites

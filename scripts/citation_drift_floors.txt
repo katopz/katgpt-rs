@@ -102,6 +102,7 @@ riir-esp32                  2      0               0       0
 riir-game-sdk             172      0               4       0
 riir-kat                    1      0               0       0
 riir-llm                    0      0               0       0  # observed 2026-09-18: joined the workspace 2026-09-18; 1 doc, 0 citations
+seal-std                    0      0               0       0  # observed 2026-10-09: joined the workspace 2026-10-07; 1 doc, 0 citations
 riir-mmorpg-examples      321      0               0       0
 riir-neuron-db             27      0               2       0  # tightened 2026-09-17 from 3 (Issue 823): the date-led heading for its own Issue 619 is readable now, so that row short-circuits as local.
 riir-shader                20      0               0       0  # 2026-09-18: 0 -> 20 (Issue 827). The 0 is the value this file's header reserves for "repos with no citations at all", and riir-shader HAD none when it was pinned; it measures 43 now (docs=2), so the floor was vacuous — a walk regression to zero would have passed it AND its max_cross=0 ceiling, which is green over whatever the instrument can see. 20 is loose on purpose, in the 5-58%-of-measured band the other 17 rows sit in: this floor catches a walk going blind, not content shrinking. Every OTHER floors file already gives this repo a real walk floor (markdown_fence 13, orphaned_attr 35, platform_dead_code 38, percentile 27) — checked, and it is an isolated stale row rather than a family-wide class.

@@ -77,6 +77,7 @@ riir-esp32                   1         5         0           0  # observed 2026-
 riir-game-sdk              150      1850         0           0
 riir-kat                    15       190         0           0
 riir-llm                     1        30         0           0  # observed 2026-09-18: joined the workspace 2026-09-18; 1 .rs, 30 candidate decls
+seal-std                     1        10         0           0  # observed 2026-10-09: joined the workspace 2026-10-07; 1 .rs, 10 candidate decls
 riir-mmorpg-examples        40       270         0           0
 riir-neuron-db             120      1950         0           0
 riir-shader                 38       640         0           0

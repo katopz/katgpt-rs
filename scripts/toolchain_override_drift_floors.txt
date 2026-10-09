@@ -140,6 +140,7 @@ riir-esp32                       3          0               0
 riir-game-sdk                   10          0               0
 riir-kat                         3          0               0
 riir-llm                         1          0               0  # observed 2026-09-18: joined the workspace 2026-09-18; 1 scanned file, no override
+seal-std                         2          0               0  # observed 2026-10-09: joined the workspace 2026-10-07; 2 scanned files, no override
 riir-mmorpg-examples            27          0               0
 riir-neuron-db                   8          0               0
 riir-shader                     10          0               0
