@@ -75,7 +75,7 @@ riir-dao                       5      0           1             0
 riir-dapps                    22     18           0             0
 riir-deployer                  6      0           0             0
 riir-esp32                     0      0           0             0
-riir-game-sdk                 57     36          31             0
+riir-game-sdk                 57     36           0             0  # silent 31 -> 0 2026-10-09 (katgpt-rs Issue 928): the last five SILENT-NOW targets armed with required-features rows at riir-game-sdk 1892808 — cas_g2 (LOAD-BEARING, RUN at --features vessel_cas: 3 passed), cas_cli, pack_smoke (riir-vessel), aoi_reveal_adjudication + prod_t47_relay_cap (riir-e2e); the repo's whole silent surface is armed. test_gate.sh counts PASSED tests not binaries, so the rows cannot move its pins (the Issue-728 caution checked).
 riir-kat                       0      0           0             0  # observed 2026-09-12: no cargo targets
 riir-llm                       0      0           0             0  # observed 2026-09-18: joined the workspace 2026-09-18; no cargo targets
 seal-std                       0      0           0             0  # observed 2026-10-09: joined the workspace 2026-10-07; no cargo test targets

@@ -1,62 +1,90 @@
-# Issue 928 — cross-repo drift-sweep debt: sibling landings that did not re-pin (the 2026-10-09 seal-std registration census)
+# Issue 928 — cross-repo drift-sweep debt: the 2026-10-09 seal-std registration census + the same-day 928 repair wave
 
-**Status:** OPEN — filed by the seal-std registration unit (katgpt-rs `c007cf543`); every row below MEASURED by running its owning sweep on this box (M3, 2026-10-09, post-`c007cf543`)
+**Status:** PARTIAL — the 10-09 wave-1 unit landed (the census rows + every quiet-repo row the fresh re-runs surfaced); the volume rows in five repos and the sibling-hot repos remain, ledgered below
 
-The seal-std registration ran all ~20 cross-repo drift sweeps to measure the
-new repo's rows. The registration itself is green — but the runs surfaced
-pre-existing committed drift in SIX sibling repos: landings that advanced
-their content past this box's floor pins without a same-commit re-pin. These
-sweeps are workstation-only (not in the docs-gate CHECKS), so the drift was
-invisible until a full-family run.
+The seal-std registration (katgpt-rs `c007cf543`) ran all ~20 cross-repo drift
+sweeps and surfaced committed sibling drift. The original census captured 9
+rows across 6 repos; the wave-1 fix-order step ("re-run each sweep fresh")
+surfaced substantially more — the census pass had been lossy. Everything is
+now measured, ledgered, and either REPAIRED (wave 1) or DEFERRED with a reason.
 
-Two classes — read before "fixing" any row:
+## Wave 1 — REPAIRED (2026-10-09, all commits `Session: dapps-121-followup/katgpt-928`)
 
-- **PIN-STALE** (the sibling commit landed; the pin did not move): repair =
-  re-pin to the measured value in the re-pin commit, citing the sibling
-  commit that caused it.
-- **CODE-DEBT** (the sweep names a repair tool and forbids raising the
-  ceiling): repair = fix the SIBLING's code, never the pin.
-
-## The census (sweep → repo → finding → class)
-
-| sweep | repo | measured vs pinned | class |
+| repo | sweep(s) | repair | commit |
 |---|---|---|---|
-| `cfg_gated` | riir-ai | load-bearing SILENT-NOW **3 committed > pinned 0** — targets whose names say their green is evidence report `ok. 0 passed` over empty binaries | **CODE-DEBT** (read the 3 targets: either they are genuinely load-bearing and their tests vanished, or the names lie — then re-pin with reasons) |
-| `cfg_gated` | riir-dapps | (same run's ✗ row — take the numbers from a fresh run) | read-then-classify |
-| `citation` | mmorpg-editor | CROSS **1 > pinned 0** + IN-LOCAL-RANGE **1 > pinned 0** (docs=2 cites=115) | **CODE-DEBT** (a cross-repo citation naming no repo — Issue 749's exact class; find and qualify the citation) |
-| `console_encoding` | mmorpg-editor | undefended **1 > pinned 0** | CODE-DEBT (defend the stream or make it ASCII) |
-| `console_encoding` | reflex-site | undefended **2 > pinned** (walk=10 pop=9 defended=7) | CODE-DEBT |
-| `instrument_reachability` | mmorpg-remake | unreachable **8 > pinned 7** | **PIN-STALE-or-DEBT** (a new script no root names — wire it or pin with a reason) |
-| `instrument_reachability` | reflex-site | unreachable **4 > pinned ?** | same |
-| `locale_io` | riir-ai | LOCALE-IO **6 committed > pinned 0** | **CODE-DEBT** — the sweep names `scripts/locale_io_fix.py`, ceiling may NOT rise |
-| `locale_io` | riir-deployer | LOCALE-IO **4 > pinned ?** | same |
+| katgpt-rs | instrument floors | the seal-std row c007cf543 claimed but missed (19 of 20) | `ce0fb09e5` |
+| riir-game-sdk | cfg_gated (5 SILENT-NOW, 1 LOAD-BEARING) | 5 `[[test]]` rows; cas_g2 RUN 3 passed | `1892808` |
+| riir-ai | cfg_gated (3 LOAD-BEARING) | 3 rows; bench_952 RUN 5 passed; attn_mass_tap_g3 blocked by the wgpu-30 lock drift → **riir-ai Issue 1046 filed**; plan614 non-macOS (4090) | `32908a05f` |
+| riir-dapps | cfg_gated 1 + console 1 | kat_decstat_reward row + RUN 18 passed; build_flow_walks defended | `d267c27` |
+| riir-infer | cfg_gated 4 + console 5 + citation 1 | 4 rows (metal_fold_bits RUN 2 passed; two carry their own #[ignore] arms); 5 defences; Research 327–332 qualified to riir-ai | `54dd734` |
+| riir-deployer | citation 1 + locale_io 4 | plan-253 qualified to mmorpg-editor; the locale rows turned out to be GITIGNORED `.deploy/` artifacts — **instrument defect** | `ba67482` |
+| katgpt-rs | locale_io (instrument) | **tracked_walk fix**: an empty tracked population is valid, never an rglob-fallback trigger (arm I; the fallback had pulled gitignored artifacts in as "committed" findings) | `7843e9d9e` |
+| mmorpg-editor | citation CROSS 1 + IN-LOCAL 1 + console 1 | "plans 584 entries" (verb!) reworded; the `- **012**` record row added (a00b60d4/c4e6b031); actor_mirror_census defended. IN-LOCAL re-pinned 0→1 (list-form blind spot, the riir-reflex precedent) | `d32d133e` (develop; NOT on the feature/run-pack-only ticket branch) |
+| reflex-site | instrument 4 + console 2 | 4 real instruments wired into the AGENTS table (incl. the pairing GATE) + the stale render_tetris_flows name fixed; 2 defences | `27b3fdc`→`1342919` |
+| riir-instinct | citation 1 + console 1 | reflex issue-074 line-reflowed into the qualifying window; stamp_doc_gold_axes defended | `396612f` |
+| riir-kat | citation 1 | issue-106 qualified to riir-dapps | `8e314f4` |
+| riir-mmorpg-examples | citation 1 | issue-920 qualified to riir-ai (the [repeat] repair) | `796d453` |
+| riir-shader | citation 1 (+2 in-local pinned) | plan-237 qualified to mmorpg-editor; 050/051 list-form rows pinned 0→2 | `7eebf45` |
+| riir-train | citation 1 | bench-023 qualified to riir-instinct (its in_local posture returns to the 2026-09-16 pin) | `e6a4a676` |
 
-len_derived also failed (`see ✗ rows above` — rows not captured in the
-census pass; re-run `scripts/len_derived_drift_sweep.py` and take the ✗
-rows before acting).
+Post-wave verdicts: **cfg_gated PASSED family-wide** (0 load-bearing in the
+workspace, 13 SILENT-NOW total). **citation** green except mmorpg-remake.
+**console_encoding** green in 5 repaired repos. **locale_io** green in
+riir-deployer (+ the instrument fixed). **instrument_reachability** green in
+reflex-site. Floor moves: cfg_gated game-sdk silent 31→0; citation
+mmorpg-editor in_local 0→1; citation shader in_local 0→2 (all with cited
+sibling commits, in the katgpt-rs wave-1 commit).
 
-## Why this is a unit, not a hotfix
+## Remaining — the wave-2 ledger (measured 2026-10-09 post-wave-1)
 
-- Two repos (riir-ai, reflex-site) had a dirty worktree file at census time
-  (sibling sessions live) — **Issue 797 applies**: counts from a dirty-tree
-  run describe a state no commit contains. Re-measure on a clean/committed
-  state before re-pinning anything; the CODE-DEBT rows are safe to READ now
-  (the finding is in the sibling's committed lines, not its WIP).
-- The locale_io rows are sibling CODE repairs (riir-ai `Path.read_text`
-  sites etc.) — landing them means touching sibling repos; coordinate with
-  their owning sessions or wait for quiet.
+### Volume rows in quiet repos (the next unit; read rows before any pin move)
 
-## The fix order
+| repo | instrument_unreach (pin→measured) | console | locale |
+|---|---|---|---|
+| riir-train | 65 → **79** | 53 → **61** | 0 → **4** |
+| riir-refine | 11 → **24** | 0 → **7** | 0 → **2** |
+| riir-reflex | 0 → **14** | 0 → **11** | 0 → **21** |
+| riir-shader | 2 → **12** | 0 → **1** | 0 → **8** |
+| riir-rethink | 1 → **5** | 0 → **3** | — |
+| riir-ai | 7 → **15** | 0 → **4** | 0 → **6** |
+| riir-dapps | 1 → **2** | ✓ | ✓ |
+| riir-infer | 0 → **7** | ✓ | ✓ |
 
-1. Re-run each sweep fresh; capture per-repo ✗ rows with numbers.
-2. CODE-DEBT rows: repair the sibling code (locale_io via
-   `scripts/locale_io_fix.py`; console_encoding via `scripts/console_safe.py`;
-   citation via qualifying the citation in the sibling doc).
-3. PIN-STALE rows: re-pin DELIBERATELY citing the sibling commit.
-4. Full-family sweep run green; append the doc-sync run-log row.
+(locale/console repairs: `scripts/locale_io_fix.py` + the backslashreplace
+idiom; instrument rows: wire real instruments into a root or re-pin the
+plan-scoped one-off class DELIBERATELY, citing the sibling commit — the
+floors header's read-before-pin law.)
+
+### Sibling-hot at wave-1 time (coordinate before touching)
+
+- **mmorpg-remake (seal-remake)** — Runetrace/player-style session live:
+  citation CROSS **10** (9 distinct decisions: Issue 190, Plans 299/300/301/311
+  ×2, 317, 323, Issue 186 [repeat], Issue 897) + instrument 7 → **8** +
+  console 2. Its 3 dirty population files were the Issue-797 advisory.
+- **riir-ai** beyond the cfg rows — locale 6 + console 4 + instrument +8:
+  the games-mmorpg WIP session owned the tree; re-measure when quiet.
+
+### Instrument findings (katgpt-rs lane)
+
+- **len_derived stability**: dropping riir-ai flips 2 riir-infer verdicts
+  (`elementwise_cubecl.rs:617/:652` input_handle EXACT-UPSTREAM → UNRESOLVED)
+  — a partial-clone box would report a WRONG bucket. Needs a design decision
+  (caller-side shape parameterization, or a partial-clone-safe pin class);
+  not mechanical.
+
+## The class law (unchanged)
+
+- **PIN-STALE** (sibling landed; pin did not move): re-pin to measured in the
+  re-pin commit, citing the sibling commit.
+- **CODE-DEBT** (sweep names a repair tool; ceiling may NOT rise): fix the
+  sibling's code, never the pin.
+- **LOAD-BEARING walls never rise** — arm with `required-features` rows and
+  RUN at the feature set (the Issue-728 law); check binary-counting floors
+  first (riir-game-sdk's gate counts PASSED tests — safe; checked).
 
 ## Related
 
-- katgpt-rs `c007cf543` (the registration that surfaced this)
-- Issue 797 (the worktree-advisory law), Issue 749 (citation qualification),
-  Issues 829/830 (locale_io), Issue 804 (console_encoding)
+- katgpt-rs `c007cf543` (the registration), `ce0fb09e5`, `7843e9d9e` (+ the
+  wave-1 pins commit)
+- riir-ai Issue 1046 (the wgpu-30 lock drift the arming surfaced)
+- Issues 728/749/781/797/804/823/828 (the law citations above)
