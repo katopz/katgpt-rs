@@ -1,6 +1,6 @@
 # Issue 928 — cross-repo drift-sweep debt: the 2026-10-09 seal-std registration census + the same-day 928 repair wave
 
-**Status:** PARTIAL — wave 2 LANDED for every QUIET repo (2026-10-09: riir-train/refine/reflex/shader console+locale repaired to 0; infer+instinct+shader+reflex+refine+train instrument floors re-pinned at measured with per-row adjudication). Remaining: the four sibling-hot repos (mmorpg-remake, riir-ai, riir-dapps, riir-rethink) — re-measure + repair when their sessions end — and the len_derived design question.
+**Status:** PARTIAL — waves 1–3 LANDED. The instrument sweep is GREEN FAMILY-WIDE (exit 0, 2026-10-09: every contract repo within its pins — the hot repos' rows re-pinned reading their stable HEADs, zero sibling-tree writes). Console+locale remain red ONLY in riir-ai (4+6) + riir-rethink (3) — sibling-tree writes, deferred to their sessions' end.
 
 The seal-std registration (katgpt-rs `c007cf543`) ran all ~20 cross-repo drift
 sweeps and surfaced committed sibling drift. The original census captured 9
@@ -65,10 +65,17 @@ Post-wave-2 verdicts: **console + locale sweeps green in every repaired repo** (
   (owners verified via git history: seal-game-editor issues 190/186 + plans 299/300/301/311/317/323;
   riir-ai issue 897 the opt-level substrate fork), the two poc consoles defended,
   instrument re-pinned 7→8 (+inspect_glb_plants, 035431a) and console ratchet lowered 4→0.
-- **riir-ai** — instrument 7→15 + locale 6 (the vessel session owns the tree — untracked
-  `dapp_vessel.rs` live in crates/riir-mcp-client at wave-3 time; console 4 too).
-- **riir-dapps** — instrument 1→2 (the vessel-bench session).
-- **riir-rethink** — instrument 1→5 + console 3 (the issue-025 T3 session).
+- ~~riir-ai instrument 7→15~~ — **RE-PINNED 2026-10-09 (wave 3, stable-HEAD read)**: seven plan/probe
+  one-offs + **artifact_boundary.py — a REAL gate landed unwired** (7f2164a46, plan 623 T1 /
+  issue 1033 LANDED; findable from NO root). Wiring it into riir-ai's AGENTS.md is that repo's
+  owners' repair — the row keeps it visible. **riir-ai console 4 + locale 6 REMAIN** (tree writes;
+  the vessel session owns crates/riir-mcp-client).
+- ~~riir-dapps instrument 1→2~~ — **RE-PINNED 2026-10-09** (+issue114_rename_cegel, 6c6ec1c,
+  the rename one-shot). No dapps tree writes needed.
+- ~~riir-rethink instrument 1→5~~ — **RE-PINNED 2026-10-09** (+4 egemma/population lane probes).
+  **rethink console 3 REMAINS** (tree writes; the issue-025 session).
+
+**Post-wave-3: the instrument_reachability sweep is GREEN across all 28 contract repos.**
 
 ### Instrument findings (katgpt-rs lane)
 
