@@ -4392,6 +4392,15 @@ required-features = ["minmax_partition"]
 name = "lattice_memory_gates"
 required-features = ["lattice_memory"]
 
+# Issue 927 — the SplitMix64 twin-pin: katgpt-types (the designated home) vs
+# katgpt-assign (the justified zero-dep copy) stream cores stay bit-identical
+# from the same seed. The one place both crates are visible; the copy-gate
+# convention's divergence-failing test half (the green-zero rule: without the
+# row, a plain `cargo test` prints `ok. 0 passed` over the cfg'd-empty binary).
+[[test]]
+name = "splitmix64_twin_pin"
+required-features = ["assignment"]
+
 # Plan 619 T1.7/T1.8 — the family GOAT: G1 recall@1 vs brute force, G2 flat
 # read latency vs N (vs PKM O(√N) + Engram O(1), interleaved best-of-arms),
 # G3 forgetting ≥ Engram, G5 near-miss graded vs Engram's hash cliff (the

@@ -7,6 +7,27 @@
 //! break the zero-dep posture, so the 8-line SplitMix64 (Ubuntu's stdlib
 //! seed generator, virtually unbounded period for our move counts) ships
 //! here instead.
+//!
+//! # The twin (Issue 927 — the copy-gate convention)
+//!
+//! The workspace's designated SplitMix64 home is `katgpt_types::rng`
+//! (reflex Issue 071's substrate export, landed one day before this copy).
+//! This copy stands under katgpt-assign's zero-dep law — the crate sits
+//! UPSTREAM of katgpt-core by design, and a katgpt-types dep would cost the
+//! standalone extractability the manifest documents — which makes it a
+//! JUSTIFIED COPY: the stream cores (γ-add + the 3-step finalizer) are
+//! pinned bit-identical from the same seed by the cross-pin test
+//! `katgpt-core/tests/splitmix64_twin_pin.rs` (under `feature =
+//! "assignment"`, the one configuration where both crates are visible
+//! together) — a constant or state-advance edit on either side alone fails
+//! that pin.
+//!
+//! Deliberately DIFFERENT: [`SplitMix64::below`] is 64-bit Lemire
+//! (`(u64 as u128 * n) >> 64`) while the types twin's is 53-bit Lemire
+//! (`((u64 >> 11) as u128 * n) >> 53`) — different indices from the same
+//! stream state, the landed Plan 620 behavior this crate's own reference
+//! tests pin. The two must NOT be "unified": converging them would
+//! silently change every deterministic sequence this solver has pinned.
 
 /// SplitMix64 — deterministic, platform-independent, 64-bit state.
 #[derive(Debug, Clone)]
