@@ -1,6 +1,6 @@
 # Issue 927 — katgpt-assign::rng::SplitMix64 duplicates katgpt-types::rng::SplitMix64 (same name, one day apart; adjudication-gated on the zero-dep law)
 
-**Status:** OPEN — filed by the 10-09 substrate-first Mode 2 audit (detection-only; no fix in the filing commit)
+**Status:** RESOLVED 2026-10-09 — menu option 1 (the cross-pin) landed in `36823de3f`: the copy-gate convention fully met (twin cited in-source + the below divergence named + `katgpt-core/tests/splitmix64_twin_pin.rs` under `required-features = ["assignment"]` pinning both streams bit-identical from 6 seeds × 10k draws — proven to fire by perturbation). Option 2 (delegate) DECLINED: it would cost katgpt-assign's documented zero-dep standalone posture. Filed by the 10-09 substrate-first Mode 2 audit (detection-only; no fix in the filing commit)
 
 - **Date:** 2026-10-09
 - **Found by:** substrate-first Mode 2 fresh-wave audit (window 10-07 03:51 → 10-09 12:2x)
