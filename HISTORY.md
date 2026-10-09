@@ -1641,6 +1641,18 @@ subnormal off by one — every subnormal read 2× large). Verdicts: Bonsai-8B cl
 Table-1 shape; Bonsai-27B inject-early/cancel-late softly; gemma-2-2b weak (the
 suppression prediction). T2 next; nothing promoted.
 
+## Issue 927 (2026-10-09) — the SplitMix64 twin cross-pin: RESOLVED (file removed per noise-reduction)
+
+`katgpt-assign::rng::SplitMix64` duplicated `katgpt-types::rng::SplitMix64`
+(same name, one day apart, `below(n)` silently divergent: 53-bit vs 64-bit
+Lemire). Menu option 1 (the cross-pin) landed in `36823de3f`: the copy-gate
+convention fully met — the twin cited in-source + the `below` divergence named
++ `katgpt-core/tests/splitmix64_twin_pin.rs` under `required-features =
+["assignment"]` pinning both streams bit-identical from 6 seeds × 10k draws
+(proven to fire by perturbation). Option 2 (delegate) DECLINED: it would cost
+katgpt-assign's documented zero-dep standalone posture. Filed by the 10-09
+substrate-first Mode 2 audit; same wave: riir-ai 1044, seal-remake 057.
+
 ## Lessons
 
 - A rule landed in one instrument and never generalised — grep the whole family and land the repair as one shared mechanism (recorded ten+ times).
