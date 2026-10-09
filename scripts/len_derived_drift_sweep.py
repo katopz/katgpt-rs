@@ -954,29 +954,34 @@ def canary() -> int:
     #      resolves and a partial box demotes to UNRESOLVED is exactly the
     #      adjudicated class — the pin must silence it without silencing a
     #      NEW flip (arm 11 above stays red under the same stab file).
-    #      Anchored on the PRODUCTION pin rows themselves (the elementwise
-    #      pair): deterministic, and a missing anchor means the production
-    #      stability file is stale — the loud failure is the correct verdict.
+    #      Self-contained since the production elementwise pair RETIRED
+    #      (riir-infer 02e7a65, the params[0]=n root fix): the anchor is the
+    #      first riir-infer input_handle bind in the measured base, the flip
+    #      is SYNTHESIZED on it (EXACT-UPSTREAM on the full box, UNRESOLVED
+    #      without riir-ai), and the stab row is derived from the SAME base
+    #      — a missing anchor still fails loud.
+    anchor = next((b for b in base.binds
+                   if b.repo == "riir-infer" and b.handle_expr == "input_handle"),
+                  None)
+    if anchor is None:
+        raise AssertionError(
+            "arm 11c anchor missing: no riir-infer input_handle bind in "
+            "base — the fixture drifted, re-anchor")
+    synth_row = (f"riir-infer {norm(anchor.file)} {anchor.kernel} "
+                 f"input_handle riir-ai:EXACT-UPSTREAM->UNRESOLVED\n")
+
     def cross_conservative(repos):
         rep = copy.deepcopy(base)
-        if not any(p.name == "riir-ai" for p in repos):
-            hit = False
-            for b in rep.binds:
-                if (b.repo == "riir-infer" and b.handle_expr == "input_handle"
-                        and b.kernel in ("sigmoid_f32", "silu_f32")
-                        and "elementwise_cubecl" in b.file
-                        and b.verdict == "EXACT-UPSTREAM"):
-                    b.verdict = "UNRESOLVED"
-                    hit = True
-            if not hit:
-                raise AssertionError(
-                    "arm 11c anchor missing: no EXACT-UPSTREAM elementwise "
-                    "input_handle in base — the production stability pin is "
-                    "stale, drop its rows")
+        has_ai = any(p.name == "riir-ai" for p in repos)
+        for b in rep.binds:
+            if (b.repo == "riir-infer" and b.handle_expr == "input_handle"
+                    and b.file == anchor.file and b.line == anchor.line):
+                b.verdict = "EXACT-UPSTREAM" if has_ai else "UNRESOLVED"
+                break
         return rep
 
     arm("pinned stability flip greens", 0, "pinned stability flip",
-        classify=cross_conservative, argv=())
+        classify=cross_conservative, argv=(), stab=stab_src + synth_row)
 
     print(f"\n{sum(results)}/{len(results)} canary arm(s) PASSED")
     return 0 if all(results) else 2

@@ -42,6 +42,11 @@
 # launch parameter instead of deriving it from input_handle's declared len
 # (a riir-infer + riir-ai change; deferred while the riir-ai tree is hot).
 #
+# RETIRED 2026-10-09 (katgpt-rs 928 wave 4, riir-infer 02e7a65): the root fix
+# landed — sigmoid_f32/silu_f32 bound by the EXPLICIT params[0] = n (the
+# copy_f32_grid2d idiom; no kernel-side .len()), the new oversized-binding
+# sentinel test proves the explicit bound, and both rows stopped flipping
+# (the sweep demanded the drop, both directions pinned). This block is the
+# retirement record; the file holds ZERO rows until the next adjudicated flip.
+#
 #                      repo        file                                    kernel       handle        spec
-riir-infer crates/riir-infer-gpu/src/elementwise_cubecl.rs sigmoid_f32 input_handle riir-ai:EXACT-UPSTREAM->UNRESOLVED
-riir-infer crates/riir-infer-gpu/src/elementwise_cubecl.rs silu_f32   input_handle riir-ai:EXACT-UPSTREAM->UNRESOLVED
