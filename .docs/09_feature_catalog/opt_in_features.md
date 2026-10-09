@@ -5513,3 +5513,25 @@ substrate lives there, no third CI copy). arXiv:2609.34327 (FlyBy, KAIST
   (bench_621, M3 Max, shared box disclosed). Phase 2 (bottleneck
   classifier) + Phase 3 (escalation gate) pending — no consumer wiring
   until their gates pass.
+
+## 145. runetrace — the scene-as-text format, decision_wire's sibling (Plan 624 / seal-remake Proposal 005)
+
+Feature `runetrace` (opt-in; zero new deps — serde + blake3 + postcard
+already non-optional). Source: `crates/katgpt-core/src/runetrace.rs`.
+
+- **`RunetraceDoc { version, tick, scene, entities }`** with per-entity
+  glyph-led condition rows + parent-indexed DAG rows — the live scene IN as
+  deterministic text (the SIBLING of `decision_wire`, which carries typed
+  questions OUT to a decision lane). Consumers: the seal-remake panels
+  (Proposal 005 Phases 3+ — scene tree, entity inspector, Copy-as-MD) and
+  the instinct/rethink lanes (Phase 4).
+- **BYTE-DETERMINISTIC canonical text render** — shortest-round-trip float
+  spelling pinned at one site; a BLAKE3 digest over that text (the
+  lab_trace discipline, one layer up); fail-closed structural validation;
+  serde (json + postcard) round-trips + golden text byte-pins in the module
+  (20 tests; the G1 fixtures caught 2 real bugs pre-merge).
+- **Raw stays raw** — never a sync surface, never parsed back into game
+  truth (the ConvexTok law). COLD PATH by construction (the renderer
+  allocates; producers stay alloc-free). Landed `f5bb0c535` (2026-10-09,
+  Plan 624 complete); the consumer-side GOAT verdicts live in the consumer
+  repos (seal-remake Plan 020's gate record: G1–G4 PASS).
