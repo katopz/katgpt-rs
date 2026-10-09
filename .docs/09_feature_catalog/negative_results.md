@@ -1000,3 +1000,40 @@ not decision-bearing here.
   existing (issue 925's follow-up) — and a fit target beyond linear
   operators (this run bounds the linear family, not fitted pooling in
   general).
+
+## 45. Loop-Alignment Probe on kimi-k3-0.40B — UNDECIDABLE: the label axis is empty (Issue 929 T1.2/T1.3)
+
+**Hypothesis.** DiscoLoop (Research 614, arXiv:2607.00341) reads loop-alignment
+directly: per-loop `cos(H, W[v̂])` plus the top1−top2 decode margin should
+separate correct from incorrect looped predictions (AUROC > 0.5 on the paper's
+§2 two-hop composition fixture), licensing a decode-reinject / halt-on-readiness
+arm. The probe instrument itself (`loop_alignment_probe`, T1.1 `5a8c190b4`) is
+landed and green; this entry records the CHECKPOINT-era verdict of the real-model
+run, not a feature kill.
+
+**Measured** ([Bench 927](../../.benchmarks/927_issue929_loop_probe_checkpoint_run.md)
++ [Bench 930](../../.benchmarks/930_issue929_kimi_loop_alignment_probe.md) — two
+INDEPENDENT runners on the same checkpoint, same day, one verdict): 180/180
+fixture queries wrong in BOTH loop arms (α=0 reentry, α=0.5 reinject);
+`bridge_top1 = 0` everywhere; **every AUROC is NaN** because the correctness
+class is empty — the T1.4 kill bar presupposes both classes and never computes
+(the honest reading: UNDECIDABLE, not answered-no). The provenance suite pins
+the root cause BEFORE the negative is recorded: forward port byte-faithful vs
+the committed python reference; checkpoint sha256 = the Bench-889 pin; tokenizer
+round-trips; **teacher-forced NLL 12.16–12.39/token vs uniform log(163840) =
+12.007 — the text head carries ≈ zero likelihood structure** (fluent style,
+chance-level semantics); untied head verified (the probe's head-row reads are
+the true readout operator); in-repo corroboration from Issue 584/Bench 025
+("attention too uniform for meaningful quality results").
+
+**Disposition:** fixture problem, not mechanism problem — Phase 2/3 (injection,
+halt-on-readiness) closed UNBUILT (no injection on a substrate with no
+correctness axis; the 0-for-3 loop-intervention lesson, honored). The probe
+instrument + fixture generator stay shipped and tested (README catalog,
+`loop_alignment_probe`).
+- **Reopen trigger:** riir-train Plan 451's loop-trained artifact — any
+  checkpoint with a trained text head re-arms the probe immediately (one
+  command per runner).
+- Also the measured confirmation of the kill criterion Issue 929's T1.4
+  pre-registered ("all-NaN AUROC across both arms ⇒ undecidable"); issue
+  stays OPEN-ARMED on that reopen trigger.
