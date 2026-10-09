@@ -906,6 +906,10 @@ required-features = ["kimi_k3_loader"]
 name = "kimi_k3_loop_alignment_probe"
 required-features = ["kimi_k3_loader", "loop_alignment_probe"]
 
+[[example]]
+name = "issue929_kimi_loop_alignment_probe"
+required-features = ["kimi_k3_loader", "loop_alignment_probe"]
+
 # ── AND-OR DDTree Decomposition (Plan 190) ───────────────────────
 
 [[example]]
