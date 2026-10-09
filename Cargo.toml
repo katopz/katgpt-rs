@@ -1205,6 +1205,17 @@ path = "benches/bench_926_mla_absorbed_decode.rs"
 required-features = ["mla_absorbed"]
 harness = false
 
+# Issue 926 SECONDARY scope — the flashmemory lane's absorbed-vs-reconstruct
+# paired A/B (G2), same interleaved-pairs discipline as the dense bench above.
+# Needs BOTH features: the fns live behind `flashmemory_sparse`, the absorbed
+# math behind `mla_absorbed` — either alone compiles this target to nothing
+# (the Issue-713 green-zero rule).
+[[bench]]
+name = "bench_926b_flashmemory_absorbed_decode"
+path = "benches/bench_926b_flashmemory_absorbed_decode.rs"
+required-features = ["mla_absorbed", "flashmemory_sparse"]
+harness = false
+
 # riir-train Issue 407 T4 precondition — K3 pause-token logit-divergence
 # diagnostic. Does kimi_k3_inject_pause change the output logits on random
 # weights? If inert, the modelless G5-K3 quality gate (T4) may not be
