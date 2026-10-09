@@ -84,8 +84,9 @@ def tracked_files(root, pattern: str = "*.rs", exclude=vendored_p) -> tuple:
     """
     root = Path(root)
     rels: list = []
+    repo = (root / ".git").exists()
     try:
-        if not (root / ".git").exists():
+        if not repo:
             raise OSError("not a repository root")
         out = subprocess.run(["git", "-C", str(root), "ls-files", "-z", pattern],
                              capture_output=True, check=True)
@@ -95,7 +96,14 @@ def tracked_files(root, pattern: str = "*.rs", exclude=vendored_p) -> tuple:
         rels = [r for r in rels if (root / r).is_file()]
     except (OSError, subprocess.CalledProcessError):
         rels = []
-    if not rels:
+    # The fallback walk is ONLY for trees with no `.git` at all (its
+    # docstring law). A repo that tracks NO matching files is a VALID empty
+    # population — falling back there credits gitignored build artifacts to
+    # the repo: measured 2026-10-09 (katgpt-rs Issue 928), riir-deployer
+    # tracks zero `*.py` and the rglob pulled six files out of the
+    # gitignored `.deploy/` staging tree into locale_io's population, three
+    # of them flagged LOCALE-IO over a state no commit contains.
+    if not rels and not repo:
         for p in root.rglob(pattern):
             parts = p.relative_to(root).parts
             if any(part in SKIP_DIRS for part in parts):
@@ -247,6 +255,22 @@ def selftest() -> list:
         check(_names(r2, got) == {"a.lean"},
               f"H': pattern ignored on the fallback branch — {_names(r2, got)}")
 
+        # I — a repo that tracks NO matching files is a VALID empty
+        # population, not a fallback trigger: the rglob would credit
+        # gitignored artifacts to the repo (riir-deployer's `.deploy/`
+        # staging tree, measured 2026-10-09 — katgpt-rs Issue 928).
+        r = _repo(tmp, "i")
+        _write(r / ".gitignore", "/stage/\n")
+        _git(r, "add", ".gitignore")
+        _write(r / "stage" / "artifact.rs")
+        got, exc = tracked_files(r)
+        check(_names(r, got) == set() and exc == 0,
+              f"I: gitignored artifact credited to a repo that tracks no "
+              f"matching files — {_names(r, got)}")
+        check((r / "stage" / "artifact.rs").is_file(),
+              "I': the fixture does not reproduce the hazard — the artifact "
+              "must exist on disk for the fallback to have seen it")
+
     return fails
 
 
@@ -257,10 +281,11 @@ def main() -> int:
         for f in fails:
             print("  ✗ " + f)
         return 1
-    print("✓ tracked_walk selftest — 8 arm(s), 11 assertion(s): tracked-vs-untracked "
+    print("✓ tracked_walk selftest — 9 arm(s), 13 assertion(s): tracked-vs-untracked "
           "(both directions), gitignored nested repo, alternate target dir + the "
           "skip-set companion, vendor exclusion + count, no-.git fallback, the "
-          "`git -C` walk-up probe, deleted-but-indexed, pattern on both branches")
+          "`git -C` walk-up probe, deleted-but-indexed, pattern on both branches, "
+          "empty-tracked-is-not-a-fallback-trigger")
     return 0
 
 
