@@ -1067,6 +1067,10 @@ last-half persistent-overlay window the paper's regime needs. The n=8 machinery
 pilot disclosed precisely this shape (0.634 vs 0.79) and the full run confirmed
 it; the pre-registration held. Site rollup: q carries the largest energy share
 (0.456, ρ 0.684), gate 0.220, up 0.190, v 0.108, o 0.025, down 0.001.
+Raw dump archive (the pin stays verifiable): hf://datasets/katopz/riir-train-data
+at `artifacts/riir-infer/hyperthink_t1/deltas_f32.bin` (5,431,296,000 B, upload
+`ca507289`, round-trip blake3-verified before the local copy was removed
+2026-10-10).
 
 **Disposition:** modelless track **CLOSED-NEGATIVE at T1**, per the issue's own
 stop clause — T2/T3 never opened, zero codebook spend (Research 606 §5's
