@@ -4513,3 +4513,12 @@ required-features = ["karc_forecaster"]
 [[test]]
 name = "scale_invariant_spec_match"
 required-features = ["scale_invariant_attn"]
+
+# Plan 622 Phase 7 — the CPU legs of the GOAT gate: G1 decade-mass
+# flatness at T = 10⁶ summed from the f32 LUT pairs, G2 the LUT-build
+# < 1 ms @ 64k bar (release-only — dev prints and skips loud), G4 the
+# counting-allocator canary over both apply variants. Gated:
+# scale_invariant_attn (the green-zero rule, same as above).
+[[test]]
+name = "scale_invariant_goat"
+required-features = ["scale_invariant_attn"]
