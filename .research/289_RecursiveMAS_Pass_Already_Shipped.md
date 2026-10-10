@@ -8,6 +8,7 @@
 > **Related Plans:** 311 (riir-ai NPC mind-reading runtime — **the Super-GOAT we already shipped, more sophisticated than this paper**), 280 (CS-KV-Importance Probe), 108 (LT2 Looped forward), 273/303 (Latent Functor), 286/318 (FuncAttn rank-k), 283 (Self-Advantage Recursion Gate), 304 (Gain/Cost Loop Halting)
 > **Verdict: PASS.** Every individual primitive RecursiveMAS introduces is already shipped in our quintet — most at higher fidelity. The paper's value is its **training recipe** (inner-outer loop co-optimization with backprop through frozen LLMs) → **riir-train**. No file/plan/guide created beyond this classification note.
 > **PASS-Redirects (synthesis):** Kim et al. [arXiv:2608.24735 "Meta^n: Recursive Self-Improvement through Emergent Depth"] — same bi-level-already-shipped verdict class (Research 512): fixed Ω + growing input, every extracted principle ships grep-verified; Ω itself remains LLM code-generation.
+> **PASS-Redirects (synthesis):** Lee, Xu, Seely, Lee, Sojoudi, Zaharia, Tang [arXiv:2610.12176 "Recursive Self-Improvement through Multi-Agent Self-Supervision"] — homogeneous RSI alternating elite-1 evolutionary multi-agent workflow search (LLM text-gen proposer, R440 class) with SFT on BT-ranked self-generated multi-agent traces; the SFT-recipe half is the actionable Gain → riir-train Plan 456. See Research 616.
 
 ---
 
