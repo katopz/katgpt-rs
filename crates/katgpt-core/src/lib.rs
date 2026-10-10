@@ -505,7 +505,12 @@ pub mod ssmax;
 // score_mod shape) and parallax (`ParallaxConfig::scale_invariant`, the
 // a_t multiplicative + m_t additive lanes over softmax AND normalized
 // sigmoid; the sigmoid tilt transfer E[σ(L_t)] = (α/2+o(1))/(t/τ+1) is the
-// novel fusion half, Research 610). Opt-in until G1–G4 (Plan 622 Phase 7).
+// novel fusion half, Research 610). PHASE 3 CALIBRATION: raw-logit
+// checkpoints normalize per head before the schedule — `SpreadAccumulator`
+// (the load-pass σ probe) → `HeadCalibration` (BLAKE3-checked sidecar,
+// loud-fail) → `tiled_attention_forward_si_calibrated`; runtime data under
+// this one feature, head_scale = 1.0 bit-identical (G3). Opt-in until
+// G1–G4 (Plan 622 Phase 7).
 #[cfg(feature = "scale_invariant_attn")]
 pub mod scale_invariant;
 // Kamath range-law regime detector + normalized-entropy dispersion diagnostic

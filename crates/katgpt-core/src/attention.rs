@@ -164,7 +164,48 @@ pub fn tiled_attention_forward_si(
         scale,
         None,
         None,
-        Some(si),
+        Some(crate::scale_invariant::SiArm::uncalibrated(si)),
+    );
+}
+
+/// The CALIBRATED scale-invariant forward (Plan 622 Phase 3): identical to
+/// [`tiled_attention_forward_si`], but this head's scores are divided by
+/// `head_scale` — its measured logit σ from the frozen
+/// [`crate::scale_invariant::HeadCalibration`] sidecar — BEFORE the
+/// schedule, realizing the unit-variance premise the schedule's constants
+/// assume on a raw-logit checkpoint. One fused loop inside the affine (no
+/// extra pass, no allocation); `head_scale = 1.0` is byte-identical to the
+/// uncalibrated wrapper (the G3 pass-through pin).
+///
+/// The per-head σ comes from ONE calibration forward at load (or a cached
+/// measurement) — [`crate::scale_invariant::SpreadAccumulator`] is the
+/// measuring instrument, the sidecar the frozen carrier. Non-finite or
+/// non-positive `head_scale` fails loud at the
+/// [`crate::scale_invariant::SiArm::calibrated`] constructor.
+#[cfg(all(feature = "tiled_attention", feature = "scale_invariant_attn"))]
+#[allow(clippy::too_many_arguments)]
+pub fn tiled_attention_forward_si_calibrated(
+    q: &[f32],
+    k: &[f32],
+    v: &[f32],
+    output: &mut [f32],
+    seq_len: usize,
+    head_dim: usize,
+    scale: f32,
+    si: &crate::scale_invariant::ScaleInvariantLut,
+    head_scale: f32,
+) {
+    tiled_attention_forward_impl(
+        q,
+        k,
+        v,
+        output,
+        seq_len,
+        head_dim,
+        scale,
+        None,
+        None,
+        Some(crate::scale_invariant::SiArm::calibrated(si, head_scale)),
     );
 }
 
@@ -216,7 +257,9 @@ fn tiled_attention_forward_impl(
     scale: f32,
     scores_buf: Option<&mut [f32]>,
     o_tile: Option<&mut [f32]>,
-    #[cfg(feature = "scale_invariant_attn")] si: Option<&crate::scale_invariant::ScaleInvariantLut>,
+    #[cfg(feature = "scale_invariant_attn")] si: Option<
+        crate::scale_invariant::SiArm<'_>,
+    >,
 ) {
     let expected = seq_len * head_dim;
     debug_assert_eq!(q.len(), expected, "Q slice length mismatch");
@@ -448,7 +491,7 @@ fn tiled_attention_inner<S: TileStats>(
     // Per-row statistics sink. `NoStats` compiles every hook to nothing, so the
     // plain forward is the same machine code it was before the sink existed.
     stats: &mut S,
-    #[cfg(feature = "scale_invariant_attn")] si: Option<&crate::scale_invariant::ScaleInvariantLut>,
+    #[cfg(feature = "scale_invariant_attn")] si: Option<crate::scale_invariant::SiArm<'_>>,
 ) {
     let log2e_scale = scale * std::f32::consts::LOG2_E;
     let q_tiles = seq_len.div_ceil(BR);
@@ -511,13 +554,14 @@ fn tiled_attention_inner<S: TileStats>(
             // pass through untouched inside `apply_inplace`. No-op when None
             // (the bit-identical flag-off path).
             #[cfg(feature = "scale_invariant_attn")]
-            if let Some(lut) = si {
+            if let Some(arm) = si {
                 for i in 0..actual_br {
-                    lut.apply_inplace(
+                    arm.lut.apply_inplace_calibrated(
                         &mut s_tile[i * BC..i * BC + actual_bc],
                         q_start + i,
                         k_start,
                         scale,
+                        arm.head_scale,
                     );
                 }
             }
@@ -611,7 +655,7 @@ fn attention_fallback(
     scale: f32,
     scores_buf: Option<&mut [f32]>,
     needed: usize,
-    #[cfg(feature = "scale_invariant_attn")] si: Option<&crate::scale_invariant::ScaleInvariantLut>,
+    #[cfg(feature = "scale_invariant_attn")] si: Option<crate::scale_invariant::SiArm<'_>>,
 ) {
     if seq_len == 0 {
         return;
@@ -651,9 +695,15 @@ fn attention_fallback(
     // the tiled kernel's hook — sink key + future keys pass through; no-op
     // when None (bit-identical).
     #[cfg(feature = "scale_invariant_attn")]
-    if let Some(lut) = si {
+    if let Some(arm) = si {
         for i in 0..seq_len {
-            lut.apply_inplace(&mut scores[i * seq_len..(i + 1) * seq_len], i, 0, scale);
+            arm.lut.apply_inplace_calibrated(
+                &mut scores[i * seq_len..(i + 1) * seq_len],
+                i,
+                0,
+                scale,
+                arm.head_scale,
+            );
         }
     }
 
@@ -1071,5 +1121,115 @@ mod si_tests {
         for (i, &out_i) in output.iter().enumerate() {
             assert!((out_i - 0.5).abs() < 1e-5, "n=1 output[{i}] = {out_i}");
         }
+    }
+
+    /// Calibrated naive reference (Plan 622 Phase 3): the divide enters the
+    /// score row BEFORE the affine — `s → a·(s/σ) + m` — with the same sink
+    /// + future carve-outs.
+    #[allow(clippy::too_many_arguments)]
+    fn naive_si_calibrated_forward(
+        q: &[f32],
+        k: &[f32],
+        v: &[f32],
+        seq_len: usize,
+        head_dim: usize,
+        scale: f32,
+        lut: &ScaleInvariantLut,
+        head_scale: f32,
+    ) -> Vec<f32> {
+        let mut out = vec![0.0f32; seq_len * head_dim];
+        for i in 0..seq_len {
+            let mut scores: Vec<f32> = (0..seq_len)
+                .map(|j| {
+                    let dot: f32 =
+                        (0..head_dim).map(|e| q[i * head_dim + e] * k[j * head_dim + e]).sum();
+                    dot * scale
+                })
+                .collect();
+            for (j, s) in scores.iter_mut().enumerate() {
+                if j == 0 || j > i {
+                    continue; // sink carve-out + future pass-through
+                }
+                let (a, m) = lut.pair(i - j);
+                *s = a * (*s / head_scale) + m;
+            }
+            let max = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            for s in &mut scores {
+                *s = (*s - max).exp();
+            }
+            let sum: f32 = scores.iter().sum();
+            for (j, &p) in scores.iter().enumerate() {
+                for e in 0..head_dim {
+                    out[i * head_dim + e] += p / sum * v[j * head_dim + e];
+                }
+            }
+        }
+        out
+    }
+
+    /// The CALIBRATED wrapper (Plan 622 Phase 3) matches the divide-then-
+    /// affine reference on BOTH internal paths, at a non-trivial σ (1.7).
+    /// The calibration must survive the tiled online-softmax path (the
+    /// transform rides between QKᵀ and the online max) AND the materialized
+    /// fallback. 1e-5 band: the fused loop multiplies by the reciprocal
+    /// where the reference divides (1-ulp-class arithmetic drift, same as
+    /// the uncalibrated wrapper's quadrature band).
+    #[test]
+    fn si_calibrated_wrapper_matches_divide_then_affine_reference_both_paths() {
+        let head_dim = 8;
+        let scale = 1.0 / (head_dim as f32).sqrt();
+        let lut = ScaleInvariantLut::build(10.0, 256);
+        let head_scale = 1.7;
+        for seq_len in [16usize, 130usize] {
+            let (q, k, v) = gen_qkv(seq_len, head_dim);
+            let mut out = vec![0.0f32; seq_len * head_dim];
+            tiled_attention_forward_si_calibrated(
+                &q,
+                &k,
+                &v,
+                &mut out,
+                seq_len,
+                head_dim,
+                scale,
+                &lut,
+                head_scale,
+            );
+            let reference = naive_si_calibrated_forward(
+                &q,
+                &k,
+                &v,
+                seq_len,
+                head_dim,
+                scale,
+                &lut,
+                head_scale,
+            );
+            for (i, (&x, &y)) in out.iter().zip(&reference).enumerate() {
+                assert!(
+                    (x - y).abs() <= 1e-5,
+                    "seq {seq_len}: [{i}] {x} vs {y} (Δ = {})",
+                    (x - y).abs()
+                );
+            }
+        }
+    }
+
+    /// G3 pass-through: the calibrated wrapper at `head_scale = 1.0` is
+    /// byte-identical to the plain si wrapper — the divide is an exact
+    /// `x / 1.0 == x` per score, the schedule untouched.
+    #[test]
+    fn si_calibrated_at_one_is_byte_identical_to_uncalibrated() {
+        let seq_len = 130; // the tiled path — the fallback equality rides the same fused loop
+        let head_dim = 8;
+        let scale = 1.0 / (head_dim as f32).sqrt();
+        let (q, k, v) = gen_qkv(seq_len, head_dim);
+        let lut = ScaleInvariantLut::build(10.0, 256);
+        let mut a = vec![0.0f32; seq_len * head_dim];
+        let mut b = vec![0.0f32; seq_len * head_dim];
+        tiled_attention_forward_si(&q, &k, &v, &mut a, seq_len, head_dim, scale, &lut);
+        tiled_attention_forward_si_calibrated(
+            &q, &k, &v, &mut b, seq_len, head_dim, scale, &lut, 1.0,
+        );
+        assert_eq!(a, b, "head_scale = 1.0 must be byte-identical (G3)");
     }
 }
