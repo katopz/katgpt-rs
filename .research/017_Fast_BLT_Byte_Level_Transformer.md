@@ -200,6 +200,8 @@ Both are "adaptive compute" — spend resources where they matter. But BLT does 
 
 5. **The performance note is valid but not urgent.** If we ever put a string-decoding validator in the DDTree hot path, incremental parsing matters. Currently, `SynPruner` is example-only and `WasmPruner` handles state internally.
 
+> **Addendum (2026-10-10):** byteification (Minixhofer et al., Nature 2026, doi:10.1038/s41586-026-11111-4 — a retrofit at <1% of pretraining budget; distill: `riir-train/.research/474`) removes this note's RETRAIN-FROM-SCRATCH premise only. Takeaway 3 (self-speculation) STANDS: a byteified model only makes a BLT-style local/global split POSSIBLE — it is not the acceleration itself.
+
 ---
 
 ## Citation
