@@ -52,7 +52,19 @@ pub struct AlignmentProbe {
     pub cos_alignment: f32,
 }
 
-/// Probe one state against its readout.
+/// `cos(a, b)` over the first `dim` entries — `0.0` when either norm is
+/// zero or non-finite (a defined, neutral reading, never NaN).
+fn cos_between(a: &[f32], b: &[f32], dim: usize) -> f32 {
+    let dot = simd_dot_f32(a, b, dim);
+    let denom = (simd_sum_sq(a, dim) * simd_sum_sq(b, dim)).sqrt();
+    if denom > 0.0 && denom.is_finite() {
+        dot / denom
+    } else {
+        0.0
+    }
+}
+
+/// Probe one state against its readout (flat row-major f32 head).
 ///
 /// * `state` — the carry hidden state `H^(k)` (at least `dim` wide; only the
 ///   first `dim` entries are read).
@@ -70,15 +82,14 @@ pub fn probe_alignment(
     lm_head: &[f32],
     dim: usize,
 ) -> AlignmentProbe {
-    let neutral = AlignmentProbe {
-        argmax: 0,
-        top1: 0.0,
-        top2: 0.0,
-        margin: 0.0,
-        cos_alignment: 0.0,
-    };
     if logits.len() < 2 || dim == 0 || state.len() < dim {
-        return neutral;
+        return AlignmentProbe {
+            argmax: 0,
+            top1: 0.0,
+            top2: 0.0,
+            margin: 0.0,
+            cos_alignment: 0.0,
+        };
     }
     let split = margin_split(logits);
     let row_start = match split.argmax.checked_mul(dim) {
@@ -94,21 +105,56 @@ pub fn probe_alignment(
         }
     };
     let row = &lm_head[row_start..row_start + dim];
-    let dot = simd_dot_f32(state, row, dim);
-    let state_sq = simd_sum_sq(state, dim);
-    let row_sq = simd_sum_sq(row, dim);
-    let denom = (state_sq * row_sq).sqrt();
-    let cos_alignment = if denom > 0.0 && denom.is_finite() {
-        dot / denom
-    } else {
-        0.0
-    };
     AlignmentProbe {
         argmax: split.argmax,
         top1: split.top1,
         top2: split.top2,
         margin: split.gap,
-        cos_alignment,
+        cos_alignment: cos_between(state, row, dim),
+    }
+}
+
+/// Packed-head variant of [`probe_alignment`]: the `W[v̂]` row is materialized
+/// through a caller-supplied accessor instead of a flat f32 slice.
+///
+/// For heads that are NOT flat row-major f32 — the Bonsai-2 ternary
+/// bit-plane head (Issue 929's Bonsai leg) dequantizes the single `v̂` row on
+/// demand; materializing all 248,320 × 5120 rows as f32 (+5.1 GB) would
+/// defeat the packed design. `row_fill(v, buf)` must write the `v`-th head
+/// row into `buf[..dim]` (`buf.len() >= dim`), or leave it untouched when the
+/// row is unavailable — the scratch is zeroed before the call, so an
+/// untouched buffer reads as the defined neutral `cos_alignment == 0.0`.
+/// `row_scratch` is caller-owned (the hot-loop rule: no per-call alloc).
+///
+/// All other semantics — degenerate-input neutrality, the top-2 scan, the
+/// returned [`AlignmentProbe`] — are identical to [`probe_alignment`]; the
+/// flat variant and this one must agree on every input they both accept
+/// (pinned by test).
+pub fn probe_alignment_with_row<F: FnOnce(usize, &mut [f32])>(
+    state: &[f32],
+    logits: &[f32],
+    dim: usize,
+    row_scratch: &mut [f32],
+    row_fill: F,
+) -> AlignmentProbe {
+    if logits.len() < 2 || dim == 0 || state.len() < dim || row_scratch.len() < dim {
+        return AlignmentProbe {
+            argmax: 0,
+            top1: 0.0,
+            top2: 0.0,
+            margin: 0.0,
+            cos_alignment: 0.0,
+        };
+    }
+    let split = margin_split(logits);
+    row_scratch[..dim].fill(0.0);
+    row_fill(split.argmax, &mut row_scratch[..dim]);
+    AlignmentProbe {
+        argmax: split.argmax,
+        top1: split.top1,
+        top2: split.top2,
+        margin: split.gap,
+        cos_alignment: cos_between(state, &row_scratch[..dim], dim),
     }
 }
 
@@ -318,8 +364,8 @@ const ADJECTIVES: [&str; 24] = [
 
 const NOUNS: [&str; 24] = [
     "otter", "falcon", "heron", "badger", "marten", "ferret", "rabbit", "weasel", "beaver",
-    "pigeon", "sparrow", "raven", "robin", "willow", "cedar", "birch", "maple", "cobble",
-    "meadow", "harbor", "summit", "valley", "brook", "delta",
+    "pigeon", "sparrow", "raven", "robin", "willow", "cedar", "birch", "maple", "cobble", "meadow",
+    "harbor", "summit", "valley", "brook", "delta",
 ];
 
 /// `24 × 24` adjective–noun pairs — the entity-name capacity of the default
@@ -562,10 +608,7 @@ fn render_item(
 
     match two_hop {
         Some((r1, r2, c)) => {
-            let bridge = golds
-                .first()
-                .map(|g| name(pool, g.b))
-                .unwrap_or_default();
+            let bridge = golds.first().map(|g| name(pool, g.b)).unwrap_or_default();
             prompt.push_str(&format!(
                 "Question: Who is the {} of the {} of {}?\nAnswer:",
                 role(r2),
@@ -630,6 +673,43 @@ mod tests {
     }
 
     #[test]
+    fn packed_row_variant_agrees_with_flat_head() {
+        // The Bonsai-2 leg (Issue 929) reads the head through a row accessor
+        // (ternary bit-planes, not flat f32). Every input both variants accept
+        // must agree EXACTLY — the packed path is the flat path with a
+        // different row materialization, never a different observable.
+        let head = [
+            0.8f32, 0.6, 0.0, // row 0
+            0.0, 1.0, 0.0, // row 1 — orthogonal to the state
+            -1.0, 0.0, 0.0, // row 2 — anti-aligned
+        ];
+        let rows: Vec<[f32; 3]> = vec![[0.8, 0.6, 0.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]];
+        let state = [1.0f32, 0.0, 0.0];
+        let mut scratch = [0.0f32; 3];
+        for logits in [
+            [3.0f32, 2.0, 1.0],
+            [1.0f32, 3.0, 2.0],
+            [1.0f32, 2.0, 3.0],
+            [0.5f32, 0.5, 0.5],
+        ] {
+            let flat = probe_alignment(&state, &logits, &head, 3);
+            let packed = probe_alignment_with_row(&state, &logits, 3, &mut scratch, |v, buf| {
+                buf.copy_from_slice(&rows[v]);
+            });
+            assert_eq!(flat, packed, "logits {logits:?}");
+        }
+        // Fill-refusal (row unavailable) → untouched zeroed scratch → the
+        // defined neutral cos 0.0, argmax/margin still reported.
+        let p = probe_alignment_with_row(&state, &[3.0f32, 2.0, 1.0], 3, &mut scratch, |_, _| {});
+        assert_eq!(p.argmax, 0);
+        assert_eq!(p.cos_alignment, 0.0);
+        // Short scratch (len < dim) → neutral, no panic.
+        let mut short = [0.0f32; 2];
+        let p = probe_alignment_with_row(&state, &[3.0f32, 2.0, 1.0], 3, &mut short, |_, _| {});
+        assert_eq!(p.cos_alignment, 0.0);
+    }
+
+    #[test]
     fn probe_neutral_on_degenerate_inputs() {
         let head = [1.0f32, 0.0, 0.0, 1.0];
         assert_eq!(
@@ -661,12 +741,17 @@ mod tests {
 
     #[test]
     fn bootstrap_is_deterministic_and_separation_sensitive() {
-        let good: Vec<f32> = (0..40).map(|i| if i % 2 == 0 { 0.9 } else { 0.1 }).collect();
+        let good: Vec<f32> = (0..40)
+            .map(|i| if i % 2 == 0 { 0.9 } else { 0.1 })
+            .collect();
         let labels: Vec<bool> = (0..40).map(|i| i % 2 == 0).collect();
         let a = bootstrap_auroc_ci(&good, &labels, 400, 7);
         let b = bootstrap_auroc_ci(&good, &labels, 400, 7);
         assert_eq!(a, b, "same seed must give byte-identical bounds");
-        assert!(a.ci_lo > 0.95, "perfect separation: tight high CI, got {a:?}");
+        assert!(
+            a.ci_lo > 0.95,
+            "perfect separation: tight high CI, got {a:?}"
+        );
 
         // A quarter of the positives dropped BELOW every negative → the
         // point estimate must collapse strictly below the clean run's.

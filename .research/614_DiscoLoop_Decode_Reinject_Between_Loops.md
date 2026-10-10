@@ -15,6 +15,8 @@ Looped transformers fail multi-hop composition not because the intermediate answ
 
 **Distilled for katgpt-rs (modelless, inference-time):** between iterations of a looped state machine (evidence class: loop-trained transformers on synthetic KG composition — transfer to non-loop-trained checkpoints is exactly what Issue 929's probe measures), the carry state drifts off the discrete manifold the next stage was designed to consume. Re-anchoring toward `Norm(W[argmax(W·h)])` — the model's own decode of its own state — is a zero-parameter, zero-training correction operator, and the alignment cosine `cos(h, W[v̂])` is a cheap health signal that predicts composition success. The gate is sigmoid (paper's own Eq. 6); the vocab softmax inside Φ is a decode readout (a legitimate softmax use — same class as an LM head), not a decision weight.
 
+**Δ 2026-10-10 (Bonsai-2 leg):** the probe question's capable-checkpoint surface LANDED code-only in the sibling `riir-infer` (owner directive; the kimi legs' label axis was dead — Benches 927+930 UNDECIDABLE): the looped probe runner over the REAL qwen35 hybrid forward, PACKED ternary load (≈7.3 GB, never f32-dequantized), K weight-shared stack re-entries at the answer position, packed-head probe variant (`probe_alignment_with_row`), K=1 bit-identity to the stock forward pinned by test. Run pending box availability — see Issue 929 §T1.2b.
+
 ---
 
 ## 1. Paper Core Findings

@@ -235,6 +235,35 @@ impl TernaryGroupWeights {
             .all(|(p, n)| p & n == 0)
     }
 
+    /// Dequantize one row into `out` (`out.len() == cols`):
+    /// `out[c] = ternary(row, c) × group_scale(row, c / GROUP_SIZE)`.
+    ///
+    /// The Issue-929 loop-alignment probe's cos leg reads single `W[v̂]` rows
+    /// of a packed LM head (the Bonsai-2 ternary bit-plane table, ~5.1 GB as
+    /// f32 if materialized whole — the row read keeps the packed design).
+    /// Same arithmetic as the per-element [`Self::get`] × [`Self::scale_at`]
+    /// pair (pinned by test); a row walk, not a re-encode.
+    #[allow(clippy::needless_range_loop)]
+    pub fn dequant_row_into(&self, row_idx: usize, out: &mut [f32]) {
+        debug_assert_eq!(out.len(), self.cols, "out slice must match cols");
+        debug_assert!(row_idx < self.rows, "row_idx out of range");
+        let base = row_idx * self.blocks64;
+        let scale_base = row_idx * self.groups_per_row;
+        for c in 0..self.cols {
+            let word = c >> 6;
+            let mask = 1u64 << (c & 63);
+            let is_pos = (self.pos_bits[base + word] & mask) != 0;
+            let is_neg = (self.neg_bits[base + word] & mask) != 0;
+            let ternary: f32 = match (is_pos, is_neg) {
+                (true, false) => 1.0,
+                (false, true) => -1.0,
+                _ => 0.0,
+            };
+            let group = c / GROUP_SIZE;
+            out[c] = ternary * self.group_scale[scale_base + group].to_f32();
+        }
+    }
+
     /// Widen row-scale ternary weights into the group-scale tier.
     ///
     /// Lossless in the weights (bit-planes are copied verbatim) and lossless in
@@ -762,6 +791,23 @@ mod tests {
                     0,
                     "pos & neg != 0 after conversion"
                 );
+            }
+        }
+    }
+
+    /// Issue 929 (Bonsai-2 loop-alignment probe): `dequant_row_into` must
+    /// equal the per-element `get` × `scale_at` pair on every element — the
+    /// probe's cos leg reads single packed-head rows through it, and a row
+    /// walk that disagrees with the element read is a different observable.
+    #[test]
+    fn dequant_row_matches_get_and_scale_at() {
+        let w = filled(5, 384, 0x929); // 3 groups/row, non-power-of-two rows
+        let mut row = vec![0.0f32; 384];
+        for r in 0..5 {
+            w.dequant_row_into(r, &mut row);
+            for (c, &got) in row.iter().enumerate() {
+                let expect = w.get(r, c) as f32 * w.scale_at(r, c / GROUP_SIZE);
+                assert_eq!(got, expect, "({r},{c})");
             }
         }
     }
