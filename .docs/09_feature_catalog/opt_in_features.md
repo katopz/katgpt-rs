@@ -5536,3 +5536,92 @@ already non-optional). Source: `crates/katgpt-core/src/runetrace.rs`.
   allocates; producers stay alloc-free). Landed `f5bb0c535` (2026-10-09,
   Plan 624 complete); the consumer-side GOAT verdicts live in the consumer
   repos (seal-remake Plan 020's gate record: G1–G4 PASS).
+
+## 146. event_state_windows — Event-Anchored Sigmoid Segmentation + Identity-Free Population Summary (Plan 623 / Research 611) — DEFAULT-ON
+
+Feature `event_state_windows` (**DEFAULT-ON since 2026-10-10**, `f27a031c2`
+— the 86th katgpt-core default entry; landed opt-in the same day and
+promoted when Plan 623's GOAT gate MET: G1–G4 (bench 931) + the riir-ai
+T2.1 consumer PoC GO (bench 978: Type-A cross-half index **1.000**, Type-B
+control 0.2917 ≈ chance, β̂ 0.9% off λ_true, Δ̂ validated 34.08/35.00) +
+modelless gain by construction — zero trained parameters,
+zero-cost-unless-invoked). Source paper: arXiv:2610.03001 (Bae & Cha,
+"Neural Data Needs Semantic Tokenization" — TWS); research:
+Research 611 + riir-ai Research 396. Source:
+`crates/katgpt-core/src/event_state_window.rs`.
+
+- **`event_state_window(t, b_prev, b_next, delta, gamma)`** — the
+  two-sided sigmoid product window with the settle transition
+  `[b, b+Δ)` excluded from both states (TWS Eq. 1); γ limits read exact
+  0/1 via `fast_sigmoid` ±40 saturation (σ(0)=0.5 pinned as the
+  ambiguous class); malformed boundary sequences return the zero window,
+  never panic (20k-iteration fuzz; `b_next=+inf` is the VALID terminal
+  shape, not malformed). Δ stays a parameter — call `settling_ticks(β, ε)`
+  directly (R586; no wrapper).
+- **`population_state_summary(values, scratch) -> StateSummary`** —
+  identity-free order statistics (mean, spread, nearest-rank
+  10/25/50/75/90% quantiles with tail supports carried in
+  `StateSummary.supports`) over an unordered member set; zero-alloc,
+  permutation BIT-identical (sorted-order fold). Transfers to never-seen
+  populations where per-member models score 0.000 (the paper's transfer
+  result, the reason the primitive exists).
+- **Paper evidence**: event-anchored boundaries vs fixed/random =
+  +166–233% decode; wrong boundaries cost −62–70% and training cannot
+  repair them.
+- **Gates (bench 931)**: window 6 ns p99 (bar 20); summary N=10k
+  98.3 µs p50 (bar 100) WITH the fixed-window baseline arm; anchoring
+  delta +500 ns; 10/10 G1 closed-form tests. G2b default-posture re-read
+  103.8 µs @10k vs the 100 µs bar = the recorded trainer-load caveat
+  (quiet re-run owed when the 4090 trainer exits; bench 931's PASS
+  stands, the promotion adds only the default-list line — code
+  byte-identical).
+
+## 147. sync_bank — CMM Sync-EWMA Relation-Surprise Memory (Issue 930 / Research 615)
+
+Feature `sync_bank` (opt-in; the ESTIMATOR is unconditional in
+katgpt-types — the TemporalDerivativeKernel precedent: leaf kernels always
+compile, the feature gates the `ReconstructionState` WIRING; the unarmed
+default path is byte-identical, γ=0). Source: arXiv:2610.07907 (Continuous
+Memory Machines), Research 615. Source:
+`crates/katgpt-types/src/sync_bank.rs`.
+
+- **`SyncBank<const D, const K>`** — K=3 FULL second-moment banks (one
+  complete accumulator per timescale; the ladder IS the discovery
+  mechanism — a relation's timescale is not known a priori), step sizes
+  d ∈ {0.25, 0.0625, 0.015625} (tick/second/minute-class; retention
+  λ = 1−d, retention-form updates `S ← λS + zz`, `m ← λm + z`,
+  `mass ← λmass + 1` — recursive, no pow, no tick count; mass → 1/d =
+  4/16/64-tick effective horizons matching the labels). Per bank: packed
+  upper-triangle S + weighted mean m + recursive mass.
+- **Readout = the exact mass-normalized covariance**
+  `C = S/mass − (m/mass)⊗(m/mass)` — everything reads C, never raw
+  products (raw products track first-order movement); the
+  mass-normalized centering is what makes the C_ij ∈ [−¼, ¼] bound and
+  the A.3 divide-by-linear-weight-sum law load-bearing (the lagged
+  `(z−m)⊗(z−m)` form breaks the bound). Two streaming scalars:
+  **δ_level** = Σ|C_ij| (+ argmax) — the coupling STATE, feeds
+  hysteresis/salience, NOT surprise; **δ_surprise** = Σ|C^fast − C^slow|
+  — the relation CHANGE across adjacent banks, spikes on correlation
+  flips AND decouplings, blind to marginal movement once means settle.
+  Zero-alloc, zero-scratch, deterministic; sigmoid gating happens at the
+  CONSUMER (the accessor returns raw bounded scalars).
+- **Wiring**: `ReconstructionState::arm_sync_bank() /
+  disarm_sync_bank() / sync_bank()` + the observe hook on BOTH
+  `evolve_belief` paths (single observation point, the temporal_deriv
+  discipline); exposes both scalars so consumers (riir-ai Issue 1049)
+  never touch core internals. Latent-only: per-entity local state; only
+  the scalars may cross any sync boundary (the 5-scalar law).
+- **Gates**: T3 property tests (horizon invariance ≤1e-6 at T=8 vs T=64
+  — the A.3 discriminator; exactness vs f64 batch λ-weighted covariance
+  ≤1e-5 over a 256-tick correlated stream); G1a PASS — the PARTIAL-sign
+  coupling flip spikes δ_surprise ≥3× the baseline MEAN, persists
+  (integrated elevation ≥4× the Plan-277 value-surprise), settles; the
+  whole-vector sign negation pinned as a covariance NO-OP (the sign-flip
+  ground truth); the independent-marginal-step negative control stays
+  quiet. G4: 0 allocs over 10k iterations (D=8) + 1k (D=64). G2 ARMED
+  with a load-aware loud SKIP — quiet-box numbers pending (contaminated
+  readings discarded as scheduler measurements). **T5 (G1b real-fixture
+  replay from riir-engine production belief trajectories, staged as a
+  3-unit plan) is the promotion gate** — the lane ships opt-in on G1a
+  alone; G1b is never skipped silently; a G1b null records the negative
+  in Research 615 §7 and removes the feature.

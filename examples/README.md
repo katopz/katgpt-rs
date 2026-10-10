@@ -429,7 +429,7 @@ cargo run --example issue929_kimi_loop_alignment_probe --features kimi_k3_loader
 
 ## Feature Flags
 
-The flags below gate the example groups above. The full set (683 flags, including
+The flags below gate the example groups above. The full set (684 flags, including
 production-default architecture features) spans the workspace manifests — the root
 [`Cargo.toml`](../Cargo.toml) `[features]` plus the per-crate manifests under
 `crates/` — and is summarised in the [README Feature Flags](../README.md#feature-flags)
