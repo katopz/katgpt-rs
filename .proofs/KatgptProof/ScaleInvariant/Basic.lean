@@ -199,7 +199,6 @@ lemma sum_log_telescope_up (τ : ℝ) (hτ : 0 < τ) :
       congr 1
       field_simp [show ((k : ℝ) + τ) ≠ 0 from ne_of_gt hkτ,
         show ((p : ℝ) - 1 + τ) ≠ 0 from ne_of_gt hp1τ]
-      all_goals ring
 
 /-- The lower-leg telescope: `Σ_{t=p}^{q} log((t+1+τ)/(t+τ)) =
     log((q+1+τ)/(p+τ))`. -/
@@ -230,12 +229,10 @@ lemma sum_log_telescope_down (τ : ℝ) (hτ : 0 < τ) :
         div_ne_zero (by linarith) (ne_of_gt hk1τ)
       rw [Finset.sum_Icc_succ_top hpk1, ih p hp hpk]
       push_cast
-      norm_num
       rw [← Real.log_mul hA hB]
       congr 1
       field_simp [show ((k : ℝ) + 1 + τ) ≠ 0 from ne_of_gt hk1τ,
         show ((p : ℝ) + τ) ≠ 0 from ne_of_gt hpτ]
-      all_goals ring
 
 /-! ## Theorem 1 — the harmonic-sum interval bound -/
 

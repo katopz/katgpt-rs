@@ -76,7 +76,6 @@ private lemma sum_Icc_geom_le {q : ℝ} (hq : 0 < q) (hqlt : q < 1) :
     have hmid : q ^ a * ((1 - q ^ (m + 1 : ℕ)) / (1 - q)) + q ^ a * q ^ (m + 1)
         = q ^ a * (((1 - q ^ (m + 1 : ℕ)) + q ^ (m + 1) * (1 - q)) / (1 - q)) := by
       field_simp [hq1]
-      all_goals ring
     refine le_trans (add_le_add h1' (le_refl _)) ?_
     rw [hmid]
     refine mul_le_mul_of_nonneg_left
@@ -88,7 +87,7 @@ private lemma sum_Icc_geom_le {q : ℝ} (hq : 0 < q) (hqlt : q < 1) :
 /-- A window of `n + 1` terms starting at `s`, each at most `K ≥ 0`, sums
     to at most `(n+1)·K` — proved by induction on the window length with
     `Finset.sum_Icc_succ_top` (no ℕ-smul lemma needed). -/
-private lemma sum_window_le_mul {g : ℕ → ℝ} {K : ℝ} (hK : 0 ≤ K) {s : ℕ}
+private lemma sum_window_le_mul {g : ℕ → ℝ} {K : ℝ} {s : ℕ}
     (hg : ∀ t, s ≤ t → g t ≤ K) :
     ∀ n : ℕ, ∑ t ∈ Finset.Icc s (s + n), g t ≤ ((n + 1 : ℕ) : ℝ) * K := by
   intro n
@@ -192,17 +191,17 @@ lemma decadeMassPow_le (hC : 0 ≤ C) (hκ : 1 < κ) (hT : 0 < T) (Δ : ℕ) :
     have hbase1 : (T : ℝ) ^ κ ≤ (1 + (t : ℝ)) ^ κ :=
       Real.rpow_le_rpow hT0 h1 hκ0
     have hbp : 0 < (1 + (t : ℝ)) ^ κ :=
-      Real.rpow_pos_of_pos (by push_cast; linarith) κ
+      Real.rpow_pos_of_pos (by linarith) κ
     have hbt : 0 < (T : ℝ) ^ κ := Real.rpow_pos_of_pos hTposR κ
     have hinv := (inv_le_inv₀ hbp hbt).mpr hbase1
-    rw [← Real.rpow_neg hT0 κ, ← Real.rpow_neg (by push_cast; linarith) κ] at hinv
+    rw [← Real.rpow_neg hT0 κ, ← Real.rpow_neg (by linarith) κ] at hinv
     exact hinv
   unfold decadeMassPow
   by_cases hne : T + 1 ≤ T * Δ
   · -- The window is Icc (T+1) ((T+1) + (TΔ−T−1)): ≤ (TΔ−T)·T^{−κ} ≤ Δ·T·T^{−κ}.
     have hwin : (T + 1) + (T * Δ - T - 1) = T * Δ := by omega
     have hexp : (T * Δ - T - 1) + 1 = T * Δ - T := by omega
-    have hraw := sum_window_le_mul hTpos.le
+    have hraw := sum_window_le_mul
       (fun t ht => hterm t ht) (T * Δ - T - 1)
     rw [hwin, hexp] at hraw
     have h1 : (((T * Δ - T : ℕ) : ℝ)) * ((T : ℝ) ^ (-κ))

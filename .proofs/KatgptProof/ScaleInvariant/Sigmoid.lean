@@ -97,8 +97,7 @@ theorem sigmoid_transfer_halves_constant (τ : ℝ) (hτ : 0 < τ)
     have hpos1 : 0 < (t : ℝ) / τ + 1 := by
       have h2 : 0 ≤ (t : ℝ) / τ := div_nonneg (Nat.cast_nonneg t) hτ.le
       linarith
-    field_simp
-    all_goals ring
+    field_simp [hpos1]
   rw [hfn]
   -- a_t = sqrt(2·log(t/τ+1)+1) → ∞, then c(a_t) → 1/2.
   have hlog : Tendsto (fun t : ℕ ↦ Real.log ((t : ℝ) / τ + 1)) atTop atTop :=
@@ -141,8 +140,7 @@ theorem sigmoid_transfer_gap (τ : ℝ) (hτ : 0 < τ)
   have hcancel : ((t : ℝ) / τ + 1)
       * (alpha / ((t : ℝ) / τ + 1) * c (Real.sqrt (aSq (t : ℝ) τ)))
       = alpha * c (Real.sqrt (aSq (t : ℝ) τ)) := by
-    field_simp
-    all_goals ring
+    field_simp [hpos1]
   have hhalf : (alpha : ℝ) / 2 = alpha * (1 / 2) := by ring
   rw [hcancel, hhalf]
   have h2 : alpha * c (Real.sqrt (aSq (t : ℝ) τ)) - alpha * (1 / 2)
