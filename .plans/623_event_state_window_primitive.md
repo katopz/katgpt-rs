@@ -1,7 +1,7 @@
 # Plan 623: Event-State Window Primitive — Event-Anchored Sigmoid Segmentation + Identity-Free Population Summary
 
 **Date:** 2026-10-08
-**Status:** Active — Phase 1 LANDED 2026-10-10 (G1–G4 ALL PASS, bench 931, opt-in per plan; load-caveated G2 — trainer-active box, quiet re-run at Phase-2 finalization); Phase 2 (riir-ai PoC) pending
+**Status:** Active — Phase 1 LANDED 2026-10-10 (G1–G4 ALL PASS, bench 931, opt-in per plan; load-caveated G2 — trainer-active box, quiet re-run at Phase-2 finalization); Phase 2 LANDED 2026-10-10 — T2.1 PoC **GO** (riir-ai bench 978: Type-A cross-half index 1.000 ≥ 0.40, Type-B control 0.2917 ≈ chance, β̂ 0.9% off λ_true, Δ̂=settling_ticks validated vs direct curve 34.08/35.00; three generator traps + the second-order heterogeneity channel recorded); promotion to default WARRANTED per the gate below — landing is the owner-noted next step
 **Research:** [katgpt-rs/.research/611_TWS_Event_State_Windows_Identity_Free_Population_Tokens.md](../.research/611_TWS_Event_State_Windows_Identity_Free_Population_Tokens.md) · [riir-ai/.research/396_crowd_regime_tokens_event_state_guide.md](../../riir-ai/.research/396_crowd_regime_tokens_event_state_guide.md)
 **Source paper:** [arXiv:2610.03001](https://arxiv.org/abs/2610.03001) — Bae & Cha, "Neural Data Needs Semantic Tokenization" (TWS)
 **Target:** `katgpt-rs/crates/katgpt-core/src/event_state_window.rs` (new module) + Cargo feature `event_state_windows`
@@ -37,11 +37,12 @@ The paper's evidence this is worth a feature flag: event-anchored boundaries vs 
 
 ## Phase 2 — Consumer PoC (riir-ai side; runs after Phase 1 lands — the go/no-go gate, not deferrable)
 
-- [ ] **T2.1** riir-ai P1 PoC per Research 396 §5 (cross-half Type-A index on crowd latents; boundary-law cliff incl. the event-time-only control; measures β for Δ). Dependency: Phase 1 merged. Promotion of the feature to default is gated on this — the paper's domain evidence does NOT auto-transfer (Research 611 §6).
+- [x] **T2.1** riir-ai P1 PoC per Research 396 §5 (cross-half Type-A index on crowd latents; boundary-law cliff incl. the event-time-only control; measures β for Δ). Dependency: Phase 1 merged. Promotion of the feature to default is gated on this — the paper's domain evidence does NOT auto-transfer (Research 611 §6).
+  → **GO, LANDED 2026-10-10** (riir-ai bench 978 + `riir-poc/tests/event_state_windows_poc.rs`, feature `event_state_windows_poc`): Type-A cross-half index **1.000** (bar 0.40), Type-B control **0.2917** ≈ chance (bar ≤ 0.50), β̂ = 0.08415 vs λ_true 0.08338 (0.9%), `settling_ticks(β̂, 0.05)` = 34.08 vs direct 35.00 ticks, event-anchored ≥ fixed/random, settle-geometry 9.9× (Δ=0 vs Δ̂ own-centroid dist), clock control 0.50, shuffled 0.000, bit-identical debug/release. **Recorded traps:** derangement private-maps leak 1.000 (index-exclusion bias), deterministic shift-cycle leaks 0.750 (cross-half-aligned pairing); the control needs random BALANCED shift decks per half. **Recorded finding:** with baseline heterogeneity ON the control lifts to 0.750 (second-order center×baseline pairing read by spread/quantiles — the CLEAN posture is the instrument; the read is a P2-wiring input). **Recorded negative-magnitude:** the paper's −62–70% accuracy cliff does NOT transfer at this SNR (saturation); the Δ law's contribution shows in geometry (9.9×), not accuracy. Held-out episode-split 0.333 — episode-level transfer is P3's business, not established here.
 
 ## GOAT gate
 
 - G1 partition/exclusion/invariance closed-form tests green.
 - G2/G4 per T1.3 (release + alloc canary).
 - G3 no-regression: feature is additive, default-off; nothing existing changes.
-- Promotion to default: only after riir-ai T2.1 PoC confirms the Type-A index on crowd latents (the paper's domain evidence does NOT auto-transfer — Research 611 §6).
+- Promotion to default: only after riir-ai T2.1 PoC confirms the Type-A index on crowd latents (the paper's domain evidence does NOT auto-transfer — Research 611 §6). → **Condition MET 2026-10-10 (riir-ai bench 978 GO)** — promotion landing pending (default-feature flip + the flag-count sites + docs-gate drift in one commit).
