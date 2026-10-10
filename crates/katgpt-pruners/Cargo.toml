@@ -78,7 +78,10 @@ cna_steering = ["bandit"]
 # dense signed per-window mean shifts as a frozen constant overlay. Pure math
 # over captured f32 vectors (no dep, no forward code) — the capture/apply
 # seams live in the consuming repos (riir-infer fork, consumer overlays).
-# OPT-IN per the feature-flag discipline; promotion waits on the issue's G2.
+# OPT-IN, measurement-only — the modelless track CLOSED-NEGATIVE (issue 920,
+# negative_results §46): C2 measured the OPPOSITE of the premise — the
+# bias-capturable constant component is front-loaded (late-third ρ 0.5719 <
+# rest 0.7624), so a persistent last-half overlay has nothing to carry.
 bias_delta = []
 deep_manifold = []
 federation = ["bandit"]

@@ -1037,3 +1037,51 @@ instrument + fixture generator stay shipped and tested (README catalog,
 - Also the measured confirmation of the kill criterion Issue 929's T1.4
   pre-registered ("all-NaN AUROC across both arms ⇒ undecidable"); issue
   stays OPEN-ARMED on that reopen trigger.
+
+## 46. HyperThink Modelless Bias-Delta Overlay — T1 premise FAIL: the constant component is front-loaded, not last-half (Issue 920)
+
+**Hypothesis.** HyperThink (Research
+[606](../../.research/606_HyperThink_Text_to_Parameter_VQ_Bias_Amortization.md),
+arXiv:2610.03039) amortizes a thinking trace into a query-conditioned
+**bias-only** delta over the paper's last-8/last-half blocks; its ablation
+ladder reads static delta 60.88 > per-instance-continuous 59.74 < VQ-routed
+61.06 (GSM8K). The modelless PoC (Issue 920, defend-wrong against §31's
+content-quantization failure) pre-registered a T1 premise gate BEFORE any
+codebook spend: **C1** — the last half of layers holds ≥ 0.60 of total delta
+energy; **C2** — mean ρ (the bias-capturable constant fraction
+(E[Δb])²/E[Δb²]) over the last ⌈n/3⌉ layers (17..25 at n=26) EXCEEDS the rest.
+Both pass ⇒ T2 (k-means conditioning-signal codebook) + T3 (routed-vs-static
+OOD arms) open; either fails ⇒ the track stops — no gate-shopping, no re-aiming
+the window after full numbers.
+
+**Measured** (full 2,000-probe capture on gemma-2-2b-it-f16, 33.7 h nice-19 on
+the M3 Max; sidecar + pin landed in riir-infer `5457d9c` —
+`tests/fixtures/hyperthink/gemma-2-2b-it-f16.t1_bias_delta.json`, fixture gate
+`tests/hyperthink_t1_fixture.rs` live 2/2 green; dump blake3 `5b5c4d71…e4ee2`
+verified against the run log; probe fixture never re-drawn, `08672efd…fc8b9`):
+**C1 PASS 0.6223 ≥ 0.60 — C2 MISS 0.5719 < 0.7624 → overall FAIL.** ρ runs
+~0.75–0.92 through the early/mid blocks and FALLS to ~0.56–0.58 in the last
+third: the with-conditioning shift is substantially a constant (bias-like)
+component EARLY and increasingly query-coupled LATE — the exact opposite of the
+last-half persistent-overlay window the paper's regime needs. The n=8 machinery
+pilot disclosed precisely this shape (0.634 vs 0.79) and the full run confirmed
+it; the pre-registration held. Site rollup: q carries the largest energy share
+(0.456, ρ 0.684), gate 0.220, up 0.190, v 0.108, o 0.025, down 0.001.
+
+**Disposition:** modelless track **CLOSED-NEGATIVE at T1**, per the issue's own
+stop clause — T2/T3 never opened, zero codebook spend (Research 606 §5's
+three-arm protocol never ran; the premise gate preceded it by design). This
+sharpens §31's taxonomy one step earlier in the pipeline: §31 quantized CONTENT
+and died on the gate/transfer arms; here the modelless CONDITIONING-SIGNAL
+regime fails at the premise — the delta content itself is not a persistent
+last-half bias overlay on gemma-2-2b, so there is nothing for a modelless
+codebook to route over that could beat the static-delta floor. The landed
+substrate stays, measurement-only: `bias_delta` (katgpt-pruners, opt-in, pure
+math + 8 unit tests) and the riir-infer capture lane (`hyperthink_t1` feature,
+the six-hook f16 fork + census bin, fixtures + pins). Issue 920 removed per the
+noise-reduction rule — this section + the research note carry it.
+- **Reopen trigger:** the trained arm — riir-train Plan 445 (VQ
+  adapter-codebook distillation, unaffected by per-track separation) — is now
+  the sole open lane; a TRAINED delta table re-arms a modelless routing
+  comparison only as measurement (the trained-vs-static ablation IS the
+  paper's own ladder).

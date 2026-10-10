@@ -2,7 +2,7 @@
 
 > **Source:** "HyperThink: Text-to-Parameter Hypernetworks for Efficient Reasoning" — Donggyun Kim, Jack Lu, Chanwoo Kim, Mengye Ren, Seunghoon Hong (KAIST / NYU), COLM 2026, [arXiv:2610.03039](https://arxiv.org/abs/2610.03039) (submitted 2026-10-02)
 > **Date:** 2026-10-06
-> **Status:** Active — per-track verdicts recorded; training plan filed (riir-train 445); modelless PoC filed (issue 920)
+> **Status:** Modelless track (a/b) CLOSED-NEGATIVE 2026-10-10 — the T1 premise gate FAILED (C2: the constant component is front-loaded, not last-half; [negative_results §46](../.docs/09_feature_catalog/negative_results.md); issue 920 removed per noise-reduction). Trained track (c) OPEN — riir-train Plan 445.
 > **Related Research:** 062 (SHINE — the closest shipped cousin), 347 (LATENTSEEK — latent-space cousin), 584 (memory_soup — query-conditioned checkpoint blending), 374 (OTF-LAM — the VQ-codebook cousin, GOAT-failed modellessly), 318 (sleep-time compute amortization)
 > **Related Plans:** riir-train 445 (VQ adapter-codebook distillation — filed this session); katgpt-rs 375 + negative_results §31 (the factorized/VQ negative record this note must argue against)
 > **Classification:** Public
