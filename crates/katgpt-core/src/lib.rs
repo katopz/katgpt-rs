@@ -349,7 +349,8 @@ pub mod state_option_scoring;
 // only always-on substrate (simd::fast_sigmoid + stats::nearest_rank — the
 // percentile-of-record, its tail supports carried verbatim). Δ is a
 // parameter (settling_ticks is the caller's wiring-time derivation, not a
-// wrapper here). Opt-in pending G1–G4 + the Phase-2 riir-ai PoC.
+// wrapper here). DEFAULT-ON 2026-10-10 — the Phase-2 riir-ai PoC (bench 978)
+// confirmed the Type-A index (1.000) and the plan's promotion gate is met.
 #[cfg(feature = "event_state_windows")]
 pub mod event_state_window;
 // escalation_probe_gate — the cost-aware escalation selection utility
