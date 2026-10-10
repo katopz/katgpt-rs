@@ -32,6 +32,8 @@ An online second-order co-activation memory over per-entity belief dims produces
 - Feature-gated; unarmed build bit-identical (GOAT flag law, γ=0 discipline — the CMM paper itself validates this rule, Research 615 §2 row 9).
 - Latent only: SyncBank state is per-entity local; only δ_level / δ_surprise / argmax scalars may cross any sync boundary (5-scalar law).
 
+⚑ **2026-10-10 ~22:3x +07 (M3 idle-loop session, NOT the 930 lane — gate debt found while landing Plan 622): the docs gate's timed-region guard is RED on develop from this issue's `1cc90867f` landing — `crates/katgpt-types/tests/sync_bank_goat.rs::g2b_readout_latency_d8_cheap` is the 28th timed region with NO loud-zero defence and no pin row (guard: "28 against 27 pinned"). Not fixable honestly today (box load 57, on battery — a latency read now measures the scheduler, exactly what the issue's own load-aware-skip law refuses). Debt recorded for the T6-G2 quiet-box lane: when the quiet window opens, either run it and pin the measured row in `scripts/timed_region_expected.txt` (or the guard's pin file), or wrap the readout in `best_of_us` — both are the guard's own two named remedies.
+
 ## References
 
 - `katgpt-rs/.research/615_Continuous_Memory_Machines_Sync_EWMA.md` (this issue's parent note)
