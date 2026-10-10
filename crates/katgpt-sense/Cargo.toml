@@ -43,6 +43,13 @@ sense_composition = []
 # the struct layout matches katgpt-core's feature-gated layout bit-for-bit.
 temporal_deriv = []
 
+# SyncBank relation memory (Issue 930 / Research 615, arXiv:2610.07907).
+# The SyncBank estimator is unconditional in katgpt-types (the
+# TemporalDerivativeKernel precedent); this flag gates the sync_bank field,
+# the arm/accessor methods and the observe hook in ReconstructionState so
+# the unarmed build stays byte-identical (GOAT flag law, γ=0).
+sync_bank = []
+
 # Modality-additive belief kernel (Issue 777 T2, Research 556 / FLYNN
 # arXiv:2607.00025). DEFAULT-ON since Issue 777 T4 (2026-09-14) — GOAT gate
 # ALL PASS: exact per-kind superposition (cos 1.0 / ratio 1.0 / predictability

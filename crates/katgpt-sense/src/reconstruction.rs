@@ -16,6 +16,9 @@ use katgpt_types::SenseModule;
 #[cfg(feature = "temporal_deriv")]
 use katgpt_types::TemporalDerivativeKernel;
 
+#[cfg(feature = "sync_bank")]
+use katgpt_types::sync_bank::{SyncBank, SYNC_BANK_LADDER};
+
 /// Morton-code identifier for an octree node.
 /// Encodes spatial position in the KG latent embedding space.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -449,6 +452,15 @@ pub struct ReconstructionState {
     /// Only written under `temporal_deriv`; read via [`surprise_vector`](Self::surprise_vector).
     #[cfg(feature = "temporal_deriv")]
     last_surprise: [f32; 8],
+    /// Online second-order co-activation memory over the belief output
+    /// channel (Issue 930 / Research 615, gated by `sync_bank`).
+    ///
+    /// `None` until the caller arms it via [`arm_sync_bank`](Self::arm_sync_bank)
+    /// — the feature gates the FIELD (unarmed layout stays byte-identical);
+    /// per-instance arming gates the WORK (GOAT flag law, γ=0). Fed every
+    /// `evolve_belief` tick once armed; read via [`sync_bank`](Self::sync_bank).
+    #[cfg(feature = "sync_bank")]
+    sync_bank: Option<SyncBank<8, 3>>,
 }
 
 impl ReconstructionState {
@@ -485,6 +497,8 @@ impl ReconstructionState {
             surprise,
             #[cfg(feature = "temporal_deriv")]
             last_surprise: [0.0; 8],
+            #[cfg(feature = "sync_bank")]
+            sync_bank: None,
         }
     }
 
@@ -555,6 +569,47 @@ impl ReconstructionState {
         }
     }
 
+    /// Arm the SyncBank relation-memory channel (Issue 930) with the
+    /// canonical step-size ladder ([`katgpt_types::sync_bank::SYNC_BANK_LADDER`]
+    /// — 4/16/64-tick horizons). Idempotent: re-arming replaces the bank
+    /// (state resets — the ladder is frozen per bank).
+    ///
+    /// Per-instance opt-in ON TOP of the cargo feature: the feature gates the
+    /// field, this call gates the work (the unarmed state stays byte-identical
+    /// even with the feature compiled in — γ=0). Consumers read the channel
+    /// back through [`sync_bank`](Self::sync_bank) — δ_level for
+    /// formed/released hysteresis and salience, δ_surprise for relation
+    /// change (riir-ai Issue 1049's two consumption scalars).
+    #[cfg(feature = "sync_bank")]
+    pub fn arm_sync_bank(&mut self) {
+        self.sync_bank = Some(SyncBank::new(SYNC_BANK_LADDER));
+    }
+
+    /// The SyncBank relation-memory channel, `None` when the `sync_bank`
+    /// feature is off OR the caller never armed it.
+    ///
+    /// The returned handle exposes the two relation readouts —
+    /// [`relation_level_into`](SyncBank::relation_level_into) (δ_level +
+    /// argmax pair) and [`relation_surprise_into`](SyncBank::relation_surprise_into)
+    /// (δ_surprise + max) — plus [`surprise_max`](SyncBank::surprise_max) /
+    /// [`level_max`](SyncBank::level_max) convenience scalars. Only the
+    /// scalars may cross a sync boundary (the 5-scalar law); never the slab.
+    #[cfg(feature = "sync_bank")]
+    #[inline]
+    pub fn sync_bank(&self) -> Option<&SyncBank<8, 3>> {
+        self.sync_bank.as_ref()
+    }
+
+    /// Disarm the SyncBank channel (drops the accumulated state). The armed
+    /// cost — one `observe` per `evolve_belief` tick — stops immediately;
+    /// useful for limelight COLD demotion (a demoted entity's channel dies
+    /// with its state, matching the "COLD entities carry no SyncBank" rule).
+    #[cfg(feature = "sync_bank")]
+    #[inline]
+    pub fn disarm_sync_bank(&mut self) {
+        self.sync_bank = None;
+    }
+
     /// Inject a direct additive delta into the belief state (per-dim clamped to
     /// `[-1, 1]`). Does NOT touch evidence and does NOT observe into the
     /// surprise kernel — call [`evolve_belief`](Self::evolve_belief) afterward to
@@ -607,6 +662,18 @@ impl ReconstructionState {
     fn observe_surprise_inner(&mut self) {
         if let Some(ref mut s) = self.surprise {
             self.last_surprise = s.observe(&self.belief);
+        }
+    }
+
+    /// Feed the current belief into the armed SyncBank. Private — the same
+    /// single-observation-point discipline as
+    /// [`observe_surprise_inner`](Self::observe_surprise_inner): only
+    /// `evolve_belief` / `evolve_belief_simd` call it, one observe per tick.
+    #[cfg(feature = "sync_bank")]
+    #[inline]
+    fn observe_sync_bank_inner(&mut self) {
+        if let Some(ref mut bank) = self.sync_bank {
+            bank.observe(&self.belief);
         }
     }
 
@@ -935,6 +1002,10 @@ impl ReconstructionState {
         // converge and the derivative decays to zero on a stationary belief.
         #[cfg(feature = "temporal_deriv")]
         self.observe_surprise_inner();
+        // Issue 930: same single-observation-point discipline for the armed
+        // SyncBank channel (a no-op when unarmed).
+        #[cfg(feature = "sync_bank")]
+        self.observe_sync_bank_inner();
     }
 
     /// Modality-additive belief evolution (Issue 777 T2, Research 556 / FLYNN
@@ -1036,6 +1107,10 @@ impl ReconstructionState {
         // `evolve_belief_surprise_simd_matches_scalar`.
         #[cfg(feature = "temporal_deriv")]
         self.observe_surprise_inner();
+        // Issue 930: the SIMD path feeds the armed SyncBank too (same
+        // observation point as the scalar path).
+        #[cfg(feature = "sync_bank")]
+        self.observe_sync_bank_inner();
     }
 
     /// Run full reconstruction loop (scalar path).
@@ -1427,6 +1502,97 @@ pub fn compare_reconstruction(modules: &[SenseModule], belief: [f32; 8]) -> Reco
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue 930 T1b — the SyncBank wiring: unarmed reads None, arming
+    /// installs the canonical-ladder bank, `evolve_belief` feeds it (single
+    /// observation point), and the readouts come back through the accessor —
+    /// the consumption surface riir-ai Issue 1049 uses.
+    #[cfg(feature = "sync_bank")]
+    #[test]
+    fn sync_bank_accessor_arms_observes_and_reads() {
+        let mut state = ReconstructionState::with_config([0.5; 8], ReconstructionConfig::default());
+        assert!(
+            state.sync_bank().is_none(),
+            "unarmed state must read None"
+        );
+
+        state.arm_sync_bank();
+        let bank = state.sync_bank().expect("armed → Some");
+        assert_eq!(bank.ladder(), &katgpt_types::sync_bank::SYNC_BANK_LADDER);
+        assert!(!bank.observed(), "no observation before the first tick");
+
+        // Drive a non-trivial belief trajectory through the scalar path.
+        let selected = [true, false, true, false, true, false];
+        for tick in 0..40u32 {
+            let scale = 0.5 + 0.05 * tick as f32;
+            let acts = [0.5 * scale, 0.2, 0.8, 0.1, 0.3, 0.0];
+            state.accumulate(&selected, &acts);
+            state.evolve_belief();
+        }
+
+        let bank = state.sync_bank().expect("armed after ticks");
+        assert!(bank.observed(), "evolve_belief must feed the armed bank");
+        let mut level = [0.0f32; 3];
+        let mut argmax = [0.0f32; 3];
+        bank.relation_level_into(&mut level, &mut argmax);
+        assert!(level.iter().all(|v| v.is_finite() && *v >= 0.0));
+        let (i, j) = katgpt_types::sync_bank::packed_unpack(8, argmax[0] as usize);
+        assert!(i <= j && j < 8);
+        let mut surprise = [0.0f32; 3];
+        bank.relation_surprise_into(&mut surprise);
+        assert!(surprise.iter().all(|v| v.is_finite() && *v >= 0.0));
+        assert_eq!(bank.surprise_max(), surprise[2]);
+    }
+
+    /// Issue 930 T1b — the SIMD path feeds the armed bank within the same
+    /// 1-ulp envelope as the belief vectors themselves (the two evolve paths
+    /// differ ≤ 1e-5 per tick — `evolve_belief_surprise_simd_matches_scalar`
+    /// — so the second-moment products inherit that envelope; bit-equality
+    /// would assert more than the underlying belief channel provides).
+    #[cfg(all(feature = "sync_bank", feature = "sense_composition"))]
+    #[test]
+    fn sync_bank_feeds_identically_on_simd_path() {
+        let belief = [0.3, 0.7, 0.1, 0.5, 0.4, 0.2, 0.6, 0.8];
+        let selected = [true, false, true, false, true, false];
+        let mut scalar = ReconstructionState::with_config(belief, ReconstructionConfig::default());
+        let mut simd = ReconstructionState::with_config(belief, ReconstructionConfig::default());
+        scalar.arm_sync_bank();
+        simd.arm_sync_bank();
+        for tick in 0..30u32 {
+            let scale = 0.5 + 0.1 * tick as f32;
+            let acts = [0.5 * scale, 0.2 * scale, 0.8, 0.1, 0.3, 0.0];
+            scalar.accumulate(&selected, &acts);
+            scalar.evolve_belief();
+            simd.accumulate(&selected, &acts);
+            simd.evolve_belief_simd();
+        }
+        let bs = scalar.sync_bank().unwrap();
+        let bd = simd.sync_bank().unwrap();
+        let max_diff = bs
+            .sums()
+            .iter()
+            .zip(bd.sums())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        assert!(
+            max_diff < 1e-4,
+            "SIMD-fed bank diverged from scalar-fed: max_diff={max_diff:e}"
+        );
+        assert_eq!(bs.mass(), bd.mass(), "mass recursion must agree exactly");
+    }
+
+    /// Issue 930 — disarm drops the state and the observe cost.
+    #[cfg(feature = "sync_bank")]
+    #[test]
+    fn sync_bank_disarm_drops_state() {
+        let mut state = ReconstructionState::with_config([0.5; 8], ReconstructionConfig::default());
+        state.arm_sync_bank();
+        state.accumulate(&[true; 6], &[0.5; 6]);
+        state.evolve_belief();
+        assert!(state.sync_bank().unwrap().observed());
+        state.disarm_sync_bank();
+        assert!(state.sync_bank().is_none());
+    }
 
     #[test]
     fn octree_node_id_depth() {

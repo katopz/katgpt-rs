@@ -25,6 +25,13 @@ pub mod bake;
 pub mod lod;
 pub mod octree;
 pub mod reconstruction;
+
+/// Re-export the SyncBank relation-memory module (Issue 930) so consumers of
+/// the reconstruction accessor resolve `katgpt_sense::sync_bank::SyncBank`
+/// without a direct katgpt-types dep. The module itself is unconditional in
+/// katgpt-types (the TemporalDerivativeKernel precedent); the
+/// `sync_bank` FEATURE gates the ReconstructionState wiring.
+pub use katgpt_types::sync_bank;
 #[cfg(feature = "depth_invariance")]
 pub mod reconstruction_depth_invariance;
 #[cfg(feature = "schema_centroid")]

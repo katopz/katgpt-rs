@@ -84,6 +84,12 @@ mod sense;
 /// these kernels and `simd::ternary` uses `types::TernaryWeights`.
 pub mod simd;
 pub mod slod;
+/// SyncBank — online second-order co-activation memory (Issue 930,
+/// Research 615). Unconditional leaf math (the TemporalDerivativeKernel
+/// precedent: the kernel is always compiled; the FEATURES gate the wiring —
+/// `sync_bank` in katgpt-sense gates the ReconstructionState field/accessor,
+/// and the katgpt-core + root rows forward it).
+pub mod sync_bank;
 pub mod temporal;
 mod ternary;
 /// Ternary `{-1,0,+1}` bit-planes with per-128 f16 group scale — the
