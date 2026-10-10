@@ -31,3 +31,7 @@ import KatgptProof.Pencil.SpecTests
 import KatgptProof.Ssmax.SpecTests
 import KatgptProof.HintRegret.Basic
 import KatgptProof.HintRegret.SpecTests
+import KatgptProof.ScaleInvariant.Basic
+import KatgptProof.ScaleInvariant.Sigmoid
+import KatgptProof.ScaleInvariant.Dominates
+import KatgptProof.ScaleInvariant.SpecTests

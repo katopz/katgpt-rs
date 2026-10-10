@@ -4503,3 +4503,13 @@ required-features = ["lattice_memory", "engram"]
 [[example]]
 name = "karc_deployed_shape_quality"
 required-features = ["karc_forecaster"]
+
+# Plan 622 Phase 6 — the ScaleInvariant Lean-trio spec match: schedule
+# closed forms (aSq/mOf/boundary pins), the harmonic interval bounds, the
+# tilt-transfer gap identity (adaptive quadrature — the Rust side carries
+# no hypotheses), and the comparator ordering. Gated: scale_invariant_attn
+# is opt-in (the green-zero rule — without the row, a plain `cargo test`
+# prints `ok. 0 passed` over the cfg'd-empty binary).
+[[test]]
+name = "scale_invariant_spec_match"
+required-features = ["scale_invariant_attn"]

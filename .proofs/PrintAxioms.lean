@@ -40,12 +40,17 @@ import KatgptProof.Pencil.Weyl
 import KatgptProof.Pencil.Loewner
 import KatgptProof.Pencil.Eigengap
 import KatgptProof.HintRegret.Basic
+import KatgptProof.ScaleInvariant.Tendsto
+import KatgptProof.ScaleInvariant.Basic
+import KatgptProof.ScaleInvariant.Sigmoid
+import KatgptProof.ScaleInvariant.Dominates
 
 open KatgptProof.Bridge
 open KatgptProof.Hope
 open KatgptProof.Ssmax
 open KatgptProof.Pencil
 open KatgptProof.HintRegret
+open KatgptProof.ScaleInvariant
 
 -- Action-bridge ranking preservation (the sigmoid strict-monotonicity chain).
 #print axioms action_bridge_ranking_preserved
@@ -110,3 +115,19 @@ open KatgptProof.HintRegret
 -- contract the f32 gate approximates (its ±40 early-exit / rounding
 -- saturation points are the documented Rust-vs-ℝ divergence).
 #print axioms bandGate_mem_Ioo
+
+-- ScaleInvariant (Plan 622 Phase 6): the schedule skeleton + the Lean trio.
+#print axioms m_add_aSq
+#print axioms perKeyMass_eq_alpha
+#print axioms scale_invariant_decade_mass_bounded
+#print axioms decadeMass_le_logDelta
+#print axioms decadeMassFloor_pos
+#print axioms decadeMass_ge_floor
+#print axioms sigmoid_tilt_pointwise
+#print axioms sigmoid_transfer_halves_constant
+#print axioms sigmoid_transfer_gap
+#print axioms decadeMassExp_le
+#print axioms decadeMassExp_tendsto_zero
+#print axioms decadeMassPow_le
+#print axioms decadeMassPow_tendsto_zero
+#print axioms scale_invariant_dominates_ssmax_on_decade_mass

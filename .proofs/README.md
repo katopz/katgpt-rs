@@ -24,6 +24,9 @@ Second Lean 4 formal-verification instance in the 7-repo stack (katgpt-rs / riir
 | `Pencil/Eigengap.lean` | `eigval_diagonal_antitone` | the antitone-sorted eigenvalue array of a decreasing diagonal is the diagonal itself — the concrete-eigenvalue-pinning substrate (singles are exact eigenvectors; CF on coordinate spans) |
 | `Pencil/Eigengap.lean` | `ladder_unit_gap` | the ladder `diag(1,…,0@k,…,−1)` has `λk − λk₊₁ = 1` exactly — Lemma 2's input gap pinned |
 | `Pencil/Eigengap.lean` | `eigengap_ladder_ge_half` | **T4 final assembly**: the seeded pencil `ladder + E + s·1` keeps `≥ ½` of the unit gap under any Hermitian `‖E‖ ≤ ¼` — the paper's Lemma 2 complete |
+| `ScaleInvariant/Basic.lean` | `scale_invariant_decade_mass_bounded` | the harmonic-sum interval bound (Plan 622 Phase 6): `ατ·log((TΔ+1+τ)/(T+1+τ)) ≤ Σ_{t=T+1}^{TΔ} mass ≤ ατ·log((TΔ+τ)/(T+τ))` for the boundary-pinned schedule (α = e^{1/2}); plus the Def-3.1 Θ(1) band legs — `decadeMass_le_logDelta` (≤ ατ·log Δ for every T), `decadeMass_ge_floor` + `decadeMassFloor_pos` (≥ the T-independent positive floor) |
+| `ScaleInvariant/Sigmoid.lean` | `sigmoid_transfer_halves_constant` | the tilt transfer (Plan 622, the novel fusion half): under the schedule `E[σ(L_t)] = α·c(a_t)/(t/τ+1)` and the constant HALVES — `lim (t/τ+1)·E[σ(L_t)] = α/2`; the Gaussian-integral facts (the tilt rule, dominated convergence) are named hypotheses per the `Hope/Basic.lean` precedent, validated numerically by the Rust spec-match; `sigmoid_transfer_gap` (hypothesis-free) is the exact ε(t): `|…−α/2| = α·|c(a_t) − 1/2|` |
+| `ScaleInvariant/Dominates.lean` | `scale_invariant_dominates_ssmax_on_decade_mass` | the comparator ordering (Plan 622): the schedule holds the T-independent floor while both position-decaying comparator families collapse — the ALiBi exponential shape (`C·q^t`) and the SSMax-dilution polynomial shape (`C·(1+t)^{−κ}`) both → 0; SSMax/ALiBi fail the Def-3.1 Θ(1) band |
 
 The headline theorem is `action_bridge_ranking_preserved`: it proves that `ActionBridge::select_action`'s sigmoid projection preserves dot-product ordering. This is the ∀-form of the empirical `g1_3_bridge_ranking_preservation` test in `crates/katgpt-core/src/micro_belief/tests.rs` (Plan 281 G1.3), which samples only 1000 random triples. The Lean theorem holds for **every** triple.
 
@@ -101,6 +104,12 @@ No `sorry`. No `sorryAx`. Verified by `#print axioms`. These are the same axioms
         ├── Loewner.lean                   # T3: Loewner monotonicity + mirror duality
         ├── Eigengap.lean                  # T4: shift lemma + antitone-diagonal pinning + ladder unit gap + the final assembly
         └── SpecTests.lean                 # Spec self-tests: T1 packing, T2 Weyl tightness, T3 Loewner, T4 exact perturbed gap
+    └── ScaleInvariant/                       # Scale-invariant attention (Plan 622 / Research 610, arXiv:2505.17083)
+        ├── Tendsto.lean                      # Shared explicit-bound Tendsto helpers (atTop algebra, no lemma-name roulette)
+        ├── Basic.lean                        # Schedule closed forms + the harmonic-sum interval bound + the Def-3.1 Θ(1) band
+        ├── Sigmoid.lean                      # The tilt transfer: the halving to α/2 + the exact ε(t) gap
+        ├── Dominates.lean                    # The comparator ordering: ALiBi/dilution families → 0 vs the schedule's floor
+        └── SpecTests.lean                    # Spec self-tests: boundary pins, the t = τ paper cell, σ(0) = 1/2, the empty decade, the antitone profile
 ```
 
 ## The f32 caveat (and why it doesn't break the theorem)
@@ -158,6 +167,32 @@ theorems + the concrete-instance spec tests landed:
 - **G3** (Rust spec matches Lean): ✅ `cargo test -p katgpt-core --features
   spectral_pencil --test pencil_spec_match` — 7/7 (T1 ×3, T2 Weyl,
   T4 shift, T4 ladder-exact, T4 seeded-jitter).
+
+**Plan 622 Phase 6 (ScaleInvariant — the Lean trio): COMPLETE 2026-10-11.**
+
+- **G1** (Lean builds): ✅ 5-module ScaleInvariant instance (Tendsto helpers
+  + Basic + Sigmoid + Dominates + SpecTests); `EXPECTED_THEOREMS` 39 → 53
+  (14 audit heads), `proof_gate.sh` **PASSED** — 53 audited, all within
+  `{propext, Classical.choice, Quot.sound}`, zero `sorry`, no
+  `native_decide`.
+- **G2** (honesty of the spec): the Gaussian-integral facts (the exponential
+  tilt rule; the dominated-convergence limit `c → 1/2`) are NAMED
+  HYPOTHESES of `sigmoid_transfer_halves_constant` per the `Hope/Basic.lean`
+  precedent — the proven/assumed split is documented in the file headers,
+  never silently assumed. Everything schedule-side is proven.
+- **G3** (Rust spec matches Lean): ✅ `cargo test -p katgpt-core --features
+  scale_invariant_attn --test scale_invariant_spec_match` — 6/6 (closed
+  forms + boundary pins, the harmonic profile, the interval bounds + band +
+  floor, the tilt identity + exact gap + the monotone drift, the comparator
+  ordering, the `.proofs/` sentinel). The Rust side validates the Lean
+  hypotheses' Gaussian-integral facts numerically (adaptive quadrature,
+  deterministic grids, no RNG). 2151/0 default-posture G3 unchanged;
+  2171/0 wired-posture; clippy 0 at the feature posture.
+
+**The Floor algebra sharpened nothing but confirmed the shape**: the
+T-independent floor's positivity reduces to `(1+τ)(T−1)(Δ−1) ≥ 0` — nonneg
+exactly on the `T ≥ 1, Δ ≥ 1` quadrant, the same tight-threshold shape the
+SSMax proof found (`s_L·log N ≥ 1`, not `N ≥ 2`).
 
 **The headline of the closeout:** Mathlib ships the spectral theorem but
 neither Courant–Fischer nor Weyl — both were built from scratch (the CF

@@ -60,7 +60,16 @@ ALLOWED_AXIOMS=("propext" "Classical.choice" "Quot.sound")
 #        (bandGate_mem_Ioo) — the ideal (0,1) contract the f32 gate
 #        approximates. Added with the pin bumped but the ladder not extended;
 #        recorded here so the pin's justification matches the pin.
-EXPECTED_THEOREMS=39
+#   53 → ScaleInvariant (Plan 622 Phase 6, 2026-10-11): the schedule
+#        skeleton (m_add_aSq, perKeyMass_eq_alpha) + the Lean trio — the
+#        harmonic-sum interval bound (scale_invariant_decade_mass_bounded),
+#        the sigmoid tilt transfer halving (sigmoid_transfer_halves_constant
+#        + sigmoid_transfer_gap), and the comparator ordering
+#        (scale_invariant_dominates_ssmax_on_decade_mass) with its two
+#        comparator families (decadeMassExp/Pow le + tendsto_zero) and the
+#        Def-3.1 band legs (decadeMass_le_logDelta, decadeMassFloor_pos,
+#        decadeMass_ge_floor). 14 audit heads; axiom budget unchanged.
+EXPECTED_THEOREMS=53
 
 # Bare `axiom` declarations that are allowed to exist, by name. Empty here:
 # KatgptProof declares none, and a new one must be justified in review rather
