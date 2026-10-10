@@ -1,7 +1,7 @@
 # Bench 925 — LoT-Fitted Extent Pooling as a Routing Summary Operator (Issue 925 probe)
 
 **Date:** 2026-10-08
-**Issue:** [`.issues/925_lot_fitted_pooling_routing_probe.md`](../.issues/925_lot_fitted_pooling_routing_probe.md) (now CLOSED — this record is its T4 verdict)
+**Issue:** `.issues/925_lot_fitted_pooling_routing_probe.md` (now CLOSED — this record is its T4 verdict)
 **Source:** [arXiv:2610.05816](https://arxiv.org/abs/2610.05816) — *Level-of-Token (LoT) Diffusion* (Nakayama et al., Oct 2026); PASS-redirects in `.research/208` + `.research/379`
 **Test:** `crates/katgpt-attn/tests/issue_925_procrustes_probe.rs`
 (run committed: `cargo test --release -p katgpt-attn --features pyramid_topk,hga --test issue_925_procrustes_probe -- --nocapture`;
