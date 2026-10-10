@@ -69,7 +69,7 @@ knowledge-like ⟺ `V_LCB(N, δ) < ε` — one inequality over the consumed boun
 | 4 | EV-lexicon analysis | No | YES as **design law**: never gate escalation on verbalized confidence; gate on measured V | Recorded here; no code |
 | 5 | Cost-aware reward shape | Partial (`llm_spend` hard caps stop spend, don't shape selection; bench_711 recorded the cost-blindness) | YES — selection utility (gain_cost_halt generalization) | Plan 621 Phase 3 + riir-train 448 |
 | 6 | Multi-depth cost tiers | Partial (ESC chain 2 live depths, static row; `ThermalTier` stub) | YES — EscalateSpec field family | Plan 621 Phase 3; training arm in 448 |
-| 7 | Rescue mining `b0=0 ∧ bd≥3` | Partial (`--misses`/`--frontier` rule-level; arm-H audit not miner) | YES — 8-row truth table | riir-refine Issue 156 |
+| 7 | Rescue mining `b0=0 ∧ bd≥3` | Partial (`--misses`/`--frontier` rule-level; arm-H audit not miner) | YES — 8-row truth table | riir-refine Issue 156 — **T5.2 LANDED 2026-10-11** (refine `893f4df8`, feature `rescue_probe`: the Phase-2 classifier over the ACCUMULATED b0 leg — the attempt-count honesty beside the pinned truth table, augment-only; the arm-H escalation-ordering consumption arms with the first owner-gated ARMED run) |
 | 8 | Query contract (isolation, overlap filter, redaction) | Partial (`code_egress` static snippet scoping ENFORCED) | Partial — dynamic composition needs the trained policy | Training track only (448) |
 | 9 | SFT+GRPO recipe | Stabilizers SHIP (`loss_grpo.rs` DAPO 0.20/0.28 clip pair, `unbiased_advantage`) | — | riir-train Plan 448 (Path 0.5) |
 
