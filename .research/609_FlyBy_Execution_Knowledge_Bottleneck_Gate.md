@@ -65,7 +65,7 @@ knowledge-like ⟺ `V_LCB(N, δ) < ε` — one inequality over the consumed boun
 |---|---|---|---|---|
 | 1 | V(s)/H(s) state probe | Partial (MCTS game-tree values; `normalized_entropy` as drift gate; `mc_ensemble`/`perturbation_ensemble` ensembles). **Miller-Madow absent.** | YES — counting + two closed forms | Plan 621 Phase 1 |
 | 2 | Bottleneck classifier | Partial (`hint_regret::triage` — offline content-level) | YES — LCB inequality + adaptive-N | Plan 621 Phase 2 |
-| 3 | Paired counterfactual ΔV protocol | Partial (`ab_timing`, `hint_regret` CRN pairs) | YES — harness lane, offline | Plan 621 Phase 5 (reflex `--probe-delta-ab`) |
+| 3 | Paired counterfactual ΔV protocol | Partial (`ab_timing`, `hint_regret` CRN pairs) | YES — harness lane, offline | Plan 621 Phase 5 (reflex `--probe-delta-ab`) — **LANDED 2026-10-11** (reflex `2680159`, feature `probe_delta_ab`: the sign test over the discordant pairs + the adaptive-N disclosure on the corpus-ab frozen read; real first read massive_intent_en 11W/1L → MOVES VALUE, settled @ n=128) |
 | 4 | EV-lexicon analysis | No | YES as **design law**: never gate escalation on verbalized confidence; gate on measured V | Recorded here; no code |
 | 5 | Cost-aware reward shape | Partial (`llm_spend` hard caps stop spend, don't shape selection; bench_711 recorded the cost-blindness) | YES — selection utility (gain_cost_halt generalization) | Plan 621 Phase 3 + riir-train 448 |
 | 6 | Multi-depth cost tiers | Partial (ESC chain 2 live depths, static row; `ThermalTier` stub) | YES — EscalateSpec field family | Plan 621 Phase 3; training arm in 448 |

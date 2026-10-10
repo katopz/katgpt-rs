@@ -1,6 +1,6 @@
 # Plan 621: State Probe + Bottleneck-Gated Escalation (`state_probe`, `escalation_probe_gate`)
 
-> **Status:** Active — Phase 1 (T1.1–T1.4) LANDED 2026-10-08 (opt-in `state_probe`, katgpt-core only); **Phase 2 (T2.1–T2.3) + Phase 3 kernel (T3.1/T3.3/T3.4) LANDED 2026-10-10** (opt-in `escalation_probe_gate` implies `state_probe`; G3/G4 green, truth tables pinned); **Phase 4 healer-lane eval LANDED 2026-10-11** ([.benchmarks/621_escalation_eval_goat.md](../.benchmarks/621_escalation_eval_goat.md): matched-spend rescues 2.66× the incumbent at precision 1.00 vs 0.34–0.40, identical rescues at 40 % spend uncapped, G2 cost cell 350× under the bar — Super-GOAT ON THE DECLARED MODEL, promotion stays opt-in for the T5.2 consumer's re-gate); T3.2 seam adapters are CONSUMER-side composition (refine Issue 156 + the reflex/instinct ESC seams — not this repo); Phase 5 consumers + docs pending
+> **Status:** Active — Phase 1 (T1.1–T1.4) LANDED 2026-10-08 (opt-in `state_probe`, katgpt-core only); **Phase 2 (T2.1–T2.3) + Phase 3 kernel (T3.1/T3.3/T3.4) LANDED 2026-10-10** (opt-in `escalation_probe_gate` implies `state_probe`; G3/G4 green, truth tables pinned); **Phase 4 healer-lane eval LANDED 2026-10-11** ([.benchmarks/621_escalation_eval_goat.md](../.benchmarks/621_escalation_eval_goat.md): matched-spend rescues 2.66× the incumbent at precision 1.00 vs 0.34–0.40, identical rescues at 40 % spend uncapped, G2 cost cell 350× under the bar — Super-GOAT ON THE DECLARED MODEL, promotion stays opt-in for the T5.2 consumer's re-gate); **T5.1 LANDED 2026-10-11** (reflex `2680159`, the `--probe-delta-ab` certification lane — real first read MOVES VALUE, settled @ n=128); T5.3 DONE 2026-10-11; T3.2 seam adapters are CONSUMER-side composition (refine Issue 156 + the reflex/instinct ESC seams — not this repo); remaining: T5.2 (refine rescue predicate, consumer) + T5.4 (promotion, gated on T5.2's real-telemetry re-gate)
 **Date:** 2026-10-08
 **Research:** [katgpt-rs/.research/609_FlyBy_Execution_Knowledge_Bottleneck_Gate.md](../.research/609_FlyBy_Execution_Knowledge_Bottleneck_Gate.md)
 **Source paper:** [arXiv:2609.34327](https://arxiv.org/abs/2609.34327) — FlyBy (KAIST 2026); decision layer only, zero training
@@ -67,9 +67,11 @@ Ship the modelless decision layer of FlyBy: a probe kernel (`V̂`, Miller-Madow 
 
 ### Tasks
 
-- [ ] **T5.1** reflex harness lane `--probe-delta-ab` (offline paired certification that an intervention class moves value) — reflex-side, consumer only.
+- [x] **T5.1** reflex harness lane `--probe-delta-ab` (offline paired certification that an intervention class moves value) — reflex-side, consumer only.
+  → **LANDED 2026-10-11** — reflex `2680159` (feature `probe_delta_ab` → `katgpt-core/state_probe`; `src/harness/probe_delta.rs`): the FlyBy paired counterfactual ΔV protocol over the corpus-ab lane's frozen read — discordant pairs = the ensemble, win-rate = V̂, `classify(ε = 0.5)` = the sign test (MOVES VALUE / NO VALUE / UNDETERMINED), the adaptive prefix walk discloses `settled_at_n` + every flip with its width; the full frozen read is the certification of record. AUGMENTS the V5 paired-LB95 gate (byte-identical verdict, G3 377/0 default · 385/0 feature · clippy 0 ×3 postures). Real first read: massive_intent_en 11W/1L → MOVES VALUE, settled @ n=128. 8 module tests pin the geometry.
 - [ ] **T5.2** riir-refine Issue 156 rescue predicate consumes `ProbeEstimate` (state-level b0/bd).
-- [ ] **T5.3** README + `count_features` sync; cross-refs from Research 609.
+- [x] **T5.3** README + `count_features` sync; cross-refs from Research 609.
+  → **DONE 2026-10-11** — `count_features.py` green (685 = measured, all claim sites match; the two features are default-off opt-ins, correctly outside the README's default-on listing); Research 609 row 3 carries the T5.1 landed hash; the T5.2 consumer cross-ref rides that landing's commit.
 - [ ] **T5.4** Promotion/demotion: GOAT pass + modelless gain → promote `escalation_probe_gate` per flag discipline; the cap-only incumbent is RETAINED as the G3 fallback, never deleted.
 
 ---
