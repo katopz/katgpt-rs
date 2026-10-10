@@ -484,6 +484,23 @@ pub mod shard_embedding;
 // G1+G2+G3+G4+G5 ALL PASS.
 #[cfg(feature = "ssmax_temperature")]
 pub mod ssmax;
+// Scale-Invariant Attention — the position-dependent affine logit schedule
+// (Plan 622, Research 610 — arXiv:2505.17083 Anson/Wang/Aitchison NeurIPS
+// 2025). Distance-indexed `L_t → a_t·L_t + m_t` LUT: the position-DEPENDENT
+// generalization of ssmax's position-INDEPENDENT scalar (the signal-diff
+// justifying a separate primitive — Research 610 §3.6). α = β = e^0.5
+// derived from the (a₀², m₀) = (1, 0) boundary pin; single knob τ.
+// ORDERING LAW: ssmax and scale_invariant are BOTH length temperatures —
+// arming both stacks two sharpeners; the ParallaxConfig combination is a
+// loud config error (pinned by test). SINK CARVE-OUT: key 0 (BOS) is
+// excluded from the transform (the paper's Gaussianity premise, App. J).
+// Serves both arms — SDPA (`tiled_attention_forward_si`, FlexAttention
+// score_mod shape) and parallax (`ParallaxConfig::scale_invariant`, the
+// a_t multiplicative + m_t additive lanes over softmax AND normalized
+// sigmoid; the sigmoid tilt transfer E[σ(L_t)] = (α/2+o(1))/(t/τ+1) is the
+// novel fusion half, Research 610). Opt-in until G1–G4 (Plan 622 Phase 7).
+#[cfg(feature = "scale_invariant_attn")]
+pub mod scale_invariant;
 // Kamath range-law regime detector + normalized-entropy dispersion diagnostic
 // (Issue 762 T4.2, Research 549 — the ASEntmax duality's measurement half,
 // beside ssmax: same statistics family). `ρ = Δ̂/(2σ̂√(2 ln n))` classifies a
@@ -927,6 +944,9 @@ pub use coda::{MoaActivation, moa_swiglu, simd_matmul_rmsnorm_moa_swiglu};
 pub use attention::{
     tiled_attention_batched, tiled_attention_forward, tiled_attention_forward_with_scores,
 };
+
+#[cfg(all(feature = "tiled_attention", feature = "scale_invariant_attn"))]
+pub use attention::tiled_attention_forward_si;
 
 #[cfg(feature = "parallax_attn")]
 pub use parallax_attn::{

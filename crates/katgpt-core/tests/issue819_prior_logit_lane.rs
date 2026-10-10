@@ -245,6 +245,8 @@ fn lane_composes_with_ssmax() {
         activation: ParallaxActivation::Sigmoid,
         ssmax: Some(SsmaxMode::Fixed { s_l: 1.0 }),
         prior_logits: lane_from(lane),
+        #[cfg(feature = "scale_invariant_attn")]
+        scale_invariant: None,
     };
     let w = forward_core(l, &cfg);
     let expect = sigmoid(4.0) / (sigmoid(4.0) + (l as f32 - 1.0) * sigmoid(0.0));

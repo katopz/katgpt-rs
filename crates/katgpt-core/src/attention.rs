@@ -51,7 +51,19 @@ pub fn tiled_attention_forward(
     head_dim: usize,
     scale: f32,
 ) {
-    tiled_attention_forward_impl(q, k, v, output, seq_len, head_dim, scale, None, None);
+    tiled_attention_forward_impl(
+        q,
+        k,
+        v,
+        output,
+        seq_len,
+        head_dim,
+        scale,
+        None,
+        None,
+        #[cfg(feature = "scale_invariant_attn")]
+        None,
+    );
 }
 
 /// SSMax-augmented tiled attention forward (Plan 411 T2.4).
@@ -94,7 +106,66 @@ pub fn tiled_attention_forward_ssmax(
         0.0
     };
     let ssmax_scale = scale * ssmax.multiplier(log_n);
-    tiled_attention_forward_impl(q, k, v, output, seq_len, head_dim, ssmax_scale, None, None);
+    tiled_attention_forward_impl(
+        q,
+        k,
+        v,
+        output,
+        seq_len,
+        head_dim,
+        ssmax_scale,
+        None,
+        None,
+        #[cfg(feature = "scale_invariant_attn")]
+        None,
+    );
+}
+
+/// Scale-invariant attention forward (Plan 622 Phase 2, Research 610 —
+/// arXiv:2505.17083).
+///
+/// Identical to [`tiled_attention_forward`] but applies the position-dependent
+/// affine logit schedule `s_ij → a_{i−j}·s_ij + m_{i−j}` per key AFTER the
+/// QKᵀ product and BEFORE online-max tracking — the FlexAttention
+/// `score_mod` shape (the paper's own implementation vehicle; the transform
+/// cannot fold into `scale` the way SSMax's scalar does, because it varies
+/// per key).
+///
+/// Contract inherited from [`crate::scale_invariant::ScaleInvariantLut`]:
+/// key 0 (BOS sink) is never transformed; keys at/ahead of the query pass
+/// through bit-exact; the LUT's `max_ctx` must cover `seq_len − 1` (loud
+/// failure otherwise).
+///
+/// # Ordering law
+///
+/// This wrapper does NOT compose with [`tiled_attention_forward_ssmax`] —
+/// both are length temperatures, and stacking double-sharpens. In the
+/// parallax config the combination is a loud error; at this API level the
+/// two wrappers are separate calls, so the caller picks exactly one.
+#[cfg(all(feature = "tiled_attention", feature = "scale_invariant_attn"))]
+#[allow(clippy::too_many_arguments)]
+pub fn tiled_attention_forward_si(
+    q: &[f32],
+    k: &[f32],
+    v: &[f32],
+    output: &mut [f32],
+    seq_len: usize,
+    head_dim: usize,
+    scale: f32,
+    si: &crate::scale_invariant::ScaleInvariantLut,
+) {
+    tiled_attention_forward_impl(
+        q,
+        k,
+        v,
+        output,
+        seq_len,
+        head_dim,
+        scale,
+        None,
+        None,
+        Some(si),
+    );
 }
 
 /// Implementation that accepts an optional pre-allocated scores scratch buffer.
@@ -115,7 +186,19 @@ pub fn tiled_attention_forward_with_scores(
     scale: f32,
     scores_buf: Option<&mut [f32]>,
 ) {
-    tiled_attention_forward_impl(q, k, v, output, seq_len, head_dim, scale, scores_buf, None);
+    tiled_attention_forward_impl(
+        q,
+        k,
+        v,
+        output,
+        seq_len,
+        head_dim,
+        scale,
+        scores_buf,
+        None,
+        #[cfg(feature = "scale_invariant_attn")]
+        None,
+    );
 }
 
 /// Inner implementation: accepts optional pre-allocated `scores_buf` and `o_tile`
@@ -133,6 +216,7 @@ fn tiled_attention_forward_impl(
     scale: f32,
     scores_buf: Option<&mut [f32]>,
     o_tile: Option<&mut [f32]>,
+    #[cfg(feature = "scale_invariant_attn")] si: Option<&crate::scale_invariant::ScaleInvariantLut>,
 ) {
     let expected = seq_len * head_dim;
     debug_assert_eq!(q.len(), expected, "Q slice length mismatch");
@@ -145,7 +229,19 @@ fn tiled_attention_forward_impl(
         n if n < TILED_ATTENTION_THRESHOLD => {
             let needed = seq_len * seq_len;
             let buf = scores_buf;
-            attention_fallback(q, k, v, output, seq_len, head_dim, scale, buf, needed);
+            attention_fallback(
+                q,
+                k,
+                v,
+                output,
+                seq_len,
+                head_dim,
+                scale,
+                buf,
+                needed,
+                #[cfg(feature = "scale_invariant_attn")]
+                si,
+            );
             return;
         }
         _ => {}
@@ -173,6 +269,8 @@ fn tiled_attention_forward_impl(
         scale,
         o_tile,
         &mut NoStats,
+        #[cfg(feature = "scale_invariant_attn")]
+        si,
     );
 }
 
@@ -307,7 +405,19 @@ pub fn tiled_attention_forward_snr(
         r2: [0.0; BR],
         out: stats,
     };
-    tiled_attention_inner(q, k, v, output, seq_len, head_dim, scale, o_tile, &mut sink);
+    tiled_attention_inner(
+        q,
+        k,
+        v,
+        output,
+        seq_len,
+        head_dim,
+        scale,
+        o_tile,
+        &mut sink,
+        #[cfg(feature = "scale_invariant_attn")]
+        None,
+    );
 }
 
 /// Inner tiled attention implementation with online-softmax.
@@ -338,6 +448,7 @@ fn tiled_attention_inner<S: TileStats>(
     // Per-row statistics sink. `NoStats` compiles every hook to nothing, so the
     // plain forward is the same machine code it was before the sink existed.
     stats: &mut S,
+    #[cfg(feature = "scale_invariant_attn")] si: Option<&crate::scale_invariant::ScaleInvariantLut>,
 ) {
     let log2e_scale = scale * std::f32::consts::LOG2_E;
     let q_tiles = seq_len.div_ceil(BR);
@@ -392,7 +503,24 @@ fn tiled_attention_inner<S: TileStats>(
                 }
                 // j >= actual_bc: never read (see the s_tile note above)
             }
-            // i >= actual_br: stays -inf (boundary query rows)
+
+            // Scale-invariant per-key affine (Plan 622 Phase 2, Research 610):
+            // the FlexAttention score_mod shape — transform scores after the
+            // QKᵀ product, BEFORE online-max tracking. Distance
+            // t = (q_start + i) − (k_start + j); the sink key and future keys
+            // pass through untouched inside `apply_inplace`. No-op when None
+            // (the bit-identical flag-off path).
+            #[cfg(feature = "scale_invariant_attn")]
+            if let Some(lut) = si {
+                for i in 0..actual_br {
+                    lut.apply_inplace(
+                        &mut s_tile[i * BC..i * BC + actual_bc],
+                        q_start + i,
+                        k_start,
+                        scale,
+                    );
+                }
+            }
 
             // 2+3. Row max + correction + P̃ + accumulate (fused per row)
             for i in 0..actual_br {
@@ -483,6 +611,7 @@ fn attention_fallback(
     scale: f32,
     scores_buf: Option<&mut [f32]>,
     needed: usize,
+    #[cfg(feature = "scale_invariant_attn")] si: Option<&crate::scale_invariant::ScaleInvariantLut>,
 ) {
     if seq_len == 0 {
         return;
@@ -514,6 +643,17 @@ fn attention_fallback(
         for (j, s) in s_row.iter_mut().enumerate() {
             let k_off = j * head_dim;
             *s = crate::simd::simd_dot_f32(q_row, &k[k_off..k_off + head_dim], head_dim);
+        }
+    }
+
+    // 1.5. Scale-invariant per-key affine (Plan 622 Phase 2): transform the
+    // full score rows after QKᵀ, before the softmax pass. Same contract as
+    // the tiled kernel's hook — sink key + future keys pass through; no-op
+    // when None (bit-identical).
+    #[cfg(feature = "scale_invariant_attn")]
+    if let Some(lut) = si {
+        for i in 0..seq_len {
+            lut.apply_inplace(&mut scores[i * seq_len..(i + 1) * seq_len], i, 0, scale);
         }
     }
 
@@ -619,6 +759,8 @@ pub fn tiled_attention_batched(
                     scale,
                     Some(&mut scores[..scores_buf_size]),
                     Some(&mut o_tile[..o_tile_size]),
+                    #[cfg(feature = "scale_invariant_attn")]
+                    None,
                 );
             });
         });
@@ -803,6 +945,131 @@ mod ssmax_tests {
                 (out_i - 0.5).abs() < 1e-5,
                 "n=1 output[{i}] = {out_i}, expected 0.5"
             );
+        }
+    }
+}
+
+#[cfg(all(test, feature = "tiled_attention", feature = "scale_invariant_attn"))]
+mod si_tests {
+    use super::*;
+    use crate::scale_invariant::ScaleInvariantLut;
+
+    /// Deterministic inputs (the ssmax_tests house pattern).
+    fn gen_qkv(seq_len: usize, head_dim: usize) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+        let q: Vec<f32> = (0..seq_len * head_dim)
+            .map(|i| ((i as f32) * 0.07).sin())
+            .collect();
+        let k: Vec<f32> = (0..seq_len * head_dim)
+            .map(|i| ((i as f32) * 0.05).cos())
+            .collect();
+        let v: Vec<f32> = (0..seq_len * head_dim)
+            .map(|i| ((i as f32) * 0.03).sin())
+            .collect();
+        (q, k, v)
+    }
+
+    /// Independent naive reference: full score matrix → per-key affine (skip
+    /// sink key 0; skip future keys) → softmax → scores @ V. Spelled from the
+    /// closed form via the LUT's own `pair` accessor (the LUT construction is
+    /// separately pinned to the closed form by the module tests).
+    fn naive_si_forward(
+        q: &[f32],
+        k: &[f32],
+        v: &[f32],
+        seq_len: usize,
+        head_dim: usize,
+        scale: f32,
+        lut: &ScaleInvariantLut,
+    ) -> Vec<f32> {
+        let mut out = vec![0.0f32; seq_len * head_dim];
+        for i in 0..seq_len {
+            let mut scores: Vec<f32> = (0..seq_len)
+                .map(|j| {
+                    let dot: f32 =
+                        (0..head_dim).map(|e| q[i * head_dim + e] * k[j * head_dim + e]).sum();
+                    dot * scale
+                })
+                .collect();
+            for (j, s) in scores.iter_mut().enumerate() {
+                if j == 0 || j > i {
+                    continue; // sink carve-out + future pass-through
+                }
+                let (a, m) = lut.pair(i - j);
+                *s = a * *s + m;
+            }
+            let max = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            for s in &mut scores {
+                *s = (*s - max).exp();
+            }
+            let sum: f32 = scores.iter().sum();
+            for (j, &p) in scores.iter().enumerate() {
+                for e in 0..head_dim {
+                    out[i * head_dim + e] += p / sum * v[j * head_dim + e];
+                }
+            }
+        }
+        out
+    }
+
+    /// The si wrapper must match the naive per-key affine reference on BOTH
+    /// internal paths: the materialized fallback (seq 16 < threshold) and the
+    /// tiled online-softmax kernel (seq 130 ≥ threshold, where the transform
+    /// rides between the QKᵀ tile and the online-max update).
+    #[test]
+    fn si_wrapper_matches_naive_reference_both_paths() {
+        let head_dim = 8;
+        let scale = 1.0 / (head_dim as f32).sqrt();
+        let lut = ScaleInvariantLut::build(10.0, 256);
+        for seq_len in [16usize, 130usize] {
+            let (q, k, v) = gen_qkv(seq_len, head_dim);
+            let mut out = vec![0.0f32; seq_len * head_dim];
+            tiled_attention_forward_si(&q, &k, &v, &mut out, seq_len, head_dim, scale, &lut);
+            let reference = naive_si_forward(&q, &k, &v, seq_len, head_dim, scale, &lut);
+            for (i, (&x, &y)) in out.iter().zip(&reference).enumerate() {
+                assert!(
+                    (x - y).abs() <= 1e-5,
+                    "seq {seq_len}: [{i}] {x} vs {y} (Δ = {})",
+                    (x - y).abs()
+                );
+            }
+        }
+    }
+
+    /// Near-identity LUT (huge τ: a_t ≈ 1, m_t ≈ 0 over the whole window)
+    /// must reproduce the plain forward within quadrature noise — the
+    /// "flag-on-but-neutral" posture, and the plumbing's no-regression proof.
+    #[test]
+    fn si_near_identity_lut_matches_plain_forward() {
+        let seq_len = 40;
+        let head_dim = 8;
+        let scale = 1.0 / (head_dim as f32).sqrt();
+        let (q, k, v) = gen_qkv(seq_len, head_dim);
+        let lut = ScaleInvariantLut::build(1.0e7, 64);
+        let mut out_si = vec![0.0f32; seq_len * head_dim];
+        let mut out_plain = vec![0.0f32; seq_len * head_dim];
+        tiled_attention_forward_si(&q, &k, &v, &mut out_si, seq_len, head_dim, scale, &lut);
+        tiled_attention_forward(&q, &k, &v, &mut out_plain, seq_len, head_dim, scale);
+        for (i, (&x, &y)) in out_si.iter().zip(&out_plain).enumerate() {
+            assert!(
+                (x - y).abs() <= 1e-4,
+                "near-identity LUT must match plain forward: [{i}] {x} vs {y}"
+            );
+        }
+    }
+
+    /// n=1: the single key is the sink — the schedule is a no-op and the
+    /// output is V, same as the plain forward's n=1 contract.
+    #[test]
+    fn si_n1_is_v() {
+        let head_dim = 4;
+        let q = [1.0f32, 0.0, 0.0, 0.0];
+        let k = [1.0f32, 0.0, 0.0, 0.0];
+        let v = [0.5f32, 0.5, 0.5, 0.5];
+        let mut output = [0.0f32; 4];
+        let lut = ScaleInvariantLut::build(10.0, 8);
+        tiled_attention_forward_si(&q, &k, &v, &mut output, 1, head_dim, 0.25, &lut);
+        for (i, &out_i) in output.iter().enumerate() {
+            assert!((out_i - 0.5).abs() < 1e-5, "n=1 output[{i}] = {out_i}");
         }
     }
 }

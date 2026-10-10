@@ -186,6 +186,26 @@ pub struct ParallaxConfig {
     /// `parallax_attn` feature that compiles this module).
     #[cfg(feature = "prior_logit_lane")]
     pub prior_logits: Option<std::sync::Arc<[f32]>>,
+    /// Optional scale-invariant schedule LUT (Plan 622 Phase 2, Research 610
+    /// — arXiv:2505.17083). When `Some`, the forward applies the per-key
+    /// affine `s → a_{i−j}·s + m_{i−j}` before normalization — `a_t` rides a
+    /// per-key MULTIPLICATIVE lane (sibling of the additive
+    /// `prior_logit_lane` shape) and `m_t` reuses the additive shape, one
+    /// fused affine per key, distance-indexed. BOTH arms (softmax and
+    /// normalized sigmoid) consume the same LUT — the sigmoid tilt transfer
+    /// gives the sigmoid arm its first length-generalization mechanism.
+    ///
+    /// ORDERING LAW: this field and [`ParallaxConfig::ssmax`] are BOTH length
+    /// temperatures; arming both stacks two sharpeners and is a LOUD config
+    /// error (asserted in the forward, pinned by test). The sink key (0) is
+    /// excluded from the transform; future keys pass through bit-exact.
+    /// Cost: one fused affine per causal key per row; zero alloc (the owned
+    /// Arc LUT is built once per session and shared). Default `None` is the
+    /// bit-identical constant path. Only present when the
+    /// `scale_invariant_attn` feature is enabled (and the `parallax_attn`
+    /// feature that compiles this module).
+    #[cfg(feature = "scale_invariant_attn")]
+    pub scale_invariant: Option<std::sync::Arc<crate::scale_invariant::ScaleInvariantLut>>,
 }
 
 impl Default for ParallaxConfig {
@@ -197,6 +217,8 @@ impl Default for ParallaxConfig {
             ssmax: None,
             #[cfg(feature = "prior_logit_lane")]
             prior_logits: None,
+            #[cfg(feature = "scale_invariant_attn")]
+            scale_invariant: None,
         }
     }
 }
@@ -276,6 +298,27 @@ fn apply_prior_lane_to_row(row: &mut [f32], prior_logits: Option<&[f32]>) {
         for (s, &l) in row.iter_mut().zip(lane) {
             *s += l;
         }
+    }
+}
+
+/// Apply the scale-invariant per-key affine schedule to a score row, if
+/// configured. No-op when `si` is `None` (the bit-identical constant path).
+///
+/// Plan 622 Phase 2 (Research 610): `a_t` rides the per-key MULTIPLICATIVE
+/// lane and `m_t` reuses the additive lane shape — one fused affine
+/// `s → a_{i−j}·s + m_{i−j}` per key, distance-indexed by the query's global
+/// row index. Applied BEFORE normalization, in place of (never beside) SSMax
+/// — the ordering law. The sink key (0) and future keys pass through inside
+/// [`crate::scale_invariant::ScaleInvariantLut::apply_inplace`].
+#[cfg(feature = "scale_invariant_attn")]
+#[inline]
+fn apply_scale_invariant_to_row(
+    row: &mut [f32],
+    si: Option<&crate::scale_invariant::ScaleInvariantLut>,
+    query_i: usize,
+) {
+    if let Some(lut) = si {
+        lut.apply_inplace(row, query_i, 0, 1.0);
     }
 }
 
@@ -514,6 +557,16 @@ pub fn tiled_attention_parallax_forward_retaining(
         );
     }
 
+    // ORDERING LAW (Plan 622, Research 610): scale_invariant and ssmax are
+    // BOTH length temperatures — arming both stacks two sharpeners and
+    // double-sharpens attention. Loud config error in both profiles.
+    #[cfg(all(feature = "scale_invariant_attn", feature = "ssmax_temperature"))]
+    assert!(
+        parallax_config.scale_invariant.is_none() || parallax_config.ssmax.is_none(),
+        "scale_invariant_attn and ssmax_temperature are both length temperatures — \
+         arming both double-sharpens attention (Plan 622 ordering law); arm exactly one"
+    );
+
     if seq_len == 0 {
         return;
     }
@@ -562,6 +615,8 @@ pub fn tiled_attention_parallax_forward_retaining(
             parallax_config.ssmax.as_ref(),
             #[cfg(feature = "prior_logit_lane")]
             parallax_config.prior_logits.as_deref(),
+            #[cfg(feature = "scale_invariant_attn")]
+            parallax_config.scale_invariant.as_deref(),
         );
         return;
     }
@@ -583,6 +638,17 @@ pub fn tiled_attention_parallax_forward_retaining(
             let k_off = j * d;
             scratch.scores[j] = simd::simd_dot_f32(q_row, &k[k_off..k_off + d], d) * scale;
         }
+
+        // Scale-invariant per-key affine schedule (Plan 622 Phase 2).
+        // Applied FIRST among the length lanes — it REPLACES SSMax (the
+        // ordering law asserts they are never both armed above) and before
+        // the additive prior lane. No-op when None.
+        #[cfg(feature = "scale_invariant_attn")]
+        apply_scale_invariant_to_row(
+            &mut scratch.scores[..n],
+            parallax_config.scale_invariant.as_deref(),
+            i,
+        );
 
         // SSMax: rescale scores by s_L · log(N) before normalization.
         // No-op when ssmax is None (the default).
@@ -1008,6 +1074,8 @@ fn tiled_attention_core(
     mut attn_matrix: Option<&mut [f32]>,
     #[cfg(feature = "ssmax_temperature")] ssmax: Option<&crate::ssmax::SsmaxMode>,
     #[cfg(feature = "prior_logit_lane")] prior_logits: Option<&[f32]>,
+    #[cfg(feature = "scale_invariant_attn")]
+    si: Option<&crate::scale_invariant::ScaleInvariantLut>,
 ) {
     let d = head_dim;
     let n = seq_len;
@@ -1036,6 +1104,13 @@ fn tiled_attention_core(
             let k_off = j * d;
             *score_slot = simd::simd_dot_f32(q_row, &k[k_off..k_off + d], d) * scale;
         }
+
+        // Scale-invariant per-key affine schedule (Plan 622 Phase 2).
+        // Applied FIRST among the length lanes — it REPLACES SSMax (the
+        // ordering law is asserted by the caller above) and before the
+        // additive prior lane. No-op when None.
+        #[cfg(feature = "scale_invariant_attn")]
+        apply_scale_invariant_to_row(&mut scores[..n], si, i);
 
         // SSMax: rescale scores by s_L · log(N) before normalization.
         // No-op when ssmax is None (the default).

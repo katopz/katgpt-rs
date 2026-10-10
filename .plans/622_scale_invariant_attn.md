@@ -1,6 +1,6 @@
 # Plan 622: Scale-Invariant Attention — `scale_invariant_attn`
 
-**Status:** Planned — GOAT verdict (Research 610; verdict ping-pong AGREE 2026-10-08, 4 amendments adopted). Opt-in `scale_invariant_attn` until G1–G4 pass. Track (a) modelless, PRIMARY. Training track: riir-train Plan 449 (SECONDARY, owns the pp-RoPE quality claim).
+**Status:** Active — Phase 1 + Phase 2 LANDED 2026-10-10 (opt-in `scale_invariant_attn`; LUT primitive + SDPA hook + parallax both-arm wiring + the tilt/Lemma G1 instruments, 404 tests green at the wired posture / 2151 default-posture no-regression / clippy 0 both postures). Phase 3 (per-head calibration) not started; Phase 4 targets riir-infer (contended this session); Phases 5–7 pending (5 diagnostics, 6 Lean, 7 GOAT — G2/G3 box/GPU-gated). Track (a) modelless, PRIMARY. Training track: riir-train Plan 449 (SECONDARY, owns the pp-RoPE quality claim).
 
 Source: arXiv:2505.17083 v2 (Anson/Wang/Aitchison, NeurIPS 2025). Distillation: `.research/610_Scale_Invariant_Attention.md`. Signal-diff vs shipped `ssmax.rs` (Plan 411): position-DEPENDENT per-distance (a_t, m_t) vs position-INDEPENDENT scalar s_L·log(N) — real delta, not covered.
 
@@ -15,17 +15,17 @@ Source: arXiv:2505.17083 v2 (Anson/Wang/Aitchison, NeurIPS 2025). Distillation: 
 
 ## Phase 1 — LUT + primitive (`katgpt-core/src/scale_invariant.rs`)
 
-- [ ] `ScaleInvariantLut { am: Vec<f32>, tau: f32 }` interleaved a_t|m_t, `build(tau, max_ctx)` with the β ≥ α·log α validity assert; constants α=β=e^0.5 derived from the (a₀², m₀)=(1,0) boundary pin, not hard-coded.
-- [ ] `apply_inplace(&self, scores: &mut [f32], query_i, key_start)` — distance-indexed affine `s → a_t·s + m_t` over the contiguous reversed slice; chunked 8-wide for LLVM auto-vectorization (ssmax.rs house pattern).
-- [ ] Feature `scale_invariant_attn` (opt-in); lib.rs module doc states the ordering law + sink carve-out.
-- [ ] Boundary/safety tests: a₀²=1, m₀=0 exact; near-identity ramp for t ≤ τ; no NaN for t up to 10⁶.
+- [x] `ScaleInvariantLut { am: Vec<f32>, tau: f32 }` interleaved a_t|m_t, `build(tau, max_ctx)` with the β ≥ α·log α validity assert; constants α=β=e^0.5 derived from the (a₀², m₀)=(1,0) boundary pin, not hard-coded.
+- [x] `apply_inplace(&self, scores: &mut [f32], query_i, key_start)` — distance-indexed affine `s → a_t·s + m_t` over the contiguous reversed slice; chunked 8-wide for LLVM auto-vectorization (ssmax.rs house pattern). **Landed as `apply_inplace(scores, query_i, key_start, logit_scale)`** — the SDPA kernels fold `scale` at their exp step, so the affine must enter in pre-scale space (`m_t/scale`; a_t commutes) — folding scale AFTER the affine would wrongly rescale m_t (the same unscaled-lane law as the prior lane). Callers already in logit space (parallax) pass 1.0 — `m·1.0 == m` IEEE-exact, bit-identical. The plan's 8-wide chunk form is ALSO a recorded deviation: the transform is a gather-indexed affine (per-element distance), not a uniform op — LLVM cannot vectorize it either way; the shipped loop is the branch-free causal-segment enumerate form (segment split = future-key bit-exact skip + sink carve-out), and the plan language moves to G2 where the real vectorization question lives.
+- [x] Feature `scale_invariant_attn` (opt-in); lib.rs module doc states the ordering law + sink carve-out.
+- [x] Boundary/safety tests: a₀²=1, m₀=0 exact; near-identity ramp for t ≤ τ; no NaN for t up to 10⁶.
 
 ## Phase 2 — Attention wiring (both arms)
 
-- [ ] `attention.rs` SDPA: per-key affine hook in the pre-softmax score path, before online-max tracking (FlexAttention score_mod shape); flag-off = bit-identical.
-- [ ] `parallax_attn`: a_t rides a new per-key MULTIPLICATIVE lane (sibling of the existing gated `prior_logit_lane` additive lane); m_t reuses the additive lane shape; both arms (softmax + normalized sigmoid) consume the same LUT.
-- [ ] Sigmoid-arm mass assertion (unit test): measured E[σ(L_t)]·(t/τ+1)/α equals the Gauss–Hermite E[σ(−L′_t)] within 1e-6 (algebra identity).
-- [ ] SSMax mutual-exclusion: enabling both together is a loud config error (or the schedule bypasses SSMax silently with a one-line log) — pick one, pin it in a test.
+- [x] `attention.rs` SDPA: per-key affine hook in the pre-softmax score path, before online-max tracking (FlexAttention score_mod shape); flag-off = bit-identical. (`tiled_attention_forward_si`, cfg `all(tiled_attention, scale_invariant_attn)`; hook rides both the tiled kernel and the materialized fallback.)
+- [x] `parallax_attn`: a_t rides a new per-key MULTIPLICATIVE lane (sibling of the existing gated `prior_logit_lane` additive lane); m_t reuses the additive lane shape; both arms (softmax + normalized sigmoid) consume the same LUT. (`ParallaxConfig::scale_invariant: Option<Arc<ScaleInvariantLut>>`; applied FIRST among the lanes — si REPLACES ssmax, prior lane stays after.)
+- [x] Sigmoid-arm mass assertion (unit test): measured E[σ(L_t)]·(t/τ+1)/α equals the Gauss–Hermite E[σ(−L′_t)] within 1e-6 (algebra identity). **Instrument note:** the σ integrand's transition (width ~1/a in the standardized variable) is MISSED by Gauss–Hermite nodes once a ≳ 5 — 40-node GH read 15× noise at a=10; the shipped instrument is adaptive Simpson (±40σ, tol 1e-12) for every σ-integrand test, GH retained only where it is the right tool (the e^x Lemma — entire integrand, spectrally exact; + the polynomial-exactness moment guard). Both sides of the identity now carry independent accurate quadrature; the 1e-6 bar holds on all six t-decades to 10⁴.
+- [x] SSMax mutual-exclusion: enabling both together is a loud config error (or the schedule bypasses SSMax silently with a one-line log) — pick one, pin it in a test. **Picked the loud config error** (assert in `tiled_attention_parallax_forward_retaining`, fires in both profiles, message names the ordering law; `#[should_panic]` test pinned). At the SDPA API level the two wrappers are separate calls — no composition exists to refuse.
 
 ## Phase 3 — Per-head logit calibration (training-free)
 

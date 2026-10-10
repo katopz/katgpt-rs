@@ -96,6 +96,8 @@ fn test_parallax_recovers_softmax_gate_zero() {
         None,
         #[cfg(feature = "prior_logit_lane")]
         None,
+        #[cfg(feature = "scale_invariant_attn")]
+        None,
     );
 
     for (i, (&a, &b)) in output_parallax.iter().zip(output_ref.iter()).enumerate() {
@@ -159,6 +161,8 @@ fn test_parallax_recovers_softmax_zero_r() {
         #[cfg(feature = "ssmax_temperature")]
         None,
         #[cfg(feature = "prior_logit_lane")]
+        None,
+        #[cfg(feature = "scale_invariant_attn")]
         None,
     );
 
@@ -265,6 +269,8 @@ fn test_parallax_sigmoid_recovers_base() {
         #[cfg(feature = "ssmax_temperature")]
         None,
         #[cfg(feature = "prior_logit_lane")]
+        None,
+        #[cfg(feature = "scale_invariant_attn")]
         None,
     );
 
@@ -1039,6 +1045,8 @@ mod ssmax_composition_tests {
             ssmax: None,
             #[cfg(feature = "prior_logit_lane")]
             prior_logits: None,
+            #[cfg(feature = "scale_invariant_attn")]
+            scale_invariant: None,
         };
 
         let mut out_base = vec![0.0f32; n * d];
@@ -1103,6 +1111,8 @@ mod ssmax_composition_tests {
             ssmax: Some(SsmaxMode::Fixed { s_l: 1.0 }),
             #[cfg(feature = "prior_logit_lane")]
             prior_logits: None,
+            #[cfg(feature = "scale_invariant_attn")]
+            scale_invariant: None,
         };
 
         let mut out_base = vec![0.0f32; d];
@@ -1169,6 +1179,8 @@ mod ssmax_composition_tests {
             ssmax: Some(SsmaxMode::Fixed { s_l: 1.0 }),
             #[cfg(feature = "prior_logit_lane")]
             prior_logits: None,
+            #[cfg(feature = "scale_invariant_attn")]
+            scale_invariant: None,
         };
 
         let mut out_base = vec![0.0f32; n * d];
@@ -1236,6 +1248,8 @@ mod ssmax_composition_tests {
             ssmax: Some(mode),
             #[cfg(feature = "prior_logit_lane")]
             prior_logits: None,
+            #[cfg(feature = "scale_invariant_attn")]
+            scale_invariant: None,
         };
         let cfg_folded = ParallaxConfig {
             gate_scale: 0.0,
@@ -1500,5 +1514,271 @@ mod ssmax_sink_aware_tests {
             diff_count > 0,
             "3-way with SSMax s_L=2.0 must differ from no-SSMax (got 0 diffs)"
         );
+    }
+}
+
+// ── Scale-invariant schedule wiring (Plan 622 Phase 2, Research 610) ──
+
+#[cfg(all(feature = "parallax_attn", feature = "scale_invariant_attn"))]
+mod scale_invariant_tests {
+    use super::*;
+    use crate::scale_invariant::ScaleInvariantLut;
+
+    const TAU: f32 = 4.0;
+    const MAX_CTX: usize = 64;
+
+    /// Independent per-row reference: scores → per-key affine (skip sink key
+    /// 0 and future keys) → normalize (softmax or sigmoid) → Σ p·v. The same
+    /// math the forward must realize, spelled from the closed form.
+    #[allow(clippy::too_many_arguments)]
+    fn reference_forward(
+        q: &[f32],
+        k: &[f32],
+        v: &[f32],
+        n: usize,
+        d: usize,
+        scale: f32,
+        si: Option<&ScaleInvariantLut>,
+        activation: ParallaxActivation,
+    ) -> Vec<f32> {
+        let mut out = vec![0.0f32; n * d];
+        for i in 0..n {
+            let mut scores: Vec<f32> = (0..n)
+                .map(|j| {
+                    let dot: f32 = (0..d)
+                        .map(|e| q[i * d + e] * k[j * d + e])
+                        .sum();
+                    dot * scale
+                })
+                .collect();
+            if let Some(lut) = si {
+                let mut transformed = scores.clone();
+                for j in 0..n {
+                    let key_j = j; // key_start = 0
+                    if key_j == 0 || key_j > i {
+                        continue;
+                    }
+                    let t = i - key_j;
+                    let (a, m) = lut.pair(t);
+                    transformed[j] = a * scores[j] + m;
+                }
+                scores = transformed;
+            }
+            match activation {
+                ParallaxActivation::Softmax => {
+                    let max = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+                    for s in &mut scores {
+                        *s = (*s - max).exp();
+                    }
+                }
+                ParallaxActivation::Sigmoid => {
+                    for s in &mut scores {
+                        *s = 1.0 / (1.0 + (-*s).exp());
+                    }
+                }
+            }
+            let sum: f32 = scores.iter().sum();
+            for (j, &p) in scores.iter().enumerate() {
+                for e in 0..d {
+                    out[i * d + e] += p / sum * v[j * d + e];
+                }
+            }
+        }
+        out
+    }
+
+    fn gen_qkv(n: usize, d: usize, phase: f32) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+        let q: Vec<f32> = (0..n * d).map(|i| ((i as f32) * 0.017 + phase).sin()).collect();
+        let k: Vec<f32> = (0..n * d).map(|i| ((i as f32) * 0.023).cos()).collect();
+        let v: Vec<f32> = (0..n * d).map(|i| ((i as f32) * 0.011).sin()).collect();
+        (q, k, v)
+    }
+
+    fn compare(a: &[f32], b: &[f32], tol: f32, what: &str) {
+        for (i, (&x, &y)) in a.iter().zip(b.iter()).enumerate() {
+            assert!(
+                (x - y).abs() <= tol,
+                "{what}: [{i}] {x} vs {y} (Δ = {})",
+                (x - y).abs()
+            );
+        }
+    }
+
+    /// Both activation arms consume the same LUT and match the independent
+    /// reference (core path: gate_scale = 0, r zero → `tiled_attention_core`).
+    #[test]
+    fn si_core_path_matches_reference_both_arms() {
+        let n = 8;
+        let d = 4;
+        let scale = 1.0 / (d as f32).sqrt();
+        let (q, k, v) = gen_qkv(n, d, 0.0);
+        let r = vec![0.0f32; d * d];
+        let x = vec![0.0f32; d];
+        let lut = std::sync::Arc::new(ScaleInvariantLut::build(TAU, MAX_CTX));
+        for activation in [ParallaxActivation::Softmax, ParallaxActivation::Sigmoid] {
+            let cfg = ParallaxConfig {
+                gate_scale: 0.0,
+                activation,
+                scale_invariant: Some(lut.clone()),
+                ..Default::default()
+            };
+            let mut out = vec![0.0f32; n * d];
+            tiled_attention_parallax_forward(
+                &q, &k, &v, &mut out, n, d, scale, &r, &x, &cfg, None,
+            );
+            let reference = reference_forward(&q, &k, &v, n, d, scale, Some(&lut), activation);
+            compare(&out, &reference, 1e-4, &format!("core {activation:?}"));
+            // Non-vacuity: the schedule must actually move the output.
+            let cfg_off = ParallaxConfig {
+                gate_scale: 0.0,
+                activation,
+                ..Default::default()
+            };
+            let mut out_off = vec![0.0f32; n * d];
+            tiled_attention_parallax_forward(
+                &q, &k, &v, &mut out_off, n, d, scale, &r, &x, &cfg_off, None,
+            );
+            let diffs = out.iter().zip(&out_off).filter(|(a, b)| a != b).count();
+            assert!(diffs > 0, "core {activation:?}: schedule must change output");
+        }
+    }
+
+    /// Same through the MAIN path (nonzero W_R → the Phase-1 loop with the
+    /// covariance correction on top — the schedule composes with Parallax).
+    #[test]
+    fn si_main_path_matches_reference() {
+        let n = 8;
+        let d = 4;
+        let scale = 1.0 / (d as f32).sqrt();
+        let (q, k, v) = gen_qkv(n, d, 0.5);
+        let r: Vec<f32> = (0..d * d).map(|i| ((i as f32) * 0.05).sin() * 0.3).collect();
+        let x: Vec<f32> = (0..d).map(|i| i as f32 * 0.1).collect();
+        let lut = std::sync::Arc::new(ScaleInvariantLut::build(TAU, MAX_CTX));
+        for activation in [ParallaxActivation::Softmax, ParallaxActivation::Sigmoid] {
+            let cfg = ParallaxConfig {
+                gate_scale: 1.0,
+                activation,
+                scale_invariant: Some(lut.clone()),
+                ..Default::default()
+            };
+            let mut out = vec![0.0f32; n * d];
+            tiled_attention_parallax_forward(
+                &q, &k, &v, &mut out, n, d, scale, &r, &x, &cfg, None,
+            );
+            // Reference: schedule-weighted attention, then the Parallax
+            // correction o −= gate_scale · Σ_KV · ρ spelled from the SAME
+            // normalized weights.
+            let mut reference =
+                reference_forward(&q, &k, &v, n, d, scale, Some(&lut), activation);
+            // column sums from the reference weights
+            let mut col = vec![0.0f32; n];
+            for i in 0..n {
+                let mut scores: Vec<f32> = (0..n)
+                    .map(|j| {
+                        let dot: f32 = (0..d).map(|e| q[i * d + e] * k[j * d + e]).sum();
+                        dot * scale
+                    })
+                    .collect();
+                for (j, s) in scores.iter_mut().enumerate().take(i.min(n - 1) + 1).skip(1) {
+                    let (a, m) = lut.pair(i - j);
+                    *s = a * *s + m;
+                }
+                match activation {
+                    ParallaxActivation::Softmax => {
+                        let max = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+                        for s in &mut scores {
+                            *s = (*s - max).exp();
+                        }
+                    }
+                    ParallaxActivation::Sigmoid => {
+                        for s in &mut scores {
+                            *s = 1.0 / (1.0 + (-*s).exp());
+                        }
+                    }
+                }
+                let sum: f32 = scores.iter().sum();
+                for (j, &p) in scores.iter().enumerate() {
+                    col[j] += p / sum;
+                }
+            }
+            let mut rho = vec![0.0f32; d];
+            for row in 0..d {
+                for col_i in 0..d {
+                    rho[row] += r[row * d + col_i] * x[col_i];
+                }
+            }
+            let mut sigma_kv = vec![0.0f32; d * d];
+            for j in 0..n {
+                for row in 0..d {
+                    for col_i in 0..d {
+                        sigma_kv[row * d + col_i] += col[j] * v[j * d + row] * k[j * d + col_i];
+                    }
+                }
+            }
+            let mut corr = vec![0.0f32; d];
+            for row in 0..d {
+                for col_i in 0..d {
+                    corr[row] += sigma_kv[row * d + col_i] * rho[col_i];
+                }
+            }
+            for i in 0..n {
+                for e in 0..d {
+                    reference[i * d + e] -= 1.0 * corr[e];
+                }
+            }
+            compare(&out, &reference, 2e-4, &format!("main {activation:?}"));
+        }
+    }
+
+    /// n=1: the only key is the sink (key 0) — the schedule must be a no-op
+    /// and the output must equal the schedule-off output bit-exactly.
+    #[test]
+    fn si_n1_is_bit_identical_to_off() {
+        let n = 1;
+        let d = 4;
+        let scale = 1.0 / (d as f32).sqrt();
+        let (q, k, v) = gen_qkv(n, d, 0.0);
+        let r = vec![0.0f32; d * d];
+        let x = vec![0.0f32; d];
+        let lut = std::sync::Arc::new(ScaleInvariantLut::build(TAU, MAX_CTX));
+        let cfg_on = ParallaxConfig {
+            gate_scale: 0.0,
+            activation: ParallaxActivation::Sigmoid,
+            scale_invariant: Some(lut),
+            ..Default::default()
+        };
+        let cfg_off = ParallaxConfig {
+            gate_scale: 0.0,
+            activation: ParallaxActivation::Sigmoid,
+            ..Default::default()
+        };
+        let mut out_on = vec![0.0f32; n * d];
+        let mut out_off = vec![0.0f32; n * d];
+        tiled_attention_parallax_forward(&q, &k, &v, &mut out_on, n, d, scale, &r, &x, &cfg_on, None);
+        tiled_attention_parallax_forward(&q, &k, &v, &mut out_off, n, d, scale, &r, &x, &cfg_off, None);
+        assert_eq!(out_on, out_off, "n=1 (all-sink row) must be bit-identical");
+    }
+
+    /// The ordering law, loud form: arming scale_invariant AND ssmax in one
+    /// config is a config error the forward refuses in both profiles.
+    #[cfg(feature = "ssmax_temperature")]
+    #[test]
+    #[should_panic(expected = "ordering law")]
+    fn si_and_ssmax_armed_is_a_loud_config_error() {
+        let n = 8;
+        let d = 4;
+        let scale = 1.0 / (d as f32).sqrt();
+        let (q, k, v) = gen_qkv(n, d, 0.0);
+        let r = vec![0.0f32; d * d];
+        let x = vec![0.0f32; d];
+        let cfg = ParallaxConfig {
+            gate_scale: 0.0,
+            activation: ParallaxActivation::Sigmoid,
+            scale_invariant: Some(std::sync::Arc::new(ScaleInvariantLut::build(TAU, MAX_CTX))),
+            ssmax: Some(crate::ssmax::SsmaxMode::Fixed { s_l: 1.0 }),
+            ..Default::default()
+        };
+        let mut out = vec![0.0f32; n * d];
+        tiled_attention_parallax_forward(&q, &k, &v, &mut out, n, d, scale, &r, &x, &cfg, None);
     }
 }
