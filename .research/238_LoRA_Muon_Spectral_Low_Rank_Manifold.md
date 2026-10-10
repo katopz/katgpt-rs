@@ -8,6 +8,7 @@
 > **Cross-ref (riir-ai):** Research 124 (LoRA-Muon training integration), Plan 299 (LoRA-Muon optimizer)
 > **Classification:** Public — generic inference engine mechanics (WHAT, not HOW)
 > **PASS-Redirects (synthesis):** CMuon [arXiv:2608.02502 "CMuon: Accelerating and Stabilizing Diffusion Transformer Training via Chunked Momentum Orthogonalization"] — training optimizer that chunks fused QKV/AdaLN/FFN matrices before Newton-Schulz to avoid subspace interference (shared `(GᵀG)^{-1/2}` preconditioner mixes disjoint gradient covariance); no modelless analog at inference (we don't orthogonalize gradient matrices at runtime). Minor design-principle echo: if Plan 152's NS infra is ever applied to a *fused* projection at inference, chunk by functional sub-block first — but this is already implied by our keep-distinct-signals-separate discipline. → riir-train for the optimizer itself.
+> **PASS-Redirects (synthesis):** Dang, Wen & Malladi [arXiv:2610.08975 "The Best Optimizer Depends on Batch Size"] — no universal Muon LR scaling rule across batch sizes/tasks + optimizer rankings reverse with batch size even after extensive retuning; any LoRA-Muon adoption (this note's training half) must ship a per-batch measured LR rule, never a transplanted constant — riir-train Research 473 + Plan 455 T4 + Issue 625 own the two-batch gate.
 
 ---
 
