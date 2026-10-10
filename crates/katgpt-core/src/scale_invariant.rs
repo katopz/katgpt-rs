@@ -548,7 +548,56 @@ impl HeadCalibration {
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────
+/// `E_{N(mu, sigma²)}[f]` by adaptive Simpson on the standardized variable
+/// `z = (x − mu)/sigma` over ±40 sigma.
+///
+/// The diagnostic quadrature behind the Phase-2 G1 tilt assertions and the
+/// Phase-5 sigmoid probes (Plan 622). σ-shaped integrands carry a transition
+/// of width ~1/a in z — Gauss–Hermite nodes (sparse near zero) MISS it once
+/// a ≳ 5, reading quadrature noise as the answer; adaptive subdivision
+/// resolves it. (GH stays the instrument for the `e^x` Lemma — entire
+/// integrand, spectrally exact there. And MC has no support on the σ tail:
+/// at t = 10⁵ the sigmoid mass is ~7e-5, so 100k draws see ~7 events.)
+pub fn gaussian_expectation(mu: f64, sigma: f64, f: impl Fn(f64) -> f64) -> f64 {
+    let g = |z: f64| {
+        let x = mu + sigma * z;
+        f(x) * (-0.5 * z * z).exp() / (2.0 * core::f64::consts::PI).sqrt()
+    };
+    // Adaptive Simpson: returns the integral of g over [a, b] with
+    // whole/halves refinement, tolerance absolute + relative.
+    #[allow(clippy::too_many_arguments)]
+    fn rec(
+        g: &impl Fn(f64) -> f64,
+        a: f64,
+        b: f64,
+        fa: f64,
+        fm: f64,
+        fb: f64,
+        tol: f64,
+        depth: usize,
+    ) -> f64 {
+        let m = 0.5 * (a + b);
+        let h = 0.5 * (b - a);
+        let lm = 0.5 * (a + m);
+        let rm = 0.5 * (m + b);
+        let flm = g(lm);
+        let frm = g(rm);
+        let whole = h / 3.0 * (fa + 4.0 * fm + fb);
+        let left = h / 6.0 * (fa + 4.0 * flm + fm);
+        let right = h / 6.0 * (fm + 4.0 * frm + fb);
+        let delta = left + right - whole;
+        if depth == 0 || delta.abs() <= 15.0 * tol {
+            return left + right + delta / 15.0;
+        }
+        rec(g, a, m, fa, flm, fm, 0.5 * tol, depth - 1)
+            + rec(g, m, b, fm, frm, fb, 0.5 * tol, depth - 1)
+    }
+    let (a, b) = (-40.0, 40.0);
+    let m = 0.5 * (a + b);
+    rec(&g, a, b, g(a), g(m), g(b), 1e-12, 52)
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Tests
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -817,43 +866,10 @@ mod tests {
         }
     }
 
-    /// `E_{N(mu, sigma²)}[f]` by adaptive Simpson on the standardized
-    /// variable z = (x − mu)/sigma over ±40 sigma.
-    ///
-    /// The σ-shaped integrands below carry a transition of width ~1/a in z —
-    /// Gauss–Hermite nodes (sparse near zero) MISS it once a ≳ 5, reading
-    /// quadrature noise as the answer; adaptive subdivision resolves it.
-    /// (GH stays the instrument for the `e^x` Lemma — entire integrand,
-    /// spectrally exact there.)
-    fn simpson_expect(mu: f64, sigma: f64, f: impl Fn(f64) -> f64) -> f64 {
-        let g = |z: f64| {
-            let x = mu + sigma * z;
-            f(x) * (-0.5 * z * z).exp() / (2.0 * std::f64::consts::PI).sqrt()
-        };
-        // Adaptive Simpson: returns the integral of g over [a, b] with
-        // whole/ halves refinement, tolerance absolute + relative.
-        #[allow(clippy::too_many_arguments)]
-        fn rec(g: &impl Fn(f64) -> f64, a: f64, b: f64, fa: f64, fm: f64, fb: f64, tol: f64, depth: usize) -> f64 {
-            let m = 0.5 * (a + b);
-            let h = 0.5 * (b - a);
-            let lm = 0.5 * (a + m);
-            let rm = 0.5 * (m + b);
-            let flm = g(lm);
-            let frm = g(rm);
-            let whole = h / 3.0 * (fa + 4.0 * fm + fb);
-            let left = h / 6.0 * (fa + 4.0 * flm + fm);
-            let right = h / 6.0 * (fm + 4.0 * frm + fb);
-            let delta = left + right - whole;
-            if depth == 0 || delta.abs() <= 15.0 * tol {
-                return left + right + delta / 15.0;
-            }
-            rec(g, a, m, fa, flm, fm, 0.5 * tol, depth - 1)
-                + rec(g, m, b, fm, frm, fb, 0.5 * tol, depth - 1)
-        }
-        let (a, b) = (-40.0, 40.0);
-        let m = 0.5 * (a + b);
-        rec(&g, a, b, g(a), g(m), g(b), 1e-12, 52)
-    }
+    // The Phase-2 quadrature moved to module level as `gaussian_expectation`
+    // (pub — the Phase-5 probes in katgpt-attn consume it); aliased back to
+    // the historical name at these call sites.
+    use super::gaussian_expectation as simpson_expect;
 
     #[test]
     fn gauss_hermite_moments_are_exact() {

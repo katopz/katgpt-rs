@@ -11,6 +11,7 @@
 //! | [`gdn2`] | `gdn2_attention` | GDN2 recurrent attention kernel + types. `forward.rs` stays root. |
 //! | [`dash_attn`] | `dash_attn` | DashAttention sparse routing kernels. `forward.rs`/`tests.rs`/`meta_router`/`sat_analysis` stay root (cross-domain deps). |
 //! | [`chiaroscuro`] | `chiaroscuro` | Per-token DCT spectral entropy operator routing. |
+//! | [`si_probes`] | `scale_invariant_attn` | Scale-invariant attention diagnostics (Plan 622 Phase 5): decade mass, entropy laws, sigmoid quadrature curve, τ-sweep verdict. |
 //! | [`rat_bridge`] | `rat_plus_bridge` | RAT+ recurrence bridge — dilated inference via GDN2 state. |
 //! | [`ega_attn`] | `ega_attn` | Energy-Gated Attention — spectral salience gating. |
 //! | [`diagonal_gate`] | `diagonal_gate` | Shared DiagonalGate abstraction (GDN2 + Wall). |
@@ -38,6 +39,9 @@ pub mod dash_attn;
 
 #[cfg(feature = "chiaroscuro")]
 pub mod chiaroscuro;
+
+#[cfg(feature = "scale_invariant_attn")]
+pub mod si_probes;
 
 #[cfg(feature = "rat_plus_bridge")]
 pub mod rat_bridge;

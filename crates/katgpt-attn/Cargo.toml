@@ -97,6 +97,11 @@ static_cal_tables = ["dep:blake3"]
 # `gdn2_attention` (needs GDN2 types + forward composition) and forwards to
 # `katgpt-core/gdn_tree_verify` (the rollback-free verify primitive).
 gdn_tree_verify = ["gdn2_attention", "katgpt-core/gdn_tree_verify"]
+# Plan 622 Phase 5 diagnostics — the scale-invariant attention probes
+# (per-decade mass, entropy laws, sigmoid MC curve, τ-sweep verdict
+# assembly). Forwards the katgpt-core primitive feature; see si_probes.rs
+# (the recorded home deviation from the plan's chiaroscuro/ path).
+scale_invariant_attn = ["katgpt-core/scale_invariant_attn"]
 # Plan 430: Dual-path GDN × HOLA tree verify bridge. Implies both parents.
 gdn_hola_tree_verify = ["gdn_tree_verify", "hippocampal_cache", "katgpt-core/gdn_hola_tree_verify"]
 # FuncAttn composition layer (Plan 286 Phase 5).
