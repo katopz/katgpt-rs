@@ -2517,6 +2517,22 @@ required-features = ["state_probe"]
 name = "escalation_probe_gate_alloc_check"
 required-features = ["escalation_probe_gate"]
 
+# Plan 621 Phase 4 — the healer-lane escalation eval (T4.1–T4.3): the
+# planted two-class corpus, the three arms (floor / incumbent / probe),
+# the G1 comparison + floor-fires assertions, and the G2 budget-guard
+# breach→fallback path.
+[[test]]
+name = "state_probe_t4_escalation_eval"
+required-features = ["escalation_probe_gate"]
+
+# Plan 621 Phase 4 G2 — the eval's cost cell at release: probe ns/state
+# across the adaptive ladder + the declared-units budget ratio, harness =
+# false (the bench_039 pattern).
+[[bench]]
+name = "bench_621_escalation_eval"
+harness = false
+required-features = ["escalation_probe_gate"]
+
 # Plan 621 Phase 1 G4 — zero-alloc steady state (probe kernel).
 # Single-fn binary (the bench_576_hint_regret_alloc_check convention).
 [[test]]

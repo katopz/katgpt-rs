@@ -1,6 +1,6 @@
 # Plan 621: State Probe + Bottleneck-Gated Escalation (`state_probe`, `escalation_probe_gate`)
 
-> **Status:** Active — Phase 1 (T1.1–T1.4) LANDED 2026-10-08 (opt-in `state_probe`, katgpt-core only); **Phase 2 (T2.1–T2.3) + Phase 3 kernel (T3.1/T3.3/T3.4) LANDED 2026-10-10** (opt-in `escalation_probe_gate` implies `state_probe`; G3/G4 green, truth tables pinned); T3.2 seam adapters are CONSUMER-side composition (refine Issue 156 + the reflex/instinct ESC seams — not this repo); Phase 4 healer-lane eval pending (the Super-GOAT label); feature-flagged, promotion follows the GOAT gates (never precedes them)
+> **Status:** Active — Phase 1 (T1.1–T1.4) LANDED 2026-10-08 (opt-in `state_probe`, katgpt-core only); **Phase 2 (T2.1–T2.3) + Phase 3 kernel (T3.1/T3.3/T3.4) LANDED 2026-10-10** (opt-in `escalation_probe_gate` implies `state_probe`; G3/G4 green, truth tables pinned); **Phase 4 healer-lane eval LANDED 2026-10-11** ([.benchmarks/621_escalation_eval_goat.md](../.benchmarks/621_escalation_eval_goat.md): matched-spend rescues 2.66× the incumbent at precision 1.00 vs 0.34–0.40, identical rescues at 40 % spend uncapped, G2 cost cell 350× under the bar — Super-GOAT ON THE DECLARED MODEL, promotion stays opt-in for the T5.2 consumer's re-gate); T3.2 seam adapters are CONSUMER-side composition (refine Issue 156 + the reflex/instinct ESC seams — not this repo); Phase 5 consumers + docs pending
 **Date:** 2026-10-08
 **Research:** [katgpt-rs/.research/609_FlyBy_Execution_Knowledge_Bottleneck_Gate.md](../.research/609_FlyBy_Execution_Knowledge_Bottleneck_Gate.md)
 **Source paper:** [arXiv:2609.34327](https://arxiv.org/abs/2609.34327) — FlyBy (KAIST 2026); decision layer only, zero training
@@ -54,10 +54,14 @@ Ship the modelless decision layer of FlyBy: a probe kernel (`V̂`, Miller-Madow 
 
 ### Tasks
 
-- [ ] **T4.1** Eval corpus: fix-miss states with BOTH classes present (planted execution-like + knowledge-like). **A gate that never fires FAILS G1** (never-escalate floor arm).
-- [ ] **T4.2** Comparison table in every G1 run: incumbent (modelless_cap alone) vs probe-gated vs never-escalate floor → escalation rate, rescued fixes, spend.
-- [ ] **T4.3** G2 cost line: probe's N evaluations ≤ **10%** of the gated decision's cost; breach → fallback to the incumbent decision (never silently eat the budget).
-- [ ] **T4.4** Benchmark file + `.benchmarks/` record. **The Super-GOAT label is decided HERE**: probe-gated must beat the incumbent at matched spend.
+- [x] **T4.1** Eval corpus: fix-miss states with BOTH classes present (planted execution-like + knowledge-like). **A gate that never fires FAILS G1** (never-escalate floor arm).
+  → **LANDED 2026-10-11** — `state_probe_eval.rs`: 150 planted states (60/60/30 knowledge/execution/productive, class-INTERLEAVED round-robin — a knowledge-first layout would hand the cap-only incumbent its best case by construction), seed-pinned splitmix64, common-random-number draws across arms; the scissors law declared FlyBy-faithful (escalation rescues ONLY the knowledge class — a class-agnostic expert rate would make triage worthless by construction). The floor law enforced by test (`corpus_carries_both_classes_and_the_floor_leaves_headroom`).
+- [x] **T4.2** Comparison table in every G1 run: incumbent (modelless_cap alone) vs probe-gated vs never-escalate floor → escalation rate, rescued fixes, spend.
+  → LANDED — `print_table` prints on every run; the frozen read: tight cap 93 vs 35 rescues (2.66×) at precision 1.00 vs 0.34; generous cap 98 = 98 rescues at 60 vs 150 units (40 % spend).
+- [x] **T4.3** G2 cost line: probe's N evaluations ≤ **10%** of the gated decision's cost; breach → fallback to the incumbent decision (never silently eat the budget).
+  → LANDED — `PROBE_BUDGET_FRACTION` + the in-arm guard (`budget_fallback` flag, loud); measured 0.048 vs the 6.0 line (125× headroom); the breach→fallback path TESTED with an absurd per-eval cost (`budget_breach_falls_back_to_the_incumbent_loudly`). Wall cell: 14.4 ns/state (High-Power-Mode disclosure in the record; 350× under the 5 µs bar).
+- [x] **T4.4** Benchmark file + `.benchmarks/` record. **The Super-GOAT label is decided HERE**: probe-gated must beat the incumbent at matched spend.
+  → **DECIDED: EARNED ON THE DECLARED MODEL** — [.benchmarks/621_escalation_eval_goat.md](../.benchmarks/621_escalation_eval_goat.md); the record carries the label's boundary (planted corpus, declared constants) and routes promotion to the T5.2 consumer's real-telemetry re-gate.
 
 ## Phase 5 — Consumers + docs
 

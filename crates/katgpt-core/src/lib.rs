@@ -361,6 +361,13 @@ pub mod event_state_window;
 // 4's healer-lane eval; implies state_probe (the classifier feeds it).
 #[cfg(feature = "escalation_probe_gate")]
 pub mod escalation_probe_gate;
+// state_probe_eval — Plan 621 Phase 4's healer-lane evaluation instrument
+// (T4.1–T4.3): the planted two-class fix-miss corpus, the three comparison
+// arms (never-escalate floor / incumbent cap-only / probe-gated), and the
+// G2 probe-cost budget guard. Declared-model simulator behind the .benchmarks
+// record; NOT production telemetry (the doc law is at the module head).
+#[cfg(feature = "escalation_probe_gate")]
+pub mod state_probe_eval;
 // template_decode — bounded template decode over CLOSED sentence grammars
 // (Plan 607 T2). A table of literal/slot templates with closed fill
 // vocabularies; decode returns (template, fill indices) and REFUSES
