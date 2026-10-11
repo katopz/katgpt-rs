@@ -14,7 +14,7 @@
 //! issue_929_loop_alignment_probe -- --nocapture`
 
 use katgpt_core::loop_alignment_probe::{
-    auroc, bootstrap_auroc_ci, generate_two_hop_fixture, probe_alignment, FixtureSpec,
+    auroc, bootstrap_auroc_ci, generate_two_hop_fixture, probe_alignment, FactPhrase, FixtureSpec,
 };
 use katgpt_rs::hla::MultiLayerAhlaCache;
 use katgpt_rs::transformer::{
@@ -167,6 +167,7 @@ fn fixture_feeds_pretrained_probe_shape() {
         two_hop_queries: 10,
         one_hop_queries: 5,
         seed: 4242,
+        phrase: FactPhrase::Possessive,
     };
     let fixture = generate_two_hop_fixture(spec);
     assert_eq!(fixture.items.len(), 2 * (10 + 5));

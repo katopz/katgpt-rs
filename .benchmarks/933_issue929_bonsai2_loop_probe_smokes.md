@@ -77,3 +77,65 @@ everywhere — the argmax==bridge_first direct readout never fires;
   `/e/tmp/b929_smoke_chat384.json` (ephemeral box scratch; the CSV cells are
   quoted above and in Issue 929).
 - Fix + knob commit: riir-infer `61fc36f`.
+
+## Appendix (2026-10-11 ~17:00 +07): the phrasing A/B — MEASURED
+
+The protocol note 3 above proposed A/B-ing the fact phrasing before the full
+run. The M3 session's full adjudication run (Bench 934, possessive phrasing,
+no-think posture) launched mid-day; this A/B ran the SAME posture on the 4090
+box to adjudicate the phrasing axis independently of (and before) that run's
+verdict lands.
+
+**Instrument:** union `69f520e` + the `FactPhrase` knob (katgpt-core
+`loop_alignment_probe`, landed with this bench; **default UNCHANGED =
+possessive** — the shared instrument is not redefined mid-adjudication) + the
+bin's `B929_PHRASE=standard` wiring + per-query JSON rows in `B929_OUT`
+(riir-infer, same commit series). Posture: `B929_CHAT=1` (no-think chat,
+8-tok answers), K=4, facts=12, n=16 (first 16 fixture items — 16 two-hop
+in-distribution queries, seed 0x929), paired arms: the knob renders the fact
+template only and consumes no RNG — identical fact windows in identical
+shuffled order (pinned by the new katgpt-core unit test
+`phrase_standard_preserves_labels_and_windows`).
+
+**Binary disclosure:** both arms ran the build at `69f520e`+knob — pre
+Plan-622 (`d1b9bd5`, which later threaded `layer_idx` through
+`qwen_deltanet_ternary_layer_body`; plumbing at this feature set, hooks
+`None`). Both arms share one binary — the pairing is internal-valid; a
+re-run at HEAD re-derives nothing from these numbers.
+
+| arm | phrasing | acc (two-hop, n=16) | verdict line | failure modes |
+|---|---|---|---|---|
+| A | possessive (default) | **0/16 (0.0000)** | UNDECIDABLE — every AUROC cell empty (label axis DEAD) | 11× immediate `<\|im_end\|>`, 3× think-start despite "Do not think", 2× bridge-stop (hop-1 entity answers) |
+| B | standard (`The {r} of {a} is {b}.`) | **5/16 (0.3125)** | **SIGNAL** — `auroc_margin` 0.8727/**0.5818** @loop1, 0.8909/**0.6182** @loop2 (LB ≥ 0.6 bar) | 9× `<\|im_end\|>`, 2× think-start, 5 VERBATIM correct (`bold rabbit<\|im_end\|>`-class), 1 partial (`badger` ⊂ `warm badger` — honestly scored wrong), 1 wrong entity |
+
+**Discordant pairs: 5 standard-only, 0 possessive-only → exact sign-test
+p = 0.03125** (n=16 paired). The 5 correct generations are verbatim
+two-hop answers with no think span to quote from — genuine composition, not
+the contains-scoring artifact (that artifact rides the THINK postures; at
+8-tok no-think there is no quotation window).
+
+### Interpretation
+
+1. **The phrasing inversion IS the binding constraint on the label axis at
+   the no-think posture.** Possessive: 0/16, every AUROC cell empty — the
+   label axis is dead, T1.3's gate cannot compute, exactly the kimi-leg
+   failure shape but with a fixable cause. Standard: 5/16 with decodable
+   margins (smoke-class SIGNAL at n=16; not the adjudication).
+2. **Implication for the in-flight Bench 934 full run (possessive):** its
+   two-hop label axis is expected DEAD — a KILL/UNDECIDABLE verdict there is
+   **phrasing-limited, not signal-absent** and must be read beside this A/B.
+   The one-hop controls (M3 smoke 4/8) are less phrasing-sensitive (single
+   hop — the inversion bites on composition).
+3. **`bridge_top1` trajectory (possessive arm): 0.8125 → 0.1875 across K=4**
+   — the first token is usually the bridge (hop-1 stop) and loop passes
+   ERODE that alignment, an inversion of the confidence-amplification shape
+   seen on kimi (margin growth k=2–3). Loop dynamics interact with the
+   phrasing confusion — worth a targeted read if Phase 2 re-opens.
+4. **The default stays possessive** (decision recorded, not made): the
+   shared instrument mid-adjudication is not redefined by a knob; whether
+   the T1.3/T1.4 adjudication of record runs at `B929_PHRASE=standard`
+   (~8 h no-think / ~21 h think-budget, either box, a window job) is the
+   owner's call. This A/B is the evidence for that call.
+
+Artifacts: `E:/tmp/b929_ab_poss.json`, `E:/tmp/b929_ab_std.json` + logs
+(`b929_ab_{poss,std}.{log,err.log}`) — box scratch, cells quoted here.

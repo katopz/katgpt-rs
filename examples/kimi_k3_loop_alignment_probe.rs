@@ -78,7 +78,8 @@ use std::path::Path;
 use std::time::Instant;
 
 use katgpt_core::loop_alignment_probe::{
-    FixtureSpec, TwoHopItem, bootstrap_auroc_ci, generate_two_hop_fixture, probe_alignment,
+    FactPhrase, FixtureSpec, TwoHopItem, bootstrap_auroc_ci, generate_two_hop_fixture,
+    probe_alignment,
 };
 use katgpt_rs::kimi_k3::loader::{KimiK3ModelWeights, load_kimi_k3};
 use katgpt_rs::kimi_k3::model::{
@@ -438,6 +439,7 @@ fn main() {
         two_hop_queries: cfg.two_hop_per_pool,
         one_hop_queries: cfg.one_hop_per_pool,
         seed: cfg.seed,
+        phrase: FactPhrase::Possessive,
     };
     let fixture = generate_two_hop_fixture(spec);
     let n_two = fixture.items.iter().filter(|i| i.is_two_hop).count();

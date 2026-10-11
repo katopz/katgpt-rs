@@ -372,6 +372,24 @@ const NOUNS: [&str; 24] = [
 /// pools (the generator asserts pools fit within it).
 pub const NAME_CAPACITY: usize = ADJECTIVES.len() * NOUNS.len();
 
+/// Fact-rendering phrasing for [`generate_two_hop_fixture`] — same KG,
+/// same queries, same gold answers; only the fact template differs.
+///
+/// The as-landed `Possessive` template composes only under a
+/// possessive-subject reading (R-of(a)=b); `Standard` states R-of(a)=b
+/// directly so both question hops compose under ordinary English semantics
+/// (the Bench-933/934 phrasing-inversion caveat; A/B knob, never the
+/// default mid-adjudication).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FactPhrase {
+    /// `"Fact: {a} is the {r} of {b}."` — the kimi/Bonsai records' phrasing
+    /// (Benches 927/930/933/934).
+    #[default]
+    Possessive,
+    /// `"Fact: The {r} of {a} is {b}."` — standard-semantics composition.
+    Standard,
+}
+
 /// Fixture shape (paper §2 defaults in [`FixtureSpec::default`]).
 #[derive(Clone, Copy, Debug)]
 pub struct FixtureSpec {
@@ -389,6 +407,8 @@ pub struct FixtureSpec {
     pub one_hop_queries: usize,
     /// Deterministic seed (no global RNG).
     pub seed: u64,
+    /// Fact-rendering phrasing (labels/bridges are phrasing-invariant).
+    pub phrase: FactPhrase,
 }
 
 impl Default for FixtureSpec {
@@ -401,6 +421,7 @@ impl Default for FixtureSpec {
             two_hop_queries: 100,
             one_hop_queries: 50,
             seed: 0x929,
+            phrase: FactPhrase::Possessive,
         }
     }
 }
@@ -522,6 +543,7 @@ pub fn generate_two_hop_fixture(spec: FixtureSpec) -> TwoHopFixture {
                 entities,
                 relations,
                 facts_per_prompt,
+                spec.phrase,
                 &mut state,
             ));
         }
@@ -536,6 +558,7 @@ pub fn generate_two_hop_fixture(spec: FixtureSpec) -> TwoHopFixture {
                 entities,
                 relations,
                 facts_per_prompt,
+                spec.phrase,
                 &mut state,
             ));
         }
@@ -555,6 +578,7 @@ fn render_item(
     entities: usize,
     relations: usize,
     facts_per_prompt: usize,
+    phrase: FactPhrase,
     state: &mut u64,
 ) -> TwoHopItem {
     let name = |pool: usize, i: usize| entity_name(pool * entities + i);
@@ -598,12 +622,17 @@ fn render_item(
 
     let mut prompt = String::new();
     for f in &window {
-        prompt.push_str(&format!(
-            "Fact: {} is the {} of {}.\n",
-            name(pool, f.a),
-            role(f.r),
-            name(pool, f.b)
-        ));
+        // Phrasing consumes no RNG — the paired A/B arms draw identical
+        // windows (pinned by the phrase-pairing test below).
+        let (a_name, b_name) = (name(pool, f.a), name(pool, f.b));
+        prompt.push_str(&match phrase {
+            FactPhrase::Possessive => {
+                format!("Fact: {a_name} is the {} of {b_name}.\n", role(f.r))
+            }
+            FactPhrase::Standard => {
+                format!("Fact: The {} of {a_name} is {b_name}.\n", role(f.r))
+            }
+        });
     }
 
     match two_hop {
@@ -774,6 +803,7 @@ mod tests {
             two_hop_queries: 12,
             one_hop_queries: 6,
             seed: 99,
+            phrase: FactPhrase::Possessive,
         };
         let f1 = generate_two_hop_fixture(spec);
         let f2 = generate_two_hop_fixture(spec);
@@ -809,6 +839,96 @@ mod tests {
         }
         // Shape sanity: the KG admits unique compositions at this size.
         assert!(f1.unique_compositions_per_pool > 0);
+    }
+
+    /// Parse `Fact:` lines back into (subject, object) entity pairs — the
+    /// phrasing-agnostic view of a fact window (roles are single words, so
+    /// the ` is the `/` of `/` is ` delimiters are unambiguous).
+    fn fact_pairs(prompt: &str) -> Vec<(String, String)> {
+        prompt
+            .lines()
+            .filter_map(|l| {
+                let body = l.strip_prefix("Fact: ")?;
+                if let Some(rest) = body.strip_prefix("The ") {
+                    // The {r} of {A} is {B}.
+                    let of = rest.find(" of ")?;
+                    let is = rest.find(" is ")?;
+                    if is < of {
+                        return None;
+                    }
+                    let a = &rest[of + 4..is];
+                    let b = rest[is + 4..].strip_suffix('.')?;
+                    Some((a.to_string(), b.to_string()))
+                } else {
+                    // {A} is the {r} of {B}.
+                    let is = body.find(" is the ")?;
+                    let of = body.find(" of ")?;
+                    if of < is {
+                        return None;
+                    }
+                    let a = &body[..is];
+                    let b = body[of + 4..].strip_suffix('.')?;
+                    Some((a.to_string(), b.to_string()))
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn phrase_standard_preserves_labels_and_windows() {
+        let base = FixtureSpec {
+            entities_per_pool: 40,
+            relations: 8,
+            out_degree: 3,
+            facts_per_prompt: 8,
+            two_hop_queries: 12,
+            one_hop_queries: 6,
+            seed: 99,
+            phrase: FactPhrase::Possessive,
+        };
+        let poss = generate_two_hop_fixture(base);
+        let std = generate_two_hop_fixture(FixtureSpec {
+            phrase: FactPhrase::Standard,
+            ..base
+        });
+        assert_eq!(poss.items.len(), std.items.len());
+        for (p, s) in poss.items.iter().zip(std.items.iter()) {
+            // Same KG, same sampled queries: labels and bridges are
+            // phrasing-invariant.
+            assert_eq!(p.answer, s.answer);
+            assert_eq!(p.bridge, s.bridge);
+            assert_eq!(p.is_two_hop, s.is_two_hop);
+            assert_eq!(p.is_ood, s.is_ood);
+            assert_ne!(p.prompt, s.prompt);
+            // Phrasing consumes no RNG: identical fact tuples in identical
+            // shuffled order — the A/B arms are truly paired.
+            assert_eq!(
+                fact_pairs(&p.prompt),
+                fact_pairs(&s.prompt),
+                "phrasing must not perturb the fact window"
+            );
+            // Standard facts read `The {r} of {a} is {b}.` — and a two-hop
+            // window carries the composable gold pivot `The {r2} of {bridge}
+            // is {answer}.` under ordinary English semantics.
+            for line in s.prompt.lines().filter(|l| l.starts_with("Fact: ")) {
+                assert!(line.starts_with("Fact: The "), "{line}");
+                assert!(line.contains(" of ") && line.contains(" is "));
+            }
+            for line in p.prompt.lines().filter(|l| l.starts_with("Fact: ")) {
+                assert!(!line.starts_with("Fact: The "), "{line}");
+            }
+            if s.is_two_hop {
+                let tail = format!("is {}.", s.answer);
+                assert!(
+                    s.prompt.lines().any(|l| l.starts_with("Fact: The ")
+                        && l.contains(&s.bridge)
+                        && l.ends_with(&tail)),
+                    "standard window carries 'The {{r2}} of {} is {}.'",
+                    s.bridge,
+                    s.answer
+                );
+            }
+        }
     }
 
     #[test]
