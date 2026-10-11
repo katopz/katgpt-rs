@@ -1283,7 +1283,7 @@ distillation, novelty + GOAT gates, modelless-unblock protocol §3.5):
 > **Repo count:** the **product/distillation set is 7** — `katgpt-rs` (public) +
 > `riir-ai`, `riir-chain`, `riir-neuron-db`, `riir-train`, `riir-game-sdk`,
 > `riir-dapps` (private). That is NOT the repo total: the
-> workspace is **28 repos**, all of which carry a root `BOUNDARY.md`
+> workspace is **29 repos**, all of which carry a root `BOUNDARY.md`
 > (add `riir-mmorpg-examples`, `riir-refine`, `riir-viewbridge`,
 > `riir-auth`, `katgpt-web`, `riir-dao`, `riir-deployer`,
 > `riir-esp32`, `riir-llm`, `mmorpg-editor`, `mmorpg-remake`,
@@ -1292,7 +1292,10 @@ distillation, novelty + GOAT gates, modelless-unblock protocol §3.5):
 > `riir-rethink` — born 2026-10-03, the Instinct/Rethink split carve's
 > private moat repo, seeded from `riir-instinct/moat/`; `seal-std` —
 > born 2026-10-07, the Seal remake's shared standard crates — the
-> animation-library leaf both the editor and the runtime resolver run).
+> animation-library leaf both the editor and the runtime resolver run;
+> `riir-refab` — born 2026-10-11, the pure-Rust rigged-GLB refab lane:
+> prompt→motion (the kimodo.cpp idea) + retargeting over sge GLBs,
+> zero workspace deps by contract).
 >
 > Read a count in prose as a claim, not a fact — and read a count that
 > MATCHES as a claim too: a count is not a checksum over a set. Drift
