@@ -941,6 +941,18 @@ slt_sweep = ["slt"]
 # consumer (the FUNCATTN arm is the first eval consumer, katgpt-attn).
 subspace_intervention = ["subspace_phase_gate"]
 
+# Plan 625 / Research 618 (SplitJEPA, arXiv:2610.12349): matched-pair
+# difference-moment block identification — variant basis (top eigenspace of
+# the whitened pair-difference second moment), invariant projector, the
+# refuse-loud eigengap identifiability verdict, and the held-out
+# `pair_leakage` residual. f64 zero-alloc accumulation; composes
+# `karc::jacobi_eigen` (d ≤ 16) / `linalg::symmetric_eig` (d ≥ 256);
+# whitening rides the caller-supplied Σ / whitener (`ns_inv_sqrt_psd_into`
+# is the in-crate form). Self-contained; no new deps. OPT-IN per the
+# no-default-consumer rule — promotion needs the GOAT bench + a wired
+# consumer (reflex Issue 086 presentation certificate is the first).
+basis_split = []
+
 # refinement_marginal (Plan 598 / Research 559, 2026-09-15): single-pass
 # token→byte distribution conversion with the closed-form terminal-mass
 # certificate — the refinement-tree coarse-graining law (boundary mass
@@ -2233,6 +2245,14 @@ required-features = ["phase_separation"]
 # test modules in the lib test binary.
 [[test]]
 name = "subspace_phase_gate_alloc_check"
+required-features = ["subspace_phase_gate"]
+
+# Plan 625 T0.3 — the TILR-first arm (the substrate comparison row for the
+# basis_split GOAT bench): planted-block recovery by principal angles + the
+# adversarial-gap evidence (TILR has no refuse-loud gate) + the allocation
+# census that justifies the f64/zero-alloc path.
+[[test]]
+name = "basis_split_phase0_tilr_arm"
 required-features = ["subspace_phase_gate"]
 
 # Issue 763 — signed-graph LIF reservoir GOAT gates: G1 exact dense parity
