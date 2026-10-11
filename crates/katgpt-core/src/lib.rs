@@ -3174,6 +3174,26 @@ pub use tilr::{
 #[cfg(all(feature = "tilr_invariant_subspace", feature = "subspace_phase_gate"))]
 pub use tilr::discover_invariant_subspace;
 
+// basis_split — Plan 625 / Research 618 (SplitJEPA, arXiv:2610.12349):
+// matched-pair block identification — variant basis (top eigenspace of the
+// whitened pair-difference second moment), invariant projector, the
+// refuse-loud eigengap identifiability verdict, and the held-out
+// `pair_leakage` generalization residual. f64 zero-alloc; composes
+// `karc::jacobi_eigen` + `linalg::symmetric_eig` only. OPT-IN per the
+// no-default-consumer rule — promotion needs the GOAT bench + a wired
+// consumer (reflex Issue 086 presentation certificate is the first).
+#[cfg(feature = "basis_split")]
+pub mod basis_split;
+#[cfg(feature = "basis_split")]
+pub use basis_split::{
+    BasisSplitError, PairDifferenceMoment, SplitReport, UnidentifiedReason, Verdict, Whitening,
+    build_zca_whitener, check_rank_gate, held_out_leakage, project_invariant_into, split,
+};
+// NOTE: `basis_split::participation_ratio` (the f64 report-only wrapper) is
+// deliberately NOT re-exported at the root — the root name is the existing
+// `subspace_phase_gate` f32 primitive; the wrapper resolves via the module
+// path only.
+
 // Plan 426: MANCE — Manifold-Aware Concept Erasure. Local tangent + spectral
 // weighting + trust-bounded erasure. Pure modelless linear algebra (k-NN +
 // thin SVD + dot-product projections). Gated on subspace_phase_gate for the
