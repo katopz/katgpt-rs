@@ -389,7 +389,20 @@ impl SpreadAccumulator {
         Some((m2 / f64::from(denom)).sqrt())
     }
 
-    /// Heads observed so far.
+    /// The head's raw Welford state `(count, mean, m2)` — the diagnostics
+    /// readout beside `std_estimate` (a σ of exactly 0 with a nonzero count
+    /// means the population is CONSTANT, which is a fixture/premise defect,
+    /// not a measurement).
+    #[must_use]
+    pub fn raw_slot(&self, head: usize) -> Option<(u64, f64, f64)> {
+        self.stats.get(head).copied()
+    }
+
+    /// The pre-sized slot count — NOT an observation count (`new` pre-sizes
+    /// and `observe_head` only grows). The observed set is the slots with a
+    /// [`Self::std_estimate`] of `Some` (≥ 2 observations); a slot with no
+    /// per-key logits (a GDN layer under Plan 622) legitimately stays at
+    /// count 0 forever.
     #[must_use]
     pub fn heads(&self) -> usize {
         self.stats.len()
