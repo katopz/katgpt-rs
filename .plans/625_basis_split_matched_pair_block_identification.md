@@ -1,6 +1,6 @@
 # Plan 625: `basis_split` — Matched-Pair Block Identification (SplitJEPA distill)
 
-**Status:** In progress — Phase 0. Source: `.research/618_SplitJEPA_Invariant_Variant_Block_Identifiability.md` (arXiv:2610.12349). Verdict-round-1 corrections applied: no new eigensolver; TILR-composition measured FIRST; whitening default; eigengap gate; `pair_leakage` naming. Consumer issues filed in the consumer repos (report-only first; no wiring in this plan).
+**Status:** In progress — Phase 0. Landed `1e35e7bb6019` (2026-10-11; Claude verdict session 782f282b — round 1 REVISE 6 fixes, round 2 AGREE + 2 non-blocking notes folded in). Source: `.research/618_SplitJEPA_Invariant_Variant_Block_Identifiability.md` (arXiv:2610.12349). Verdict-round-1 corrections applied: no new eigensolver; TILR-composition measured FIRST; whitening default; eigengap gate; `pair_leakage` naming. Consumer issues filed in the consumer repos (report-only first; no wiring in this plan).
 
 ## Goal
 
