@@ -2149,6 +2149,18 @@ name = "stokes_calculus_bench"
 harness = false
 required-features = ["dec_operators"]
 
+# Plan 625 Phase 2 — basis_split GOAT gate: G1 planted recovery by principal
+# angles at d ∈ {16,64,256} (asserted — a regression FAILS the bench),
+# G2 split latency (d=64/N=2048, < 10 ms at --release; quote preflight
+# provenance beside the number), adversarial canaries (shuffled/degenerate
+# MUST emit Unidentified) + the T0.3 TILR-composition row (the substrate
+# A/B baseline). Requires basis_split + subspace_phase_gate (the TILR row
+# + thin_svd principal angles).
+[[bench]]
+name = "basis_split_goat"
+harness = false
+required-features = ["basis_split", "subspace_phase_gate"]
+
 # Plan 357 Phase 2 — Motor-Gated DEC Field GOAT gate (G1–G5):
 # G1 no-teleporting (centroid displacement ≤ stencil), G2 motor-gate locality
 # (isolation ratio > 100×), G3 conservation (mass drift < 5%), G4 zero-alloc
@@ -2246,6 +2258,12 @@ required-features = ["phase_separation"]
 [[test]]
 name = "subspace_phase_gate_alloc_check"
 required-features = ["subspace_phase_gate"]
+
+# Plan 625 T2.4 — the G4 zero-alloc canary over the whole split path
+# (separate binary: #[global_allocator] is crate-binary-unique).
+[[test]]
+name = "basis_split_g4_alloc"
+required-features = ["basis_split"]
 
 # Plan 625 T0.3 — the TILR-first arm (the substrate comparison row for the
 # basis_split GOAT bench): planted-block recovery by principal angles + the

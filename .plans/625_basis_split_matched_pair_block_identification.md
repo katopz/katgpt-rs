@@ -31,16 +31,16 @@ A certified block split over (frozen embedding accessor, matched pairs): variant
 
 ## Phase 2 — bench + GOAT gates
 
-- [ ] T2.1 `benches/basis_split_goat.rs`: G1 planted-block recovery by principal angles (`SVD(V_trueᵀ V_est)`, all < 1e-3) at d ∈ {16, 64, 256}; adversarial arms, precisely defined: **shuffled pairs** (after whitening `M ≈ 2I`, no eigengap) must emit `Unidentified` via the T1.3 gap gate; **degenerate pairs** (all identical) must emit `Unidentified`; both canaries prove the gates fire — a gate that never reds certifies nothing. Include the T0.3 TILR-composition arm as the substrate comparison row.
-- [ ] T2.2 G2: `--release`; full split (accum + eigen) < 10 ms at d=64/N=2k; quote `bench_preflight` PROVENANCE beside the number.
-- [ ] T2.3 G3: `cargo test -p katgpt-core --lib` count floor unchanged (new leaf code, no consumer touched).
-- [ ] T2.4 G4: counting-allocator canary over the whole split path (fixed scratch only).
-- [ ] T2.5 Record verdict in `.benchmarks/` per numbering discipline; promote to default ONLY on GOAT pass + a wired consumer; otherwise stays opt-in (loser law applies to any future competitor in the same slot).
+- [x] T2.1 `benches/basis_split_goat.rs` — **LANDED 2026-10-12** (`[[bench]]` row required-features `basis_split,subspace_phase_gate`): G1 planted-recovery group (asserted per iteration at d ∈ {16,64,256} — a regression FAILS the bench, not just slows it; d=256 EXECUTED green 2026-10-12 under load), `g2_split_latency` group (d=64/N=2048 full pipeline incl. one armed projection per iteration), adversarial canaries (shuffled + degenerate both ASSERT `Unidentified` per iteration — the shuffled canary EXECUTED green), and the T0.3 TILR-composition row (same fixture through `discover_invariant_subspace`, r=48 asserted — the substrate A/B baseline).
+- [-] T2.2 G2 `--release` latency — **STAGED on the box window**: the bench compiles + runs (criterion, optimized profile), but `bench_preflight` REFUSED the G2 measurement (load 22.03 > 6.0, powermode=2/high — sibling sessions saturating the box; PROVENANCE line on record). The < 10 ms @ d=64/N=2048 number runs at the next quiet window: `cargo bench -p katgpt-core --features basis_split,subspace_phase_gate --bench basis_split_goat g2_split_latency` with the preflight PROVENANCE quoted beside it. Load-contaminated timing is a measurement of the scheduler (the Issue-723 law) — not taken.
+- [x] T2.3 G3 count floor — **HOLDS**: lib suite at the feature posture 2157 passed / 0 failed (same count as before this plan touched the crate — new leaf code, no consumer edited).
+- [x] T2.4 G4 alloc canary — **PASS** (`tests/basis_split_g4_alloc.rs`, `[[test]]` row, separate binary per the global-allocator convention): 0 allocations on the steady-state path (accumulate → finish → split → project → held_out_leakage) at BOTH solver postures (d=16 Jacobi, d=64 QL), warm-then-count discipline.
+- [-] T2.5 `.benchmarks/` record — **BLOCKED on T2.2** (the record carries the G2 number + provenance). Write it at the quiet-window run; promotion to default stays owner-gated behind the wired consumer per the standing law regardless of the number.
 
 ## Phase 3 — handoff
 
-- [ ] T3.1 Cross-link consumer issues (their repos): game style/affect split audit; healer formatting-invariant retrieval; decision-server presentation certificate.
-- [ ] T3.2 Update Research 618 status line with the landed commit hash.
+- [x] T3.1 Cross-link consumer issues — **DONE 2026-10-12**: the consumers on record are reflex Issue 086 (presentation-subspace certificate — the first wired consumer; report-only per the plan's consumer law) + riir-refine `.issues/162_formatting_invariant_dense_retrieval.md` (the healer formatting-invariant arm) + the game style/affect split audit (riir-ai-side; filed when that consumer arms). The T0.3 verdict scopes them: report-only consumers MAY compose TILR alone; armed read paths consume `basis_split`.
+- [x] T3.2 Update Research 618 status line — **DONE 2026-10-12**: Phase 0+1 landed hashes + the TILR-first verdict recorded in `.research/618` status (T3.2's "landed commit hash" = `acbe6450d` + `85a0ad8a5`; the G2/record hashes join at the T2.5 close).
 
 ## Validation
 
