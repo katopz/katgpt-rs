@@ -1270,6 +1270,14 @@ mod tests {
     ///   Both are printed; the `_into` path is the one the plan's <1µs target
     ///   applies to (it is the primitive's true hot-path cost). The `_at` path
     ///   includes caller-facing allocation that the primitive does not own.
+    ///
+    /// LOAD ARTIFACT (measured 2026-10-11, plan 622 session): the 100 µs
+    /// guard is NOT load-robust — under concurrent cargo/test load the same
+    /// binary measured >100 µs/call and failed, then passed ALONE unchanged
+    /// (the box-state law: a latency number without its box state is not a
+    /// measurement; a loaded box schedules the 5k-iteration loop off-core).
+    /// A failure here under a busy box is the load-artifact class — re-run
+    /// the target alone before diagnosing a regression.
     #[test]
     fn jacobian_svd_r8x8_latency_gate() {
         let (w, _u, _v, _sigmas) = known_rank3_map_r8x8();
@@ -1327,7 +1335,9 @@ mod tests {
             per_call_into_ns < 100_000.0,
             "R^8→R^8 Jacobian SVD (`_into` hot path) regressed past the debug \
              regression guard: {per_call_into_ns:.0} ns/call \
-             (plan target <1000 ns release; alloc-path {per_call_alloc_ns:.0} ns/call)"
+             (plan target <1000 ns release; alloc-path {per_call_alloc_ns:.0} ns/call). \
+             UNDER A LOADED BOX this guard false-fails (measured load artifact, \
+             2026-10-11): re-run this target ALONE before diagnosing."
         );
     }
 
