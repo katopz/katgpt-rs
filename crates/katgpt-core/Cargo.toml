@@ -951,7 +951,15 @@ subspace_intervention = ["subspace_phase_gate"]
 # is the in-crate form). Self-contained; no new deps. OPT-IN per the
 # no-default-consumer rule — promotion needs the GOAT bench + a wired
 # consumer (reflex Issue 086 presentation certificate is the first).
-basis_split = []
+# Implies subspace_phase_gate + karc_forecaster: the module's
+# participation_ratio wrapper delegates to the former (the DRY law) and
+# its d≤16 solver routing calls karc::jacobi_eigen — a consumer forwarding
+# basis_split WITHOUT katgpt-core defaults (reflex declares
+# default-features = false) would otherwise hit E0433 on both — the GOAT
+# bench never saw it because it runs at
+# all(basis_split, subspace_phase_gate) under default builds where both
+# are transitively always-on.
+basis_split = ["subspace_phase_gate", "karc_forecaster"]
 
 # refinement_marginal (Plan 598 / Research 559, 2026-09-15): single-pass
 # token→byte distribution conversion with the closed-form terminal-mass
