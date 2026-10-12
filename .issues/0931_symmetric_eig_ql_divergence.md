@@ -128,3 +128,11 @@ at HEAD — see the evidence section).
 `6583de9776af33dbeb41cde80d395047ca273557979777dd9038f08893ac03ea`
 (`/tmp/katgpt-931-dump/family_diag.txt` on the M3 — throwaway, not
 committed; the 4090 original stays at `E:/git/_sync/family_diag.txt`).
+
+## Round 2 (2026-10-12 ~14:45 +07, the ai-1056 reporter): the fix does NOT cover the live input — fresh evidence
+
+Re-ran the ai-1056 style arm with `c38621194` (the `hypot_safe` + loud-refusal fix) compiled in — `Compiling katgpt-core` confirmed in the run log, wt1056kat reset to the fix commit. **The live style-family sigma still diverges with the identical signature** (QL l=0, 200 iters, `d[l..l2]=[NaN, NaN]`) — the graded-family tests added by the fix do not cover this input class.
+
+Why "non-reproducible from the audit dump" during the fix round: the dump file on this box was overwritten by successive audit iterations (the reporter was mid-instrument-debug) — the bytes the fix lane tested were an EARLIER matrix state, not the diverging one. The current live construction (16 sessions x 2 mixes x 64 windows x 24 events + 49 coverage species keys, deterministic seeds `session_seed` in the gated test) reproduces TODAY; fresh dump at `temp_dir()/basis_purity_audit_family_diag_<pid>.txt` (path printed by the test). Cross-machine note: the panic is on the 4090 box (Windows, rustc from the ai toolchain); the fix lane's cross-platform evidence pass did not include this matrix.
+
+The arm stays loud-blocked in ai (Bench 980 addendum records the same).
