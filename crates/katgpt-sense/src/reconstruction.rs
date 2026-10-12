@@ -982,6 +982,17 @@ impl ReconstructionState {
     /// is `Σ kind_activations[0..6]` (the 6 source activations — NOT the
     /// gathered 8; see `leaky_core` module docs). Behavior is byte-identical to
     /// the previous inline implementation.
+    ///
+    /// ⚠ **Bounded-episode kernel.** `evidence` is cumulative and the step
+    /// reads no belief state, so once Σ evidence ≥ 1 each dim moves by
+    /// `lr·(p_i − 0.5)` over cumulative kind shares (Σp = 1): at most one kind
+    /// (≤ 2 dims via `KIND_MAP`) can drift up, and ≥ 6 of 8 dims pin at −1
+    /// within a few dozen calls for ANY stream (measured 96.9% clamped,
+    /// `tests/belief_views_viability_probe.rs`, Issue 934). Fine for a fresh or
+    /// reloaded state per episode (`reconstruct`, K-step branch loops); a
+    /// per-tick, never-reset host must window its evidence, feed its channels
+    /// directly, or use `evolve_belief_additive` (feature `modality_additive`;
+    /// convex, never clamps).
     pub fn evolve_belief(&mut self) {
         // total is over the 6 distinct SenseKind activations — preserved exactly
         // from the original inline math. Do not change to Σ padded (would alter
