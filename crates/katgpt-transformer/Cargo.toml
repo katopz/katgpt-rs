@@ -161,6 +161,10 @@ name = "attn_res_g1_spec_match"
 required-features = ["transformer_attn_res"]
 
 [[test]]
+name = "bench_933_attn_res_decode_ab"
+required-features = ["transformer_attn_res"]
+
+[[test]]
 name = "moe_g1_spec_match"
 required-features = ["transformer_moe"]
 

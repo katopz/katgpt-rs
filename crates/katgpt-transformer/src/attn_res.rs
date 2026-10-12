@@ -173,6 +173,15 @@ impl AttnResWeights {
 /// The caller (decoder layer) is responsible for computing the correct
 /// summed value to push at each block boundary.
 ///
+/// # Per-summary view cache (Issue 933 T3)
+///
+/// Each summary's `Σ v²` (the RMSNorm reduction) depends only on the summary,
+/// never on the sublayer weights, yet every `apply_attn_res` call used to
+/// recompute it for every summary — `2·S` times per summary per token. It is
+/// computed once in [`push`](Self::push) and read by every later call. The
+/// summaries are private (read through [`residuals`](Self::residuals)), so a
+/// summary can only change via `push`/`clear`, which keep the cache in step.
+///
 /// # Zero-alloc steady state
 ///
 /// The inner `Vec<f32>` slots are pre-allocated once (in [`new_with_capacity`])
@@ -188,7 +197,9 @@ pub struct AttnResBlockState {
     /// `residuals.len()` is the logical length; the outer Vec's capacity is
     /// pre-allocated in `new_with_capacity`. Inner slots are NOT dropped on
     /// `clear()` — they move to `pool` for reuse.
-    pub residuals: Vec<Vec<f32>>,
+    residuals: Vec<Vec<f32>>,
+    /// Cached `Σ v²` per summary, parallel to `residuals` (Issue 933 T3).
+    sum_sq: Vec<f32>,
     /// Pre-allocated reusable slots (zero-alloc steady state).
     ///
     /// Pop on `push`, refill on `clear`. Eliminates per-token `Vec<f32>`
@@ -207,6 +218,7 @@ impl AttnResBlockState {
     pub fn new(hidden_size: usize) -> Self {
         Self {
             residuals: Vec::new(),
+            sum_sq: Vec::new(),
             pool: Vec::new(),
             hidden_size,
         }
@@ -225,6 +237,7 @@ impl AttnResBlockState {
             .collect();
         Self {
             residuals: Vec::with_capacity(max_entries),
+            sum_sq: Vec::with_capacity(max_entries),
             pool,
             hidden_size,
         }
@@ -234,6 +247,14 @@ impl AttnResBlockState {
     #[inline]
     pub fn len(&self) -> usize {
         self.residuals.len()
+    }
+
+    /// The accumulated block summaries, oldest first (read-only: mutation
+    /// goes through [`push`](Self::push) / [`clear`](Self::clear) so the
+    /// per-summary cache cannot go stale).
+    #[inline]
+    pub fn residuals(&self) -> &[Vec<f32>] {
+        &self.residuals
     }
 
     /// Whether the block state is empty.
@@ -256,6 +277,7 @@ impl AttnResBlockState {
         };
         debug_assert_eq!(slot.len(), self.hidden_size);
         slot.copy_from_slice(hidden);
+        self.sum_sq.push(simd_sum_sq(&slot, self.hidden_size));
         self.residuals.push(slot);
     }
 
@@ -269,6 +291,7 @@ impl AttnResBlockState {
         while let Some(slot) = self.residuals.pop() {
             self.pool.push(slot);
         }
+        self.sum_sq.clear();
     }
 }
 
@@ -316,6 +339,12 @@ impl AttnResScratch {
 /// softmax-weighted combination. The mixing weights are computed from
 /// RMSNorm'd values dotted with the score weight (gamma ⊙ proj).
 ///
+/// Re-folds `scratch.score_weight` from `weights` on every call, so it stays
+/// correct if the weights change between calls. A caller whose weights are
+/// frozen for the scratch's lifetime folds once
+/// ([`AttnResScratch::recompute_score_weight`]) and calls
+/// [`apply_attn_res_prepared`] — bit-identical output.
+///
 /// # Arguments
 /// - `config` — the attention residual config
 /// - `weights` — the per-layer weights (norm + proj)
@@ -336,12 +365,26 @@ pub fn apply_attn_res<'a>(
     scratch: &'a mut AttnResScratch,
     prefix_sum: &[f32],
 ) -> &'a mut [f32] {
+    scratch.recompute_score_weight(weights);
+    apply_attn_res_prepared(config, block_state, scratch, prefix_sum)
+}
+
+/// [`apply_attn_res`] with `scratch.score_weight` already folded.
+///
+/// Precondition: [`AttnResScratch::recompute_score_weight`] was called with
+/// the weights this scratch serves, after their last change. Every summary's
+/// `Σ v²` comes from the block state's push-time cache (Issue 933 T3), so the
+/// per-call work is one dot per summary plus the weighted sum.
+pub fn apply_attn_res_prepared<'a>(
+    config: &AttnResConfig,
+    block_state: &AttnResBlockState,
+    scratch: &'a mut AttnResScratch,
+    prefix_sum: &[f32],
+) -> &'a mut [f32] {
     let d = config.d();
     debug_assert_eq!(prefix_sum.len(), d);
     debug_assert_eq!(scratch.score_weight.len(), d);
-
-    // Pre-compute score_weight = norm_weight ⊙ proj_weight
-    scratch.recompute_score_weight(weights);
+    debug_assert_eq!(block_state.sum_sq.len(), block_state.residuals.len());
 
     // Number of entries: block_residuals + 1 (the prefix_sum)
     let num_entries = block_state.len() + 1;
@@ -353,51 +396,37 @@ pub fn apply_attn_res<'a>(
     );
 
     let scores = &mut scratch.scores[..num_entries];
+    let score_weight = &scratch.score_weight[..d];
 
-    // Compute scores for each entry: score[i] = dot(rmsnorm(v[i]), score_weight)
-    // We compute rmsnorm inline (no gamma — gamma is in score_weight).
+    // score[i] = dot(rmsnorm(v[i]), score_weight) = inv_rms * dot(v[i], score_weight)
+    // (no gamma in the norm — gamma is folded into score_weight).
     let eps = config.rms_eps;
+    let inv_rms = |sum_sq: f32| 1.0 / ((sum_sq / d as f32 + eps).sqrt());
 
-    // Block residual entries
-    for (i, residual) in block_state.residuals.iter().enumerate() {
-        let sum_sq = simd_sum_sq(residual, d);
-        let inv_rms = 1.0 / ((sum_sq / d as f32 + eps).sqrt());
-        // score = dot(residual / rms, score_weight) = inv_rms * dot(residual, score_weight)
-        let raw_dot = simd_dot_f32(residual, &scratch.score_weight, d);
-        scores[i] = inv_rms * raw_dot;
-    }
-
-    // Prefix sum entry (the current hidden state)
+    for ((score, residual), &sum_sq) in scores
+        .iter_mut()
+        .zip(&block_state.residuals)
+        .zip(&block_state.sum_sq)
     {
-        let sum_sq = simd_sum_sq(prefix_sum, d);
-        let inv_rms = 1.0 / ((sum_sq / d as f32 + eps).sqrt());
-        let raw_dot = simd_dot_f32(prefix_sum, &scratch.score_weight, d);
-        scores[num_entries - 1] = inv_rms * raw_dot;
+        *score = inv_rms(sum_sq) * simd_dot_f32(residual, score_weight, d);
     }
+    scores[num_entries - 1] =
+        inv_rms(simd_sum_sq(prefix_sum, d)) * simd_dot_f32(prefix_sum, score_weight, d);
 
-    // Softmax over scores
     softmax(scores);
 
-    // Weighted average of ORIGINAL v values (not normed k):
-    // out = Σ_i probs[i] · v[i]
+    // Weighted average of ORIGINAL v values (not normed k): out = Σ_i probs[i] · v[i].
+    // Same summation order as before; zipped slices let LLVM vectorize.
     let out = &mut scratch.out[..d];
-    // Zero output
-    for x in out.iter_mut() {
-        *x = 0.0;
-    }
-
-    // Block residual contributions
-    for (i, residual) in block_state.residuals.iter().enumerate() {
-        let prob = scores[i];
-        for (j, &rv) in residual.iter().enumerate() {
-            out[j] += prob * rv;
+    out.fill(0.0);
+    for (&prob, residual) in scores.iter().zip(&block_state.residuals) {
+        for (o, &rv) in out.iter_mut().zip(&residual[..d]) {
+            *o += prob * rv;
         }
     }
-
-    // Prefix sum contribution
     let prob = scores[num_entries - 1];
-    for (j, &pv) in prefix_sum.iter().enumerate() {
-        out[j] += prob * pv;
+    for (o, &pv) in out.iter_mut().zip(&prefix_sum[..d]) {
+        *o += prob * pv;
     }
 
     out
