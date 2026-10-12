@@ -111,7 +111,7 @@ fn main() {
         println!("\n## {rows}x{cols}");
         let base = times[0].clone();
         for (a, arm_times) in times.iter().enumerate() {
-            let label = chunks.get(a).map_or_else(|| "q8 sdot".to_owned(), |c| format!("chunk {c:>5}"));
+            let label = chunks.get(a).map_or_else(|| "q8 int8".to_owned(), |c| format!("chunk {c:>5}"));
             let mut ratios: Vec<f64> = arm_times.iter().zip(&base).map(|(t, b)| t / b).collect();
             let mut abs = arm_times.clone();
             println!(

@@ -1,6 +1,6 @@
 # Issue 935 — the Q2_0_g128 ternary matvec is the whole Bonsai-2-27B CPU decode (and compute-bound)
 
-**Status:** OPEN — T1–T3 DONE (Bonsai-2-27B CPU decode 1.96 → 7.86 tok/s, riir-infer Bench 877, q8 PROMOTED in riir-infer); only T4 (AVX2 q8 port) remains.
+**Status:** OPEN — T1–T4 DONE (Bonsai-2-27B CPU decode 1.96 → 7.86 tok/s, riir-infer Bench 877, q8 PROMOTED in riir-infer; AVX2 q8 port landed, bit-identical); only T4b (native x86_64 wall on the 4090) remains.
 
 ## Finding
 
@@ -35,6 +35,24 @@ the M3 Max; decode measured ~520 ms/token → compute-bound by ~25×.
   `ternary_q8_act`); end-to-end tg 7.86 tok/s, 65/65 greedy tokens identical
   to f32 (riir-infer Bench 877). katgpt-types keeps the feature opt-in — the
   consumer owns the lossy choice.
-- [ ] T4 — x86_64 q8 port (AVX2 `maddubs`/VNNI). Today the q8 entry point
-  runs the f32 kernel off aarch64-with-dotprod (no regression, no gain), so
-  the 4090 box's CPU decode is unchanged.
+- [x] T4 — x86_64 q8 port: `avx2_q8_row_range` (runtime-probed via
+  `is_avx2_fma_available`, never a compile-time `target_feature`). Per 32
+  weights: broadcast u32 per plane, `pshufb` + `and`/`cmpeq` → byte masks,
+  `sub` → {-1,0,+1}, `psignb` onto xq, `pmaddubsw` vs ones → i16; the four
+  i16 partials of a group (|sum| ≤ 1016) widen once via `pmaddwd`. Integer
+  inner sum ⇒ **bit-identical** to `ternary_group_q8_rows_scalar` — the same
+  reference the NEON arm matches, so the aarch64 real-model GOAT gate (T3)
+  transfers to x86_64 exactly. Verified on the M3 under Rosetta 2 with
+  `ROSETTA_ADVERTISE_AVX=1` (without it Rosetta hides AVX/AVX2/FMA in CPUID
+  and the test prints `SKIP`): 21/21 ternary_group tests, new
+  `saturated_extremes_match_exact_integer_sum` (every |xq| = 127, every
+  weight ±1), mutation canary (`sub(pm, nm)`) reds 3/5. Clippy clean on both
+  triples. Rosetta-translated kernel A/B (indicative ONLY — translated AVX2,
+  not a native wall): q8 = 0.467–0.482× the shipped f32 AVX2 kernel on all
+  four Bonsai-2 shapes (~0.6× vs chunk-32 f32).
+- [ ] T4b — native x86_64 wall on the 4090 (`ternary_group_par_chunk_ab
+  --features ternary_group_q8_act` + riir-infer `twt_perf_tg_pp`). Deferred
+  only while the Plan 620 session holds that box (sync via `gitsync`
+  schtask first). No promotion decision rides on it: the consumer feature is
+  already default in riir-infer and the result is bit-identical to the
+  gated aarch64 arm.

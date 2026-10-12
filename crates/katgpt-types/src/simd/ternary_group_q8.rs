@@ -18,7 +18,9 @@
 //! only (the regime llama.cpp's CPU `Q2_0` path runs: q8 activations).
 //!
 //! Fast path requires `cols % 128 == 0` (every Bonsai shape); anything else
-//! falls through to the f32 kernel.
+//! falls through to the f32 kernel. x86_64 runs the AVX2 port
+//! (`psignb` + `pmaddubsw`, Issue 935 T4), bit-identical to the same scalar
+//! reference.
 
 #![allow(clippy::needless_range_loop)]
 
@@ -151,20 +153,97 @@ unsafe fn neon_q8_row_range(
     }
 }
 
-/// Whether the SDOT fast path runs on this CPU (aarch64 + `dotprod`).
+/// AVX2 row range (Issue 935 T4). Same contract as
+/// [`ternary_group_q8_rows_scalar`] and bit-identical to it.
+///
+/// Per 32 weights: broadcast one u32 of each bit-plane, `pshufb` byte k to
+/// lanes 8k..8k+8, `and`+`cmpeq` against the per-lane bit → 0xFF masks,
+/// `sub` → {-1,0,+1}, `psignb` applies it to `xq`, `pmaddubsw` against ones
+/// pair-sums to i16. The four i16 partials of a 128-group (each ≤ 254 in
+/// magnitude, sum ≤ 1016) stay in i16; one `pmaddwd` widens per group.
+///
+/// # Safety
+/// CPU supports `avx2`; `w.cols % GROUP_SIZE == 0`; `xq.len() == w.cols`;
+/// `row_offset + y.len() <= w.rows`; `|xq| <= 127` (no `psignb` overflow).
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn avx2_q8_row_range(
+    w: &TernaryGroupWeights,
+    xq: &[i8],
+    xs: &[f32],
+    y: &mut [f32],
+    row_offset: usize,
+) {
+    use core::arch::x86_64::*;
+    debug_assert_eq!(w.cols % GROUP_SIZE, 0);
+    debug_assert_eq!(xq.len(), w.cols);
+    debug_assert!(row_offset + y.len() <= w.rows);
+    unsafe {
+        // `pshufb` is in-lane: the low 128-bit lane takes bytes 0,1 of the
+        // broadcast u32, the high lane bytes 2,3 (indices are lane-relative,
+        // and every lane holds the full broadcast word).
+        let shuf = _mm256_setr_epi8(
+            0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, //
+            2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,
+        );
+        let bit = _mm256_set1_epi64x(0x8040_2010_0804_0201u64 as i64);
+        let ones_u8 = _mm256_set1_epi8(1);
+        let ones_i16 = _mm256_set1_epi16(1);
+        let xq_ptr = xq.as_ptr();
+        for (i, y_slot) in y.iter_mut().enumerate() {
+            let r = row_offset + i;
+            let row_base = r * w.blocks64;
+            let pos = w.pos_bits.as_ptr().add(row_base) as *const u32;
+            let neg = w.neg_bits.as_ptr().add(row_base) as *const u32;
+            let scales = w.group_scale.as_ptr().add(r * w.groups_per_row);
+            let mut row_sum = 0.0f32;
+            for g in 0..w.groups_per_row {
+                let mut acc16 = _mm256_setzero_si256();
+                for k in 0..GROUP_SIZE / 32 {
+                    let wi = g * (GROUP_SIZE / 32) + k;
+                    // Little-endian: u32 word wi of the plane = cols 32wi..32wi+32.
+                    let pw = _mm256_shuffle_epi8(_mm256_set1_epi32(pos.add(wi).read_unaligned() as i32), shuf);
+                    let nw = _mm256_shuffle_epi8(_mm256_set1_epi32(neg.add(wi).read_unaligned() as i32), shuf);
+                    let pm = _mm256_cmpeq_epi8(_mm256_and_si256(pw, bit), bit);
+                    let nm = _mm256_cmpeq_epi8(_mm256_and_si256(nw, bit), bit);
+                    // mask lanes are -1 where set: neg − pos = +1 pos, −1 neg.
+                    let sign = _mm256_sub_epi8(nm, pm);
+                    let xv = _mm256_loadu_si256(xq_ptr.add(wi * 32) as *const __m256i);
+                    let sx = _mm256_sign_epi8(xv, sign);
+                    acc16 = _mm256_add_epi16(acc16, _mm256_maddubs_epi16(ones_u8, sx));
+                }
+                let acc32 = _mm256_madd_epi16(acc16, ones_i16);
+                let s128 = _mm_add_epi32(_mm256_castsi256_si128(acc32), _mm256_extracti128_si256::<1>(acc32));
+                let s64 = _mm_add_epi32(s128, _mm_unpackhi_epi64(s128, s128));
+                let s32 = _mm_add_epi32(s64, _mm_shuffle_epi32::<0b01>(s64));
+                let isum = _mm_cvtsi128_si32(s32);
+                let scale = (*scales.add(g)).to_f32() * xs[g];
+                row_sum += scale * isum as f32;
+            }
+            *y_slot = row_sum;
+        }
+    }
+}
+
+/// Whether the integer fast path runs on this CPU (aarch64 + `dotprod`, or
+/// x86_64 + `avx2` — runtime-probed, never a compile-time `target_feature`).
 #[inline]
 fn q8_fast_path_available() -> bool {
     #[cfg(target_arch = "aarch64")]
     {
         std::arch::is_aarch64_feature_detected!("dotprod")
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
+    {
+        super::is_avx2_fma_available()
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         false
     }
 }
 
-/// One row range over pre-quantized activations — the SDOT kernel.
+/// One row range over pre-quantized activations — the SDOT / AVX2 kernel.
 ///
 /// Only reached when [`q8_fast_path_available`] is true.
 #[inline]
@@ -174,7 +253,13 @@ fn q8_row_range(w: &TernaryGroupWeights, xq: &[i8], xs: &[f32], y: &mut [f32], r
     unsafe {
         neon_q8_row_range(w, xq, xs, y, row_offset)
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
+    // SAFETY: the caller checked avx2 and the shape contract; quantization
+    // clamps xq to ±127.
+    unsafe {
+        avx2_q8_row_range(w, xq, xs, y, row_offset)
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     ternary_group_q8_rows_scalar(w, xq, xs, y, row_offset);
 }
 
@@ -188,9 +273,9 @@ thread_local! {
 ///
 /// Quantizes `x` once (per-128-group int8), then runs the SDOT kernel over
 /// rayon row chunks (the same capped split as the f32 kernel). Where the fast
-/// path cannot run — `cols % 128 != 0`, or no aarch64 `dotprod` (x86_64 has no
-/// q8 port yet; its scalar integer arm would be far slower than the AVX2 f32
-/// kernel) — this IS the f32 kernel, exactly.
+/// path cannot run — `cols % 128 != 0`, or neither aarch64 `dotprod` nor x86_64
+/// `avx2` (the scalar integer arm would be far slower than the f32 kernel) —
+/// this IS the f32 kernel, exactly.
 pub fn simd_ternary_group_matvec_q8_parallel(w: &TernaryGroupWeights, x: &[f32], y: &mut [f32]) {
     use rayon::prelude::*;
 
@@ -275,12 +360,22 @@ mod tests {
         assert!(xq[..GROUP_SIZE].iter().any(|&q| q.unsigned_abs() == 127));
     }
 
-    /// The integer inner sum makes NEON and scalar bit-identical. aarch64-only:
-    /// elsewhere the entry point is the f32 kernel (no q8 port to compare).
-    #[cfg(target_arch = "aarch64")]
+    /// The integer inner sum makes NEON / AVX2 and scalar bit-identical.
+    /// Elsewhere the entry point is the f32 kernel (no q8 port to compare).
+    #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
     #[test]
-    fn neon_matches_scalar_q8_bit_identical() {
-        assert!(q8_fast_path_available(), "every Apple-silicon / ARMv8.4 CPU has dotprod");
+    fn simd_matches_scalar_q8_bit_identical() {
+        if !q8_fast_path_available() {
+            // aarch64: every Apple-silicon / ARMv8.4 CPU has dotprod — a miss
+            // there is a defect. x86_64 without AVX2 legitimately has no port.
+            #[cfg(target_arch = "aarch64")]
+            panic!("aarch64 CPU without dotprod");
+            #[cfg(target_arch = "x86_64")]
+            {
+                eprintln!("SKIP: no avx2 — the q8 entry point is the f32 kernel here");
+                return;
+            }
+        }
         for &(rows, cols) in &[(1, 128), (37, 256), (300, 640), (1023, 384)] {
             let w = fixture(rows, cols, 0x935 ^ rows as u64);
             let x = activations(cols);
@@ -293,6 +388,41 @@ mod tests {
             simd_ternary_group_matvec_q8_parallel(&w, &x, &mut y);
             for r in 0..rows {
                 assert_eq!(y[r].to_bits(), y_ref[r].to_bits(), "{rows}x{cols} row {r}");
+            }
+        }
+    }
+
+    /// Worst-case magnitudes: every weight ±1 and every |xq| = 127 — the i16
+    /// partials (AVX2 `pmaddubsw` chain) and i32 sums must not saturate.
+    #[test]
+    fn saturated_extremes_match_exact_integer_sum() {
+        let (rows, cols) = (64, 512);
+        let mut w = TernaryGroupWeights::new(rows, cols);
+        for r in 0..rows {
+            for c in 0..cols {
+                w.set(r, c, if r % 2 == 0 { 1 } else { -1 });
+            }
+            for g in 0..w.groups_per_row {
+                w.set_scale(r, g, 1.0);
+            }
+        }
+        // x = ±1 alternating by row parity of the sign → every xq = ±127.
+        let x: Vec<f32> = (0..cols).map(|c| if (c / 7) % 2 == 0 { 1.0 } else { -1.0 }).collect();
+        let mut xq = vec![0i8; cols];
+        let mut xs = vec![0.0f32; cols / GROUP_SIZE];
+        quantize_activations_q8(&x, &mut xq, &mut xs);
+        assert!(xq.iter().all(|&q| q.unsigned_abs() == 127));
+        let mut y_ref = vec![0.0f32; rows];
+        ternary_group_q8_rows_scalar(&w, &xq, &xs, &mut y_ref, 0);
+        let mut y = vec![0.0f32; rows];
+        simd_ternary_group_matvec_q8_parallel(&w, &x, &mut y);
+        let mut y_f32 = vec![0.0f32; rows];
+        simd_ternary_group_matvec(&w, &x, &mut y_f32);
+        for r in 0..rows {
+            // ±1 activations quantize exactly, so every arm agrees with f32 too.
+            assert!((y[r] - y_f32[r]).abs() <= 1e-3, "row {r}: {} vs f32 {}", y[r], y_f32[r]);
+            if q8_fast_path_available() {
+                assert_eq!(y[r].to_bits(), y_ref[r].to_bits(), "row {r}");
             }
         }
     }
