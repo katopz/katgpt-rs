@@ -400,6 +400,308 @@ fn n_equals_64_reconstruction() {
     check_eigenpairs(&a, &eigvals, &eigvecs, n, 1e-9);
 }
 
+// ─── Issue 931: graded symmetric matrices ───────────────────────────────────
+//
+// The riir-ai style-shard covariance (Bench 980) — large diagonal spread with
+// mixed-magnitude off-diagonals, cond ≈ 7.3e5, min eig 7.08e-8 > 0 — made the
+// QL phase diverge: loud NaN panic at the raw scale, and (worse) eigenvalues
+// at ±1e78 after a uniform rescale to O(1) diagonals. numpy solves the same
+// input to full precision, so the input is well-posed and the solver was at
+// fault. These tests pin the repaired behavior: finite, accurate eigenvalues
+// on the graded family at every scale, no panic, no garbage.
+
+/// Deterministic orthonormal basis via two-pass Gram-Schmidt over xorshift
+/// columns. Column k of the result is orthonormal to all others; the whole
+/// matrix is the rotation V in `A = V Λ Vᵀ`.
+fn random_orthonormal(state: &mut u64, v_out: &mut [f64], n: usize) {
+    for k in 0..n {
+        for i in 0..n {
+            v_out[i * n + k] = u64_to_unit_f64(xorshift64(state));
+        }
+    }
+    // Two modified Gram-Schmidt passes (re-orthogonalization keeps the basis
+    // orthonormal to machine precision even for near-parallel seeds).
+    for _pass in 0..2 {
+        for k in 0..n {
+            for j in 0..k {
+                let mut dot = 0.0_f64;
+                for i in 0..n {
+                    dot += v_out[i * n + k] * v_out[i * n + j];
+                }
+                for i in 0..n {
+                    v_out[i * n + k] -= dot * v_out[i * n + j];
+                }
+            }
+            let mut norm = 0.0_f64;
+            for i in 0..n {
+                norm += v_out[i * n + k] * v_out[i * n + k];
+            }
+            let norm = norm.sqrt();
+            for i in 0..n {
+                v_out[i * n + k] /= norm;
+            }
+        }
+    }
+}
+
+/// Build `A = V · diag(λ) · Vᵀ` from a rotation and a target spectrum. The
+/// eigenvalues of the result are exactly the λ vector (up to f64 rounding in
+/// the triple product, ~eps·‖A‖).
+fn spectral_matrix(v: &[f64], lambda: &[f64], a_out: &mut [f64], n: usize) {
+    for val in a_out.iter_mut().take(n * n) {
+        *val = 0.0;
+    }
+    // A = Σ_k λ_k · v_k v_kᵀ — one rank-1 update per eigenvalue.
+    for k in 0..n {
+        let col = &v[k..n * n].iter().step_by(n).cloned().collect::<Vec<_>>();
+        let lam = lambda[k];
+        for i in 0..n {
+            let ci = lam * col[i];
+            for j in 0..n {
+                a_out[i * n + j] += ci * col[j];
+            }
+        }
+    }
+}
+
+/// Sorted-eigenvalue comparison against the exactly-known spectrum.
+fn check_known_spectrum(eigvals: &[f64], lambda_true: &mut [f64], n: usize, tol: f64) {
+    let mut got: Vec<f64> = eigvals.iter().take(n).cloned().collect();
+    got.sort_by(|a, b| a.partial_cmp(b).expect("solver returned NaN eigenvalue"));
+    lambda_true.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    for k in 0..n {
+        let err = (got[k] - lambda_true[k]).abs();
+        assert!(
+            err < tol,
+            "eigenvalue {k} off: got {:.17e} want {:.17e} err {err:e} (tol {tol:e})",
+            got[k],
+            lambda_true[k]
+        );
+    }
+}
+
+/// The Issue 931 graded family: cond ≈ 7.3e5 (the Bench 980 style-shard
+/// covariance shape) at three uniform scales — the raw scale (loud NaN panic
+/// class) and the O(1)-normalized scale (silent ±1e78 garbage class), plus a
+/// large-scale arm. Every arm must solve to known eigenvalues, orthonormal
+/// vectors, and small residuals.
+#[test]
+fn graded_matrix_issue931_scales() {
+    let n = 64;
+    // Log-spaced spectrum over [7.08e-8, 5.14e-2]: the measured triggering
+    // shape (min eig 7.08e-8, max 5.14e-2, cond ≈ 7.3e5).
+    let lo = 7.08e-8_f64;
+    let hi = 5.14e-2_f64;
+    let mut lambda: Vec<f64> = (0..n)
+        .map(|k| lo * (hi / lo).powf(k as f64 / (n - 1) as f64))
+        .collect();
+
+    let mut state: u64 = 0x9A31_0000_C0DE_D00D;
+    let mut v = vec![0.0_f64; n * n];
+    random_orthonormal(&mut state, &mut v, n);
+
+    let mut a = vec![0.0_f64; n * n];
+    spectral_matrix(&v, &lambda, &mut a, n);
+
+    for &scale in &[1.0_f64, 1.0 / hi, 1e6] {
+        let mut a_scaled = a.clone();
+        for val in a_scaled.iter_mut() {
+            *val *= scale;
+        }
+        let mut eigvals = vec![0.0_f64; n];
+        let mut eigvecs = vec![0.0_f64; n * n];
+        let mut scratch = SymmetricEigScratch::new();
+        symmetric_eig(
+            &mut eigvals,
+            &mut eigvecs,
+            &a_scaled,
+            &mut scratch,
+            n,
+            200,
+        );
+        // Accuracy bar: ±1e-9 vs the known spectrum — but the spectrum scales
+        // too, so compare against the scaled λ (tolerance scales with ‖A‖).
+        let mut lambda_scaled = lambda.clone();
+        for val in lambda_scaled.iter_mut() {
+            *val *= scale;
+        }
+        let tol = 1e-9 * scale.max(1.0);
+        check_known_spectrum(&eigvals, &mut lambda_scaled, n, tol);
+        check_orthonormal(&eigvecs, n, 1e-9);
+        check_eigenpairs(&a_scaled, &eigvals, &eigvecs, n, tol.max(1e-9));
+    }
+}
+
+/// Higher dynamic range: cond ≈ 7e12 (λ over [1e-11, 1]) — beyond the reported
+/// trigger but the same class. The solver must stay finite and resolve the
+/// dominant spectrum to tolerance (the subspace holding λ ≤ 1e-11 is allowed
+/// relative error ~eps·‖A‖/λ_min = O(1), so only λ ≥ 1e-6 are pinned; the
+/// residual bound uses ‖A‖-scaled tolerance).
+#[test]
+fn graded_matrix_issue931_extreme_range() {
+    let n = 48;
+    let lo = 1e-11_f64;
+    let hi = 1.0_f64;
+    let mut lambda: Vec<f64> = (0..n)
+        .map(|k| lo * (hi / lo).powf(k as f64 / (n - 1) as f64))
+        .collect();
+    let mut state: u64 = 0x0DEFACED_931D0001;
+    let mut v = vec![0.0_f64; n * n];
+    random_orthonormal(&mut state, &mut v, n);
+    let mut a = vec![0.0_f64; n * n];
+    spectral_matrix(&v, &lambda, &mut a, n);
+
+    let mut eigvals = vec![0.0_f64; n];
+    let mut eigvecs = vec![0.0_f64; n * n];
+    let mut scratch = SymmetricEigScratch::new();
+    symmetric_eig(&mut eigvals, &mut eigvecs, &a, &mut scratch, n, 200);
+
+    // Every eigenvalue must at least be finite.
+    for (k, &lv) in eigvals.iter().enumerate().take(n) {
+        assert!(lv.is_finite(), "eigenvalue {k} non-finite: {lv:e}");
+    }
+    // The well-resolved head of the spectrum (λ ≥ 1e-6) is pinned to
+    // eps·‖A‖-scaled tolerance; the deep tail is only required finite.
+    let tol = 1e-9;
+    let mut got: Vec<f64> = eigvals.iter().take(n).cloned().collect();
+    got.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let mut want = lambda.clone();
+    want.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    for k in 0..n {
+        if want[k] >= 1e-6 {
+            let err = (got[k] - want[k]).abs();
+            assert!(
+                err < tol,
+                "eigenvalue {k} off: got {:+.17e} want {:+.17e} err {err:e}",
+                got[k],
+                want[k]
+            );
+        }
+    }
+    check_orthonormal(&eigvecs, n, 1e-9);
+    check_eigenpairs(&a, &eigvals, &eigvecs, n, 1e-9);
+}
+
+/// Diagonally-graded family: diag entries graded over many orders while
+/// off-diagonals stay comparable to the geometric mean of their endpoints —
+/// locally breaking diagonal dominance (big off-diagonal beside tiny
+/// diagonals). This is the EISPACK-era "graded matrix" shape that broke NR
+/// `tqli` and the shape the Bench 980 style covariance reports ("large
+/// diagonal spread with mixed-magnitude off-diagonals"). Oracles: residual
+/// (A·v = λ·v) + orthonormality — both must hold at eps·‖A‖ level.
+#[test]
+fn graded_matrix_issue931_diagonally_graded() {
+    let n = 64;
+    // diag spans 1 → 1e-12; A[i][j] = g_ij · √(D_i·D_j) with g_ij ∈ [-1, 1],
+    // drawn once per {i,j} pair and mirrored (the matrix must be symmetric —
+    // an asymmetric input is out of contract and the solver's output is
+    // undefined for it).
+    let mut state: u64 = 0x9A31_D1A0_0AFF_0002;
+    let mut a = vec![0.0_f64; n * n];
+    for i in 0..n {
+        let di = 10.0_f64.powf(-(i as f64) * 12.0 / (n - 1) as f64);
+        for j in 0..=i {
+            let dj = 10.0_f64.powf(-(j as f64) * 12.0 / (n - 1) as f64);
+            let g = u64_to_unit_f64(xorshift64(&mut state));
+            let v = g * (di * dj).sqrt();
+            a[i * n + j] = v;
+            a[j * n + i] = v;
+        }
+    }
+
+    let mut eigvals = vec![0.0_f64; n];
+    let mut eigvecs = vec![0.0_f64; n * n];
+    let mut scratch = SymmetricEigScratch::new();
+    symmetric_eig(&mut eigvals, &mut eigvecs, &a, &mut scratch, n, 200);
+
+    for (k, &lv) in eigvals.iter().enumerate().take(n) {
+        assert!(lv.is_finite(), "eigenvalue {k} non-finite: {lv:e}");
+    }
+    check_orthonormal(&eigvecs, n, 1e-9);
+    check_eigenpairs(&a, &eigvals, &eigvecs, n, 1e-9);
+}
+
+/// The real-pipeline shape: a covariance accumulated from N snapshots over
+/// features whose scales span orders of magnitude (the Bench 980 style-shard
+/// sigma is exactly this — 1024 snapshots, d=64, moment columns of mixed
+/// magnitude). Built as X̃ᵀX̃/N with graded feature scales + shared factors.
+#[test]
+fn graded_matrix_issue931_snapshot_covariance() {
+    let n = 64;
+    let snapshots = 1024_usize;
+    let mut state: u64 = 0x9A31_5A1A_0003;
+    // Feature scales span 1 → 1e-4 (diag of the covariance spans 1 → 1e-8).
+    let scale = |j: usize| 10.0_f64.powf(-(j as f64) * 4.0 / (n - 1) as f64);
+    // Latent factors drive correlation: f ∈ R^8 per snapshot.
+    let mut a = vec![0.0_f64; n * n];
+    let mut x = vec![0.0_f64; n];
+    for _t in 0..snapshots {
+        let mut f = [0.0_f64; 8];
+        for fv in f.iter_mut() {
+            *fv = u64_to_unit_f64(xorshift64(&mut state));
+        }
+        for j in 0..n {
+            let mut v = f[j % 8] + 0.5 * u64_to_unit_f64(xorshift64(&mut state));
+            v *= scale(j);
+            x[j] = v;
+        }
+        for i in 0..n {
+            for j in 0..n {
+                a[i * n + j] += x[i] * x[j];
+            }
+        }
+    }
+    for val in a.iter_mut() {
+        *val /= snapshots as f64;
+    }
+
+    let mut eigvals = vec![0.0_f64; n];
+    let mut eigvecs = vec![0.0_f64; n * n];
+    let mut scratch = SymmetricEigScratch::new();
+    symmetric_eig(&mut eigvals, &mut eigvecs, &a, &mut scratch, n, 200);
+
+    for (k, &lv) in eigvals.iter().enumerate().take(n) {
+        assert!(lv.is_finite(), "eigenvalue {k} non-finite: {lv:e}");
+    }
+    check_orthonormal(&eigvecs, n, 1e-9);
+    check_eigenpairs(&a, &eigvals, &eigvecs, n, 1e-9);
+}
+
+/// A NaN entry must refuse loudly at the input seam (Issue 931): the QL
+/// deflation tests read false against NaN, so the pre-guard panic at entry
+/// replaces the old spin-to-cap failure ("QL failed to converge … [NaN, NaN]").
+#[test]
+#[should_panic(expected = "non-finite input at (i, j) = (1, 2)")]
+fn non_finite_input_refuses_loudly() {
+    let n = 4;
+    let mut a = vec![0.0_f64; n * n];
+    for i in 0..n {
+        a[i * n + i] = 1.0;
+    }
+    a[1 * n + 2] = f64::NAN;
+    a[2 * n + 1] = f64::NAN; // keep it symmetric — position (1,2) is named
+    let mut eigvals = vec![0.0; n];
+    let mut eigvecs = vec![0.0; n * n];
+    let mut scratch = SymmetricEigScratch::new();
+    symmetric_eig(&mut eigvals, &mut eigvecs, &a, &mut scratch, n, 30);
+}
+
+/// An inf entry must refuse the same way.
+#[test]
+#[should_panic(expected = "non-finite input")]
+fn infinite_input_refuses_loudly() {
+    let n = 3;
+    let mut a = vec![0.0_f64; n * n];
+    for i in 0..n {
+        a[i * n + i] = 1.0;
+    }
+    a[0] = f64::INFINITY;
+    let mut eigvals = vec![0.0; n];
+    let mut eigvecs = vec![0.0; n * n];
+    let mut scratch = SymmetricEigScratch::new();
+    symmetric_eig(&mut eigvals, &mut eigvecs, &a, &mut scratch, n, 30);
+}
+
 // ─── Issue 186 T4 GOAT G2 perf gate (ad-hoc timing) ─────────────────────────
 //
 // Run with: cargo test --release --features karc_forecaster --lib \

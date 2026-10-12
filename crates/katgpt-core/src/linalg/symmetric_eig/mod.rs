@@ -46,6 +46,77 @@ mod tests;
 #[cfg(feature = "karc_householder_eig_par")]
 pub mod par;
 
+/// Overflow-guarded Euclidean radius `sqrt(x² + y²)`.
+///
+/// On the entire range where `x² + y²` cannot overflow (`|x|, |y| < 1e150`,
+/// i.e. every input the bounded QL arithmetic can produce — all quantities
+/// stay within ~max(|d|, |e|) of the tridiagonal) this is the verbatim
+/// inline form, so results are bit-identical to every prior run of this
+/// module. Only the overflow-threatened tail routes through the scaled
+/// form `hi·sqrt(1 + (lo/hi)²)`, which cannot overflow. The Numerical
+/// Recipes reference computes both radii through `pythag` unconditionally;
+/// this guarded variant keeps that safety while preserving the bit
+/// patterns of the benign range (this module sits under downstream
+/// bit-identity pins).
+fn hypot_safe(x: f64, y: f64) -> f64 {
+    const OVERFLOW_GUARD: f64 = 1e150;
+    if x.abs() < OVERFLOW_GUARD && y.abs() < OVERFLOW_GUARD {
+        (x * x + y * y).sqrt()
+    } else {
+        let ax = x.abs();
+        let ay = y.abs();
+        let (hi, lo) = if ax >= ay { (ax, ay) } else { (ay, ax) };
+        if hi == 0.0 {
+            0.0
+        } else if lo.is_infinite() {
+            // hypot(inf, ·) is inf by convention (the inline form agrees).
+            f64::INFINITY
+        } else {
+            let r = lo / hi;
+            hi * (1.0 + r * r).sqrt()
+        }
+    }
+}
+
+/// Loud refusal on a non-finite entry: the first (i, j) with a non-finite
+/// value panics naming its position. The QL arithmetic cannot recover from
+/// a poisoned input — every deflation test reads false against NaN and the
+/// iteration would spin to its cap and panic with a confusing NaN dump
+/// instead (the Issue 931 audit signature).
+fn refuse_non_finite_input(a: &[f64], n: usize) {
+    for (idx, &v) in a.iter().enumerate().take(n * n) {
+        if !v.is_finite() {
+            panic!(
+                "symmetric_eig: non-finite input at (i, j) = ({}, {}) = {:e} — \
+                 the solver requires a finite symmetric matrix",
+                idx / n,
+                idx % n,
+                v
+            );
+        }
+    }
+}
+
+/// Loud refusal on a non-finite intermediate produced mid-solve.
+fn refuse_non_finite_intermediate(what: &str, d: &[f64], e: &[f64], n: usize, l: usize, iter: usize) {
+    for k in l..n {
+        if !d[k].is_finite() {
+            panic!(
+                "symmetric_eig: non-finite intermediate ({what}) at l={l}, iteration {iter}: \
+                 d[{k}] = {:e} — refusing instead of returning garbage",
+                d[k]
+            );
+        }
+        if k < n && !e[k].is_finite() {
+            panic!(
+                "symmetric_eig: non-finite intermediate ({what}) at l={l}, iteration {iter}: \
+                 e[{k}] = {:e} — refusing instead of returning garbage",
+                e[k]
+            );
+        }
+    }
+}
+
 /// Scratch buffers for [`symmetric_eig`]. Owns ~`n²` f64 for the working copy
 /// of A plus `O(n)`-sized temps. Lazily sized via [`ensure_capacity`].
 ///
@@ -121,11 +192,29 @@ impl SymmetricEigScratch {
 ///
 /// # Panics
 ///
+/// - Non-finite input: any NaN/inf entry panics at entry naming `(i, j)`
+///   (Issue 931). QL cannot recover from a poisoned matrix — every deflation
+///   test reads false against NaN — so the old behavior (spin to the iteration
+///   cap, panic with a NaN dump) is replaced by an immediate, precise refusal.
+///   The parallel variant refuses identically.
+/// - Non-finite intermediates: if the tridiagonalization or a QL sweep ever
+///   produced a non-finite `d`/`e` (not reachable for finite bounded input —
+///   all QL quantities stay within ~max(|d|, |e|) — but guarded anyway), the
+///   solve refuses immediately naming the phase, position and iteration.
 /// - Input slice length mismatches (debug_assert only — release builds skip).
 /// - QL fails to converge after `max_iters_per_eigval` iterations per
-///   eigenvalue (Numerical Recipes uses 30; we follow). This indicates either
-///   a pathologically close-to-defective matrix or a bug in the implementation.
-///   Caller should regularize (e.g. `A + ε·I`) or investigate.
+///   eigenvalue (Numerical Recipes uses 30; Issue 931 callers use 200). This
+///   indicates either a pathologically close-to-defective matrix or a bug in
+///   the implementation. Caller should regularize (e.g. `A + ε·I`) or
+///   investigate.
+///
+/// The two radii of the QL iteration (the shift radius and the bulge-chase
+/// radius) are computed by an overflow-guarded [`hypot_safe`]: bit-identical
+/// to the historical inline `sqrt(x²+y²)` on the entire benign range, and
+/// scaled-form beyond. The Numerical Recipes reference computes both
+/// radii through `pythag` unconditionally; the inline form overflowed at
+/// |entries| ≳ 1e154 and would cascade `inf → inf/inf = NaN` — the latent
+/// transcription defect class closed here (Issue 931).
 ///
 /// # Determinism
 ///
@@ -141,6 +230,11 @@ pub fn symmetric_eig(
     debug_assert_eq!(a_in.len(), n * n, "a_in must be n*n");
     debug_assert_eq!(eigvals.len(), n, "eigvals must be n");
     debug_assert_eq!(eigvecs.len(), n * n, "eigvecs must be n*n");
+
+    // Loud refusal on a poisoned input (Issue 931): NaN/inf entries make every
+    // QL deflation test read false, so the solver would spin to its iteration
+    // cap and panic with a confusing NaN dump. Refuse here, naming the entry.
+    refuse_non_finite_input(a_in, n);
 
     scratch.ensure_capacity(n);
 
@@ -177,6 +271,13 @@ pub fn symmetric_eig(
     }
     if n > 0 {
         scratch.subdiag[n - 1] = 0.0; // Sentinel required by tqli.
+    }
+
+    // Loud refusal if phase 1 ever produced a non-finite d/e (Issue 931):
+    // QL cannot converge from a poisoned tridiagonal — refuse with the phase
+    // named instead of spinning.
+    if n > 0 {
+        refuse_non_finite_intermediate("after tridiagonalize", eigvals, &scratch.subdiag, n, 0, 0);
     }
 
     // Phase 2: implicit-shift QL on the tridiagonal, accumulating into eigvecs.
@@ -390,6 +491,11 @@ fn tqli_implicit_shift(
                 break;
             }
 
+            // Loud refusal on non-finite intermediates (Issue 931): a poisoned
+            // d/e would never deflate (every negligible test reads false
+            // against NaN) — refuse at once instead of spinning to the cap.
+            refuse_non_finite_intermediate("ql sweep", d, e, m + 1, l, iter + 1);
+
             iter += 1;
             if iter > max_iters_per_eigval {
                 panic!(
@@ -406,7 +512,7 @@ fn tqli_implicit_shift(
             // This is the eigenvalue of [[d[l], e[l]], [e[l], d[l+1]]] closer
             // to d[l+1] (QL pushes mass toward the lower-left).
             let g = (d[l + 1] - d[l]) / (2.0 * e[l]);
-            let r = (g * g + 1.0).sqrt();
+            let r = hypot_safe(g, 1.0);
             // The shift: μ = d[m] - (d[l] - μ') where μ' is the closer-of-two
             // eigenvalue of the 2×2 block. Numerical Recipes condenses this
             // to a single expression; see NR §11.3 for the algebra.
@@ -424,7 +530,7 @@ fn tqli_implicit_shift(
             for i in (l..m).rev() {
                 let f = s * e[i];
                 let b = c * e[i];
-                let r = (f * f + g * g).sqrt();
+                let r = hypot_safe(f, g);
                 e[i + 1] = r;
                 if r == 0.0 {
                     // Underflow recovery: if r is exactly zero, f and g are

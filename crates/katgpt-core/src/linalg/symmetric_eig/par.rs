@@ -59,6 +59,11 @@ pub fn symmetric_eig_par(
     debug_assert_eq!(eigvals.len(), n, "eigvals must be n");
     debug_assert_eq!(eigvecs.len(), n * n, "eigvecs must be n*n");
 
+    // Loud refusal on a poisoned input — same seam as the serial path
+    // (Issue 931); the parallel path must refuse identically to stay
+    // bit-identical on every input the two share.
+    super::refuse_non_finite_input(a_in, n);
+
     scratch.ensure_capacity(n);
 
     // Initialize eigvecs = I (row-parallel — each row is independent).
@@ -92,6 +97,12 @@ pub fn symmetric_eig_par(
     }
     if n > 0 {
         scratch.subdiag[n - 1] = 0.0;
+    }
+
+    // Loud refusal if phase 1 ever produced a non-finite d/e — same seam as
+    // the serial path (Issue 931).
+    if n > 0 {
+        super::refuse_non_finite_intermediate("after tridiagonalize", eigvals, &scratch.subdiag, n, 0, 0);
     }
 
     // Phase 2: batched-parallel implicit-shift QL.
@@ -290,6 +301,10 @@ fn tqli_implicit_shift_par(
                 break;
             }
 
+            // Loud refusal on non-finite intermediates — same seam as the
+            // serial path (Issue 931).
+            super::refuse_non_finite_intermediate("ql sweep", d, e, m + 1, l, iter + 1);
+
             iter += 1;
             if iter > max_iters_per_eigval {
                 panic!(
@@ -303,7 +318,7 @@ fn tqli_implicit_shift_par(
             }
 
             let g = (d[l + 1] - d[l]) / (2.0 * e[l]);
-            let r = (g * g + 1.0).sqrt();
+            let r = super::hypot_safe(g, 1.0);
             let r_signed = if g >= 0.0 { r } else { -r };
             let mut g = d[m] - d[l] + e[l] / (g + r_signed);
 
@@ -317,7 +332,7 @@ fn tqli_implicit_shift_par(
             for i in (l..m).rev() {
                 let f = s * e[i];
                 let b = c * e[i];
-                let r = (f * f + g * g).sqrt();
+                let r = super::hypot_safe(f, g);
                 e[i + 1] = r;
                 if r == 0.0 {
                     d[i + 1] -= p;
