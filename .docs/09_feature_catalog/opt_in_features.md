@@ -5578,7 +5578,8 @@ Research 611 + riir-ai Research 396. Source:
 
 ## 147. sync_bank — CMM Sync-EWMA Relation-Surprise Memory (Issue 930 / Research 615)
 
-Feature `sync_bank` (opt-in; the ESTIMATOR is unconditional in
+Feature `sync_bank` (**DEFAULT-ON since 2026-10-12** — Issue 930 T5
+promotion, owner GO; the ESTIMATOR is unconditional in
 katgpt-types — the TemporalDerivativeKernel precedent: leaf kernels always
 compile, the feature gates the `ReconstructionState` WIRING; the unarmed
 default path is byte-identical, γ=0). Source: arXiv:2610.07907 (Continuous
@@ -5618,10 +5619,13 @@ Memory Machines), Research 615. Source:
   (integrated elevation ≥4× the Plan-277 value-surprise), settles; the
   whole-vector sign negation pinned as a covariance NO-OP (the sign-flip
   ground truth); the independent-marginal-step negative control stays
-  quiet. G4: 0 allocs over 10k iterations (D=8) + 1k (D=64). G2 ARMED
-  with a load-aware loud SKIP — quiet-box numbers pending (contaminated
-  readings discarded as scheduler measurements). **T5 (G1b real-fixture
-  replay from riir-engine production belief trajectories, staged as a
-  3-unit plan) is the promotion gate** — the lane ships opt-in on G1a
-  alone; G1b is never skipped silently; a G1b null records the negative
-  in Research 615 §7 and removes the feature.
+  quiet. G4: 0 allocs over 10k iterations (D=8) + 1k (D=64). G2 quiet-box
+  numbers COLLECTED 2026-10-11 (M3 idle loop, load 2.15/16, AC): D=8
+  observe 54.8 ns, D=8 readouts 59.8 ns/pair, D=64 observe 2354.1 ns —
+  all bars green with headroom. **T5 (G1b real-fixture replay) PASSED
+  2026-10-11 — δ_surprise 23/23 warm events at EVERY matched FP budget
+  vs value-surprise 0/23; Wilson 95% intervals disjoint; McNemar 23-0-0;
+  AUC 0.72 vs 0.55** (fixture:
+  `crates/katgpt-types/tests/sync_bank_g1b_real_fixture.rs`, re-measured
+  every run). **PROMOTED TO DEFAULT 2026-10-12** (owner GO); the pinning
+  test re-reds past the recorded margins.
