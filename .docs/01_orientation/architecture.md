@@ -1236,7 +1236,7 @@ Reuses `spectralquant`'s `SpectralRotation`, `LloydMaxQuantizer`, `BitAllocator`
 | `rope` | `undo_rope` / `reapply_rope` with `RopeFreqs` |
 | `types` | `ShardConfig`, `ShardCalibration`, `ShardLayer`, `VqCodebook` |
 
-**Feature gate:** `shard_kv` (opt-in, requires `spectral_quant`, `turboquant`)
+**Feature gate:** `shard_kv` (the root pipeline feature is opt-in in this crate, requires `spectral_quant`, `turboquant`; the katgpt-kv f16-cache substrate flag of the same name is transitively default-on via `mla_attention` since the `mla_absorbed` promotion, 2026-10-12 — Issue 926)
 
 ## Sleep Consolidation (`src/sleep/`, Plan 154, Research 116)
 

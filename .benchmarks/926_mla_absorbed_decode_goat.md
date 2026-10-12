@@ -1,6 +1,6 @@
 # Bench 926 — MLA absorbed decode GOAT gate (Issue 926)
 
-**Status:** LANDED 2026-10-08 — G1 PASS · G2 PASS-provisional (ratio stable, absolutes load-contaminated — quiet-box re-pin pending before any promotion) · G3 PASS · G4 PASS. Feature `mla_absorbed` opt-in (katgpt-attn `mla_absorbed = ["mla_attention"]` + root forward); reconstruct path unchanged as the spec-match reference; kill-switch `KATGPT_MLA_RECONSTRUCT=1`.
+**Status:** LANDED + PROMOTED 2026-10-12 — G1 PASS · **G2 PASS (quiet-box re-pin, citable)** · G3 PASS · G4 PASS · flashmemory A/B MEASURED. Feature `mla_absorbed` **DEFAULT-ON since 2026-10-12** (katgpt-attn `mla_absorbed = ["mla_attention"]` + root forward, in the root `default` array); reconstruct path unchanged as the spec-match reference; kill-switch `KATGPT_MLA_RECONSTRUCT=1`.
 
 ## What landed
 
@@ -51,18 +51,41 @@ per-step max-abs diffs (dev profile, 1.98.1, aarch64):
 re-passes its existing gates unchanged: `mla_g1_spec_match` 8/8 (default AND
 `mla_backward` postures), `mla_backward_grad_check` 4/4.
 
-### G2 — decode latency (PASS-provisional)
+### G2 — decode latency (PASS — quiet-box re-pin 2026-10-12, the citable numbers)
 
 `benches/bench_926_mla_absorbed_decode.rs` (harness=false, interleaved A/B
 pairs, median over pairs, black_box both arms, `rewind_to` keeps the cache
 length constant across timed steps). kimi geometry (d_h=64, d_c=128, d_r=32,
 v_h=64, n_h=8), random weights, cache pre-filled directly:
 
-| seq | speedup (4 runs) | verdict row |
-|---|---|---|
-| 1024 | 23.9 – 25.5× (±3%, stable) | PASS |
-| 4096 | 36 – 53× | PASS |
-| 16384 | 36 – 54× | PASS |
+| seq | speedup (quiet x86_64) | absorbed µs/step | recon µs/step | verdict |
+|---|---|---|---|---|
+| 1024 | **18.54×** | 329.5 | 6109.8 | PASS |
+| 4096 | **27.88×** | 871.0 | 24285.3 | PASS |
+| 16384 | **28.91×** | 3254.3 | 94089.0 | PASS |
+
+**Quiet-box provenance (2026-10-12T13:30Z):** x86_64 i7-13700K (16C), Windows,
+High-performance power scheme, load ~1.2 at start / CPU 2% at end, **zero
+rustc/cargo/cl processes before, during, and after** (the precondition held for
+the first time since 2026-10-08 — every prior window closed on the Issue-920
+census or sibling builds). `CARGO_TARGET_DIR=/tmp/katgpt-926-root` per the
+runbook; release bench profile.
+
+**Why the quiet ratios are LOWER than the provisional 23.9–54× (a confirmation,
+not a regression):** the reconstruct arm is the bandwidth-heavy one — under the
+M3's load 14–42 it was contended slower, inflating the ratio; the interleaved
+pair design kept the ratio HONEST-bounded but load-asymmetric. On the quiet
+box the recon arm runs at full speed (spread −3%..+6%) and the ratio settles at
+its true value. The absorbed arm's ABSOLUTE medians are near-identical across
+platforms and loads (M3 loaded: ~316–398/986–1065/3323–3883 µs; x86_64 quiet:
+329.5/871.0/3254.3 µs) — the absorbed path's cost is compute-shaped, not
+bandwidth-shaped, which is the mechanism working as designed. The absorbed
+arm's within-run spread at seq=1024 was 58.7% (median over 40 pairs is the
+reported statistic; the spread is disclosed, not hidden).
+
+Historical provisional rows (M3 Max, load 14–42, sibling rustc + census — kept
+for the record, superseded by the table above): 1024: 23.9–25.5×; 4096:
+36–53×; 16384: 36–54×.
 
 ⛔ **Provenance (loud):** M3 Max 16-core, AC power, battery 100% charged,
 **load average 14–42 with a sibling session's bevy release build actively
@@ -116,10 +139,12 @@ fixed cache length (rewind pattern) → **0 allocations**.
   routes through `mla_forward_token_dispatched` (one call site).
 - Kill-switch: `KATGPT_MLA_RECONSTRUCT=1` bit-restores the reconstruct path
   under the feature.
-- Promotion: NOT done — gated on the quiet-box re-pin above (the G2 gain is
-  modelless — pure algebra — so the promotion path is open once numbers are
-  clean; the rejected alternative of caching up-projected k_c/v_c is recorded
-  in Issue 926 so nobody reopens it).
+- Promotion: **DONE 2026-10-12** — `mla_absorbed` in the root `default` array
+  after the quiet-box re-pin above (the G2 gain is modelless — pure algebra —
+  so the promotion path opened once the numbers were clean; the rejected
+  alternative of caching up-projected k_c/v_c is recorded in Issue 926 so
+  nobody reopens it). Validation at the promoted default: root lib 212/0, all
+  five mla spec/alloc binaries green, clippy clean at the default posture.
 
 ## Secondary scope — flashmemory_sparse absorbed decode (2026-10-08, `ea0c60e41`)
 
@@ -138,9 +163,20 @@ feature, dispatched router + `KATGPT_MLA_RECONSTRUCT=1` kill-switch shared:
 - G1 8/8 (pos=0 bit-identical, worst 8.94e-8 vs 1e-4/1e-3); G4 0 allocs /
   256 steps; clippy green at 4 postures; katgpt-attn lib 176/176; root lib
   `mla_absorbed,kimi_k3` 217/217; all 6 flashmemory bench consumers compile.
-- **Flashmemory G2 paired A/B: PENDING** — runs in a quiet window under the
-  same discipline (interleaved pairs, medians, box-state provenance), after
-  or alongside the primary re-pin; NOT a promotion blocker for the dense
-  lane. Until measured, the flashmemory absorbed path carries the same
-  FLOP-model expectation (~60× fewer up-projection FLOPs at large seq) with
-  no wall-clock claim.
+- **Flashmemory G2 paired A/B: MEASURED 2026-10-12** (same quiet window as the
+  primary re-pin, same discipline):
+
+| seq | speedup | fm-absorbed µs/step | fm-recon µs/step |
+|---|---|---|---|
+| 1024 | **11.41×** | 296.4 | 3382.2 |
+| 4096 | **14.07×** | 889.4 | 12514.9 |
+| 16384 | **15.42×** | 3108.5 | 47923.1 |
+
+  Lower ratios than the dense lane by construction — the flashmemory recon
+  arm already skips unselected blocks (3–4× cheaper than dense recon), so the
+  absorption's saving is measured against a leaner incumbent. The
+  fm-absorbed absolutes track the dense absorbed arm within ~5% at every seq
+  (296 vs 329 µs @1K, 889 vs 871 @4K, 3109 vs 3254 @16K) — the absorbed tail
+  cost is dominated by the shared latent matvec, not the selection. NOT a
+  promotion blocker for the dense lane (as stated at staging) and the
+  flashmemory feature itself stays opt-in on its own gate (Issue 584).
