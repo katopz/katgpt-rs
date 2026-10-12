@@ -33,6 +33,14 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static ALLOC_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+/// The two pipeline tests share ONE global allocator counter; libtest runs
+/// them on parallel threads, so one test's SETUP allocations can land inside
+/// the other's TRACKING window and be miscounted (measured post-931-round-3:
+/// d16 reporting d64's setup allocs — 250/1 depending on scheduling). Hold
+/// this lock for the WHOLE test body: the pipelines serialize, the counter
+/// is never observed cross-test.
+static SERIALIZE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 static TRACKING: AtomicUsize = AtomicUsize::new(0);
 
 struct Counting;
@@ -138,6 +146,7 @@ fn counted_pipeline(d: usize, k: usize, n: usize) -> (usize, bool) {
 
 #[test]
 fn g4_zero_alloc_steady_state_d64() {
+    let _serialize = SERIALIZE.lock().unwrap();
     let (count, ok) = counted_pipeline(64, 16, 2048);
     assert!(ok);
     assert_eq!(count, 0, "G4 FAIL: {count} allocations on the steady-state split path (d=64)");
@@ -145,6 +154,7 @@ fn g4_zero_alloc_steady_state_d64() {
 
 #[test]
 fn g4_zero_alloc_steady_state_d16_jacobi() {
+    let _serialize = SERIALIZE.lock().unwrap();
     let (count, ok) = counted_pipeline(16, 4, 1024);
     assert!(ok);
     assert_eq!(count, 0, "G4 FAIL: {count} allocations on the steady-state Jacobi path (d=16)");

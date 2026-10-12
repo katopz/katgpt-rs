@@ -479,20 +479,31 @@ pub fn split(
                 return Err(BasisSplitError::ScratchTooShort { required: d * d });
             }
             // M' = W M Wᵀ via T = M Wᵀ, then W T (d³ calibration-time work).
+            // T lands in `eigvecs` — free scratch here (it holds the whitener's
+            // eigenvectors, which the eigensolve below overwrites) — so the
+            // second product reads T and writes M' across three DISTINCT
+            // buffers. The previous form wrote M' into `moment_scratch` while
+            // still reading it as T: row i read rows 0..i-1 already
+            // overwritten with output, compounding W factor-on-factor down
+            // the rows — on graded spectra (λ_min/λ_max ~1e-6) the compounded
+            // magnitudes overflowed f64 by row ~41 and the eigensolve
+            // received a poisoned matrix (Issue 931 round 3: `non-finite
+            // input at (58, 0) = -inf` on the live style-shard sigma+moment;
+            // silent row-mixing corruption at any d before the overflow).
             for i in 0..d {
                 for j in 0..d {
                     let mut acc = 0.0;
                     for l in 0..d {
                         acc += moment[i * d + l] * whitener_out[j * d + l];
                     }
-                    moment_scratch[i * d + j] = acc;
+                    eigvecs[i * d + j] = acc;
                 }
             }
             for i in 0..d {
                 for j in 0..d {
                     let mut acc = 0.0;
                     for l in 0..d {
-                        acc += whitener_out[i * d + l] * moment_scratch[l * d + j];
+                        acc += whitener_out[i * d + l] * eigvecs[l * d + j];
                     }
                     moment_scratch[i * d + j] = acc;
                 }
@@ -587,23 +598,29 @@ pub fn build_zca_whitener(
     if !(min_ev.is_finite() && min_ev > 0.0) {
         return Err(BasisSplitError::CovarianceNotPositiveDefinite);
     }
-    // W = V Λ^{-1/2} Vᵀ via t = Λ^{-1/2} Vᵀ (row j = column j scaled), then
-    // W = t·Vᵀ — symmetric, computed upper-triangle + mirror.
+    // W = V Λ^{-1/2} Vᵀ (columns of V are the eigenvectors, the symmetric_eig
+    // convention: column j pairs with eigvals[j]), accumulated per
+    // eigenvector — one sqrt + one scale factor per j — upper-triangle +
+    // mirror; the eigenvector buffer is NOT mutated (it stays the caller's
+    // diagnostic output). The previous form scaled eigvecs ROW j by s_j and
+    // multiplied the scaled buffer against itself: that is Zᵀ D Z with
+    // D = diag(λ_j^{-1}) — a congruence in the WRONG basis (rows, not the
+    // eigenvector columns), equal to Σ^{-1} only on near-diagonal V where the
+    // distinction vanishes — which is exactly where the module's entire test
+    // surface lived (Issue 931 round 3: on the live rotated style-shard
+    // Σ it whitened nothing; the magnitudes it fed the aliased M' product
+    // are what overflowed f64 by row ~41).
+    whitener_out[..d * d].fill(0.0);
     for j in 0..d {
         let s = 1.0 / eigvals[j].sqrt();
-        for r in 0..d {
-            eigvecs[j * d + r] *= s;
-        }
-    }
-    for i in 0..d {
-        for l in i..d {
-            let mut acc = 0.0;
-            for j in 0..d {
-                acc += eigvecs[j * d + i] * eigvecs[j * d + l];
-            }
-            whitener_out[i * d + l] = acc;
-            if i != l {
-                whitener_out[l * d + i] = acc;
+        for i in 0..d {
+            let vi = s * eigvecs[i * d + j];
+            for l in i..d {
+                let contrib = vi * eigvecs[l * d + j];
+                whitener_out[i * d + l] += contrib;
+                if i != l {
+                    whitener_out[l * d + i] += contrib;
+                }
             }
         }
     }
@@ -1130,5 +1147,268 @@ mod tests {
             "same-generator held-out leakage {leakage} — should be ~0 (generalization residual, not purity)"
         );
         assert!(agreement < 1e-3);
+    }
+
+    /// Issue 931 round 3 regression A: the built whitener is the ZCA
+    /// `W = Sigma^(-1/2)` — `W Sigma W^T = I` on a correlated (rotated
+    /// graded) sigma, where `Sigma^(-1)` differs from `Sigma^(-1/2)` by
+    /// structure, not just axis scale. The shipped form scaled the
+    /// eigenvector buffer in place to `t = L^(-1/2) V^T` and then formed
+    /// `t*t^T = V L^(-1) V^T = Sigma^(-1)` — one factor of `Sigma^(-1)`
+    /// beyond the documented `Whitening::Whitener` contract.
+    #[test]
+    fn zca_whitener_is_sigma_inv_half_not_inv() {
+        const DW: usize = 24; // > JACOBI_MAX_DIM: V comes from the QL path
+        let mut rng = Lcg(0x0931_0001);
+        // Deterministic orthogonal Q (modified Gram-Schmidt over gaussians).
+        let mut cols = vec![vec![0.0_f64; DW]; DW];
+        for c in cols.iter_mut() {
+            for v in c.iter_mut() {
+                *v = rng.next_gauss();
+            }
+        }
+        for i in 0..DW {
+            let (before, after) = cols.split_at_mut(i);
+            let ci = &mut after[0];
+            for cj in before.iter() {
+                let dot: f64 = ci.iter().zip(cj.iter()).map(|(a, b)| a * b).sum();
+                for (a, b) in ci.iter_mut().zip(cj.iter()) {
+                    *a -= dot * b;
+                }
+            }
+            let norm: f64 = ci.iter().map(|v| v * v).sum::<f64>().sqrt();
+            assert!(norm > 1e-8, "degenerate Gram-Schmidt column {i}");
+            for v in ci.iter_mut() {
+                *v /= norm;
+            }
+        }
+        // Graded spectrum: lambda_c = 1e-1 down to ~1e-6.9 (cond ~1e6, the
+        // issue's class); Sigma = Q diag(lambda) Q^T.
+        let lam: Vec<f64> = (0..DW)
+            .map(|c| 10.0_f64.powi(-1 - (6 * c as i32) / DW as i32))
+            .collect();
+        let mut sigma = vec![0.0_f64; DW * DW];
+        for i in 0..DW {
+            for j in 0..DW {
+                sigma[i * DW + j] = (0..DW).map(|c| cols[c][i] * lam[c] * cols[c][j]).sum();
+            }
+        }
+        let mut w = vec![0.0_f64; DW * DW];
+        let mut ev = vec![0.0_f64; DW];
+        let mut evec = vec![0.0_f64; DW * DW];
+        let mut sym = SymmetricEigScratch::new();
+        build_zca_whitener(&sigma, DW, &mut w, &mut ev, &mut evec, &mut sym).unwrap();
+
+        // W Sigma W^T must be the identity (the Whitener contract).
+        let mut worst = 0.0_f64;
+        for i in 0..DW {
+            for j in 0..DW {
+                let mut acc = 0.0_f64;
+                for l in 0..DW {
+                    let ws_il: f64 = (0..DW).map(|k| w[i * DW + k] * sigma[k * DW + l]).sum();
+                    acc += ws_il * w[j * DW + l];
+                }
+                let want = if i == j { 1.0 } else { 0.0 };
+                worst = worst.max((acc - want).abs());
+            }
+        }
+        assert!(
+            worst < 1e-8,
+            "||W Sigma W^T - I||_max = {worst:e} - the built whitener is not Sigma^(-1/2)"
+        );
+        assert!(evec[..DW * DW].iter().all(|v| v.is_finite()));
+    }
+
+    /// Issue 931 round 3 regression B: under `TotalCovariance`, the whitened
+    /// moment left in `moment_scratch` after `split` equals the independently
+    /// computed `W M W^T`. The previous two-pass product wrote `M'` into the
+    /// same buffer it was still reading as `T = M W^T`: row i read rows
+    /// 0..i-1 already overwritten with output, compounding W
+    /// factor-on-factor down the rows (silent row-mixing at any d; on graded
+    /// spectra the compounded magnitudes overflow f64 by row ~41 and the
+    /// eigensolve received a poisoned matrix - the live 931 signature).
+    #[test]
+    fn total_covariance_whitened_moment_matches_w_m_wt() {
+        const DA: usize = 20; // > JACOBI_MAX_DIM
+        let mut rng = Lcg(0x0931_0002);
+        let mut cols = vec![vec![0.0_f64; DA]; DA];
+        for c in cols.iter_mut() {
+            for v in c.iter_mut() {
+                *v = rng.next_gauss();
+            }
+        }
+        for i in 0..DA {
+            let (before, after) = cols.split_at_mut(i);
+            let ci = &mut after[0];
+            for cj in before.iter() {
+                let dot: f64 = ci.iter().zip(cj.iter()).map(|(a, b)| a * b).sum();
+                for (a, b) in ci.iter_mut().zip(cj.iter()) {
+                    *a -= dot * b;
+                }
+            }
+            let norm: f64 = ci.iter().map(|v| v * v).sum::<f64>().sqrt();
+            for v in ci.iter_mut() {
+                *v /= norm;
+            }
+        }
+        // Genuinely correlated SPD: Sigma = Q diag(lam) Q^T with lam per
+        // EIGENVECTOR index c (a lam inside the (i,j) loop would collapse
+        // Q Q^T = I and make Sigma diagonal — exactly the blindness that
+        // let the aliasing ship).
+        let lam: Vec<f64> = (0..DA).map(|c| 1.0 + 2.0 * c as f64 / DA as f64).collect();
+        let mut sigma = vec![0.0_f64; DA * DA];
+        for i in 0..DA {
+            for j in 0..DA {
+                sigma[i * DA + j] = (0..DA).map(|c| cols[c][i] * lam[c] * cols[c][j]).sum();
+            }
+        }
+        // A benign pair-difference moment (random deltas: PSD, positive
+        // trace — passes the ZeroVariance screen like every real caller).
+        let mut m = vec![0.0_f64; DA * DA];
+        {
+            let mut acc = PairDifferenceMoment::new(&mut m, DA).unwrap();
+            for _ in 0..64 {
+                let delta: Vec<f64> = (0..DA).map(|_| rng.next_gauss()).collect();
+                acc.accumulate(&delta).unwrap();
+            }
+            acc.finish();
+        }
+        let mut ev = vec![0.0_f64; DA];
+        let mut evec = vec![0.0_f64; DA * DA];
+        let mut basis = vec![0.0_f64; DA * DA];
+        let mut sym = SymmetricEigScratch::new();
+        let mut jac = vec![0.0_f64; DA * DA];
+        let mut mscratch = vec![0.0_f64; DA * DA];
+        let mut whit = vec![0.0_f64; DA * DA];
+        let _ = split(
+            &m,
+            DA,
+            Some(Whitening::TotalCovariance(&sigma)),
+            None,
+            2.0,
+            &mut ev,
+            &mut evec,
+            &mut basis,
+            &mut sym,
+            &mut jac,
+            &mut mscratch,
+            &mut whit,
+        )
+        .unwrap();
+        let mut w2 = vec![0.0_f64; DA * DA];
+        let mut ev2 = vec![0.0_f64; DA];
+        let mut evec2 = vec![0.0_f64; DA * DA];
+        let mut sym2 = SymmetricEigScratch::new();
+        build_zca_whitener(&sigma, DA, &mut w2, &mut ev2, &mut evec2, &mut sym2).unwrap();
+        // Naive W M W^T with the SAME association (T = M W^T, then W T).
+        let mut worst = 0.0_f64;
+        let mut scale = 0.0_f64;
+        for i in 0..DA {
+            for j in 0..DA {
+                let acc: f64 = (0..DA)
+                    .map(|l| {
+                        let t_l: f64 = (0..DA).map(|k| m[l * DA + k] * w2[j * DA + k]).sum();
+                        w2[i * DA + l] * t_l
+                    })
+                    .sum();
+                worst = worst.max((acc - mscratch[i * DA + j]).abs());
+                scale = scale.max(acc.abs());
+            }
+        }
+        assert!(
+            worst < 1e-9 * scale.max(1.0),
+            "whitened moment diverges from W M W^T: {worst:e} (scale {scale:e})"
+        );
+    }
+
+    /// Issue 931 round 3 regression C (the live signature, synthetic twin):
+    /// a graded snapshot-covariance sigma (feature scales spanning orders of
+    /// magnitude - the ai-1056 style-shard class: shared graded factors +
+    /// per-feature scale, min eigenvalue deep below the smallest diagonal)
+    /// plus its pair-difference moment at d=64, end-to-end through
+    /// `split(TotalCovariance)`. Pre-fix this manufactured +-inf by row ~41
+    /// (`non-finite input at (58, 0) = -inf` on the live bytes; the
+    /// original pre-guard signature was the NaN QL spin at l=0).
+    #[test]
+    fn issue931_graded_style_shard_split_end_to_end() {
+        const DS: usize = 64;
+        const N_SNAP: usize = 1024;
+        const F: usize = 24;
+        let mut rng = Lcg(0x0931_0064);
+        let mut snaps = vec![vec![0.0_f64; DS]; N_SNAP];
+        for s in snaps.iter_mut() {
+            let mut factors = [0.0_f64; F];
+            for (j, fa) in factors.iter_mut().enumerate() {
+                *fa = rng.next_gauss() * 10.0_f64.powi(-3 * j as i32 / F as i32);
+            }
+            for (i, v) in s.iter_mut().enumerate() {
+                let feat_scale = 10.0_f64.powf(-2.1 - 3.6 * i as f64 / DS as f64);
+                let mut x = rng.next_gauss() * feat_scale;
+                for fa in factors.iter() {
+                    x += fa * feat_scale * 0.5;
+                }
+                *v = x;
+            }
+        }
+        let mut mean = vec![0.0_f64; DS];
+        for s in &snaps {
+            for i in 0..DS {
+                mean[i] += s[i];
+            }
+        }
+        for m in mean.iter_mut() {
+            *m /= N_SNAP as f64;
+        }
+        let mut sigma = vec![0.0_f64; DS * DS];
+        for s in &snaps {
+            for i in 0..DS {
+                for j in 0..DS {
+                    sigma[i * DS + j] += (s[i] - mean[i]) * (s[j] - mean[j]);
+                }
+            }
+        }
+        for v in sigma.iter_mut() {
+            *v /= N_SNAP as f64;
+        }
+        let mut m = vec![0.0_f64; DS * DS];
+        {
+            let mut acc = PairDifferenceMoment::new(&mut m, DS).unwrap();
+            for w in snaps.windows(2) {
+                let delta: Vec<f64> = (0..DS).map(|i| w[0][i] - w[1][i]).collect();
+                acc.accumulate(&delta).unwrap();
+            }
+            acc.finish();
+        }
+        let mut ev = vec![0.0_f64; DS];
+        let mut evec = vec![0.0_f64; DS * DS];
+        let mut basis = vec![0.0_f64; DS * DS];
+        let mut sym = SymmetricEigScratch::new();
+        let mut jac = vec![0.0_f64; DS * DS];
+        let mut mscratch = vec![0.0_f64; DS * DS];
+        let mut whit = vec![0.0_f64; DS * DS];
+        let (verdict, report) = split(
+            &m,
+            DS,
+            Some(Whitening::TotalCovariance(&sigma)),
+            None,
+            2.0,
+            &mut ev,
+            &mut evec,
+            &mut basis,
+            &mut sym,
+            &mut jac,
+            &mut mscratch,
+            &mut whit,
+        )
+        .unwrap();
+        assert!(report.gap_ratio.is_finite(), "gap_ratio {}", report.gap_ratio);
+        assert!(
+            report.participation_ratio.is_finite(),
+            "PR {}",
+            report.participation_ratio
+        );
+        assert!(ev[..DS].iter().all(|v| v.is_finite()));
+        assert!(mscratch.iter().all(|v| v.is_finite()));
+        let _ = &verdict;
     }
 }

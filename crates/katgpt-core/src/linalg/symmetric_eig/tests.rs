@@ -492,7 +492,7 @@ fn graded_matrix_issue931_scales() {
     // shape (min eig 7.08e-8, max 5.14e-2, cond ≈ 7.3e5).
     let lo = 7.08e-8_f64;
     let hi = 5.14e-2_f64;
-    let mut lambda: Vec<f64> = (0..n)
+    let lambda: Vec<f64> = (0..n)
         .map(|k| lo * (hi / lo).powf(k as f64 / (n - 1) as f64))
         .collect();
 
@@ -542,7 +542,7 @@ fn graded_matrix_issue931_extreme_range() {
     let n = 48;
     let lo = 1e-11_f64;
     let hi = 1.0_f64;
-    let mut lambda: Vec<f64> = (0..n)
+    let lambda: Vec<f64> = (0..n)
         .map(|k| lo * (hi / lo).powf(k as f64 / (n - 1) as f64))
         .collect();
     let mut state: u64 = 0x0DEFACED_931D0001;
@@ -678,7 +678,7 @@ fn non_finite_input_refuses_loudly() {
     for i in 0..n {
         a[i * n + i] = 1.0;
     }
-    a[1 * n + 2] = f64::NAN;
+    a[n + 2] = f64::NAN;
     a[2 * n + 1] = f64::NAN; // keep it symmetric — position (1,2) is named
     let mut eigvals = vec![0.0; n];
     let mut eigvecs = vec![0.0; n * n];
