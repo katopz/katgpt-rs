@@ -139,13 +139,15 @@ block — a repair applied to the arm somebody can see is a measurement of
 which arms are visible. The lane is `--all-features` (Layer 3's coverage on
 the x86_64 arch); the TRIPLE is the design decision, printed on the verdict
 line. **The inverse holds too:** running ON macOS silently drops every
-`not(target_os = "macos")` backend. Typecheck that half from the M3
-(`--canary` is not optional — it requires E0425 from a planted undefined
-call, else "Finished" is indistinguishable from compiled-to-nothing):
+`not(target_os = "macos")` backend. Typecheck that half from the M3 — the
+script PROVES the gated modules were compiled (read-only, from rustc's
+dep-info; `--min-gated N` floors the count), since "Finished" alone is
+indistinguishable from compiled-to-nothing. Args are `<repo> <pkg>
+[features...]` — there is no `--canary` flag (measured 2026-10-13: it is
+read as the repo and REFUSEd):
 
 ```bash
-scripts/check_platform_gated_modules.sh --canary ../riir-train riir-train-gpu \
-    crates/riir-train-gpu/src/numeric_drift_tap.rs numeric_drift_cuda
+scripts/check_platform_gated_modules.sh --min-gated 1 ../riir-train riir-train-gpu numeric_drift_cuda
 ```
 
 **The profile axis is feature-shaped too (Layer 6b, Issue 758).** Layer 6 runs

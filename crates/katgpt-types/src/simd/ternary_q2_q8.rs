@@ -293,9 +293,11 @@ unsafe fn avx2_q2_row_range(
 }
 
 /// Whether a SIMD arm runs on this CPU (aarch64 `dotprod` / x86_64 `avx2`,
-/// runtime-probed).
+/// runtime-probed). Public so a loader can decline the raw-Q2 layout where
+/// only the scalar reference would run: there the bit-plane q8 entry falls
+/// back to the f32 kernel instead, a different (and faster) arm.
 #[inline]
-fn q2_fast_path_available() -> bool {
+pub fn q2_fast_path_available() -> bool {
     #[cfg(target_arch = "aarch64")]
     {
         std::arch::is_aarch64_feature_detected!("dotprod")
@@ -347,25 +349,35 @@ thread_local! {
     static Q2_SCRATCH: RefCell<Q2Scratch> = const { RefCell::new((Vec::new(), Vec::new(), Vec::new(), Vec::new())) };
 }
 
+/// Below this row count, rayon's task overhead outweighs the work.
+const PARALLEL_ROW_MIN: usize = 256;
+
+/// The prepared int8 activation operands `(xq, xperm, xsum, xs)` of one `x`.
+type Q2Acts<'a> = (&'a [i8], &'a [i8], &'a [i32], &'a [f32]);
+
+/// Quantize + permute `x` once into the per-thread scratch and hand the
+/// operands to `f` — shared by the single and the pair entry points.
+fn with_q2_activations<R>(x: &[f32], f: impl FnOnce(Q2Acts<'_>) -> R) -> R {
+    Q2_SCRATCH.with_borrow_mut(|(xq, xperm, xs, xsum)| {
+        let groups = x.len() / GROUP_SIZE;
+        xq.resize(x.len(), 0);
+        xperm.resize(x.len(), 0);
+        xs.resize(groups, 0.0);
+        xsum.resize(groups, 0);
+        quantize_activations_q8(x, xq, xs);
+        permute_activations_q2(xq, xperm, xsum);
+        f((&xq[..], &xperm[..], &xsum[..], &xs[..]))
+    })
+}
+
 /// Row-parallel ternary matvec over Q2_0 blocks with int8 activations:
 /// `y ≈ W × x`, bit-identical to the bit-plane q8 kernel on the same weights.
 pub fn simd_ternary_q2_matvec_q8_parallel(w: &TernaryQ2Weights, x: &[f32], y: &mut [f32]) {
     use rayon::prelude::*;
 
-    /// Below this row count, rayon's task overhead outweighs the work.
-    const PARALLEL_ROW_MIN: usize = 256;
-
     assert_eq!(x.len(), w.cols, "x vector length must match weight cols");
     assert_eq!(y.len(), w.rows, "y vector length must match weight rows");
-    Q2_SCRATCH.with_borrow_mut(|(xq, xperm, xs, xsum)| {
-        let groups = w.groups_per_row;
-        xq.resize(w.cols, 0);
-        xperm.resize(w.cols, 0);
-        xs.resize(groups, 0.0);
-        xsum.resize(groups, 0);
-        quantize_activations_q8(x, xq, xs);
-        permute_activations_q2(xq, xperm, xsum);
-        let (xq, xperm, xs, xsum) = (&xq[..], &xperm[..], &xs[..], &xsum[..]);
+    with_q2_activations(x, |(xq, xperm, xsum, xs)| {
         if w.rows < PARALLEL_ROW_MIN {
             q2_row_range(w, xq, xperm, xsum, xs, y, 0);
             return;
@@ -374,6 +386,41 @@ pub fn simd_ternary_q2_matvec_q8_parallel(w: &TernaryQ2Weights, x: &[f32], y: &m
         y.par_chunks_mut(chunk)
             .enumerate()
             .for_each(|(ci, y_chunk)| q2_row_range(w, xq, xperm, xsum, xs, y_chunk, ci * chunk));
+    });
+}
+
+/// Two Q2_0 matvecs over ONE shared `x` (an FFN's gate and up projections):
+/// `ya ≈ Wa × x`, `yb ≈ Wb × x` with one activation quantize+permute and one
+/// fork-join instead of two. Rows are independent, so this is bit-identical
+/// to two [`simd_ternary_q2_matvec_q8_parallel`] calls.
+///
+/// # Panics
+/// `wa.cols != wb.cols`, or a length mismatch against `x` / `ya` / `yb`.
+pub fn simd_ternary_q2_matvec_q8_parallel_pair(
+    wa: &TernaryQ2Weights,
+    wb: &TernaryQ2Weights,
+    x: &[f32],
+    ya: &mut [f32],
+    yb: &mut [f32],
+) {
+    use rayon::prelude::*;
+
+    assert_eq!(wa.cols, wb.cols, "a pair shares x: both matrices need the same cols");
+    assert_eq!(x.len(), wa.cols, "x vector length must match weight cols");
+    assert_eq!(ya.len(), wa.rows, "ya length must match wa rows");
+    assert_eq!(yb.len(), wb.rows, "yb length must match wb rows");
+    with_q2_activations(x, |(xq, xperm, xsum, xs)| {
+        if wa.rows + wb.rows < PARALLEL_ROW_MIN {
+            q2_row_range(wa, xq, xperm, xsum, xs, ya, 0);
+            q2_row_range(wb, xq, xperm, xsum, xs, yb, 0);
+            return;
+        }
+        let (ca, cb) = (super::par_matvec_chunk(wa.rows), super::par_matvec_chunk(wb.rows));
+        ya.par_chunks_mut(ca)
+            .enumerate()
+            .map(|(ci, c)| (wa, c, ci * ca))
+            .chain(yb.par_chunks_mut(cb).enumerate().map(|(ci, c)| (wb, c, ci * cb)))
+            .for_each(|(w, y_chunk, row0)| q2_row_range(w, xq, xperm, xsum, xs, y_chunk, row0));
     });
 }
 
@@ -457,6 +504,25 @@ mod tests {
                 let code = (b.qs[j / 4] >> (2 * (j % 4))) & 3;
                 assert_eq!(code as i8 - 1, w.get(r, c), "row {r} col {c}");
             }
+        }
+    }
+
+    /// The pair entry is two single calls, bit-for-bit — unequal row counts,
+    /// the serial (< 256 rows total) and the parallel posture.
+    #[test]
+    fn pair_matches_two_single_calls() {
+        for &(ra, rb, cols) in &[(3, 5, 128), (100, 155, 256), (300, 700, 640), (1024, 1024, 384)] {
+            let a = TernaryQ2Weights::from_group(&fixture(ra, cols, 0xA5 ^ ra as u64));
+            let b = TernaryQ2Weights::from_group(&fixture(rb, cols, 0x5A ^ rb as u64));
+            let x = activations(cols);
+            let (mut ya, mut yb) = (vec![0.0f32; ra], vec![0.0f32; rb]);
+            simd_ternary_q2_matvec_q8_parallel(&a, &x, &mut ya);
+            simd_ternary_q2_matvec_q8_parallel(&b, &x, &mut yb);
+            let (mut pa, mut pb) = (vec![f32::NAN; ra], vec![f32::NAN; rb]);
+            simd_ternary_q2_matvec_q8_parallel_pair(&a, &b, &x, &mut pa, &mut pb);
+            let bits = |v: &[f32]| v.iter().map(|f| f.to_bits()).collect::<Vec<_>>();
+            assert_eq!(bits(&pa), bits(&ya), "{ra}x{cols} a");
+            assert_eq!(bits(&pb), bits(&yb), "{rb}x{cols} b");
         }
     }
 

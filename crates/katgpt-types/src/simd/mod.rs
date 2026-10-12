@@ -166,8 +166,8 @@ pub use ternary_group_q8::{
 };
 #[cfg(feature = "ternary_q2_q8")]
 pub use ternary_q2_q8::{
-    Q2Block, TernaryQ2Weights, permute_activations_q2, simd_ternary_q2_matvec_q8_parallel,
-    ternary_q2_q8_rows_scalar,
+    Q2Block, TernaryQ2Weights, permute_activations_q2, q2_fast_path_available,
+    simd_ternary_q2_matvec_q8_parallel, simd_ternary_q2_matvec_q8_parallel_pair, ternary_q2_q8_rows_scalar,
 };
 #[cfg(feature = "ternary_trit_pack")]
 pub use ternary_trit::{
