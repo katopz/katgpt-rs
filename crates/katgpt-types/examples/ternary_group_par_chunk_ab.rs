@@ -110,10 +110,10 @@ fn main() {
         }
         println!("\n## {rows}x{cols}");
         let base = times[0].clone();
-        for a in 0..n_arms {
+        for (a, arm_times) in times.iter().enumerate() {
             let label = chunks.get(a).map_or_else(|| "q8 sdot".to_owned(), |c| format!("chunk {c:>5}"));
-            let mut ratios: Vec<f64> = times[a].iter().zip(&base).map(|(t, b)| t / b).collect();
-            let mut abs = times[a].clone();
+            let mut ratios: Vec<f64> = arm_times.iter().zip(&base).map(|(t, b)| t / b).collect();
+            let mut abs = arm_times.clone();
             println!(
                 "{label:>11}: median {:>8.1} us | ratio vs shipped {:.3}",
                 median(&mut abs) * 1e6,

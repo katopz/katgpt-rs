@@ -151,17 +151,30 @@ unsafe fn neon_q8_row_range(
     }
 }
 
-/// Dispatch one row range over pre-quantized activations.
+/// Whether the SDOT fast path runs on this CPU (aarch64 + `dotprod`).
+#[inline]
+fn q8_fast_path_available() -> bool {
+    #[cfg(target_arch = "aarch64")]
+    {
+        std::arch::is_aarch64_feature_detected!("dotprod")
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        false
+    }
+}
+
+/// One row range over pre-quantized activations — the SDOT kernel.
+///
+/// Only reached when [`q8_fast_path_available`] is true.
 #[inline]
 fn q8_row_range(w: &TernaryGroupWeights, xq: &[i8], xs: &[f32], y: &mut [f32], row_offset: usize) {
     #[cfg(target_arch = "aarch64")]
-    {
-        if std::arch::is_aarch64_feature_detected!("dotprod") {
-            // SAFETY: dotprod detected; the caller checked the shape contract.
-            unsafe { neon_q8_row_range(w, xq, xs, y, row_offset) };
-            return;
-        }
+    // SAFETY: the caller checked dotprod and the shape contract.
+    unsafe {
+        neon_q8_row_range(w, xq, xs, y, row_offset)
     }
+    #[cfg(not(target_arch = "aarch64"))]
     ternary_group_q8_rows_scalar(w, xq, xs, y, row_offset);
 }
 
@@ -174,8 +187,10 @@ thread_local! {
 /// Row-parallel ternary group matvec with int8 activations: `y ≈ W × x`.
 ///
 /// Quantizes `x` once (per-128-group int8), then runs the SDOT kernel over
-/// rayon row chunks (the same capped split as the f32 kernel). Shapes the fast
-/// path cannot take (`cols % 128 != 0`) fall back to the f32 kernel.
+/// rayon row chunks (the same capped split as the f32 kernel). Where the fast
+/// path cannot run — `cols % 128 != 0`, or no aarch64 `dotprod` (x86_64 has no
+/// q8 port yet; its scalar integer arm would be far slower than the AVX2 f32
+/// kernel) — this IS the f32 kernel, exactly.
 pub fn simd_ternary_group_matvec_q8_parallel(w: &TernaryGroupWeights, x: &[f32], y: &mut [f32]) {
     use rayon::prelude::*;
 
@@ -184,7 +199,7 @@ pub fn simd_ternary_group_matvec_q8_parallel(w: &TernaryGroupWeights, x: &[f32],
 
     assert_eq!(x.len(), w.cols, "x vector length must match weight cols");
     assert_eq!(y.len(), w.rows, "y vector length must match weight rows");
-    if !w.cols.is_multiple_of(GROUP_SIZE) {
+    if !w.cols.is_multiple_of(GROUP_SIZE) || !q8_fast_path_available() {
         let chunk = super::par_matvec_chunk(w.rows);
         simd_ternary_group_matvec_parallel_chunked(w, x, y, chunk);
         return;
@@ -260,9 +275,12 @@ mod tests {
         assert!(xq[..GROUP_SIZE].iter().any(|&q| q.unsigned_abs() == 127));
     }
 
-    /// The integer inner sum makes NEON and scalar bit-identical.
+    /// The integer inner sum makes NEON and scalar bit-identical. aarch64-only:
+    /// elsewhere the entry point is the f32 kernel (no q8 port to compare).
+    #[cfg(target_arch = "aarch64")]
     #[test]
     fn neon_matches_scalar_q8_bit_identical() {
+        assert!(q8_fast_path_available(), "every Apple-silicon / ARMv8.4 CPU has dotprod");
         for &(rows, cols) in &[(1, 128), (37, 256), (300, 640), (1023, 384)] {
             let w = fixture(rows, cols, 0x935 ^ rows as u64);
             let x = activations(cols);
