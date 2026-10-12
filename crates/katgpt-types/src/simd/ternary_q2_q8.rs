@@ -389,10 +389,48 @@ pub fn simd_ternary_q2_matvec_q8_parallel(w: &TernaryQ2Weights, x: &[f32], y: &m
     });
 }
 
-/// Two Q2_0 matvecs over ONE shared `x` (an FFN's gate and up projections):
-/// `ya ≈ Wa × x`, `yb ≈ Wb × x` with one activation quantize+permute and one
-/// fork-join instead of two. Rows are independent, so this is bit-identical
-/// to two [`simd_ternary_q2_matvec_q8_parallel`] calls.
+/// `N` Q2_0 matvecs over ONE shared `x` (an FFN's gate + up, a `DeltaNet`
+/// layer's qkv + z, an attention layer's q/k/v): `ys[i] ≈ ws[i] × x` with one
+/// activation quantize+permute and one fork-join instead of `N`. Rows are
+/// independent, so this is bit-identical to `N`
+/// [`simd_ternary_q2_matvec_q8_parallel`] calls. Zero-allocation: the operand
+/// sets are fixed-size arrays.
+///
+/// # Panics
+/// Any `ws[i].cols != x.len()`, or `ys[i].len() != ws[i].rows`.
+pub fn simd_ternary_q2_matvec_q8_parallel_n<const N: usize>(
+    ws: [&TernaryQ2Weights; N],
+    x: &[f32],
+    mut ys: [&mut [f32]; N],
+) {
+    use rayon::prelude::*;
+
+    for (w, y) in ws.iter().zip(&ys) {
+        assert_eq!(x.len(), w.cols, "x vector length must match every weight's cols");
+        assert_eq!(y.len(), w.rows, "ys[i] length must match ws[i] rows");
+    }
+    with_q2_activations(x, |(xq, xperm, xsum, xs)| {
+        if ws.iter().map(|w| w.rows).sum::<usize>() < PARALLEL_ROW_MIN {
+            for (w, y) in ws.iter().zip(ys.iter_mut()) {
+                q2_row_range(w, xq, xperm, xsum, xs, y, 0);
+            }
+            return;
+        }
+        ys.par_iter_mut()
+            .zip(ws.par_iter())
+            .flat_map(|(y, &w)| {
+                let chunk = super::par_matvec_chunk(w.rows);
+                y.par_chunks_mut(chunk)
+                    .enumerate()
+                    .map(move |(ci, c)| (w, c, ci * chunk))
+            })
+            .for_each(|(w, y_chunk, row0)| q2_row_range(w, xq, xperm, xsum, xs, y_chunk, row0));
+    });
+}
+
+/// Two Q2_0 matvecs over ONE shared `x` (an FFN's gate and up projections) —
+/// [`simd_ternary_q2_matvec_q8_parallel_n`] at `N = 2`, bit-identical to two
+/// [`simd_ternary_q2_matvec_q8_parallel`] calls.
 ///
 /// # Panics
 /// `wa.cols != wb.cols`, or a length mismatch against `x` / `ya` / `yb`.
@@ -403,25 +441,7 @@ pub fn simd_ternary_q2_matvec_q8_parallel_pair(
     ya: &mut [f32],
     yb: &mut [f32],
 ) {
-    use rayon::prelude::*;
-
-    assert_eq!(wa.cols, wb.cols, "a pair shares x: both matrices need the same cols");
-    assert_eq!(x.len(), wa.cols, "x vector length must match weight cols");
-    assert_eq!(ya.len(), wa.rows, "ya length must match wa rows");
-    assert_eq!(yb.len(), wb.rows, "yb length must match wb rows");
-    with_q2_activations(x, |(xq, xperm, xsum, xs)| {
-        if wa.rows + wb.rows < PARALLEL_ROW_MIN {
-            q2_row_range(wa, xq, xperm, xsum, xs, ya, 0);
-            q2_row_range(wb, xq, xperm, xsum, xs, yb, 0);
-            return;
-        }
-        let (ca, cb) = (super::par_matvec_chunk(wa.rows), super::par_matvec_chunk(wb.rows));
-        ya.par_chunks_mut(ca)
-            .enumerate()
-            .map(|(ci, c)| (wa, c, ci * ca))
-            .chain(yb.par_chunks_mut(cb).enumerate().map(|(ci, c)| (wb, c, ci * cb)))
-            .for_each(|(w, y_chunk, row0)| q2_row_range(w, xq, xperm, xsum, xs, y_chunk, row0));
-    });
+    simd_ternary_q2_matvec_q8_parallel_n([wa, wb], x, [ya, yb]);
 }
 
 #[cfg(test)]
@@ -523,6 +543,35 @@ mod tests {
             let bits = |v: &[f32]| v.iter().map(|f| f.to_bits()).collect::<Vec<_>>();
             assert_eq!(bits(&pa), bits(&ya), "{ra}x{cols} a");
             assert_eq!(bits(&pb), bits(&yb), "{rb}x{cols} b");
+        }
+    }
+
+    /// The N-way entry at N = 3 (attention q/k/v: one wide, two narrow) is
+    /// three single calls, bit-for-bit — serial and parallel postures.
+    #[test]
+    fn n_way_matches_single_calls() {
+        for &(rq, rkv, cols) in &[(4, 2, 128), (60, 30, 256), (1024, 256, 384)] {
+            let shapes = [rq, rkv, rkv];
+            let ws: Vec<_> = shapes
+                .iter()
+                .enumerate()
+                .map(|(i, &r)| TernaryQ2Weights::from_group(&fixture(r, cols, 0x3A ^ (i * 977 + r) as u64)))
+                .collect();
+            let x = activations(cols);
+            let singles: Vec<Vec<f32>> = ws
+                .iter()
+                .map(|w| {
+                    let mut y = vec![0.0f32; w.rows];
+                    simd_ternary_q2_matvec_q8_parallel(w, &x, &mut y);
+                    y
+                })
+                .collect();
+            let (mut q, mut k, mut v) = (vec![f32::NAN; rq], vec![f32::NAN; rkv], vec![f32::NAN; rkv]);
+            simd_ternary_q2_matvec_q8_parallel_n([&ws[0], &ws[1], &ws[2]], &x, [&mut q, &mut k, &mut v]);
+            let bits = |v: &[f32]| v.iter().map(|f| f.to_bits()).collect::<Vec<_>>();
+            for (i, got) in [&q, &k, &v].into_iter().enumerate() {
+                assert_eq!(bits(got), bits(&singles[i]), "{rq}/{rkv}x{cols} arm {i}");
+            }
         }
     }
 

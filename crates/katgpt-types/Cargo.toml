@@ -245,3 +245,8 @@ required-features = ["sigmoid_margin"]
 [[example]]
 name = "ternary_group_par_chunk_ab"
 required-features = ["ternary_group_scale"]
+
+# Pair-vs-two-calls A/B for the Q2_0 int8-activation FFN gate+up matvec.
+[[example]]
+name = "ternary_q2_pair_ab"
+required-features = ["ternary_q2_q8"]

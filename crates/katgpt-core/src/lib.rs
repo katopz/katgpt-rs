@@ -1021,7 +1021,7 @@ pub use simd::{quantize_activations_q8, simd_ternary_group_matvec_q8_parallel};
 #[cfg(feature = "ternary_q2_q8")]
 pub use simd::{
     Q2Block, TernaryQ2Weights, q2_fast_path_available, simd_ternary_q2_matvec_q8_parallel,
-    simd_ternary_q2_matvec_q8_parallel_pair,
+    simd_ternary_q2_matvec_q8_parallel_n, simd_ternary_q2_matvec_q8_parallel_pair,
 };
 #[cfg(feature = "ternary_group_scale")]
 pub use types::{TernaryFfnHook, TernaryGroupWeights, TernaryInputProjHook, TernaryMatvecHook};
