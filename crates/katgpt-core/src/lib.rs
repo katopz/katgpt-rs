@@ -1016,6 +1016,8 @@ pub use simd::{
     simd_ternary_group_matmul_batch, simd_ternary_group_matvec, simd_ternary_group_matvec_parallel,
     ternary_group_matvec_scalar,
 };
+#[cfg(feature = "ternary_group_q8_act")]
+pub use simd::{quantize_activations_q8, simd_ternary_group_matvec_q8_parallel};
 #[cfg(feature = "ternary_group_scale")]
 pub use types::{TernaryFfnHook, TernaryGroupWeights, TernaryInputProjHook, TernaryMatvecHook};
 

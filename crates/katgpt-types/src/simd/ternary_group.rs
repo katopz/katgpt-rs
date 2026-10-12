@@ -897,6 +897,9 @@ pub fn simd_ternary_group_matvec(w: &TernaryGroupWeights, x: &[f32], y: &mut [f3
 /// The dense tier has had [`crate::math::matmul_parallel`] for this all along;
 /// the ternary tier simply never grew the equivalent.
 ///
+/// Tasks are capped at `PAR_MATVEC_CHUNK_ROWS` rows (Issue 935) so
+/// work-stealing balances P- and E-cores.
+///
 /// ## Correctness
 ///
 /// Rows are fully independent: row `r` reads only its own slices of
@@ -910,8 +913,6 @@ pub fn simd_ternary_group_matvec(w: &TernaryGroupWeights, x: &[f32], y: &mut [f3
 /// for real shapes — Bonsai's `ssm_alpha`/`ssm_beta` are only 48 rows.
 #[cfg(feature = "ternary_group_scale")]
 pub fn simd_ternary_group_matvec_parallel(w: &TernaryGroupWeights, x: &[f32], y: &mut [f32]) {
-    use rayon::prelude::*;
-
     /// Below this row count, rayon's task overhead outweighs the work.
     const PARALLEL_ROW_MIN: usize = 256;
 
@@ -923,9 +924,23 @@ pub fn simd_ternary_group_matvec_parallel(w: &TernaryGroupWeights, x: &[f32], y:
         return;
     }
 
-    // One chunk per worker — fewer, larger tasks beat many small ones here
-    // because each row already carries `cols` worth of work.
-    let chunk = w.rows.div_ceil(rayon::current_num_threads().max(1));
+    simd_ternary_group_matvec_parallel_chunked(w, x, y, super::par_matvec_chunk(w.rows));
+}
+
+/// [`simd_ternary_group_matvec_parallel`] with an explicit rows-per-task
+/// `chunk` — bit-identical for every `chunk >= 1` (a pure row partition).
+#[cfg(feature = "ternary_group_scale")]
+pub fn simd_ternary_group_matvec_parallel_chunked(
+    w: &TernaryGroupWeights,
+    x: &[f32],
+    y: &mut [f32],
+    chunk: usize,
+) {
+    use rayon::prelude::*;
+
+    assert_eq!(x.len(), w.cols, "x vector length must match weight cols");
+    assert_eq!(y.len(), w.rows, "y vector length must match weight rows");
+    let chunk = chunk.max(1);
     y.par_chunks_mut(chunk)
         .enumerate()
         .for_each(|(ci, y_chunk)| {
@@ -1291,6 +1306,25 @@ mod parallel_tests {
                     y_par[r]
                 );
             }
+        }
+    }
+
+    /// Issue 935: every rows-per-task split is a pure partition — bit-equal to
+    /// the serial kernel for chunks below, at and above the row count.
+    #[test]
+    fn chunked_matches_serial_bit_identical_for_any_chunk() {
+        let (rows, cols) = (1023, 384);
+        let w = fixture(rows, cols, 0x935);
+        let x: Vec<f32> = (0..cols).map(|i| (i % 11) as f32 * 0.09 - 0.45).collect();
+        let mut y_serial = vec![0.0f32; rows];
+        simd_ternary_group_matvec(&w, &x, &mut y_serial);
+        for chunk in [0, 1, 7, 32, 64, 1000, rows, rows + 5] {
+            let mut y = vec![0.0f32; rows];
+            simd_ternary_group_matvec_parallel_chunked(&w, &x, &mut y, chunk);
+            assert!(
+                y.iter().zip(&y_serial).all(|(a, b)| a.to_bits() == b.to_bits()),
+                "chunk {chunk}: not bit-identical to serial"
+            );
         }
     }
 

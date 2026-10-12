@@ -62,6 +62,9 @@ mod ternary;
 /// Group-scale ternary matvec kernels (`ternary_group_scale`, Issue 578).
 #[cfg(feature = "ternary_group_scale")]
 pub mod ternary_group;
+/// Int8-activation SDOT ternary matvec (`ternary_group_q8_act`, Issue 935).
+#[cfg(feature = "ternary_group_q8_act")]
+pub mod ternary_group_q8;
 /// Trit-packed ternary matvec kernels (`ternary_trit_pack`, Issue 582).
 #[cfg(feature = "ternary_trit_pack")]
 pub mod ternary_trit;
@@ -151,7 +154,12 @@ pub use ternary::{
 pub use ternary_group::{
     simd_ternary_group_matmul_batch, simd_ternary_group_matvec, simd_ternary_group_matvec_folded,
     simd_ternary_group_matvec_hoisted, simd_ternary_group_matvec_parallel,
+    simd_ternary_group_matvec_parallel_chunked,
     ternary_group_matvec_scalar,
+};
+#[cfg(feature = "ternary_group_q8_act")]
+pub use ternary_group_q8::{
+    quantize_activations_q8, simd_ternary_group_matvec_q8_parallel, ternary_group_q8_rows_scalar,
 };
 #[cfg(feature = "ternary_trit_pack")]
 pub use ternary_trit::{
@@ -180,6 +188,25 @@ pub enum SimdLevel {
     Avx2,
     /// WASM SIMD128 (4× f32 per operation) — compile-time gated by `target_feature = "simd128"`.
     WasmSimd128,
+}
+
+/// Rows per rayon task for the row-parallel quantized matvecs (Issue 935).
+///
+/// One chunk per worker (the earlier split) is optimal only on a homogeneous
+/// box: on an M3 Max (12 P + 4 E cores) the E-core chunks finish last while the
+/// P-cores idle. Capping a task at 32 rows lets work-stealing rebalance —
+/// measured 0.67–0.72× wall on the Bonsai-2-27B decode shapes. Any chunk is a
+/// pure row partition, so the result stays bit-identical.
+#[cfg(feature = "ternary_group_scale")]
+pub(crate) const PAR_MATVEC_CHUNK_ROWS: usize = 32;
+
+/// The rows-per-task for a row-parallel matvec over `rows` rows: one chunk per
+/// worker, capped at [`PAR_MATVEC_CHUNK_ROWS`].
+#[cfg(feature = "ternary_group_scale")]
+#[inline]
+pub(crate) fn par_matvec_chunk(rows: usize) -> usize {
+    rows.div_ceil(rayon::current_num_threads().max(1))
+        .clamp(1, PAR_MATVEC_CHUNK_ROWS)
 }
 
 /// Detect the best available SIMD level for the current CPU.

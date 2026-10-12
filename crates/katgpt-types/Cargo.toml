@@ -95,6 +95,11 @@ binary_plasma = []
 # the row-scale kernel — its win is memory traffic on Q2_0_g128 weights only.
 ternary_group_scale = ["binary_plasma"]
 
+# Issue 935: int8-activation SDOT kernel for the Q2_0_g128 tier — activations
+# quantized once per call to int8 per 128-group (llama.cpp's CPU Q2_0 regime).
+# LOSSY (activation rounding) — opt-in until the real-model quality gate holds.
+ternary_group_q8_act = ["ternary_group_scale"]
+
 # Issue 582: base-3 trit packing — 5 trits/byte + per-128 f16 scale = 1.75
 # bits/weight vs the bit-plane tier's 2.125 (-17.6%, Bonsai-27B 7.17 -> 5.90 GB).
 # Same alphabet, same group granularity; only the storage differs. Implies
@@ -229,3 +234,9 @@ required-features = ["sigmoid_margin"]
 [[test]]
 name = "sigmoid_argmaxability"
 required-features = ["sigmoid_margin"]
+
+# Issue 935 — rows-per-task A/B (+ the q8 SDOT arm under ternary_group_q8_act)
+# on the Bonsai-2-27B decode shapes.
+[[example]]
+name = "ternary_group_par_chunk_ab"
+required-features = ["ternary_group_scale"]

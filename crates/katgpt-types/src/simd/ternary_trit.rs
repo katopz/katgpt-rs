@@ -353,9 +353,8 @@ pub fn simd_ternary_trit_matvec_parallel(w: &TernaryTritWeights, x: &[f32], y: &
         return;
     }
 
-    // One chunk per worker: each row already carries `cols` worth of work, so
-    // fewer larger tasks beat many small ones.
-    let chunk = w.rows.div_ceil(rayon::current_num_threads().max(1));
+    // Capped rows per task so work-stealing balances P- and E-cores (Issue 935).
+    let chunk = super::par_matvec_chunk(w.rows);
     y.par_chunks_mut(chunk)
         .enumerate()
         .for_each(|(ci, y_chunk)| {
