@@ -100,6 +100,11 @@ ternary_group_scale = ["binary_plasma"]
 # LOSSY (activation rounding) — opt-in until the real-model quality gate holds.
 ternary_group_q8_act = ["ternary_group_scale"]
 
+# Issue 935 T5: the same int8-activation regime over RAW Q2_0 blocks (ggml
+# block_q2_0, 2-bit codes) — shr+and per byte instead of the two-plane walk.
+# Bit-identical to ternary_group_q8_act on the same weights; only speed moves.
+ternary_q2_q8 = ["ternary_group_q8_act"]
+
 # Issue 582: base-3 trit packing — 5 trits/byte + per-128 f16 scale = 1.75
 # bits/weight vs the bit-plane tier's 2.125 (-17.6%, Bonsai-27B 7.17 -> 5.90 GB).
 # Same alphabet, same group granularity; only the storage differs. Implies

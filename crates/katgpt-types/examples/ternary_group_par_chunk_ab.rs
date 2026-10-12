@@ -80,8 +80,23 @@ fn main() {
             );
         }
 
-        // Arm index == chunks.len() is the q8 kernel when compiled in.
-        let n_arms = chunks.len() + usize::from(cfg!(feature = "ternary_group_q8_act"));
+        // Arm index == chunks.len() is the bit-plane q8 kernel, chunks.len()+1
+        // the raw-Q2_0 q8 kernel, each when compiled in.
+        #[cfg(feature = "ternary_q2_q8")]
+        let q2 = {
+            let q2 = katgpt_types::simd::TernaryQ2Weights::from_group(&w);
+            let mut y8 = vec![0.0f32; rows];
+            katgpt_types::simd::simd_ternary_group_matvec_q8_parallel(&w, &x, &mut y8);
+            katgpt_types::simd::simd_ternary_q2_matvec_q8_parallel(&q2, &x, &mut y);
+            assert!(
+                y.iter().zip(&y8).all(|(a, b)| a.to_bits() == b.to_bits()),
+                "q2 not bit-identical to bit-plane q8"
+            );
+            q2
+        };
+        let n_arms = chunks.len()
+            + usize::from(cfg!(feature = "ternary_group_q8_act"))
+            + usize::from(cfg!(feature = "ternary_q2_q8"));
         let mut times = vec![Vec::with_capacity(ROUNDS); n_arms];
         for round in 0..ROUNDS {
             for k in 0..n_arms {
@@ -95,10 +110,17 @@ fn main() {
                             black_box(&mut y),
                             chunks[a],
                         );
-                    } else {
+                    } else if a == chunks.len() {
                         #[cfg(feature = "ternary_group_q8_act")]
                         katgpt_types::simd::simd_ternary_group_matvec_q8_parallel(
                             black_box(&w),
+                            black_box(&x),
+                            black_box(&mut y),
+                        );
+                    } else {
+                        #[cfg(feature = "ternary_q2_q8")]
+                        katgpt_types::simd::simd_ternary_q2_matvec_q8_parallel(
+                            black_box(&q2),
                             black_box(&x),
                             black_box(&mut y),
                         );
@@ -111,7 +133,11 @@ fn main() {
         println!("\n## {rows}x{cols}");
         let base = times[0].clone();
         for (a, arm_times) in times.iter().enumerate() {
-            let label = chunks.get(a).map_or_else(|| "q8 int8".to_owned(), |c| format!("chunk {c:>5}"));
+            let label = match chunks.get(a) {
+                Some(c) => format!("chunk {c:>5}"),
+                None if a == chunks.len() => "q8 planes".to_owned(),
+                None => "q8 raw q2".to_owned(),
+            };
             let mut ratios: Vec<f64> = arm_times.iter().zip(&base).map(|(t, b)| t / b).collect();
             let mut abs = arm_times.clone();
             println!(

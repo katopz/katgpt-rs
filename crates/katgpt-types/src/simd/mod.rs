@@ -65,6 +65,9 @@ pub mod ternary_group;
 /// Int8-activation SDOT ternary matvec (`ternary_group_q8_act`, Issue 935).
 #[cfg(feature = "ternary_group_q8_act")]
 pub mod ternary_group_q8;
+/// Int8-activation ternary matvec over raw Q2_0 blocks (`ternary_q2_q8`, Issue 935 T5).
+#[cfg(feature = "ternary_q2_q8")]
+pub mod ternary_q2_q8;
 /// Trit-packed ternary matvec kernels (`ternary_trit_pack`, Issue 582).
 #[cfg(feature = "ternary_trit_pack")]
 pub mod ternary_trit;
@@ -160,6 +163,11 @@ pub use ternary_group::{
 #[cfg(feature = "ternary_group_q8_act")]
 pub use ternary_group_q8::{
     quantize_activations_q8, simd_ternary_group_matvec_q8_parallel, ternary_group_q8_rows_scalar,
+};
+#[cfg(feature = "ternary_q2_q8")]
+pub use ternary_q2_q8::{
+    Q2Block, TernaryQ2Weights, permute_activations_q2, simd_ternary_q2_matvec_q8_parallel,
+    ternary_q2_q8_rows_scalar,
 };
 #[cfg(feature = "ternary_trit_pack")]
 pub use ternary_trit::{
