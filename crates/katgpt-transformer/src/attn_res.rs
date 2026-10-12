@@ -432,6 +432,85 @@ pub fn apply_attn_res_prepared<'a>(
     out
 }
 
+// ─── Fixed-query (depth-profile) arm — Issue 933 T4 ────────────────────────
+
+/// katgpt-rs Issue 933 T4 — the fixed-query **modelless** mixing arm
+/// (Research 619 E5, MSAR's conv-removal motivation): the learned
+/// `score_weight` query is replaced by a deterministic exponential-depth
+/// profile, `score[i] = -λ·age[i]` (age 0 = `prefix_sum`, +1 per completed
+/// block older). No RMSNorm, no content scoring — the mixing weights are a
+/// pure recency prior over the depth axis. For checkpoints WITHOUT AttnRes
+/// weights (Gemma-2-class) this is the only constructible form of the
+/// mechanism.
+///
+/// `λ = f32::INFINITY` is the DISARMED identity posture: `out` is a
+/// byte-copy of `prefix_sum`, no entry contributes — the α=0 bit-identity
+/// law (Issue 929 T2.1 precedent), pinned by test below. Finite large λ
+/// saturates toward but never exactly reaches identity (softmax tails are
+/// nonzero), which is why the arm exists explicitly.
+///
+/// Same entry order and weighted-sum accumulation shape as
+/// [`apply_attn_res_prepared`], so the two arms share numerical structure
+/// wherever they overlap.
+///
+/// # Panics
+/// Debug builds assert `prefix_sum` non-empty, `scratch.out` sized to the
+/// hidden dim, and `block_state.hidden_size == prefix_sum.len()`.
+pub fn apply_attn_res_depth_profile<'a>(
+    block_state: &AttnResBlockState,
+    scratch: &'a mut AttnResScratch,
+    lambda: f32,
+    prefix_sum: &[f32],
+) -> &'a mut [f32] {
+    let d = prefix_sum.len();
+    debug_assert!(d > 0, "empty prefix_sum");
+    debug_assert_eq!(scratch.out.len(), d, "out buffer sized for another d");
+    debug_assert_eq!(block_state.hidden_size, d);
+
+    let out = &mut scratch.out[..d];
+
+    // The disarmed posture: identity by construction (a memcpy is exact).
+    if !lambda.is_finite() {
+        out.copy_from_slice(prefix_sum);
+        return out;
+    }
+    debug_assert!(
+        lambda >= 0.0,
+        "negative λ inverts the recency prior; use a finite ≥ 0 rate"
+    );
+
+    // scores[i] = -λ·age[i]: the prefix (age 0) scores 0, each completed
+    // block one λ lower. Entry order matches `apply_attn_res_prepared`.
+    let num_entries = block_state.len() + 1;
+    debug_assert!(
+        scratch.scores.len() >= num_entries,
+        "scores buffer too small: {} < {}",
+        scratch.scores.len(),
+        num_entries
+    );
+    let scores = &mut scratch.scores[..num_entries];
+    for (i, score) in scores.iter_mut().enumerate() {
+        *score = -lambda * (num_entries - 1 - i) as f32;
+    }
+
+    softmax(scores);
+
+    // Weighted average of ORIGINAL v values — identical accumulation shape
+    // to `apply_attn_res_prepared`.
+    out.fill(0.0);
+    for (&prob, residual) in scores.iter().zip(&block_state.residuals) {
+        for (o, &rv) in out.iter_mut().zip(&residual[..d]) {
+            *o += prob * rv;
+        }
+    }
+    let prob = scores[num_entries - 1];
+    for (o, &pv) in out.iter_mut().zip(&prefix_sum[..d]) {
+        *o += prob * pv;
+    }
+
+    out
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -594,5 +673,116 @@ mod tests {
         // Max entries = 2 + 1 = 3. Round up generously for safety.
         let num_layers = 8;
         (num_layers / config.block_size + 1) + 1
+    }
+
+    // ── Issue 933 T4: the depth-profile (fixed-query) arm ──────────────────
+
+    #[test]
+    fn depth_profile_lambda_inf_is_bitwise_identity() {
+        // The disarmed posture: out must equal prefix_sum EXACTLY (to_bits),
+        // even with entries present that a finite λ would mix in.
+        let config = AttnResConfig::kimi_k3_0_40b();
+        let mut block_state = AttnResBlockState::new(config.d());
+        block_state.push(&vec![7.0; config.d()]);
+        block_state.push(&vec![-3.0; config.d()]);
+        let mut scratch = AttnResScratch::new(&config, max_entries(&config));
+
+        let prefix_sum: Vec<f32> = (0..config.d()).map(|i| (i as f32).sin() * 0.1).collect();
+        let out = apply_attn_res_depth_profile(
+            &block_state,
+            &mut scratch,
+            f32::INFINITY,
+            &prefix_sum,
+        );
+        for i in 0..config.d() {
+            assert_eq!(
+                out[i].to_bits(),
+                prefix_sum[i].to_bits(),
+                "λ=∞ must be bitwise identity at [{i}]"
+            );
+        }
+    }
+
+    #[test]
+    fn depth_profile_lambda_zero_is_uniform_mean() {
+        // λ=0 → every score 0 → softmax uniform. With ONE residual + prefix
+        // the weights are exactly [0.5, 0.5] (exp(0)/2), so constant vectors
+        // 2.0 and 4.0 mix to exactly 3.0.
+        let config = AttnResConfig::kimi_k3_0_40b();
+        let mut block_state = AttnResBlockState::new(config.d());
+        block_state.push(&vec![2.0; config.d()]);
+        let mut scratch = AttnResScratch::new(&config, max_entries(&config));
+
+        let prefix_sum = vec![4.0; config.d()];
+        let out = apply_attn_res_depth_profile(&block_state, &mut scratch, 0.0, &prefix_sum);
+        for i in 0..config.d() {
+            assert_eq!(out[i], 3.0, "λ=0 must be the exact uniform mean at [{i}]");
+        }
+    }
+
+    #[test]
+    fn depth_profile_recency_is_monotone_in_lambda() {
+        // λ>0 pulls the mix toward the prefix (age 0). With residual 10.0 and
+        // prefix 0.0 the output must sit below the uniform mean (5.0) and
+        // shrink monotonically as λ grows.
+        let config = AttnResConfig::kimi_k3_0_40b();
+        let mut block_state = AttnResBlockState::new(config.d());
+        block_state.push(&vec![10.0; config.d()]);
+        let prefix_sum = vec![0.0; config.d()];
+
+        let mut prev = f32::MAX;
+        for lambda in [0.5f32, 1.0, 2.0, 4.0, 8.0] {
+            let mut scratch = AttnResScratch::new(&config, max_entries(&config));
+            let out =
+                apply_attn_res_depth_profile(&block_state, &mut scratch, lambda, &prefix_sum);
+            assert!(
+                out[0] < 5.0,
+                "λ={lambda}: recency must pull below the uniform mean, got {}",
+                out[0]
+            );
+            assert!(
+                out[0] < prev,
+                "λ={lambda}: mix must shrink monotonically ({} !< {prev})",
+                out[0]
+            );
+            prev = out[0];
+        }
+    }
+
+    #[test]
+    fn depth_profile_empty_state_returns_prefix() {
+        // No residuals → a single entry → softmax [1.0] → prefix, any λ.
+        let config = AttnResConfig::kimi_k3_0_40b();
+        let block_state = AttnResBlockState::new(config.d());
+        let prefix_sum: Vec<f32> = (0..config.d()).map(|i| (i as f32) * 0.25).collect();
+        for lambda in [0.0f32, 2.0, 100.0, f32::INFINITY] {
+            let mut scratch = AttnResScratch::new(&config, max_entries(&config));
+            let out =
+                apply_attn_res_depth_profile(&block_state, &mut scratch, lambda, &prefix_sum);
+            for i in 0..config.d() {
+                assert_eq!(
+                    out[i].to_bits(),
+                    prefix_sum[i].to_bits(),
+                    "empty state, λ={lambda}: must return prefix at [{i}]"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn depth_profile_deterministic_same_inputs_same_output() {
+        let config = AttnResConfig::kimi_k3_0_40b();
+        let mut block_state = AttnResBlockState::new(config.d());
+        block_state.push(&(0..config.d()).map(|i| (i as f32).sin() * 0.1).collect::<Vec<_>>());
+        block_state.push(&(0..config.d()).map(|i| (i as f32).cos() * 0.1).collect::<Vec<_>>());
+        let prefix_sum: Vec<f32> = (0..config.d()).map(|i| (i as f32) * 0.05 - 1.0).collect();
+
+        let mut s1 = AttnResScratch::new(&config, max_entries(&config));
+        let mut s2 = AttnResScratch::new(&config, max_entries(&config));
+        let o1 = apply_attn_res_depth_profile(&block_state, &mut s1, 1.5, &prefix_sum).to_vec();
+        let o2 = apply_attn_res_depth_profile(&block_state, &mut s2, 1.5, &prefix_sum);
+        for i in 0..config.d() {
+            assert_eq!(o1[i].to_bits(), o2[i].to_bits(), "non-deterministic at [{i}]");
+        }
     }
 }
