@@ -1,6 +1,6 @@
 # Bench 937 — Issue 933: `apply_attn_res` decode, push-time Σv² cache + prepared score weight
 
-**Status:** DONE 2026-10-13. Exact (bit-identical) refactor, measured win; no flag needed (same function, same reductions, same summation order).
+**Status:** DONE 2026-10-13 (katgpt-rs `12e031cff`). Exact (bit-identical) refactor, measured win; no flag needed (same function, same reductions, same summation order).
 
 ## What changed (katgpt-transformer `attn_res.rs`)
 
