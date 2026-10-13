@@ -382,11 +382,45 @@ pub fn simd_ternary_q2_matvec_q8_parallel(w: &TernaryQ2Weights, x: &[f32], y: &m
             q2_row_range(w, xq, xperm, xsum, xs, y, 0);
             return;
         }
+        #[cfg(feature = "decode_spin_pool")]
+        if q2_rows_on_spin_pool([w], &mut [&mut *y], (xq, xperm, xsum, xs)) {
+            return;
+        }
         let chunk = super::par_matvec_chunk(w.rows);
         y.par_chunks_mut(chunk)
             .enumerate()
             .for_each(|(ci, y_chunk)| q2_row_range(w, xq, xperm, xsum, xs, y_chunk, ci * chunk));
     });
+}
+
+/// The row-parallel body on this thread's installed [`super::spin_pool`]
+/// (Issue 936): fixed [`super::PAR_MATVEC_CHUNK_ROWS`]-row tasks over all `N`
+/// matrices, one flat task index each. `false` (nothing run) when no pool is
+/// installed. Same per-row kernel as the rayon arm ⇒ bit-identical.
+#[cfg(feature = "decode_spin_pool")]
+fn q2_rows_on_spin_pool<const N: usize>(ws: [&TernaryQ2Weights; N], ys: &mut [&mut [f32]; N], acts: Q2Acts<'_>) -> bool {
+    use super::spin_pool::SyncMutPtr;
+    const CHUNK: usize = super::PAR_MATVEC_CHUNK_ROWS;
+    let (xq, xperm, xsum, xs) = acts;
+    let outs: [(SyncMutPtr<f32>, usize); N] = std::array::from_fn(|i| (SyncMutPtr(ys[i].as_mut_ptr()), ys[i].len()));
+    let n_tasks: usize = ws.iter().map(|w| w.rows.div_ceil(CHUNK)).sum();
+    super::spin_pool::spin_pool_run(n_tasks, &|mut t| {
+        for (w, &(ptr, len)) in ws.iter().zip(&outs) {
+            let chunks = w.rows.div_ceil(CHUNK);
+            if t >= chunks {
+                t -= chunks;
+                continue;
+            }
+            let row0 = t * CHUNK;
+            let rows = CHUNK.min(len - row0);
+            // SAFETY: task t of matrix w owns rows [row0, row0 + rows) of its
+            // output alone; `ys` outlives the run (spin_pool_run returns only
+            // after every task finished).
+            let y = unsafe { std::slice::from_raw_parts_mut(ptr.0.add(row0), rows) };
+            q2_row_range(w, xq, xperm, xsum, xs, y, row0);
+            return;
+        }
+    })
 }
 
 /// `N` Q2_0 matvecs over ONE shared `x` (an FFN's gate + up, a `DeltaNet`
@@ -414,6 +448,10 @@ pub fn simd_ternary_q2_matvec_q8_parallel_n<const N: usize>(
             for (w, y) in ws.iter().zip(ys.iter_mut()) {
                 q2_row_range(w, xq, xperm, xsum, xs, y, 0);
             }
+            return;
+        }
+        #[cfg(feature = "decode_spin_pool")]
+        if q2_rows_on_spin_pool(ws, &mut ys, (xq, xperm, xsum, xs)) {
             return;
         }
         ys.par_iter_mut()
@@ -572,6 +610,36 @@ mod tests {
             for (i, got) in [&q, &k, &v].into_iter().enumerate() {
                 assert_eq!(bits(got), bits(&singles[i]), "{rq}/{rkv}x{cols} arm {i}");
             }
+        }
+    }
+
+    /// Issue 936: the spin-pool arm is the rayon arm, bit-for-bit — single and
+    /// N = 3 entries, row counts that do and do not divide the 32-row task.
+    #[cfg(feature = "decode_spin_pool")]
+    #[test]
+    fn spin_pool_arm_matches_rayon_arm() {
+        let pool = super::super::spin_pool::SpinPool::new(3);
+        let bits = |v: &[f32]| v.iter().map(|f| f.to_bits()).collect::<Vec<_>>();
+        for &(r0, r1, cols) in &[(300, 77, 256), (1024, 256, 384), (513, 513, 128)] {
+            let ws: Vec<_> = [r0, r1, r1]
+                .iter()
+                .enumerate()
+                .map(|(i, &r)| TernaryQ2Weights::from_group(&fixture(r, cols, 0x936 ^ (i * 31 + r) as u64)))
+                .collect();
+            let x = activations(cols);
+            let mut want = vec![0.0f32; r0];
+            simd_ternary_q2_matvec_q8_parallel(&ws[0], &x, &mut want);
+            let mut got = vec![f32::NAN; r0];
+            super::super::spin_pool::with_spin_pool(&pool, || simd_ternary_q2_matvec_q8_parallel(&ws[0], &x, &mut got));
+            assert_eq!(bits(&got), bits(&want), "single {r0}x{cols}");
+
+            let (mut a, mut b, mut c) = (vec![0.0f32; r0], vec![0.0f32; r1], vec![0.0f32; r1]);
+            simd_ternary_q2_matvec_q8_parallel_n([&ws[0], &ws[1], &ws[2]], &x, [&mut a, &mut b, &mut c]);
+            let (mut sa, mut sb, mut sc) = (vec![f32::NAN; r0], vec![f32::NAN; r1], vec![f32::NAN; r1]);
+            super::super::spin_pool::with_spin_pool(&pool, || {
+                simd_ternary_q2_matvec_q8_parallel_n([&ws[0], &ws[1], &ws[2]], &x, [&mut sa, &mut sb, &mut sc])
+            });
+            assert_eq!((bits(&sa), bits(&sb), bits(&sc)), (bits(&a), bits(&b), bits(&c)), "n-way {r0}/{r1}x{cols}");
         }
     }
 

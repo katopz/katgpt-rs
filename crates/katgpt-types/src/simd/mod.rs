@@ -68,6 +68,9 @@ pub mod ternary_group_q8;
 /// Int8-activation ternary matvec over raw Q2_0 blocks (`ternary_q2_q8`, Issue 935 T5).
 #[cfg(feature = "ternary_q2_q8")]
 pub mod ternary_q2_q8;
+
+#[cfg(feature = "decode_spin_pool")]
+pub mod spin_pool;
 /// Trit-packed ternary matvec kernels (`ternary_trit_pack`, Issue 582).
 #[cfg(feature = "ternary_trit_pack")]
 pub mod ternary_trit;
@@ -164,6 +167,8 @@ pub use ternary_group::{
 pub use ternary_group_q8::{
     quantize_activations_q8, simd_ternary_group_matvec_q8_parallel, ternary_group_q8_rows_scalar,
 };
+#[cfg(feature = "decode_spin_pool")]
+pub use spin_pool::{SpinPool, spin_pool_run, with_spin_pool};
 #[cfg(feature = "ternary_q2_q8")]
 pub use ternary_q2_q8::{
     Q2Block, TernaryQ2Weights, permute_activations_q2, q2_fast_path_available,
