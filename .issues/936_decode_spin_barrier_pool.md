@@ -1,6 +1,6 @@
 # Issue 936 — decode-scoped spin-barrier pool for the row-parallel matvecs
 
-**Status:** T1–T3 DONE 2026-10-13. Promoted downstream into riir-infer `deltanet_ternary_inference` (`27a4da7`): Bonsai-2-27B CPU decode ~100 → ~72 ms/token, bit-identical. The katgpt-types feature stays opt-in (a consumer installs the pool per thread). OPEN for T4/T5 (measurements only).
+**Status:** T1–T3 DONE 2026-10-13. Promoted downstream into riir-infer `deltanet_ternary_inference` (`27a4da7`): Bonsai-2-27B CPU decode ~100 → ~72 ms/token, bit-identical. The katgpt-types feature stays opt-in (a consumer installs the pool per thread). T5 DONE 2026-10-13 (Metal hooked lane: no-harm 0.994, `decode_spin_pool_gpu_goat`). OPEN for T4 (4090 off-macOS re-measure with the idle window, measurements only).
 
 ## Why
 
@@ -62,5 +62,18 @@ Two in-rayon fixes were measured and refuted (riir-infer Issue 045):
       (11), 2.55 (15), 3.86–3.93 (23); mechanism not established. The default
       there is 0 workers. Re-measure WITH the idle window and the real-model gate
       before considering a non-zero default.
-- [ ] T5: GPU-hooked decode (the pool is installed there too; workers park
-      after 100 µs idle while the GPU works). Measure one run, Metal lane.
+- [x] T5: GPU-hooked decode measured 2026-10-13 (M3 Max Metal, `riir-infer`
+      `decode_spin_pool_gpu_goat`, real Bonsai-2-27B PQ2_0, 24 teacher-forced
+      positions, first mover rotated): G1 bit-identity 0/24 mismatches; G2
+      no-harm median paired ratio **0.994** (pool 218.3 ms/tok / 4.58 tok/s vs
+      rayon 220.0 / 4.54) — inside the ≤ 1.05 bar with margin. The idle window
+      works as designed: a ~2 ms Metal dispatch is far past the 100 µs spin
+      window, so workers park during GPU work and the pool costs the hooked
+      lane nothing. PROVENANCE: AC, powermode 2, loadavg 8.93 (sibling cargo
+      active; paired rotation controls). Note: the hooked lane itself now runs
+      220 ms/tok vs Bench 603's August 1.22 s/tok (the CPU-side optimizations
+      since — resident Q2, fused entries, worker placement — also land in its
+      rayon arm), still ~3× behind the 72 ms/tok CPU lane → the Metal hook
+      lane stays a fallback posture, pool on/off immaterial. Feature
+      `spin_pool_gpu_goat` = `ternary_gemv` + `bonsai2_hadamard` (the
+      required-features row keeps the reader honest).
