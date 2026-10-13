@@ -197,3 +197,5 @@ Per Research 003 (Commercial Open Source Strategy):
 ## TL;DR
 
 OSSM-PINN's oscillatory state-space models (eigenvalues on imaginary axis, not decaying) are a fundamental departure from Mamba/S4 dampening. The **modelless distillation** is a Frequency Bandit that learns which temporal frequency band (low/medium/high) matters for each query and routes decode strategy. This is the simplest application: GOAT, default on if no perf hurt. The deeper applications (OscKV, ModalSpec) are conditional — gate behind feature flags, validate before enabling.
+
+> **PASS-Redirects (synthesis):** Liang & Song [arXiv:2610.13341 "Understanding Mamba-3 Through Oscillatory Dynamics"] — adds the damping-regime axis (ζ as a design knob) + GDN-is-overdamped proof + constructed input-conditional phase codes; distilled as katgpt-rs Research 620 (this note covers free oscillation only).

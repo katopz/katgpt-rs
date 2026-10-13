@@ -3,7 +3,7 @@
 > **Paper:** [arXiv:2605.22791 — Gated DeltaNet-2: Decoupling Erase and Write in Linear Attention](https://arxiv.org/abs/2605.22791) — Hatamizadeh, Choi, Kautz (NVIDIA), May 2026 (PDF also in the upstream repo: NVlabs/GatedDeltaNet-2 `paper/GDN2_paper.pdf` @ `a5552fe`)
 > **Code:** [github.com/NVlabs/GatedDeltaNet-2](https://github.com/NVlabs/GatedDeltaNet-2) (PyTorch + Triton)
 > **Date:** 2026-05, distilled 2025-07
-> **Related Research:** 28 (HLA), 061 (Delta Attention Residuals), 22 (Lighthouse Attention), 42 (SP-KV), 24 (δ-Mem), 48 (HRM-Text)
+> **Related Research:** 28 (HLA), 061 (Delta Attention Residuals), 22 (Lighthouse Attention), 42 (SP-KV), 24 (δ-Mem), 48 (HRM-Text), 620 (Mamba-3 oscillatory dynamics — explains this note's Mamba-3(MIMO) RULER cells via the rotation/erase accumulation duality)
 > **Related Plans:** 104 (Gated DeltaNet-2 Recurrent Attention)
 > **Verdict: COMPLEMENTARY TO HLA — GDN2 solves a different problem than our HLA/AHLA: memory-editing vs. memory compression. The channel-wise erase gate `b_t` (key-axis selective erasure) is the key innovation, accounting for ~90% of GDN2's gains over KDA. Best fit: riir-ai LoRA training pipeline where recurrent layers replace full attention for long-context. CPU SIMD recurrent decode is feasible for katgpt-rs. Feature-gate as `gdn2_attention` alongside `hla_attention`. Not a replacement for HLA — both address different linear attention axes.**
 >
