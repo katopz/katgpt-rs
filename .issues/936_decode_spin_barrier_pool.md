@@ -51,6 +51,12 @@ Two in-rayon fixes were measured and refuted (riir-infer Issue 045):
       0.679–0.734 plain, 0.794–0.822 beside a 6-thread burner. Spin-forever was
       1.22–1.35× SLOWER under contention; the idle window fixed it. Promoted.
       Power/thermal: AC only, not measured on battery.
+- [x] T3b: macOS worker count, measured in-model (katgpt-rs-21, Issue 937 T4,
+      closed `c47a1dffd`). `decode_spin_pool_goat`, 4 rounds with the order
+      rotated, load 8.8–12.2, 0 mismatches in all 16 runs. Pool ms/token: 11 →
+      69.5–71.8, 10 → 72.1–73.1, 9 → 73.4–75.5, 7 → 82.9–85.2. 11 won every
+      round. The isolated kernel's 10-thread bandwidth peak does not carry into
+      the model. Default stays P-cores − 1 = 11. Paired ratio at 11: 0.633–0.682.
 - [ ] T4: off macOS. 4090 i7-13700K microbench, before the idle window, by two
       sessions: spin/rayon at the decode posture 0.97–0.99 (7 workers), 1.71–1.75
       (11), 2.55 (15), 3.86–3.93 (23); mechanism not established. The default
