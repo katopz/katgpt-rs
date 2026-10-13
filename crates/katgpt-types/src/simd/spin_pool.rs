@@ -70,6 +70,10 @@ struct Shared {
     job: AtomicPtr<()>,
     /// Open spin scopes + in-flight runs; workers park while it is 0.
     active: AtomicUsize,
+    /// Workers parked by the idle window inside an open scope.
+    idle_parked: AtomicUsize,
+    /// Idle spin window before such a park, ns (`u64::MAX` = spin forever).
+    idle_spin_ns: AtomicU64,
     stop: AtomicBool,
     poisoned: AtomicBool,
     park_lock: Mutex<()>,
@@ -112,21 +116,60 @@ impl Shared {
     }
 
     fn worker_loop(&self) {
+        let mut idle_since: Option<std::time::Instant> = None;
+        let mut spins = 0u32;
         loop {
             if self.stop.load(Ordering::Acquire) {
                 return;
             }
             if self.active.load(Ordering::Acquire) == 0 {
                 self.park_while_inactive();
+                idle_since = None;
                 continue;
             }
             match self.try_claim() {
-                Some(i) => self.execute(i),
-                // A periodic `yield_now` here was measured (every 64 / 1024
-                // idle spins, load avg 10-11): no difference, so plain spin.
-                None => std::hint::spin_loop(),
+                Some(i) => {
+                    idle_since = None;
+                    self.execute(i);
+                }
+                None => {
+                    std::hint::spin_loop();
+                    spins = spins.wrapping_add(1);
+                    // Check the clock every 64 idle spins, not every spin.
+                    if !spins.is_multiple_of(64) {
+                        continue;
+                    }
+                    let since = *idle_since.get_or_insert_with(std::time::Instant::now);
+                    let limit = self.idle_spin_ns.load(Ordering::Relaxed);
+                    if limit != u64::MAX && since.elapsed().as_nanos() as u64 >= limit {
+                        self.park_until_job();
+                        idle_since = None;
+                    }
+                }
             }
         }
+    }
+
+    /// Idle past the spin window inside an open scope: park until a job with
+    /// unclaimed tasks is published, the scope closes, or the pool stops.
+    /// Hands the core back on a contended box, where an idle spinner keeps
+    /// the thread HOLDING a task off-CPU.
+    fn park_until_job(&self) {
+        let mut g = self.park_lock.lock().unwrap_or_else(|p| p.into_inner());
+        self.idle_parked.fetch_add(1, Ordering::SeqCst);
+        loop {
+            // SeqCst pairs with `run`'s claim store + `idle_parked` load: either
+            // we see the new job here or `run` sees us parked and notifies.
+            let (n, idx) = unpack(self.claim.0.load(Ordering::SeqCst));
+            if idx < n
+                || self.active.load(Ordering::SeqCst) == 0
+                || self.stop.load(Ordering::SeqCst)
+            {
+                break;
+            }
+            g = self.park_cv.wait(g).unwrap_or_else(|p| p.into_inner());
+        }
+        self.idle_parked.fetch_sub(1, Ordering::SeqCst);
     }
 
     fn park_while_inactive(&self) {
@@ -145,7 +188,14 @@ impl Shared {
     }
 
     fn deactivate(&self) {
-        self.active.fetch_sub(1, Ordering::SeqCst);
+        // The last scope closing must release idle-parked workers to the
+        // inactive park (they wait on "job, scope closed, or stop").
+        if self.active.fetch_sub(1, Ordering::SeqCst) == 1
+            && self.idle_parked.load(Ordering::SeqCst) > 0
+        {
+            let _g = self.park_lock.lock().unwrap_or_else(|p| p.into_inner());
+            self.park_cv.notify_all();
+        }
     }
 }
 
@@ -165,6 +215,9 @@ impl SpinPool {
     /// `workers == 0` runs every job serially on the caller.
     pub fn new(workers: usize) -> Self {
         let shared = Arc::new(Shared::default());
+        shared
+            .idle_spin_ns
+            .store(default_idle_spin_ns(), Ordering::Relaxed);
         let handles = (0..workers)
             .map(|i| {
                 let s = Arc::clone(&shared);
@@ -182,16 +235,23 @@ impl SpinPool {
         }
     }
 
+    /// Set the idle spin window: a worker idle that long inside an open scope
+    /// parks until the next job (`None` = spin for the whole scope).
+    pub fn set_idle_spin(&self, window: Option<std::time::Duration>) {
+        let ns = window.map_or(u64::MAX, |d| d.as_nanos().min(u64::MAX as u128 - 1) as u64);
+        self.shared.idle_spin_ns.store(ns, Ordering::Relaxed);
+    }
+
     /// One worker per PERFORMANCE core minus one (the caller is the last):
     /// spinning threads on every core leave no room for anything else, and a
     /// descheduled spinner holding a task stalls the fork. Measured on the M3
     /// Max (12 P + 4 E), FFN gate+up after a serial gap: 11 workers ran at
     /// 0.60–0.84× rayon-on-a-worker, 15 workers swung 0.84–1.29× with one
     /// other busy process on the box, 7 workers were bandwidth-short
-    /// (0.81–1.22×). `KATGPT_SPIN_POOL_WORKERS` overrides; off macOS the
-    /// count is `available_parallelism() / 2 - 1` (unmeasured). A pool that
-    /// comes out at 0 workers is never used by [`spin_pool_run`]: the kernels
-    /// keep their rayon arm rather than running every fork serially.
+    /// (0.81–1.22×). `KATGPT_SPIN_POOL_WORKERS` overrides. Off macOS the
+    /// default is 0 workers (measured a loss on an i7-13700K, see
+    /// `default_workers`). A pool with 0 workers is never used by
+    /// [`spin_pool_run`]: the kernels keep their rayon arm.
     pub fn for_this_machine() -> Self {
         Self::new(default_workers())
     }
@@ -243,7 +303,11 @@ impl SpinPool {
         s.job
             .store(&job as *const JobRef<'_> as *mut (), Ordering::Relaxed);
         s.done.0.store(0, Ordering::Relaxed);
-        s.claim.0.store(pack(epoch, n_tasks, 0), Ordering::Release);
+        s.claim.0.store(pack(epoch, n_tasks, 0), Ordering::SeqCst);
+        if s.idle_parked.load(Ordering::SeqCst) > 0 {
+            let _g = s.park_lock.lock().unwrap_or_else(|p| p.into_inner());
+            s.park_cv.notify_all();
+        }
         while let Some(i) = s.try_claim() {
             s.execute(i);
         }
@@ -256,6 +320,25 @@ impl SpinPool {
     }
 }
 
+/// Default idle spin window: `KATGPT_SPIN_POOL_IDLE_US` (µs; `inf` = spin
+/// for the whole scope), else [`DEFAULT_IDLE_SPIN_US`].
+fn default_idle_spin_ns() -> u64 {
+    match std::env::var("KATGPT_SPIN_POOL_IDLE_US").ok().as_deref() {
+        Some("inf") => u64::MAX,
+        Some(v) => v.parse::<u64>().map_or(DEFAULT_IDLE_SPIN_US * 1000, |us| {
+            us.saturating_mul(1000).min(u64::MAX - 1)
+        }),
+        None => DEFAULT_IDLE_SPIN_US * 1000,
+    }
+}
+
+/// Idle spin window before a worker parks inside an open scope, µs.
+/// Measured against ∞ and 30 µs only (riir-infer `decode_spin_pool_goat`,
+/// Bonsai-2-27B, M3 Max): quiet box ∞ 0.740 / 100 µs 0.735 / 30 µs 0.757;
+/// with a 6-thread CPU burner ∞ 1.339 (spin-forever collapses) / 100 µs
+/// 0.794 / 30 µs 0.834. A tuning point among three, not an optimum.
+pub const DEFAULT_IDLE_SPIN_US: u64 = 100;
+
 /// Worker count for [`SpinPool::for_this_machine`].
 fn default_workers() -> usize {
     if let Some(n) = std::env::var("KATGPT_SPIN_POOL_WORKERS")
@@ -264,14 +347,14 @@ fn default_workers() -> usize {
     {
         return n;
     }
-    // Off macOS (or with no perflevel sysctl) the count is UNMEASURED:
-    // `available_parallelism()` counts SMT siblings and E-cores (24 on the
-    // 4090 box's i7-13700K), the oversubscribed shape that was unstable at 15
-    // on the M3. Half of it is the conservative guess until a box measures it.
-    let cores = performance_cores()
-        .or_else(|| std::thread::available_parallelism().ok().map(|n| n.get() / 2))
-        .unwrap_or(1);
-    cores.saturating_sub(1)
+    // Off macOS (or with no perflevel sysctl): 0 workers, i.e. the pool is
+    // never used and the kernels keep rayon. Measured on the 4090 box's
+    // i7-13700K (8P+8E, 24 threads, Windows; spin_pool_gap_ab, 2026-10-13,
+    // two sessions agreeing): spin/rayon-on-worker at the decode posture
+    // (gap >= 10 us) was 0.97-0.99 at 7 workers, 1.71-1.75 at 11, 2.55 at 15,
+    // 3.86-3.93 at 23 — never a win worth the risk. Mechanism not established
+    // (SMT siblings / E-cores suspected). Set KATGPT_SPIN_POOL_WORKERS to opt in.
+    performance_cores().map_or(0, |p| p.saturating_sub(1))
 }
 
 /// Performance-core count (`hw.perflevel0.physicalcpu`); `None` when the
@@ -384,7 +467,11 @@ pub fn spin_pool_run(n_tasks: usize, f: &(dyn Fn(usize) + Sync)) -> bool {
 /// `body(y_chunk, row0)` for consecutive `rows_per_task`-row chunks of `y`.
 /// `false` (nothing run) when no pool is installed. Same partition semantics
 /// as `y.par_chunks_mut(rows_per_task).enumerate()`.
-pub fn spin_row_chunks(y: &mut [f32], rows_per_task: usize, body: &(dyn Fn(&mut [f32], usize) + Sync)) -> bool {
+pub fn spin_row_chunks(
+    y: &mut [f32],
+    rows_per_task: usize,
+    body: &(dyn Fn(&mut [f32], usize) + Sync),
+) -> bool {
     let chunk = rows_per_task.max(1);
     let (ptr, len) = (SyncMutPtr(y.as_mut_ptr()), y.len());
     spin_pool_run(len.div_ceil(chunk), &|t| {
@@ -470,10 +557,57 @@ mod tests {
         let n = std::thread::available_parallelism().map_or(1, |n| n.get());
         let w = default_workers();
         assert!(w < n.max(1), "{w} workers on {n} cores");
+        #[cfg(not(target_os = "macos"))]
+        if std::env::var("KATGPT_SPIN_POOL_WORKERS").is_err() {
+            assert_eq!(w, 0, "off macOS the pool is opt-in (0 workers = rayon)");
+        }
         #[cfg(target_os = "macos")]
         if let Some(p) = performance_cores() {
             assert!(p <= n, "perflevel0 {p} > {n} cores");
         }
+    }
+
+    #[test]
+    fn idle_parked_workers_wake_for_the_next_job_in_scope() {
+        let pool = SpinPool::new(3);
+        pool.set_idle_spin(Some(std::time::Duration::from_micros(10)));
+        let caller = std::thread::current().id();
+        with_spin_pool(&pool, || {
+            for gap_ms in [0u64, 1, 5] {
+                std::thread::sleep(std::time::Duration::from_millis(gap_ms));
+                let sum = AtomicUsize::new(0);
+                let worker_ran = AtomicBool::new(false);
+                let timed_out = AtomicBool::new(false);
+                assert!(spin_pool_run(200, &|i| {
+                    if std::thread::current().id() != caller {
+                        worker_ran.store(true, Ordering::Release);
+                    }
+                    // The caller drains every task itself, so a correct sum
+                    // alone cannot catch a lost wake-up: task 0 waits for a
+                    // parked WORKER to wake and run something.
+                    if i == 0 {
+                        let t = std::time::Instant::now();
+                        while !worker_ran.load(Ordering::Acquire) {
+                            if t.elapsed() > std::time::Duration::from_secs(1) {
+                                timed_out.store(true, Ordering::Relaxed);
+                                break;
+                            }
+                            std::hint::spin_loop();
+                        }
+                    }
+                    sum.fetch_add(i, Ordering::Relaxed);
+                }));
+                assert!(
+                    !timed_out.load(Ordering::Relaxed),
+                    "gap {gap_ms} ms: no parked worker woke"
+                );
+                assert_eq!(
+                    sum.load(Ordering::Relaxed),
+                    199 * 200 / 2,
+                    "gap {gap_ms} ms"
+                );
+            }
+        });
     }
 
     #[test]
