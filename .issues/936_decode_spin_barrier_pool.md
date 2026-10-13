@@ -34,7 +34,7 @@ Two in-rayon fixes were measured and refuted (riir-infer Issue 045):
 ## Tasks
 
 - [ ] T1: substrate check (done 2026-10-13: no spin/barrier pool in
-      katgpt-rs, riir-infer or riir-ai; there are 30+ `par_chunks_mut` sites in
+      katgpt-rs, riir-infer or riir-ai; there are 21 `par_matvec_chunk`/`par_chunks_mut` lines in
       `katgpt-types/src/simd`). Define the executor trait in katgpt-types and
       make rayon its default impl, with no behaviour change.
 - [ ] T2: spin-barrier impl behind a feature `decode_spin_pool` (opt-in).
