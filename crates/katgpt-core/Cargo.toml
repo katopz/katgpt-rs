@@ -200,6 +200,18 @@ lthash = []
 # transport operators — unrelated).
 lattice_memory = []
 
+# lattice_memory_3d (Issue 938, 2026-10-13): the 3-AXIS lattice — the second
+# capacity remedy for Bench 919's NOT-PROMOTED floor. The sizer's envelope
+# generalizes to N_max ≈ 0.35·d_k·(3.76/R)^AXES, so A=3 lifts the R=0.05σ
+# ceiling at d_k=32 from ~63k to ~4.8M items at ~1.8 GB slab (G6: under the
+# 2 GiB bar — priced before the build). Implies lattice_memory; the shipped
+# A=2 monomorphization is bit-identical by construction (same draw order,
+# same accumulation order, same commitment byte stream — the G3 law, gated
+# by lattice_memory_gates + bench_919). GOAT gates: bench_938_lattice_3d_goat
+# (G1 recall at 10⁶, G2 27-tap read vs PKM, G5 graded recovery at ε=0.05σ
+# vs Engram, G6 memory) — promotion is the bench's verdict, never the alias.
+lattice_memory_3d = ["lattice_memory"]
+
 # bf16_simd (Issue 800 Arm A, 2026-09-16): SIMD bf16⇄f32 batch conversion
 # kernels — the widening direction (u16→u32<<16→f32) is lossless; the
 # narrowing ships RNE (bit-exact vs the `half` crate) with truncation as the
@@ -4526,6 +4538,14 @@ required-features = ["minmax_partition"]
 name = "lattice_memory_gates"
 required-features = ["lattice_memory"]
 
+# Issue 938 — the 3-axis gate surface: G6 memory pricing (the before-the-build
+# arithmetic), 3^A support mechanics, sized3 capacity contrast (2D refuses the
+# 10⁶/0.05σ point 3D accepts), freeze/thaw on the 3D shape, G4 alloc (the
+# Issue-741 profile rule). The recall/latency GOAT lives in the bench below.
+[[test]]
+name = "lattice_memory_3d_gates"
+required-features = ["lattice_memory_3d"]
+
 # Issue 927 — the SplitMix64 twin-pin: katgpt-types (the designated home) vs
 # katgpt-assign (the justified zero-dep copy) stream cores stay bit-identical
 # from the same seed. The one place both crates are visible; the copy-gate
@@ -4544,6 +4564,15 @@ required-features = ["assignment"]
 name = "bench_919_lattice_goat"
 harness = false
 required-features = ["lattice_memory", "engram"]
+
+# Issue 938 T2.3/T2.4 — the G5 cell re-run at 3D (R=0.05σ, N=10⁶, ε sweep,
+# graded recovery vs Engram's cliff) + the G2 gate (27-tap read vs PKM at
+# 10⁶, cell-count-matched 27-vs-9 tap arm) + the G6 memory column + G4 alloc
+# (alloc_tracking profile). --release mandatory at G2.
+[[bench]]
+name = "bench_938_lattice_3d_goat"
+harness = false
+required-features = ["lattice_memory_3d", "engram"]
 
 # Rider (Plan 619 posture sweep, 2026-10-07): the example imports
 # karc_forecaster-gated names (FourierBasis/KarcBasis/KarcForecaster) and

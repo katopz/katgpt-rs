@@ -1,9 +1,9 @@
 //! LatticeMemory — E2LSH-addressed delta-rule cell lattice (Plan 619).
 //!
 //! The deterministic, modelless extraction of the Spotlight-class addressing
-//! math (research note 233): a 2D lattice of delta-rule cells addressed by
+//! math (research note 233): a lattice of delta-rule cells addressed by
 //! **continuous E2LSH per-axis coordinates** (`address`), bump-interpolated
-//! over the 3×3 neighborhood (`bump`), cells allocated on first write into a
+//! over the 3^A neighborhood (`bump`), cells allocated on first write into a
 //! preallocated flat slab (`types`) — the candidate fifth retrieval
 //! complexity class (growing state + constant-neighborhood access + graded
 //! near-miss recall) beside Raven O(1) / Engram O(1) / δ-Mem O(r) / PKM
@@ -17,6 +17,16 @@
 //! freeze/thaw — `snapshot`/`restore`/`commitment`, the Plan 199 T1.B
 //! consumer surface (BLAKE3-committed artifact; whole-swap thaw).
 //!
+//! Issue 938: the lattice is **generic over the axis count** —
+//! [`LatticeMemory`] is the shipped `A = 2` monomorphization (Plan 619,
+//! bit-identical by construction: same draw order, same accumulation order,
+//! same commitment byte stream), and [`LatticeMemory3D`] behind
+//! `lattice_memory_3d` is the second capacity remedy for Bench 919's
+//! NOT-PROMOTED floor (`N_max ≈ 0.35·d_k·(3.76/R)^AXES`). The sizer gains
+//! the measured-erosion capacity (`capacity_per_cell_eroded`,
+//! `sized_eroded`) and the overwrite lane gains the unblended
+//! [`LatticeMemoryG::read_direct`].
+//!
 //! Opt-in (`feature = "lattice_memory"`) until the Plan 619 GOAT gate
 //! (T1.7) passes; the gate designs live in the plan, never here. Name
 //! disambiguation: NOT `analytic_lattice` (Plan 330 transport operators).
@@ -27,24 +37,40 @@ mod cdf;
 mod sizer;
 pub mod types;
 
-pub use address::{split_coordinate, LshAxes, AXES};
+use types::LatticeConfigG;
+
+pub use address::{split_coordinate, LshAxes};
 pub use bump::{axis_weights, axis_weights_cos2, build_lut, weights_direct, AxisWeights, BumpLut};
 pub use cdf::CdfWarp;
-pub use sizer::{capacity_per_cell, support_radius};
+pub use sizer::{capacity_per_cell, capacity_per_cell_eroded, grid_side_for, support_radius};
 pub use types::{
     validate, BumpKernel, LatticeCell, LatticeConfig, LatticeConfigError, LatticeSnapshot,
     LatticeSnapshotError,
 };
 
-/// The 3×3 neighborhood weight row for one axis: `[prev, center, next]`.
+/// The shipped 2-axis lattice (Plan 619) — the default monomorphization.
+/// Every Plan 619 call site compiles unchanged through this alias.
+pub type LatticeMemory = LatticeMemoryG<2>;
+
+/// The 3-axis lattice — Issue 938 T2's second capacity remedy. Opt-in
+/// behind `lattice_memory_3d`; promotion is the bench's verdict (G1/G2/G5/G6),
+/// never this alias.
+#[cfg(feature = "lattice_memory_3d")]
+pub type LatticeMemory3D = LatticeMemoryG<3>;
+
+/// The 3-axis config alias (see [`types::LatticeConfig3D`]).
+#[cfg(feature = "lattice_memory_3d")]
+pub use types::LatticeConfig3D;
+
+/// The 3-tap neighborhood weight row for one axis: `[prev, center, next]`.
 const TAPS: usize = 3;
 
 /// A query's lattice location: the clamped primary cell + the signed
 /// fractional offsets the bump consumes.
-struct Located {
-    row: usize,
-    col: usize,
-    delta: [f32; AXES],
+struct Located<const A: usize> {
+    /// The primary cell coordinate per axis (clamped into the grid).
+    cell: [usize; A],
+    delta: [f32; A],
 }
 
 /// The within-cell read query (T1.4).
@@ -59,17 +85,19 @@ enum Query<'a> {
     Dense(&'a [f32]),
 }
 
-/// The lattice: seeded axes + bump table + dense cell table + flat slab.
+/// The lattice: seeded axes + bump table + dense cell table + flat slab,
+/// generic over the axis count `A` (Issue 938 T2.1).
 ///
-/// Constructed once via [`LatticeMemory::new`] (or the occupancy-fitted
-/// [`LatticeMemory::sized`]); every hot-path read is a coordinate pair →
-/// 9 dense-table lookups → slab rows blended in place — zero heap allocation
-/// after construction (the G4 law, gated by `tests/lattice_memory_gates.rs`).
-pub struct LatticeMemory {
-    config: LatticeConfig,
-    axes: LshAxes,
+/// Constructed once via [`LatticeMemoryG::new`] (or the occupancy-fitted
+/// [`LatticeMemoryG::sized`]); every hot-path read is a coordinate tuple →
+/// 3^A dense-table lookups → slab rows blended in place — zero heap
+/// allocation after construction (the G4 law, gated by
+/// `tests/lattice_memory_gates.rs`).
+pub struct LatticeMemoryG<const A: usize> {
+    config: LatticeConfigG<A>,
+    axes: LshAxes<A>,
     lut: BumpLut,
-    /// Dense cell table, `grid[0] × grid[1]` — unwritten cells carry
+    /// Dense cell table, row-major over axes — unwritten cells carry
     /// `LatticeCell::unwritten()` (writes == 0).
     cells: Vec<LatticeCell>,
     /// Preallocated flat slab, `cell_count × d_k × d_v` elements. Cells claim
@@ -85,20 +113,24 @@ pub struct LatticeMemory {
     scratch: Vec<f32>,
 }
 
-impl LatticeMemory {
+impl<const A: usize> LatticeMemoryG<A> {
+    /// Neighborhood taps across the whole product: `3^A`.
+    const TAPS_POW: usize = TAPS.pow(A as u32);
+
     /// Construct from a validated config — one slab allocation, once.
     ///
     /// # Errors
     /// [`LatticeConfigError`] on zero dimensions, non-finite widths, or a
     /// slab over the configured `byte_budget`.
-    pub fn new(config: LatticeConfig) -> Result<Self, LatticeConfigError> {
+    pub fn new(config: LatticeConfigG<A>) -> Result<Self, LatticeConfigError> {
         validate(&config)?;
-        let axes = LshAxes::new(
-            config.d,
-            config.w,
-            config.seed,
-            &[config.grid[0] as u64, config.grid[1] as u64, config.d_k as u64, config.d_v as u64],
-        );
+        let mut parts = Vec::with_capacity(A + 2);
+        for &side in config.grid.iter() {
+            parts.push(side as u64);
+        }
+        parts.push(config.d_k as u64);
+        parts.push(config.d_v as u64);
+        let axes = LshAxes::new(config.d, config.w, config.seed, &parts);
         let cells = vec![LatticeCell::unwritten(); config.cell_count()];
         let slab = vec![0.0_f32; config.cell_count() * config.cell_len()];
         let scratch = vec![0.0_f32; config.d_v];
@@ -107,7 +139,7 @@ impl LatticeMemory {
 
     /// The validated config this lattice was built from.
     #[must_use]
-    pub const fn config(&self) -> &LatticeConfig {
+    pub const fn config(&self) -> &LatticeConfigG<A> {
         &self.config
     }
 
@@ -125,39 +157,52 @@ impl LatticeMemory {
         self.cursor
     }
 
-    /// The clamped primary cell `(row, col)` a query addresses — the
-    /// occupancy/locality readout; the hot paths recompute it inline.
+    /// The clamped primary cell a query addresses — the occupancy/locality
+    /// readout; the hot paths recompute it inline.
     #[must_use]
-    pub fn primary_cell(&self, x: &[f32]) -> [usize; 2] {
-        let located = self.locate(x);
-        [located.row, located.col]
+    pub fn primary_cell(&self, x: &[f32]) -> [usize; A] {
+        self.locate(x).cell
     }
 
-    /// Address `x` → primary cell + both axes' fractional offsets.
+    /// Address `x` → primary cell + every axis' fractional offsets.
     ///
     /// The optional CDF warp (`T1.5`) remaps the raw coordinates first —
     /// monotone, so locality and the real fractional part survive. Cell
     /// coordinates clamp into the grid (queries may project outside it; the
     /// lattice's answers stay in-bounds — the read renormalizes over the
     /// clipped neighborhood).
-    fn locate(&self, x: &[f32]) -> Located {
+    fn locate(&self, x: &[f32]) -> Located<A> {
         let mut c = self.axes.coordinates(x);
         if let Some(warp) = self.config.warp.as_ref() {
-            for axis in 0..AXES {
+            for axis in 0..A {
                 c[axis] = warp[axis].apply(c[axis]);
             }
         }
-        let mut cell = [0_i64; AXES];
-        let mut delta = [0.0_f32; AXES];
-        for axis in 0..AXES {
+        let mut cell = [0_i64; A];
+        let mut delta = [0.0_f32; A];
+        for axis in 0..A {
             let (i, f) = split_coordinate(c[axis]);
             let m = i + i64::from(f > 0.5); // round(c): the primary
             cell[axis] = m;
             delta[axis] = c[axis] - m as f32;
         }
-        let row = cell[0].clamp(0, i64::from(self.config.grid[0]) - 1) as usize;
-        let col = cell[1].clamp(0, i64::from(self.config.grid[1]) - 1) as usize;
-        Located { row, col, delta }
+        let mut clamped = [0_usize; A];
+        for axis in 0..A {
+            clamped[axis] = cell[axis].clamp(0, i64::from(self.config.grid[axis]) - 1) as usize;
+        }
+        Located { cell: clamped, delta }
+    }
+
+    /// Row-major flat index of a cell coordinate tuple (strides derived from
+    /// the grid, never stored). For `A = 2` this is exactly the historical
+    /// `row * grid[1] + col`.
+    #[inline]
+    fn cell_index(&self, cell: [usize; A]) -> usize {
+        let mut idx = 0_usize;
+        for (&c, &side) in cell.iter().zip(self.config.grid.iter()) {
+            idx = idx * side as usize + c;
+        }
+        idx
     }
 
     /// **Delta-rule cell write** (T1.4): the cell `x` addresses gets
@@ -185,7 +230,7 @@ impl LatticeMemory {
         assert_eq!(v.len(), self.config.d_v, "value width must be d_v");
         assert!(beta > 0.0 && beta <= 1.0, "beta must be in (0, 1], got {beta}");
         let located = self.locate(x);
-        let idx = located.row * self.config.grid[1] as usize + located.col;
+        let idx = self.cell_index(located.cell);
         let len = self.config.cell_len();
         if !self.cells[idx].is_written() {
             let offset = self.cursor;
@@ -236,7 +281,7 @@ impl LatticeMemory {
     pub fn write_value(&mut self, x: &[f32], v: &[f32]) {
         assert_eq!(v.len(), self.config.d_v, "value width must be d_v");
         let located = self.locate(x);
-        let idx = located.row * self.config.grid[1] as usize + located.col;
+        let idx = self.cell_index(located.cell);
         let len = self.config.cell_len();
         if !self.cells[idx].is_written() {
             let offset = self.cursor;
@@ -261,12 +306,39 @@ impl LatticeMemory {
         self.read_impl(x, Query::Row0, out);
     }
 
+    /// The unblended primary-cell read of the overwrite lane (Issue 938
+    /// T4.1): `write_value` + `read_direct` is a BIT-IDENTICAL round trip.
+    ///
+    /// The tent's exact-hit center mass is 0.6 per axis (and 0.6^A for the
+    /// blended read at an exact hit — 0.36 at `A = 2`, 0.216 at `A = 3`), so
+    /// a POSITIONAL consumer — data placed by address, not keyed by content —
+    /// must read through this lane and not [`read_blend`](Self::read_blend).
+    /// mLattice found the same boundary independently (their MAD Copy = 0.003
+    /// content lane forced `write_cell`/`read_cell` into their API).
+    ///
+    /// Returns whether the primary cell was written; an unwritten cell
+    /// zero-fills `out` and returns `false`. Zero-alloc (one memcpy).
+    pub fn read_direct(&self, x: &[f32], out: &mut [f32]) -> bool {
+        assert_eq!(out.len(), self.config.d_v, "out width must be d_v");
+        out.fill(0.0);
+        let located = self.locate(x);
+        let idx = self.cell_index(located.cell);
+        let cell = self.cells[idx];
+        if !cell.is_written() {
+            return false;
+        }
+        let base = cell.offset as usize;
+        let d_v = self.config.d_v;
+        out.copy_from_slice(&self.slab[base..base + d_v]);
+        true
+    }
+
     /// The φ-blended delta-rule read at `x`: `Σ_cells φ(cell)·(S_cᵀ q)`,
     /// written into `out` (caller-owned — the hot path allocates nothing).
     ///
-    /// Per-cell read-then-blend (the T1.4 law): each written cell in the 3×3
+    /// Per-cell read-then-blend (the T1.4 law): each written cell in the 3^A
     /// neighborhood contributes `φ_c·(S_cᵀ q)` by row-wise direct
-    /// accumulation — `9 × d_k` row MACs at `d_v` wide — and no cross-cell
+    /// accumulation — `3^A × d_k` row MACs at `d_v` wide — and no cross-cell
     /// state is ever materialized (sum-then-read would need a `d_k·d_v`
     /// scratch AND read every row of every cell).
     pub fn read_cells(&self, x: &[f32], q: &[f32], out: &mut [f32]) {
@@ -308,9 +380,9 @@ impl LatticeMemory {
 
     /// Thaw: replace the current state with a snapshot taken from a lattice
     /// of the SAME geometry (built from the same `LatticeConfig`). After a
-    /// successful restore, reads are bitwise what the source lattice's reads
-    /// were at snapshot time, and later writes continue from the snapshot's
-    /// slab cursor.
+    /// successful restore, reads are bitwise
+    /// what the source lattice's reads were at snapshot time, and later
+    /// writes continue from the snapshot's slab cursor.
     ///
     /// # Errors
     /// [`LatticeSnapshotError::GeometryMismatch`] when the snapshot came
@@ -352,16 +424,18 @@ impl LatticeMemory {
         Ok(())
     }
 
-    /// BLAKE3 commitment over the full state: a geometry header (grid,
-    /// `d_k`, `d_v`, lengths, cursor), the cell table, then every slab
-    /// element — all little-endian, so commitments are comparable across
-    /// machines. Byte-identical state commits identically; any written byte
-    /// moves the commitment.
+    /// BLAKE3 commitment over the full state: a geometry header (every grid
+    /// side in axis order, then `d_k`, `d_v`, lengths, cursor), the cell
+    /// table, then every slab element — all little-endian, so commitments
+    /// are comparable across machines. Byte-identical state commits
+    /// identically; any written byte moves the commitment. The `A = 2`
+    /// header byte stream is exactly the pre-generic one.
     #[must_use]
     pub fn commitment(&self) -> [u8; 32] {
         let mut hasher = blake3::Hasher::new();
-        hasher.update(&self.config.grid[0].to_le_bytes());
-        hasher.update(&self.config.grid[1].to_le_bytes());
+        for side in self.config.grid {
+            hasher.update(&side.to_le_bytes());
+        }
         hasher.update(&(self.config.d_k as u64).to_le_bytes());
         hasher.update(&(self.config.d_v as u64).to_le_bytes());
         hasher.update(&(self.cells.len() as u64).to_le_bytes());
@@ -387,71 +461,68 @@ impl LatticeMemory {
     /// The shared read body — blends the neighborhood into `out` and returns
     /// the written-mass fraction of the in-grid kernel mass (the T1.6 score
     /// input; `0.0` for an all-empty support).
+    ///
+    /// The neighborhood is the 3^A product over per-axis 3-tap rows, visited
+    /// in row-major tap order (axis 0 most significant) — at `A = 2` exactly
+    /// the historical `(row, col)` double loop, so the mass/out accumulation
+    /// ORDER (and therefore every float result) is unchanged.
     fn read_impl(&self, x: &[f32], query: Query<'_>, out: &mut [f32]) -> f32 {
         assert_eq!(out.len(), self.config.d_v, "out width must be d_v");
         out.fill(0.0);
         let located = self.locate(x);
-        let (w_row, w_col) = self.neighborhood_weights(located.delta);
+        let w_axis = self.neighborhood_weights(located.delta);
+        let taps_pow = Self::TAPS_POW;
+        let mut tap_stride = [0_usize; A];
+        let mut s = 1_usize;
+        for axis in (0..A).rev() {
+            tap_stride[axis] = s;
+            s *= TAPS;
+        }
         let d_v = self.config.d_v;
         let d_k = self.config.d_k;
-        let grid1 = self.config.grid[1] as usize;
         // The kernel's in-grid mass — data-independent shape walk, computed
         // first; the written share rides the same walk (cell-table reads
         // only).
         let mut mass = 0.0_f32;
         let mut written_mass = 0.0_f32;
-        for (ri, &wr) in w_row.iter().enumerate() {
-            let r = located.row as i64 + ri as i64 - 1;
-            if r < 0 || r >= i64::from(self.config.grid[0]) {
-                continue;
-            }
-            for (ci, &wc) in w_col.iter().enumerate() {
-                let c = located.col as i64 + ci as i64 - 1;
-                if c >= 0 && c < i64::from(self.config.grid[1]) {
-                    let phi = wr * wc;
-                    mass += phi;
-                    if self.cells[r as usize * grid1 + c as usize].is_written() {
-                        written_mass += phi;
-                    }
+        for tap in 0..taps_pow {
+            if let Some((phi, cell_idx)) = self.tap_location(tap, &located, &w_axis, &tap_stride) {
+                mass += phi;
+                if self.cells[cell_idx].is_written() {
+                    written_mass += phi;
                 }
             }
         }
         if mass <= f32::EPSILON {
             return 0.0;
         }
-        for (ri, &wr) in w_row.iter().enumerate() {
-            let r = located.row as i64 + ri as i64 - 1;
-            if r < 0 || r >= i64::from(self.config.grid[0]) {
+        for tap in 0..taps_pow {
+            let Some((phi, cell_idx)) = self.tap_location(tap, &located, &w_axis, &tap_stride)
+            else {
+                continue;
+            };
+            let phi = phi / mass;
+            let cell = self.cells[cell_idx];
+            if !cell.is_written() {
                 continue;
             }
-            for (ci, &wc) in w_col.iter().enumerate() {
-                let c = located.col as i64 + ci as i64 - 1;
-                if c < 0 || c >= i64::from(self.config.grid[1]) {
-                    continue;
-                }
-                let phi = wr * wc / mass;
-                let cell = self.cells[r as usize * grid1 + c as usize];
-                if !cell.is_written() {
-                    continue;
-                }
-                let base = cell.offset as usize;
-                match query {
-                    Query::Row0 => {
-                        let src = &self.slab[base..base + d_v];
-                        for (o, &s) in out.iter_mut().zip(src.iter()) {
-                            *o += phi * s;
-                        }
+            let base = cell.offset as usize;
+            match query {
+                Query::Row0 => {
+                    let src = &self.slab[base..base + d_v];
+                    for (o, &s) in out.iter_mut().zip(src.iter()) {
+                        *o += phi * s;
                     }
-                    Query::Dense(q) => {
-                        for (i, &qi) in q.iter().take(d_k).enumerate() {
-                            if qi == 0.0 {
-                                continue;
-                            }
-                            let w = phi * qi;
-                            let row = &self.slab[base + i * d_v..base + (i + 1) * d_v];
-                            for (o, &s) in out.iter_mut().zip(row.iter()) {
-                                *o += w * s;
-                            }
+                }
+                Query::Dense(q) => {
+                    for (i, &qi) in q.iter().take(d_k).enumerate() {
+                        if qi == 0.0 {
+                            continue;
+                        }
+                        let w = phi * qi;
+                        let row = &self.slab[base + i * d_v..base + (i + 1) * d_v];
+                        for (o, &s) in out.iter_mut().zip(row.iter()) {
+                            *o += w * s;
                         }
                     }
                 }
@@ -460,22 +531,51 @@ impl LatticeMemory {
         written_mass / mass
     }
 
-    /// Per-axis 3-tap weights for both axes at once, dispatched on the
-    /// configured kernel (T1.8's tunable).
-    #[must_use]
-    fn neighborhood_weights(&self, delta: [f32; AXES]) -> ([f32; TAPS], [f32; TAPS]) {
-        match self.config.bump_kernel {
-            BumpKernel::Tent => {
-                let (r0, r1, r2) = axis_weights(&self.lut, delta[0]);
-                let (c0, c1, c2) = axis_weights(&self.lut, delta[1]);
-                ([r0, r1, r2], [c0, c1, c2])
+    /// One neighborhood tap: the per-axis tap index decomposition, its
+    /// product weight, and the in-bounds check — `None` when any axis'
+    /// tap falls outside the grid (the read renormalizes over the clipped
+    /// neighborhood). The weight product multiplies in axis order, which at
+    /// `A = 2` is exactly the historical `wr * wc`.
+    #[inline]
+    fn tap_location(
+        &self,
+        tap: usize,
+        located: &Located<A>,
+        w_axis: &[[f32; TAPS]; A],
+        tap_stride: &[usize; A],
+    ) -> Option<(f32, usize)> {
+        let mut weight = 1.0_f32;
+        let mut flat = 0_usize;
+        for axis in 0..A {
+            let t = (tap / tap_stride[axis]) % TAPS;
+            weight *= w_axis[axis][t];
+            let c = located.cell[axis] as i64 + t as i64 - 1;
+            if c < 0 || c >= i64::from(self.config.grid[axis]) {
+                return None;
             }
-            BumpKernel::Cos2 => {
-                let (r0, r1, r2) = axis_weights_cos2(delta[0]);
-                let (c0, c1, c2) = axis_weights_cos2(delta[1]);
-                ([r0, r1, r2], [c0, c1, c2])
-            }
+            flat = flat * self.config.grid[axis] as usize + c as usize;
         }
+        Some((weight, flat))
+    }
+
+    /// Per-axis 3-tap weights, dispatched on the configured kernel (T1.8's
+    /// tunable).
+    #[must_use]
+    fn neighborhood_weights(&self, delta: [f32; A]) -> [[f32; TAPS]; A] {
+        let mut w = [[0.0_f32; TAPS]; A];
+        for (axis, row) in w.iter_mut().enumerate() {
+            *row = match self.config.bump_kernel {
+                BumpKernel::Tent => {
+                    let (a, b, c) = axis_weights(&self.lut, delta[axis]);
+                    [a, b, c]
+                }
+                BumpKernel::Cos2 => {
+                    let (a, b, c) = axis_weights_cos2(delta[axis]);
+                    [a, b, c]
+                }
+            };
+        }
+        w
     }
 }
 
@@ -737,6 +837,59 @@ mod tests {
         for (a, b) in dense.iter().zip(blend.iter()) {
             assert!((a - b).abs() < 1e-6, "row-0 paths disagree: {dense:?} vs {blend:?}");
         }
+    }
+
+    // ── Issue 938 T4: the positional-copy boundary ────────────────────────
+
+    #[test]
+    fn read_direct_is_the_exact_write_value_round_trip() {
+        // The T4.2 law: write_value + read_direct is BIT-IDENTICAL, while
+        // the blended read at the same address is the graded dilution (the
+        // tent's ≈ 0.6 exact-hit center mass, renormalized over the 3×3
+        // support). A positional consumer must use read_direct.
+        let mut lat = LatticeMemory::new(config([32, 32], [2.0, 2.0])).unwrap();
+        let x = [0.6_f32; 16];
+        let v = [0.5_f32, -0.25, 1.0, 0.0];
+        lat.write_value(&x, &v);
+        let mut direct = [0.0_f32; 4];
+        assert!(lat.read_direct(&x, &mut direct), "written cell must read true");
+        assert_eq!(direct, v, "read_direct must be the exact round trip");
+        // The blended read is GRADED, not exact: direction preserved (every
+        // component scaled by one factor — the written cell's normalized
+        // kernel mass), strictly below 1.0. The 0.6 exact-hit center mass is
+        // a per-axis bump property (pinned in bump.rs); the blended factor
+        // at an arbitrary query is that mass to the A-th power, renormalized
+        // over the in-grid support — geometry-dependent, so the contract
+        // asserted here is direction + dilution, not a constant.
+        let mut blend = [0.0_f32; 4];
+        lat.read_blend(&x, &mut blend);
+        let g = blend[0] / v[0];
+        assert!(g > 0.0 && g <= 1.0 + 1e-6, "blend factor {g} outside (0, 1]");
+        for (b, &s) in blend.iter().zip(v.iter()) {
+            assert!((b - g * s).abs() < 1e-6, "blend broke direction: {b} vs {g}·{s}");
+        }
+        assert!((g - 1.0).abs() > 1e-6, "blend must be DILUTED, not exact (g = {g})");
+        // Unwritten cell: zeros + false.
+        let mut out = [9.0_f32; 4]; // poisoned
+        assert!(!lat.read_direct(&[0.99; 16], &mut out), "unwritten must read false");
+        assert!(out.iter().all(|&o| o == 0.0), "unwritten read must zero-fill");
+    }
+
+    #[test]
+    fn read_direct_survives_the_freeze_thaw_round_trip() {
+        // The unblended lane is state like any other: snapshot/restore must
+        // preserve it bitwise (the Plan 199 consumer surface, T4 rider).
+        let mut lat = LatticeMemory::new(config([16, 16], [2.0, 2.0])).unwrap();
+        let x = [0.35_f32; 16];
+        let v = [3.5_f32, -1.25, 0.0, 7.0];
+        lat.write_value(&x, &v);
+        let snap = lat.snapshot();
+        let mut before = [0.0_f32; 4];
+        lat.read_direct(&x, &mut before);
+        lat.restore(&snap).expect("restore");
+        let mut after = [0.0_f32; 4];
+        assert!(lat.read_direct(&x, &mut after));
+        assert_eq!(before, after, "thaw must preserve the unblended lane bitwise");
     }
 
     // ── T1.6: sigmoid-only scoring ────────────────────────────────────────

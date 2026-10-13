@@ -5481,6 +5481,30 @@ arXiv:2412.09764 — our form is closed-form delta rule, no gradient descent).
   kernel A/B) remain; consumer = riir-refine Plan 199. No GOAT claim until
   T1.7 runs.
 
+### 143.1 lattice_memory_3d — the 3-axis remedy (Issue 938, Bench 938)
+
+The axis count is a **const generic** (`LshAxes<A>`, `LatticeMemoryG<A>`;
+`LatticeMemory`/`LatticeConfig` stay the A=2 aliases, bit-identical by
+construction — same draw order, accumulation order, commitment byte
+stream), and `lattice_memory_3d = ["lattice_memory"]` opens `A = 3`:
+`N_max ≈ 0.35·d_k·(3.76/R)^AXES` lifts the R=0.05σ ceiling from ~63k to
+~4.76M at d_k=32 (slab 1.798 GB at d_v=32 — priced under the 2 GiB bar
+before the build). The sizer also gains the measured-erosion capacity
+(`capacity_per_cell_eroded`, `sized_eroded` — the same-cell E[cos²]
+estimated from the fit corpus; defaults bit-for-bit `0.35·d_k`) and the
+overwrite lane gains `read_direct` (the exact positional-copy read; the
+blended read dilutes by 0.6^A at an exact hit).
+
+**Verdict (Bench 938, RECORDED NEGATIVE at G2):** at the 10⁶/0.05σ cell 2D
+cannot even size, 3D holds G1 recall 0.9345 + G5 graded recovery 0.184 vs
+Engram 0.004 + G6 857 MB — but the 27-tap read costs 2.90× the 9-tap
+kernel and loses to PKM (7379 vs 5171 ns). Opt-in forever unless a
+posture-changing A/B (the 2-tap kernel, 8 taps vs 27) re-opens it. The
+T1 gates: random keys bracket the aggregate survival law (promise 0.723 ≥
+0.5 at λ=11), clustered keys saturate above it (the exact key-recursion
+algebra pinned ±0.08 — the eroded surface is conservative for parallel
+keys, the safe direction).
+
 Substrate: `crates/katgpt-core/src/lattice_memory/` (`types.rs` vocabulary,
 `address.rs` E2LSH, `bump.rs` the 3-tap LUT) + `crates/katgpt-core/src/
 lsh_seed.rs` (the shared seed discipline). Pure stdlib + fastrand,
