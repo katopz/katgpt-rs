@@ -400,11 +400,6 @@ fn performance_cores() -> Option<usize> {
     (rc == 0 && value > 0).then_some(value as usize)
 }
 
-#[cfg(not(target_os = "macos"))]
-fn performance_cores() -> Option<usize> {
-    None
-}
-
 /// Guard of an open spin scope (see [`SpinPool::spin_scope`]).
 struct SpinScope<'a>(&'a Shared);
 
