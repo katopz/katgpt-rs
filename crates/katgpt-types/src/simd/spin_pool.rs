@@ -249,9 +249,9 @@ impl SpinPool {
     /// 0.60–0.84× rayon-on-a-worker, 15 workers swung 0.84–1.29× with one
     /// other busy process on the box, 7 workers were bandwidth-short
     /// (0.81–1.22×). `KATGPT_SPIN_POOL_WORKERS` overrides. Off macOS the
-    /// default is 0 workers (measured a loss on an i7-13700K, see
-    /// `default_workers`). A pool with 0 workers is never used by
-    /// [`spin_pool_run`]: the kernels keep their rayon arm.
+    /// default is 0 workers below 8 logical CPUs, i.e. where the pool is
+    /// unmeasured (see `default_workers`). A pool with 0 workers is never used
+    /// by [`spin_pool_run`]: the kernels keep their rayon arm.
     pub fn for_this_machine() -> Self {
         Self::new(default_workers())
     }
@@ -347,14 +347,27 @@ fn default_workers() -> usize {
     {
         return n;
     }
-    // Off macOS (or with no perflevel sysctl): 0 workers, i.e. the pool is
-    // never used and the kernels keep rayon. Measured on the 4090 box's
-    // i7-13700K (8P+8E, 24 threads, Windows; spin_pool_gap_ab, 2026-10-13,
-    // two sessions agreeing): spin/rayon-on-worker at the decode posture
-    // (gap >= 10 us) was 0.97-0.99 at 7 workers, 1.71-1.75 at 11, 2.55 at 15,
-    // 3.86-3.93 at 23 — never a win worth the risk. Mechanism not established
-    // (SMT siblings / E-cores suspected). Set KATGPT_SPIN_POOL_WORKERS to opt in.
-    performance_cores().map_or(0, |p| p.saturating_sub(1))
+    // Off macOS: DEFAULT-ON with the idle window at every measured count —
+    // the 4090 box's i7-13700K (8P+8E, 24 threads, Windows), real Bonsai-2-27B
+    // paired gate (Issue 936 T4, 2026-10-13, this commit's re-measure WITH the
+    // idle window; supersedes the pre-idle-window 0.97–3.93× losses the old 0
+    // default was set from — the mechanism is now established: workers park
+    // through the long gaps instead of burning SMT/E-core spin): 0.862 at 23
+    // workers, 0.851 at 15, 0.866 at 11, 0.902 at 7 — a win at every grid
+    // point, G1 bit-identical ×4, flat plateau 23/15/11. Boundary = the
+    // measurement floor: hosts under 8 logical CPUs are unmeasured and keep
+    // rayon (0 workers). `KATGPT_SPIN_POOL_WORKERS` overrides everywhere.
+    #[cfg(not(target_os = "macos"))]
+    {
+        std::thread::available_parallelism()
+            .map_or(0, |n| if n.get() >= 8 { n.get() - 1 } else { 0 })
+    }
+    // macOS: P-cores − 1, the measured in-model optimum (Issue 936 T3b:
+    // 11 < 10 < 9 < 7 ms/token across 4 interleaved rounds, katgpt-rs-21).
+    #[cfg(target_os = "macos")]
+    {
+        performance_cores().map_or(0, |p| p.saturating_sub(1))
+    }
 }
 
 /// Performance-core count (`hw.perflevel0.physicalcpu`); `None` when the
@@ -557,14 +570,20 @@ mod tests {
         let n = std::thread::available_parallelism().map_or(1, |n| n.get());
         let w = default_workers();
         assert!(w < n.max(1), "{w} workers on {n} cores");
-        #[cfg(not(target_os = "macos"))]
-        if std::env::var("KATGPT_SPIN_POOL_WORKERS").is_err() {
-            assert_eq!(w, 0, "off macOS the pool is opt-in (0 workers = rayon)");
+    #[cfg(target_os = "macos")]
+    if let Some(p) = performance_cores() {
+        assert!(p <= n, "perflevel0 {p} > {n} cores");
+    }
+    #[cfg(not(target_os = "macos"))]
+    if std::env::var("KATGPT_SPIN_POOL_WORKERS").is_err() {
+        // Issue 936 T4 promotion: default-on at n ≥ 8 (the measured floor),
+        // 0 below it — and always strictly less than the core count.
+        if n >= 8 {
+            assert_eq!(w, n - 1, "off macOS the default is n − 1 workers");
+        } else {
+            assert_eq!(w, 0, "under 8 CPUs the pool stays opt-in (unmeasured)");
         }
-        #[cfg(target_os = "macos")]
-        if let Some(p) = performance_cores() {
-            assert!(p <= n, "perflevel0 {p} > {n} cores");
-        }
+    }
     }
 
     #[test]
