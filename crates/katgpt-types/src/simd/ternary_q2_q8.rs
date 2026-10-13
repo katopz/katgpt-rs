@@ -187,6 +187,61 @@ pub fn ternary_q2_q8_rows_scalar(w: &TernaryQ2Weights, xq: &[i8], xs: &[f32], y:
     }
 }
 
+/// Weight prefetch distance in bytes ahead of the block being read
+/// (`q2_prefetch`, Issue 937 T3). `usize::MAX` = not yet read from
+/// `KATGPT_Q2_PREFETCH_BYTES`; `0` = no prefetch.
+#[cfg(feature = "q2_prefetch")]
+static Q2_PREFETCH_BYTES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(usize::MAX);
+
+/// Default [`q2_prefetch_bytes`] when the env var is unset — a probe value,
+/// not a measured optimum (the sweep is `examples/q2_prefetch_sweep.rs`).
+#[cfg(feature = "q2_prefetch")]
+pub const DEFAULT_Q2_PREFETCH_BYTES: usize = 1024;
+
+/// Current weight prefetch distance (bytes; `0` = off). Read once per call,
+/// never per block.
+#[cfg(feature = "q2_prefetch")]
+pub fn q2_prefetch_bytes() -> usize {
+    use std::sync::atomic::Ordering;
+    match Q2_PREFETCH_BYTES.load(Ordering::Relaxed) {
+        usize::MAX => {
+            let n = std::env::var("KATGPT_Q2_PREFETCH_BYTES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(DEFAULT_Q2_PREFETCH_BYTES)
+                .min(usize::MAX - 1);
+            Q2_PREFETCH_BYTES.store(n, Ordering::Relaxed);
+            n
+        }
+        n => n,
+    }
+}
+
+/// Set the weight prefetch distance (bytes; `0` = off). Any value is
+/// bit-identical: a prefetch moves cache lines, never numbers.
+#[cfg(feature = "q2_prefetch")]
+pub fn set_q2_prefetch_bytes(bytes: usize) {
+    Q2_PREFETCH_BYTES.store(bytes.min(usize::MAX - 1), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Streaming read prefetch hint. Never faults, so `p` may point past the
+/// weights (it is formed with `wrapping_add`, never dereferenced).
+#[cfg(all(feature = "q2_prefetch", any(target_arch = "aarch64", target_arch = "x86_64")))]
+#[inline(always)]
+fn prefetch_stream(p: *const u8) {
+    #[cfg(target_arch = "aarch64")]
+    // SAFETY: `prfm` is a hint — no memory access is architecturally
+    // performed and an invalid address does not fault.
+    unsafe {
+        core::arch::asm!("prfm pldl1strm, [{0}]", in(reg) p, options(nostack, readonly, preserves_flags));
+    }
+    #[cfg(target_arch = "x86_64")]
+    // SAFETY: `prefetchnta` is a hint and does not fault on any address.
+    unsafe {
+        core::arch::x86_64::_mm_prefetch::<{ core::arch::x86_64::_MM_HINT_NTA }>(p as *const i8);
+    }
+}
+
 /// NEON + SDOT row range over permuted activations.
 ///
 /// # Safety
@@ -208,12 +263,18 @@ unsafe fn neon_q2_row_range(
     unsafe {
         let m3 = vdupq_n_u8(3);
         let xp = xperm.as_ptr();
+        #[cfg(feature = "q2_prefetch")]
+        let pf = q2_prefetch_bytes();
         for (i, y_slot) in y.iter_mut().enumerate() {
             let r = row_offset + i;
             let blocks = w.blocks.as_ptr().add(r * w.groups_per_row);
             let mut row_sum = 0.0f32;
             for g in 0..w.groups_per_row {
                 let b = &*blocks.add(g);
+                #[cfg(feature = "q2_prefetch")]
+                if pf != 0 {
+                    prefetch_stream((b as *const Q2Block as *const u8).wrapping_add(pf));
+                }
                 let lo = vld1q_u8(b.qs.as_ptr());
                 let hi = vld1q_u8(b.qs.as_ptr().add(16));
                 let x = xp.add(g * GROUP_SIZE);
@@ -259,13 +320,19 @@ unsafe fn avx2_q2_row_range(
         let m3 = _mm256_set1_epi8(3);
         let ones_i16 = _mm256_set1_epi16(1);
         let xp = xperm.as_ptr();
+        #[cfg(feature = "q2_prefetch")]
+        let pf = q2_prefetch_bytes();
         for (i, y_slot) in y.iter_mut().enumerate() {
             let r = row_offset + i;
             let blocks = w.blocks.as_ptr().add(r * w.groups_per_row);
             let mut row_sum = 0.0f32;
             for g in 0..w.groups_per_row {
                 let b = &*blocks.add(g);
-                let v = _mm256_loadu_si256(b.qs.as_ptr() as *const __m256i);
+                #[cfg(feature = "q2_prefetch")]
+                if pf != 0 {
+                    prefetch_stream((b as *const Q2Block as *const u8).wrapping_add(pf));
+                }
+                let v =_mm256_loadu_si256(b.qs.as_ptr() as *const __m256i);
                 let x = xp.add(g * GROUP_SIZE) as *const __m256i;
                 let c0 = _mm256_and_si256(v, m3);
                 let c1 = _mm256_and_si256(_mm256_srli_epi16::<2>(v), m3);
@@ -663,6 +730,31 @@ mod tests {
                 assert_eq!(y[r].to_bits(), y_ref[r].to_bits(), "simd {rows}x{cols} row {r}");
             }
         }
+    }
+
+    /// `q2_prefetch` moves cache lines, never numbers: every distance —
+    /// off, sub-line, typical, and far past the end of the weights — is
+    /// bit-identical to the scalar reference. Restores the default after.
+    #[cfg(feature = "q2_prefetch")]
+    #[test]
+    fn prefetch_distances_are_bit_identical() {
+        let (rows, cols) = (300, 640);
+        let w = fixture(rows, cols, 0x937);
+        let q = TernaryQ2Weights::from_group(&w);
+        let x = activations(cols);
+        let (xq, xs) = quantized(&x);
+        let mut y_ref = vec![0.0f32; rows];
+        ternary_group_q8_rows_scalar(&w, &xq, &xs, &mut y_ref, 0);
+        for pf in [0, 34, 128, 1024, 4096, 1 << 30] {
+            set_q2_prefetch_bytes(pf);
+            assert_eq!(q2_prefetch_bytes(), pf);
+            let mut y = vec![0.0f32; rows];
+            simd_ternary_q2_matvec_q8_parallel(&q, &x, &mut y);
+            for r in 0..rows {
+                assert_eq!(y[r].to_bits(), y_ref[r].to_bits(), "prefetch {pf} row {r}");
+            }
+        }
+        set_q2_prefetch_bytes(DEFAULT_Q2_PREFETCH_BYTES);
     }
 
     /// Worst-case magnitudes: every |xq| = 127, every weight ±1 — no i16

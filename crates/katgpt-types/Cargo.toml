@@ -109,6 +109,11 @@ ternary_q2_q8 = ["ternary_group_q8_act"]
 # Opt in per thread with `with_spin_pool`. Bit-identical (fixed row
 # partition). Opt-in until the real-model GOAT passes.
 decode_spin_pool = []
+# Issue 937 T3: software prefetch of the Q2_0 weight stream in the NEON/AVX2
+# row-range arms (`KATGPT_Q2_PREFETCH_BYTES`, 0 = off). Bit-identical by
+# construction (a hint moves cache lines, not numbers). Opt-in probe until a
+# quiet-box sweep + real-model paired ratio <= 0.95.
+q2_prefetch = ["ternary_q2_q8"]
 
 # Issue 582: base-3 trit packing — 5 trits/byte + per-128 f16 scale = 1.75
 # bits/weight vs the bit-plane tier's 2.125 (-17.6%, Bonsai-27B 7.17 -> 5.90 GB).
@@ -260,3 +265,8 @@ required-features = ["ternary_q2_q8"]
 [[example]]
 name = "spin_pool_gap_ab"
 required-features = ["ternary_q2_q8", "decode_spin_pool"]
+
+# Issue 937 T3: weight prefetch-distance sweep for the Q2_0 matvec.
+[[example]]
+name = "q2_prefetch_sweep"
+required-features = ["q2_prefetch"]

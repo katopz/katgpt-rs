@@ -175,6 +175,8 @@ pub use ternary_q2_q8::{
     simd_ternary_q2_matvec_q8_parallel, simd_ternary_q2_matvec_q8_parallel_n, simd_ternary_q2_matvec_q8_parallel_pair,
     ternary_q2_q8_rows_scalar,
 };
+#[cfg(feature = "q2_prefetch")]
+pub use ternary_q2_q8::{DEFAULT_Q2_PREFETCH_BYTES, q2_prefetch_bytes, set_q2_prefetch_bytes};
 #[cfg(feature = "ternary_trit_pack")]
 pub use ternary_trit::{
     simd_ternary_trit_matvec, simd_ternary_trit_matvec_parallel, ternary_trit_matvec_scalar,
