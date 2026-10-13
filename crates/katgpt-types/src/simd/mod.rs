@@ -168,7 +168,7 @@ pub use ternary_group_q8::{
     quantize_activations_q8, simd_ternary_group_matvec_q8_parallel, ternary_group_q8_rows_scalar,
 };
 #[cfg(feature = "decode_spin_pool")]
-pub use spin_pool::{SpinPool, spin_pool_run, with_spin_pool};
+pub use spin_pool::{SpinPool, SyncMutPtr, spin_pool_run, spin_row_chunks, with_spin_pool};
 #[cfg(feature = "ternary_q2_q8")]
 pub use ternary_q2_q8::{
     Q2Block, TernaryQ2Weights, permute_activations_q2, q2_fast_path_available,

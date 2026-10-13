@@ -298,6 +298,10 @@ pub fn simd_ternary_group_matvec_q8_parallel(w: &TernaryGroupWeights, x: &[f32],
             q8_row_range(w, xq, xs, y, 0);
             return;
         }
+        #[cfg(feature = "decode_spin_pool")]
+        if super::spin_pool::spin_row_chunks(y, super::PAR_MATVEC_CHUNK_ROWS, &|c, row0| q8_row_range(w, xq, xs, c, row0)) {
+            return;
+        }
         let chunk = super::par_matvec_chunk(w.rows);
         y.par_chunks_mut(chunk)
             .enumerate()
@@ -344,6 +348,22 @@ mod tests {
             .collect()
     }
 
+
+    /// Issue 936: the spin-pool arm is the rayon arm, bit-for-bit.
+    #[cfg(feature = "decode_spin_pool")]
+    #[test]
+    fn spin_pool_arm_matches_rayon_arm() {
+        let pool = crate::simd::spin_pool::SpinPool::new(3);
+        for &(rows, cols) in &[(300, 256), (1025, 384)] {
+            let w = fixture(rows, cols, 0x936 ^ rows as u64);
+            let x: Vec<f32> = (0..cols).map(|i| ((i * 37) % 101) as f32 * 0.01 - 0.5).collect();
+            let mut want = vec![0.0f32; rows];
+            simd_ternary_group_matvec_q8_parallel(&w, &x, &mut want);
+            let mut got = vec![f32::NAN; rows];
+            crate::simd::spin_pool::with_spin_pool(&pool, || simd_ternary_group_matvec_q8_parallel(&w, &x, &mut got));
+            assert!(got.iter().zip(&want).all(|(a, b)| a.to_bits() == b.to_bits()), "{rows}x{cols}");
+        }
+    }
     #[test]
     fn quantize_round_trips_within_half_a_step() {
         let x = activations(512);

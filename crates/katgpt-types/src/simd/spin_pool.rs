@@ -189,7 +189,9 @@ impl SpinPool {
     /// 0.60–0.84× rayon-on-a-worker, 15 workers swung 0.84–1.29× with one
     /// other busy process on the box, 7 workers were bandwidth-short
     /// (0.81–1.22×). `KATGPT_SPIN_POOL_WORKERS` overrides; off macOS the
-    /// count is `available_parallelism() - 1`.
+    /// count is `available_parallelism() / 2 - 1` (unmeasured). A pool that
+    /// comes out at 0 workers is never used by [`spin_pool_run`]: the kernels
+    /// keep their rayon arm rather than running every fork serially.
     pub fn for_this_machine() -> Self {
         Self::new(default_workers())
     }
@@ -262,8 +264,12 @@ fn default_workers() -> usize {
     {
         return n;
     }
+    // Off macOS (or with no perflevel sysctl) the count is UNMEASURED:
+    // `available_parallelism()` counts SMT siblings and E-cores (24 on the
+    // 4090 box's i7-13700K), the oversubscribed shape that was unstable at 15
+    // on the M3. Half of it is the conservative guess until a box measures it.
     let cores = performance_cores()
-        .or_else(|| std::thread::available_parallelism().ok().map(|n| n.get()))
+        .or_else(|| std::thread::available_parallelism().ok().map(|n| n.get() / 2))
         .unwrap_or(1);
     cores.saturating_sub(1)
 }
@@ -355,7 +361,11 @@ pub fn with_spin_pool<R>(pool: &SpinPool, body: impl FnOnce() -> R) -> R {
 /// on the caller thread cannot re-enter the pool.
 pub fn spin_pool_run(n_tasks: usize, f: &(dyn Fn(usize) + Sync)) -> bool {
     let pool = CURRENT.with(|c| c.replace(std::ptr::null()));
-    if pool.is_null() {
+    // SAFETY: `with_spin_pool` holds `&SpinPool` for the whole body and
+    // restores the slot on exit, so a non-null slot points at a live pool.
+    // A 0-worker pool would run every fork serially: fall back to rayon.
+    if pool.is_null() || unsafe { &*pool }.workers() == 0 {
+        CURRENT.with(|c| c.set(pool));
         return false;
     }
     struct Reinstall(*const SpinPool);
@@ -365,18 +375,56 @@ pub fn spin_pool_run(n_tasks: usize, f: &(dyn Fn(usize) + Sync)) -> bool {
         }
     }
     let _reinstall = Reinstall(pool);
-    // SAFETY: `with_spin_pool` holds `&SpinPool` for the whole body and
-    // restores the slot on exit, so a non-null slot points at a live pool.
+    // SAFETY: as above.
     unsafe { &*pool }.run(n_tasks, f);
     true
 }
 
-/// A `*mut T` that crosses threads; the caller guarantees disjoint access.
+/// Row-chunked body over ONE output buffer on this thread's installed pool:
+/// `body(y_chunk, row0)` for consecutive `rows_per_task`-row chunks of `y`.
+/// `false` (nothing run) when no pool is installed. Same partition semantics
+/// as `y.par_chunks_mut(rows_per_task).enumerate()`.
+pub fn spin_row_chunks(y: &mut [f32], rows_per_task: usize, body: &(dyn Fn(&mut [f32], usize) + Sync)) -> bool {
+    let chunk = rows_per_task.max(1);
+    let (ptr, len) = (SyncMutPtr(y.as_mut_ptr()), y.len());
+    spin_pool_run(len.div_ceil(chunk), &|t| {
+        let row0 = t * chunk;
+        let rows = chunk.min(len - row0);
+        // SAFETY: task t alone owns rows [row0, row0 + rows) of `y`, which
+        // outlives the run (spin_pool_run returns after every task).
+        let y_chunk = unsafe { std::slice::from_raw_parts_mut(ptr.get().add(row0), rows) };
+        body(y_chunk, row0);
+    })
+}
+
+/// A `*mut T` that crosses threads, for handing DISJOINT sub-slices of one
+/// buffer to [`spin_pool_run`] tasks. Construction is `unsafe`: the caller
+/// promises no two tasks touch the same element and the buffer outlives the
+/// run.
 #[derive(Clone, Copy)]
-pub(crate) struct SyncMutPtr<T>(pub(crate) *mut T);
+pub struct SyncMutPtr<T>(pub(crate) *mut T);
 // SAFETY: used only to hand DISJOINT sub-slices of one buffer to tasks.
 unsafe impl<T: Send> Send for SyncMutPtr<T> {}
 unsafe impl<T: Send> Sync for SyncMutPtr<T> {}
+
+impl<T> SyncMutPtr<T> {
+    /// Wrap `p` for disjoint per-task access.
+    ///
+    /// # Safety
+    /// Every task derived from the wrapper must touch a disjoint element
+    /// range, and the pointee must outlive the [`spin_pool_run`] it feeds.
+    #[inline]
+    pub unsafe fn new(p: *mut T) -> Self {
+        Self(p)
+    }
+
+    /// The pointer. A method (not `.0`) so a closure captures the whole
+    /// `Sync` wrapper rather than the bare raw-pointer field.
+    #[inline]
+    pub fn get(self) -> *mut T {
+        self.0
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -399,6 +447,8 @@ mod tests {
     #[test]
     fn zero_workers_runs_serially_and_parks_wake_up() {
         let serial = SpinPool::new(0);
+        // Installed, a 0-worker pool is never used: the kernels keep rayon.
+        with_spin_pool(&serial, || assert!(!spin_pool_run(4, &|_| {})));
         let sum = AtomicUsize::new(0);
         serial.run(10, &|i| {
             sum.fetch_add(i, Ordering::Relaxed);
