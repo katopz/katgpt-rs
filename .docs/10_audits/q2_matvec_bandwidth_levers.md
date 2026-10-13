@@ -1,6 +1,6 @@
 # Issue 937 — Q2 row-parallel matvec reaches ~72% of the CPU streaming roof
 
-**Status:** OPEN 2026-10-13 — software prefetch REFUTED on both arches (T3 M3, T5 4090) and the `q2_prefetch` probe RETIRED (code removed; the kernel is byte-identical to before this issue). Lead: on the M3 the isolated kernel streamed more with fewer threads (10 → 103.5 GB/s vs 16 → 80–89, loaded box) — load-confounded, unproven at idle. The 4090 is the opposite (monotone up to 24 threads). Next: T4 on an idle M3 with `examples/q2_bandwidth_sweep.rs` + the in-model worker count.
+**Status:** CLOSED 2026-10-13 — every lever this issue listed was measured and none beats the shipped state. Software prefetch REFUTED on both arches (retired, c27ab15ea). The isolated fewer-threads effect on the M3 does NOT transfer in-model: T4 confirms the decode spin pool's 11-worker macOS default (11 < 10 < 9 < 7 ms/token in all 4 interleaved rounds). In-model the Q2 projections now stream ~7.2 GB in ~72 ms/token (~100 GB/s, ~80% of the ~125 GB/s roof) — Issue 936 closed most of the in-model gap. Record relocated from `.issues/` to `.docs/10_audits/`.
 
 ## Why
 
@@ -49,13 +49,13 @@ Issue 936 targets. The isolated loss (90 vs 125) is not explained yet.
       loss (1.03–1.27). The hardware prefetcher already covers the stream.
       With T5 also negative, the feature was RETIRED (removed, not left
       opt-in): code in 29038059f if anyone re-opens it.
-- [ ] T4: in-model worker count on the decode spin pool (now on in
+- [x] T4: in-model worker count on the decode spin pool (now on in
       riir-infer `deltanet_ternary_inference`, 12 participants on the M3):
       `KATGPT_SPIN_POOL_WORKERS` 7/9/11 on Bonsai-2-27B decode, idle M3,
       paired ratio vs 11, 3×, box state recorded. The isolated rayon peak at
       10 threads predicts 9 workers + caller; the in-model shape (gaps,
       smaller matrices) may not. Promote a new macOS default only on a
-      real-model win.
+      real-model win. **Done: 11 stays** (§T4 below).
 - [x] T5: 4090 AVX2 prefetch sweep (i7-13700K, 24 threads, 29038059f,
       two repeats): **NEGATIVE** — 256 B 0.990/0.993 (noise), 1 KB
       1.025–1.052, 4 KB 1.074–1.077, 8 KB 1.26–1.29, 16 KB 1.44–1.46.
@@ -103,3 +103,29 @@ per arm, interleaved in one process) at load average 12–13 gave ratios vs
 contention fewer threads win big, so the loaded T2 table above over-states
 the idle effect by an unknown amount. T4 runs this instrument on an idle
 M3 first.
+
+T4 — in-model worker count, riir-infer `tests/decode_spin_pool_goat.rs` at
+riir-infer 9b9fe49 (real Bonsai-2-27B PQ2_0, one load, pool vs rayon flipped
+per position, 64 positions), `--release`, `KATGPT_SPIN_POOL_WORKERS` set per
+run, 4 rounds with the order rotated. M3 on AC, load average 8.8–12.2
+(other sessions). 0 logit mismatches in all 16 runs.
+
+| workers | pool ms/token (r1–r4) | paired ratio vs rayon (r1–r4) |
+|---|---|---|
+| **11 (default)** | 69.5 / 71.6 / 71.8 / 71.7 | 0.654 / 0.633 / 0.682 / 0.638 |
+| 10 | 72.1 / 72.4 / 73.1 / 72.5 | 0.705 / 0.676 / 0.704 / 0.633 |
+| 9 | 73.4 / 74.6 / 75.4 / 75.5 | 0.662 / 0.685 / 0.704 / 0.704 |
+| 7 | 82.9 / 83.9 / 84.2 / 85.2 | 0.767 / 0.808 / 0.778 / 0.732 |
+
+The ordering 11 < 10 < 9 < 7 held in every round. Heavy load should favour
+FEWER workers, so a loaded box biases against 11 — the verdict is robust in
+the direction that matters. The isolated kernel's 10-thread peak is a
+property of back-to-back large matvecs; the decode forward (gaps, smaller
+matrices, the caller as the 12th participant) prefers all P-cores.
+
+## Residual
+
+~20% of the roof is still unclaimed in-model (~72 → ~58 ms/token at
+125 GB/s). No measured lever remains in this issue; the next candidates are
+outside it (fusing more projections per fork, and work outside the
+matvecs). Re-open as a new issue with a new number if one is measured.

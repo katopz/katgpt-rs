@@ -80,7 +80,7 @@ arenas. The open sibling of the private `riir-ai` runtime.
 
 | Folder | What it covers |
 |---|---|
-| [`10_audits/`](10_audits/) | Phase 0.5 loser-sweep audit (Proposal 003), claim-rubric audit vs `Claim` fixtures, cross-repo consolidation audit (riir-ai/riir-chain/riir-neuron-db), doc-drift auditor design record (Issue 702), the silent-zero-pass / alloc-counter / dev-vs-release gate records (Issues 713–716) |
+| [`10_audits/`](10_audits/) | Phase 0.5 loser-sweep audit (Proposal 003), claim-rubric audit vs `Claim` fixtures, cross-repo consolidation audit (riir-ai/riir-chain/riir-neuron-db), doc-drift auditor design record (Issue 702), the silent-zero-pass / alloc-counter / dev-vs-release gate records (Issues 713–716), the Q2 matvec bandwidth-lever record (Issue 937) |
 
 ## Sibling repos (private runtimes consume these primitives)
 
