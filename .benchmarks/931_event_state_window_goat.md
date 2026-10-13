@@ -1,6 +1,6 @@
 # Bench 931 — `event_state_windows` Phase 1 GOAT (Plan 623 T1.3)
 
-**Date:** 2026-10-10 · **Box:** 4090 workstation (shikuwa, i7-13700K, Windows 11)
+**Date:** 2026-10-10 (quiet re-run addendum 2026-10-13, below) · **Box:** 4090 workstation (shikuwa, i7-13700K, Windows 11)
 **Posture:** `--release` (bench profile), `cargo bench -p katgpt-core --features event_state_windows --bench bench_931_event_state_window_goat`
 **Box state (provenance):** ⚠ NOT a verified-quiet window — the riir-train T0.3b
 dllm AR trainer (issue 621) was RUNNING throughout at its ~20–22 s/step
@@ -91,3 +91,34 @@ edge — with γ=1e-3 the sigmoid argument is 1.0, σ(1)=0.73, NOT saturated
 points — the hard indicator is undefined THERE by construction); (2)
 `b_next = +inf` is a VALID terminal shape (open-ended rise), not a malformed
 input — only NaN/−inf/inverted bounds are malformed.
+
+## Quiet re-run addendum (2026-10-13) — the load caveat CLOSED
+
+The bench's own "re-run on a quiet box" debt and the promotion-day default-
+posture caveat (plan 623: 103.8 µs @10k under trainer load vs the 100 µs bar)
+are both discharged. Posture: **DEFAULT features** (the feature is
+default-on since the 2026-10-10 promotion — the default-posture read this
+caveate was recorded against, not the opt-in posture of the original run).
+PROVENANCE: quiet box — CPU 5% at launch, no cargo/rustc processes, GPU idle
+(427 MiB graphics-only), desktop on AC. Same bench binary, same commit class
+(develop HEAD, code byte-identical to the promoted state per the plan note).
+
+| arm | quiet default-posture read | bar | verdict |
+|---|---|---|---|
+| G2a window per-call | **6 ns** (p90 6 ns, p99 6 ns; batch=256, n=2000, tail@p99=200) | ≤ 20 ns | PASS, unchanged |
+| K=8 partition row (context) | 48 ns/tick | — | unchanged |
+| G2b summary N=10k fixed-window | **p50 98.0 µs / p99 153.8 µs** | p50 ≤ 100 µs | **PASS, 2.0% margin** |
+| G2b event-anchored total | p50 98.4 µs / p99 148.7 µs — anchoring delta **+400 ns** | ≤ K×20 ns + noise | PASS |
+| determinism | double-summary + reversed-order bit-identical ✓ | — | PASS |
+
+- **The 103.8 µs promotion-day read was trainer-load scheduler noise, as
+called**: quiet reads 98.0 µs (vs the original run's own 98.3 µs — the two
+quiet-class reads agree within 0.3%). The p99 spread (148.7–153.8 µs) is the
+same tail class as the load-caveated run — the sort dominates the tail.
+- **Cross-posture bit-identity**: the summary BLAKE3 is **IDENTICAL** to the
+original run's pin — `f4938f076062e5b5f997311f78c63a8bb1dcaccda1811a25fd1f3cad7090a641`
+(opt-in posture 2026-10-10 ≡ default posture 2026-10-13, same seeded LCG
+corpus) — the promotion added only the default-list line, confirmed by
+execution at the bench posture.
+- Standing conclusion unchanged: G1–G4 ALL PASS, now without the load
+asterisk; `event_state_windows` default-on stands.
