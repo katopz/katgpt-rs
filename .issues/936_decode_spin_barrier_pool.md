@@ -1,6 +1,6 @@
 # Issue 936 — decode-scoped spin-barrier pool for the row-parallel matvecs
 
-**Status:** OPEN 2026-10-13 — design + prototype. The prize is measured, not the mechanism. Consumer: riir-infer Issue 045 T4.
+**Status:** T1–T3 DONE 2026-10-13. Promoted downstream into riir-infer `deltanet_ternary_inference` (`27a4da7`): Bonsai-2-27B CPU decode ~100 → ~72 ms/token, bit-identical. The katgpt-types feature stays opt-in (a consumer installs the pool per thread). OPEN for T4/T5 (measurements only).
 
 ## Why
 
@@ -33,13 +33,28 @@ Two in-rayon fixes were measured and refuted (riir-infer Issue 045):
 
 ## Tasks
 
-- [ ] T1: substrate check (done 2026-10-13: no spin/barrier pool in
-      katgpt-rs, riir-infer or riir-ai; there are 21 `par_matvec_chunk`/`par_chunks_mut` lines in
-      `katgpt-types/src/simd`). Define the executor trait in katgpt-types and
-      make rayon its default impl, with no behaviour change.
-- [ ] T2: spin-barrier impl behind a feature `decode_spin_pool` (opt-in).
-      Microbench: fork latency after a 30 µs serial gap, rayon vs spin.
-- [ ] T3: riir-infer wiring + the in-process paired real-model GOAT (one load,
-      switch flipped per position; bit identity + ratio ≤ 0.95). Re-run 3×.
-      Promote to default if it passes. Record power/thermal (spinning burns
-      cores between sections; laptop AC vs battery is part of the claim).
+- [x] T1: substrate check (no spin/barrier pool in katgpt-rs, riir-infer or
+      riir-ai). Shipped as a thread-local install (`with_spin_pool` /
+      `spin_pool_run` / `spin_row_chunks`) instead of an executor trait: the
+      kernels take a pool arm when one is installed, so no kernel signature
+      changed (`bb3b24f2e`, `65574c5d9`).
+- [x] T2: `SpinPool` behind `decode_spin_pool`. Tasks are claimed by CAS on one
+      `epoch|n|idx` word and retired per task. Workers spin only inside an open
+      scope, park after a 100 µs idle window, and park when no scope is open
+      (`9c4f7f9dd`). Sizing: P-cores − 1 on macOS; 0 (= rayon) elsewhere.
+      `examples/spin_pool_gap_ab` (FFN gate+up after a 0–100 µs gap), 11
+      workers vs rayon on a worker: 0.60–0.84. 15 workers swung 0.84–1.29;
+      7 were bandwidth-short.
+- [x] T3: riir-infer `on_decode_pool` + pool arms for the GDN recurrence and
+      attention heads + `tests/decode_spin_pool_goat.rs` (riir-infer `27a4da7`,
+      Bench 879 §Decode spin pool). Bit-identical in every run. 100 µs window:
+      0.679–0.734 plain, 0.794–0.822 beside a 6-thread burner. Spin-forever was
+      1.22–1.35× SLOWER under contention; the idle window fixed it. Promoted.
+      Power/thermal: AC only, not measured on battery.
+- [ ] T4: off macOS. 4090 i7-13700K microbench, before the idle window, by two
+      sessions: spin/rayon at the decode posture 0.97–0.99 (7 workers), 1.71–1.75
+      (11), 2.55 (15), 3.86–3.93 (23); mechanism not established. The default
+      there is 0 workers. Re-measure WITH the idle window and the real-model gate
+      before considering a non-zero default.
+- [ ] T5: GPU-hooked decode (the pool is installed there too; workers park
+      after 100 µs idle while the GPU works). Measure one run, Metal lane.
