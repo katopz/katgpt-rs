@@ -126,7 +126,7 @@ impl RuntimeSnapshot {
         Self {
             mla,
             kda,
-            block_residuals: runtime.block_state.residuals.clone(),
+            block_residuals: runtime.block_state.residuals().to_vec(),
         }
     }
 
@@ -162,11 +162,10 @@ impl RuntimeSnapshot {
 }
 
 fn restore_block_residuals(residuals: &[Vec<f32>], runtime: &mut KimiK3Runtime) {
-    runtime.block_state.residuals.clear();
-    runtime
-        .block_state
-        .residuals
-        .extend(residuals.iter().cloned());
+    // restore() (not a raw clear+extend) so the per-summary Σv² cache is
+    // recomputed — apply_attn_res zips scores against BOTH vectors, and an
+    // empty cache silently no-ops the whole mix.
+    runtime.block_state.restore(residuals);
 }
 
 /// Rewind ONLY layers `> delay_layer` to their pre-token state (MLA seq_len
@@ -253,7 +252,7 @@ pub fn capture_forward_token(
 
     for (layer_idx, layer_w) in weights.layers.iter().enumerate() {
         x_in.push(runtime.hidden.clone());
-        block_at_entry.push(runtime.block_state.residuals.clone());
+        block_at_entry.push(runtime.block_state.residuals().to_vec());
         let layer_cfg = config.layer_config(layer_idx);
         let layer_rt = &mut runtime.layers[layer_idx];
         kimi_decoder_layer_forward(

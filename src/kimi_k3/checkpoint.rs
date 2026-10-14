@@ -149,7 +149,7 @@ pub fn kimi_k3_forward_token_ckpt(
     // Decoder layers — capture only layer input + block-state snapshots
     for (layer_idx, layer_w) in weights.layers.iter().enumerate() {
         let block_state_self_snapshot: Vec<Vec<f32>> = if !runtime.block_state.is_empty() {
-            runtime.block_state.residuals.clone()
+            runtime.block_state.residuals().to_vec()
         } else {
             Vec::new()
         };
@@ -175,7 +175,7 @@ pub fn kimi_k3_forward_token_ckpt(
             &mut runtime.scratch_hidden,
         );
 
-        let block_state_mlp_snapshot: Vec<Vec<f32>> = runtime.block_state.residuals.clone();
+        let block_state_mlp_snapshot: Vec<Vec<f32>> = runtime.block_state.residuals().to_vec();
 
         ckpt.layers.push(LayerCheckpoint {
             prefix_sum_in,
@@ -186,7 +186,7 @@ pub fn kimi_k3_forward_token_ckpt(
 
     // Output attn-res
     let prefix_sum_final = runtime.hidden.clone();
-    let block_state_final = runtime.block_state.residuals.clone();
+    let block_state_final = runtime.block_state.residuals().to_vec();
     let has_output_attn_res = !runtime.block_state.is_empty();
 
     if !runtime.block_state.is_empty() {

@@ -293,6 +293,21 @@ impl AttnResBlockState {
         }
         self.sum_sq.clear();
     }
+
+    /// Replace the accumulated summaries with `rows` (checkpoint restore /
+    /// speculative rewind).
+    ///
+    /// Goes through [`clear`](Self::clear) + [`push`](Self::push) so the slot
+    /// pool and the per-summary `Σ v²` cache (Issue 933 T3) stay in step —
+    /// clearing directly and extending `residuals` would leave `sum_sq`
+    /// empty, and [`apply_attn_res`] zips scores against BOTH vectors (the
+    /// empty cache would silently no-op the whole mix).
+    pub fn restore(&mut self, rows: &[Vec<f32>]) {
+        self.clear();
+        for row in rows {
+            self.push(row);
+        }
+    }
 }
 
 // ─── Forward scratch ────────────────────────────────────────────────────────
