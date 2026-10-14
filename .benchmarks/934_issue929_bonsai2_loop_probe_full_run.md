@@ -2,7 +2,7 @@
 
 **Numbering note:** allocated 934 after a same-day INDEPENDENT dual allocation of 933 (`933_…_smokes.md`, the 4090-idle session's three smoke postures, `c9c9c0f3e`) — two sessions, two stems, one number; the unpushed side (this file) renumbered per the renumber-never-reuse law. This record is the FULL-RUN companion to [Bench 933](933_issue929_bonsai2_loop_probe_smokes.md): their smokes prove the axis alive and root-cause the OOM; this run is the T1.3/T1.4 adjudication attempt.
 
-**Status:** RUN EXECUTING (launched 2026-10-11 12:46 +07, detached; log `/tmp/b929_full.log`, JSON `/tmp/b929_full.json`) — verdict + tables land at completion; the record skeleton + instrument-repair disclosures are committed NOW to pin the number (highwater bumped same commit). Early pace ~280 s/query incl. the 164 s load (q0–q2 observed) → ETA slides past the 8 h estimate; actuals land with the results. **Posture vs Bench 933's protocol note:** theirs recommends CHAT + 384-tok think budgets (~21 h); THIS run is the no-think posture (system + empty-think prefix, 8-tok answers, ~8 h) — both measured, cross-referenced; the phrasing-inversion caveat rides BOTH records.
+**Status:** **COMPLETED 2026-10-12 01:31 +07** — 45,916 s (12.75 h) wall incl. the 164 s load; 180/180 queries at ~255 s/q steady-state. Log `/tmp/b929_full.log` + JSON `/tmp/b929_full.json` (volatile /tmp — the grid below is the verbatim copy, the preservation). Verdict filled 2026-10-14 (idle-loop record completion; the record skeleton + instrument-repair disclosures were committed at launch to pin the number). **Posture vs Bench 933's protocol note:** theirs recommends CHAT + 384-tok think budgets (~21 h); THIS run is the no-think posture (system + empty-think prefix, 8-tok answers, ~8 h) — both measured, cross-referenced; the phrasing-inversion caveat rides BOTH records.
 
 **Concurrent-landing reconciliation (Issue-825 class, resolved by union):** while this run was in flight, the 4090-idle session landed `61fc36f` (bounded HybridCache KV — a measured >100 GiB OOM on the unbounded ctor — plus their own B929_CHAT framing variant, bare scaffold, think-then-answer at ~384-tok budgets) and this session's `d633fbb` (clean-state continuation + no-think chat posture + B929_SKIP) stranded on a diverged local develop. Reconciled as **`69f520e`** (the union, pushed fast-forward from a detached `61fc36f` worktree): bounded KV + clean-state continuation + the no-think posture as `B929_CHAT=1`. **The in-flight run's instrument == the union's chat posture byte-for-byte in behavior** (same template string; the KV bound is allocation-only, zero numerical effect) — its numbers record for the union instrument. The bare-scaffold/think-budget variant stays recorded in the issue as the alternative elicitation (~420 s/q), not this run's posture.
 
@@ -12,7 +12,12 @@
 
 ## Verdict
 
-<!-- FILLED AT RUN COMPLETION -->
+**SIGNAL — the pre-registered T1.4 bar is formally met, entirely on the `auroc_margin` axis — but the read is phrasing-limited and fragile, and is NOT the T1.3 adjudication of record.** Six (loop, split, signal) cells carry AUROC 95% CI LB ≥ 0.6, every one on margin: **loop 2/all 0.8897/0.8300** (peak), loop 2/two_hop 0.8661/0.7920, loop 1/all 0.8020/0.7192, loop 1/ood 0.8123/0.6705, loop 2/ood 0.8123/0.6858, loop 0/ood 0.7893/0.6092. The margin signal peaks at k=2 and COLLAPSES at k=3 (all-split 0.2996/0.1350) — the loop-refinement window the paper and the kimi legs (Bench 930, peak k=2–3) both show. `auroc_cos_bridge` — the axis the Bench-933 n=4 smoke read at 1.0000/1.0000 every loop — is FLAT at 0.14–0.24 across the whole grid: the smoke's cos_bridge signal did not survive n=180 (small-n artifact, disclosed). KILL not fired (T1.4's negative branch stays unfired).
+
+Three caveats bound the claim (all pre-registered in this record + Bench 933 before launch):
+1. **Possessive posture** — the run rides the as-landed possessive phrasing that Bench 933's A/B shows kills two-hop ANSWER accuracy at the no-think posture (0/16). Measured here: acc two_hop 0.0250 (3/120), all 0.0611 (11/180) — the correctness axis near-dead exactly as predicted; phrasing-limited by construction (the issue's own standing note).
+2. **Fragile positives** — the AUROC positive class is 3–11 items; the 400-iter stratified bootstrap resamples that class whole. The bar is formally met; the read of record remains the owner-gated `B929_PHRASE=standard` full run.
+3. **Instrument vintage** — the run's tree is the pre-union bin (worktree at `32fd838` + the chat/clean-state edits; reconciled upstream as `69f520e` per the paragraph above — behaviorally identical: same template string, KV binding allocation-only). The post-launch evolutions (`B929_PHRASE`, `B929_OUT` per-query rows, bounded KV) are NOT in this run; the log carries no `phrase=` field because the knob did not exist yet — the posture is possessive by the default it predated.
 
 ## Instrument repairs landed with this run (disclosed, both binary in effect)
 
@@ -30,8 +35,35 @@ Smoke (8 queries, one-hop controls, chat posture, post-repair): acc 4/8, AUROC c
 
 ## Results
 
-<!-- CSV grid + verdict line, pasted at run completion -->
+Verbatim from `/tmp/b929_full.log` (score cells are point/lb95, stratified bootstrap 400 iters, seed 929):
+
+```
+# issue929 Bonsai-2-27B (PQ2_0) loop-alignment probe
+# model=/Users/katopz/git/riir-train/data/Ternary-Bonsai-2-27B-PQ2_0.gguf | head=untied | fixture: 180 queries, facts=12, loops=4 | elicitation=chat
+# score cells are point/lb95 (stratified bootstrap, 400 iters)
+loop,split,n,acc,bridge_top1,auroc_cos_argmax,auroc_margin,auroc_cos_bridge
+0,all,180,0.0611,0.5500,0.6466/0.4744,0.6084/0.4024,0.2361/0.1573
+0,two_hop,120,0.0250,0.8250,0.3191/0.1054,0.0997/0.0427,0.2137/0.0142
+0,ood,90,0.0333,0.5778,0.4521/0.2031,0.7893/0.6092,0.1552/0.1264
+1,all,180,0.0611,0.5056,0.7370/0.5966,0.8020/0.7192,0.2378/0.1573
+1,two_hop,120,0.0250,0.7583,0.6296/0.4587,0.6011/0.4302,0.2222/0.0427
+1,ood,90,0.0333,0.5111,0.4866/0.2184,0.8123/0.6705,0.1552/0.1264
+2,all,180,0.0611,0.2889,0.3588/0.2754,0.8897/0.8300,0.2378/0.1573
+2,two_hop,120,0.0250,0.4333,0.2963/0.2080,0.8661/0.7920,0.2222/0.0427
+2,ood,90,0.0333,0.2556,0.1533/0.0536,0.8123/0.6858,0.1552/0.1264
+3,all,180,0.0611,0.1167,0.0920/0.0694,0.2996/0.1350,0.2399/0.1573
+3,two_hop,120,0.0250,0.1750,0.1282/0.0883,0.3219/0.1225,0.2336/0.0655
+3,ood,90,0.0333,0.0889,0.0383/0.0000,0.1801/0.0498,0.1552/0.1264
+verdict: SIGNAL — at least one (loop, split, signal) AUROC 95% CI LB >= 0.6 — T1.3 G1 gate PASSES; Phase 2 GOAT adjudication re-opens
+json:{"model":"/Users/katopz/git/riir-train/data/Ternary-Bonsai-2-27B-PQ2_0.gguf","untied":true,"queries":180,"loops":4,"acc_last":0.0611,"elapsed_s":45916.3}
+```
+
+acc columns are loop-invariant by design (the clean-state continuation decodes from the restored post-prefill state, so accuracy cannot depend on K — the instrument repair working as specified). `ood` = the bin's second-pool unseen-composition split (two pools × (60 two-hop + 30 one-hop), the Bench-930 shape; splits overlap).
 
 ## Interpretation
 
-<!-- FILLED AT RUN COMPLETION -->
+- **The DiscoLoop sign reproduces on the league model**: at a posture where the model can barely answer (2.5% two-hop), the k≤2 margin-alignment readout still ranks the rare correct answers above the wrong ones (LB 0.79–0.83) — alignment tracks correctness BEFORE the answer is emitted, the paper's core claim, in sign.
+- **The two probe signals diverge at scale.** The n=4 smoke's cos_bridge 1.0000 was small-n noise; margin is the live axis on this checkpoint (cos_bridge flat 0.14–0.24 over 180 queries). Any future GOAT adjudication on this instrument should pre-register `auroc_margin` at k=2 as the primary signal, cos_bridge demoted to secondary.
+- **Loops help the readout, not the model.** bridge_top1 decays monotonically with K (0.55 → 0.12 all-split) while margin-AUROC peaks at k=2 — past k=2 the stack iteration moves the head AWAY from the gold token. The loop intervention stays measurement-only (reinject is Phase 2, closed unbuilt).
+- **Phase 2 re-open NOT taken on this record.** The verdict line's "Phase 2 GOAT adjudication re-opens" is the bar's formal branch, but a reinject GOAT over a 2.5%-accurate two-hop axis would measure the phrasing, not the loops. The lane's next read of record is the owner-gated `B929_PHRASE=standard` full run (issue T1.3); Phase 2 adjudicates after that lands SIGNAL.
+- **Housekeeping:** the run worktree `/private/tmp/riir-infer-929` (the exact instrument source) was verified a strict subset of upstream HEAD (diff 2026-10-14 — the union `69f520e` + post-launch knobs supersede every line) and pruned after this record landed; the raw log/JSON above are the volatile-path preservation.
