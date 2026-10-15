@@ -1,6 +1,7 @@
 # Issue 943: Issue-level claim lease before implementation (pre-work in-flight markers)
 
 **Status:** Open — P2 multi-agent collision defense; rescoped at verdict round 1 (semantic-search v1 → claim lease; v2 deferred); sourced from the autoresearch rails distill (riir-refine/.research/272)
+**Claimed:** zed-idle-943, 1792085272, expires 2026-10-17T17:27:52Z
 **Date:** 2026-10-15
 **Source:** this repo's Issue 825 + a private-tier same-day collision (fixture details in riir-refine/.research/272, private); the lease SHAPE comes from the riir-refine mining-queue claim markers (48 h expiry, push-as-arbiter) and CrocSwap/integer-mult-bounds' CLAIM packages @ `0fdd7d82` (Apache-2.0)
 
