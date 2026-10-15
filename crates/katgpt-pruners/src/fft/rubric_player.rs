@@ -407,6 +407,7 @@ impl RubricFFTPlayer {
         // Pick best blended action
         (0..NUM_ACTIONS)
             .filter(|&i| blended[i] > f32::NEG_INFINITY)
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|a, b| katgpt_core::float_order::cmp_for_max(blended[*a], blended[*b]))
             .map_or(ActionType::Wait, ActionType::from)
     }

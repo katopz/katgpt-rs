@@ -416,6 +416,7 @@ impl GoTemplateProposer {
     /// Select a template via UCB1.
     pub fn select_template(&mut self) -> GoTemplate {
         let idx = (0..NUM_TEMPLATES)
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|&a, &b| {
                 katgpt_core::float_order::cmp_for_max(
                     self.stats[a].ucb1(self.total_pulls),
@@ -841,6 +842,7 @@ pub fn run_gzero_selfplay(
             // Pick best candidate by greedy score
             let best_move = candidates
                 .iter()
+                // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
                 .max_by(|&&a, &&b| {
                     katgpt_core::float_order::cmp_for_max(
                         compute_move_score(&state, a.0, a.1),

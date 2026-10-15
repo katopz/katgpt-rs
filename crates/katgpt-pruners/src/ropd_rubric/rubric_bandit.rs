@@ -242,6 +242,7 @@ impl<P: ScreeningPruner> RubricBanditPruner<P> {
         student_rubric: &RubricVector,
         references: &[RubricVector],
     ) {
+        // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
         let best_ref = references.iter().max_by(|a, b| {
             katgpt_core::float_order::cmp_for_max(a.weighted_score(), b.weighted_score())
         });

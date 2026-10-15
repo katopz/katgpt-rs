@@ -65,6 +65,7 @@ impl ScoreResult {
     ///
     /// Returns the gap vs the reference with the highest weighted score.
     pub fn scalar_delta(&self) -> f32 {
+        // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
         let best_ref = self.references.iter().max_by(|a, b| {
             katgpt_core::float_order::cmp_for_max(a.weighted_score(), b.weighted_score())
         });

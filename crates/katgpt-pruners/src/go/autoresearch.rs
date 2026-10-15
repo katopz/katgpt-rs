@@ -486,6 +486,7 @@ impl GoPlayer for ResearchPlayer {
         // Weighted greedy fallback
         let best = legal_moves
             .iter()
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|&&a, &&b| {
                 let sa = weighted_greedy_score(state, a.0, a.1, &self.weights);
                 let sb = weighted_greedy_score(state, b.0, b.1, &self.weights);
@@ -771,6 +772,7 @@ pub fn run_autoresearch(config: &AutoResearchConfig, rng: &mut Rng) -> AutoResea
 
         let arm_idx = active_indices
             .iter()
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|&&a, &&b| {
                 katgpt_core::float_order::cmp_for_max(
                     arms[a].ucb1(total_pulls),
@@ -835,6 +837,7 @@ pub fn run_autoresearch(config: &AutoResearchConfig, rng: &mut Rng) -> AutoResea
     let best_arm = arms
         .iter()
         .filter(|a| a.pulls > 0)
+        // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
         .max_by(|a, b| katgpt_core::float_order::cmp_for_max(a.mean_reward(), b.mean_reward()));
 
     let (best_config, best_win_rate) = match best_arm {

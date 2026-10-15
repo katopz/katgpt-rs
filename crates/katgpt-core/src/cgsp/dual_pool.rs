@@ -468,6 +468,7 @@ impl<B: HintDeltaBandit> DualPoolBandit<B> {
                     // float_order: a NaN priority must never be the eviction
                     // target (total_cmp ranks NaN below -inf → it would win
                     // the min and be evicted first); NaN loses instead.
+                    // Issue 940 LI pin: std min_by is LAST-min-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
                     .min_by(|(_, a), (_, b)| crate::float_order::cmp_for_min(**a, **b))
                     .map(|(i, _)| i);
                 if let Some(idx) = evict_idx {

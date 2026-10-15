@@ -235,13 +235,23 @@ katgpt-pruners (`tes_loop`, `wealth_bandit`, `self_distilling_bandit`,
 `ropd_rubric`), katgpt-core (`cgsp/dual_pool` eviction,
 `compression_drafter` final pick, `factorized_action/codebook`). A future
 mechanical rewrite to `fold`/`max_by_key` silently flips tie behavior —
-each site gets a one-line pin comment in the fix unit.
+each site gets a one-line pin comment in the fix unit. **LANDED
+2026-10-16**: 41 uniform pin comments (`Issue 940 LI pin: std max_by/min_by
+is LAST-{max,min}-wins — this tie pick is deliberately last-index; a fold
+rewrite silently flips ties to first.`) across the 22 named files,
+production code only (test mods excluded). Note `max_by_key` sites were
+pinned too — also last-max-wins, and equally vulnerable to a fold rewrite.
 
 ### Edge noted
 
 `katgpt-pruners/screening/complexity_prior.rs:416-439,600-618` `top_k`: if
 every remaining `log_prob` is `-inf`, `best_ix` stays `usize::MAX` and is
-written to `out` (silent degenerate index).
+written to `out` (silent degenerate index). **FIXED 2026-10-16**: the first
+unchosen candidate now always takes the lead (`lp > best_lp || best_ix ==
+usize::MAX`), so an all-`-inf` round deterministically picks the LOWEST
+unchosen index and the sentinel can never survive a round — in BOTH the
+byte and latent variants. Pin `top_k_all_neg_inf_candidates_never_leak_the_sentinel`
+(α = +∞ mock proxy drives every log_prob to -inf; out must read [0, 1, 2]).
 
 ### GOOD substrate (consume, never fork)
 
@@ -368,7 +378,16 @@ total order · `dot_f32_ordered` + the `bridge_certified` certified pattern
    katgpt-percepta 40, katgpt-claim 59, katgpt-band 25 (α pin), katgpt-core
    2157 default + 2184 `induced_cwm` + 10 tournament gated; clippy
    `-D warnings` all.
-11. **LI pin comments** + the `usize::MAX` edge guard.
+11. **LI pin comments + the `usize::MAX` edge guard — LANDED 2026-10-16**
+    (fix unit ⑪, one commit): 41 uniform LAST-index pin comments across the
+    22 named files (max_by/min_by/max_by_key — the comment names std's
+    last-extreme-wins rule and the fold-rewrite hazard);
+    `complexity_prior::top_k` both variants guarded (first-unchosen lead →
+    the all-`-inf` round picks the lowest unchosen index deterministically,
+    the sentinel never survives) + the sentinel-leak pin test. Validation:
+    katgpt-pruners 126 lib (incl. the new pin), katgpt-core 2183/2184 at
+    `induced_cwm` (the 1 failure a KNOWN loaded-box latency-guard artifact,
+    passes alone per its own panic message), clippy `-D warnings` both.
 
 ## Honest scope
 

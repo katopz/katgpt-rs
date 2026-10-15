@@ -133,6 +133,7 @@ impl BomberTemplateProposer {
     /// Select a template via UCB1, returns (template, template_id).
     pub fn select(&mut self) -> (BomberTemplate, usize) {
         let best_id = (0..8)
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|a, b| {
                 katgpt_core::float_order::cmp_for_max(
                     self.stats[*a].ucb1_score(self.total_pulls),
@@ -178,6 +179,7 @@ impl BomberTemplateProposer {
     /// Template with highest mean outcome reward (most successful).
     pub fn best_template(&self) -> BomberTemplate {
         (0..8)
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|a, b| {
                 let a_reward = if self.stats[*a].outcome_count > 0 {
                     self.stats[*a].total_outcome / self.stats[*a].outcome_count as f32
@@ -335,6 +337,7 @@ fn hint_chase_nearest(
     if is_move {
         let nearest = opponents
             .iter()
+            // Issue 940 LI pin: std min_by_key is LAST-min-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .min_by_key(|o| (pos.0 - o.0).abs() + (pos.1 - o.1).abs());
         if let Some(op) = nearest {
             let current_dist = (pos.0 - op.0).abs() + (pos.1 - op.1).abs();

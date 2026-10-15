@@ -74,6 +74,7 @@ impl MuxPatternStore {
             .get(query_type)?
             .iter()
             .filter(|p| p.tier == tier)
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|a, b| katgpt_core::float_order::cmp_for_max(a.kl_reward, b.kl_reward))
     }
 
@@ -82,6 +83,7 @@ impl MuxPatternStore {
         self.patterns
             .get(query_type)?
             .iter()
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|a, b| katgpt_core::float_order::cmp_for_max(a.kl_reward, b.kl_reward))
     }
 

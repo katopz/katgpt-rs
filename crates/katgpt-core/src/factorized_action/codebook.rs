@@ -251,6 +251,7 @@ pub fn fit_codebook_kmeans_into<const K: usize, const D: usize>(
                     .iter()
                     .enumerate()
                     // cmp_for_max: NaN can never win the farthest-code selection.
+                    // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
                     .max_by(|(_, a), (_, b)| crate::float_order::cmp_for_max_f64(**a, **b))
                     .map_or((0, 0.0), |(i, &d)| (i, d));
                 centroids[kk].copy_from_slice(&patches[far_idx][..D]);

@@ -269,6 +269,7 @@ impl FftLoRAPlayer {
         let best_idx = self.logits[ACTION_OFFSET..ACTION_OFFSET + ACTION_COUNT]
             .iter()
             .enumerate()
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(**a, **b))
             .map_or(0, |(i, _)| i);
 
@@ -381,6 +382,7 @@ impl FftLoRAPlayer {
                 let allies = state.targets_in_range(unit.pos, unit.stats.range, unit.team);
                 allies
                     .iter()
+                    // Issue 940 LI pin: std min_by_key is LAST-min-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
                     .min_by_key(|&&id| state.units[id as usize].hp)
                     .copied()
                     .or(Some(unit_id))

@@ -109,6 +109,7 @@ pub trait TesLoop: Send + Sync {
                 .iter()
                 .enumerate()
                 .filter(|(i, _)| !selected.contains(i) && !excluded.contains(i))
+                // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
                 .max_by(|(_, a), (_, b)| {
                     katgpt_core::float_order::cmp_for_max(a.propagated_value, b.propagated_value)
                 })
@@ -192,6 +193,7 @@ pub trait TesLoop: Send + Sync {
                 .iter()
                 .enumerate()
                 .filter(|(i, _)| !selected.contains(i) && !excluded.contains(i))
+                // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
                 .max_by(|(_, a), (_, b)| {
                     let sa = self.rpucg_score(a, total_visits, lambda);
                     let sb = self.rpucg_score(b, total_visits, lambda);

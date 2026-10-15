@@ -171,6 +171,7 @@ impl<P: ScreeningPruner> WealthBanditPruner<P> {
         self.arms
             .iter()
             .enumerate()
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|(_, a), (_, b)| {
                 katgpt_core::float_order::cmp_for_max_f64(a.q_value, b.q_value)
             })
@@ -182,6 +183,7 @@ impl<P: ScreeningPruner> WealthBanditPruner<P> {
         self.arms
             .iter()
             .enumerate()
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max_f64(a.wealth, b.wealth))
             .map_or(0, |(i, _)| i)
     }

@@ -195,6 +195,7 @@ impl RuleBandit {
         self.stats
             .iter()
             .filter(|(_, (s, f))| *s + *f > 0)
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|a, b| {
                 let rate_a = a.1.0 as f32 / (a.1.0 + a.1.1) as f32;
                 let rate_b = b.1.0 as f32 / (b.1.0 + b.1.1) as f32;

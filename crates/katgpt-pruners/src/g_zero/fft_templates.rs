@@ -120,6 +120,7 @@ impl FFTTemplateProposer {
     /// Select a template via UCB1. Returns (template, template_id).
     pub fn select(&mut self) -> (FFTTemplate, usize) {
         let best_id = (0..10)
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|a, b| {
                 katgpt_core::float_order::cmp_for_max(
                     self.stats[*a].ucb1_score(self.total_pulls),
@@ -156,6 +157,7 @@ impl FFTTemplateProposer {
             return FFTTemplate::HealFirst;
         }
         (0..10)
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|a, b| {
                 katgpt_core::float_order::cmp_for_max(
                     self.stats[*a].mean_delta(),

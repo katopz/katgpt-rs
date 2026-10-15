@@ -40,6 +40,7 @@ pub trait FftPlayer {
 pub fn weakest_target(state: &BattleState, targets: &[u8]) -> Option<u8> {
     targets
         .iter()
+        // Issue 940 LI pin: std min_by_key is LAST-min-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
         .min_by_key(|&&id| state.units[id as usize].hp)
         .copied()
 }
@@ -55,6 +56,7 @@ pub fn most_debuffed_ally(
 ) -> Option<u8> {
     allies
         .iter()
+        // Issue 940 LI pin: std max_by_key is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
         .max_by_key(|&&id| {
             effects
                 .iter()
@@ -67,6 +69,7 @@ pub fn most_debuffed_ally(
 fn targets_min_by(state: &BattleState, targets: &[u8], f: fn(&Unit) -> i32) -> Option<u8> {
     targets
         .iter()
+        // Issue 940 LI pin: std min_by_key is LAST-min-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
         .min_by_key(|&&id| f(&state.units[id as usize]))
         .copied()
 }
@@ -76,6 +79,7 @@ pub fn nearest_enemy_pos(state: &BattleState, pos: Pos, team: Team) -> Option<Po
         .units
         .iter()
         .filter(|u| u.alive && u.team != team)
+        // Issue 940 LI pin: std min_by_key is LAST-min-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
         .min_by_key(|u| pos.manhattan(u.pos))
         .map(|u| u.pos)
 }
@@ -83,6 +87,7 @@ pub fn nearest_enemy_pos(state: &BattleState, pos: Pos, team: Team) -> Option<Po
 pub fn move_toward(reachable: &[Pos], target: Pos) -> Option<Pos> {
     reachable
         .iter()
+        // Issue 940 LI pin: std min_by_key is LAST-min-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
         .min_by_key(|p| p.manhattan(target))
         .copied()
 }
@@ -90,6 +95,7 @@ pub fn move_toward(reachable: &[Pos], target: Pos) -> Option<Pos> {
 pub fn move_away(reachable: &[Pos], threat: Pos) -> Option<Pos> {
     reachable
         .iter()
+        // Issue 940 LI pin: std max_by_key is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
         .max_by_key(|p| p.manhattan(threat))
         .copied()
 }
@@ -334,6 +340,7 @@ impl HLFFTPlayer {
     fn best_available(&self, available: &[ActionType]) -> ActionType {
         available
             .iter()
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|a, b| {
                 let qa = self.q_values[a.as_usize()];
                 let qb = self.q_values[b.as_usize()];

@@ -419,6 +419,10 @@ impl<K: ComplexityProxy> CompressionPriorSampler<K> {
         // O(k·n) which is fine for small k. For k up to ~16, a linear scan over
         // `out[0..filled]` to skip already-chosen indices is cheaper than a
         // HashSet allocation (k² ≤ 256 comparisons).
+        // Issue 940 edge guard: the first unchosen candidate always takes the
+        // lead (even at -inf), so an all-`-inf` round deterministically picks
+        // the LOWEST unchosen index instead of leaking the `usize::MAX`
+        // sentinel into `out` (the old `-inf > -inf = false` round left it).
         for filled in 0..k {
             let mut best_ix: usize = usize::MAX;
             let mut best_lp: f32 = f32::NEG_INFINITY;
@@ -429,7 +433,7 @@ impl<K: ComplexityProxy> CompressionPriorSampler<K> {
                     continue;
                 }
                 let lp = self.log_prob(c);
-                if lp > best_lp {
+                if lp > best_lp || best_ix == usize::MAX {
                     best_lp = lp;
                     best_ix = i;
                 }
@@ -608,7 +612,9 @@ impl<K: ComplexityProxy> LatentCompressionPriorSampler<K> {
                 debug_assert!(scratch_byte.len() >= c.len());
                 quantize_latent(c, scratch_byte);
                 let lp = self.inner.log_prob(&scratch_byte[..c.len()]);
-                if lp > best_lp {
+                // Issue 940 edge guard: same first-unchosen lead as the byte
+                // variant — the usize::MAX sentinel can never survive a round.
+                if lp > best_lp || best_ix == usize::MAX {
                     best_lp = lp;
                     best_ix = i;
                 }
@@ -903,5 +909,34 @@ mod tests {
             lp_simple >= lp_complex,
             "constant latent (entropy 0) should score >= spread latent"
         );
+    }
+
+    /// Issue 940 edge-guard pin: when EVERY candidate's log_prob is `-inf`
+    /// (α = +∞ here drives `-α·k̃` to `-inf` for any finite k̃), `top_k` must
+    /// still fill `out[0..k]` with REAL indices — the lowest unchosen, in
+    /// ascending order — never the `usize::MAX` sentinel (the old
+    /// `-inf > -inf = false` round leaked it into `out`).
+    #[test]
+    fn top_k_all_neg_inf_candidates_never_leak_the_sentinel() {
+        struct AlwaysInfinite;
+        impl ComplexityProxy for AlwaysInfinite {
+            fn k_tilde(&self, _candidate: &[u8]) -> f32 {
+                f32::INFINITY
+            }
+        }
+        let sampler = CompressionPriorSampler {
+            proxy: AlwaysInfinite,
+            alpha: 1.0,
+            beta: 0.0,
+        };
+        let cands: Vec<&[u8]> = vec![b"aa", b"bb", b"cc", b"dd"];
+        let mut out = [usize::MAX; 4];
+        sampler.top_k(&cands, 3, &mut out);
+        assert_eq!(
+            out[..3],
+            [0, 1, 2],
+            "all--inf round must pick the lowest unchosen indices (sentinel-leak regression?)"
+        );
+        assert!(out[..3].iter().all(|&ix| ix != usize::MAX));
     }
 }

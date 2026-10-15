@@ -470,6 +470,7 @@ pub fn beam_search<S: MatchScorer>(
     // Return the highest-scoring beam.
     beams
         .into_iter()
+        // Issue 940 LI pin: std max_by_key is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
         .max_by_key(|(_, s)| *s)
         .map(|(b, _)| b)
         .unwrap_or_default()

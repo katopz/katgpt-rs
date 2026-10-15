@@ -411,6 +411,7 @@ impl GoPlayer for GoGreedyPlayer {
 
         let best = legal_moves
             .iter()
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|&&a, &&b| {
                 let sa = greedy_score(state, a.0, a.1);
                 let sb = greedy_score(state, b.0, b.1);
@@ -713,6 +714,7 @@ impl GoPlayer for GoHLPlayer {
             // Exploit: best blended score
             *scored
                 .iter()
+                // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
                 .max_by(|a, b| katgpt_core::float_order::cmp_for_max(a.2, b.2))
                 .expect("scored is non-empty")
         };
@@ -802,6 +804,7 @@ impl TemplateStats {
 
     fn best_ucb1(&self) -> usize {
         (0..NUM_TEMPLATES)
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|&a, &b| katgpt_core::float_order::cmp_for_max(self.ucb1(a), self.ucb1(b)))
             .unwrap_or(0)
     }
@@ -992,6 +995,7 @@ impl GoPlayer for GoGZeroPlayer {
         // Pick best by greedy score among candidates
         let best = candidates
             .iter()
+            // Issue 940 LI pin: std max_by is LAST-max-wins — this tie pick is deliberately last-index; a fold rewrite silently flips ties to first.
             .max_by(|&&a, &&b| {
                 let sa = greedy_score(state, a.0, a.1);
                 let sb = greedy_score(state, b.0, b.1);
