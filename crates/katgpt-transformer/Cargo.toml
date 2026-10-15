@@ -99,6 +99,10 @@ dense_mesh = []
 # Phase 12 T4.6 (2026-07-04): strategy_adapter moved here from root (thinking_cot cycle resolved).
 swir_switch_thinking = ["thinking_cot"]
 
+# Plan 626: SwiR anchor-exit — boundary-argmax span termination beside the
+# entropy-trend law. Implies the SwiR substrate; flag-OFF compiles to nothing.
+swir_anchor_exit = ["swir_switch_thinking"]
+
 # Thinking CoT — adaptive thinking controller (Plan 194). Phase 12 T4.6
 # (2026-07-04): module moved here from katgpt-rs root. strategy_adapter depends on it.
 thinking_cot = []

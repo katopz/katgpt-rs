@@ -101,6 +101,11 @@ pub mod bench;
 mod controller;
 mod convex_hull_check;
 mod entropy;
+// Plan 626: anchor-exit boundary set (T0.1) — the controller extension lands
+// behind `swir_anchor_exit` (implies `swir_switch_thinking`); flag-OFF
+// compiles the module to nothing (the zero-code posture).
+#[cfg(feature = "swir_anchor_exit")]
+pub mod anchor;
 // Issue 942: report-only latent pseudo-text readout + health sensors.
 pub mod pseudo_text;
 mod position_provenance;
