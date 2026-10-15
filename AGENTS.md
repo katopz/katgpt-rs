@@ -1205,6 +1205,19 @@ cargo refine --fix --write --verify --verify-args "--features <set>" <paths>  # 
   compile gate, self-evolve memory). Observed misses → the session record;
   they feed the post-mining queue (usage-artifact improvement intake).
 
+## Determinism law — synced f32 reductions and picks (Issue 940)
+
+An f32 reduction or pick whose result crosses the sync/quorum boundary
+(committed, exported, hashed, or replay-compared) pins its reduction order
+and tie rule: the sequential fold (`dot_f32_ordered`, plain `+=`/`.sum()`
+folds — never a platform-lane SIMD kernel) and one fixed strict tie rule
+(first-index or documented last-index — never a tolerance band, never
+HashMap iteration order). Anything else must be reclassified local-only
+with the decision recorded at the site. Full census, hazards, and fix
+queue: `.docs/10_audits/float_reduction_order_tie_band_determinism_audit.md`.
+The certified precedent is `katgpt-core/src/closure/bridge_certified.rs`
+(`dot_f32_ordered` + `fast_sigmoid` behind `freeze_version_hash`).
+
 ## Feature Flag Discipline
 
 Every new primitive ships behind a feature flag (opt-in). Promotion to

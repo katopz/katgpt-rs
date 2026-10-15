@@ -1,6 +1,6 @@
 # Issue 940: Float reduction-order + tie-band determinism audit (handwired distill, Research 621)
 
-**Status:** Open — audit, no code change implied yet
+**Status:** Open — **AUDIT LANDED 2026-10-16** (`.docs/10_audits/float_reduction_order_tie_band_determinism_audit.md` — T1 census + T2 decisions + T3 tie-band census + T4 law; the fix queue is Part C there and the tasks below); code changes belong to the fix units, not this audit
 **Claimed:** katgpt-rs-idle-unit (riir-refine idle loop), 2026-10-16T00:00Z, expires 2026-10-18T00:00Z
 **Source:** [Research 621](../.research/621_Handwired_Exact_Differentiable_Program_Circuits.md) — chenglou/handwired @ `4ea7fcb2`, `docs/patterns.md` §"Why a tree gives the loop's answer" + `emitArgmax` tie-band law.
 
@@ -15,10 +15,14 @@ Known synced f32 aggregate by contract: the flock centroid — per the global la
 
 ## Tasks
 
-- [ ] **T1** Enumerate every katgpt-rs-side f32 reduction whose result is committed, exported, or replay-compared (belief/kernel sums, selector aggregates). For each: is the reduction order a single fixed sequential order, or platform/lane dependent? (The game-side sync-surface half — flock centroid etc. — is riir-ai Issue 1074, not here.)
-- [ ] **T2** For each site that is order-dependent: either pin the order (documented sequential fold) or move the quantity to exact arithmetic (integer/grid), or reclassify it as local-only (never compared across nodes) with the decision recorded in the site's docs.
-- [ ] **T3** Audit near-tie argmax/tournament picks that feed decisions (goal salience, limelight picks, pruner selection): confirm tie-breaking is a single fixed rule (first-index / stable), not tolerance-based; add the tie-band fact to the selection module docs.
-- [ ] **T4** Write the law once, in the right home: "an f32 reduction or pick that crosses the sync/quorum boundary pins its reduction order and tie rule; anything else must be reclassified as local." Reference Research 621 + handwired patterns.md.
+- [x] **T1** Enumerate every katgpt-rs-side f32 reduction whose result is committed, exported, or replay-compared (belief/kernel sums, selector aggregates). For each: is the reduction order a single fixed sequential order, or platform/lane dependent? (The game-side sync-surface half — flock centroid etc. — is riir-ai Issue 1074, not here.)
+  - **LANDED 2026-10-16** — census in the audit doc (Part A): 24 committed-state sites classified across 9 crates + the local-only ledger. Headline: `dot_f32_ordered` + the certified pattern exist (`bridge_certified.rs`, Bench 844) and are deployed in exactly ONE lane; every other committed lane uses the platform-lane `simd_dot_f32`/`simd_sum_f32` — micro-belief's bridge produces THE 5 synced affect scalars with a doc claiming "bit-identical across runs", personality `drift` feeds a synced BLAKE3 commitment, bom_arena hashes a platform-dependent dot into an RNG seed, HLA `k_mq`/`q_mk` dots mutate the committed moments Pod, procrustes precedes KG-triple-committed alignment, stokes ships TWO mutually-divergent pinned orders agreed only at 1e-4. Zero rayon/collection-dependent reductions. Quotes of all headline sites re-verified line-by-line.
+- [-] **T2** For each site that is order-dependent: either pin the order (documented sequential fold) or move the quantity to exact arithmetic (integer/grid), or reclassify it as local-only (never compared across nodes) with the decision recorded in the site's docs.
+  - **DECISIONS RECORDED 2026-10-16** (audit doc Part A, Decision column: PIN ×13, CANONICALIZE ×1, LOCAL ×4, good-as-is ×6); the per-site doc edits + kernel swaps are the fix queue (Part C) — deferred `- [-]` to the fix units, not abandoned.
+- [-] **T3** Audit near-tie argmax/tournament picks that feed decisions (goal salience, limelight picks, pruner selection): confirm tie-breaking is a single fixed rule (first-index / stable), not tolerance-based; add the tie-band fact to the selection module docs.
+  - **CENSUS LANDED 2026-10-16** (audit doc Part B): ~90 pick sites; 4 TOL hazards (clr brevity 1e-3 winner band, percepta 1e-9 attention band + hull cross-component tie-definition inconsistency, induced_cwm f32::EPSILON tournament band, band_conditioner α-grid dispatch), 4 HashMap-order UNST picks (ruliology `promoted_winner` worst — HashSet iteration picks the winner), 2 production NaN-panic sorts (`sigmoid_calibration.rs:113,510`), the LAST-INDEX pin-comment debt, and the good-substrate inventory (`float_order`, first-index `simd_argmax_f32`, the `(NaN,key,index)` total order). The per-module doc additions ride the fix queue — deferred `- [-]` to it.
+- [x] **T4** Write the law once, in the right home: "an f32 reduction or pick that crosses the sync/quorum boundary pins its reduction order and tie rule; anything else must be reclassified as local." Reference Research 621 + handwired patterns.md.
+  - **LANDED 2026-10-16** — law stated in the audit doc (§The law) + a compact section in `AGENTS.md` ("Determinism law — synced f32 reductions and picks"), citing Research 621 + handwired and the `bridge_certified` precedent.
 
 ## References
 

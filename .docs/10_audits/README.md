@@ -21,6 +21,7 @@
 | [`debug_release_profile_axis.md`](debug_release_profile_axis.md) | The profile is part of the claim — orphaned `#[cfg]` across a blank line (Issue 715) and the full gate's release Layer 6 (Issue 716), both closed 2026-09-03 |
 | [`suite_membership_census.md`](suite_membership_census.md) | Which test targets does anything name — the per-target "gate nobody runs" census (865/868 class as a standing instrument), first census 2026-09-04: the 346 actionable rows land exactly on this repo's 723 and riir-train's 507 documented populations |
 | [`q2_matvec_bandwidth_levers.md`](q2_matvec_bandwidth_levers.md) | Q2_0 matvec vs the M3 CPU streaming roof (Issue 937): software prefetch refuted on M3 + 4090 (retired), isolated fewer-threads peak does not transfer in-model, the decode spin pool's 11-worker macOS default confirmed; in-model ~100 GB/s of ~125 |
+| [`float_reduction_order_tie_band_determinism_audit.md`](float_reduction_order_tie_band_determinism_audit.md) | Reduction-order + tie-band determinism census (Issue 940): every f32 reduction/pick feeding committed state classified (pinned / platform-lane / local), the tolerance + HashMap-order pick hazards, the NaN-panic sorts, and the fix queue — the `bridge_certified` ordered-dot pattern exists, every other committed lane lacks it |
 
 ## Note
 
