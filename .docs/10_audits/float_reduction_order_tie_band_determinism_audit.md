@@ -407,6 +407,18 @@ total order · `dot_f32_ordered` + the `bridge_certified` certified pattern
   are inferences from this repo's docs + the workspace AGENTS rules;
   verified against the siblings at fix time if a fix unit needs it.
 
+## The fix commits (Part C landed 2026-10-16 — 11/11 units)
+
+`d279c7c24` audit · `b66056fcc` unit ① (MB-1/2) · `bb0ffb339` ② (PE-1) ·
+`bef1f0f2f` ③ (MB-4) · `052f7e732` ④ (HL-1/2/3, Bench 939) ·
+`0419d5e52` ⑤ (SE-2/3/4/7) · `5b4f3fdf7` ⑥ (SP-2/3 + CL-1/2/3 + the
+fused-scale-acc tail repair) · `fa45702f5` ⑦ (DE-2 canonicalize) ·
+`4fde9c260` ⑧ (NaN-hardened sorts) · `4e3ad9a84` ⑨ (UNST ×4 tiebreaks) ·
+`4ac43fba7` ⑩ (TOL ×4 adjudication) · `23a04077c` ⑪ (LI pins + the
+usize::MAX sentinel guard). The tracking issue was removed per
+noise-reduction after this record; its full per-unit text lives in git
+history at `23a04077c~1:.issues/940_float_reduction_order_tie_band_determinism_audit.md`.
+
 ## References
 
 - Research 621 (handwired distill) · handwired `docs/patterns.md`
