@@ -96,6 +96,19 @@ pub trait DecodeBackend {
     ///
     /// Returns the argmax token id (for accuracy measurement — the "answer"
     /// token if this is the final step).
+    ///
+    /// # Position-provenance contract (Issue 941)
+    ///
+    /// `token_id = Some(id)` marks a REAL decode position: the host MUST
+    /// append `id` to its materialized token history M(L) — the single
+    /// history surface samplers read
+    /// ([`ProvenanceLedger`](super::position_provenance::ProvenanceLedger)).
+    /// `token_id = None` (soft-embedding step) marks a LATENT position:
+    /// think-brain scratch — it attends and is attended, but it MUST NOT
+    /// enter M(L) (its per-step argmax is not a token decision).
+    /// Reference implementation: riir-ai
+    /// `riir-engine/src/swir_validation/gemma2_backend.rs` (the Plan 313
+    /// real-model host). The ledger is metadata, NEVER an attention mask.
     fn decode_step(
         &mut self,
         token_id: Option<u32>,
