@@ -412,6 +412,17 @@ pub use katgpt_core::sigmoid;
 ///
 /// Hard-coded lookup avoids pulling in a statistics dependency.
 /// Returns `Phi^{-1}(1 - alpha/2)` — the rejection threshold on |z|.
+///
+/// # Issue 940 (TOL) — the dispatch rule, documented
+///
+/// The grid is EXACTLY the four levels below (0.10, 0.05, 0.01, 0.001), each
+/// matching an acceptance window of ±1e-3 around the level; ANY other α —
+/// including between-grid values like 0.005 — silently receives the DEFAULT
+/// 95% z (1.959_964), NOT the nearest grid z. Callers must pass one of the
+/// four levels; the window exists only to absorb float spellings of them.
+/// The `band_conditioner` tests pin the fallthrough (`alpha_between_grid_points_gets_the_documented_default_z`)
+/// so the rule cannot silently drift. Interpolation was considered and
+/// declined (a behavior change needing its own GOAT).
 fn inverse_normal_cdf_two_sided(alpha: f32) -> f32 {
     match alpha {
         a if (a - 0.10).abs() < 1e-3 => 1.644_853_6,  // 90%
@@ -895,5 +906,21 @@ mod tests {
             per_call_us < 1000.0,
             "CI test took {per_call_us:.2}μs/call (expected < 1000μs)",
         );
+    }
+
+    /// Issue 940 (TOL) pin: the α dispatch rule, executable-documented — a
+    /// between-grid α (0.005) is inside NO acceptance window and receives the
+    /// DEFAULT 95% z, not the nearest grid z. If this ever reds, someone
+    /// changed the dispatch (e.g. to interpolation) — re-document then.
+    #[test]
+    fn alpha_between_grid_points_gets_the_documented_default_z() {
+        // 0.005: 4e-3 from 0.001, 5e-3 from 0.01 — outside both ±1e-3 windows.
+        assert_eq!(super::inverse_normal_cdf_two_sided(0.005), 1.959_964);
+        // On-grid spellings (including float-near ones inside the windows).
+        assert_eq!(super::inverse_normal_cdf_two_sided(0.05), 1.959_964);
+        assert_eq!(super::inverse_normal_cdf_two_sided(0.05 + 5e-4), 1.959_964);
+        assert_eq!(super::inverse_normal_cdf_two_sided(0.10), 1.644_853_6);
+        assert_eq!(super::inverse_normal_cdf_two_sided(0.01), 2.575_829_3);
+        assert_eq!(super::inverse_normal_cdf_two_sided(0.001), 3.290_526_7);
     }
 }

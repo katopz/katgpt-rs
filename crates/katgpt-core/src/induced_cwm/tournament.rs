@@ -407,13 +407,21 @@ where
         // Tie-break: highest sum of head-to-head win-rates (sum over row of
         // `head_to_head[i]` minus the diagonal). Tertiary tie-break: lowest
         // index (deterministic).
+        // Issue 940 (TOL): the tie is EXACT win-rate equality, not an
+        // f32::EPSILON band. Win rates are counts over a common denominator,
+        // so distinct achievable rates differ by ≥ 1/total — the band only
+        // ever fired for exactly-equal rates in practice, but its expression
+        // was a non-transitive tolerance band on a committed pick. With the
+        // strict form a (theoretically possible) sub-EPSILON gap now resolves
+        // by win rate — more correct — and exact ties keep the head-to-head
+        // path. ⚠ Effective behavior change: none at achievable game counts.
         let mut best_idx = 0usize;
         let mut best_wr = vs_baseline[0].win_rate();
         let mut best_tb: f32 = head_to_head[0].iter().sum();
         for i in 1..n {
             let wr = vs_baseline[i].win_rate();
             let tb: f32 = head_to_head[i].iter().sum();
-            if (wr > best_wr) || ((wr - best_wr).abs() < f32::EPSILON && tb > best_tb) {
+            if (wr > best_wr) || (wr == best_wr && tb > best_tb) {
                 best_idx = i;
                 best_wr = wr;
                 best_tb = tb;

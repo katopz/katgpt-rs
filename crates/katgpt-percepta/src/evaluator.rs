@@ -352,14 +352,22 @@ impl GraphEvaluator {
 
         for entry in entries.iter() {
             let score = qx * entry.kx + qy * entry.ky;
-            if score > best_score + 1e-9 {
+            // Issue 940 (TOL): the tie set is BIT-EQUAL scores, matching the
+            // hull hard-attention implementation (`hull.rs` walks `s ==
+            // best_raw`) and the Issue-940 law (a tie is bit-equality resolved
+            // by a fixed rule — never a tolerance band). The former 1e-9 band
+            // was ~4M f64 ulps of leniency and the two hard-attention
+            // implementations disagreed on what a tie is; ⚠ one-time behavior
+            // change: entries scoring within (0, 1e-9] of the best no longer
+            // merge into the tie accumulator.
+            if score > best_score {
                 // New best — reset accumulators
                 best_score = score;
                 total.fill(0.0);
                 count = 0;
                 latest_entry = None;
             }
-            if (score - best_score).abs() <= 1e-9 {
+            if score == best_score {
                 for (j, v) in entry.values.iter().enumerate() {
                     total[j] += v;
                 }
@@ -797,6 +805,57 @@ mod tests {
         let _v2 = evaluator.step("x").unwrap();
 
         // Should not panic
+    }
+
+    /// Issue 940 (TOL) pin: the hard-attention tie set is BIT-EQUAL scores —
+    /// an entry scoring 5e-10 ABOVE the best is strictly greater, joins the
+    /// tie set alone, and Average resolves to ITS value (the former 1e-9 band
+    /// would have merged both and averaged 15.0). Drives the real
+    /// `attention_insert_and_query` with a hand-built LookUp: constant query
+    /// (qx=1, qy=0), key `kx` from a dim, values tagged 10.0 / 20.0.
+    #[test]
+    fn attention_tie_set_is_bit_equality_not_a_band() {
+        const ONE: DimId = 0;
+        const K: DimId = 1;
+        let lookup = LookUp {
+            id: 0,
+            name: None,
+            value_exprs: vec![Expression::from_scalar(1.0, ONE)],
+            query_exprs_2d: [Expression::from_scalar(1.0, ONE), Expression::zero()],
+            key_exprs_2d: [Expression::from_dim(K), Expression::zero()],
+            tie_break: TieBreak::Average,
+            dim_ids: vec![],
+        };
+        let mut entries: HashMap<DimId, Vec<AttentionEntry>> = HashMap::new();
+        let mut scratch: Vec<f64> = Vec::new();
+
+        // Entry 1: kx = 1.0, tagged value 10.0 (via the value expression
+        // {ONE: 1.0} and vals {ONE: 10.0}).
+        let vals1 = HashMap::from([(ONE, 10.0f64), (K, 1.0f64)]);
+        let r1 = GraphEvaluator::attention_insert_and_query(
+            &mut entries,
+            0,
+            &mut scratch,
+            &lookup,
+            &vals1,
+        );
+        assert_eq!(r1, vec![10.0]);
+
+        // Entry 2: kx = 1.0 + 5e-10 — 4M f64 ulps above entry 1's score at
+        // qx = 1, but far BELOW the old 1e-9 band. Its tagged value is 20.0.
+        let vals2 = HashMap::from([(ONE, 20.0f64), (K, 1.0 + 5e-10)]);
+        let r2 = GraphEvaluator::attention_insert_and_query(
+            &mut entries,
+            1,
+            &mut scratch,
+            &lookup,
+            &vals2,
+        );
+        assert_eq!(
+            r2,
+            vec![20.0],
+            "sub-band score gap must NOT merge into the tie set (1e-9-band regression?)"
+        );
     }
 
     #[test]

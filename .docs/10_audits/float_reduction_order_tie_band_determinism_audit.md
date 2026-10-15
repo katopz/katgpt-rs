@@ -140,20 +140,50 @@ pick, consumed same-node); `katgpt-band` (retention cosines + CI statistics
    0.9e-3 below max is a candidate; 1.1e-3 below is not. Feeds the **CLR
    vote winner**. Decision: keep the band ONLY if documented as by-design
    leniency with the transitivity caveat recorded at the site; otherwise
-   strict `cmp_for_max` + documented tie rule.
+   strict `cmp_for_max` + documented tie rule. **ADJUDICATED 2026-10-16:
+   KEEP + DOCUMENT** — the module doc's false "never changes which answer
+   wins" claim (true only of the strict ordering) replaced with the honest
+   statement: the band is by-design Research-255 leniency, well-defined per
+   call (threshold against THIS call's max — not a pairwise band, so no
+   non-transitivity within a call), in-band rule deterministic (min tokens,
+   first-encountered). Pins `band_leniency_is_by_design` (0.9e-3 below max +
+   shorter wins) + `outside_the_band_the_max_wins` (1.1e-3 below loses).
 2. **`katgpt-percepta/evaluator.rs:355,362`** hard attention:
    `score > best_score + 1e-9` / `(score - best_score).abs() <= 1e-9`. Also
    CROSS-COMPONENT INCONSISTENT: `hull.rs`/`BruteAttentionHead` treat only
    bit-equal scores as ties — the two hard-attention implementations
    disagree on what a tie is. Decision: one tie definition for both.
+   **ADJUDICATED 2026-10-16: BIT-EQUALITY EVERYWHERE** — evaluator adopts
+   the hull's `s == best_raw` (and the Issue-940 law's "never a tolerance
+   band"): the 1e-9 f64 band was ~4M ulps of leniency. ⚠ One-time behavior
+   change: entries scoring within (0, 1e-9] of the best no longer merge
+   into the tie accumulator. Pin `attention_tie_set_is_bit_equality_not_a_band`
+   (drives the real `attention_insert_and_query` with a hand-built LookUp:
+   a 5e-10 score gap must NOT merge — old code averages 15.0, pinned 20.0).
 3. **`katgpt-core/induced_cwm/tournament.rs:416`**: `(wr > best_wr) ||
    ((wr - best_wr).abs() < f32::EPSILON && tb > best_tb)` — an
    `f32::EPSILON` (≈1.2e-7) win-rate band gated on head-to-head;
    non-transitive. Feeds the tournament winner (advance/commit).
+   **ADJUDICATED 2026-10-16: EXACT EQUALITY** — win rates are counts over a
+   common denominator, so distinct achievable rates differ by ≥ 1/total; the
+   band only ever fired for exactly-equal rates. Now `wr == best_wr && tb >
+   best_tb` — a (theoretical) sub-EPSILON gap resolves strictly by win rate
+   (more correct), exact ties keep the head-to-head path, tertiary
+   first-index rule unchanged. ⚠ Effective behavior change: none at
+   achievable game counts. Gated validation: `induced_cwm_tournament` 10/10
+   (the module is opt-in — the default lib run compiles it to nothing),
+   `induced_cwm` full lib 2184.
 4. **`katgpt-band/band_conditioner.rs:415-425`** `inverse_normal_cdf_two_sided`:
    tolerance-KEYED dispatch `(a - 0.10).abs() < 1e-3 => z` — a classifier,
    not a pick; an α between grid points (e.g. 0.005) silently gets the 95%
    z. Decision: document the grid + nearest-key rule, or interpolate.
+   **ADJUDICATED 2026-10-16: DOCUMENT (no interpolation)** — the doc states
+   the four exact levels, the ±1e-3 acceptance windows (float-spelling
+   absorption only), and that ANY other α gets the DEFAULT 95% z (not the
+   nearest grid z); callers must pass one of the four levels. Interpolation
+   declined (a behavior change needing its own GOAT). Pin
+   `alpha_between_grid_points_gets_the_documented_default_z` (0.005 → 1.96,
+   plus all four on-grid spellings) makes the rule executable-documented.
 
 ### UNST hazards (collection-order ties)
 
@@ -318,9 +348,26 @@ total order · `dot_f32_ordered` + the `bridge_certified` certified pattern
    site) assert the lowest-key winner over a tied population — a reversion
    flakes with probability 1 − 1/N per run. Validation: katgpt-ruliology 94,
    katgpt-pruners 126, clippy `-D warnings` both.
-10. **TOL adjudication ×4** — strict comparator or documented-band
-    decision at each site (brevity, percepta+hull consistency,
-    tournament, α-grid).
+10. **TOL adjudication ×4 — LANDED 2026-10-16** (fix unit ⑩, one commit):
+   **brevity: KEEP + DOCUMENT** (the band is by-design Research-255 leniency;
+   module doc's false "never changes which answer wins" claim corrected;
+   per-call well-definedness + deterministic in-band rule documented; pins
+   both sides of the band). **percepta: BIT-EQUALITY EVERYWHERE** (evaluator
+   adopts hull's `s == best_raw` + the Issue-940 law — the 1e-9 f64 band was
+   ~4M ulps of leniency; ⚠ one-time behavior change: sub-band entries stop
+   merging; pin drives the real `attention_insert_and_query` with a
+   hand-built LookUp). **tournament: EXACT EQUALITY** (win rates are counts
+   over a common denominator — distinct rates differ by ≥ 1/total, so the
+   f32::EPSILON band only ever fired for exact ties; `wr == best_wr` now,
+   non-transitive band expression gone; gated validation at
+   `induced_cwm_tournament` — the module is opt-in, the default run compiles
+   it to nothing). **α-grid: DOCUMENT, no interpolation** (the four levels +
+   ±1e-3 windows + the default-95% fallthrough stated at the site; between-grid
+   α gets the DEFAULT z, not nearest — pinned executable; interpolation
+   declined: a behavior change needing its own GOAT). Validation:
+   katgpt-percepta 40, katgpt-claim 59, katgpt-band 25 (α pin), katgpt-core
+   2157 default + 2184 `induced_cwm` + 10 tournament gated; clippy
+   `-D warnings` all.
 11. **LI pin comments** + the `usize::MAX` edge guard.
 
 ## Honest scope

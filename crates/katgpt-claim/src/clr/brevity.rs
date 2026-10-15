@@ -2,9 +2,18 @@
 //!
 //! Given a set of clusters tied (within `eps`) on `total_reliability`, pick the
 //! one whose representative trajectory used the fewest tokens/steps. This is
-//! the Long2Short zero-sum tiebreak from Research 255: it never changes *which*
-//! answer wins (the reliability ordering is preserved), it only breaks ties
-//! in favor of brevity.
+//! the Long2Short zero-sum tiebreak from Research 255.
+//!
+//! **Issue 940 (TOL) — the `eps` band is BY-DESIGN LENIENCY, documented.** A
+//! cluster up to `tiebreak_eps = 1e-3` below the max reliability CAN win when
+//! its representative is shorter — the earlier "never changes which answer
+//! wins" claim was true only of the strict ordering, not of the band. The
+//! band is well-defined per call (candidates are `>= max - eps` against THIS
+//! call's max — a threshold band, not a pairwise band, so the classic
+//! non-transitivity does not arise within a call), and the in-band rule is
+//! deterministic (min tokens, first-encountered). Pins:
+//! `band_leniency_is_by_design` (0.9e-3 below max + shorter wins) and
+//! `outside_the_band_the_max_wins` (1.1e-3 below loses).
 //!
 //! The function is allocation-free beyond the linear scan: it returns an index
 //! into the `candidates` slice and does not construct any intermediate `Vec`.
@@ -178,5 +187,57 @@ mod tests {
         let trajectories: Vec<Trajectory<()>> = vec![];
         let candidates: Vec<&Cluster<()>> = vec![];
         let _ = brevity_tiebreak(&candidates, &trajectories, 0.01);
+    }
+
+    /// Issue 940 (TOL) pin, band side: a cluster 0.9e-3 BELOW the max, with a
+    /// shorter representative, WINS — the leniency is by design, not a bug.
+    #[test]
+    fn band_leniency_is_by_design() {
+        let trajectories = vec![
+            Trajectory {
+                outcome: (),
+                tokens_or_steps: 100,
+                claims: vec![],
+                log_probs: None,
+            },
+            Trajectory {
+                outcome: (),
+                tokens_or_steps: 10,
+                claims: vec![],
+                log_probs: None,
+            },
+        ];
+        let c_max = cluster((), 1.0000, 0, &[0]);
+        let c_below = cluster((), 1.0000 - 0.9e-3, 1, &[1]);
+        let candidates: Vec<&Cluster<()>> = vec![&c_max, &c_below];
+        // 0.9e-3 < tiebreak_eps 1e-3 → inside the band → the SHORTER
+        // representative (cluster 1) wins despite lower reliability.
+        let picked = brevity_tiebreak(&candidates, &trajectories, 1e-3);
+        assert_eq!(picked, 1, "in-band shorter cluster must win (leniency is by design)");
+    }
+
+    /// Issue 940 (TOL) pin, outside side: 1.1e-3 below the max is OUT of the
+    /// band — the max-reliability cluster wins regardless of tokens.
+    #[test]
+    fn outside_the_band_the_max_wins() {
+        let trajectories = vec![
+            Trajectory {
+                outcome: (),
+                tokens_or_steps: 100,
+                claims: vec![],
+                log_probs: None,
+            },
+            Trajectory {
+                outcome: (),
+                tokens_or_steps: 10,
+                claims: vec![],
+                log_probs: None,
+            },
+        ];
+        let c_max = cluster((), 1.0000, 0, &[0]);
+        let c_below = cluster((), 1.0000 - 1.1e-3, 1, &[1]);
+        let candidates: Vec<&Cluster<()>> = vec![&c_max, &c_below];
+        let picked = brevity_tiebreak(&candidates, &trajectories, 1e-3);
+        assert_eq!(picked, 0, "out-of-band cluster must not win");
     }
 }
