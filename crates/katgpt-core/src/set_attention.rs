@@ -136,6 +136,8 @@ pub enum SetAttentionError {
     ReliabilityLenMismatch { expected: usize, got: usize },
     /// `n`, `d`, or `k` is zero.
     ZeroDim,
+    /// `scratch_sum_av.len()` < `d` (wide entry point only).
+    SumAvLenMismatch { expected: usize, got: usize },
 }
 
 impl std::fmt::Display for SetAttentionError {
@@ -170,6 +172,10 @@ impl std::fmt::Display for SetAttentionError {
                 write!(f, "reliability.len() = {got}, expected n = {expected}")
             }
             Self::ZeroDim => write!(f, "n, d, or k is zero"),
+            Self::SumAvLenMismatch { expected, got } => write!(
+                f,
+                "scratch_sum_av.len() (got {got}) < d (expected {expected}) — wide entry point only"
+            ),
         }
     }
 }
@@ -251,7 +257,7 @@ impl std::error::Error for SetAttentionError {}
 ///
 /// This function performs zero heap allocations. The caller owns all scratch.
 #[inline]
-pub fn set_sigmoid_attention_into(
+pub fn set_sigmoid_attention_wide_into(
     states: &[f32],
     w_q: &[f32],
     w_k: &[f32],
@@ -264,6 +270,7 @@ pub fn set_sigmoid_attention_into(
     scratch_q: &mut [f32],
     scratch_k: &mut [f32],
     scratch_alpha: &mut [f32],
+    scratch_sum_av: &mut [f32],
 ) -> Result<(), SetAttentionError> {
     // ── Dimension checks ─────────────────────────────────────────────
     if n == 0 || d == 0 || k == 0 {
@@ -323,6 +330,12 @@ pub fn set_sigmoid_attention_into(
             got: scratch_alpha.len(),
         });
     }
+    if scratch_sum_av.len() < d {
+        return Err(SetAttentionError::SumAvLenMismatch {
+            expected: d,
+            got: scratch_sum_av.len(),
+        });
+    }
 
     // ── Project all queries and keys (W_Q · h_i, W_K · h_j) ──────────
     // scratch_q[i*k..(i+1)*k] = W_Q · states[i*d..(i+1)*d]
@@ -356,8 +369,8 @@ pub fn set_sigmoid_attention_into(
     // `out_i[m] = state_i[m] + …` for every `i in 0..n` and `m in 0..d`, and
     // `output.len()` is checked to equal exactly `n * d` above, so every slot
     // it later reads is written first in the same pass — the n·d memcpy was
-    // entirely dead on the dense path. (Only observable difference: if
-    // `dense_accumulate`'s `d <= 16` release assert fires, `output` is now left
+    // entirely dead on the dense path. (Only observable difference: if the
+    // legacy wrapper's `d <= 16` release assert fires, `output` is now left
     // untouched rather than pre-seeded on the way out of the panic.)
     match cfg.top_k {
         None => dense_accumulate(
@@ -372,6 +385,7 @@ pub fn set_sigmoid_attention_into(
             d,
             k,
             scale,
+            scratch_sum_av,
         ),
         Some(k_max) => {
             // The sparse path accumulates (`out_i[m] += …`) over only the top-k
@@ -399,6 +413,55 @@ pub fn set_sigmoid_attention_into(
     }
 }
 
+/// Legacy stack-scratch entry point — identical math to
+/// [`set_sigmoid_attention_wide_into`] with the accumulation scratch owned
+/// here as a `[f32; 16]` stack array, hence the historical `d <= 16` cap
+/// (HLA d=8 and most latents). Wider embeddings (decision planes run
+/// d = 256, Plan 627 `set_refine`) must call the wide variant with a
+/// caller-owned scratch. At `d <= 16` the two entry points are
+/// bit-identical: this wrapper asserts the cap, provides the stack
+/// scratch, and delegates.
+///
+/// # Panics
+/// Panics in release when `d > 16` (the stack scratch bound) — the same
+/// guard the dense path carried before the wide variant existed.
+#[inline]
+pub fn set_sigmoid_attention_into(
+    states: &[f32],
+    w_q: &[f32],
+    w_k: &[f32],
+    w_v: Option<&[f32]>,
+    output: &mut [f32],
+    cfg: &SetAttentionConfig,
+    n: usize,
+    d: usize,
+    k: usize,
+    scratch_q: &mut [f32],
+    scratch_k: &mut [f32],
+    scratch_alpha: &mut [f32],
+) -> Result<(), SetAttentionError> {
+    assert!(
+        d <= 16,
+        "set_sigmoid_attention_into: d > 16 needs a caller-owned scratch — use set_sigmoid_attention_wide_into"
+    );
+    let mut sum_av_stack = [0.0f32; 16];
+    set_sigmoid_attention_wide_into(
+        states,
+        w_q,
+        w_k,
+        w_v,
+        output,
+        cfg,
+        n,
+        d,
+        k,
+        scratch_q,
+        scratch_k,
+        scratch_alpha,
+        &mut sum_av_stack[..d],
+    )
+}
+
 /// Dense path: all N peers contribute to each query. O(N²·k) attention scores.
 ///
 /// The residual update is **normalised by N** (the peer count) so γ is
@@ -419,7 +482,12 @@ fn dense_accumulate(
     d: usize,
     k: usize,
     scale: f32,
+    sum_av: &mut [f32],
 ) -> Result<(), SetAttentionError> {
+    // The per-i accumulation scratch lives with the CALLER (stack in the
+    // legacy entry point, caller-owned buffer in the wide one) — the
+    // kernel itself never allocates (G4 law).
+    debug_assert!(sum_av.len() >= d, "dense_accumulate: sum_av.len() >= d");
     let gamma = cfg.gamma;
     // Precompute γ/N — the per-peer average step size. See the doc comment
     // above for why we normalise by N.
@@ -431,13 +499,10 @@ fn dense_accumulate(
     // This is one multiply per (i, m) for the final combine, vs one multiply +
     // one subtract per (i, j, m) in the naive form — a ~N× speedup on the
     // inner product. The stack scratch `sum_av` is bounded at d=16 (covers
-    // HLA d=8 and most latents; larger d would need a heap scratch).
-    // Release-checked OOB guard: sum_av is a fixed [f32; 16] stack array,
-    // so d > 16 would write past the end. Must fire in release, not just debug.
-    assert!(
-        d <= 16,
-        "dense_accumulate: d > 16 needs a larger stack scratch"
-    );
+    // HLA d=8 and most latents). The d cap moved to the ENTRY POINTS: the
+    // legacy `set_sigmoid_attention_into` release-asserts d <= 16 before
+    // providing its stack scratch; `set_sigmoid_attention_wide_into` takes
+    // the accumulation scratch from the caller and has no cap.
     // Precompute v_proj[j] = W_V · state_j for all j, once.
     // Without this, v_j would be recomputed n times (once per query i),
     // turning an O(n·d²) matvec into O(n²·d²).
@@ -490,7 +555,7 @@ fn dense_accumulate(
         // still correct but we'd need a separate scratch). For HLA (d=8) and
         // NPC zones (n >= 8 typically), this holds. To be safe, use a stack
         // array for d <= 16.
-        let mut sum_av = [0.0f32; 16];
+        sum_av[..d].fill(0.0);
         let mut sum_a = 0.0f32;
         let sa = &scratch_alpha[..n];
         if let Some(vp) = &v_proj {

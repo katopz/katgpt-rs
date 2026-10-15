@@ -2482,10 +2482,18 @@ pub mod set_attention;
 #[cfg(feature = "set_attention")]
 pub use set_attention::{
     SetAttentionConfig, SetAttentionError, identity, identity_into, identity_projection,
-    identity_projection_into, set_sigmoid_attention_into,
+    identity_projection_into, set_sigmoid_attention_into, set_sigmoid_attention_wide_into,
 };
 #[cfg(feature = "clr_weighted_set_attention")]
 pub use set_attention::{clr_reliability_scores, clr_weighted_set_attention_into};
+
+// Set-Refine — the decision-plane composition of set_attention (Plan 627,
+// reflex Issue 090 C2): set-conditioned state refinement for option scoring.
+// Thin wrapper over set_sigmoid_attention_wide_into — no fresh kernel.
+#[cfg(feature = "set_refine")]
+pub mod set_refine;
+#[cfg(feature = "set_refine")]
+pub use set_refine::{SetRefineConfig, SetRefineError, SetRefineScratch, gate_weight, refine_state_into};
 
 // Depth-Invariance Diagnostic + Magnitude-Regularized Residual — the
 // root-cause counterpart to four symptom-only detectors (BeliefRankPruner,

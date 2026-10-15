@@ -253,6 +253,51 @@ fn g2_identity_floor_meaningful_2cluster() {
 }
 
 // ─────────────────────────────────────────────────────────────────
+/// Legacy-vs-wide entry-point equivalence (Plan 627): at d <= 16 the stack
+/// wrapper and the wide caller-scratch variant must be BIT-identical (the
+/// wrapper only provides the scratch and delegates). Verifies both dense
+/// and top-k paths.
+#[test]
+fn legacy_stack_and_wide_bit_identical_at_small_d() {
+    use katgpt_core::set_attention::set_sigmoid_attention_wide_into;
+    let n = 6;
+    let d = 8;
+    let k = 8;
+    let mut state = 0xABCD_1234_u64;
+    let mut lcg = || {
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        ((state >> 32) as f32) / (u32::MAX as f32)
+    };
+    let states: Vec<f32> = (0..n * d).map(|_| lcg()).collect();
+    let w_q = identity_projection(d, k);
+    let w_k = identity_projection(d, k);
+    let mut sq = vec![0.0f32; n * k];
+    let mut sk = vec![0.0f32; n * k];
+    let mut sa = vec![0.0f32; n];
+    let mut sum_av = vec![0.0f32; d];
+    for cfg in [
+        SetAttentionConfig::new(1.3, 0.4),
+        SetAttentionConfig::new(0.7, 1.0).with_top_k(3),
+    ] {
+        let mut out_legacy = vec![0.0f32; n * d];
+        let mut out_wide = vec![0.0f32; n * d];
+        set_sigmoid_attention_into(
+            &states, &w_q, &w_k, None, &mut out_legacy, &cfg, n, d, k, &mut sq, &mut sk, &mut sa,
+        )
+        .unwrap();
+        set_sigmoid_attention_wide_into(
+            &states, &w_q, &w_k, None, &mut out_wide, &cfg, n, d, k, &mut sq, &mut sk, &mut sa,
+            &mut sum_av,
+        )
+        .unwrap();
+        let b1: Vec<u32> = out_legacy.iter().map(|v| v.to_bits()).collect();
+        let b2: Vec<u32> = out_wide.iter().map(|v| v.to_bits()).collect();
+        assert_eq!(b1, b2, "legacy and wide must be bit-identical at d <= 16");
+    }
+}
+
 // G4 — zero allocations in steady state (dense path)
 // ─────────────────────────────────────────────────────────────────
 

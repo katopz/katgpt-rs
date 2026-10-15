@@ -59,6 +59,24 @@ Set Attention" matches none of `set_refine`/`option_interaction`/`preference_rev
   kernel blend, options immutable, sum-symmetric). T1 ships the kernel's form; the suite
   pins whichever form ships.
 
+**Second implementation-time discovery (T1):** the legacy kernel entry point carries a
+release `assert!(d <= 16)` (a `[f32; 16]` stack accumulation scratch — an implementation
+artifact, not a design boundary) and reflex's `EMBED_DIM` is 256. T1 therefore ALSO added
+`set_sigmoid_attention_wide_into` to Plan 354's module: identical math, caller-owned
+`sum_av` scratch (the zero-alloc law holds), no d cap; the legacy `set_sigmoid_attention_into`
+is now a thin stack-scratch wrapper, bit-identical at d <= 16 (asserted by test in
+`tests/set_attention_g1_g5.rs`, dense + top-k). `set_refine` consumes the wide entry.
+
+**T1 LANDED 2026-10-16** — 2160 lib tests + Plan-354 G1-G5 (7) + CLR G8 (3) + the S-suite
+(9: S1 reversal capability incl. the independent-scorer contrast arm, S1b ordinal flip,
+S2 same-order bit-identity + 6-permutation drift <= 1e-6, S3 sigmoid-not-softmax
+denominator-free, S4 option immutability + displacement bound, S5 gamma=0 byte-identity,
+d=256 wide smoke, 100-call stability) — all green; clippy `-D warnings --all-targets`
+clean at the feature posture; default-features check clean (flag-off compiles to nothing).
+The S1 fixture: x=e1, A=rot(+25deg), B=rot(-35deg), D=rot(-45deg), tau=0.5, gamma=1.0
+(working envelope tau 0.4-0.7 x gamma 0.8-1.5; gamma >= 2 over-refines and flips {A,B}
+directly — the documented envelope, not a defect).
+
 **REVISED VERDICT: the operator is NOT new substrate — it is a thin composition (~60-80 LOC
 wrapper) over `set_sigmoid_attention_into`, feature `set_refine = ["set_attention"]`.**
 The genuinely NEW part is the S1-S5 decision-plane suite (Plan 354's tests are entity-plane).
@@ -122,7 +140,7 @@ test, run at every posture:
 
 ## 5. Execution order (each its own session slice)
 
-- [ ] T1 katgpt-core: `set_refine` module (feature `set_refine`, opt-in) —
+- [x] T1 katgpt-core: `set_refine` module (feature `set_refine`, opt-in) —
       operator + types.rs + S1–S5 unit suite. REVISED per the amendment: a thin composition wrapper over `set_sigmoid_attention_into` (`set_refine = ["set_attention"]`), NOT a fresh kernel — the original ~100-150 LOC estimate covered machinery Plan 354 already ships. Gate: `cargo test -p katgpt-core
       --features set_refine --lib`, clippy `-D warnings` default + all-features.
 - [ ] T2 reflex: engine seam (flag-gated, default-off) + the harness A/B arm —
