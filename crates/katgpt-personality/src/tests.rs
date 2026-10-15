@@ -297,6 +297,58 @@ fn drift_empty_recent_direction_zero_delta() {
     assert!(kernel.r_expected()[0] > 0.0);
 }
 
+// ─── Issue 940 (PE-1): the drift fold is the ordered sequential fold ──────
+
+#[test]
+fn drift_folds_in_ascending_index_order_not_platform_order() {
+    // Mirror of `ordered_dot_differs_from_simd_dot` (katgpt-types simd::dot)
+    // and `bridge_is_the_ordered_fold_not_the_platform_kernel`
+    // (katgpt-micro-belief), lifted through `drift`: `w` feeds the synced
+    // BLAKE3 commitment, so the Σ d_recent fold must land on the sequential
+    // value — 3.0 on this craft — never the platform lane grouping's 0.0.
+    //
+    // Hand-computed, recent = [1e8, 1, 1, 1, −1e8, 1, 1, 1, 0 × 24]: the
+    // sequential fold loses each +1 to f32 spacing at 1e8 (ulp 8) until the
+    // cancellation, then keeps the three trailing +1s → 3.0; every
+    // reassociating backend pairs the cancellation inside one lane group and
+    // drops them → 0.0.
+    let mut recent = [0.0f32; 32];
+    recent[0] = 1e8;
+    recent[1] = 1.0;
+    recent[2] = 1.0;
+    recent[3] = 1.0;
+    recent[4] = -1e8;
+    recent[5] = 1.0;
+    recent[6] = 1.0;
+    recent[7] = 1.0;
+
+    let config = PersonalityConfig {
+        alpha: 1.0, // Δw = surprise · Σ d_recent exactly
+        ..Default::default()
+    };
+    let mut kernel = PersonalityWeightedComposition::<1, 32>::new(config, [0.0]);
+    let l0 = StaticLayer::new(recent).with_recent(recent);
+    let layers: [&dyn LayerDirectionSource; 1] = [&l0];
+
+    kernel.drift(&layers, 1.0); // surprise = 1.0
+
+    // Bit-exact: alpha·surprise·3.0 with alpha = surprise = 1.0, no clamp hit.
+    assert_eq!(
+        kernel.w_snapshot()[0],
+        3.0,
+        "drift must fold in ascending index order (the sequential fold)"
+    );
+
+    // Anti-regression witness: on this input the platform kernel disagrees
+    // with the ordered fold, so the assertion above is load-bearing.
+    let ones = [1.0f32; 32];
+    assert_ne!(
+        katgpt_types::simd::simd_dot_f32(&recent, &ones, 32),
+        3.0,
+        "ordered and platform kernels converged on the pin input — re-adjudicate this test"
+    );
+}
+
 // ─── Phase 1: multi-layer integration smoke test ───────────────────────────
 
 #[test]

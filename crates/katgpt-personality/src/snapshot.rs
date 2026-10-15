@@ -11,6 +11,11 @@
 //!   would destroy per-entity personality divergence.
 //! - The **commitment** (BLAKE3 hash + version + archetype) IS synced as an
 //!   audit event when a hot-swap occurs.
+//! - Cross-node stability of that commitment is a *provenance* property of
+//!   `w` (Issue 940, PE-1): every fold feeding `w` — today the `drift` delta
+//!   — is pinned to the sequential order (`dot_f32_ordered`), never a
+//!   platform-lane SIMD kernel, so two nodes replaying the same reward
+//!   stream hash to the same commitment.
 //!
 //! # Commitment scheme
 //!

@@ -85,7 +85,7 @@ were found; collection-dependence exists only in PICKS (below).
 | SE-8 `sense/reconstruction_depth_invariance.rs:141` | delegates to SE-1 + scalar `sum_sq` folds | PINNED | RMS-rescaled belief → SyncBank | good |
 | **HL-1/2/3** `katgpt-hla/kernel.rs:123,194,474` | `simd_dot_f32` (`k_mq`, `q_mk`) | PLATFORM | **mutate `hla_moments`** — the Cold-tier Pod, BLAKE3-committed on freeze | **PIN** — the only platform-dependent inputs into committed HLA state; G2 (decode-loop cost of the scalar fold) is the fix unit's bench duty |
 | HL-4 `kernel.rs:321-322,389-390,494` readout denoms | `simd_dot_f32` | PLATFORM | attention readout → logits → int token ids | **LOCAL** (recorded) — tokens, not bits, cross the wire |
-| **PE-1** `katgpt-personality/kernel.rs:227-235` `drift` | `simd_dot_f32(&d_recent, &ONES)` | PLATFORM | `w` → `PersonalitySnapshot.blake3` — "The **commitment** … IS synced as an audit event when a hot-swap occurs" (snapshot.rs:12-14) | **PIN** — exact structural twin of the certified `bridge_certified` lane; adopt the same pattern |
+| **PE-1** `katgpt-personality/kernel.rs:227-235` `drift` | `simd_dot_f32(&d_recent, &ONES)` | PLATFORM | `w` → `PersonalitySnapshot.blake3` — "The **commitment** … IS synced as an audit event when a hot-swap occurs" (snapshot.rs:12-14) | **PIN — LANDED 2026-10-16**: `dot_f32_ordered(&d_recent, &ONES)` (the mul-by-1.0 is an exact f32 identity, so this IS Σ d_recent in ascending order); pin test `drift_folds_in_ascending_index_order_not_platform_order` (cancellation craft, w lands on 3.0 bit-exact); provenance law noted in snapshot.rs |
 | **SP-2** `katgpt-spectral/procrustes.rs:445` `m_norm` | `simd_sum_sq(..).sqrt()` pre-scale | PLATFORM | `M̃` → Newton-Schulz → aligned-entity match "committed as a raw KG triple with a confidence scalar" (module doc; riir-chain Issue 001) | **PIN** |
 | **SP-3** `spectral/spectral_rewire.rs:308` (`spectral_rewire`, opt-in) | `simd_dot_f32` building `M = A·V` | PLATFORM | purified weight deltas → BLAKE3-committed freeze/thaw overlays | **PIN** |
 | SP-1 `spectral/hla_eigenbasis.rs:571-585` | `simd_dot_f32` power iteration | PLATFORM | eigenbasis — "stay local to the NPC — never synced" (file doc :41-45); provenance hashes the INPUT window, not eigvecs | **LOCAL** (recorded, by the file's own law) |
@@ -198,7 +198,10 @@ total order · `dot_f32_ordered` + the `bridge_certified` certified pattern
    change: attractor belief states + bridge scalars move at this upgrade
    (downstream replay hashes / BLAKE3 commitments over them re-baseline).
 2. **PE-1** — ordered dot in `drift` (the snapshot BLAKE3 then becomes
-   platform-stable).
+   platform-stable). **LANDED 2026-10-16** — one-time committed-bits
+   change: personality `w`/`r_expected` trajectories and every
+   `PersonalitySnapshot.blake3` minted after a drift step move at this
+   upgrade (re-baseline downstream audit-event commitments).
 3. **MB-4** — hash the ordered dot.
 4. **HL-1/2/3** — ordered dots (bench the scalar-fold cost at decode-loop
    scale before landing; G2 duty).

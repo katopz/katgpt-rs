@@ -17,7 +17,7 @@
 use crate::sigmoid::sigmoid;
 use crate::trait_def::LayerDirectionSource;
 use crate::types::PersonalityConfig;
-use katgpt_types::simd::{simd_dot_f32, simd_fused_scale_acc};
+use katgpt_types::simd::{dot_f32_ordered, simd_fused_scale_acc};
 
 /// Unit vector used by [`PersonalityWeightedComposition::drift`] to compute
 /// `Σ_j d_recent[j]` as a dot-product (one NEON/AVX2 reduction instead of a
@@ -218,12 +218,16 @@ impl<const N: usize, const D: usize> PersonalityWeightedComposition<N, D> {
             let surprise = r_observed - self.r_expected[i];
 
             // Δw_i = alpha · surprise · Σ_j d_recent_i[j]
-            // Use the SIMD dot-product against a unit vector — at D=32 this is
-            // a single NEON/AVX2 reduction instead of 32 scalar adds. The host
-            // contract is `recent_direction()` returns either `&[]` (layer
-            // opts out of drift → delta = 0) or a length-`D` slice; we bound
-            // the dot to the actual slice length to stay safe against hosts
-            // that return a short EMA buffer during warmup.
+            // Issue 940 (PE-1): `w` feeds the synced BLAKE3 commitment
+            // (`PersonalitySnapshot` — the commitment IS synced as an audit
+            // event on hot-swap), so this fold is pinned to the sequential
+            // order — `dot_f32_ordered` against the ONES unit vector (the
+            // mul-by-1.0 is an exact f32 identity, so this IS Σ d_recent in
+            // ascending index order), never a platform-lane SIMD kernel. The
+            // host contract is `recent_direction()` returns either `&[]`
+            // (layer opts out of drift → delta = 0) or a length-`D` slice; we
+            // bound the fold to the actual slice length to stay safe against
+            // hosts that return a short EMA buffer during warmup.
             let drift_len = d_recent.len().min(D);
             let delta = if drift_len == 0 {
                 0.0
@@ -232,7 +236,7 @@ impl<const N: usize, const D: usize> PersonalityWeightedComposition<N, D> {
                     D <= ONES_MAX_D,
                     "D={D} exceeds ONES_MAX_D={ONES_MAX_D}; bump the constant"
                 );
-                simd_dot_f32(&d_recent[..drift_len], &ONES[..drift_len], drift_len)
+                dot_f32_ordered(&d_recent[..drift_len], &ONES[..drift_len])
             };
             let inc = alpha * surprise * delta;
 
