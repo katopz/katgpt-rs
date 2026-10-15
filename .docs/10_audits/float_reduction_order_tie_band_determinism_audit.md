@@ -154,6 +154,13 @@ pick, consumed same-node); `katgpt-band` (retention cosines + CI statistics
 `sort_unstable_by(|a,b| a.partial_cmp(b).unwrap())` in `resolution_w_floor`
 and `auc_rank_average`. A NaN input aborts the calibration fit. Fix:
 `total_cmp` (a NaN then sorts deterministically instead of panicking).
+**LANDED 2026-10-16** — both sites → `total_cmp` (no non-NaN behavior
+change: `dedup`'s `==` still collapses −0.0/+0.0, the AUC tie groups are
+`==`-keyed regardless of sort order); NaN tests added. ⚠ the module is
+OPT-IN (`sigmoid_calibration`) — the default-posture lib run compiles it
+to NOTHING (the green-zero trap); validation must run at
+`--features sigmoid_calibration` (22 module tests + the 2 new NaN pins
+green there).
 
 ### LAST-INDEX pins owed (deterministic today, unpinned)
 
@@ -211,6 +218,8 @@ total order · `dot_f32_ordered` + the `bridge_certified` certified pattern
 6. **SP-2 / SP-3 / CL-1 / CL-2 / CL-3** — ordered.
 7. **DE-2** — canonical mass order + envelope doc.
 8. **NaN-hardening** — `sigmoid_calibration.rs` ×2 → `total_cmp`.
+   **LANDED 2026-10-16** — gated-posture validated (see the Part B note:
+   the module is opt-in; the default run greens a zero).
 9. **UNST ×4** — id/index tiebreaks (ruliology first).
 10. **TOL adjudication ×4** — strict comparator or documented-band
     decision at each site (brevity, percepta+hull consistency,

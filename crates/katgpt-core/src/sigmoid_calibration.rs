@@ -108,7 +108,9 @@ const RESOLUTION_FLOOR_MAX: f32 = 1.0;
 /// resolve.
 fn resolution_w_floor(z: &[f32], c: f32) -> f32 {
     let mut sorted = z.to_vec();
-    sorted.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+    // Issue 940 (NaN-hardening): total_cmp, not partial_cmp().unwrap() — a NaN
+    // input sorts deterministically (NaN-last) instead of aborting the fit.
+    sorted.sort_unstable_by(f32::total_cmp);
     sorted.dedup();
     if sorted.len() <= 1 {
         return W_MIN;
@@ -510,7 +512,9 @@ fn auc_rank_average(keys: &[f32], ys: &[bool]) -> f64 {
         return f64::NAN;
     }
     let mut idx: Vec<usize> = (0..keys.len()).collect();
-    idx.sort_unstable_by(|&a, &b| keys[a].partial_cmp(&keys[b]).unwrap());
+    // Issue 940 (NaN-hardening): total_cmp, not partial_cmp().unwrap() — a NaN
+    // key sorts deterministically instead of aborting the AUC computation.
+    idx.sort_unstable_by(|&a, &b| keys[a].total_cmp(&keys[b]));
     let mut ranks = vec![0.0f64; keys.len()];
     let mut i = 0;
     while i < idx.len() {
@@ -1589,5 +1593,27 @@ mod tests {
     /// the way `refit` would (t_pos > 0.5 > t_neg).
     fn y_flags_from(ys: &[bool]) -> Vec<f32> {
         ys.iter().map(|&y| if y { 0.99 } else { 0.01 }).collect()
+    }
+
+    // ── Issue 940 (NaN-hardening): the calibration sorts never panic ──────
+
+    #[test]
+    fn resolution_w_floor_nan_input_sorts_instead_of_panicking() {
+        // A NaN in the evidence window used to abort the fit
+        // (partial_cmp().unwrap()); total_cmp sorts it deterministically and
+        // `f32::min` ignores the NaN diff, so the floor computes from the
+        // finite gaps.
+        let w = resolution_w_floor(&[0.1, f32::NAN, 0.5, 0.7], 0.0);
+        assert!(w >= W_MIN, "floor must stay at or above W_MIN, got {w}");
+        // And an all-NaN window degrades to the floor, not a panic.
+        assert_eq!(resolution_w_floor(&[f32::NAN; 4], 0.0), W_MIN);
+    }
+
+    #[test]
+    fn auc_rank_average_nan_key_sorts_instead_of_panicking() {
+        // A NaN key used to abort the AUC; total_cmp ranks it deterministically
+        // (last) and the AUC computes.
+        let auc = auc_rank_average(&[0.1, f32::NAN, 0.9], &[true, false, true]);
+        assert!((0.0..=1.0).contains(&auc), "AUC out of range: {auc}");
     }
 }
