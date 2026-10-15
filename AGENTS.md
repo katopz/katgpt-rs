@@ -1265,6 +1265,14 @@ exists, consume it; if not, file an issue in the right repo FIRST. Prevents
 the drift pattern of a parallel system re-implementing shipped substrate
 under a different name.
 
+**Before implementing any FILED issue or plan, run the claim-lease check
+(Issue 943):** `git fetch origin && py ../katgpt-rs/scripts/claim_lease_check.py
+--item <NNN>` — a foreign live `Claimed:` line on the item is the yield
+signal (coordinate or pick another unit); to claim, append
+`**Claimed:** <session>, <epoch>, expires <ISO-UTC>` under the Status line
+and push BEFORE implementing (48 h expiry; advisory — the push stays the
+arbiter; exit 1 = the instrument could not read, never a silent pass).
+
 ⛔ **A concurrent session is the OTHER way this gate gets skipped, and the
 cost is a NEGATIVE RESULT rather than a duplicate** (Issue 825): two sessions
 implemented one issue four hours apart, and the second measured a failure,
