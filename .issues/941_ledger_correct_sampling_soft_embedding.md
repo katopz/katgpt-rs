@@ -1,6 +1,7 @@
 # Issue 941: Lift the Token/Latent Position-Provenance Convention Into the SwiR Host Contract
 
 **Status:** Open — P2 substrate-first lift (the behavior SHIPS host-side; the contract and its katgpt-rs-side tests do not)
+**Claimed:** shikuwa-4090-agent, epoch 2026-10-15T21:39:53Z, expires 2026-10-17T22:00:00Z
 **Date:** 2026-10-15
 **Source:** katgpt-rs/.research/622 (HybridAgent distill, arXiv:2610.18861 §"continuous working memory"); corrected by verdict review round 1 — the original "not shipped / P1 bug" framing was a substrate-first miss
 
