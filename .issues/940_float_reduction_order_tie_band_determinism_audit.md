@@ -1,6 +1,7 @@
 # Issue 940: Float reduction-order + tie-band determinism audit (handwired distill, Research 621)
 
 **Status:** Open — audit, no code change implied yet
+**Claimed:** katgpt-rs-idle-unit (riir-refine idle loop), 2026-10-16T00:00Z, expires 2026-10-18T00:00Z
 **Source:** [Research 621](../.research/621_Handwired_Exact_Differentiable_Program_Circuits.md) — chenglou/handwired @ `4ea7fcb2`, `docs/patterns.md` §"Why a tree gives the loop's answer" + `emitArgmax` tie-band law.
 
 ## Why
