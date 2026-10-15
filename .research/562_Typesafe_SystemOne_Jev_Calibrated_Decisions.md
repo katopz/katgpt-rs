@@ -8,6 +8,7 @@
 > **Cross-ref (riir-ai / riir-chain / riir-neuron-db):** riir-ai `arg_runtime/pipeline.rs` (ActionBridge ABSTAIN), `integrity/injection.rs` (5 affect scalars), `.proofs/RiirAiProof/Hla/Bounded.lean`
 > **Classification:** Public
 > **Harness follow-up (2026-09-22):** [Research 579](579_Jev_Harness_Engineering_Coding_Agents.md) — the coding-agent-harness synthesis of the same design notes (no-KV-cache thought experiment, six symptoms, six per-turn decision points, visibility ladder, priced-per-rebuild routing); decision-model coverage stands, consumer map filed as riir-reflex Issue 004.
+> **Addendum (2026-10-15):** **Jeva** (arXiv:2610.18773, Li & Wang, NUS; HF `LIQIIIII/Jeva-4B`, code Apache-2.0) — the first decision-native System-One model with a full published paper: coverage-factorized null head (no log-K drift, their Prop 2), permutation invariance by construction (0.00% flips, Prop 3), one candidate-conditioned decision block over a cached option K/V memory (27.98× reuse), 78.30 typed_decisions, null AUROC 98.66. §3's audited RLCD discard named its reopen trigger "Jev paper release, or any plan that trains a decision head" — **fired**: the recipe (factorized loss Eq 9, dual-shuffle teacher blending, 13.37M-param head) is now consumable; product-side distill + teacher lane live in the private tier (rethink Research 007, riir-train Issue 632).
 
 ---
 
