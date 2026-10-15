@@ -31,6 +31,11 @@ katgpt-types = { path = "../katgpt-types", version = "0.2.1" }
 # uses this to bincode-serialize `MultiLayerHlaCache` for Cold Tier storage.
 serde = { version = "1", features = ["derive"], optional = true }
 
+# Issue 940 HL-1/2/3 G2 duty — the ordered-fold cost at decode-loop scale.
+[[bench]]
+name = "bench_939_hla_ordered_dot_g2"
+harness = false
+
 [features]
 # katgpt-hla compiles its entire substrate (types + kernel) unconditionally.
 # HLA substrate is always-on inside katgpt-core (mirrors the pre-promotion

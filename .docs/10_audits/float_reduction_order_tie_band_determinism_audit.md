@@ -83,7 +83,7 @@ were found; collection-dependence exists only in PICKS (below).
 | SE-6 `sense/schema_centroid.rs:44-52,185` | Welford scalar folds | PINNED (given ordered input slice) | centroid → seeded `KgEmbedding` → BLAKE3/Merkle | good — fix-time note: callers must pass deterministically-ordered classes |
 | **SE-7** `sense/bake.rs:92` `precision_to_confidence` | `simd_sum_f32(lambda)` | PLATFORM | confidence → **Merkle leaf bytes** (octree.rs:181,197) | **PIN** |
 | SE-8 `sense/reconstruction_depth_invariance.rs:141` | delegates to SE-1 + scalar `sum_sq` folds | PINNED | RMS-rescaled belief → SyncBank | good |
-| **HL-1/2/3** `katgpt-hla/kernel.rs:123,194,474` | `simd_dot_f32` (`k_mq`, `q_mk`) | PLATFORM | **mutate `hla_moments`** — the Cold-tier Pod, BLAKE3-committed on freeze | **PIN** — the only platform-dependent inputs into committed HLA state; G2 (decode-loop cost of the scalar fold) is the fix unit's bench duty |
+| **HL-1/2/3** `katgpt-hla/kernel.rs:123,194,474` | `simd_dot_f32` (`k_mq`, `q_mk`) | PLATFORM | **mutate `hla_moments`** — the Cold-tier Pod, BLAKE3-committed on freeze | **PIN — LANDED 2026-10-16**: all FOUR state-feeding dots → `dot_f32_ordered` — the census's three lines **plus the missed fourth site** `ahla_per_head_step` :637 (same committed `q_head.n` as `ahla_step`; found by classifying every `simd_dot_f32` in the crate by consumer). G2 duty discharged (Bench 939): the fix costs one +36.7 ns dot per step; whole-step A/B -1.1% .. +2.4% (within run scatter of the predicted +0.8%); readout denoms (HL-4) stay SIMD. Pins: `k_mq_folds_in_index_order_not_platform_order` + the AHLA twin (probe k at 2^-25 keeps mK bit-identical, `n[i] = 3·2^-25` exact). ⚠ One-time committed-bits change: `hla_moments` `h`/`n` arrays move at this upgrade (SK/CQV/G/mQ untouched — no reduction). |
 | HL-4 `kernel.rs:321-322,389-390,494` readout denoms | `simd_dot_f32` | PLATFORM | attention readout → logits → int token ids | **LOCAL** (recorded) — tokens, not bits, cross the wire |
 | **PE-1** `katgpt-personality/kernel.rs:227-235` `drift` | `simd_dot_f32(&d_recent, &ONES)` | PLATFORM | `w` → `PersonalitySnapshot.blake3` — "The **commitment** … IS synced as an audit event when a hot-swap occurs" (snapshot.rs:12-14) | **PIN — LANDED 2026-10-16**: `dot_f32_ordered(&d_recent, &ONES)` (the mul-by-1.0 is an exact f32 identity, so this IS Σ d_recent in ascending order); pin test `drift_folds_in_ascending_index_order_not_platform_order` (cancellation craft, w lands on 3.0 bit-exact); provenance law noted in snapshot.rs |
 | **SP-2** `katgpt-spectral/procrustes.rs:445` `m_norm` | `simd_sum_sq(..).sqrt()` pre-scale | PLATFORM | `M̃` → Newton-Schulz → aligned-entity match "committed as a raw KG triple with a confidence scalar" (module doc; riir-chain Issue 001) | **PIN** |
@@ -213,7 +213,13 @@ total order · `dot_f32_ordered` + the `bridge_certified` certified pattern
    seeds; `nonergodic_g5_identification` (BoM-baseline quality gate) green
    at the new seeds.
 4. **HL-1/2/3** — ordered dots (bench the scalar-fold cost at decode-loop
-   scale before landing; G2 duty).
+   scale before landing; G2 duty). **LANDED 2026-10-16** — Bench 939
+   (`.benchmarks/939_hla_ordered_dot_g2.md`): BEFORE/AFTER A/B, whole-step
+   -1.1% .. +2.4% (predicted +0.8% from the raw-dot delta; one dot per
+   step), readout path untouched. The census missed a fourth state-feeding
+   site (`ahla_per_head_step` :637 → `q_head.n`) — fixed in the same unit;
+   divergence pins for both state families (HLA `h`, AHLA `n`) added in
+   kernel.rs tests.
 5. **SE-2/SE-3/SE-4/SE-7** — ordered kernels or recorded envelope demotion.
 6. **SP-2 / SP-3 / CL-1 / CL-2 / CL-3** — ordered.
 7. **DE-2** — canonical mass order + envelope doc.

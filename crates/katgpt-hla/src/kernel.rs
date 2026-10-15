@@ -119,8 +119,10 @@ pub fn hla_state_update(
     // G_t += k_t · (kᵀ · CQV_{t-1})
     simd::simd_outer_product_acc(&mut q_head.g, k, &tmp_k_cqv[..hd], hd, hd);
 
-    // kᵀ · mQ_{t-1} → scalar
-    let k_mq = simd::simd_dot_f32(k, &q_head.mq, hd);
+    // kᵀ · mQ_{t-1} → scalar. Ordered fold: feeds q_head.h → committed
+    // hla_moments (Issue 940 HL-1) — the platform kernel's lane order is not
+    // bit-stable across aarch64/x86_64/wasm32.
+    let k_mq = katgpt_types::simd::dot_f32_ordered(&k[..hd], &q_head.mq[..hd]);
 
     // h_t += k_t · (kᵀ · mQ_{t-1})
     for i in 0..hd {
@@ -190,8 +192,9 @@ fn hla_per_head_update(
     // G_t += k_t · (kᵀ · CQV_{t-1})
     simd::simd_outer_product_acc(&mut q_head.g, k, &tmp_k_cqv[..hd], hd, hd);
 
-    // kᵀ · mQ_{t-1} → scalar
-    let k_mq = simd::simd_dot_f32(k, &q_head.mq, hd);
+    // kᵀ · mQ_{t-1} → scalar. Ordered fold (Issue 940 HL-2) — same committed
+    // state as hla_state_update.
+    let k_mq = katgpt_types::simd::dot_f32_ordered(&k[..hd], &q_head.mq[..hd]);
 
     // h_t += k_t · (kᵀ · mQ_{t-1})
     for i in 0..hd {
@@ -470,8 +473,9 @@ pub fn ahla_step(
     // E_t += k_t · r_t (outer product)
     simd::simd_outer_product_acc(&mut q_head.e, k, &tmp_r[..hd], hd, hd);
 
-    // q_tᵀ · mK_t → scalar
-    let q_mk = simd::simd_dot_f32(q, mk, hd);
+    // q_tᵀ · mK_t → scalar. Ordered fold: feeds q_head.n → committed
+    // hla_moments (Issue 940 HL-3).
+    let q_mk = katgpt_types::simd::dot_f32_ordered(&q[..hd], &mk[..hd]);
 
     // n_t += k_t · (q_tᵀ · mK_t)
     for i in 0..hd {
@@ -633,8 +637,9 @@ fn ahla_per_head_step(
     // Step 3: E_t += k_t · r_t
     simd::simd_outer_product_acc(&mut q_head.e, k, &tmp_r[..hd], hd, hd);
 
-    // Step 4: q_tᵀ · mK_t → scalar (shared, already updated)
-    let q_mk = simd::simd_dot_f32(q, mk, hd);
+    // Step 4: q_tᵀ · mK_t → scalar (shared, already updated). Ordered fold
+    // (Issue 940 HL-3) — same committed q_head.n as ahla_step.
+    let q_mk = katgpt_types::simd::dot_f32_ordered(&q[..hd], &mk[..hd]);
 
     // Step 5: n_t += k_t · (q_tᵀ · mK_t)
     for i in 0..hd {
@@ -985,5 +990,152 @@ mod tests {
         for &x in &out {
             assert!(x.is_finite(), "Output should be finite: {x}");
         }
+    }
+
+    /// Mirror of `bridge_is_the_ordered_fold_not_the_platform_kernel`
+    /// (katgpt-micro-belief) and `certified_differs_from_platform_on_cancellation_input`
+    /// (katgpt-core bridge_certified), lifted through the HLA state update:
+    /// the `k·mQ` scalar that feeds `q_head.h` MUST be the sequential fold
+    /// (index order), not the platform kernel — `h` lands in committed
+    /// `hla_moments`, BLAKE3-hashed on freeze (Issue 940 HL-1).
+    ///
+    /// ⛔ Length 16 is load-bearing: below one full vector the SIMD backends
+    /// legitimately converge with the ordered fold BY CONSTRUCTION. The craft
+    /// is the certified one — `[1e8, 1, 1, 1, -1e8, 1, 1, 1, …]` against an
+    /// all-ones direction: the sequential fold adds the +1s AFTER the
+    /// 1e8/−1e8 cancellation (they are lost to f32 spacing at 1e8, ulp 8),
+    /// landing on 3.0; every reassociating backend pairs the cancellation
+    /// inside one lane/accumulator group and keeps its +1s → 6.0.
+    #[test]
+    fn k_mq_folds_in_index_order_not_platform_order() {
+        use katgpt_types::simd::{dot_f32_ordered, simd_dot_f32};
+
+        let hd = 16usize;
+        let mut craft = [0.0f32; 16];
+        craft[0] = 1e8;
+        craft[1] = 1.0;
+        craft[2] = 1.0;
+        craft[3] = 1.0;
+        craft[4] = -1e8;
+        craft[5] = 1.0;
+        craft[6] = 1.0;
+        craft[7] = 1.0;
+
+        // Step 1: accumulate mQ = craft (q lands in mQ unchanged; k = 0 keeps
+        // every other term zero). Step 2: k = all ones exposes the mQ dot in h.
+        let mut sk = vec![0.0f32; hd * hd];
+        let mut q_head = crate::types::HlaQHeadState::new(hd);
+        let mut tmp_k_cqv = vec![0.0f32; hd];
+        let ones = [1.0f32; 16];
+        let zeros = [0.0f32; 16];
+        hla_state_update(
+            &mut sk,
+            &mut q_head,
+            &craft,
+            &zeros,
+            &zeros,
+            hd,
+            1.0,
+            &mut tmp_k_cqv,
+        );
+        hla_state_update(
+            &mut sk,
+            &mut q_head,
+            &zeros,
+            &ones,
+            &zeros,
+            hd,
+            1.0,
+            &mut tmp_k_cqv,
+        );
+
+        // h[i] = 1.0 * (ones · craft), the fold exactly as the kernel computed it.
+        assert_eq!(
+            q_head.h[0], 3.0,
+            "k·mQ must fold in ascending index order (the sequential fold: 3.0, not the platform 6.0)"
+        );
+        // The anti-regression witness: on this input the platform kernel
+        // disagrees with the ordered fold, so the assertion above is
+        // load-bearing and not vacuously satisfiable.
+        assert_ne!(
+            dot_f32_ordered(&craft, &ones),
+            simd_dot_f32(&craft, &ones, hd),
+            "ordered and platform kernels converged on the pin input — re-adjudicate this test"
+        );
+    }
+
+    /// AHLA twin of `k_mq_folds_in_index_order_not_platform_order`: the
+    /// `q·mK` scalar that feeds `q_head.n` MUST be the sequential fold —
+    /// `n` lands in committed `hla_moments` (Issue 940 HL-3).
+    ///
+    /// Ordering note: `ahla_step` adds `k` into `mK` BEFORE the dot, so the
+    /// craft rides k in step 1 and a tiny probe k in step 2 — 2^-25 is below
+    /// half an ulp at 1.0 (2^-24) and far below the ulp at 1e8 (8), so it
+    /// leaves the crafted mK bit-identical while keeping the probe k nonzero
+    /// (n[i] = 2^-25 · dot, exact in f32).
+    #[test]
+    fn q_mk_folds_in_index_order_not_platform_order() {
+        use katgpt_types::simd::{dot_f32_ordered, simd_dot_f32};
+
+        let hd = 16usize;
+        let mut craft = [0.0f32; 16];
+        craft[0] = 1e8;
+        craft[1] = 1.0;
+        craft[2] = 1.0;
+        craft[3] = 1.0;
+        craft[4] = -1e8;
+        craft[5] = 1.0;
+        craft[6] = 1.0;
+        craft[7] = 1.0;
+        const PROBE: f32 = 1.0 / (1u32 << 25) as f32; // exact 2^-25
+        let probe = [PROBE; 16];
+
+        // Step 1: k = craft accumulates mK = craft (q = 0 keeps n at zero).
+        // Step 2: q = all ones exposes the mK dot in n; the probe k preserves
+        // mK bit-exactly (quarter-ulp at 1.0) and scales the dot into n.
+        let mut pkv = vec![0.0f32; hd * hd];
+        let mut mk = vec![0.0f32; hd];
+        let mut q_head = crate::types::AhlaQHeadState::new(hd);
+        let mut out = vec![0.0f32; hd];
+        let mut tmp_r = vec![0.0f32; hd];
+        let zeros = [0.0f32; 16];
+        let ones = [1.0f32; 16];
+        ahla_step(
+            &mut pkv,
+            &mut mk,
+            &mut q_head,
+            &zeros,
+            &craft,
+            &zeros,
+            hd,
+            1.0,
+            &mut out,
+            &mut tmp_r,
+        );
+        ahla_step(
+            &mut pkv,
+            &mut mk,
+            &mut q_head,
+            &ones,
+            &probe,
+            &zeros,
+            hd,
+            1.0,
+            &mut out,
+            &mut tmp_r,
+        );
+
+        // n[i] = 2^-25 * (ones · craft), the fold exactly as the kernel computed it.
+        assert_eq!(
+            q_head.n[0],
+            3.0 * PROBE,
+            "q·mK must fold in ascending index order (the sequential fold: 3·2^-25, not the platform 6·2^-25)"
+        );
+        // Anti-regression witness as above.
+        assert_ne!(
+            dot_f32_ordered(&craft, &ones),
+            simd_dot_f32(&craft, &ones, hd),
+            "ordered and platform kernels converged on the pin input — re-adjudicate this test"
+        );
     }
 }
