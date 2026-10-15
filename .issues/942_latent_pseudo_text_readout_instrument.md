@@ -1,7 +1,7 @@
 # Issue 942: Latent Pseudo-Text Readout + Health Sensors (Report-Only Instrument)
 
 **Status:** CLOSED 2026-10-16 — landed `76d6d4fef` (module + example + gates, report-only; claim lease `c88264c85` honoured)
-**Claimed:** shikuwa-4090-agent (GLM 5.3), 2026-10-15T21:48:03Z, expires 2026-10-17T21:48:03Z
+**Claimed:** shikuwa-4090-agent, 1792100883, expires 2026-10-17T21:48:03Z
 **Date:** 2026-10-15
 **Source:** katgpt-rs/.research/622 (HybridAgent distill — interpretable latent mode; the readout technique family is established prior art: logit-lens/coda-lens arXiv:2507.02199 et al.; the delta here is only that ours doesn't ship)
 

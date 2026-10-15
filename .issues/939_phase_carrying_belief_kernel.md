@@ -1,7 +1,8 @@
 # Issue 939: Phase-carrying belief kernel + constructed phase-code counters (underdamped κ-blocks)
 
 **Status:** Open — POC, **defer-until-pull** (no committed consumer; promotion requires a named pull — posture set at verdict round 1).
-**Claimed:** katgpt-rs-idle-939, 2026-10-15T20:39Z, expires 2026-10-17T20:39Z — P1/P2/P4 LANDED 2026-10-16 (see the checkboxes); P3 open, waiting on the named pull.
+**Claimed:** katgpt-rs-idle-939, 1792096740, expires 2026-10-17T20:39:00Z
+**Note:** P1/P2/P4 LANDED 2026-10-16 (see the checkboxes); P3 open, waiting on the named pull.
 **Landed:** 2026-10-16 — `crates/katgpt-sense/src/phase_belief.rs` (feature `phase_belief`, forward chain root → core → sense; catalog §148; 11 gate tests, `tests/phase_belief_gates.rs` + required-features row). Drive readout is `fast_sigmoid(gain·cos φ)`; the counter ships BOTH quadratures (`readout_pair`) because cos alone is injective on ℤ_m only at m=2 (the m=3 degeneracy is pinned, not assumed).
 
 ## The idea
