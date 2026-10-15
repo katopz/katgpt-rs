@@ -256,7 +256,8 @@ impl TrialLog {
             .unwrap_or(0.0)
             / total_episodes as f32;
 
-        // Find best arm by average reward
+        // Find best arm by average reward.
+        // Issue 940 (UNST): ties resolve by LOWER arm id, not HashMap order.
         let mut arm_counts: std::collections::HashMap<usize, (f32, usize)> =
             std::collections::HashMap::new();
         for r in records {
@@ -267,7 +268,15 @@ impl TrialLog {
         let best_arm = arm_counts
             .iter()
             .map(|(&arm, &(sum, count))| (arm, sum / count as f32))
-            .max_by(|(_, a), (_, b)| katgpt_core::float_order::cmp_for_max(*a, *b))
+            .max_by(|&(arm_a, a), &(arm_b, b)| {
+                use std::cmp::Ordering;
+                match katgpt_core::float_order::cmp_for_max(a, b) {
+                    // max_by returns the LAST max → the higher arm must
+                    // compare Less on a tie; the lower arm wins.
+                    Ordering::Equal => arm_b.cmp(&arm_a),
+                    ord => ord,
+                }
+            })
             .map_or(0, |(arm, _)| arm);
 
         TrialSummary {
@@ -676,5 +685,24 @@ mod tests {
         }
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// Issue 940 (UNST) pin: arms tied on average reward → `summary`'s
+    /// best_arm is the LOWER arm id, not HashMap iteration order (a bare
+    /// `max_by` returned whichever tied arm the RandomState order surfaced
+    /// last).
+    #[test]
+    fn summary_best_arm_tie_resolves_by_lowest_arm_not_hash_order() {
+        let records = vec![
+            sample_record(0, 3, 0.5),
+            sample_record(1, 7, 0.5),
+            sample_record(2, 3, 0.5),
+            sample_record(3, 7, 0.5),
+        ];
+        let summary = TrialLog::summary(&records);
+        assert_eq!(
+            summary.best_arm, 3,
+            "average-reward tie must resolve to the lower arm id (HashMap-order regression?)"
+        );
     }
 }

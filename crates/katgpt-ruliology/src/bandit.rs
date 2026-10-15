@@ -418,7 +418,13 @@ impl RuliologyAbsorbCompress {
     }
 
     /// Get the best promoted arm (winner), if any.
+    ///
+    /// Issue 940 (UNST): ties resolve by LOWER arm index, not HashSet
+    /// iteration order — the promoted set is a `HashSet`, so a bare `max_by`
+    /// returned a run-to-run nondeterministic winner whenever two promoted
+    /// arms shared the top payoff.
     pub fn promoted_winner(&self) -> Option<usize> {
+        use std::cmp::Ordering;
         if self.promoted.is_empty() {
             return None;
         }
@@ -431,7 +437,13 @@ impl RuliologyAbsorbCompress {
                 let pb = self.bandit.arms()[b].payoff();
                 // float_order: a NaN payoff must never win the promotion
                 // (total_cmp ranks NaN above +inf → it would be selected).
-                katgpt_core::float_order::cmp_for_max_f64(pa, pb)
+                match katgpt_core::float_order::cmp_for_max_f64(pa, pb) {
+                    // max_by returns the LAST max, so on a payoff tie the
+                    // higher index must compare Less — the lower index wins
+                    // deterministically.
+                    Ordering::Equal => b.cmp(&a),
+                    ord => ord,
+                }
             })
             .copied()
     }
@@ -565,6 +577,39 @@ mod absorb_compress_tests {
             promoted.len() <= 2,
             "should promote at most 2 arms, got {}",
             promoted.len()
+        );
+    }
+
+    /// Issue 940 (UNST) pin: two arms tied at the top payoff → the winner is
+    /// the LOWER arm index, deterministically — never HashSet iteration order
+    /// (a bare `max_by` over the `HashSet` returned a run-to-run random one).
+    #[test]
+    fn promoted_winner_tie_resolves_by_lowest_index_not_hash_order() {
+        let bandit = make_test_bandit();
+        let config = RuliologyPromoteConfig {
+            min_visits: 5,
+            payoff_threshold: 0.3,
+            max_promotions: 4,
+            check_interval: 10,
+        };
+        let mut ac = RuliologyAbsorbCompress::new(bandit, config);
+
+        // Arms 0 and 1 reach the SAME payoff (exactly 1.0); every other arm
+        // is left unvisited (payoff 0.0 < threshold, never promoted).
+        for _ in 0..10 {
+            ac.absorb(0, 1.0);
+            ac.absorb(1, 1.0);
+        }
+        ac.compress();
+        assert!(
+            ac.promoted_arms().contains(&0) && ac.promoted_arms().contains(&1),
+            "both tied arms should be promoted"
+        );
+
+        let winner = ac.promoted_winner().expect("promoted arms exist");
+        assert_eq!(
+            winner, 0,
+            "payoff tie must resolve to the lower arm index (HashSet-order regression?)"
         );
     }
 }

@@ -160,16 +160,26 @@ pick, consumed same-node); `katgpt-band` (retention cosines + CI statistics
 1. **`katgpt-ruliology/bandit.rs:426-438` `promoted_winner`** — `max_by` over
    a **`HashSet`**; payoff ties pick the last element in RandomState order
    → run-to-run nondeterministic winner. Worst class. Fix: tiebreak on arm
-   index.
+   index. **FIXED 2026-10-16**: tie → `b.cmp(&a)` so `max_by`'s last-max
+   rule lands on the LOWER arm index; pin `promoted_winner_tie_resolves_by_lowest_index_not_hash_order`
+   (arms 0+1 tied at payoff 1.0, winner must be 0).
 2. **`katgpt-pruners/proof/sketch_population.rs:313` `best_elo`** (+ `:359`
    `sorted_by_elo`/`top_k`) — `HashMap::values()` + `max_by`/stable sort;
    equal-Elo ties (0.0 initial Elo makes this reachable) resolve by HashMap
-   order. Fix: id tiebreak.
+   order. Fix: id tiebreak. **FIXED 2026-10-16**: `best_elo` tie → lower
+   `SketchId` bytes; `sorted_by_elo` fully keyed (elo desc, then id asc — a
+   stable sort no longer inherits HashMap order); pins
+   `best_elo_tie_resolves_by_lowest_id_not_hash_order` +
+   `sorted_by_elo_ties_order_by_id_not_hash_order` (top_k agrees with the
+   sorted prefix).
 3. **`katgpt-pruners/proof/sketch_sampler.rs:347` `sample_fallback_ucb`** —
    `values_arbitrary()` + `max_by`; exact-score ties possible at equal
-   elo+visits.
+   elo+visits. **FIXED 2026-10-16**: tie → lower id; pin
+   `fallback_ucb_tie_resolves_by_lowest_id_not_hash_order`.
 4. **`katgpt-pruners/trial_log.rs:258-271` `summary`** — HashMap iter +
-   `max_by` (report-level "best arm"; lower stakes, same class).
+   `max_by` (report-level "best arm"; lower stakes, same class). **FIXED
+   2026-10-16**: tie → lower arm id; pin
+   `summary_best_arm_tie_resolves_by_lowest_arm_not_hash_order`.
 
 ### NaN-unsafe (panic class, production)
 
@@ -298,7 +308,16 @@ total order · `dot_f32_ordered` + the `bridge_certified` certified pattern
 8. **NaN-hardening** — `sigmoid_calibration.rs` ×2 → `total_cmp`.
    **LANDED 2026-10-16** — gated-posture validated (see the Part B note:
    the module is opt-in; the default run greens a zero).
-9. **UNST ×4** — id/index tiebreaks (ruliology first).
+9. **UNST ×4 — LANDED 2026-10-16** (fix unit ⑨, one commit): all four
+   collection-order ties now resolve deterministically — ruliology
+   `promoted_winner` (lower arm index), `best_elo`/`sorted_by_elo`+`top_k`
+   (lower SketchId bytes; the sort fully keyed), `sample_fallback_ucb`
+   (lower id), `trial_log::summary` best_arm (lower arm id) — each composed
+   AFTER the existing `float_order` NaN-safe comparator, exploiting `max_by`'s
+   last-max rule (tie → `b.cmp(&a)` so the smaller key wins). 4 pins (one per
+   site) assert the lowest-key winner over a tied population — a reversion
+   flakes with probability 1 − 1/N per run. Validation: katgpt-ruliology 94,
+   katgpt-pruners 126, clippy `-D warnings` both.
 10. **TOL adjudication ×4** — strict comparator or documented-band
     decision at each site (brevity, percepta+hull consistency,
     tournament, α-grid).

@@ -309,11 +309,22 @@ impl SketchPopulation {
     /// O(N) single pass, no allocation. Replaces the previous
     /// `sorted_by_elo().first()` which performed an O(N log N) sort + Vec
     /// allocation per call.
+    ///
+    /// Issue 940 (UNST): Elo ties resolve by LOWER id (`SketchId` bytes), not
+    /// HashMap iteration order — initial 0.0 Elo makes exact ties reachable.
     pub fn best_elo(&self) -> Option<&SketchEntry> {
+        use std::cmp::Ordering;
         self.sketches
             .values()
             // float_order: a NaN elo must never win best-elo.
-            .max_by(|a, b| katgpt_core::float_order::cmp_for_max_f64(a.elo_rating, b.elo_rating))
+            .max_by(|a, b| {
+                match katgpt_core::float_order::cmp_for_max_f64(a.elo_rating, b.elo_rating) {
+                    // max_by returns the LAST max, so the higher id must
+                    // compare Less on a tie — the lower id wins.
+                    Ordering::Equal => b.id.0.cmp(&a.id.0),
+                    ord => ord,
+                }
+            })
     }
 
     /// Pick the entry at the `idx`-th position in HashMap iteration order.
@@ -358,9 +369,14 @@ impl SketchPopulation {
     ///
     /// Returns a Vec of references, highest Elo first.
     /// Allocates — use sparingly in hot paths.
+    ///
+    /// Issue 940 (UNST): fully keyed — Elo descending, then id ascending — so
+    /// equal-Elo entries (0.0 initial Elo) order deterministically instead of
+    /// by HashMap iteration order (a bare stable sort keeps that order).
     pub fn sorted_by_elo(&self) -> Vec<&SketchEntry> {
         let mut entries: Vec<&SketchEntry> = self.sketches.values().collect();
-        entries.sort_by(|a, b| b.elo_rating.total_cmp(&a.elo_rating));
+        entries
+            .sort_by(|a, b| b.elo_rating.total_cmp(&a.elo_rating).then(a.id.0.cmp(&b.id.0)));
         entries
     }
 
@@ -956,5 +972,49 @@ mod tests {
         let report = pop.insert(make_entry(1400.0));
         assert!(report.did_evict());
         assert_eq!(pop.len(), 2);
+    }
+
+    /// Issue 940 (UNST) pin: with N equal-Elo entries, `best_elo` returns the
+    /// LOWEST id — not whatever the HashMap iteration order surfaces last.
+    /// A reversion to the bare `max_by` fails whenever the RandomState order
+    /// doesn't put the min-id entry last (probability 1 − 1/N per run).
+    #[test]
+    fn best_elo_tie_resolves_by_lowest_id_not_hash_order() {
+        let mut pop = SketchPopulation::new(PopulationConfig::PAPER_DEFAULTS);
+        let n = 16;
+        for _ in 0..n {
+            pop.insert_no_evict(make_entry(DEFAULT_ELO)); // all tied at 0.0
+        }
+        let expected_min_id = pop
+            .values_arbitrary()
+            .map(|e| e.id.0)
+            .min()
+            .expect("non-empty population");
+        let best = pop.best_elo().expect("non-empty population");
+        assert_eq!(
+            best.id.0, expected_min_id,
+            "best_elo tie did not resolve to the lowest id (HashMap-order regression?)"
+        );
+    }
+
+    /// Issue 940 (UNST) pin: `sorted_by_elo` is fully keyed — equal-Elo
+    /// entries come out in ascending id order, deterministically, instead of
+    /// HashMap iteration order (which a stable sort preserves verbatim).
+    #[test]
+    fn sorted_by_elo_ties_order_by_id_not_hash_order() {
+        let mut pop = SketchPopulation::new(PopulationConfig::PAPER_DEFAULTS);
+        for _ in 0..12 {
+            pop.insert_no_evict(make_entry(DEFAULT_ELO)); // all tied
+        }
+        let mut ids: Vec<[u8; 16]> = pop.sorted_by_elo().iter().map(|e| e.id.0).collect();
+        let is_sorted = ids.windows(2).all(|w| w[0] <= w[1]);
+        assert!(
+            is_sorted,
+            "equal-Elo entries are not in ascending id order (HashMap-order regression?)"
+        );
+        // And top_k agrees with the sorted prefix.
+        ids.truncate(4);
+        let top_ids: Vec<[u8; 16]> = pop.top_k().iter().map(|e| e.id.0).collect();
+        assert_eq!(ids, top_ids);
     }
 }

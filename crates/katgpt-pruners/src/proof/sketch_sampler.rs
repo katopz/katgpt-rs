@@ -349,7 +349,13 @@ impl SketchSampler {
             let score_a = a.elo_rating + c * (total as f64 / (a.visits + 1) as f64).sqrt();
             let score_b = b.elo_rating + c * (total as f64 / (b.visits + 1) as f64).sqrt();
             // float_order: a NaN UCB score must never win the sample.
-            katgpt_core::float_order::cmp_for_max_f64(score_a, score_b)
+            // Issue 940 (UNST): an exact-score tie (equal elo + visits is
+            // reachable at the 0.0 initial Elo) resolves by LOWER id, not
+            // HashMap iteration order.
+            match katgpt_core::float_order::cmp_for_max_f64(score_a, score_b) {
+                std::cmp::Ordering::Equal => b.id.0.cmp(&a.id.0),
+                ord => ord,
+            }
         });
 
         // `values_arbitrary` on a non-empty HashMap always yields at least
@@ -981,5 +987,29 @@ mod tests {
 
         let selected = sampler.sample_p_ucb(&mut rng).expect("should select");
         assert!((selected.elo_rating - 1200.0).abs() < f64::EPSILON);
+    }
+
+    /// Issue 940 (UNST) pin: equal elo + equal visits → equal UCB scores →
+    /// the fallback picks the LOWEST id, not whatever `values_arbitrary()`
+    /// surfaces last. A reversion to the bare `max_by` fails whenever the
+    /// HashMap order doesn't put the min-id entry last.
+    #[test]
+    fn fallback_ucb_tie_resolves_by_lowest_id_not_hash_order() {
+        let entries: Vec<SketchEntry> = (0..12).map(|_| make_entry_with_visits(1000.0, 5)).collect();
+        let sampler = make_sampler_with_entries(entries);
+        let mut rng = Rng::with_seed(42);
+        let best = sampler
+            .sample_fallback_ucb(&mut rng)
+            .expect("non-empty population");
+        let expected_min_id = sampler
+            .population
+            .values_arbitrary()
+            .map(|e| e.id.0)
+            .min()
+            .expect("non-empty population");
+        assert_eq!(
+            best.id.0, expected_min_id,
+            "UCB tie did not resolve to the lowest id (HashMap-order regression?)"
+        );
     }
 }
