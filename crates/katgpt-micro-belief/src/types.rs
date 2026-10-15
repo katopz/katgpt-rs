@@ -98,13 +98,19 @@ impl RecurrenceFamily {
 /// operate on caller-owned slices and MUST NOT allocate. The kernel's own
 /// weights are allocated once at construction and read-only thereafter.
 ///
-/// # Determinism contract (G1.1)
+/// # Determinism contract (G1.1 — cross-node; Issue 940 law)
 ///
 /// Given the same `(s_0, x_1..x_T)` sequence, [`step`](Self::step) MUST produce
-/// bit-identical `s_T` across runs (no hidden RNG, no threading-dependent
-/// reduction order). This is enforced by reusing `katgpt_types::simd::simd_dot_f32`
-/// (deterministic SIMD reduction) and `katgpt_types::simd::fast_sigmoid` (exact libm
-/// path, no polynomial approximation).
+/// bit-identical `s_T` — across runs AND across nodes/platforms — because the
+/// bridge scalars cross the sync boundary **raw** (they drive game-visible
+/// behavior and are replay-compared; a per-run-only claim is not enough).
+/// This is enforced by folding every dot through
+/// `katgpt_types::simd::dot_f32_ordered` (the sequential fold — never a
+/// platform-lane SIMD kernel; the Issue 940 determinism law,
+/// `.docs/10_audits/float_reduction_order_tie_band_determinism_audit.md`,
+/// and the `bridge_certified` precedent) and
+/// `katgpt_types::simd::fast_sigmoid` (exact libm path, elementwise — no
+/// horizontal reduce, so it never reassociates).
 pub trait MicroRecurrentBeliefState: Send + Sync {
     /// Belief vector dimension (fixed at construction).
     fn dim(&self) -> usize;
@@ -150,7 +156,9 @@ pub trait MicroRecurrentBeliefState: Send + Sync {
 /// require a custom projection.
 ///
 /// Computes `out[k] = fast_sigmoid(dot(state, &directions[k*dim..(k+1)*dim]))`
-/// for each k, reusing `katgpt_types::simd::simd_dot_f32` and `katgpt_types::simd::fast_sigmoid`.
+/// for each k, reusing `katgpt_types::simd::dot_f32_ordered` (the sequential
+/// fold — the projection crosses the sync boundary, so the reduction order is
+/// pinned cross-node per the Issue 940 law) and `katgpt_types::simd::fast_sigmoid`.
 ///
 /// Matches the existing `SenseModule::project` (dot + sigmoid) bridge pattern —
 /// see Plan 276 T0.5. No duplication of bridge logic.
@@ -170,8 +178,10 @@ pub(crate) fn project_to_scalars_bridge(
     );
     for k_idx in 0..k {
         let row_start = k_idx * dim;
-        let dot =
-            katgpt_types::simd::simd_dot_f32(state, &directions[row_start..row_start + dim], dim);
+        // Issue 940 (MB-1): the projected scalars ARE the synced affect
+        // channel — the reduction order is pinned to the sequential fold,
+        // never a platform-lane SIMD kernel.
+        let dot = katgpt_types::simd::dot_f32_ordered(state, &directions[row_start..row_start + dim]);
         out[k_idx] = fast_sigmoid(dot);
     }
 }
@@ -290,6 +300,52 @@ mod tests {
             out[1],
             fast_sigmoid(0.0),
             "orthogonal direction → sigmoid(0)=0.5"
+        );
+    }
+
+    /// Mirror of `ordered_dot_differs_from_simd_dot` (katgpt-types simd::dot)
+    /// and `certified_differs_from_platform_on_cancellation_input`
+    /// (katgpt-core bridge_certified), lifted through THIS bridge.
+    ///
+    /// ⛔ Length 16 is load-bearing: below one full vector the SIMD backends
+    /// legitimately converge with the ordered fold BY CONSTRUCTION (the NEON
+    /// tail at len < 4, the AVX2 tail at len < 8 — the katgpt-types test red
+    /// on x86_64 from the day it landed at len = 4 for exactly this reason).
+    /// Hand-computed, direction = all ones: the sequential fold adds the +1s
+    /// AFTER the 1e8/−1e8 cancellation (they are lost to f32 spacing at 1e8,
+    /// ulp 8) landing on 3.0; every reassociating backend pairs the
+    /// cancellation inside one lane/accumulator group and keeps its +1s → 6.0.
+    /// sigmoid(3.0) ≈ 0.9526 vs sigmoid(6.0) ≈ 0.9975 — visibly different, so
+    /// a regression back to `simd_dot_f32` reds this test by construction.
+    #[test]
+    fn bridge_is_the_ordered_fold_not_the_platform_kernel() {
+        use katgpt_types::simd::{dot_f32_ordered, simd_dot_f32};
+
+        let dim = 16usize;
+        let mut state = [0.0f32; 16];
+        state[0] = 1e8;
+        state[1] = 1.0;
+        state[2] = 1.0;
+        state[3] = 1.0;
+        state[4] = -1e8;
+        state[5] = 1.0;
+        state[6] = 1.0;
+        state[7] = 1.0;
+        let directions = [1.0f32; 16];
+        let mut out = [0.0f32; 1];
+        project_to_scalars_bridge(&state, &directions, dim, &mut out);
+        assert_eq!(
+            out[0],
+            fast_sigmoid(3.0),
+            "bridge must fold in ascending index order (the sequential fold)"
+        );
+        // The anti-regression witness: on this input the platform kernel
+        // disagrees with the ordered fold, so the assertion above is
+        // load-bearing and not vacuously satisfiable.
+        assert_ne!(
+            fast_sigmoid(dot_f32_ordered(&state, &directions)),
+            fast_sigmoid(simd_dot_f32(&state, &directions, dim)),
+            "ordered and platform kernels converged on the pin input — re-adjudicate this test"
         );
     }
 }

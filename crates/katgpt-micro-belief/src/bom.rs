@@ -37,7 +37,7 @@
 
 use crate::types::MicroRecurrentBeliefState;
 use crate::{assume_init_slice, uninit_stack};
-use katgpt_types::simd::simd_dot_f32;
+use katgpt_types::simd::{dot_f32_ordered, simd_dot_f32};
 
 #[cfg(not(feature = "simd_sigmoid"))]
 use katgpt_types::simd::fast_sigmoid;
@@ -275,6 +275,11 @@ fn select_best_generic<S: Fn(&[f32]) -> f32>(
 ///
 /// Returns a closure suitable for [`BoMSampler::select_best`]. Reuses
 /// [`simd_dot_f32`]. Callers wanting minimax-over-threat supply their own `Fn`.
+///
+/// Deliberately platform SIMD (Issue 940 audit, MB-5 LOCAL): the score is
+/// consumed in-process by `select_best` (lowest-index strict-`>` tie rule)
+/// and is never hashed, committed, or replay-compared — the ordered fold
+/// would buy nothing here.
 pub fn dot_product_scorer<'a>(direction: &'a [f32], dim: usize) -> impl Fn(&[f32]) -> f32 + 'a {
     move |hyp| simd_dot_f32(hyp, &direction[..dim], dim)
 }
@@ -290,7 +295,9 @@ impl BoMSampler for AttractorKernel {
     ///
     /// Computes the base activation `act[i] = W_s[i]·s + W_x[i]·x + b[i]` once
     /// (mirroring [`AttractorKernel::step`] exactly — same chunked-4 outer
-    /// loop, same `simd_dot_f32` reductions), then perturbs elementwise for
+    /// loop, same `dot_f32_ordered` sequential folds; the σ=0 degeneracy below
+    /// is a bit-identity contract, so the base activation moves with `step()`
+    /// whenever its reduction order changes), then perturbs elementwise for
     /// each of K queries.
     ///
     /// # G1.3 (σ=0 degeneracy)
@@ -336,8 +343,8 @@ impl BoMSampler for AttractorKernel {
         let act: &mut [f32] = unsafe { assume_init_slice(&mut act_buf, dim) };
 
         // Chunked-4 outer loop — mirrors AttractorKernel::step exactly so the
-        // dot-product reductions and FMA scheduling produce the same f32
-        // intermediates. Four independent dot-pairs hide FMA latency.
+        // ordered sequential folds produce the same f32 intermediates. Four
+        // independent dot-pairs hide latency across rows.
         let mut i = 0usize;
         while i + 4 <= dim {
             let ws_r0 = &self.ws[i * dim..(i + 1) * dim];
@@ -349,14 +356,14 @@ impl BoMSampler for AttractorKernel {
             let wx_r2 = &self.wx[(i + 2) * dim..(i + 3) * dim];
             let wx_r3 = &self.wx[(i + 3) * dim..(i + 4) * dim];
 
-            let dot_ws_0 = simd_dot_f32(s_prev, ws_r0, dim);
-            let dot_ws_1 = simd_dot_f32(s_prev, ws_r1, dim);
-            let dot_ws_2 = simd_dot_f32(s_prev, ws_r2, dim);
-            let dot_ws_3 = simd_dot_f32(s_prev, ws_r3, dim);
-            let dot_wx_0 = simd_dot_f32(x, wx_r0, dim);
-            let dot_wx_1 = simd_dot_f32(x, wx_r1, dim);
-            let dot_wx_2 = simd_dot_f32(x, wx_r2, dim);
-            let dot_wx_3 = simd_dot_f32(x, wx_r3, dim);
+            let dot_ws_0 = dot_f32_ordered(s_prev, ws_r0);
+            let dot_ws_1 = dot_f32_ordered(s_prev, ws_r1);
+            let dot_ws_2 = dot_f32_ordered(s_prev, ws_r2);
+            let dot_ws_3 = dot_f32_ordered(s_prev, ws_r3);
+            let dot_wx_0 = dot_f32_ordered(x, wx_r0);
+            let dot_wx_1 = dot_f32_ordered(x, wx_r1);
+            let dot_wx_2 = dot_f32_ordered(x, wx_r2);
+            let dot_wx_3 = dot_f32_ordered(x, wx_r3);
 
             // Same addition order as step(): (dot_ws + dot_wx) + b.
             act[i] = dot_ws_0 + dot_wx_0 + self.b[i];
@@ -369,8 +376,8 @@ impl BoMSampler for AttractorKernel {
         while i < dim {
             let ws_row = &self.ws[i * dim..(i + 1) * dim];
             let wx_row = &self.wx[i * dim..(i + 1) * dim];
-            let dot_ws = simd_dot_f32(s_prev, ws_row, dim);
-            let dot_wx = simd_dot_f32(x, wx_row, dim);
+            let dot_ws = dot_f32_ordered(s_prev, ws_row);
+            let dot_wx = dot_f32_ordered(x, wx_row);
             act[i] = dot_ws + dot_wx + self.b[i];
             i += 1;
         }

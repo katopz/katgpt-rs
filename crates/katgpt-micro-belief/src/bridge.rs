@@ -18,9 +18,12 @@
 //!
 //! # Determinism
 //!
-//! Reuses `katgpt_types::simd::simd_dot_f32` (deterministic SIMD reduction — same
-//! instruction order every run) and `katgpt_types::simd::fast_sigmoid` (exact libm
-//! path, no polynomial approximation). Bit-identical across runs (G1.1).
+//! Reuses `katgpt_types::simd::dot_f32_ordered` (the sequential fold — the
+//! scalars cross the sync boundary, so the reduction order is pinned
+//! cross-node, never platform-lane SIMD; Issue 940 law) and
+//! `katgpt_types::simd::fast_sigmoid` (exact libm path, elementwise — no
+//! horizontal reduce). Bit-identical across runs AND across nodes/platforms
+//! (G1.1, upgraded from the per-run claim by Issue 940 MB-1).
 
 use crate::types::project_to_scalars_bridge as impl_bridge;
 
@@ -29,7 +32,7 @@ use crate::types::project_to_scalars_bridge as impl_bridge;
 /// For each `k` in `0..out.len()`:
 ///
 /// ```text
-/// out[k] = fast_sigmoid( simd_dot_f32(state, &directions[k*dim .. (k+1)*dim], dim) )
+/// out[k] = fast_sigmoid( dot_f32_ordered(state, &directions[k*dim .. (k+1)*dim]) )
 /// ```
 ///
 /// # Arguments

@@ -31,13 +31,14 @@
 //!
 //! Generic const exprs (`[f32; DIM]`) are not stable, so weights are stored as
 //! row-major `Vec<f32>` of length `dim*dim`. Row `i` is `ws[i*dim .. (i+1)*dim]`.
-//! Performance impact at `dim = 32` is negligible: the matvec is 32 dot
-//! products of length 32, each dispatched to `simd_dot_f32` which auto-vectorises.
+//! The matvec is 32 dot products of length 32, each folded through
+//! `dot_f32_ordered` — the belief bits feed the bridge, which crosses the sync
+//! boundary, so the reduction order is pinned cross-node (Issue 940 MB-2).
 
 use crate::bridge::project_to_scalars as bridge_project;
 use crate::types::{KernelConfig, MicroRecurrentBeliefState, RecurrenceFamily};
 use crate::{assume_init_slice, uninit_stack};
-use katgpt_types::simd::simd_dot_f32;
+use katgpt_types::simd::dot_f32_ordered;
 
 #[cfg(not(feature = "simd_sigmoid"))]
 use katgpt_types::simd::fast_sigmoid;
@@ -137,9 +138,9 @@ impl AttractorKernel {
     ///
     /// # Bit-identical to the `dot_wx` inside `step()`
     ///
-    /// Uses the same `simd_dot_f32` reductions in the same chunked-4 outer-loop
-    /// pattern as `step()`, so `out[i]` is bit-identical to the `dot_wx`
-    /// computed inside [`step()`](Self::step). This preserves the G1.6
+    /// Uses the same `dot_f32_ordered` sequential folds in the same chunked-4
+    /// outer-loop pattern as `step()`, so `out[i]` is bit-identical to the
+    /// `dot_wx` computed inside [`step()`](Self::step). This preserves the G1.6
     /// K=1-reduces-to-Family-A property.
     #[inline]
     pub fn precompute_wx_dot(&self, input: &[f32], out: &mut [f32]) {
@@ -152,15 +153,15 @@ impl AttractorKernel {
             let wx_r1 = &self.wx[(i + 1) * dim..(i + 2) * dim];
             let wx_r2 = &self.wx[(i + 2) * dim..(i + 3) * dim];
             let wx_r3 = &self.wx[(i + 3) * dim..(i + 4) * dim];
-            out[i] = simd_dot_f32(input, wx_r0, dim);
-            out[i + 1] = simd_dot_f32(input, wx_r1, dim);
-            out[i + 2] = simd_dot_f32(input, wx_r2, dim);
-            out[i + 3] = simd_dot_f32(input, wx_r3, dim);
+            out[i] = dot_f32_ordered(input, wx_r0);
+            out[i + 1] = dot_f32_ordered(input, wx_r1);
+            out[i + 2] = dot_f32_ordered(input, wx_r2);
+            out[i + 3] = dot_f32_ordered(input, wx_r3);
             i += 4;
         }
         while i < dim {
             let wx_row = &self.wx[i * dim..(i + 1) * dim];
-            out[i] = simd_dot_f32(input, wx_row, dim);
+            out[i] = dot_f32_ordered(input, wx_row);
             i += 1;
         }
     }
@@ -177,7 +178,8 @@ impl AttractorKernel {
     ///
     /// Addition order is preserved: `next[i] = (dot_ws + wx_x[i]) + b[i]`,
     /// matching `step()`'s `(dot_ws + dot_wx) + b[i]` when `wx_x[i]` was
-    /// produced by `precompute_wx_dot` (same `simd_dot_f32` reduction).
+    /// produced by `precompute_wx_dot` (same `dot_f32_ordered` sequential
+    /// fold).
     #[inline]
     pub fn step_with_precomputed_wx(&self, state: &mut [f32], wx_x: &[f32]) {
         debug_assert_eq!(state.len(), self.dim, "state/dim mismatch");
@@ -195,10 +197,10 @@ impl AttractorKernel {
             let ws_r1 = &self.ws[(i + 1) * dim..(i + 2) * dim];
             let ws_r2 = &self.ws[(i + 2) * dim..(i + 3) * dim];
             let ws_r3 = &self.ws[(i + 3) * dim..(i + 4) * dim];
-            let dot_ws_0 = simd_dot_f32(state, ws_r0, dim);
-            let dot_ws_1 = simd_dot_f32(state, ws_r1, dim);
-            let dot_ws_2 = simd_dot_f32(state, ws_r2, dim);
-            let dot_ws_3 = simd_dot_f32(state, ws_r3, dim);
+            let dot_ws_0 = dot_f32_ordered(state, ws_r0);
+            let dot_ws_1 = dot_f32_ordered(state, ws_r1);
+            let dot_ws_2 = dot_f32_ordered(state, ws_r2);
+            let dot_ws_3 = dot_f32_ordered(state, ws_r3);
             // Same addition order as step(): (dot_ws + dot_wx) + b.
             next[i] = (dot_ws_0 + wx_x[i]) + self.b[i];
             next[i + 1] = (dot_ws_1 + wx_x[i + 1]) + self.b[i + 1];
@@ -208,7 +210,7 @@ impl AttractorKernel {
         }
         while i < dim {
             let ws_row = &self.ws[i * dim..(i + 1) * dim];
-            let dot_ws = simd_dot_f32(state, ws_row, dim);
+            let dot_ws = dot_f32_ordered(state, ws_row);
             next[i] = (dot_ws + wx_x[i]) + self.b[i];
             i += 1;
         }
@@ -329,10 +331,12 @@ impl MicroRecurrentBeliefState for AttractorKernel {
     /// # Hot-path properties
     ///
     /// - Zero allocation: writes in-place to `state`.
-    /// - Deterministic: `simd_dot_f32` and `fast_sigmoid` are both deterministic
-    ///   across runs (G1.1).
-    /// - Auto-vectorisable: each row is a length-`dim` dot product dispatched to
-    ///   `simd_dot_f32`; the outer loop over `dim` rows is chunkable.
+    /// - Deterministic: `dot_f32_ordered` (the sequential fold — cross-node
+    ///   bit-identity, Issue 940 MB-2; the belief bits ARE the bridge inputs)
+    ///   and `fast_sigmoid` (exact libm, elementwise) are both deterministic
+    ///   across runs AND platforms (G1.1).
+    /// - Chunkable: each row is a length-`dim` ordered dot; the outer loop over
+    ///   `dim` rows is chunkable (independent folds hide latency across rows).
     ///
     /// # Range
     ///
@@ -363,9 +367,9 @@ impl MicroRecurrentBeliefState for AttractorKernel {
         // SAFETY: we write next[..dim] via the matvec below before any read.
         let next: &mut [f32] = unsafe { assume_init_slice(&mut next_buf, dim) };
 
-        // Process rows in chunks of 4 to give LLVM a clear auto-vec hint on
-        // the outer loop. The inner reductions are dispatched to simd_dot_f32.
-        // Four independent accumulators per pass hide FMA pipeline latency.
+        // Process rows in chunks of 4 to keep four independent sequential folds
+        // in flight — the ILP now lives ACROSS rows (the within-dot order is
+        // pinned to ascending index by `dot_f32_ordered`, Issue 940 MB-2).
         let mut i = 0;
         while i + 4 <= dim {
             // Row slices for W_s and W_x — computed once per row.
@@ -378,15 +382,15 @@ impl MicroRecurrentBeliefState for AttractorKernel {
             let wx_r2 = &self.wx[(i + 2) * dim..(i + 3) * dim];
             let wx_r3 = &self.wx[(i + 3) * dim..(i + 4) * dim];
 
-            // 4 independent dot products over state, 4 over input — FMA-bound.
-            let dot_ws_0 = simd_dot_f32(state, ws_r0, dim);
-            let dot_ws_1 = simd_dot_f32(state, ws_r1, dim);
-            let dot_ws_2 = simd_dot_f32(state, ws_r2, dim);
-            let dot_ws_3 = simd_dot_f32(state, ws_r3, dim);
-            let dot_wx_0 = simd_dot_f32(input, wx_r0, dim);
-            let dot_wx_1 = simd_dot_f32(input, wx_r1, dim);
-            let dot_wx_2 = simd_dot_f32(input, wx_r2, dim);
-            let dot_wx_3 = simd_dot_f32(input, wx_r3, dim);
+            // 4 independent ordered dots over state, 4 over input.
+            let dot_ws_0 = dot_f32_ordered(state, ws_r0);
+            let dot_ws_1 = dot_f32_ordered(state, ws_r1);
+            let dot_ws_2 = dot_f32_ordered(state, ws_r2);
+            let dot_ws_3 = dot_f32_ordered(state, ws_r3);
+            let dot_wx_0 = dot_f32_ordered(input, wx_r0);
+            let dot_wx_1 = dot_f32_ordered(input, wx_r1);
+            let dot_wx_2 = dot_f32_ordered(input, wx_r2);
+            let dot_wx_3 = dot_f32_ordered(input, wx_r3);
 
             // Pre-sigmoid activation = W_s·s + W_x·x + b.
             // Addition order MUST stay (dot_ws + dot_wx) + b — do not rearrange
@@ -401,8 +405,8 @@ impl MicroRecurrentBeliefState for AttractorKernel {
         while i < dim {
             let ws_row = &self.ws[i * dim..(i + 1) * dim];
             let wx_row = &self.wx[i * dim..(i + 1) * dim];
-            let dot_ws = simd_dot_f32(state, ws_row, dim);
-            let dot_wx = simd_dot_f32(input, wx_row, dim);
+            let dot_ws = dot_f32_ordered(state, ws_row);
+            let dot_wx = dot_f32_ordered(input, wx_row);
             next[i] = dot_ws + dot_wx + self.b[i];
             i += 1;
         }
