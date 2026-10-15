@@ -87,9 +87,14 @@ pub fn bake_regularize(
 /// Compute effective confidence from precision vector.
 /// confidence = sigmoid(mean(precision) - 1.0)
 /// Higher average precision → higher confidence.
+///
+/// Issue 940 SE-7: this confidence enters the Merkle leaf bytes
+/// (`octree.rs`), so the mean's reduction order is pinned — a sequential
+/// index-order `.sum()` fold, never the platform-lane `simd_sum_f32` whose
+/// horizontal reduce differs across aarch64/x86_64/wasm32.
 #[inline]
 pub fn precision_to_confidence(lambda: &[f32; 8]) -> f32 {
-    let mean_lambda = katgpt_types::simd::simd_sum_f32(lambda) * 0.125;
+    let mean_lambda: f32 = lambda.iter().copied().sum::<f32>() * 0.125;
     1.0 / (1.0 + (-(mean_lambda - 1.0)).exp()) // sigmoid
 }
 
@@ -396,6 +401,32 @@ mod tests {
         let low = precision_to_confidence(&[0.1f32; 8]);
         let high = precision_to_confidence(&[10.0f32; 8]);
         assert!(high > low, "higher precision should give higher confidence");
+    }
+
+    /// Issue 940 SE-7: the confidence enters the Merkle leaf bytes, so the
+    /// mean's reduction order is pinned — the sequential `.sum()` fold. On
+    /// the certified cancellation craft the sequential fold reads 3.0
+    /// (mean 0.375) while any lane-grouped fold reads 6.0 (mean 0.75), so
+    /// the exact-value assertion is load-bearing, not vacuous.
+    #[test]
+    fn precision_to_confidence_folds_in_index_order() {
+        let craft = [1e8f32, 1.0, 1.0, 1.0, -1e8, 1.0, 1.0, 1.0];
+        // The fold exactly as the function computes it: Σ index-order × 0.125.
+        let expected_mean = 3.0f32 * 0.125;
+        let expected = 1.0 / (1.0 + (-(expected_mean - 1.0)).exp());
+        assert_eq!(
+            precision_to_confidence(&craft).to_bits(),
+            expected.to_bits(),
+            "the precision mean must fold in ascending index order (3.0, not the lane-grouped 6.0)"
+        );
+        // Anti-regression witness: the lane-grouped mean (6.0 × 0.125 = 0.75)
+        // disagrees, so the pin above cannot pass by accident.
+        let lane_mean = 6.0f32 * 0.125;
+        assert_ne!(
+            precision_to_confidence(&craft).to_bits(),
+            (1.0 / (1.0 + (-(lane_mean - 1.0)).exp())).to_bits(),
+            "ordered and lane-grouped folds converged on the craft — re-adjudicate this test"
+        );
     }
 
     #[test]

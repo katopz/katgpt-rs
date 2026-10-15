@@ -76,12 +76,12 @@ were found; collection-dependence exists only in PICKS (below).
 | MB-3 `micro-belief/leaky.rs:155` | scalar `.sum()` | PINNED | belief → bridge | good |
 | MB-5 `micro-belief/bom.rs:352-359,279` `sample_k_states` / `dot_product_scorer` | `simd_dot_f32` per hypothesis | PLATFORM | distributional steering (in-process inference; nothing hashed/committed) | **LOCAL** (recorded) — winner selection consumed in-process. **AMENDED 2026-10-16 at fix unit ①**: the census's line range conflated two things — the `sample_k_states` Phase-1 base activation is BIT-COUPLED to `step()` by the pinned σ=0 degeneracy contract (`bom_sigma_zero_matches_step_attractor` asserts exact equality), so it went ordered WITH MB-2 (a LOCAL call there was not available without breaking a pinned test); only `dot_product_scorer` + the per-hypothesis winner pick stay platform SIMD/LOCAL (site comment added) |
 | SE-1 `katgpt-sense/reconstruction.rs:994-1000` `evolve_belief` | scalar fold over `[f32; 6]` | PINNED | belief → SyncBank → relation scalars (the 930 lane) | good |
-| **SE-2** `reconstruction.rs:1093` `evolve_belief_simd` (`sense_composition`) | `simd_sum_f32` | PLATFORM | belief → SyncBank → relation scalars; the in-repo test pins scalar-vs-SIMD ≤ 1e-5 and states "bit-equality would assert more than the underlying belief channel provides" | **PIN** (ordered sum) or demote the feature's replay claim in its docs — the fix unit picks; today the feature silently breaks cross-node bit-identity that SE-1 preserves |
-| **SE-3** `reconstruction.rs:791` `expand_simd` (`sense_composition`) | `simd_dot_f32` per module | PLATFORM | kind_activations → belief → SyncBank | **PIN with SE-2** |
-| **SE-4** `reconstruction.rs:925` `route_simd` (`sense_composition`) | `simd_sum_f32` mean → threshold mask | PLATFORM | which modules' evidence enters the belief (razor-edge flip at the mean threshold) | **PIN with SE-2** (scalar `route` at :879 is the pinned twin) |
+| **SE-2** `reconstruction.rs:1093` `evolve_belief_simd` (`sense_composition`) | `simd_sum_f32` | PLATFORM | belief → SyncBank → relation scalars; the in-repo test pins scalar-vs-SIMD ≤ 1e-5 and states "bit-equality would assert more than the underlying belief channel provides" | **PIN — LANDED 2026-10-16**: `evolve_belief_simd` DELEGATES to `evolve_belief` (the same `leaky_step` core + the same Σ[0..6] total — byte-identical by construction; the tolerance tests strengthened to exact `to_bits` equality). Side effect, recorded: the SIMD path's old early-return skipped the no-op-tick surprise/SyncBank observation the scalar path documents as intentional — the delegation aligns it. ⚠ Audit finding: the chain also rode `simd_fused_sub_scale_inplace`, whose scalar arm is FMA-shaped (`mul_add`) while its NEON/AVX2 arms are two-op — per-cell cross-platform divergence on scalar-fallback targets (see the elementwise note below). |
+| **SE-3** `reconstruction.rs:791` `expand_simd` (`sense_composition`) | `simd_dot_f32` per module | PLATFORM | kind_activations → belief → SyncBank | **PIN — LANDED 2026-10-16**: `expand_simd` DELEGATES to `expand` (the pinned `SenseModule::project` sequential-FMA fold); ⚠ CENSUS EXTENDED: the audit missed the two matrix paths — `expand_with_weights` (:852) and `expand_batch` (:393) fed the same activations through `simd_matmul_rows` (expand_with_weights is `reconstruct_inner`'s DEFAULT expand under the feature). Both now fold per row with a portable sequential FMA chain (`mul_add`, defined one-rounding semantics on every target); the retired 1.27× SIMD matvec advantage (20.4 vs 25.9 ns at 6×8) is recorded as the price. Pins: `expand_simd_is_the_scalar_expand_bitwise`, `expand_with_weights_folds_rows_in_index_order` (the len-8 craft: sequential 3.0 vs lane-grouped 6.0), `expand_batch_matches_expand_with_weights_bitwise`. Note: matrix-row values are pre-rounded `sign·scale`, so the matrix fold is NOT bit-identical to `project`'s exact-shape FMA — a deterministic feature-config-level difference (pick one path per fleet), recorded at the site. |
+| **SE-4** `reconstruction.rs:925` `route_simd` (`sense_composition`) | `simd_sum_f32` mean → threshold mask | PLATFORM | which modules' evidence enters the belief (razor-edge flip at the mean threshold) | **PIN — LANDED 2026-10-16**: `route_simd` DELEGATES to `route` (the pinned `.sum()` fold — bit-identical mask by construction); pin `route_simd_is_the_scalar_route_bitwise` (512-sample seeded battery + tie cases) |
 | SE-5 `sense/octree.rs:128-141` `embedding_to_ternary` | scalar fold (`scale_sum`) | PINNED | ternary dirs → `SenseModule::commit()` **BLAKE3** | good |
 | SE-6 `sense/schema_centroid.rs:44-52,185` | Welford scalar folds | PINNED (given ordered input slice) | centroid → seeded `KgEmbedding` → BLAKE3/Merkle | good — fix-time note: callers must pass deterministically-ordered classes |
-| **SE-7** `sense/bake.rs:92` `precision_to_confidence` | `simd_sum_f32(lambda)` | PLATFORM | confidence → **Merkle leaf bytes** (octree.rs:181,197) | **PIN** |
+| **SE-7** `sense/bake.rs:92` `precision_to_confidence` | `simd_sum_f32(lambda)` | PLATFORM | confidence → **Merkle leaf bytes** (octree.rs:181,197) | **PIN — LANDED 2026-10-16**: the mean folds through `lambda.iter().copied().sum()` (the source-pinned index order); pin `precision_to_confidence_folds_in_index_order` (the craft: sequential mean 0.375 vs lane-grouped 0.75 — visibly different sigmoids) |
 | SE-8 `sense/reconstruction_depth_invariance.rs:141` | delegates to SE-1 + scalar `sum_sq` folds | PINNED | RMS-rescaled belief → SyncBank | good |
 | **HL-1/2/3** `katgpt-hla/kernel.rs:123,194,474` | `simd_dot_f32` (`k_mq`, `q_mk`) | PLATFORM | **mutate `hla_moments`** — the Cold-tier Pod, BLAKE3-committed on freeze | **PIN — LANDED 2026-10-16**: all FOUR state-feeding dots → `dot_f32_ordered` — the census's three lines **plus the missed fourth site** `ahla_per_head_step` :637 (same committed `q_head.n` as `ahla_step`; found by classifying every `simd_dot_f32` in the crate by consumer). G2 duty discharged (Bench 939): the fix costs one +36.7 ns dot per step; whole-step A/B -1.1% .. +2.4% (within run scatter of the predicted +0.8%); readout denoms (HL-4) stay SIMD. Pins: `k_mq_folds_in_index_order_not_platform_order` + the AHLA twin (probe k at 2^-25 keeps mK bit-identical, `n[i] = 3·2^-25` exact). ⚠ One-time committed-bits change: `hla_moments` `h`/`n` arrays move at this upgrade (SK/CQV/G/mQ untouched — no reduction). |
 | HL-4 `kernel.rs:321-322,389-390,494` readout denoms | `simd_dot_f32` | PLATFORM | attention readout → logits → int token ids | **LOCAL** (recorded) — tokens, not bits, cross the wire |
@@ -98,7 +98,17 @@ were found; collection-dependence exists only in PICKS (below).
 
 Elementwise/axpy kernels (`simd_outer_product_acc`, `simd_transpose_matvec_acc`,
 `simd_add_inplace`, `SyncBank::observe`, …) are PINNED per cell (single-rounding
-FMA chains, no horizontal reduce) — not hazards.
+FMA chains, no horizontal reduce) — not hazards. ⚠ **AMENDED 2026-10-16 (SE-2
+fix unit)**: the classification's premise — "single-rounding FMA chains" — has
+a measured hole: `simd_fused_sub_scale_inplace`'s scalar-fallback arm is
+FMA-shaped (`v.mul_add(scale, -(sub·scale))`) while its NEON and AVX2 arms are
+two-op (`(v − sub) · scale`) — a scalar-fallback target (wasm32, non-AVX2
+x86_64) computes DIFFERENT per-cell bits than the SIMD targets for the same
+inputs. The one sync-boundary consumer (SE-2's `evolve_belief_simd`) is fixed
+by delegation; the remaining callers (`softmax_scaled`, the tiled-attention
+max-shift) are tolerance-domain (post-exp) — recorded, not fixed. A kernel-level
+shape unification (two-op everywhere, or FMA everywhere) is a follow-up if any
+future caller is exactness-domain.
 
 **Local-only candidates** (recorded, no action): `katgpt-sleep`
 (`predictability.rs:79`, `consume.rs:86/:103` — sleep-time cache + wake slot
@@ -221,6 +231,21 @@ total order · `dot_f32_ordered` + the `bridge_certified` certified pattern
    divergence pins for both state families (HLA `h`, AHLA `n`) added in
    kernel.rs tests.
 5. **SE-2/SE-3/SE-4/SE-7** — ordered kernels or recorded envelope demotion.
+   **LANDED 2026-10-16**: SE-2/SE-3-delegation + SE-4 delegate to the pinned
+   scalar cores (byte-identical by construction — the strongest form of
+   "pin"); the two matrix expand paths the census missed
+   (`expand_with_weights`/`expand_batch`) fold with a portable sequential
+   FMA chain; SE-7's mean folds through `.sum()`. Two census corrections
+   ride the unit: the missed matrix paths, and the elementwise
+   classification hole (`simd_fused_sub_scale_inplace` scalar arm is
+   FMA-shaped vs the SIMD arms' two-op — recorded, remaining callers are
+   tolerance-domain). Tests: 5 new pins + the two tolerance tests
+   strengthened to exact bit-equality. Validation: sense 25 default / 32
+   `sense_composition` / 37 all-three postures, clippy `-D warnings`
+   `--all-features`, katgpt-core 2157/2157 lib. ⚠ One-time committed-bits
+   change: a `sense_composition` node's activations/beliefs move at this
+   upgrade on every platform (the folds' values change in the last ULP on
+   non-cancellation inputs); scalar-posture nodes are untouched.
 6. **SP-2 / SP-3 / CL-1 / CL-2 / CL-3** — ordered.
 7. **DE-2** — canonical mass order + envelope doc.
 8. **NaN-hardening** — `sigmoid_calibration.rs` ×2 → `total_cmp`.

@@ -290,7 +290,8 @@ impl TripleEvidence {
 ///
 /// Materialized once from `NpcBrain` modules, then reused across all reconstruction
 /// steps. Avoids per-module ternary bit extraction in the hot loop, turning
-/// `expand()` from 6 individual `module.project()` calls into one `simd_matmul_rows`.
+/// `expand()` from 6 individual `module.project()` calls into one pinned
+/// index-order FMA fold per row (Issue 940 SE-3).
 ///
 /// Layout: `matrix[module_idx * 8 + dim] = sign × row_scale`
 /// where `sign ∈ {-1, 0, +1}` is extracted from `directions[dim]` bit `dim`.
@@ -306,8 +307,8 @@ impl ProjectionWeights {
     /// Pre-compute projection weights from brain modules.
     ///
     /// Extracts ternary signs and row scales into a contiguous `[f32; 48]` matrix
-    /// suitable for `simd_matmul_rows`. Zero-cost per reconstruction step — compute
-    /// once, use across all 3 steps.
+    /// consumed by the pinned index-order FMA fold (Issue 940 SE-3). Zero-cost
+    /// per reconstruction step — compute once, use across all 3 steps.
     /// Issue 007 Phase C: renamed from from_brain.
     #[inline]
     pub fn from_modules(modules: &[SenseModule]) -> Self {
@@ -370,10 +371,9 @@ impl BatchProjectionWeights {
     /// `belief_batch`: `[N × 8]` row-major (entity 0's belief, then entity 1's, etc.)
     /// `activations_out`: `[N × 6]` row-major output
     ///
-    /// For each entity, computes `[6×8] × [8] → [6]` raw dots, then sigmoid + confidence.
-    /// SIMD amortizes across all N × 6 = 6N dot products (each 8 elements).
-    ///
-    /// Wins when N ≥ 4: 24+ dot × 8 f32 = 192+ ops, NEON setup amortized.
+    /// For each entity, `[6×8] × [8] → [6]` raw dots (the same pinned
+    /// sequential FMA fold as [`ProjectionWeights`] consumers — Issue 940
+    /// SE-3), then sigmoid + confidence.
     #[cfg(feature = "sense_composition")]
     pub fn expand_batch(
         &self,
@@ -388,24 +388,17 @@ impl BatchProjectionWeights {
             let belief_off = e * 8;
             let act_off = e * 6;
 
-            // One matvec: [6×8] × [8] → [6] raw dots
-            let mut dots = [0.0f32; 6];
-            katgpt_types::simd::simd_matmul_rows(
-                &mut dots,
-                &self.weights.matrix,
-                &belief_batch[belief_off..belief_off + 8],
-                6,
-                8,
-            );
-
-            // Sigmoid + confidence. Uses katgpt_types::simd::fast_sigmoid for numerical
-            // equivalence with scalar `SenseModule::project` (the rational
-            // approximation overshoots (0,1) for |x| > 2.67 — see simd.rs docs).
-            // NOTE: `simd_sigmoid_inplace` was benchmarked and rejected for the
-            // 6-element expand path — see `expand_with_weights` for details.
+            // Issue 940 SE-3: same pinned fold as `expand_with_weights` —
+            // sequential FMA in index order, never the platform lane kernel.
             for m in 0..6 {
+                let row = &self.weights.matrix[m * 8..m * 8 + 8];
+                let belief = &belief_batch[belief_off..belief_off + 8];
+                let mut dot = 0.0f32;
+                for (w, b) in row.iter().zip(belief.iter()) {
+                    dot = w.mul_add(*b, dot);
+                }
                 activations_out[act_off + m] =
-                    self.weights.confidence[m] * katgpt_types::simd::fast_sigmoid(dots[m]);
+                    self.weights.confidence[m] * katgpt_types::simd::fast_sigmoid(dot);
             }
         }
     }
@@ -753,69 +746,37 @@ impl ReconstructionState {
         activations
     }
 
-    /// SIMD-optimized expand: vectorized ternary projection across all modules.
+    /// SIMD-optimized expand — DELEGATED to the scalar path (Issue 940 SE-3).
     ///
-    /// For each module, `project()` computes:
-    ///   `dot = Σ_i sign_i * belief[i] * directions[i].row_scale`
-    /// where `sign_i` is extracted from direction `i`'s ternary bits at position `i`.
-    ///
-    /// This builds per-module sign/scale arrays and uses `simd_dot_f32` for the
-    /// dot-product, letting SIMD handle the 8-element FMA chain in one vector op.
-    ///
-    /// **Scaling note**: At 6 modules × 8-dim belief, the SIMD setup overhead
-    /// (building `sign_scaled` array per module) exceeds the compute savings.
-    /// This method wins when module count or belief dimensionality scales up.
-    /// The default `reconstruct_simd()` path keeps expand scalar for this reason.
+    /// The activations feed `accumulate` → `evidence` → `evolve_belief` →
+    /// SyncBank (a sync-boundary quantity), so the projection dot must pin its
+    /// reduction order. The scalar `SenseModule::project` fold (sequential
+    /// FMA in index order) IS that pinned order, and this method's own
+    /// scaling note already conceded the SIMD shape loses at 6 modules × 8
+    /// dims — so the platform-lane `simd_dot_f32` variant is retired and this
+    /// name now produces the SAME BYTES as [`Self::expand`] by construction.
+    /// Kept as the `sense_composition`-path name for API compatibility.
     #[cfg(feature = "sense_composition")]
     pub fn expand_simd(&mut self, modules: &[SenseModule]) -> [f32; 6] {
-        let mut activations = [0.0f32; 6];
-
-        for module in modules {
-            let kind_idx = module.kind as usize;
-            if kind_idx >= 6 {
-                continue;
-            }
-
-            let n = module.n_directions as usize;
-
-            // Build sign × scale vector: sign_scaled[i] = sign_i * directions[i].row_scale
-            let mut sign_scaled = [0.0f32; 8];
-            for (i, item) in sign_scaled.iter_mut().enumerate().take(n) {
-                let dir = &module.directions[i];
-                let pos = ((dir.pos_bits >> i) & 1) as f32;
-                let neg = ((dir.neg_bits >> i) & 1) as f32;
-                *item = (pos - neg) * dir.row_scale;
-            }
-
-            // SIMD dot: sign_scaled · belief
-            let dot = katgpt_types::simd::simd_dot_f32(&sign_scaled, &self.belief, 8);
-
-            // Fast sigmoid * confidence. Uses katgpt_types::simd::fast_sigmoid for
-            // numerical equivalence with the scalar `SenseModule::project` path
-            // (the previous rational approximation `0.5 + x/(2+sqrt(4+x^2))`
-            // overshoots (0,1) for |x| > 2.67 — see simd.rs docs).
-            activations[kind_idx] = module.confidence * katgpt_types::simd::fast_sigmoid(dot);
-        }
-
-        activations
+        self.expand(modules)
     }
 
-    /// Batched expand: uses pre-computed `[6×8]` weight matrix for one-shot matvec.
+    /// Batched expand: materializes the `[6×8]` weight matrix on first call,
+    /// then reuses it for one pinned-fold pass per step (Issue 940 SE-3).
     ///
     /// On first call, materializes `ProjectionWeights` from `brain.modules` and caches
     /// it in `cached_weights`. Subsequent calls reuse the cache — the matrix only
     /// depends on the module directions (immutable during reconstruction), not the
     /// evolving belief state.
     ///
-    /// vs `expand()` (6 × module.project): replaces 6 individual 8-el ternary dot
-    /// products with one `simd_matmul_rows` call. The per-row overhead (NEON load,
-    /// horizontal sum) is amortized across all 6 rows in a single function call.
+    /// vs `expand()` (6 × module.project): identical dots in a different pinned
+    /// shape — the row values are the pre-rounded `sign·scale` products, so
+    /// the fold is one sequential FMA chain per row over the matrix (see
+    /// `expand_with_weights` for the exact cross-path note).
     ///
-    /// vs `expand_simd()`: avoids per-module `sign_scaled` array construction.
-    /// The weight matrix is computed once, not per module per step.
-    ///
-    /// **Benchmark note**: At 6×8 = 48 f32 ops, SIMD matmul is marginal vs scalar
-    /// auto-unrolled on Apple Silicon. This method shines when:
+    /// **Benchmark note**: the retired SIMD matvec's 1.27× per-step advantage
+    /// (20.4 ns vs 25.9 ns at 6×8) was traded for the sync-boundary pinned
+    /// order. This method still shines when:
     /// - Module count scales beyond 6
     /// - belief dimensionality scales beyond 8
     /// - Combined with multi-entity batch (see `BatchProjectionWeights`)
@@ -833,7 +794,7 @@ impl ReconstructionState {
         self.expand_with_weights(weights)
     }
 
-    /// Expand with pre-computed weights — zero overhead path.
+    /// Expand with pre-computed weights — the cached-weights path.
     ///
     /// Use when `ProjectionWeights` is created once per brain config change
     /// (not per entity per tick). This is the production path for multi-entity:
@@ -844,30 +805,31 @@ impl ReconstructionState {
     ///     // route + accumulate + evolve...
     /// }
     /// ```
+    ///
+    /// **Issue 940 SE-3**: the dots feed `kind_activations` → `evidence` →
+    /// `evolve_belief` → SyncBank (a sync-boundary quantity), so the row dot's
+    /// reduction order is PINNED: a sequential FMA fold in index order
+    /// (`mul_add` has defined one-rounding semantics on every target) — never
+    /// the platform-lane `simd_matmul_rows`, whose horizontal reduce differs
+    /// across aarch64/x86_64/wasm32. The measured 1.27× SIMD matvec advantage
+    /// (20.4 ns vs 25.9 ns at 6×8) is retired for this: the fold now runs at
+    /// scalar speed and the cached-weights API keeps its value. The row
+    /// values are the pre-rounded `sign·scale` products, so these dots are
+    /// NOT bit-identical to `SenseModule::project`'s exact-shape FMA — a
+    /// deterministic, feature-config-level difference (pick one path per
+    /// fleet), not a platform hazard.
     #[cfg(feature = "sense_composition")]
     #[inline(always)]
     pub fn expand_with_weights(&self, weights: &ProjectionWeights) -> [f32; 6] {
-        // One matvec: [6×8] × [8] → [6] raw dot products
-        let mut dots = [0.0f32; 6];
-        katgpt_types::simd::simd_matmul_rows(&mut dots, &weights.matrix, &self.belief, 6, 8);
-
-        // Elementwise sigmoid + confidence. Uses katgpt_types::simd::fast_sigmoid for
-        // numerical equivalence with scalar `SenseModule::project` (the rational
-        // approximation `0.5 + x/(2+sqrt(4+x^2))` overshoots (0,1) for |x| > 2.67).
-        //
-        // NOTE: `simd_sigmoid_inplace` was benchmarked here and REJECTED. On
-        // Apple Silicon NEON, libm `expf` is fast enough (~5 ns/call) that the
-        // 6-call scalar loop beats the SIMD polynomial path — the Cephes setup
-        // (10+ `vdupq` constants) + 1 SIMD chunk + 2-element scalar tail costs
-        // more than 6 libm calls. Padding to 8 helped the per-step expand
-        // (~25% faster) but regressed the full reconstruction cycle (~40 ns
-        // slower) due to register/icache pressure in the hot loop. The scalar
-        // `fast_sigmoid` loop is the GOAT here.
         let mut activations = [0.0f32; 6];
-        for i in 0..6 {
-            activations[i] = weights.confidence[i] * katgpt_types::simd::fast_sigmoid(dots[i]);
+        for m in 0..6 {
+            let row = &weights.matrix[m * 8..m * 8 + 8];
+            let mut dot = 0.0f32;
+            for (w, b) in row.iter().zip(self.belief.iter()) {
+                dot = w.mul_add(*b, dot);
+            }
+            activations[m] = weights.confidence[m] * katgpt_types::simd::fast_sigmoid(dot);
         }
-
         activations
     }
 
@@ -908,50 +870,19 @@ impl ReconstructionState {
         selected
     }
 
-    /// SIMD-optimized route: uses `simd_sum_f32` and `simd_max_f32` for the
-    /// reduction phase, keeping selection mask generation scalar (branchy,
-    /// not worth SIMD for 6 elements).
+    /// SIMD-optimized route — DELEGATED to the scalar path (Issue 940 SE-4).
     ///
-    /// Pads activations to 8 elements for SIMD alignment.
-    ///
-    /// **Scaling note**: At 6 activations, SIMD reduction overhead barely wins
-    /// over scalar `iter().sum()`. Useful as a building block for larger arrays.
+    /// The mask decides which modules' evidence enters the belief, and the
+    /// mean threshold is razor-edge — a platform-lane `simd_sum_f32` vs the
+    /// scalar `.sum()` could flip the mask at the boundary. The scalar
+    /// [`Self::route`] fold (index-order `.sum()`) IS the pinned order, and
+    /// this method's own scaling note conceded the SIMD reduction barely wins
+    /// at 6 activations — so this name now produces the SAME MASK as
+    /// [`Self::route`] by construction. Kept as the `sense_composition`-path
+    /// name for API compatibility.
     #[cfg(feature = "sense_composition")]
     pub fn route_simd(&self, activations: &[f32; 6]) -> [bool; 6] {
-        // Pad to 8 for SIMD alignment
-        let mut padded = [0.0f32; 8];
-        padded[..6].copy_from_slice(activations);
-
-        let total = katgpt_types::simd::simd_sum_f32(&padded);
-        if total < 1e-8 {
-            return [false; 6];
-        }
-
-        let mean = total * (1.0 / 6.0);
-        let mut selected = [false; 6];
-        let mut any_selected = false;
-        // Track the first max index with strict `>` so SIMD and scalar paths
-        // agree on tie-breaking (e.g. all-equal activations: both pick index 0).
-        // Seed from activations[0] (not the SIMD-reduced padded max, which would
-        // incorrectly consider the 2 zero-padding lanes when all activations
-        // are negative).
-        let mut max_idx = 0usize;
-        let mut max_val = activations[0];
-        for i in 0..6 {
-            let above = activations[i] > mean;
-            selected[i] = above;
-            any_selected |= above;
-            if activations[i] > max_val {
-                max_val = activations[i];
-                max_idx = i;
-            }
-        }
-
-        if !any_selected {
-            selected[max_idx] = true;
-        }
-
-        selected
+        self.route(activations)
     }
 
     /// Accumulate evidence from selected modules.
@@ -1073,55 +1004,22 @@ impl ReconstructionState {
         }
     }
 
-    /// SIMD-optimized belief evolution.
+    /// SIMD-optimized belief evolution — DELEGATED to the scalar path
+    /// (Issue 940 SE-2).
     ///
-    /// Uses `simd_sum_f32` for activation total and `simd_fused_sub_scale_inplace`
-    /// for the normalize-scale chain. For the 8-element belief array, the SIMD
-    /// benefit is marginal but ensures the hot path uses SIMD primitives
-    /// consistent with the rest of the codebase.
-    ///
-    /// Zero-allocation: uses stack-local `[f32; 8]` delta buffer.
+    /// The belief crosses the sync boundary (SyncBank observes it; the Issue
+    /// 930 relation scalars read it), so the SIMD path must produce the SAME
+    /// BYTES as the scalar path. The platform `simd_sum_f32` total and the
+    /// `simd_fused_sub_scale_inplace` chain were per-platform bit-unstable
+    /// (the elementwise kernel's scalar arm is FMA-shaped while its NEON/AVX2
+    /// arms are two-op — a recorded audit finding), so this name now runs the
+    /// SAME [`Self::evolve_belief`] `leaky_step` core with the SAME Σ[0..6]
+    /// total — byte-identical by construction, including the
+    /// observe-even-when-no-op'd discipline the scalar path documents. Kept
+    /// as the `sense_composition`-path name for API compatibility.
     #[cfg(feature = "sense_composition")]
     pub fn evolve_belief_simd(&mut self) {
-        let lr = self.config.belief_learning_rate;
-        let max_delta = self.config.max_belief_delta;
-
-        // SIMD sum of kind activations (zero-padded to [f32; 8] — sum is over the
-        // 6 distinct activations, matching the scalar path's Σ[0..6]).
-        let mut padded_activations = [0.0f32; 8];
-        padded_activations[..6].copy_from_slice(&self.evidence.kind_activations);
-        let total_activation = katgpt_types::simd::simd_sum_f32(&padded_activations);
-
-        if total_activation < 1e-8 {
-            return;
-        }
-
-        let t_min = total_activation.min(1.0);
-        let scale = lr * t_min / total_activation;
-
-        // Gather: KIND_MAP = [0,1,2,3,4,5,0,1] → lives once in
-        // TripleEvidence::kind_activations_padded() (Plan 276 T2.2 dedup).
-        let mut delta = self.evidence.kind_activations_padded();
-
-        // SIMD: delta = (delta - 0.5 * total) * scale  →  fused sub-scale
-        let sub_val = 0.5 * total_activation;
-        katgpt_types::simd::simd_fused_sub_scale_inplace(&mut delta, sub_val, scale);
-
-        // Clamp delta and apply to belief
-        for (d, h) in delta.iter_mut().zip(self.belief.iter_mut()) {
-            *d = d.clamp(-max_delta, max_delta);
-            *h = (*h + *d).clamp(-1.0, 1.0);
-        }
-
-        // Fusion F1 (Plan 277): SIMD path must feed the surprise kernel too —
-        // numerical equivalence with the scalar path is asserted in
-        // `evolve_belief_surprise_simd_matches_scalar`.
-        #[cfg(feature = "temporal_deriv")]
-        self.observe_surprise_inner();
-        // Issue 930: the SIMD path feeds the armed SyncBank too (same
-        // observation point as the scalar path).
-        #[cfg(feature = "sync_bank")]
-        self.observe_sync_bank_inner();
+        self.evolve_belief()
     }
 
     /// Run full reconstruction loop (scalar path).
@@ -1156,18 +1054,17 @@ impl ReconstructionState {
     /// Run reconstruction using pre-computed matvec for expand.
     ///
     /// Materializes `[6×8]` weight matrix on first step, then reuses it for
-    /// all subsequent steps. The expand becomes one `simd_matmul_rows` call
-    /// instead of 6 individual `module.project()` calls.
+    /// all subsequent steps. The expand fold runs in the pinned index-order
+    /// FMA form (Issue 940 SE-3) — platform-stable, no longer the SIMD
+    /// matvec (the 1.27× per-step advantage was traded for the sync-boundary
+    /// pinned order).
     ///
-    /// **Note**: Since the matvec path is now numerically equivalent to the
-    /// scalar path (both use `katgpt_types::simd::fast_sigmoid`), `reconstruct_inner`
-    /// dispatches to `expand_matvec` directly when `sense_composition` is on.
-    /// This function is kept for explicit callers that want the matvec path
-    /// without depending on feature-flag dispatch.
-    ///
-    /// **GOAT result**: Per-step expand is 1.27× faster than scalar (20.4ns vs 25.9ns).
-    /// Full-cycle parity depends on loop overhead — use `expand_with_weights()`
-    /// with a pre-computed `ProjectionWeights` for production multi-entity path.
+    /// **Note**: Since the matvec path uses the same `fast_sigmoid` as the
+    /// scalar path, `reconstruct_inner` dispatches to `expand_matvec` directly
+    /// when `sense_composition` is on. This function is kept for explicit
+    /// callers that want the matvec path without depending on feature-flag
+    /// dispatch. Use `expand_with_weights()` with a pre-computed
+    /// `ProjectionWeights` for the production multi-entity path.
     #[cfg(feature = "sense_composition")]
     pub fn reconstruct_matvec(&mut self, modules: &[SenseModule]) -> [f32; 6] {
         // Plan 283 T5.1: previous-step activations for the advantage gate.
@@ -1274,11 +1171,12 @@ impl ReconstructionState {
 
         loop {
             // Expand + route. When `sense_composition` is enabled, use the
-            // matvec path: weights are cached on first call (one-shot
-            // `simd_matmul_rows` for all 6 modules) and reused for every
-            // subsequent step. Benchmarks show ~1.27× per-step expand speedup
-            // (20.4ns vs 25.9ns). Numerically equivalent to scalar `expand`
-            // since both paths now use `katgpt_types::simd::fast_sigmoid`.
+            // matvec path: weights are cached on first call and reused for
+            // every subsequent step. The dots fold in the pinned index-order
+            // FMA form (Issue 940 SE-3) — the retired SIMD matvec's 1.27×
+            // per-step advantage was traded for the sync-boundary pinned
+            // order; the route/evolve halves delegate to the same pinned
+            // scalar cores (SE-2/SE-4).
             //
             // Constraint: a `ReconstructionState` is bound to one brain
             // configuration once `expand_matvec` is called (it caches the
@@ -1291,7 +1189,8 @@ impl ReconstructionState {
 
             self.accumulate(&selected, &activations);
 
-            // Evolve belief: SIMD path wins here (8-element fused sub-scale)
+            // Evolve belief: both halves run the same `leaky_step` core
+            // (Issue 940 SE-2 — the SIMD name delegates).
             #[cfg(feature = "sense_composition")]
             if simd_available {
                 self.evolve_belief_simd();
@@ -1683,7 +1582,9 @@ mod tests {
         assert!(!state.sufficient()); // step 0, max_steps 3
     }
 
-    /// Verify SIMD evolve_belief produces numerically equivalent results to scalar.
+    /// Verify SIMD evolve_belief produces the SAME BYTES as scalar (Issue 940
+    /// SE-2 — both names run the same `leaky_step` core; the previous 1e-4
+    /// tolerance covered the retired platform-lane total/sub-scale chain).
     #[cfg(feature = "sense_composition")]
     #[test]
     fn evolve_belief_simd_matches_scalar() {
@@ -1703,26 +1604,24 @@ mod tests {
         state_simd.accumulate(&selected, &activations);
         state_simd.evolve_belief_simd();
 
-        // Compare belief states — should be numerically close
-        let mut max_diff = 0.0f32;
+        // Compare belief states — byte-identical by construction now.
         for i in 0..8 {
-            let diff = (state_scalar.belief()[i] - state_simd.belief()[i]).abs();
-            max_diff = max_diff.max(diff);
+            assert_eq!(
+                state_scalar.belief()[i].to_bits(),
+                state_simd.belief()[i].to_bits(),
+                "belief[{i}] must be byte-identical across the scalar and SIMD names"
+            );
         }
-        assert!(
-            max_diff < 1e-4,
-            "SIMD and scalar evolve_belief should produce similar results, diff={max_diff}"
-        );
     }
 
-    /// Plan 277 T2.7 — surprise channel numerical equivalence between scalar
+    /// Plan 277 T2.7 — surprise channel equivalence between scalar
     /// `evolve_belief` and SIMD `evolve_belief_simd` paths.
     ///
     /// Both paths feed the same belief into the `TemporalDerivativeKernel<8>` via
-    /// `observe_surprise_inner()`. Since the belief itself is numerically
-    /// equivalent (asserted by `evolve_belief_simd_matches_scalar`) and the
-    /// surprise kernel is deterministic given its input, the surprise vectors
-    /// and norms MUST match to within f32 rounding tolerance.
+    /// `observe_surprise_inner()`. Since Issue 940 SE-2 both names run the
+    /// same `leaky_step` core, the belief — and therefore the surprise
+    /// vectors and norms — must be BIT-IDENTICAL (the previous f32-rounding
+    /// tolerance covered the retired platform-lane chain).
     ///
     /// Guards against a regression where someone edits only one path's surprise
     /// observe call (e.g. moves it before the leaky step, or removes it).
@@ -1738,7 +1637,7 @@ mod tests {
 
         // Run 10 ticks on each path so the surprise kernel builds up nonzero
         // (fast − slow) state — a single tick would only test the initial
-        // transient, not the steady-state divergence robustness.
+        // transient, not the steady-state behavior.
         let mut state_scalar = ReconstructionState::with_config(belief, config);
         let mut state_simd = ReconstructionState::with_config(belief, config);
         for tick in 0..10u32 {
@@ -1758,30 +1657,30 @@ mod tests {
             state_simd.evolve_belief_simd();
         }
 
-        // Compare the surprise vectors.
+        // Issue 940 SE-2: both names run the same `leaky_step` core, so the
+        // surprise vectors must now be BIT-IDENTICAL — the previous 1e-5
+        // tolerance covered the retired platform-lane total/sub-scale chain.
         let sv_scalar = state_scalar
             .surprise_vector()
             .expect("temporal_deriv on → surprise_vector is Some");
         let sv_simd = state_simd
             .surprise_vector()
             .expect("temporal_deriv on → surprise_vector is Some");
-        let mut max_vec_diff = 0.0f32;
         for i in 0..8 {
-            let diff = (sv_scalar[i] - sv_simd[i]).abs();
-            max_vec_diff = max_vec_diff.max(diff);
+            assert_eq!(
+                sv_scalar[i].to_bits(),
+                sv_simd[i].to_bits(),
+                "surprise vector must be byte-identical across the scalar and SIMD names"
+            );
         }
-        assert!(
-            max_vec_diff < 1e-5,
-            "surprise vector scalar vs SIMD diverged: max_diff={max_vec_diff:e}"
-        );
 
-        // Compare the surprise norms.
+        // Compare the surprise norms (same byte-identity law).
         let n_scalar = state_scalar.surprise_norm();
         let n_simd = state_simd.surprise_norm();
-        let norm_diff = (n_scalar - n_simd).abs();
-        assert!(
-            norm_diff < 1e-5,
-            "surprise_norm scalar vs SIMD diverged: scalar={n_scalar:e}, simd={n_simd:e}, diff={norm_diff:e}"
+        assert_eq!(
+            n_scalar.to_bits(),
+            n_simd.to_bits(),
+            "surprise_norm must be byte-identical across the scalar and SIMD names"
         );
     }
 
@@ -2214,5 +2113,184 @@ mod tests {
             !state.advantage_gate_halt(Some(&prev), &curr),
             "improving step must not halt"
         );
+    }
+
+    // ── Issue 940 SE-2/SE-3/SE-4: the sync-boundary folds are pinned ──
+
+    /// The certified len-8 cancellation craft: the sequential fold lands on
+    /// 3.0 (the +1s are lost to f32 spacing at 1e8, ulp 8, then re-added
+    /// after the 1e8/−1e8 cancellation); every reassociating lane kernel
+    /// pairs the cancellation inside one lane/accumulator group and keeps
+    /// its +1s → 6.0. Mirrors `bridge_is_the_ordered_fold_not_the_platform_kernel`
+    /// (katgpt-micro-belief) and the bench_844 G1c pin.
+    fn issue940_craft_row() -> [f32; 8] {
+        [1e8, 1.0, 1.0, 1.0, -1e8, 1.0, 1.0, 1.0]
+    }
+
+    /// Deterministic small helper brain — one module per kind, alternating
+    /// ternary signs so the projection dots exercise positive and negative
+    /// terms. Zero octree bits (not read by expand).
+    fn issue940_test_modules() -> Vec<SenseModule> {
+        (0..6)
+            .map(|k| SenseModule {
+                octree_bits: [0u64; 4],
+                directions: std::array::from_fn(|i| katgpt_types::TernaryDir {
+                    pos_bits: if (i + k) % 2 == 0 { 1 << i } else { 0 },
+                    neg_bits: if (i + k) % 2 == 1 { 1 << i } else { 0 },
+                    row_scale: 0.5 + 0.1 * i as f32,
+                }),
+                confidence: 0.9,
+                kind: match k {
+                    0 => katgpt_types::SenseKind::CommonSense,
+                    1 => katgpt_types::SenseKind::FighterSense,
+                    2 => katgpt_types::SenseKind::GameTheorySense,
+                    3 => katgpt_types::SenseKind::SpatialSense,
+                    4 => katgpt_types::SenseKind::SocialSense,
+                    _ => katgpt_types::SenseKind::SkillSense,
+                },
+                version: 1,
+                octree_depth: 0,
+                n_directions: 8,
+                _reserved: 0,
+                commitment: [0u8; 32],
+            })
+            .collect()
+    }
+
+    /// SE-3: `expand_simd` must produce the SAME BYTES as the scalar
+    /// `expand` — the activations feed the sync-boundary belief, so the SIMD
+    /// name delegates to the pinned `SenseModule::project` fold.
+    #[cfg(feature = "sense_composition")]
+    #[test]
+    fn expand_simd_is_the_scalar_expand_bitwise() {
+        let modules = issue940_test_modules();
+        let mut scalar = ReconstructionState::new([0.3, -0.7, 0.1, 0.5, -0.4, 0.2, 0.6, -0.8]);
+        let mut simd = ReconstructionState::new([0.3, -0.7, 0.1, 0.5, -0.4, 0.2, 0.6, -0.8]);
+        let a = scalar.expand(&modules);
+        let b = simd.expand_simd(&modules);
+        for i in 0..6 {
+            assert_eq!(
+                a[i].to_bits(),
+                b[i].to_bits(),
+                "expand_simd[{i}] must be bit-identical to expand (delegation is the pin)"
+            );
+        }
+    }
+
+    /// SE-3: the cached-weights fold must be the sequential FMA chain in
+    /// index order — on the craft row the sequential fold reads 3.0 while
+    /// ANY reassociating lane grouping reads 6.0, so the assertion is
+    /// load-bearing, not vacuous.
+    #[cfg(feature = "sense_composition")]
+    #[test]
+    fn expand_with_weights_folds_rows_in_index_order() {
+        use katgpt_types::simd::fast_sigmoid;
+
+        let mut weights = ProjectionWeights {
+            matrix: [0.0; 48],
+            confidence: [1.0; 6],
+        };
+        weights.matrix[0..8].copy_from_slice(&issue940_craft_row());
+        let state = ReconstructionState::new([1.0; 8]);
+        let acts = state.expand_with_weights(&weights);
+        assert_eq!(
+            acts[0].to_bits(),
+            fast_sigmoid(3.0).to_bits(),
+            "the row dot must fold in ascending index order (3.0, not the lane-grouped 6.0)"
+        );
+        // Anti-regression witness: on this input the lane-grouped fold
+        // disagrees, so the pin above cannot pass by accident.
+        assert_ne!(
+            acts[0].to_bits(),
+            fast_sigmoid(6.0).to_bits(),
+            "ordered and lane-grouped folds converged on the craft — re-adjudicate this test"
+        );
+    }
+
+    /// SE-3: the batch path shares the pinned fold with `expand_with_weights`.
+    #[cfg(feature = "sense_composition")]
+    #[test]
+    fn expand_batch_matches_expand_with_weights_bitwise() {
+        let modules = issue940_test_modules();
+        let weights = ProjectionWeights::from_modules(&modules);
+        let batch = BatchProjectionWeights::new(&modules, 3);
+        let beliefs: Vec<f32> = [0.3f32, -0.7, 0.1, 0.5, -0.4, 0.2, 0.6, -0.8]
+            .iter()
+            .cycle()
+            .take(24)
+            .copied()
+            .collect();
+        let mut out = [0.0f32; 18];
+        batch.expand_batch(&beliefs, &mut out);
+        for e in 0..3usize {
+            let belief: [f32; 8] = beliefs[e * 8..e * 8 + 8].try_into().unwrap();
+            let state = ReconstructionState::new(belief);
+            let acts = state.expand_with_weights(&weights);
+            for m in 0..6 {
+                assert_eq!(
+                    out[e * 6 + m].to_bits(),
+                    acts[m].to_bits(),
+                    "expand_batch[{e}][{m}] must share the pinned fold"
+                );
+            }
+        }
+    }
+
+    /// SE-4: `route_simd` must produce the SAME MASK as the scalar `route` —
+    /// the mean threshold is razor-edge, so the SIMD name delegates to the
+    /// pinned `.sum()` fold. Seeded battery over varied activations plus the
+    /// all-equal tie case.
+    #[cfg(feature = "sense_composition")]
+    #[test]
+    fn route_simd_is_the_scalar_route_bitwise() {
+        let state = ReconstructionState::new([0.0; 8]);
+        let mut rng = katgpt_types::Rng::new(0x940_5E4);
+        for _ in 0..512 {
+            let acts: [f32; 6] = std::array::from_fn(|_| 2.0 * rng.uniform() - 1.0);
+            assert_eq!(
+                state.route_simd(&acts),
+                state.route(&acts),
+                "route_simd must be the scalar route (delegation is the pin)"
+            );
+        }
+        // Tie cases: all-equal (mean == every element → none strictly above
+        // → the max fallback fires) and all-zero (early return).
+        assert_eq!(state.route_simd(&[0.5; 6]), state.route(&[0.5; 6]));
+        assert_eq!(state.route_simd(&[0.0; 6]), state.route(&[0.0; 6]));
+    }
+
+    /// SE-2: `evolve_belief_simd` must produce the SAME belief BYTES as the
+    /// scalar `evolve_belief` — both run the shared `leaky_step` core with
+    /// the same Σ[0..6] total now.
+    #[cfg(feature = "sense_composition")]
+    #[test]
+    fn evolve_belief_simd_is_the_scalar_path_bitwise() {
+        let config = ReconstructionConfig::default();
+        let belief = [0.3, 0.7, 0.1, 0.5, 0.4, 0.2, 0.6, 0.8];
+        let selected = [true, false, true, false, true, false];
+        let mut scalar = ReconstructionState::with_config(belief, config);
+        let mut simd = ReconstructionState::with_config(belief, config);
+        for tick in 0..10u32 {
+            let scale = 0.5 + 0.1 * tick as f32;
+            let acts = [
+                0.5 * scale,
+                0.2 * scale,
+                0.8 * scale,
+                0.1 * scale,
+                0.3 * scale,
+                0.0,
+            ];
+            scalar.accumulate(&selected, &acts);
+            scalar.evolve_belief();
+            simd.accumulate(&selected, &acts);
+            simd.evolve_belief_simd();
+        }
+        for i in 0..8 {
+            assert_eq!(
+                scalar.belief[i].to_bits(),
+                simd.belief[i].to_bits(),
+                "belief[{i}] must be byte-identical across the scalar and SIMD names"
+            );
+        }
     }
 }
