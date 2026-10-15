@@ -42,9 +42,22 @@
 //!
 //! Newton-Schulz with fixed iteration count + Frobenius pre-scaling is
 //! deterministic across platforms (no eigensolver, no convergence loop,
-//! no platform-specific LAPACK). G3 determinism test (Issue 001) verifies
-//! bit-identical `R` on `x86_64`, `aarch64`, `wasm32` for the same anchor
-//! pair. (See `tests/procrustes_determinism.rs`.)
+//! no platform-specific LAPACK).
+//!
+//! **Issue 940 (2026-10-16): the pipeline is bit-deterministic end to end.**
+//! Every reduction on a committed path folds in ascending index order —
+//! `M = BᵀA` accumulates each cell per-index through the single-rounding FMA
+//! kernels (whose tails round like their bodies), `‖M‖_F` and the uncentered
+//! residual dots fold through `dot_f32_ordered`, the centered residual and
+//! the polar iteration are plain sequential scalar loops, and
+//! `sqrt`/scale are IEEE-exact operations. The same anchors produce the same
+//! rotation bits, the same `m_norm` and the same residual on any node. The
+//! module pin test (`m_norm_folds_in_index_order_not_platform_order`)
+//! crafts anchors whose `M` makes the platform SIMD sum-of-squares diverge
+//! from the ordered fold and asserts the report lands on the ordered bits.
+//! (The pre-940 G3 cross-platform claim was documented but its cited test
+//! file, `tests/procrustes_determinism.rs`, never existed — the pin below is
+//! the first executable record.)
 //!
 //! # Raw vs Latent boundary (AGENTS.md)
 //!
@@ -64,7 +77,7 @@
 //! - Schönemann, P. (1966) — original Procrustes solution via SVD.
 //! - Higham, N. (1986) — Newton-Schulz iteration for polar factor.
 
-use katgpt_core::simd::{simd_dot_f32, simd_fused_scale_acc, simd_scale_inplace, simd_sum_sq};
+use katgpt_core::simd::{dot_f32_ordered, simd_fused_scale_acc, simd_scale_inplace};
 
 /// Configuration for [`orthogonal_procrustes`].
 #[derive(Clone, Copy, Debug)]
@@ -441,8 +454,16 @@ pub fn orthogonal_procrustes(
         }
     }
 
-    // ── 4. Compute ‖M‖_F ────────────────────────────────────────────
-    let m_norm = simd_sum_sq(&scratch.m[..dd], dd).sqrt();
+    // ── 4. Compute ‖M‖_F ────────────────────────────────────────
+    // Issue 940 SP-2: the ordered fold, not the platform `simd_sum_sq` —
+    // m_norm pre-scales M̃, the polar factor of which is the rotation applied
+    // to align embeddings before the entity match is committed as a raw KG
+    // triple with a confidence scalar; a platform-lane reduction here makes
+    // that committed value node-dependent. Σ x[i]² IS dot(x, x), so the
+    // ordered dot is the exact sequential sum of squares. Cost is one O(d²)
+    // sequential pass against the O(d³)×15 scalar Newton-Schulz iteration
+    // that follows — unmeasurable.
+    let m_norm = dot_f32_ordered(&scratch.m[..dd], &scratch.m[..dd]).sqrt();
     if !m_norm.is_finite() || m_norm == 0.0 {
         return Err(ProcrustesError::DegenerateAnchors);
     }
@@ -524,7 +545,12 @@ pub fn orthogonal_procrustes(
                     }
                     predicted[cprime] = acc;
                 } else {
-                    predicted[cprime] = simd_dot_f32(r_row, a_row, d);
+                    // Issue 940 SP-2 (census addendum): the residual feeds the
+                    // confidence scalar of the committed KG triple in this
+                    // module's designed deployment, and the centered arm above
+                    // already folds sequentially — both arms fold the same way
+                    // now.
+                    predicted[cprime] = dot_f32_ordered(r_row, a_row);
                 }
             }
             // residual_sq += ‖b_centered_row - predicted‖²
@@ -813,7 +839,7 @@ mod tests {
         let mut out = vec![0.0; d];
         for r in 0..d {
             let row = &m[r * d..(r + 1) * d];
-            out[r] = simd_dot_f32(row, v, d);
+            out[r] = dot_f32_ordered(row, v);
         }
         out
     }
@@ -1117,7 +1143,7 @@ mod tests {
             for j in 0..4 {
                 let r_col_i = [r[0 * 4 + i], r[4 + i], r[2 * 4 + i], r[3 * 4 + i]];
                 let r_col_j = [r[0 * 4 + j], r[4 + j], r[2 * 4 + j], r[3 * 4 + j]];
-                rtr[i * 4 + j] = simd_dot_f32(&r_col_i, &r_col_j, 4);
+                rtr[i * 4 + j] = dot_f32_ordered(&r_col_i, &r_col_j);
             }
         }
         for i in 0..4 {
@@ -1339,6 +1365,95 @@ mod tests {
             report.det > 0.0,
             "det should be positive after flip, got {}",
             report.det
+        );
+    }
+
+    /// Issue 940 SP-2 pin: `m_norm` folds in ascending index order, not the
+    /// platform `simd_sum_sq` lane order. The anchors make `M = BᵀA` land on
+    /// a crafted 16-cell vector (d=4 → d²=16): `A`'s first four rows are
+    /// e₀..e₃ (the rest zero) so `M[c'][c] = b[c][c']`, and `B`'s first four
+    /// rows spell Mᵀ with M's first eight cells `[1e8, s, s, s, -1e8, s, s,
+    /// s]`. Squares never cancel, so whether a reassociating fold diverges
+    /// from the sequential one is backend rounding structure: on aarch64 the
+    /// NEON kernel's final `vaddvq` is sequential and small cells are
+    /// swallowed at the 1e16-scale ulp (~2³⁰) in BOTH folds — divergence
+    /// appears only when the small cells' squares sit at the ulp boundary
+    /// (s = 32768 → s² = 2³⁰ = 1 ulp of 1e16). The test probes a small
+    /// deterministic candidate list for the divergent craft ON THE PLATFORM
+    /// RUNNING THE TEST (ordered `2.0000005e16` vs platform
+    /// `2.0000007e16` on aarch64), asserts the report lands on the ordered
+    /// bits, and says so instead of passing vacuously if no candidate
+    /// diverges (the backends-have-converged case that would need
+    /// re-adjudication).
+    #[test]
+    fn m_norm_folds_in_index_order_not_platform_order() {
+        use katgpt_core::simd::{dot_f32_ordered, simd_sum_sq};
+
+        // (big, small) cell pairs; smalls near the ulp boundary of big².
+        const CANDIDATES: [(f32, f32); 12] = [
+            (1e8, 32768.0),
+            (1e8, 24576.0),
+            (1e8, 40960.0),
+            (1e8, 16384.0),
+            (2e8, 32768.0),
+            (1e8, 49152.0),
+            (1e8, 1.0),
+            (1e8, 8192.0),
+            (5e8, 32768.0),
+            (3e8, 32768.0),
+            (1e8, 20000.0),
+            (1e8, 30000.0),
+        ];
+        let mut m_cells = None;
+        let mut ordered_sq = 0.0f32;
+        'outer: for &(b, s) in &CANDIDATES {
+            let mut m = [0.0f32; 16];
+            m[0] = b;
+            m[1] = s;
+            m[2] = s;
+            m[3] = s;
+            m[4] = -b;
+            m[5] = s;
+            m[6] = s;
+            m[7] = s;
+            let o = dot_f32_ordered(&m, &m);
+            if o != simd_sum_sq(&m, 16) {
+                m_cells = Some(m);
+                ordered_sq = o;
+                break 'outer;
+            }
+        }
+        let m_expected = m_cells
+            .expect("no candidate diverges: SIMD sum_sq converged with the sequential fold; re-adjudicate this pin");
+
+        let d = 4usize;
+        let n = 2 * d; // == default min_anchors
+        // A = identity (first 4 rows), zero rows after.
+        let mut a = vec![0.0f32; n * d];
+        for c in 0..d {
+            a[c * d + c] = 1.0;
+        }
+        // B's first four rows = Mᵀ (so M[c'][c] = b[c][c']), zeros after.
+        let mut b = vec![0.0f32; n * d];
+        for c in 0..d {
+            for cprime in 0..d {
+                b[c * d + cprime] = m_expected[cprime * d + c];
+            }
+        }
+
+        let cfg = ProcrustesConfig {
+            center: false, // centering would destroy the crafted cells
+            compute_residual: false,
+            ..Default::default()
+        };
+        let mut rot = vec![0.0f32; d * d];
+        let mut scratch = ProcrustesScratch::new(n, d);
+        let report = orthogonal_procrustes(&a, &b, n, d, &mut rot, &mut scratch, &cfg)
+            .expect("crafted anchors should succeed");
+        assert_eq!(
+            report.m_norm.to_bits(),
+            ordered_sq.sqrt().to_bits(),
+            "m_norm is not the ordered fold (simd_sum_sq regression?)"
         );
     }
 }

@@ -86,8 +86,11 @@ impl<T> ClaimVerifier<T> for SigmoidProjectionVerifier<'_> {
             embedding.len(),
             self.direction_dim
         );
-        // SIMD dot on the full k-dim vectors.
-        let dot = katgpt_core::simd::simd_dot_f32(embedding, d, self.direction_dim);
+        // Issue 940 CL-2: ordered fold, not the platform lane kernel — the
+        // sigmoid of this dot is the per-claim verdict, the atomic input of
+        // the reliability aggregation (CL-1) and the vote winner; a
+        // platform-lane reduction would make the verdict node-dependent.
+        let dot = katgpt_core::simd::dot_f32_ordered(embedding, d);
         // Scalar sigmoid — single value, not a vector path; f32::exp is fine.
         sigmoid(dot)
     }
@@ -222,5 +225,46 @@ mod tests {
     fn new_panics_on_zero_dim() {
         let dirs = FlatDirections::from_rows(&[&[1.0]]);
         let _ = SigmoidProjectionVerifier::new(&dirs, 0);
+    }
+
+    /// Issue 940 CL-2 pin: the verdict dot folds in ascending index order,
+    /// not the platform lane kernel. The embedding is the certified len-16
+    /// cancellation craft against a ones direction — ordered dot 3.0, any
+    /// reassociating backend 6.0 — so a reversion to `simd_dot_f32` flips
+    /// the verdict bits and this reds.
+    #[test]
+    fn verdict_dot_folds_in_index_order_not_platform_order() {
+        use katgpt_core::simd::{dot_f32_ordered, fast_sigmoid, simd_dot_f32};
+
+        let mut emb = [0.0f32; 16];
+        emb[0] = 1e8;
+        emb[1] = 1.0;
+        emb[2] = 1.0;
+        emb[3] = 1.0;
+        emb[4] = -1e8;
+        emb[5] = 1.0;
+        emb[6] = 1.0;
+        emb[7] = 1.0;
+        let ones = [1.0f32; 16];
+
+        // The craft is load-bearing: the two folds disagree on this input.
+        assert_ne!(
+            dot_f32_ordered(&emb, &ones),
+            simd_dot_f32(&emb, &ones, 16),
+            "craft no longer diverges: the pin stopped being load-bearing"
+        );
+
+        let dirs = FlatDirections::from_rows(&[&ones]);
+        let verifier = SigmoidProjectionVerifier::new(&dirs, 16);
+        // T is not inferable from the args — name it via the trait.
+        use crate::clr::traits::ClaimVerifier;
+        let v = ClaimVerifier::<()>::verify_embedding(&verifier, &emb, 0);
+        assert_eq!(
+            v.to_bits(),
+            fast_sigmoid(dot_f32_ordered(&emb, &ones)).to_bits(),
+            "verdict is not sigmoid of the ordered fold (platform-kernel regression?)"
+        );
+        // The platform value is a DIFFERENT verdict — the flip is observable.
+        assert_ne!(v.to_bits(), fast_sigmoid(6.0f32).to_bits());
     }
 }

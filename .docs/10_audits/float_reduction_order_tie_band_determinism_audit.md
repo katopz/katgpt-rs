@@ -86,12 +86,12 @@ were found; collection-dependence exists only in PICKS (below).
 | **HL-1/2/3** `katgpt-hla/kernel.rs:123,194,474` | `simd_dot_f32` (`k_mq`, `q_mk`) | PLATFORM | **mutate `hla_moments`** — the Cold-tier Pod, BLAKE3-committed on freeze | **PIN — LANDED 2026-10-16**: all FOUR state-feeding dots → `dot_f32_ordered` — the census's three lines **plus the missed fourth site** `ahla_per_head_step` :637 (same committed `q_head.n` as `ahla_step`; found by classifying every `simd_dot_f32` in the crate by consumer). G2 duty discharged (Bench 939): the fix costs one +36.7 ns dot per step; whole-step A/B -1.1% .. +2.4% (within run scatter of the predicted +0.8%); readout denoms (HL-4) stay SIMD. Pins: `k_mq_folds_in_index_order_not_platform_order` + the AHLA twin (probe k at 2^-25 keeps mK bit-identical, `n[i] = 3·2^-25` exact). ⚠ One-time committed-bits change: `hla_moments` `h`/`n` arrays move at this upgrade (SK/CQV/G/mQ untouched — no reduction). |
 | HL-4 `kernel.rs:321-322,389-390,494` readout denoms | `simd_dot_f32` | PLATFORM | attention readout → logits → int token ids | **LOCAL** (recorded) — tokens, not bits, cross the wire |
 | **PE-1** `katgpt-personality/kernel.rs:227-235` `drift` | `simd_dot_f32(&d_recent, &ONES)` | PLATFORM | `w` → `PersonalitySnapshot.blake3` — "The **commitment** … IS synced as an audit event when a hot-swap occurs" (snapshot.rs:12-14) | **PIN — LANDED 2026-10-16**: `dot_f32_ordered(&d_recent, &ONES)` (the mul-by-1.0 is an exact f32 identity, so this IS Σ d_recent in ascending order); pin test `drift_folds_in_ascending_index_order_not_platform_order` (cancellation craft, w lands on 3.0 bit-exact); provenance law noted in snapshot.rs |
-| **SP-2** `katgpt-spectral/procrustes.rs:445` `m_norm` | `simd_sum_sq(..).sqrt()` pre-scale | PLATFORM | `M̃` → Newton-Schulz → aligned-entity match "committed as a raw KG triple with a confidence scalar" (module doc; riir-chain Issue 001) | **PIN** |
-| **SP-3** `spectral/spectral_rewire.rs:308` (`spectral_rewire`, opt-in) | `simd_dot_f32` building `M = A·V` | PLATFORM | purified weight deltas → BLAKE3-committed freeze/thaw overlays | **PIN** |
+| **SP-2** `katgpt-spectral/procrustes.rs:445` `m_norm` | `simd_sum_sq(..).sqrt()` pre-scale | PLATFORM | `M̃` → Newton-Schulz → aligned-entity match "committed as a raw KG triple with a confidence scalar" (module doc; riir-chain Issue 001) | **PIN — LANDED 2026-10-16**: `dot_f32_ordered(&m, &m).sqrt()` (Σx² IS dot(x,x) — the exact sequential sum of squares; cost one O(d²) pass against the O(d³)×15 scalar Newton-Schulz — unmeasurable), plus the census-missed **uncentered residual arm** `simd_dot_f32` → ordered (the residual feeds the confidence scalar in the module's designed deployment, and the centered arm already folded sequentially — both arms consistent now). Pin `m_norm_folds_in_index_order_not_platform_order`: anchors craft `M` onto a 16-cell ulp-boundary vector (squares can't cancel — on aarch64 divergence appears only at s = 32768, s² = 2³⁰ = 1 ulp of 1e16; the test probes a per-platform candidate list and refuses to pass vacuously). Module doc's determinism section upgraded to the end-to-end bit claim (M per-cell FMA + ordered norm + scalar polar iteration + IEEE-exact sqrt/scale); the pre-940 G3 claim cited a test file that never existed — this pin is the first executable record. |
+| **SP-3** `spectral/spectral_rewire.rs:308` (`spectral_rewire`, opt-in) | `simd_dot_f32` building `M = A·V` | PLATFORM | purified weight deltas → BLAKE3-committed freeze overlays | **PIN — LANDED 2026-10-16**: `dot_f32_ordered(a_row_i, v_col_j)`; steps 2/4/5 already folded per-index through single-rounding `mul_add`, so this was the one platform hole in the projection. Pin `rewiring_matrix_folds_in_index_order_not_platform_order` (driven through the real private `project_core` with a rank-1 shape whose algebra is bit-exact: `u_col(0) = e₀`, `v_col(0) = ones`, `delta[0][:]` the certified len-16 cancellation craft → M[0][0] = 3.0 not the platform 6.0, and the single cell propagates bit-exactly through B and ΔW*). Price recorded: r² dots of d_in go scalar-fold — offline freeze-time path, correctness-first. |
 | SP-1 `spectral/hla_eigenbasis.rs:571-585` | `simd_dot_f32` power iteration | PLATFORM | eigenbasis — "stay local to the NPC — never synced" (file doc :41-45); provenance hashes the INPUT window, not eigvecs | **LOCAL** (recorded, by the file's own law) |
-| **CL-1** `katgpt-claim/clr/vote.rs:133,232` | `simd_sum_f32(row)/m` reliability mean | PLATFORM | CLR verdict reliability → compaction gate / jury | **PIN** (verdict = decision surface) |
-| **CL-2** `claim/clr/verifier.rs:90` | `simd_dot_f32` → sigmoid verdict | PLATFORM | per-claim verdicts → CL-1 inputs | **PIN with CL-1** |
-| **CL-3** `claim/clr/mgpo.rs:83` `allocate_budget` | `simd_sum_f32(weights)` | PLATFORM | proportional allocation `.floor()` — integer flip at boundary → different sampling budgets | **PIN** |
+| **CL-1** `katgpt-claim/clr/vote.rs:133,232` | `simd_sum_f32(row)/m` reliability mean | PLATFORM | CLR verdict reliability → compaction gate / jury | **PIN — LANDED 2026-10-16**: both sites fold `row.iter().sum::<f32>()` (m is small — paper default 5 — so the sequential fold is also the faster shape); pin `reliability_mean_folds_in_index_order_not_platform_order` (table verifier hands out the certified len-16 craft as M=16 verdicts: ordered mean 3/16 vs platform 6/16 → orders-of-magnitude reliability flip at the `^M` gate; expectation recomputed in-test so the powf path stays portable) |
+| **CL-2** `claim/clr/verifier.rs:90` | `simd_dot_f32` → sigmoid verdict | PLATFORM | per-claim verdicts → CL-1 inputs | **PIN — LANDED 2026-10-16**: `dot_f32_ordered(embedding, d)` (also removes the unchecked-len hazard — the ordered fold asserts equal lengths where the kernel trusted the caller's `direction_dim`); pin `verdict_dot_folds_in_index_order_not_platform_order` (craft embedding vs ones direction: verdict is `fast_sigmoid(3.0)` bits, provably ≠ the platform's `fast_sigmoid(6.0)`) |
+| **CL-3** `claim/clr/mgpo.rs:83` `allocate_budget` | `simd_sum_f32(weights)` | PLATFORM | proportional allocation `.floor()` — integer flip at boundary → different sampling budgets | **PIN — LANDED 2026-10-16**: `weights.iter().sum()`; pin `budget_sum_folds_in_index_order_not_platform_order` (certified len-16 craft as weights: ordered sum 3.0 → seed-0 budget 3.33e9, platform sum 6.0 → 1.67e9 — the floor flip is a 2× allocation change; weights deliberately violate the documented non-negative domain because the pin targets the sum's fold order, noted in-test) |
 | **DE-2** `katgpt-dec/stokes_calculus.rs:287-292,358-363` | TWO mass paths, each a pinned scalar fold but in DIFFERENT orders; repo test pins agreement at 1e-4, naming "float accumulation-order differences between the two paths" (:810) | PINNED×2, mutually divergent | belief-region mass → stampede trigger (`zone_density.rs:431`), conservation checks | **CANONICALIZE** — pick ONE order (the indexed form) as the replay-compared mass; the other stays diagnostic with the 1e-4 envelope documented |
 | DE-1 `stokes_calculus.rs:80` `belief_mass_divergence` | scalar `.sum()` of abs | PINNED | divergence scalar → curiosity / ICT branching | good |
 | DE-3/DE-4 + `katgpt-dec` latent-field folds | scalar folds / `katgpt_dec::simd` source-pinned twin (NOTE: different bits than the types-crate kernel — one implementation, two spellings) | PINNED | local solver/latent state | good |
@@ -104,11 +104,24 @@ a measured hole: `simd_fused_sub_scale_inplace`'s scalar-fallback arm is
 FMA-shaped (`v.mul_add(scale, -(sub·scale))`) while its NEON and AVX2 arms are
 two-op (`(v − sub) · scale`) — a scalar-fallback target (wasm32, non-AVX2
 x86_64) computes DIFFERENT per-cell bits than the SIMD targets for the same
-inputs. The one sync-boundary consumer (SE-2's `evolve_belief_simd`) is fixed
+input. The one sync-boundary consumer (SE-2's `evolve_belief_simd`) is fixed
 by delegation; the remaining callers (`softmax_scaled`, the tiled-attention
 max-shift) are tolerance-domain (post-exp) — recorded, not fixed. A kernel-level
 shape unification (two-op everywhere, or FMA everywhere) is a follow-up if any
 future caller is exactness-domain.
+
+⚠ **AMENDED 2026-10-16 (SP-2 fix unit, second instance + a REPAIR)**: the same
+audit found the INVERTED shape in the sibling `simd_fused_scale_acc` (and its
+f16 twin): the SIMD bodies are FMA (`vfmaq_f32`/`_mm256_fmadd_ps`) but the
+NEON/AVX2 tail loops were two-op (`+= scale * src`) while the scalar arm
+(wasm32 et al.) is all-`mul_add` — tail cells diverged per-cell across
+platforms/lengths. Unlike the sub_scale variant this one had a sync-boundary
+consumer (procrustes builds the KG-committed `M` through it at `len = d`,
+arbitrary dim), so the KERNEL was repaired at the root, not worked around:
+all four tails now round `scale.mul_add(s, *dst)` — single-rounding fused on
+every platform, every length. ⚠ One-time committed-bits change: tail cells of
+odd-length calls through `simd_fused_scale_acc{,_f16}` move (procrustes `M`,
+manifold_power_iter_router accumulators; attention callers are tolerance-domain).
 
 **Local-only candidates** (recorded, no action): `katgpt-sleep`
 (`predictability.rs:79`, `consume.rs:86/:103` — sleep-time cache + wake slot
@@ -246,7 +259,33 @@ total order · `dot_f32_ordered` + the `bridge_certified` certified pattern
    change: a `sense_composition` node's activations/beliefs move at this
    upgrade on every platform (the folds' values change in the last ULP on
    non-cancellation inputs); scalar-posture nodes are untouched.
-6. **SP-2 / SP-3 / CL-1 / CL-2 / CL-3** — ordered.
+6. **SP-2 / SP-3 / CL-1 / CL-2 / CL-3 — LANDED 2026-10-16** (fix unit ⑥,
+   one commit): SP-2 `m_norm` → `dot_f32_ordered(&m,&m).sqrt()` **plus the
+   census-missed uncentered residual arm** (:527 `simd_dot_f32` → ordered —
+   confidence-scalar feeder, and it makes both center arms
+   reduction-consistent); SP-3 `M = A·V_r` → ordered (steps 2/4/5 already
+   sequential FMA); CL-1 both reliability means → `row.iter().sum()`; CL-2
+   verdict dot → ordered (also fixes an unchecked-len hazard); CL-3 budget
+   sum → `iter().sum()`. PLUS the kernel repair the census surfaced:
+   `simd_fused_scale_acc{,_f16}` tails were two-op vs FMA bodies/scalar arm
+   (the unit-⑤ hole class, inverted) — procrustes builds the KG-committed M
+   through it, so the four tails were fixed to single-rounding `mul_add` at
+   the root. Pins: `m_norm_folds_in_index_order_not_platform_order`
+   (per-platform ulp-boundary craft search — squares can't cancel; refuses
+   to pass vacuously), `rewiring_matrix_folds_in_index_order_not_platform_order`
+   (real `project_core`, bit-exact rank-1 algebra, 3.0 vs 6.0),
+   `reliability_mean_folds_in_index_order_not_platform_order`,
+   `verdict_dot_folds_in_index_order_not_platform_order`,
+   `budget_sum_folds_in_index_order_not_platform_order`. Validation:
+   katgpt-claim 57 lib (default posture — clr is default-on), katgpt-spectral
+   104 procrustes / 101 rewire / 120 combined (GATED postures — both modules
+   are opt-in features; the default lib run compiles them to nothing, the
+   green-zero trap), clippy `-D warnings` at all three postures, downstream:
+   katgpt-canon gated tests 1+5+2, katgpt-speculative 305, katgpt-core 2157,
+   katgpt-sense 25, katgpt-forward 131, katgpt-types 162. ⚠ One-time
+   committed-bits change: procrustes `m_norm`/rotations/residuals,
+   spectral-rewire `M`/ΔW*/overlays, CLR reliabilities + verdicts + MGPO
+   budgets, and the fused-scale-acc tail cells all move at this upgrade.
 7. **DE-2** — canonical mass order + envelope doc.
 8. **NaN-hardening** — `sigmoid_calibration.rs` ×2 → `total_cmp`.
    **LANDED 2026-10-16** — gated-posture validated (see the Part B note:

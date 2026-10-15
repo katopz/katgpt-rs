@@ -25,8 +25,6 @@
 //! normalize across seeds and destroy per-seed independence: a seed at `p=0.5`
 //! should always get weight 1.0 regardless of how many other seeds exist.
 
-use katgpt_core::simd::simd_sum_f32;
-
 /// MGPO sampling weight: `exp(-γ * |2p - 1|)`.
 ///
 /// Peaks at `p = 0.5` (maximum-entropy / calibration boundary), decays toward
@@ -80,7 +78,10 @@ pub fn allocate_budget(weights: &[f32], total_budget: usize) -> Vec<usize> {
     if weights.is_empty() {
         return Vec::new();
     }
-    let sum: f32 = simd_sum_f32(weights);
+    // Issue 940 CL-3: ordered fold, not the platform `simd_sum_f32` — the
+    // sum divides every weight and floors to an integer sampling budget; a
+    // platform-lane reduction flips allocations at floor boundaries.
+    let sum: f32 = weights.iter().sum();
     let inv = 1.0 / sum;
     let mut counts: Vec<usize> = Vec::with_capacity(weights.len());
     let mut allocated = 0usize;
@@ -152,5 +153,52 @@ mod tests {
     #[should_panic(expected = "total_budget must be > 0")]
     fn allocate_budget_panics_on_zero_budget() {
         let _ = allocate_budget(&[1.0, 1.0], 0);
+    }
+
+    /// Issue 940 CL-3 pin: the budget sum folds in ascending index order,
+    /// not the platform `simd_sum_f32`. The weights are the certified len-16
+    /// cancellation craft (ordered sum 3.0, any reassociating backend 6.0) —
+    /// deliberately outside the documented non-negative domain, because the
+    /// pin targets the SUM's fold order, not the allocation semantics; the
+    /// negative entries simply floor-cast to 0. A reversion to the platform
+    /// kernel doubles the normalizer and halves seed 0's budget.
+    #[test]
+    fn budget_sum_folds_in_index_order_not_platform_order() {
+        use katgpt_core::simd::simd_sum_f32;
+
+        let mut weights = [0.0f32; 16];
+        weights[0] = 1e8;
+        weights[1] = 1.0;
+        weights[2] = 1.0;
+        weights[3] = 1.0;
+        weights[4] = -1e8;
+        weights[5] = 1.0;
+        weights[6] = 1.0;
+        weights[7] = 1.0;
+
+        // The craft is load-bearing: the two folds disagree on this row.
+        assert_ne!(
+            simd_sum_f32(&weights),
+            weights.iter().sum::<f32>(),
+            "craft no longer diverges: the pin stopped being load-bearing"
+        );
+
+        let total = 100usize;
+        let alloc = allocate_budget(&weights, total);
+        // Recompute the expectation with the production expression order
+        // (w * (1/sum) * total).floor() over the ORDERED sum — portable.
+        let ordered_sum = weights.iter().sum::<f32>();
+        let expected0 = (weights[0] * (1.0f32 / ordered_sum) * total as f32).floor() as usize;
+        assert_eq!(
+            alloc[0], expected0,
+            "budget normalizer is not the ordered fold (simd_sum_f32 regression?)"
+        );
+        // The platform normalizer gives a materially different budget — the
+        // floor flip the audit row is about is observable, not theoretical.
+        let platform_sum = simd_sum_f32(&weights);
+        assert_ne!(
+            (weights[0] * (1.0f32 / platform_sum) * total as f32).floor() as usize,
+            alloc[0]
+        );
     }
 }

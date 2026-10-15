@@ -42,7 +42,6 @@ use crate::clr::brevity::brevity_tiebreak;
 use crate::clr::scratch::ClrScratch;
 use crate::clr::traits::{ClaimExtractor, ClaimVerifier};
 use crate::clr::types::{Cluster, ReliabilityScore, Trajectory, VoteResult};
-use katgpt_core::simd::simd_sum_f32;
 
 /// Run the full CLR vote and return a [`VoteResult`] audit trail.
 ///
@@ -127,10 +126,13 @@ where
     }
 
     // Step 3: per-trajectory reliability = (mean_m v_k,m)^M.
+    // Issue 940 CL-1: the mean folds in index order (`.sum()`), not the
+    // platform `simd_sum_f32` — reliability feeds the cluster totals Σ r_k
+    // and the winner pick (compaction gate / jury), a decision surface.
     let reliability_slice = &mut scratch.reliability[..k_count];
     for k in 0..k_count {
         let row = &scratch.verdicts[k * m..k * m + m];
-        let mean_v = simd_sum_f32(row) / m as f32;
+        let mean_v = row.iter().sum::<f32>() / m as f32;
         reliability_slice[k] = reliability_gate(mean_v, m);
     }
 
@@ -227,9 +229,10 @@ where
     }
 
     // Step 3: reliability gate.
+    // Issue 940 CL-1: ordered fold (see the clr_vote twin above).
     for k in 0..k_count {
         let row = &scratch.verdicts[k * m..k * m + m];
-        let mean_v = simd_sum_f32(row) / m as f32;
+        let mean_v = row.iter().sum::<f32>() / m as f32;
         scratch.reliability[k] = reliability_gate(mean_v, m);
     }
 
@@ -704,6 +707,89 @@ mod tests {
         assert!(
             reliability > 1.0,
             "5-member cluster reliability should be > 1.0, got {reliability}"
+        );
+    }
+
+    /// Issue 940 CL-1 pin: the verdict mean folds in ascending index order,
+    /// not the platform `simd_sum_f32`. A table verifier hands out the
+    /// certified len-16 cancellation craft as the M=16 verdicts — ordered
+    /// sum 3.0, any reassociating backend 6.0 — so the reliability gate sees
+    /// mean 3/16 vs 6/16 and a reversion to the platform kernel flips the
+    /// returned reliability by orders of magnitude.
+    #[test]
+    fn reliability_mean_folds_in_index_order_not_platform_order() {
+        use katgpt_core::simd::simd_sum_f32;
+
+        const M: usize = 16;
+        let mut craft = [0.0f32; M];
+        craft[0] = 1e8;
+        craft[1] = 1.0;
+        craft[2] = 1.0;
+        craft[3] = 1.0;
+        craft[4] = -1e8;
+        craft[5] = 1.0;
+        craft[6] = 1.0;
+        craft[7] = 1.0;
+
+        // The craft is load-bearing: the two folds disagree on this row.
+        assert_ne!(
+            simd_sum_f32(&craft),
+            craft.iter().sum::<f32>(),
+            "craft no longer diverges: the pin stopped being load-bearing"
+        );
+
+        struct TableVerifier {
+            table: [f32; M],
+        }
+        impl ClaimVerifier<()> for TableVerifier {
+            fn verify_embedding(&self, _embedding: &[f32], direction_idx: usize) -> f32 {
+                self.table[direction_idx]
+            }
+        }
+        struct NullExtractor;
+        impl ClaimExtractor<()> for NullExtractor {
+            fn extract(&self, _trajectory: &Trajectory<()>) -> Vec<Claim<()>> {
+                (0..M)
+                    .map(|_| Claim {
+                        embedding: vec![0.0; 1],
+                        payload: (),
+                    })
+                    .collect()
+            }
+        }
+
+        let traj = Trajectory::<()> {
+            outcome: (),
+            tokens_or_steps: 1,
+            claims: vec![],
+            log_probs: None,
+        };
+        let config = ClrConfig {
+            k: 1,
+            m: M,
+            embedding_dim: 1,
+            ..ClrConfig::default()
+        };
+        let mut scratch = ClrScratch::new(config.k, config.m, config.embedding_dim);
+
+        let (_, reliability) = clr_vote_minimal(
+            std::slice::from_ref(&traj),
+            &NullExtractor,
+            &TableVerifier { table: craft },
+            &config,
+            &|_a: &(), _b: &()| true,
+            &mut scratch,
+        );
+
+        // Ordered mean = 3/16; the gate at M=16 is `powf`. The expectation is
+        // recomputed with the same expression so the pin stays portable — the
+        // platform mean (6/16) would give a reliability orders of magnitude
+        // larger, so any fold reversion flips this assert.
+        let ordered_mean = craft.iter().sum::<f32>() / M as f32;
+        assert_eq!(
+            reliability.to_bits(),
+            ordered_mean.powf(M as f32).to_bits(),
+            "reliability mean is not the ordered fold (simd_sum_f32 regression?)"
         );
     }
 }

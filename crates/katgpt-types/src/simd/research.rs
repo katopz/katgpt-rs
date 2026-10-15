@@ -1490,7 +1490,12 @@ unsafe fn neon_fused_scale_acc(dst: &mut [f32], src: &[f32], scale: f32, len: us
         }
 
         while i < len {
-            *dst.get_unchecked_mut(i) += scale * *src.get_unchecked(i);
+            // Issue 940 per-cell law: the tail MUST round like the SIMD body
+            // (single-rounding FMA) and like the scalar arm (mul_add), or the
+            // tail cells diverge per-cell across platforms/lengths — procrustes
+            // feeds this kernel len = d (arbitrary dim) on a committed path.
+            let s = *src.get_unchecked(i);
+            *dst.get_unchecked_mut(i) = scale.mul_add(s, *dst.get_unchecked(i));
             i += 1;
         }
     }
@@ -1516,7 +1521,10 @@ unsafe fn avx2_fused_scale_acc(dst: &mut [f32], src: &[f32], scale: f32, len: us
         }
 
         while i < len {
-            *dst.get_unchecked_mut(i) += scale * *src.get_unchecked(i);
+            // Issue 940 per-cell law: single-rounding FMA tail (matches the
+            // SIMD body above and the scalar arm), never a two-op `+=`.
+            let s = *src.get_unchecked(i);
+            *dst.get_unchecked_mut(i) = scale.mul_add(s, *dst.get_unchecked(i));
             i += 1;
         }
     }
@@ -1608,10 +1616,11 @@ unsafe fn neon_fused_scale_acc_f16(dst: &mut [f32], src_f16: &[half::f16], scale
             i += 4;
         }
 
-        // Scalar tail.
+        // Scalar tail — Issue 940 per-cell law: single-rounding FMA like the
+        // vector body and the scalar arm, never a two-op `+=`.
         while i < len {
             let s = (*src_f16.get_unchecked(i)).to_f32();
-            *dst.get_unchecked_mut(i) += scale * s;
+            *dst.get_unchecked_mut(i) = scale.mul_add(s, *dst.get_unchecked(i));
             i += 1;
         }
     }
@@ -1649,8 +1658,10 @@ unsafe fn avx2_fused_scale_acc_f16(dst: &mut [f32], src_f16: &[half::f16], scale
         }
 
         while i < len {
+            // Issue 940 per-cell law: single-rounding FMA tail (matches the
+            // SIMD body above and the scalar arm), never a two-op `+=`.
             let s = (*src_f16.get_unchecked(i)).to_f32();
-            *dst.get_unchecked_mut(i) += scale * s;
+            *dst.get_unchecked_mut(i) = scale.mul_add(s, *dst.get_unchecked(i));
             i += 1;
         }
     }

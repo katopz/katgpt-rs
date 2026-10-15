@@ -44,7 +44,7 @@
 //! 1.5B–32B LLM weights; our 64×64 / 128×128 matrices are unvalidated at that
 //! scale. See `.benchmarks/423_*`.
 
-use katgpt_core::simd::simd_dot_f32;
+use katgpt_core::simd::dot_f32_ordered;
 use katgpt_core::{SvdResultScratch, SvdScratch, thin_svd_into};
 
 // Issue 124 (resolved 2026-07-10): the one-sided Jacobi SVD substrate in
@@ -305,7 +305,13 @@ where
         let a_row_i = &a_buf[i * d_in..(i + 1) * d_in]; // contiguous, length d_in
         for j in 0..r {
             let v_col_j = v_col(j); // length d_in, contiguous
-            m_buf[i * r + j] = simd_dot_f32(a_row_i, v_col_j, d_in);
+            // Issue 940 SP-3: ordered fold, not the platform lane kernel — M
+            // feeds B → ΔW*, the purified weight delta that lands in
+            // BLAKE3-committed freeze/thaw overlays; the platform reduction
+            // would make the committed overlay node-dependent. The other
+            // projection steps (2/4/5) already fold per-index through
+            // single-rounding `mul_add`, so this was the one platform hole.
+            m_buf[i * r + j] = dot_f32_ordered(a_row_i, v_col_j);
         }
     }
 
@@ -1464,5 +1470,82 @@ mod tests {
             "delta_star should match on-manifold component, rel err = {}",
             star_err / star_norm
         );
+    }
+
+    /// Issue 940 SP-3 pin: `project_core`'s `M = A·V_r` folds through the
+    /// ordered dot, not the platform lane kernel. Driven through the REAL
+    /// `project_core` (same module — it is private by design) with a crafted
+    /// rank-1 shape whose algebra makes every step bit-exact: `u_col(0) = e₀`
+    /// (d_out = 1) so `A[0][:] = delta[0][:]` exactly, `v_col(0) = ones(16)`,
+    /// and `delta[0][:]` the certified len-16 cancellation craft — on which
+    /// the ordered dot reads 3.0 while every reassociating backend reads 6.0
+    /// (the `ordered_dot_differs_from_simd_dot` craft). B = U·M and
+    /// ΔW* = B·Vᵀ then propagate that single cell, so the whole output flips
+    /// if the fold reverts to platform order.
+    #[test]
+    fn rewiring_matrix_folds_in_index_order_not_platform_order() {
+        use katgpt_core::simd::{dot_f32_ordered, simd_dot_f32};
+
+        let d_in = 16usize;
+        let mut delta_row = [0.0f32; 16];
+        delta_row[0] = 1e8;
+        delta_row[1] = 1.0;
+        delta_row[2] = 1.0;
+        delta_row[3] = 1.0;
+        delta_row[4] = -1e8;
+        delta_row[5] = 1.0;
+        delta_row[6] = 1.0;
+        delta_row[7] = 1.0;
+
+        // The craft is load-bearing: the two folds disagree on this row.
+        assert_ne!(
+            dot_f32_ordered(&delta_row, &[1.0f32; 16]),
+            simd_dot_f32(&delta_row, &[1.0f32; 16], 16),
+            "craft no longer diverges: the pin stopped being load-bearing"
+        );
+
+        let d_out = 1usize;
+        let r = 1usize;
+        let u = [1.0f32]; // U (1×1): u_col(0) = [1.0]
+        let v = [1.0f32; 16]; // V column: ones
+
+        let mut a_buf = vec![0.0f32; r * d_in];
+        let mut m_buf = vec![0.0f32; r * r];
+        let mut b_buf = vec![0.0f32; d_out * r];
+        let mut delta_star_buf = vec![0.0f32; d_out * d_in];
+        let mut residual_buf = vec![0.0f32; d_out * d_in];
+
+        let out = project_core(
+            &delta_row,
+            d_out,
+            d_in,
+            r,
+            d_out * d_in,
+            &mut a_buf,
+            &mut m_buf,
+            &mut b_buf,
+            &mut delta_star_buf,
+            &mut residual_buf,
+            |i| {
+                let _ = i;
+                &u[..]
+            },
+            |j| {
+                let _ = j;
+                &v[..]
+            },
+        );
+
+        // Ordered fold: Σ craft = 1e8 +1 +1 +1 −1e8 +1 +1 +1 = 3.0 exactly.
+        assert_eq!(
+            out.rewiring_matrix[0].to_bits(),
+            3.0f32.to_bits(),
+            "M[0][0] is not the ordered fold (platform-kernel regression?)"
+        );
+        // The single M cell propagates bit-exactly: B[0][0] = 1·3.0, then
+        // ΔW*[0][j] = 3.0·1.0 for every j.
+        for &cell in out.delta_star {
+            assert_eq!(cell.to_bits(), 3.0f32.to_bits());
+        }
     }
 }
