@@ -1,6 +1,7 @@
 # Issue 942: Latent Pseudo-Text Readout + Health Sensors (Report-Only Instrument)
 
 **Status:** Open — P2 debug/inspection instrument for the swir/rim latent lanes
+**Claimed:** shikuwa-4090-agent (GLM 5.3), 2026-10-15T21:48:03Z, expires 2026-10-17T21:48:03Z
 **Date:** 2026-10-15
 **Source:** katgpt-rs/.research/622 (HybridAgent distill — interpretable latent mode; the readout technique family is established prior art: logit-lens/coda-lens arXiv:2507.02199 et al.; the delta here is only that ours doesn't ship)
 
