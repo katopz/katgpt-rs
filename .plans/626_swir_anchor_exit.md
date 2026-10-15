@@ -1,7 +1,8 @@
 # Plan 626: SwiR Anchor-Exit — Boundary-Argmax Span Termination (Modelless)
 
 **Date:** 2026-10-15
-**Status:** Active — Phase 0 (probe / kill gate)
+> **Status:** Active — Phase 0 (probe / kill gate)
+> **Claimed:** katgpt-rs-idle-626, 1792102437, expires 2026-10-18T22:14:00Z
 **Research:** [katgpt-rs/.research/622_HybridAgent_Hybrid_Latent_Text_Agents.md](../.research/622_HybridAgent_Hybrid_Latent_Text_Agents.md)
 **Source paper:** [arXiv:2610.18861](https://arxiv.org/abs/2610.18861) HybridAgent (anchor exit, trained form) + trained-form prior arXiv:2610.17189 (implicit-readout exit); modelless adaptation unclaimed
 **Target:** `crates/katgpt-transformer/src/swir/` (controller extension) + Cargo feature `swir_anchor_exit` (implies `swir_switch_thinking`)
