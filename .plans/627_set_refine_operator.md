@@ -6,6 +6,8 @@ Issue 090 C2 (the Jeva fusion follow-up; the issue text is the seed spec). The
 promotion decision stays gated on the MEASURED GOAT (§4) — nothing here promotes
 or wires by default.
 
+**Claimed:** 4090-setrefine, epoch 2026-10-15T23:26Z, expires 2026-10-17T23:26Z (T1-T3)
+
 ## 1. Substrate-first verdict (the gate this plan exists to record)
 
 Vocabulary translation searched 3+ name variants across `katgpt-rs/**/*.rs`,
@@ -31,6 +33,35 @@ Vocabulary translation searched 3+ name variants across `katgpt-rs/**/*.rs`,
   `semantic_route` (Bench 149), the `--rubric-probe` lane's route-agreement
   characterization (context==state-alone 59.7% — the measured gap a
   set-conditioned term would close or consciously not close).
+
+
+**AMENDED 2026-10-16 (T1 claim, second substrate pass at implementation time):** the
+verdict above is INCOMPLETE — one more pass found the KERNEL substrate the table's
+vocabulary missed (the vocabulary-translation trap the skill warns about: "cross-Datapoint
+Set Attention" matches none of `set_refine`/`option_interaction`/`preference_reversal`/
+`cross_option`/`option_conditioned`/`set_dependent`):
+
+- **`set_attention` (Plan 354, opt-in feature `set_attention`)** ships
+  `set_sigmoid_attention_into`: `h_i + (gamma/N) * sum_j sigma((q_i.k_j)/sqrt(k)*beta) *
+  (v_j - h_i)` with identity projections shipped (`identity_projection`), `w_v: Option`
+  (None = identity values), zero-alloc caller-owned scratch, and G1
+  permutation-equivariance (bit-exact) + G4 alloc gates ALREADY SHIPPED
+  (`tests/set_attention_g1_g5.rs`). The C2 operator is the single-query /
+  identity-projection special case: state `x` = row 0, options `k_i` = rows 1..=N, `w_q =
+  w_k = identity`, `w_v = None`, `beta = sqrt(d)/tau` => `alpha_i = sigma(dot(x, k_i)/tau)
+  = w_i` exactly. Options are READ ONLY (the kernel writes only `output`) — S4
+  immutability by construction.
+- **Residual form (amends the section-2 formula):** the shipped form is the N-normalized
+  PULL form `x' = x + (gamma/N) * sum_i w_i * (k_i - x)` rather than the raw additive
+  `x + g * sum_i w_i * k_i` — the `/N` makes gamma invariant to set size (structurally
+  solving the S4 blowup concern: the sum mass cannot grow with N) and the `-x` self-damp
+  keeps `||x'||` near `||x||` at high option mass. Same mechanism class (sigmoid-gated
+  kernel blend, options immutable, sum-symmetric). T1 ships the kernel's form; the suite
+  pins whichever form ships.
+
+**REVISED VERDICT: the operator is NOT new substrate — it is a thin composition (~60-80 LOC
+wrapper) over `set_sigmoid_attention_into`, feature `set_refine = ["set_attention"]`.**
+The genuinely NEW part is the S1-S5 decision-plane suite (Plan 354's tests are entity-plane).
 
 **Verdict: the operator itself is NEW, small substrate.** ~100–150 LOC + types +
 probe suite + benches. File in katgpt-core (this repo — modelless inference
@@ -92,7 +123,7 @@ test, run at every posture:
 ## 5. Execution order (each its own session slice)
 
 - [ ] T1 katgpt-core: `set_refine` module (feature `set_refine`, opt-in) —
-      operator + types.rs + S1–S5 unit suite. Gate: `cargo test -p katgpt-core
+      operator + types.rs + S1–S5 unit suite. REVISED per the amendment: a thin composition wrapper over `set_sigmoid_attention_into` (`set_refine = ["set_attention"]`), NOT a fresh kernel — the original ~100-150 LOC estimate covered machinery Plan 354 already ships. Gate: `cargo test -p katgpt-core
       --features set_refine --lib`, clippy `-D warnings` default + all-features.
 - [ ] T2 reflex: engine seam (flag-gated, default-off) + the harness A/B arm —
       NOT wired into any shipped posture; the lane refuses unless the feature is
