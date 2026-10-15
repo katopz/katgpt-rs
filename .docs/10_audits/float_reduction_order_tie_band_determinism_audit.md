@@ -72,7 +72,7 @@ were found; collection-dependence exists only in PICKS (below).
 |---|---|---|---|---|
 | **MB-1** `katgpt-micro-belief/types.rs:157-177` `project_to_scalars_bridge` | `simd_dot_f32` per direction row → `fast_sigmoid` | PLATFORM | **THE 5 synced affect scalars** (latent→raw bridge; types.rs:90-91 "cross the sync boundary raw … need bit-identical deterministic replay"; bridge.rs:20-23 claims "Bit-identical across runs (G1.1)" — per-run only, not cross-node) | **PIN — LANDED 2026-10-16**: `dot_f32_ordered` + docs upgraded to the cross-node claim; divergence test `bridge_is_the_ordered_fold_not_the_platform_kernel` (len-16 craft, mirrors the certified test) |
 | **MB-2** `micro-belief/attractor.rs:155-163,198-211` `AttractorKernel` | `simd_dot_f32` per row (weights × state) | PLATFORM | belief vector `s_t` → MB-1 scalars | **PIN with MB-1 — LANDED 2026-10-16**: all three dot sites (`step`, `precompute_wx_dot`, `step_with_precomputed_wx`) → `dot_f32_ordered`; the ILP now lives across rows. Measured cost: G1.4 informational 270 → **491.7 ns/step** at dim=32 in release (the sequential fold is ~1.8×; the test was already failing its 100 ns bar before, stays informational; ~1% of one core at 1000 NPC × 20 Hz) |
-| **MB-4** `micro-belief/bom_arena.rs:343,444` | `simd_dot_f32(..).to_bits() as u64` → RNG seed → K hypotheses → **mean committed back into `state`** | PLATFORM | belief state (→ MB-1) | **PIN** — hash the ordered dot; a platform-dependent float hashed into a seed diverges the whole hypothesis set cross-platform |
+| **MB-4** `micro-belief/bom_arena.rs:343,444` | `simd_dot_f32(..).to_bits() as u64` → RNG seed → K hypotheses → **mean committed back into `state`** | PLATFORM | belief state (→ MB-1) | **PIN — LANDED 2026-10-16**: both planner seeds fold the obs dot through `dot_f32_ordered(&state[..dim], &observation[..dim])`, closing the cross-platform chain seed → queries → hypotheses → mean → `state` → bridge |
 | MB-3 `micro-belief/leaky.rs:155` | scalar `.sum()` | PINNED | belief → bridge | good |
 | MB-5 `micro-belief/bom.rs:352-359,279` `sample_k_states` / `dot_product_scorer` | `simd_dot_f32` per hypothesis | PLATFORM | distributional steering (in-process inference; nothing hashed/committed) | **LOCAL** (recorded) — winner selection consumed in-process. **AMENDED 2026-10-16 at fix unit ①**: the census's line range conflated two things — the `sample_k_states` Phase-1 base activation is BIT-COUPLED to `step()` by the pinned σ=0 degeneracy contract (`bom_sigma_zero_matches_step_attractor` asserts exact equality), so it went ordered WITH MB-2 (a LOCAL call there was not available without breaking a pinned test); only `dot_product_scorer` + the per-hypothesis winner pick stay platform SIMD/LOCAL (site comment added) |
 | SE-1 `katgpt-sense/reconstruction.rs:994-1000` `evolve_belief` | scalar fold over `[f32; 6]` | PINNED | belief → SyncBank → relation scalars (the 930 lane) | good |
@@ -202,7 +202,9 @@ total order · `dot_f32_ordered` + the `bridge_certified` certified pattern
    change: personality `w`/`r_expected` trajectories and every
    `PersonalitySnapshot.blake3` minted after a drift step move at this
    upgrade (re-baseline downstream audit-event commitments).
-3. **MB-4** — hash the ordered dot.
+3. **MB-4** — hash the ordered dot. **LANDED 2026-10-16** — both planner
+   seeds; `nonergodic_g5_identification` (BoM-baseline quality gate) green
+   at the new seeds.
 4. **HL-1/2/3** — ordered dots (bench the scalar-fold cost at decode-loop
    scale before landing; G2 duty).
 5. **SE-2/SE-3/SE-4/SE-7** — ordered kernels or recorded envelope demotion.

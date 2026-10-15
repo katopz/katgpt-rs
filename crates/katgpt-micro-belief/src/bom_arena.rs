@@ -340,7 +340,12 @@ impl<K: BoMSampler> BeliefPlanner for BoMMinimaxPlanner<K> {
         // The actual noise values are reproducible because the harness feeds
         // the same state+observation sequence to both arms.
         let tick_salt: u64 = 0x9E37_79B9_7F4A_7C15;
-        let obs_hash = katgpt_types::simd::simd_dot_f32(state, observation, dim).to_bits() as u64;
+        // Issue 940 (MB-4): the seed must be platform-stable — a platform-lane
+        // SIMD dot hashed here diverges the whole hypothesis set cross-platform
+        // (queries → hypotheses → committed state → the synced bridge
+        // scalars). The ordered fold pins the bits.
+        let obs_hash =
+            katgpt_types::simd::dot_f32_ordered(&state[..dim], &observation[..dim]).to_bits() as u64;
         self.resample_queries(tick_salt.wrapping_add(obs_hash));
 
         // Sample K diverse next-states in one batched call.
@@ -441,7 +446,11 @@ impl<K: BoMSampler> BeliefPlanner for BoMMeanPlanner<K> {
         let dim = self.kernel.dim();
         let k = self.cfg.k;
         let tick_salt: u64 = 0x9E37_79B9_7F4A_7C15;
-        let obs_hash = katgpt_types::simd::simd_dot_f32(state, observation, dim).to_bits() as u64;
+        // Issue 940 (MB-4): ordered fold — see the Minimax planner's comment.
+        // This planner COMMITS the hypothesis mean back into `state` (→ the
+        // synced bridge scalars), so the seed chain must be platform-stable.
+        let obs_hash =
+            katgpt_types::simd::dot_f32_ordered(&state[..dim], &observation[..dim]).to_bits() as u64;
         self.resample_queries(tick_salt.wrapping_add(obs_hash));
         self.kernel.sample_k_states(
             state,
