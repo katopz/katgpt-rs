@@ -196,6 +196,17 @@ pub fn boundary_flux_mass_with_decomp(
 /// This is the hot-path variant for callers that either (a) don't need the
 /// error bound, or (b) cache the decomposition across many region queries.
 ///
+/// # Determinism tier (Issue 940 DE-2)
+///
+/// **DIAGNOSTIC** — this path folds boundary entries in matrix order, which
+/// differs from the canonical [`boundary_flux_mass_indexed`] fold (region
+/// order, per-cell CSR slices). The two agree to `1e-4` (pinned by
+/// `test_boundary_flux_mass_indexed_subset`), not bit-exactly: the interior
+/// `±v` pairs cancel exactly in f32, but the surviving boundary terms sum in
+/// different orders. Consumers that COMMIT or REPLAY-compare the mass must
+/// call the canonical indexed path; this one is for one-shot diagnostics and
+/// the benches.
+///
 /// Returns `0.0` for an empty region.
 ///
 /// # Complexity
@@ -226,6 +237,13 @@ pub fn boundary_flux_mass_only(
 
 /// Zero-alloc variant of [`boundary_flux_mass_only`] that takes a caller-owned
 /// `in_region` scratch buffer instead of allocating one per call.
+///
+/// # Determinism tier (Issue 940 DE-2)
+///
+/// **DIAGNOSTIC** — same fold order as [`boundary_flux_mass_only`] (matrix
+/// order), same `1e-4` envelope against the canonical
+/// [`boundary_flux_mass_indexed`]. The pca morphogen signal family consumes
+/// this variant report-only.
 ///
 /// # When to use this
 ///
@@ -315,6 +333,17 @@ pub fn boundary_flux_mass_only_scratched(
 ///   `O(|region| × boundary_per_cell)`.
 ///
 /// Returns `0.0` for an empty region.
+///
+/// # Determinism tier (Issue 940 DE-2)
+///
+/// **CANONICAL** — this is the mass path committed/replay-compared values
+/// must go through. Its fold (region order, then each cell's CSR boundary
+/// slice) is the order downstream consumers see. ⚠ The fold is in CALLER
+/// region order by design (no sort — this is the fast path): a
+/// replay-compared consumer must therefore construct `region_cells` in a
+/// deterministic order (sorted, or a fixed generation order). The full-scan
+/// paths fold the same terms in boundary-matrix order and agree to `1e-4`
+/// (pinned) — they are diagnostic, never a substitute here.
 ///
 /// # Complexity
 /// `O(|region| × boundary_per_cell)` — direct CSR lookups, no full-matrix
@@ -806,8 +835,12 @@ mod tests {
             "indexed Stokes identity (subset): {mass} must equal volume integral {volume_mass}"
         );
 
-        // Also cross-check against the full-scan path (tolerance accounts for
-        // float accumulation-order differences between the two paths).
+        // Also cross-check against the full-scan path. Issue 940 DE-2: the
+        // indexed path is the CANONICAL mass for committed/replayed values;
+        // the scan paths are diagnostic and agree only to this 1e-4 envelope
+        // (same terms, different fold order — interior ±v pairs cancel
+        // exactly, the surviving boundary terms reassociate). This is an
+        // envelope contract, NOT a bit-identity contract.
         let mass_only = boundary_flux_mass_only(&cx, &region, &field);
         assert!(
             (mass - mass_only).abs() < 1e-4,

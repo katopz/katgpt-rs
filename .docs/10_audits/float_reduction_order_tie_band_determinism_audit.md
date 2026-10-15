@@ -92,7 +92,7 @@ were found; collection-dependence exists only in PICKS (below).
 | **CL-1** `katgpt-claim/clr/vote.rs:133,232` | `simd_sum_f32(row)/m` reliability mean | PLATFORM | CLR verdict reliability → compaction gate / jury | **PIN — LANDED 2026-10-16**: both sites fold `row.iter().sum::<f32>()` (m is small — paper default 5 — so the sequential fold is also the faster shape); pin `reliability_mean_folds_in_index_order_not_platform_order` (table verifier hands out the certified len-16 craft as M=16 verdicts: ordered mean 3/16 vs platform 6/16 → orders-of-magnitude reliability flip at the `^M` gate; expectation recomputed in-test so the powf path stays portable) |
 | **CL-2** `claim/clr/verifier.rs:90` | `simd_dot_f32` → sigmoid verdict | PLATFORM | per-claim verdicts → CL-1 inputs | **PIN — LANDED 2026-10-16**: `dot_f32_ordered(embedding, d)` (also removes the unchecked-len hazard — the ordered fold asserts equal lengths where the kernel trusted the caller's `direction_dim`); pin `verdict_dot_folds_in_index_order_not_platform_order` (craft embedding vs ones direction: verdict is `fast_sigmoid(3.0)` bits, provably ≠ the platform's `fast_sigmoid(6.0)`) |
 | **CL-3** `claim/clr/mgpo.rs:83` `allocate_budget` | `simd_sum_f32(weights)` | PLATFORM | proportional allocation `.floor()` — integer flip at boundary → different sampling budgets | **PIN — LANDED 2026-10-16**: `weights.iter().sum()`; pin `budget_sum_folds_in_index_order_not_platform_order` (certified len-16 craft as weights: ordered sum 3.0 → seed-0 budget 3.33e9, platform sum 6.0 → 1.67e9 — the floor flip is a 2× allocation change; weights deliberately violate the documented non-negative domain because the pin targets the sum's fold order, noted in-test) |
-| **DE-2** `katgpt-dec/stokes_calculus.rs:287-292,358-363` | TWO mass paths, each a pinned scalar fold but in DIFFERENT orders; repo test pins agreement at 1e-4, naming "float accumulation-order differences between the two paths" (:810) | PINNED×2, mutually divergent | belief-region mass → stampede trigger (`zone_density.rs:431`), conservation checks | **CANONICALIZE** — pick ONE order (the indexed form) as the replay-compared mass; the other stays diagnostic with the 1e-4 envelope documented |
+| **DE-2** `katgpt-dec/stokes_calculus.rs:287-292,358-363` | TWO mass paths, each a pinned scalar fold but in DIFFERENT orders; repo test pins agreement at 1e-4, naming "float accumulation-order differences between the two paths" (:810) | PINNED×2, mutually divergent | belief-region mass → stampede trigger (`zone_density.rs:431`), conservation checks | **CANONICALIZE — LANDED 2026-10-16**: `boundary_flux_mass_indexed` documented CANONICAL for committed/replay-compared masses (with the caller-order caveat: the fold is in caller region order by design — a replay consumer must construct the region deterministically); `boundary_flux_mass_only{,_scratched}` documented DIAGNOSTIC with the pinned 1e-4 cross-path envelope (an envelope contract, not bit-identity — interior ±v pairs cancel exactly, surviving terms reassociate). Workspace census: neither path has a production consumer today (indexed = re-export/bench only; scratched = the pca morphogen report-only signal; the stampede trigger at zone_density.rs:431 consumes `belief_mass_divergence` = DE-1, already pinned) — so the canonicalization is a documentation+test-annotation act, zero behavior change. Test comment re-annotated with the tier law. katgpt-dec 249/249 lib, clippy `-D warnings`. |
 | DE-1 `stokes_calculus.rs:80` `belief_mass_divergence` | scalar `.sum()` of abs | PINNED | divergence scalar → curiosity / ICT branching | good |
 | DE-3/DE-4 + `katgpt-dec` latent-field folds | scalar folds / `katgpt_dec::simd` source-pinned twin (NOTE: different bits than the types-crate kernel — one implementation, two spellings) | PINNED | local solver/latent state | good |
 
@@ -286,7 +286,15 @@ total order · `dot_f32_ordered` + the `bridge_certified` certified pattern
    committed-bits change: procrustes `m_norm`/rotations/residuals,
    spectral-rewire `M`/ΔW*/overlays, CLR reliabilities + verdicts + MGPO
    budgets, and the fused-scale-acc tail cells all move at this upgrade.
-7. **DE-2** — canonical mass order + envelope doc.
+7. **DE-2** — canonical mass order + envelope doc. **LANDED 2026-10-16**
+   (fix unit ⑦): `boundary_flux_mass_indexed` documented CANONICAL (with the
+   caller-region-order caveat), `boundary_flux_mass_only{,_scratched}`
+   documented DIAGNOSTIC with the 1e-4 envelope; the agreement test
+   re-annotated (envelope, not bit-identity). Workspace census: no production
+   consumer of either path today (the zone_density stampede trigger consumes
+   `belief_mass_divergence` = DE-1, already pinned; the pca consumer is the
+   report-only morphogen family) — zero behavior change. katgpt-dec 249/249
+   lib, clippy `-D warnings`.
 8. **NaN-hardening** — `sigmoid_calibration.rs` ×2 → `total_cmp`.
    **LANDED 2026-10-16** — gated-posture validated (see the Part B note:
    the module is opt-in; the default run greens a zero).
