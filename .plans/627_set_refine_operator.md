@@ -5,6 +5,7 @@ for a new katgpt-core primitive; implementation unclaimed. Downstream of reflex
 Issue 090 C2 (the Jeva fusion follow-up; the issue text is the seed spec). The
 promotion decision stays gated on the MEASURED GOAT (§4) — nothing here promotes
 or wires by default.
+**Claimed:** set-refine-t1-m3, 1792106687, expires 2026-10-17T23:30:00Z
 
 **Claimed:** 4090-setrefine, epoch 2026-10-15T23:26Z, expires 2026-10-17T23:26Z (T1-T3)
 
