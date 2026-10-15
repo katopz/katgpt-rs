@@ -5653,3 +5653,58 @@ Memory Machines), Research 615. Source:
   `crates/katgpt-types/tests/sync_bank_g1b_real_fixture.rs`, re-measured
   every run). **PROMOTED TO DEFAULT 2026-10-12** (owner GO); the pinning
   test re-reds past the recorded margins.
+
+## 148. phase_belief — Phase-Carrying Belief Kernel POC (Issue 939 / Research 620)
+
+Feature `phase_belief` (OPT-IN, **defer-until-pull** — promotion requires
+P1–P4 green AND a named consumer pull from the drive/FSM stack; the P3
+real-boot FSM test is the deciding gate). Source: arXiv:2610.13341
+(damping-regime framework), Research 620. Source:
+`crates/katgpt-sense/src/phase_belief.rs` (forward chain root →
+katgpt-core → katgpt-sense).
+
+- **`ModularPhaseCounter`** — the exact undamped phase code (the paper's
+  E.1 modular counter, CONSTRUCTED not trained): a `u32` count mod `m`
+  (2..=256) + precomputed cos/sin LUTs — bit-deterministic by
+  construction, zero drift over unbounded streams, O(1) LUT readout.
+  `readout()` is the cos half (injective on ℤ_m ONLY at m=2 — parity);
+  `readout_pair()` is the full phase code; `drive_readout(gain)` =
+  `fast_sigmoid(gain·cos φ)` for the FSM-facing scalar (sigmoid, never
+  softmax).
+- **`DampedPhaseBlock`** — the non-trivial primitive: per-channel 2×2
+  underdamped κ-block `z ← ρ·R(θ)·z + u`, fixed `[f32; 2]` state,
+  precomputed rotation, single-rounding `mul_add` folds (Issue 940 kernel
+  discipline). Phase and magnitude fade TOGETHER (`ρⁿ·R(nθ)` closed form
+  pinned by test to f32 tolerance; with constant writes the iterate
+  matches the geometric series `(1−wⁿ)/(1−w)`, w = ρe^{iθ}). The
+  paper's C.3 steady state `‖u‖/|1−ρe^{iθ}|` ships as
+  `steady_state_bound` / `write_budget_for(ε)` — the P4 per-channel
+  write-budget design constraint, with the θ-dependence honestly
+  exposed: ρ→1 ⇒ 2·sin(θ/2) (large-θ channels win), θ→0 ⇒ the leaky
+  kernel's own (1−ρ) scale (the rotation buys nothing there).
+- **Signal-diff vs the cousins**: katgpt-core `phase_rotation_coupling`
+  (Plan 322, §§ above) is a phase-modulated MIX between two named
+  vectors — a gate, not a state integrator; Research 169 (LinOSS) is
+  free oscillation as architecture; Research 371 is population-level
+  DMFT. The only claim: first constructed phase code on OUR belief
+  substrate (engineering claim, never a Super-GOAT).
+- **Gates (11, `tests/phase_belief_gates.rs`, required-features row)**:
+  P1 integer counter exact over 10⁶ random events at every m in a sweep
+  + the f32-accumulation drift pin (mean |Δcos| > 0.2 over 1000
+  checkpoints at 10⁶ events — the justification, guarded against a
+  future "simplification" back to f32); P1 damped free run = ρⁿ·R(nθ)
+  and constant write = the geometric series (f64 reference); P2 parity
+  classified exactly while a timing-compensated leaky pair orders
+  BACKWARDS (odd > even — the parity-blindness witness); P2 mod-3
+  degeneracy pinned (cos(2π/3) = cos(4π/3)) with the pair delivering;
+  P2 fade-together smoke (22 ticks at θ=π/2 → phase π at <10%
+  confidence, predictors read it without stepping); P4 constant write
+  converges to the C.3 bound incl. the ρ→1 θ-only agreement;
+  constructor domain guards; sigmoid readout shape. **P3 (FSM real-boot
+  progress test) NOT BUILT — it is the promotion-deciding gate and
+  waits for the named pull** (the house behaviour law: the ringing
+  drive must assert PROGRESS through the FSM, no oscillation flip-flop;
+  ζ-budget floor is the control).
+- **Local-only state**: nothing here crosses a sync boundary; if a
+  consumer ever syncs the readout, the SCALAR crosses, never the
+  `[f32; 2]` block.

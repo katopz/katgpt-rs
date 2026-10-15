@@ -62,6 +62,17 @@ sync_bank = []
 # (FLYNN's linear sensory integration, distilled).
 modality_additive = []
 
+# Phase-carrying belief kernel POC (Issue 939, Research 620, arXiv:2610.13341)
+# — gates the `phase_belief` submodule: `ModularPhaseCounter` (the exact
+# undamped phase code: integer count mod m + cos/sin LUT — bit-deterministic,
+# zero drift) + `DampedPhaseBlock` (the 2×2 underdamped κ-block
+# z ← ρ·R(θ)·z + u — phase-and-magnitude fade together; the paper's C.3
+# steady state exposed as the per-channel write budget, P4). OPT-IN,
+# defer-until-pull: promotion requires P1–P4 green AND a named consumer pull
+# from the drive/FSM stack. Self-contained — no new deps (fixed [f32; 2]
+# state, sigmoid readout via katgpt-types).
+phase_belief = []
+
 # Spectral NPC Perception Compression (Plan 240) — LOD routing for sense
 # modules. Gates the `lod` submodule + its SenseLodLevel/SenseLodMask/
 # SenseLodRouter surface. Forwards the slod / spectral_hierarchy dependency
@@ -104,3 +115,12 @@ self_advantage_gate = []
 name = "modality_additive_superposition"
 path = "tests/modality_additive_superposition.rs"
 required-features = ["modality_additive"]
+
+# Issue 939 — phase-belief kernel gates. required-features per the
+# cfg-gated-target discipline: without the feature the file is an empty
+# binary that would print a green `0 passed`; this row makes the skip
+# VISIBLE to the reader.
+[[test]]
+name = "phase_belief_gates"
+path = "tests/phase_belief_gates.rs"
+required-features = ["phase_belief"]
