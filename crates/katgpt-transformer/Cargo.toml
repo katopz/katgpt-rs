@@ -176,3 +176,8 @@ required-features = ["transformer_moe"]
 [[test]]
 name = "moe_backward_grad_check"
 required-features = ["moe_backward"]
+
+# Issue 942: report-only latent pseudo-text trace demo (swir-gated).
+[[example]]
+name = "latent_readout_trace"
+required-features = ["swir_switch_thinking"]

@@ -101,6 +101,8 @@ pub mod bench;
 mod controller;
 mod convex_hull_check;
 mod entropy;
+// Issue 942: report-only latent pseudo-text readout + health sensors.
+pub mod pseudo_text;
 mod position_provenance;
 mod signal_mix;
 mod soft_embedding;
@@ -115,6 +117,9 @@ pub use convex_hull_check::in_vocab_convex_hull;
 pub use entropy::{entropy_from_logits, shannon_entropy};
 pub use position_provenance::{PositionProvenance, ProvenanceLedger};
 pub use signal_mix::{SignalMixKind, mix_thinking_signal};
+pub use pseudo_text::{
+    LatentLoopSensor, LatentReadoutBank, NearestToken, PseudoTextCollapseSensor, span_readability,
+};
 pub use soft_embedding::soft_embedding;
 pub use types::{ControlToken, StepAction, SwiRConfig, SwiRStats, ThinkMode};
 
