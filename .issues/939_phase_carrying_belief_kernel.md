@@ -1,6 +1,7 @@
 # Issue 939: Phase-carrying belief kernel + constructed phase-code counters (underdamped κ-blocks)
 
 **Status:** Open — POC, **defer-until-pull** (no committed consumer; promotion requires a named pull — posture set at verdict round 1).
+**Claimed:** katgpt-rs-idle-939, 2026-10-15T20:39Z, expires 2026-10-17T20:39Z
 
 ## The idea
 
