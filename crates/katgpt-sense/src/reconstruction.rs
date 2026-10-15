@@ -2123,6 +2123,7 @@ mod tests {
     /// pairs the cancellation inside one lane/accumulator group and keeps
     /// its +1s → 6.0. Mirrors `bridge_is_the_ordered_fold_not_the_platform_kernel`
     /// (katgpt-micro-belief) and the bench_844 G1c pin.
+    #[cfg(feature = "sense_composition")]
     fn issue940_craft_row() -> [f32; 8] {
         [1e8, 1.0, 1.0, 1.0, -1e8, 1.0, 1.0, 1.0]
     }
@@ -2130,6 +2131,7 @@ mod tests {
     /// Deterministic small helper brain — one module per kind, alternating
     /// ternary signs so the projection dots exercise positive and negative
     /// terms. Zero octree bits (not read by expand).
+    #[cfg(feature = "sense_composition")]
     fn issue940_test_modules() -> Vec<SenseModule> {
         (0..6)
             .map(|k| SenseModule {
