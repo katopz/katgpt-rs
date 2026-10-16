@@ -2689,6 +2689,13 @@ required-features = ["cgsp"]
 name = "bench_275_swir_goat"
 required-features = ["swir_switch_thinking"]
 
+# swir_strategy_integration — same gating as bench_275 (the row is the
+# cfg-gated-floor fix for the demotion: the demote took swir_switch_thinking
+# default-off, which made the ungated target SILENT-NOW, Issue 1075 follow-up).
+[[test]]
+name = "swir_strategy_integration"
+required-features = ["swir_switch_thinking"]
+
 # ── Plan 265: Task-Relevant Identifiability (BCKVSS + SPLAT + CCCP) ────────
 
 [[example]]
