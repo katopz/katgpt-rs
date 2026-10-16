@@ -1,6 +1,7 @@
 # Issue 945: QRR quotient-convergence extraction — rate-aware halting, settling budgets, phase-belief commit law
 
 **Status:** Open — POC. P1/P2/P3/P5 landable now (live consumer: `forward_looped`/`GainCostLoopHalter`); P4 defer-until-pull (rides Issue 939's posture); P6 report-only. Every gate before any promotion.
+**Claimed:** Zed-agent-idle-945, 1792159000, expires 2026-10-18T17:00:00+00:00
 
 ## The idea
 
