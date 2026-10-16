@@ -2,7 +2,7 @@
 
 **Status:** COMPLETE 2026-10-13 — T1 (measured-erosion capacity) GATES PASS; T2 (3D axis) RECORDED NEGATIVE at G2 (G1/G5/G6 PASS, G2 FAIL: the 27-tap read loses to PKM). `lattice_memory_3d` stays OPT-IN; the negative is the second measured remedy in Bench 919's story. T3 (kernel/write A/B queue) DEFERRED.
 
-**Source:** Issue 938 (the μLattice distill) — [`.issues/938_lattice_memory_3d_axis_and_measured_capacity_gate.md`](../.issues/938_lattice_memory_3d_axis_and_measured_capacity_gate.md). Prior art: [Bench 919](919_lattice_family_goat.md) (2D floor NOT PROMOTED, support×capacity-bounded), Plan 619, riir-refine Research 233.
+**Source:** Issue 938 (the μLattice distill) — `.issues/938_lattice_memory_3d_axis_and_measured_capacity_gate.md`. Prior art: [Bench 919](919_lattice_family_goat.md) (2D floor NOT PROMOTED, support×capacity-bounded), Plan 619, riir-refine Research 233.
 
 **Posture:** M3 Max 16 cores, d = d_k = 32, d_v = 16 (bench) / 32 (G6 worst case), queries = 2000, window = 200, interleaved best-of-5 rounds, `--release`.
 **Box state (Issue 021 law):** `PROVENANCE: power=AC Power load=2.49 swap=0.00M canary=skipped powermode=2(high)` (riir-reflex `bench_preflight.sh`), RAM 90% free, no concurrent cargo, load avg 2.53/7.63/7.51 (decaying tail from earlier work), 2026-10-13 ~10:30. Latency numbers are workstation readings — quote them with this caveat.
