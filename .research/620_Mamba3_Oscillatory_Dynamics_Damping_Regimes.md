@@ -4,7 +4,7 @@
 
 > **Source:** "Understanding Mamba-3 Through Oscillatory Dynamics" — Shutian Liang, Yue Song (Tsinghua), [arXiv:2610.13341](https://arxiv.org/abs/2610.13341), 2026-10-09. Code: shutian-liang.github.io/oscillationmamba. CC-BY 4.0.
 > **Date:** 2026-10-13
-> **Related Research:** 169 (LinOSS oscillatory SSM — closest cousin on the oscillation axis), 371 (low-rank RNN oscillatory DMFT — the mean-field cousin), 070 (GDN2 — the GDN-lane cousin; its Mamba-3(MIMO) tables are what this paper's framework explains), 243 (temporal derivative kernel), 301 (Subspace Phase-Gate)
+> **Related Research:** 623 (QRR quotient recurrent reasoner — the CONVERGENCE half of this axis: rate-inheritance theorem, symmetry-modulo halting, delta-sequence mode attribution; this note owns the capacity/regime half), 169 (LinOSS oscillatory SSM — closest cousin on the oscillation axis), 371 (low-rank RNN oscillatory DMFT — the mean-field cousin), 070 (GDN2 — the GDN-lane cousin; its Mamba-3(MIMO) tables are what this paper's framework explains), 243 (temporal derivative kernel), 301 (Subspace Phase-Gate)
 > **Related Plans:** 189 (LinOSS, shipped from 169), 104 (GDN2, shipped), riir-train Plan 459 (this research's training probe — filed this session)
 > **Classification:** Public
 
