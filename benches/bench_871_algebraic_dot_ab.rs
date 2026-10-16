@@ -41,6 +41,8 @@
 
 use std::hint::black_box;
 
+use katgpt_types::approx::ulp_distance;
+
 #[path = "../tests/common/ab_timing.rs"]
 mod ab_timing;
 
@@ -114,10 +116,13 @@ fn dot_strict_f64(a: &[f32], b: &[f32]) -> f64 {
     dot
 }
 
-/// Integer bit-distance — a valid ulp metric for same-sign finite floats
-/// (all bench data is finite; ±0 never occurs with a random mantissa).
+/// Integer bit-distance — the shared ULP metric (`katgpt_types::approx`,
+/// Issue 944), with the signed-zero and non-finite laws stated there. The
+/// old local copy's "same-sign finite" precondition is subsumed: every gate
+/// domain here is finite dot outputs, and the metric now refuses (via
+/// `expect`) instead of measuring garbage if that ever changes.
 fn ulp_delta(x: f32, y: f32) -> u32 {
-    (x.to_bits() as i32).abs_diff(y.to_bits() as i32)
+    ulp_distance(x, y).expect("finite dot outputs")
 }
 
 fn rel_err(x: f32, reference: f64) -> f64 {

@@ -46,6 +46,7 @@ use std::time::Instant;
 
 use katgpt_core::simd::{dot_f32_ordered, fast_sigmoid, simd_dot_f32};
 use katgpt_core::{exact_sigmoid, exact_sigmoid_f64};
+use katgpt_types::approx::ApproxContract;
 
 /// Deterministic xorshift — seeded, local, never the global RNG.
 struct Xorshift(u64);
@@ -66,13 +67,6 @@ fn verdict(ok: bool) -> &'static str {
         true => "✓",
         false => "✗",
     }
-}
-
-/// Monotone ULP distance over the f32 bit pattern (two's-complement map).
-fn ulp_diff(a: f32, b: f32) -> u32 {
-    (a.to_bits() as i32)
-        .wrapping_sub(b.to_bits() as i32)
-        .unsigned_abs()
 }
 
 /// The f64-computed sigmoid, narrowed — the highest-precision reference
@@ -123,18 +117,18 @@ fn best_of_ns_f64(rounds: usize, iters: usize, mut f: impl FnMut(u32) -> f64) ->
 fn main() {
     println!("═══ Bench 844 — exact_sigmoid / dot_f32_ordered substrate GOAT ═══");
 
-    // ── G1a: f32 exactness vs the f64 reference ──────────────────────────
-    let mut exact_max_ulp = 0u32;
+    // ── G1a: f32 exactness vs the f64 reference ────────────────────────────────
+    // The ULP halves are two named approximation contracts (Issue 944); the
+    // abs-error maxima stay plain folds beside them.
+    let mut exact = ApproxContract::new("exact_sigmoid vs f64 reference");
+    let mut fast = ApproxContract::new("fast_sigmoid vs f64 reference");
     let mut exact_max_abs = 0.0f32;
-    let mut fast_max_ulp = 0u32;
     let mut fast_max_abs = 0.0f32;
     let mut x = -80.0f32;
     while x <= 80.0 {
         let r = f64_ref(x);
-        let de = ulp_diff(exact_sigmoid(x), r);
-        let df = ulp_diff(fast_sigmoid(x), r);
-        exact_max_ulp = exact_max_ulp.max(de);
-        fast_max_ulp = fast_max_ulp.max(df);
+        exact.measure(exact_sigmoid(x), r);
+        fast.measure(fast_sigmoid(x), r);
         exact_max_abs = exact_max_abs.max((exact_sigmoid(x) - r).abs());
         fast_max_abs = fast_max_abs.max((fast_sigmoid(x) - r).abs());
         x += 0.0137;
@@ -142,9 +136,11 @@ fn main() {
     // Edges inside the normal-output regime.
     for edge in [-1e-30f32, 1e-30, 1e-20, -1e-20, 1.0, -1.0, 27.5, -27.5] {
         let r = f64_ref(edge);
-        exact_max_ulp = exact_max_ulp.max(ulp_diff(exact_sigmoid(edge), r));
-        fast_max_ulp = fast_max_ulp.max(ulp_diff(fast_sigmoid(edge), r));
+        exact.measure(exact_sigmoid(edge), r);
+        fast.measure(fast_sigmoid(edge), r);
     }
+    let exact_max_ulp = exact.max_ulps().expect("sigmoid outputs are finite");
+    let fast_max_ulp = fast.max_ulps().expect("sigmoid outputs are finite");
     let g1a = exact_max_ulp <= 4 && exact_max_abs <= 1e-6 && exact_max_ulp < fast_max_ulp;
     println!(
         "G1a f32 exactness: exact max {exact_max_ulp} ULP / {exact_max_abs:.3e} abs · fast max \

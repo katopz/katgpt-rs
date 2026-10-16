@@ -1839,13 +1839,7 @@ unsafe fn wasm32_sigmoid_tanh_clamp(out: &mut [f32], a: &[f32], q: &[f32], clamp
 #[cfg(test)]
 mod exact_sigmoid_tests {
     use super::{exact_sigmoid, exact_sigmoid_f64, fast_sigmoid};
-
-    /// Monotone ULP distance over the f32 bit pattern (two's-complement map).
-    fn ulp_diff(a: f32, b: f32) -> u32 {
-        (a.to_bits() as i32)
-            .wrapping_sub(b.to_bits() as i32)
-            .unsigned_abs()
-    }
+    use crate::approx::ulp_distance;
 
     /// The f64-computed sigmoid, narrowed — the highest-precision reference
     /// std can express (the ULP gate's oracle).
@@ -1858,13 +1852,15 @@ mod exact_sigmoid_tests {
         let mut max_ulp = 0u32;
         let mut x = -90.0f32;
         while x <= 90.0 {
-            let d = ulp_diff(exact_sigmoid(x), f64_ref(x));
+            let d = ulp_distance(exact_sigmoid(x), f64_ref(x))
+                .expect("sigmoid outputs are finite");
             assert!(d <= 2, "x={x}: {d} ULP vs f64 reference");
             max_ulp = max_ulp.max(d);
             x += 0.0137;
         }
         for edge in [-1e-45f32, 1e-45, 1e-30, -1e-30, 1.0, -1.0, 27.5, -27.5] {
-            let d = ulp_diff(exact_sigmoid(edge), f64_ref(edge));
+            let d = ulp_distance(exact_sigmoid(edge), f64_ref(edge))
+                .expect("sigmoid outputs are finite");
             assert!(d <= 2, "edge x={edge}: {d} ULP");
             max_ulp = max_ulp.max(d);
         }
@@ -1875,8 +1871,12 @@ mod exact_sigmoid_tests {
     fn f32_exact_is_closer_to_the_reference_than_fast() {
         // The differentiator that justifies a second variant: the exact form
         // must not lose to the Cephes approximation on its own gate.
-        let exact_max = ulp_scan(|x| ulp_diff(exact_sigmoid(x), f64_ref(x)));
-        let fast_max = ulp_scan(|x| ulp_diff(fast_sigmoid(x), f64_ref(x)));
+        let exact_max = ulp_scan(|x| {
+            ulp_distance(exact_sigmoid(x), f64_ref(x)).expect("finite sigmoid outputs")
+        });
+        let fast_max = ulp_scan(|x| {
+            ulp_distance(fast_sigmoid(x), f64_ref(x)).expect("finite sigmoid outputs")
+        });
         assert!(exact_max < fast_max, "exact {exact_max} vs fast {fast_max}");
     }
 
