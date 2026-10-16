@@ -1674,6 +1674,14 @@ convention fully met — the twin cited in-source + the `below` divergence named
 katgpt-assign's documented zero-dep standalone posture. Filed by the 10-09
 substrate-first Mode 2 audit; same wave: riir-ai 1044, seal-remake 057.
 
+## Issue 941 (2026-10-16) — the token/latent position-provenance convention lifted into the swir host contract: LANDED (file removed per noise-reduction)
+
+`crates/katgpt-transformer/src/swir/position_provenance.rs`: `PositionProvenance::{Tok(u32), Lat{span, step}}` + `ProvenanceLedger` (`record` / `materialized()` = M(L) / `latent_spans` / `clear`) — latent content is structurally unretainable (counts only, no Lat-content field). `DecodeBackend::decode_step` doc gained the position-provenance contract section: `Some(id)` MUST enter M(L), `None` (soft-embedding) MUST NOT; reference implementation = riir-ai `swir_validation/gemma2_backend.rs` (the Plan-313 host); the ledger is metadata, NEVER an attention mask. 6 contract tests green at `--features swir_switch_thinking` (51/51 swir module tests); no new flag (rides opt-in `swir_switch_thinking`). Cross-refs: riir-ai Issue 1075 (the two LIVE defects found in the same subsystem — compounding + pseudo-argmax leakage) carried in the module docs. Landed by shikuwa-4090-agent via the isolated worktree (the main worktree was wedged by a sibling's dirty Cargo.toml).
+
+## Issue 942 (2026-10-16) — the latent pseudo-text readout + health sensors (report-only instrument): CLOSED (file removed per noise-reduction)
+
+`crates/katgpt-transformer/src/swir/pseudo_text.rs` + the example: pre-normalized embedding bank built once; `readout(v) = argmax_j cos(v/‖v‖, ê_j)` + top-k; span readability = mean max-cosine; loop + collapse health sensors for `collapse_aware_thinking` consumption; glyph-led markdown report lane, exit-0 always WITH a blindness floor (min steps inspected). Gates: G1 peaked-distribution argmax agreement, G2 armed cost = one V·D matvec per INSPECTED step, G4 bank precomputed zero per-call alloc. Landed `76d6d4fef` (module + example + gates, report-only) by shikuwa-4090-agent (claim lease honoured). Optional later leg (low readability as an abstention feature) stays out of scope — UQ-flavored, must beat the conformal-naive floor.
+
 ## Lessons
 
 - A rule landed in one instrument and never generalised — grep the whole family and land the repair as one shared mechanism (recorded ten+ times).
