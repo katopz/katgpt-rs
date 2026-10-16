@@ -2602,6 +2602,16 @@ required-features = ["escalation_probe_gate"]
 name = "state_probe_t1_alloc_check"
 required-features = ["state_probe"]
 
+# Plan 621 Phase 4 — the healer-lane Super-GOAT eval suite (T4.1–T4.4):
+# planted two-class fix-miss corpus, gate-must-fire vs the never-escalate
+# floor control, the T4.2 three-arm table + matched-spend verdict, the
+# T4.3 cost line with loud breach fallback, the ratio sweep, and the
+# table-blake3 determinism pin. Engine: tests/common/plan621_healer_sim.rs
+# (#[path]-included, eval-only).
+[[test]]
+name = "healer_lane_eval_t4"
+required-features = ["escalation_probe_gate"]
+
 # Plan 621 Phase 1 G2 — state_probe micro-bench: bound math < 1 µs/call at
 # release (T1.4); harness = false (the bench_039 pattern — asserted bar,
 # black-boxed inputs, cargo-bench release posture).
@@ -2609,6 +2619,15 @@ required-features = ["state_probe"]
 name = "bench_621_state_probe"
 harness = false
 required-features = ["state_probe"]
+
+# Plan 621 Phase 4 T4.4 — the healer-lane Super-GOAT bench: the T4.2 table
+# + matched-spend verdict + T4.3 cost line asserted at the RELEASE posture
+# (harness = false, the bench_039 pattern); the table blake3 must equal the
+# test-suite pin (cross-profile determinism — f64 IEEE, no fast-math).
+[[bench]]
+name = "bench_621b_healer_lane_eval"
+harness = false
+required-features = ["escalation_probe_gate"]
 
 # Plan 575 Phase 2 — risk_control_exit GOAT gate: G1 risk-hold across 40
 # validation/test resplits (+ naive no-correction violation contrast),

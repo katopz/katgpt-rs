@@ -50,3 +50,17 @@ G1 generous cap (the uncapped incumbent escalates every state) — cap = 150 uni
 ## Provenance chain
 
 Plan 621 Phase 1 (T1.1–T1.4, 2026-10-08) → Phase 2 + 3 (T2.1–T3.4, 2026-10-10) → **this record (Phase 4, 2026-10-11)** → Phase 5 consumers pending (T5.1 reflex lane, T5.2 refine Issue 156, T5.3 docs sync, T5.4 the promotion decision — owner-gated on the consumer's gate).
+
+## Addendum (2026-10-16) — the healer-lane suite LANDED as the second instrument (the Oct-10 draft, revived)
+
+The Oct-10 17:00 draft instrument (`healer_lane_eval_t4` + `bench_621b_healer_lane_eval` + the `plan621_healer_sim.rs` engine, untracked since the Oct-11 M3 landing landed the simpler eval first) is LANDED verbatim 2026-10-16 after verification — the prior caveat's "port the coverage arm at T5.4" disposition is SUPERSEDED by landing the whole suite in-tree (verified green, so the donor-at-risk class is gone; T5.4's re-gate may read either instrument — owner call, both runnable).
+
+**Why:** the draft carries the two arms the landed instrument lacks — `t44_probe_ci_coverage_measured_on_the_run` (the UQ note's promised coverage assert: Wilson-CI empirical coverage over the run's own probe observations, floor 0.85) and `t44_ratio_sweep_verdict_holds_across_the_affordable_range` (verdict robustness across the c_depth ladder) — plus the cross-profile table-blake3 determinism pin.
+
+**Measured (4090 box, i7-13700K, AC, CPU-side — the GPU was owned by the LOWO chain; this suite touches no GPU):**
+
+- Tests `healer_lane_eval_t4` 9/9 PASS at `--features escalation_probe_gate` (corpus/floor/table/cost/coverage/ratio/blake3 arms).
+- Release bench `bench_621b_healer_lane_eval` (harness=false): corpus 250 planted states (100 exec / 100 knowledge / 50 middle), seed 0x6210400 — floor 204/250 rescued @ spend 5322 · incumbent 211/250 @ 62000 (120 esc, 48.0%) · probe-gated **226/250 @ 35526 (63 esc, 25.2%)**; **CI coverage 0.9929** (95% nominal, over the run's own observations); **matched spend 34000: incumbent 175 vs probe 226**; breach posture c_depth 250: 63 escalations / 63 disclosed fallbacks (loud, never silent); table blake3 `c4a00f955e49783e9a8365e51b486930fdb271a066e1b481641577620d60ffc1` — equal to the test-suite pin (cross-profile determinism: dev test == release bench).
+- The verdict REPRODUCES the record's decision on the richer corpus: probe-gated beats the incumbent at matched spend (226 vs 175) at HALF the escalation rate — Super-GOAT PASS on the declared model, again.
+
+G3 re-verified at landing: default-posture `cargo check -p katgpt-core --lib` clean; feature-posture clippy (`--tests --benches`) 0 warnings. The manifest rows are the draft's own (`[[test]] healer_lane_eval_t4` / `[[bench]] bench_621b_healer_lane_eval`, both `escalation_probe_gate`-gated, from the lifted patch — the stale `phase_belief`-removal fragment discarded). `.plans/621_draft_wip_cargo.patch` is REMOVED (its rows applied verbatim; git history preserves it via this commit's parent).
