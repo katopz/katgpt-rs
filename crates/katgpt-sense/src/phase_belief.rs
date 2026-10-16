@@ -227,6 +227,13 @@ impl DampedPhaseBlock {
     ///
     /// Write `u` may be `[0.0, 0.0]` (pure decay — the free run). Ordered
     /// per-component `mul_add` folds (Issue 940 kernel discipline).
+    ///
+    /// **fp32-rotation law (Issue 945 P5):** the rotation here is computed
+    /// and applied in f32 REGARDLESS of any future storage dtype — at bf16
+    /// the per-step rotation stops being orthogonal (`cos²+sin² = 1 ± 2⁻⁸`)
+    /// and `‖z‖` random-walks ~13% over 1000 steps (arXiv:2610.18174
+    /// numerics law; the failure is reproduced by the reduced-precision
+    /// canary in `tests/issue945_fp32_rotation_law.rs`).
     pub fn step(&mut self, write: [f32; 2]) {
         let [x, y] = self.z;
         let (c, s, r) = (self.cos_theta, self.sin_theta, self.rho);

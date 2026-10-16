@@ -124,3 +124,13 @@ required-features = ["modality_additive"]
 name = "phase_belief_gates"
 path = "tests/phase_belief_gates.rs"
 required-features = ["phase_belief"]
+
+# Issue 945 P5 — the fp32-rotation law + reduced-precision canary over the
+# rotation-carrying primitive (`DampedPhaseBlock`): the shipped f32 path
+# stays under the drift bound; the bf16-emulated counterfactual must
+# reproduce the paper's ~13% drift (the loud-zero defense). Same green-zero
+# row discipline as above.
+[[test]]
+name = "issue945_fp32_rotation_law"
+path = "tests/issue945_fp32_rotation_law.rs"
+required-features = ["phase_belief"]

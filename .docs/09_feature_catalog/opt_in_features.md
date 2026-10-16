@@ -5746,3 +5746,61 @@ candidate-conditioned attention block. The modelless analog:
   byte-identity), G4 PASS (0 allocs). Promotion refused; re-open = a
   different KEY family (per-option fitted directions — riir-train
   territory), never a γ/τ retune.
+
+## 150. qrr_convergence — QRR Quotient-Convergence Extraction (Issue 945 / Research 623)
+
+Feature `qrr_convergence` (OPT-IN POC, **no promotion claim** — the gates
+pin mechanics, never a perf gain). Source: arXiv:2610.18174 (Quotient
+Recurrent Reasoner — rate inheritance Thm 3.2, quotient halting, the
+tension law), Research 623. Source:
+`crates/katgpt-core/src/qrr_convergence.rs` (+ the P2 verdict inside
+`gain_cost_halt.rs`, the P5 gate in katgpt-sense).
+
+- **P1 `ModeFitter`** — per-channel sliding-window AR(2) fit
+  `δ_{t+2} = a·δ_{t+1} + b·δ_t`: fixed 16-triple ring, O(1)/step,
+  zero-alloc; companion roots of `z² − az − b` ARE the linearized Jacobian's
+  dominant mode `(r, ω)` — complex pair `r = √(−b)`, `ω = acos(a/2r)`; real
+  dominant root (negative ⇒ the FPRM alternating flip). Two measured
+  numerics laws ride the implementation: the sliding `+=`/`-=` ring sums
+  cancel catastrophically in f32 (~3–14% sum error → the ρ²-shadow root;
+  the window sums accumulate in f64 and reproduce the exact-arithmetic fit),
+  and a relative Tikhonov ridge repairs the rank-deficient single-mode
+  window (min-norm solution; the dominant root still recovers λ exactly).
+  Guards refuse to fabricate verdicts: cold window, exact stillness
+  (aperiodic/stuck), and the BLIND channel (the near-90° signed projection
+  is rounding noise — the Issue-720 trigger-happy edge — where the
+  incumbent verdict stands).
+- **P2 two-channel oscillation verdict** —
+  `GainCostLoopHalter::with_mode_verdict()`: the halter feeds the SIGNED
+  one-lag projection `s_t = gain·cosθ`; at a reversal-at-patience loop the
+  fitted modulus separates `OscillatingButSettling` (r < 1−ε — the halt is
+  SUPPRESSED; a genuinely converged loop still exits via `GainBelowCost`)
+  from `LimitCycle` (the incumbent halt fires at UNCHANGED latency — pinned
+  by the equal-patience twin). Kill-switch env `KATGPT_QRR_OSC_VERDICT=0`
+  demotes DECISION-ONLY (the fitter keeps observing;
+  `last_oscillation_verdict()` stays live); the byte-identity gate runs in
+  a child process so the parent env stays untouched. Cold-window posture:
+  patience < `MIN_FIT_SAMPLES` (6) still false-halts the first reversals —
+  patience ≥ the warmup is the arming contract.
+- **P3 settling budget + certificate** — `settling_steps(r, δ)` =
+  `τ_δ = log(1/δ)/(−log r)`, invertible (`tolerance_for_budget`); gate:
+  predicted vs actual settling within ×2 on ≥95% of a 36-run synthetic
+  corpus (damped spirals ρ∈{0.6,0.75,0.9,0.97} × θ + flips × 3 seeds,
+  relative noise), the constant-budget floor printed beside the mean
+  predicted budget. The `r = 1` certificate is TWO-SIGNAL
+  (`R1Certificate`: near-one modulus streak AND consumer-owned complement
+  stagnation) — one alone never acts, the tension law; advisory-only until
+  a consumer wires an exit.
+- **P5 fp32-rotation law + canary** — `DampedPhaseBlock` (the
+  rotation-carrying primitive) stays f32-internal regardless of storage
+  dtype; the shipped path drifts 1.0e-3 relative over 1000 free steps while
+  a bf16-emulated counterfactual (RNE rounding on every rotation op) drifts
+  4.0 — the loud-zero defense that keeps the 2% law bound honest.
+- **Not landed here (per the issue's own split)**: P4 the write-residual
+  commit law (defer-until-pull, rides Issue 939's posture — the gauge
+  quotient is WRONG on single-scalar orbits; the free-dynamics innovation
+  residual is the sound form, Research 623 §4.3), P6 the Sylvester
+  attribution + α-intervention replay (report-only, offline). Guard: NO
+  quotient residual (`r_G`) may ever be wired into `forward_looped` or the
+  halter — non-equivariant loops are the paper's own 23%-false-halt
+  ablation.

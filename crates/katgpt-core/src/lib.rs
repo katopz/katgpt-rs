@@ -2325,6 +2325,21 @@ pub mod gain_cost_halt;
 pub use gain_cost_halt::{
     GainCostLoopHalter, HaltDecision, HaltReason, angular_change, hidden_erank, step_size,
 };
+// Issue 945 P1/P3 (Research 623, arXiv:2610.18174 QRR) — the
+// quotient-convergence extraction: P1 per-channel delta-sequence mode fitter
+// (companion roots → (r, ω) with no Jacobian oracle), P3 settling-budget
+// predictor + two-signal r=1 certificate. P2's halter verdict (the modulus
+// channel over the oscillation detector) lives in gain_cost_halt behind the
+// SAME feature and arms via `with_mode_verdict()`. Opt-in POC — no promotion
+// claim; P4 rides `phase_belief` defer-until-pull (Issue 939), P6 is
+// report-only offline (issue file carries the split).
+#[cfg(feature = "qrr_convergence")]
+pub mod qrr_convergence;
+#[cfg(feature = "qrr_convergence")]
+pub use qrr_convergence::{
+    ModeEstimate, ModeFitter, ModeKind, OscillationVerdict, R1Certificate, settling_steps,
+    tolerance_for_budget,
+};
 // Plan 593 / Research 546 (arXiv:2609.04963 "Fractal basins trap latent
 // reasoning") — Saddle-Trap Escape Gate: three-way Continue /
 // Halt{Converged} / Halt{Trapped} / Kick loop controller wrapping (never

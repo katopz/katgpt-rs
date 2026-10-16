@@ -472,6 +472,19 @@ kl_depth_probe = []
 # top-2 implementation, not two.
 loop_alignment_probe = ["margin_gate"]
 
+# qrr_convergence (Issue 945 / Research 623, arXiv:2610.18174 QRR): the
+# quotient-convergence extraction — P1 per-channel delta-sequence AR(2) mode
+# fitter (ring-buffer, zero-alloc, ridge-repaired; companion roots → (r, ω)),
+# P2 two-channel oscillation verdict in GainCostLoopHalter (`with_mode_verdict()`
+# — OscillatingButSettling suppresses the halt, LimitCycle keeps it at
+# unchanged latency; kill-switch env KATGPT_QRR_OSC_VERDICT=0 demotes
+# decision-only), P3 settling-budget predictor (τ_δ = log(1/δ)/(−log r)) + the
+# two-signal r=1 certificate (advisory-only until a consumer wires an exit).
+# Opt-in POC — no promotion claim; P4 rides `phase_belief` defer-until-pull
+# (Issue 939), P6 report-only (issue file). Composes with `gain_cost_halt`
+# (P2 needs both; P1/P3 stand alone).
+qrr_convergence = []
+
 # saddle_escape (Plan 593 / Research 546, arXiv:2609.04963 "Fractal basins trap
 # latent reasoning"): three-way Continue / Halt{Converged} / Halt{Trapped} /
 # Kick loop controller for looped latent reasoners. Wraps (never forks)
@@ -4626,3 +4639,14 @@ required-features = ["scale_invariant_attn"]
 [[test]]
 name = "scale_invariant_goat"
 required-features = ["scale_invariant_attn"]
+
+# Issue 945 — the QRR gates: P1 mode-fit recovery (spiral/flip/ridge/SNR
+# sweep/stillness), P2 verdict discrimination (settling flip/spiral never
+# Oscillation-halt; limit cycle at unchanged latency; kill-switch child
+# byte-identity), P3 budget calibration (×2 on ≥95% of the synthetic
+# corpus) + two-sided certificate. Gated: gain_cost_halt + qrr_convergence
+# (P2 needs both; the green-zero rule — without the row, a plain `cargo
+# test` prints `ok. 0 passed` over the cfg'd-empty binary).
+[[test]]
+name = "issue945_qrr_gates"
+required-features = ["gain_cost_halt", "qrr_convergence"]

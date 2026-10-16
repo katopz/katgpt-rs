@@ -179,6 +179,18 @@ pub struct GainCostLoopHalter {
     /// Reset by any non-inverting loop and by the `NonContraction` halt
     /// itself (episode semantics: a halt ends the measurement episode).
     pub(crate) inversion_streak: u8,
+    /// QRR mode fitter (Issue 945 P2, feature `qrr_convergence`) — armed
+    /// via [`Self::with_mode_verdict`]; `None` = incumbent behavior.
+    #[cfg(feature = "qrr_convergence")]
+    pub(crate) mode: Option<crate::qrr_convergence::ModeFitter>,
+    /// QRR verdict demotion switch — `KATGPT_QRR_OSC_VERDICT=0` at arming
+    /// time keeps the fitter observing but never suppresses a halt.
+    #[cfg(feature = "qrr_convergence")]
+    pub(crate) mode_verdict_enabled: bool,
+    /// Last oscillation-channel verdict the fitter produced (observation
+    /// surface; stays live even when [`Self::mode_verdict_enabled`] is off).
+    #[cfg(feature = "qrr_convergence")]
+    pub(crate) last_mode_verdict: Option<crate::qrr_convergence::OscillationVerdict>,
 }
 
 impl GainCostLoopHalter {
@@ -205,6 +217,12 @@ impl GainCostLoopHalter {
             prev_gain: None,
             first_gain: None,
             inversion_streak: 0,
+            #[cfg(feature = "qrr_convergence")]
+            mode: None,
+            #[cfg(feature = "qrr_convergence")]
+            mode_verdict_enabled: false,
+            #[cfg(feature = "qrr_convergence")]
+            last_mode_verdict: None,
         }
     }
 
@@ -363,11 +381,33 @@ impl GainCostLoopHalter {
         // Oscillation early-halt — catches what stability-only primitives miss.
         // A NaN cos_theta fails `< 0.0` → treated as non-oscillatory.
         if cos_theta < 0.0 {
+            // Issue 945 P2: feed the signed one-lag projection (gain × cosθ)
+            // to the mode fitter whenever armed — the fit is what separates a
+            // settling oscillation from a limit cycle below. Non-finite
+            // products are dropped inside the fitter.
+            #[cfg(feature = "qrr_convergence")]
+            if let Some(fitter) = self.mode.as_mut() {
+                fitter.observe_signed(gain, cos_theta);
+            }
             self.oscillation_count = self.oscillation_count.saturating_add(1);
             if self.oscillation_count >= self.oscillation_patience {
-                return HaltDecision::Halt {
-                    reason: HaltReason::Oscillation,
-                };
+                // Issue 945 P2: consult the fitted modulus before firing.
+                // Without the feature (or the arming, or a trustworthy
+                // estimate) this is `false` and the incumbent verdict stands
+                // unchanged — G3 byte-identity when off.
+                #[cfg(feature = "qrr_convergence")]
+                let suppressed = self.mode_verdict_suppressed();
+                #[cfg(not(feature = "qrr_convergence"))]
+                let suppressed = false;
+                if !suppressed {
+                    return HaltDecision::Halt {
+                        reason: HaltReason::Oscillation,
+                    };
+                }
+                // Suppressed (OscillatingButSettling): fall through — the
+                // scissors still exit a genuinely converged loop via
+                // GainBelowCost, and a later limit-cycle estimate (the fit
+                // crossing the settle band) resumes the incumbent halt.
             }
         } else {
             // Positive or zero alignment resets the streak — one good loop
@@ -417,6 +457,67 @@ impl GainCostLoopHalter {
         }
 
         HaltDecision::Continue
+    }
+
+    /// Arm the QRR mode verdict (Issue 945 P2, feature `qrr_convergence`):
+    /// when the oscillation detector reaches patience, the fitted modulus of
+    /// the SIGNED one-lag projection (`gain × cosθ`) separates a settling
+    /// oscillation ([`OscillationVerdict::OscillatingButSettling`] — the
+    /// halt is SUPPRESSED; a genuinely converged loop still exits via the
+    /// scissors with [`HaltReason::GainBelowCost`]) from a limit cycle
+    /// ([`OscillationVerdict::LimitCycle`] — the incumbent halt fires at
+    /// unchanged latency).
+    ///
+    /// # Kill switch
+    ///
+    /// Env `KATGPT_QRR_OSC_VERDICT=0` (read ONCE here, never per loop)
+    /// demotes the verdict to the incumbent behavior with byte-identical
+    /// decisions, while the fitter keeps observing
+    /// ([`Self::last_oscillation_verdict`] stays live) — the demote-only
+    /// switch is the G3 arm; with the feature compiled out the entire
+    /// surface is absent and the kernel is untouched.
+    ///
+    /// # Cold window
+    ///
+    /// The verdict needs [`qrr_convergence::MIN_FIT_SAMPLES`] fitted
+    /// triples; before that (and on a blind/still channel — the near-90°
+    /// projection) the incumbent verdict stands. Arming with
+    /// `oscillation_patience <` that floor still false-halts the first
+    /// reversals — patience ≥ the floor is the intended posture.
+    #[cfg(feature = "qrr_convergence")]
+    #[inline]
+    pub fn with_mode_verdict(mut self) -> Self {
+        self.mode = Some(crate::qrr_convergence::ModeFitter::new());
+        self.mode_verdict_enabled = !crate::qrr_convergence::oscillation_verdict_kill_switch();
+        self
+    }
+
+    /// The last oscillation-channel verdict the fitter produced, if any.
+    /// Observation surface — stays live even under the kill switch (the
+    /// demotion is decision-only).
+    #[cfg(feature = "qrr_convergence")]
+    #[inline]
+    pub fn last_oscillation_verdict(
+        &self,
+    ) -> Option<crate::qrr_convergence::OscillationVerdict> {
+        self.last_mode_verdict
+    }
+
+    /// Consult the fitted mode at a reversal-at-patience loop. `true` = the
+    /// halt is suppressed (settling oscillation). Without an armed fitter or
+    /// without a trustworthy estimate the incumbent verdict stands (`false`).
+    #[cfg(feature = "qrr_convergence")]
+    #[inline]
+    fn mode_verdict_suppressed(&mut self) -> bool {
+        let Some(fitter) = self.mode.as_mut() else {
+            return false;
+        };
+        let Some(estimate) = fitter.estimate() else {
+            return false;
+        };
+        let verdict = crate::qrr_convergence::OscillationVerdict::from_mode(&estimate);
+        self.last_mode_verdict = Some(verdict);
+        self.mode_verdict_enabled && verdict == crate::qrr_convergence::OscillationVerdict::OscillatingButSettling
     }
 
     /// Update the previous-loop step size (gain signal) for the next iteration's
@@ -1132,9 +1233,22 @@ mod tests {
         // accidental bloat: the halter lives on the caller's stack per forward
         // pass. If this ever grows past a cache half-word, reconsider the
         // field set before extending further.
+        // Issue 945 P2 (feature `qrr_convergence`): the opt-in mode fitter is
+        // a DELIBERATE stack resident — a fixed 16-triple f32 ring + five f64
+        // window sums, no allocation, ~280 bytes — so the armed halter is a
+        // ~320-byte stack object under the feature. The default build (feature
+        // off) keeps the 48-byte incumbent exactly; the combo bound below only
+        // holds the bloat to the documented fitter size.
+        #[cfg(not(feature = "qrr_convergence"))]
         assert!(
             size_of::<GainCostLoopHalter>() <= 48,
             "GainCostLoopHalter must stay ≤ 48 bytes, got {}",
+            size_of::<GainCostLoopHalter>()
+        );
+        #[cfg(feature = "qrr_convergence")]
+        assert!(
+            size_of::<GainCostLoopHalter>() <= 352,
+            "GainCostLoopHalter + qrr mode fitter must stay ≤ 352 bytes, got {}",
             size_of::<GainCostLoopHalter>()
         );
     }
