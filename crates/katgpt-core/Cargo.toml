@@ -4650,3 +4650,25 @@ required-features = ["scale_invariant_attn"]
 [[test]]
 name = "issue945_qrr_gates"
 required-features = ["gain_cost_halt", "qrr_convergence"]
+
+# Issue 945 P6 — the Sylvester attribution gates: the Kronecker solve
+# (P S − AP = B_c, refused exactly on the σ(A)∩σ(S) overlap — the uniqueness
+# precondition surfacing as a verdict), the complement energy split (rate
+# inheritance: the r=0.999 coupled share dominates the ρ(A)=0.5 intrinsic
+# share at t=200), and the α-intervention replay (α ∈ {0, ½, 1} exact in the
+# linear instrument; a corrupted coupling measured against a stale P is the
+# recorded-negative path, matches=false). Gated: qrr_convergence alone (the
+# green-zero rule — without the row, a plain `cargo test` prints `ok. 0
+# passed` over the cfg'd-empty binary). Report-only lane — no production
+# consumer in this ticket (bench_011/013 extractors + Issue 717 are the
+# declared future consumers).
+[[test]]
+name = "issue945_qrr_sylvester_gates"
+required-features = ["qrr_convergence"]
+
+# Issue 945 P6 — the report instrument: builds the coupled-stall fixture,
+# prints the energy split + the three α replays + the recorded-negative
+# probe and ONE verdict line. Report-only: prints, exits 0, writes nothing.
+[[example]]
+name = "issue945_qrr_sylvester_report"
+required-features = ["qrr_convergence"]

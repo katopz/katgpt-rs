@@ -1,6 +1,9 @@
-//! QRR quotient-convergence extraction — Issue 945 P1/P3 (Research 623,
+//! QRR quotient-convergence extraction — Issue 945 P1/P3/P6 (Research 623,
 //! arXiv:2610.18174, Quotient Recurrent Reasoner). P2's halter verdict lives
-//! in [`crate::gain_cost_halt`] and consumes this module's estimate types.
+//! in [`crate::gain_cost_halt`] and consumes this module's estimate types;
+//! P6 (the report-only offline attribution instrument: Sylvester solve,
+//! complement energy split, α-intervention replay) sits at the bottom of
+//! this module.
 //!
 //! The paper's convergence-law family needs NO oracle and NO training: the
 //! dominant mode `(r, ω)` of an iterative loop is recoverable from the
@@ -387,6 +390,301 @@ impl R1Certificate {
 #[inline]
 pub fn oscillation_verdict_kill_switch() -> bool {
     std::env::var("KATGPT_QRR_OSC_VERDICT").is_ok_and(|v| v == "0")
+}
+
+// ─── Issue 945 P6 — Sylvester attribution + α-intervention replay ───────────
+// Report-only, OFFLINE instrument (Research 623 §1: Theorem 3.2 + the α
+// protocol). Consumers are FUTURE work (the bench_011/013 feature
+// extractors, the Issue 717 damping decisions) — nothing in this section is
+// wired into any hot path. Unlike the fitter above it allocates (`Vec`) and
+// computes in f64 — the solve AND every magnitude it feeds, for two measured
+// reasons: the α-identity's 1e-9 bar is unreachable through an f32-quantized
+// `P` (quantization alone injects Θ(1e-7) into the telescoping identity
+// `Σ A^{k−1−i}(PS−AP−B_c)S^i` — three orders over the bar), and an f32 norm
+// underflows at long horizons (ρ(A) = 0.5 at t = 200 ≈ 6e-61) and would fake
+// an exact zero share. The same measured-necessity class as the f64 window
+// sums in [`ModeFitter`]; the captured system itself still enters as f32
+// ([`SylvesterBlocks`]).
+
+/// P6 — the constructed/known linear system around a captured stall point.
+/// In the ordered coordinates `(u, e)` — `u ∈ R²` the oscillatory block,
+/// `e ∈ R^k` the complement (`d = 2 + k`) — the coupled system reads
+/// `u_{t+1} = S u_t`, `e_{t+1} = B_c u_t + A e_t`, with `B_c` the complement
+/// rows of `b` (rows `2..`; the `U` rows must be exactly zero — coupling
+/// into the invariant subspace would break the decomposition). The exact
+/// Sylvester decomposition (`P S − A P = B_c`, unique iff
+/// `σ(A) ∩ σ(S) = ∅`) splits the complement response into
+/// `e_t = A^t(e₀ − P u₀) + P S^t u₀`: intrinsic transient vs mode-coupled
+/// stall carrier.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SylvesterBlocks {
+    /// The 2×2 oscillatory block: the complex pair `r·e^{±iω}` as
+    /// `[[r·cosω, −r·sinω], [r·sinω, r·cosω]]`, or the real flip
+    /// `[[-r, 0], [0, −r]]`.
+    pub s: [[f32; 2]; 2],
+    /// Complement dynamics, `k×k` — stable and spectrally disjoint from
+    /// `s` (disjointness is the uniqueness precondition;
+    /// [`solve_sylvester`] refuses an overlapping system).
+    pub a: Vec<Vec<f32>>,
+    /// Coupling, `d×2` with `d = k + 2`; ONLY the complement rows (`2..`)
+    /// may be nonzero (enforced by [`solve_sylvester`]).
+    pub b: Vec<Vec<f32>>,
+    /// The recorded 2-column oscillatory basis, `[I₂; 0]` embedded in
+    /// `R^d` — how fitted oscillatory coordinates map back into full-state
+    /// space. Carried for the future extractor consumers; the functions in
+    /// this section work in the `(u, e)` coordinates directly and do not
+    /// read it.
+    pub u: Vec<Vec<f32>>,
+}
+
+/// P6 — solve `P S − A P = B_c` for `P` (`k×2`) via the Kronecker form
+/// `(Sᵀ ⊗ I_k − I₂ ⊗ A) vec(P) = vec(B_c)` — a `2k×2k` dense system
+/// (column-major `vec`), one Gaussian elimination with partial pivoting.
+/// The solve is delivered in f64 DELIBERATELY (not this file's usual f32
+/// boundary): an f32-quantized `P` carries Θ(1e-7) into the α-identity's
+/// telescoping residual, three orders over its 1e-9 bar, and nothing here
+/// syncs `P` (no boundary to protect — the P5 fp32 law is about rotation
+/// carry, and no rotation is carried by a linear solve).
+///
+/// `None` when the system is singular — exactly the spectral overlap
+/// `σ(A) ∩ σ(S) ≠ ∅`, since the Kronecker spectrum is `{λᵢ(S) − μⱼ(A)}`.
+/// That overlap is the paper's uniqueness precondition, so a refusal here
+/// is the FINDING, not an error. Also `None` on a shape violation.
+pub fn solve_sylvester(blocks: &SylvesterBlocks) -> Option<Vec<Vec<f64>>> {
+    let k = blocks.a.len();
+    if k == 0 || blocks.a.iter().any(|row| row.len() != k) {
+        return None;
+    }
+    if blocks.b.len() != k + 2 || blocks.b.iter().any(|row| row.len() != 2) {
+        return None;
+    }
+    if blocks.b[0].iter().any(|&x| x != 0.0) || blocks.b[1].iter().any(|&x| x != 0.0) {
+        return None; // the U rows must not couple (block-triangular premise)
+    }
+    let n = 2 * k;
+    // M[(jc·k + i)][(lc·k + i')] = Sᵀ[jc][lc]·δ(i,i') − A[i][i']·δ(jc,lc).
+    let mut m = vec![vec![0.0_f64; n]; n];
+    for jc in 0..2 {
+        for lc in 0..2 {
+            let st = blocks.s[lc][jc] as f64;
+            for i in 0..k {
+                m[jc * k + i][lc * k + i] += st;
+            }
+        }
+    }
+    for j in 0..2 {
+        for i in 0..k {
+            for l in 0..k {
+                m[j * k + i][j * k + l] -= blocks.a[i][l] as f64;
+            }
+        }
+    }
+    let mut rhs = vec![0.0_f64; n];
+    for j in 0..2 {
+        for i in 0..k {
+            rhs[j * k + i] = blocks.b[2 + i][j] as f64;
+        }
+    }
+    // Partial pivoting; a pivot at rounding scale of the matrix magnitude
+    // is the singular (spectral-overlap) verdict. The tolerance separates
+    // cleanly: the fixtures' smallest genuine |λᵢ(S) − μⱼ(A)| is O(0.5)
+    // while an exact overlap converges to ~1e-16.
+    let scale = m.iter().flatten().fold(0.0_f64, |acc, &x| acc.max(x.abs()));
+    let singular_tol = 1e-10 * scale.max(1.0) * n as f64;
+    for col in 0..n {
+        let mut pivot_row = col;
+        let mut pivot_val = m[col][col].abs();
+        for (ri, row) in m.iter().enumerate().skip(col + 1) {
+            let v = row[col].abs();
+            if v > pivot_val {
+                pivot_val = v;
+                pivot_row = ri;
+            }
+        }
+        if pivot_val <= singular_tol {
+            return None;
+        }
+        m.swap(col, pivot_row);
+        rhs.swap(col, pivot_row);
+        let piv = m[col][col];
+        let pivot_tail = m[col][col + 1..].to_vec();
+        let rhs_pivot = rhs[col];
+        for (ri, row) in m.iter_mut().enumerate().skip(col + 1) {
+            let f = row[col] / piv;
+            if f == 0.0 {
+                continue;
+            }
+            for (pv, val) in pivot_tail.iter().zip(row.iter_mut().skip(col + 1)) {
+                *val -= f * pv;
+            }
+            rhs[ri] -= f * rhs_pivot;
+        }
+    }
+    let mut x = vec![0.0_f64; n];
+    for r in (0..n).rev() {
+        let mut acc = rhs[r];
+        for c in (r + 1)..n {
+            acc -= m[r][c] * x[c];
+        }
+        x[r] = acc / m[r][r];
+    }
+    // Unstack vec(P) (column-major) back to the k×2 matrix.
+    Some((0..k).map(|i| vec![x[i], x[k + i]]).collect())
+}
+
+/// f64 2-norm (offline helper).
+fn norm2(v: &[f64]) -> f64 {
+    v.iter().map(|x| x * x).sum::<f64>().sqrt()
+}
+
+/// f64 row `i` of `P·(x, y)` for the k×2 coupling `p`.
+fn p_row(p: &[Vec<f64>], i: usize, x: f64, y: f64) -> f64 {
+    p[i][0] * x + p[i][1] * y
+}
+
+/// f64 `A·v` for the k×k complement dynamics.
+fn matvec_a(a: &[Vec<f32>], v: &[f64]) -> Vec<f64> {
+    a.iter()
+        .map(|row| row.iter().zip(v).map(|(&x, &y)| x as f64 * y).sum())
+        .collect()
+}
+
+/// f64 `S·w` for the 2×2 oscillatory block.
+fn matvec_s(s: &[[f32; 2]; 2], w: &[f64]) -> Vec<f64> {
+    vec![
+        s[0][0] as f64 * w[0] + s[0][1] as f64 * w[1],
+        s[1][0] as f64 * w[0] + s[1][1] as f64 * w[1],
+    ]
+}
+
+/// P6 — the Theorem 3.2 complement-energy split at the horizon.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EnergySplit {
+    /// `‖P Sᵗ u₀‖` — the mode-coupled response (inherits the oscillatory
+    /// rate `r`; at `r ≈ 1` this is the stall carrier).
+    pub coupled: f64,
+    /// `‖Aᵗ(e₀ − P u₀)‖` — the complement's own (intrinsic) transient.
+    pub intrinsic: f64,
+    /// `‖e_t‖` — the actual complement magnitude (NOT the scalar sum of
+    /// the two shares; the split terms need not align).
+    pub total: f64,
+}
+
+/// P6 — simulate `e_t = A^t(e₀ − P u₀) + P S^t u₀` in f64 and split the
+/// complement energy at horizon `t`. At `t = 0` the decomposition identity
+/// gives `total = ‖e₀‖` (the sanity pin the gates hold).
+pub fn energy_split(
+    blocks: &SylvesterBlocks,
+    p: &[Vec<f64>],
+    u0: &[f32],
+    e0: &[f32],
+    t: usize,
+) -> EnergySplit {
+    let mut v: Vec<f64> = (0..blocks.a.len())
+        .map(|i| e0[i] as f64 - p_row(p, i, u0[0] as f64, u0[1] as f64))
+        .collect();
+    let mut w = vec![u0[0] as f64, u0[1] as f64];
+    for _ in 0..t {
+        v = matvec_a(&blocks.a, &v);
+        w = matvec_s(&blocks.s, &w);
+    }
+    let coupled: Vec<f64> = (0..v.len()).map(|i| p_row(p, i, w[0], w[1])).collect();
+    let intrinsic = norm2(&v);
+    let total = norm2(&v.iter().zip(&coupled).map(|(a, b)| a + b).collect::<Vec<_>>());
+    EnergySplit { coupled: norm2(&coupled), intrinsic, total }
+}
+
+/// P6 — prediction-match tolerance for [`alpha_replay_check`]. The identity
+/// arm measures f64 roundoff (~1e-15); a real coupling mismatch surfaces
+/// orders of magnitude above this.
+pub const ALPHA_REPLAY_TOL: f64 = 1e-5;
+
+/// P6 — the canonical replay probe state: `u₀ = [1, 0]`, `e₀ᵢ = 1/(i + 1)`
+/// — the initial condition [`alpha_replay_check`] intervenes on. Exposed so
+/// gates and the report instrument reproduce the exact same state (`dim_k`
+/// is the complement dimension).
+pub fn replay_probe_state(dim_k: usize) -> (Vec<f32>, Vec<f32>) {
+    (
+        vec![1.0, 0.0],
+        (0..dim_k).map(|i| 1.0 / (i as f32 + 1.0)).collect(),
+    )
+}
+
+/// P6 — one row of the α-replay report table.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AlphaReplayVerdict {
+    /// The applied amplitude projection.
+    pub alpha: f32,
+    /// `‖e_k‖` measured by stepping the coupled recurrence from the
+    /// intervened state.
+    pub measured: f64,
+    /// `‖A^k(e₀ − αPu₀) + α·P S^k u₀‖` — the decomposition's prediction.
+    pub closed_form: f64,
+    /// Max-abs coordinate deviation, measured vs closed form.
+    pub deviation: f64,
+    /// `deviation < ALPHA_REPLAY_TOL`.
+    pub matches: bool,
+}
+
+/// P6 — the paper's α-intervention causal check, closed form. Project the
+/// oscillatory amplitude ONCE (`u₀ → α·u₀`, the complement untouched),
+/// resume the linear recurrence `k` steps, and compare the measured
+/// complement response against the decomposition's closed form
+/// `A^k(e₀ − αPu₀) + α·P S^k u₀` — the α-scaled coupled contribution. For
+/// the linear instrument the identity is EXACT up to f64 roundoff at every
+/// α (`α = 1` the identity arm; `α = 0` zeroes the coupled drive), so a
+/// deviation beyond [`ALPHA_REPLAY_TOL`] is a first-class recorded
+/// NEGATIVE: the attribution's `p` does not describe the measured coupling.
+/// Replay-only by contract — never a production write.
+///
+/// `p` is passed in (not re-solved) precisely so a stale attribution
+/// against the measured `blocks.b` is expressible — that mismatch IS the
+/// negative path. `k` is the replay horizon in steps; the complement
+/// dimension is `blocks.a.len()`.
+pub fn alpha_replay_check(
+    blocks: &SylvesterBlocks,
+    p: &[Vec<f64>],
+    alpha: f32,
+    k: usize,
+) -> AlphaReplayVerdict {
+    let (u0, e0) = replay_probe_state(blocks.a.len());
+    let a = f64::from(alpha);
+    let u0a = [u0[0] as f64 * a, u0[1] as f64 * a];
+    // Measured: step the TRUE coupled recurrence (drive = B_c) from the
+    // intervened state — the closed form is built from `p`, so a `p` that
+    // does not describe the measured coupling is exactly what the deviation
+    // exposes.
+    let mut u: Vec<f64> = u0a.to_vec();
+    let mut e: Vec<f64> = e0.iter().map(|&x| x as f64).collect();
+    for _ in 0..k {
+        let drive: Vec<f64> = (0..e.len())
+            .map(|i| blocks.b[2 + i][0] as f64 * u[0] + blocks.b[2 + i][1] as f64 * u[1])
+            .collect();
+        e = matvec_a(&blocks.a, &e).iter().zip(drive).map(|(x, d)| x + d).collect();
+        u = matvec_s(&blocks.s, &u);
+    }
+    // Closed form: A^k(e₀ − αPu₀) + α·P S^k u₀ (linearity folds α into u₀).
+    let mut v: Vec<f64> = (0..e0.len())
+        .map(|i| e0[i] as f64 - p_row(p, i, u0a[0], u0a[1]))
+        .collect();
+    let mut w = u0a.to_vec();
+    for _ in 0..k {
+        v = matvec_a(&blocks.a, &v);
+        w = matvec_s(&blocks.s, &w);
+    }
+    let closed: Vec<f64> = v
+        .iter()
+        .zip((0..v.len()).map(|i| p_row(p, i, w[0], w[1])))
+        .map(|(x, c)| x + c)
+        .collect();
+    let deviation = e.iter().zip(&closed).map(|(x, c)| (x - c).abs()).fold(0.0_f64, f64::max);
+    AlphaReplayVerdict {
+        alpha,
+        measured: norm2(&e),
+        closed_form: norm2(&closed),
+        deviation,
+        matches: deviation < ALPHA_REPLAY_TOL,
+    }
 }
 
 #[cfg(test)]
