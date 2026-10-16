@@ -144,10 +144,14 @@ test, run at every posture:
       operator + types.rs + S1–S5 unit suite. REVISED per the amendment: a thin composition wrapper over `set_sigmoid_attention_into` (`set_refine = ["set_attention"]`), NOT a fresh kernel — the original ~100-150 LOC estimate covered machinery Plan 354 already ships. Gate: `cargo test -p katgpt-core
       --features set_refine --lib`, clippy `-D warnings` default + all-features.
 - [x] T2 reflex: engine seam (flag-gated, default-off) + the harness A/B arm —
-      LANDED 2026-10-16 (reflex `t2-setrefine` @ `63ccf78`, branch — push held
-      for the katgpt-rs main-worktree sync, see the commit's NOTE; the feature
-      row requires katgpt-rs >= 0fb56b269, cargo validates dep-features
-      eagerly). The seam: per-question refinement inside `route_active` over
+      LANDED 2026-10-16, PUSHED 2026-10-16 (reflex develop `63ccf78`+`8546a68`+
+      `9494d83` — the push was held only until this box's katgpt-rs main
+      worktree synced past `a081134a8` (the plan-621 draft Cargo lift,
+      `.plans/621_draft_wip_cargo.patch`); the bench GOAT gate arm `9494d83`
+      was recovered from the uncommitted ring-worktree state and rides the
+      push. The feature row requires katgpt-rs >= 0fb56b269, cargo validates
+      dep-features eagerly — verified: shared-checkout `cargo check` green
+      post-ff). The seam: per-question refinement inside `route_active` over
       `refine_state_into`, keys = the options' resolved domain DIRECTIONS (this
       engine's option model), route+head terms recomputed from x' (the
       mc_ensemble `eff_state` pattern); noul + drafter-only byte-identical
