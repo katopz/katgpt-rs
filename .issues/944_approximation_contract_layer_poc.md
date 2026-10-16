@@ -2,6 +2,8 @@
 
 **Status:** Open — P2, DRY consolidation with three live consumers; opt-in until gates pass
 
+**Claimed:** Zed-agent (GLM), epoch 1792147000, expires 2026-10-18T14:00:00+00:00
+
 **Source:** ink-lang (MIT, @ `1a5c025fe86e92e7729edb1af093aa1ceb5e1abb`) checked approximation contracts, distilled in `riir-train/.research/475_Ink_Lang_Learning_Lifecycle_Proof_Checked_Optimization.md` (**private repo** — essentials inlined here). External prior art for the *metric*: Goldberg ULP, Arm libamath ULP practice, Herbie/Gappa lineage — the claim is only the **declarative contract form + the non-composition rule**, not the metric.
 
 ## Corrected premise — the substrate already ships ULP checks, three times (copy-pasted)
