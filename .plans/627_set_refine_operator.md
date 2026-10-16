@@ -1,6 +1,6 @@
 # Plan 627 — the `set_refine` operator: the one capability an independent option scorer structurally lacks
 
-**Status:** FILED 2026-10-16 (substrate-first gate SATISFIED, see §1) — plan-first
+**Status:** T1-T3 COMPLETE 2026-10-16 — T3 GOAT verdict: MEASURED NEGATIVE (G1 fail, monotone in γ; reflex Bench 150). The lane stays opt-in katgpt-core-side (`set_refine` feature) + reflex-side (`set_refine` feature, knob default 0.0); promotion REFUSED on G1 — T4's proposal is moot (the plan's own law: a negative is a valid landing). See §5 records.
 for a new katgpt-core primitive; implementation unclaimed. Downstream of reflex
 Issue 090 C2 (the Jeva fusion follow-up; the issue text is the seed spec). The
 promotion decision stays gated on the MEASURED GOAT (§4) — nothing here promotes
@@ -143,12 +143,40 @@ test, run at every posture:
 - [x] T1 katgpt-core: `set_refine` module (feature `set_refine`, opt-in) —
       operator + types.rs + S1–S5 unit suite. REVISED per the amendment: a thin composition wrapper over `set_sigmoid_attention_into` (`set_refine = ["set_attention"]`), NOT a fresh kernel — the original ~100-150 LOC estimate covered machinery Plan 354 already ships. Gate: `cargo test -p katgpt-core
       --features set_refine --lib`, clippy `-D warnings` default + all-features.
-- [ ] T2 reflex: engine seam (flag-gated, default-off) + the harness A/B arm —
-      NOT wired into any shipped posture; the lane refuses unless the feature is
-      named (the birth-gate pair: `#![cfg]` + `[[test]]`/`[[bench]]`
-      required-features in the same commit).
-- [ ] T3 the GOAT run (§4) on the tranche suites; bench record + honest verdict.
-- [ ] T4 proposal (or the measured negative) — owner-gated promotion decision.
+- [x] T2 reflex: engine seam (flag-gated, default-off) + the harness A/B arm —
+      LANDED 2026-10-16 (reflex `t2-setrefine` @ `63ccf78`, branch — push held
+      for the katgpt-rs main-worktree sync, see the commit's NOTE; the feature
+      row requires katgpt-rs >= 0fb56b269, cargo validates dep-features
+      eagerly). The seam: per-question refinement inside `route_active` over
+      `refine_state_into`, keys = the options' resolved domain DIRECTIONS (this
+      engine's option model), route+head terms recomputed from x' (the
+      mc_ensemble `eff_state` pattern); noul + drafter-only byte-identical
+      (issue-030 legality); nb/oc/ridge token-keyed, structurally unaffected;
+      engine-held scratch (G4: 0 allocs post-warmup). Birth-gate pair shipped:
+      `tests/set_refine_seam_gates.rs` 7/7 incl. `seam_equals_substrate_composition`
+      (engine probs == hand-composed substrate pipeline to 1e-6) + CLI
+      `--set-refine-ab/--set-refine-gamma/--set-refine-tau` (loud refuse without
+      the feature). Clippy `-D warnings --all-targets` clean at BOTH postures;
+      default lib 427 passed; engine_gates 9/9.
+- [x] T3 the GOAT run — DONE 2026-10-16 (reflex **Bench 150**): **G1 FAIL** —
+      γ=1.0/τ=0.5 loses −12.3..−14.0 pt on the wide by-name suites
+      (banking77/massive/ag_news), −2.8 sst5, −0.7 xnli; emotion +2.0 (lcb95
+      −0.03 — not beyond noise). The γ=0.25 monotonicity probe shows damage
+      scaling with γ, no reversal — the negative is STRUCTURAL: with
+      unit-centroid keys the set-conditioned pull regresses the state toward
+      the corpus mean, homogenizing exactly the geometry the route terms
+      discriminate with (collateral: calibrator collapse, abstain
+      0.526→0.974 banking77). Controls validate the seam: typed_decisions +
+      prompt_injections read exactly 0 flips (byte-identical, the legality
+      scope working as designed). G2 PASS at bench scale (p99 454 µs ≤ 1 ms;
+      O(n·d²) identity-matmul caveat ~9 ms @ k=77 — the fast-path is a
+      kernel_opt candidate, mooted by G1). G3 PASS (identity gates + the
+      0-flip controls). G4 PASS (0 allocs). **Verdict: measured negative,
+      promotion refused; a re-open needs a different KEY FAMILY (per-option
+      fitted directions — riir-train territory), never a γ/τ retune.**
+- [x] T4 — RESOLVED BY THE MEASURED NEGATIVE (no promotion question survives
+      G1's failure; §4's own law: "Any miss ⇒ stays opt-in with the measured
+      record"). Owner disclosure: reflex Bench 150 carries the full record.
 
 ## 6. Cross-references
 
