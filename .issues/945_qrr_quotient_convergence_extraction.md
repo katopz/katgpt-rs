@@ -1,7 +1,7 @@
 # Issue 945: QRR quotient-convergence extraction — rate-aware halting, settling budgets, phase-belief commit law
 
 **Status:** Open — POC. P1/P2/P3/P5 LANDED 2026-10-16 (see the checkboxes; feature `qrr_convergence`, kill-switch `KATGPT_QRR_OSC_VERDICT=0`); P4 defer-until-pull (rides Issue 939's posture); P6 report-only. Every gate before any promotion.
-**Claimed:** Zed-agent-idle-945, 1792159000, expires 2026-10-18T17:00:00+00:00
+**Claim:** closed — P1/P2/P3/P5 landed `f112eecaa`; P4/P6 are defer/report by contract, no further implementation expected from the claimant.
 **Landed:** 2026-10-16 — `crates/katgpt-core/src/qrr_convergence.rs` (P1 fitter + P3 fns; feature `qrr_convergence`) + P2 in `gain_cost_halt.rs` (`with_mode_verdict()`, cfg-gated) + `tests/issue945_qrr_gates.rs` (14 gates) + P5 `crates/katgpt-sense/tests/issue945_fp32_rotation_law.rs` (3 gates; f32 drift 1.0e-3 vs bf16 4.0 over 1000 steps) + catalog §150. Two measured numerics laws discovered by the gates themselves: the f32 sliding-window sums cancel catastrophically (~3–14% sum error → the ρ²-shadow root) — window sums accumulate in f64; and the exact-single-mode normal equations are rank-deficient — a relative Tikhonov ridge recovers the true mode through the min-norm solution.
 
 ## The idea
