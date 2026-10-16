@@ -2,14 +2,20 @@
 #   cd /Users/katopz/git && for d in */; do \
 #     [ -f "$d/BOUNDARY.md" ] && [ -d "$d/.git" ] && echo "${d%/}"; done
 # `-d .git`, not `-e`: a git worktree has a .git FILE.
+# The walk yields ON-DISK spellings; rows are CONTRACT spellings — a box with
+# scripts/repo_alias.local.txt translations writes the contract side of each
+# mapping (Issue 842: every tracked pin is keyed on contract names).
 # scripts/skill_repo_set_gate.py FAILS on the workstation if this drifts.
+jup-tool
 katgpt-rs
 katgpt-web
+mmorpg-editor
+mmorpg-remake
+mmorpg-remaster
 reflex-site
 riir-ai
 riir-auth
 riir-chain
-riir-refine
 riir-dao
 riir-dapps
 riir-deployer
@@ -21,14 +27,12 @@ riir-kat
 riir-llm
 riir-mmorpg-examples
 riir-neuron-db
-riir-reflex
 riir-refab
+riir-refine
+riir-reflex
 riir-reflexer
 riir-rethink
 riir-shader
 riir-train
 riir-viewbridge
-mmorpg-editor
-mmorpg-remaster
-mmorpg-remake
 seal-std
