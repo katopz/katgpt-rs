@@ -2312,6 +2312,7 @@ These are additional standalone features with their own plans that were not cove
 | `data_gate` | 111 | Task-level data gating for self-play training stability (Research 075) |
 | `vortex_flow` | — | VortexFlow attention substrate (parent of MSA family) |
 | `pyramid_topk` | 612 | PISA pyramid Top-K + LSE block selection — coarse-to-fine key pyramid, root-seeded bounded expansion, exact-LSE leaf scoring (arXiv:2609.31093); implies `dash_attn`. Opt-in — **G2 iso-quality NEGATIVE** (Bench 612: −0.133 Recall@8 vs the single-level exact-LSE scan at 32K+; latency slope CONFIRMED 1.07 vs 1.99) |
+| `swir_anchor_exit` | 626 | SwiR anchor-exit BoundarySet — the anchor-agreement/exit-boundary substrate for `swir_switch_thinking` (root forward: `katgpt-transformer/swir_anchor_exit`; fuel-side probes via riir-engine `swir_validation` consume it). Opt-in — Phase-0 kill gate IN FLIGHT (B1–B4 bars pre-registered in Bench 941 before the run; promotes only after the T0.5 GOAT) |
 
 ### Remaining smaller primitives (cross-reference)
 
@@ -5708,3 +5709,40 @@ katgpt-core → katgpt-sense).
 - **Local-only state**: nothing here crosses a sync boundary; if a
   consumer ever syncs the readout, the SCALAR crosses, never the
   `[f32; 2]` block.
+
+## 149. set_refine — Set-Refined State Embedding (Plan 627 / reflex Issue 090 C2)
+
+Feature `set_refine` (OPT-IN, **measured NEGATIVE at the GOAT — stays
+opt-in with the record**, the Bench-109 shape). Source: Jeva Prop 1
+(arXiv:2610.18773) — the one capability an independent per-option scorer
+structurally lacks is set-dependent preference; their fix is a
+candidate-conditioned attention block. The modelless analog:
+`crates/katgpt-core/src/set_refine.rs` — a thin composition over
+`set_attention` (Plan 354), NOT a fresh kernel.
+
+- **The operator**: `x' = x + (γ/n) · Σᵢ wᵢ·(kᵢ − x)`, `wᵢ =
+  σ(dot(x, kᵢ)/τ)` (sigmoid, NEVER softmax) — ONE query (the state
+  embedding) refined by the sigmoid-gated option set; options immutable
+  (read-only), permutation-invariant by sum symmetry, γ=0 verbatim-copy
+  short-circuit, caller-owned grow-only scratch (zero-alloc). Ships
+  `refine_state_into` + `SetRefineScratch`.
+- **The wide entry**: `set_sigmoid_attention_wide_into` — identical math,
+  caller-owned scratch, NO `d` cap; the legacy entry's `assert!(d ≤ 16)` is
+  a `[f32; 16]` stack-scratch artifact while decision embeddings run
+  d=256 (reflex `EMBED_DIM`). Legacy is now a thin stack-scratch wrapper,
+  bit-identical at d ≤ 16 (tested).
+- **Gates**: the S1–S5 set-awareness suite
+  (`tests/set_refine_suite.rs`, required-features row) — S1 reversal
+  capability (the independent scorer CANNOT flip, asserted; the refined
+  scorer flips A→B when a B-shaped decoy joins, decoy never wins), S2
+  permutation, S3 sigmoid-not-softmax, S4 immutability+bound, S5 γ=0
+  byte-identity; the A2-exemption gate suite (`set_refine` deliberately
+  BREAKS decoy-invariance A2 by design — Jeva Prop 1).
+- **GOAT verdict (reflex Bench 150, the consumer lane)**: **G1 FAIL** —
+  −12.3..−14.0 pt on banking77/massive/ag_news at γ=1.0/τ=0.5, monotone
+  in γ (the 0.25 probe shows no reversal — structural, not a too-hot
+  knob: unit-centroid keys pull the state toward the corpus mean). G2
+  PASS at bench scale (454 µs p99; O(n·d²) caveat), G3 PASS (flag-off
+  byte-identity), G4 PASS (0 allocs). Promotion refused; re-open = a
+  different KEY family (per-option fitted directions — riir-train
+  territory), never a γ/τ retune.
