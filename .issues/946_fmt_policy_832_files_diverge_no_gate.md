@@ -1,6 +1,36 @@
 # Issue 946 — formatting policy: 832 tracked files disagree with bare rustfmt; no rustfmt.toml, no fmt gate anywhere (policy call)
 
-**Status:** Open — owner policy call (2026-10-17, measured; nothing changed — detection only). **Audit landed same day (this section below the finding): the 832 was a file:line HEADER count, not files — true divergence 158 files (5.7% of tracked .rs); no config collapses it; option 1's cost ~5× lower than first costed. The slug carries the artifact number (kept — the number is the identity).**
+**Status:** Open — **VERDICT 2026-10-17: option 1 (adopt + gate), LANDED** — format commit `6760d76f5` (131 files, formatting only, in `.git-blame-ignore-revs`), `rustfmt.toml` (defaults + `edition`), gate `scripts/fmt_gate.py` wired as `full_gate.sh` Layer 7, policy in AGENTS.md §Formatting. Remaining: drain the 26-file list (T4) — held back because a commit touched each in the prior 48 h.
+
+## Verdict + landing (2026-10-17, session zed-m3-idle-1017d — owner-gated call made per the "ask Claude for verdict" rule)
+
+**Option 1.** Why not 2: per-touch fmt on a drifted file buries the real hunk under
+reflow in EVERY future commit to it, and the memory record shows the recurring cost of the
+status quo (sessions hand-matching style, `cargo fmt` sweeps reverting landed fixes). At
+5.7% the cliff is one normal commit; nothing is gained by spreading it out.
+
+The landing-window risk (reformatting under a concurrent session) is handled by
+MEMBERSHIP rather than by a quiet window: every drifted file touched by a commit in the
+48 h before the base (`08425f084`) was held back — 26 files, pinned in
+`scripts/fmt_pending_expected.txt` with a reason each — so the format commit only touched
+files no live lane had in flight. The gate reds both ways (UNPINNED new drift, STALE row),
+so the list can only shrink.
+
+- [x] T1 one-time format of the 131 cold files — `6760d76f5` (worktree run, `cargo fmt
+  --all -- --check -l` residue == the 26 held-back files exactly; docs gate 32/35 with the
+  3 reds environmental — worktree name / no upstream / alias file, all green on the main
+  checkout).
+- [x] T2 `rustfmt.toml` (defaults + `edition = "2024"`, so bare `rustfmt` and editor
+  format-on-save agree with `cargo fmt`) + `.git-blame-ignore-revs`.
+- [x] T3 gate `scripts/fmt_gate.py` — membership both ways, `MIN_FILES=2500` blindness
+  floor (`-v` count: 2,768), non-0/1 exit = NO VERDICT (2), self-test arm runs every
+  invocation. Canary run: a planted drift in `src/lib.rs` + a drained pinned file →
+  `1 unpinned, 1 stale`, exit 1. Wired as `full_gate.sh` Layer 7 (LAST, so a stable-rot
+  reflow never masks the lint verdict; not in docs_gate — that lane is toolchain-free by
+  design).
+- [ ] T4 drain the 26 — format each when its lane is idle, delete its row in the same commit.
+- [ ] T5 sibling repos (riir-ai, riir-chain, riir-reflex are known drifted) — same recipe,
+  per-repo, only on owner pull; not started.
 
 ## Audit (2026-10-17, session zed-m3-idle-1017b, M3) — the 832 is a header count; true divergence 158 files (5.7%)
 

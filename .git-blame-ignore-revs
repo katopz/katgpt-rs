@@ -1,0 +1,3 @@
+# Formatting-only commits — `git config blame.ignoreRevsFile .git-blame-ignore-revs`
+# Issue 946: rustfmt the 131 drifted files
+6760d76f57203ee9b213aaad653bdf03f2791011

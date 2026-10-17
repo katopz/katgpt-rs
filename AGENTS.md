@@ -1167,6 +1167,18 @@ invalidate should **refuse**, not warn — detect concurrent cargo by working
 directory, not command line; a lock-based check cannot work (cargo releases
 `target/<profile>/.cargo-lock` *before* running the test binaries).
 
+## Formatting — rustfmt defaults, gated (Issue 946, adopted 2026-10-17)
+
+The repo is rustfmt-DEFAULT-styled (`rustfmt.toml` sets only `edition`; no
+wider setting fits — measured). **Run `cargo fmt --all` (or `rustfmt <file>`)
+before committing `.rs`.** ⛔ Never `cargo fmt -p X -- a.rs`: everything after
+`--` is a rustfmt OPTION, so it formats the whole package. The one-time format
+commit is in `.git-blame-ignore-revs` (`git config blame.ignoreRevsFile
+.git-blame-ignore-revs`). Verdict: `scripts/fmt_gate.py`, `full_gate.sh`
+Layer 7 — drift pinned by MEMBERSHIP on `scripts/fmt_pending_expected.txt`, a
+drain list that only shrinks: format a pinned file, delete its row in the same
+commit; never add a row for new drift.
+
 ## Lint healing — `cargo refine` before manual fixes (adopted 2026-08-24)
 
 Mechanical clippy findings (`needless_return`, `unnecessary_map_or`,

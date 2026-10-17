@@ -1,0 +1,38 @@
+# fmt_gate.py — the Issue 946 DRAIN LIST: files still diverging from rustfmt
+# defaults, held back from the one-time format commit because a commit touched
+# them in the 48 h before it (a concurrent session may be mid-edit; reformatting
+# under it turns its next rebase into a conflict).
+#
+# Format:  <relpath> # reason        (a reasonless row is REFUSED)
+#
+# Reds in BOTH directions: a drifted file with no row (UNPINNED), and a row
+# whose file is now clean (STALE). Drain a row by formatting the file —
+# `rustfmt --edition 2024 <file>` — and deleting the row in the SAME commit.
+# NEVER add a row for new drift: format the file instead. This list only shrinks.
+#
+crates/katgpt-claim/src/clr/brevity.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-core/src/gain_cost_halt.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-core/src/lib.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-core/src/qrr_convergence.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-core/src/set_refine.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-core/src/sigmoid_calibration.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-core/tests/common/plan621_healer_sim.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-core/tests/healer_lane_eval_t4.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-core/tests/issue945_qrr_gates.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-core/tests/set_attention_g1_g5.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-core/tests/set_refine_suite.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-hla/benches/bench_939_hla_ordered_dot_g2.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-micro-belief/src/bom_arena.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-micro-belief/src/types.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-pruners/src/proof/sketch_population.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-pruners/src/proof/sketch_sampler.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-sense/src/lib.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-sense/src/phase_belief.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-sense/src/reconstruction.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-sense/tests/phase_belief_gates.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-transformer/examples/latent_readout_trace.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-transformer/src/swir/mod.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-transformer/src/swir/position_provenance.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-transformer/src/swir/pseudo_text.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-types/src/lib.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle
+crates/katgpt-types/src/simd/activations.rs # touched <48h before the 946 format commit (base 08425f084) — drain when idle

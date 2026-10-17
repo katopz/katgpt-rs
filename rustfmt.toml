@@ -1,0 +1,6 @@
+# rustfmt DEFAULTS, deliberately (Issue 946). The repo is default-styled: the
+# measured residual curve unpacked 2,000+ files under every wider setting, so
+# there is nothing to tune. `edition` is here only so a bare `rustfmt <file>`
+# (and editor format-on-save) agrees with `cargo fmt` — every crate is 2024.
+# Gate: scripts/fmt_gate.py (full_gate.sh Layer 7).
+edition = "2024"

@@ -63,6 +63,11 @@
 #                            cell was asserted by nothing until Issue 758 fell
 #                            through it (slice_tca/tests.rs E0432). Same three-
 #                            package population as test_gate.sh.
+#   7. rustfmt             → `scripts/fmt_gate.py` (Issue 946): the tree is
+#                            rustfmt-default-styled; drift is pinned by
+#                            MEMBERSHIP on a drain list that only shrinks.
+#                            Last, so a toolchain-bump reflow on the weekly
+#                            stable rot run never masks the lint verdict.
 #   5. doc/script parity   → AGENTS.md must quote the same command this script
 #                            runs; a gate whose spec has drifted from its
 #                            implementation is a gate nobody is running
@@ -882,6 +887,15 @@ for relrow in $RELD_ROWS; do
     rm -f "$RELD_LOG"
     echo "  ✓ $relpkg release/default-features clean ($RELD_UNITS compiler-artifact record(s))"
 done
+
+# ── Layer 7: rustfmt (Issue 946) ────────────────────────────────────────────
+# Membership-pinned, both directions — see scripts/fmt_gate.py. Exit 2 is NO
+# VERDICT (a blind formatter or a failing self-test), never folded into a pass.
+echo "▸ Layer 7: rustfmt — scripts/fmt_gate.py"
+if ! python3 "$REPO_ROOT/scripts/fmt_gate.py"; then
+    echo "✗ full gate FAILED — rustfmt drift outside the Issue 946 drain list"
+    exit 1
+fi
 
 # UNITS is printed on every pass, not just when it is interesting: the number
 # that would have exposed the vacuous CI green was never on screen.
