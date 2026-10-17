@@ -1,6 +1,6 @@
 # Issue 946 — formatting policy: 832 tracked files disagree with bare rustfmt; no rustfmt.toml, no fmt gate anywhere (policy call)
 
-**Status:** Open — **VERDICT 2026-10-17: option 1 (adopt + gate), LANDED** — format commit `6760d76f5` (131 files, formatting only, in `.git-blame-ignore-revs`), `rustfmt.toml` (defaults + `edition`), gate `scripts/fmt_gate.py` wired as `full_gate.sh` Layer 7, policy in AGENTS.md §Formatting. Remaining: drain the last 7 of the 26-file list (T4; 19 drained 2026-10-17) — held back because a commit touched each in the prior 48 h.
+**Status:** Open — **VERDICT 2026-10-17: option 1 (adopt + gate), LANDED** — format commit `6760d76f5` (131 files, formatting only, in `.git-blame-ignore-revs`), `rustfmt.toml` (defaults + `edition`), gate `scripts/fmt_gate.py` wired as `full_gate.sh` Layer 7, policy in AGENTS.md §Formatting. Drain: 19 done 2026-10-17, 6 more 2026-10-18 (`627`/`939` claims expired, formatted + clippy-green at `set_refine`/`phase_belief` feature postures) — **1 row remains** (`swir/mod.rs`, held by the live plan 626 claim, exp 2026-10-18T22:14Z).
 
 ## Verdict + landing (2026-10-17, session zed-m3-idle-1017d — owner-gated call made per the "ask Claude for verdict" rule)
 

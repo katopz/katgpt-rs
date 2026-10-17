@@ -78,7 +78,11 @@ fn f32_phase_accumulation_drifts_where_the_integer_form_does_not() {
         }
     }
     let mean_err = (err_sum / checks as f64) as f32;
-    assert_eq!(ctr.count(), 1, "1_000_000 mod 3 — the integer side is exact");
+    assert_eq!(
+        ctr.count(),
+        1,
+        "1_000_000 mod 3 — the integer side is exact"
+    );
     assert!(
         mean_err > 0.2,
         "f32 accumulation should decorrelate by 10⁶ events (mean |Δcos| = {mean_err}); \
@@ -352,7 +356,10 @@ fn write_budget_sizes_writes_to_a_target_bound() {
     let small = DampedPhaseBlock::new(0.999, 1e-3).unwrap();
     let leaky_scale = 1.0 - 0.999f32; // |1−ρe^{iθ}| ≈ √((1−ρ)²+θ²) ≥ 1−ρ
     assert!(small.write_budget_for(1.0) >= leaky_scale * 0.99);
-    assert!(small.write_budget_for(1.0) < 0.05, "θ=1e-3 keeps the budget tiny");
+    assert!(
+        small.write_budget_for(1.0) < 0.05,
+        "θ=1e-3 keeps the budget tiny"
+    );
 }
 
 // ─── Constructor guards + sigmoid readout shape ─────────────────────────
@@ -402,8 +409,14 @@ fn drive_readouts_are_sigmoid_shaped_never_softmax() {
     for gain in [0.5f32, 2.0, 8.0] {
         let a = ctr.drive_readout(gain);
         let b = blk.drive_readout(gain);
-        assert!(a > 0.5 && a < 1.0, "count-0 sigmoid readout must exceed 0.5");
-        assert!((a - b).abs() < 1e-6, "zero-state convention matches count 0");
+        assert!(
+            a > 0.5 && a < 1.0,
+            "count-0 sigmoid readout must exceed 0.5"
+        );
+        assert!(
+            (a - b).abs() < 1e-6,
+            "zero-state convention matches count 0"
+        );
         assert!(ctr.drive_readout(gain * 2.0) > a, "monotone in gain");
     }
 }

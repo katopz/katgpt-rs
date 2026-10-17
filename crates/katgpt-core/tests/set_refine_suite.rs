@@ -115,18 +115,38 @@ fn s1_set_dependent_reversal() {
     // scores do not read the set at all.
     let indep_ab = [dot(&x, &a), dot(&x, &b)];
     let indep_abd = [dot(&x, &a), dot(&x, &b), dot(&x, &d)];
-    assert_eq!(argmax_lowest(&indep_ab), 0, "independent: A must win on {{A,B}}");
-    assert_eq!(argmax_lowest(&indep_abd), 0, "independent: A must win on {{A,B,D}} — an independent scorer CANNOT reverse (Prop 1)");
+    assert_eq!(
+        argmax_lowest(&indep_ab),
+        0,
+        "independent: A must win on {{A,B}}"
+    );
+    assert_eq!(
+        argmax_lowest(&indep_abd),
+        0,
+        "independent: A must win on {{A,B,D}} — an independent scorer CANNOT reverse (Prop 1)"
+    );
 
     // Refined scorer, {A,B}: A wins.
     let x2 = refine(&x, &[&a, &b], &cfg);
     let s_ab = [dot(&x2, &a), dot(&x2, &b)];
-    assert_eq!(argmax_lowest(&s_ab), 0, "refined {{A,B}}: A must win (margin {})", s_ab[0] - s_ab[1]);
+    assert_eq!(
+        argmax_lowest(&s_ab),
+        0,
+        "refined {{A,B}}: A must win (margin {})",
+        s_ab[0] - s_ab[1]
+    );
 
     // Refined scorer, {A,B,D}: B wins, the decoy never does.
     let x3 = refine(&x, &[&a, &b, &d], &cfg);
     let s_abd = [dot(&x3, &a), dot(&x3, &b), dot(&x3, &d)];
-    assert_eq!(argmax_lowest(&s_abd), 1, "refined {{A,B,D}}: B must win — the set-dependent REVERSAL (A={:.4} B={:.4} D={:.4})", s_abd[0], s_abd[1], s_abd[2]);
+    assert_eq!(
+        argmax_lowest(&s_abd),
+        1,
+        "refined {{A,B,D}}: B must win — the set-dependent REVERSAL (A={:.4} B={:.4} D={:.4})",
+        s_abd[0],
+        s_abd[1],
+        s_abd[2]
+    );
 }
 
 /// Adding the decoy must not merely narrow the gap — the A-vs-B order
@@ -142,8 +162,14 @@ fn s1_reversal_is_ordinal() {
     let x3 = refine(&x, &[&a, &b, &d], &cfg);
     let ab2 = dot(&x2, &a) - dot(&x2, &b);
     let ab3 = dot(&x3, &a) - dot(&x3, &b);
-    assert!(ab2 > 0.01, "{{A,B}} margin must be comfortably positive: {ab2}");
-    assert!(ab3 < -0.01, "{{A,B,D}} margin must be comfortably negative: {ab3}");
+    assert!(
+        ab2 > 0.01,
+        "{{A,B}} margin must be comfortably positive: {ab2}"
+    );
+    assert!(
+        ab3 < -0.01,
+        "{{A,B,D}} margin must be comfortably negative: {ab3}"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -166,12 +192,20 @@ fn s2_same_order_bit_identical() {
     let mut sc2 = SetRefineScratch::new(D, 3);
     refine_state_into(&x, &flat1, &mut o1, &cfg, &mut sc1).unwrap();
     refine_state_into(&x, &flat2, &mut o2, &cfg, &mut sc2).unwrap();
-    assert_eq!(bits(&o1), bits(&o2), "S2: same inputs, bit-identical refined state");
+    assert_eq!(
+        bits(&o1),
+        bits(&o2),
+        "S2: same inputs, bit-identical refined state"
+    );
 
     // And across a REUSED scratch (the steady-state path).
     let mut o3 = vec![0.0f32; D];
     refine_state_into(&x, &flat1, &mut o3, &cfg, &mut sc1).unwrap();
-    assert_eq!(bits(&o1), bits(&o3), "S2: scratch reuse stays bit-identical");
+    assert_eq!(
+        bits(&o1),
+        bits(&o3),
+        "S2: scratch reuse stays bit-identical"
+    );
 }
 
 /// Permuted option order: float-precision agreement (peer-order addition)
@@ -182,17 +216,33 @@ fn s2_permuted_options_float_precision() {
     let opts: Vec<Vec<f32>> = vec![s1_a(), s1_b(), s1_d()];
     let cfg = s1_cfg();
     let base = refine(&x, &[&opts[0], &opts[1], &opts[2]], &cfg);
-    for perm in [[0usize, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]] {
+    for perm in [
+        [0usize, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ] {
         let rows: Vec<&[f32]> = perm.iter().map(|i| opts[*i].as_slice()).collect();
         let xp = refine(&x, &rows, &cfg);
         let mut max_drift: f32 = 0.0;
         for m in 0..D {
             max_drift = max_drift.max((base[m] - xp[m]).abs());
         }
-        assert!(max_drift <= 1e-6, "S2: perm {:?} drift {max_drift} exceeds 1e-6", perm);
+        assert!(
+            max_drift <= 1e-6,
+            "S2: perm {:?} drift {max_drift} exceeds 1e-6",
+            perm
+        );
         // Same winner under every permutation (score the base set order).
         let sb: Vec<f32> = opts.iter().map(|o| dot(&xp, o)).collect();
-        assert_eq!(argmax_lowest(&sb), 1, "S2: perm {:?} winner must stay B", perm);
+        assert_eq!(
+            argmax_lowest(&sb),
+            1,
+            "S2: perm {:?} winner must stay B",
+            perm
+        );
     }
 }
 
@@ -209,16 +259,29 @@ fn s3_gates_sigmoid_not_softmax() {
     let a = s1_a();
     let b = s1_b();
     let d = s1_d();
-    let gates = [gate_weight(&x, &a, TAU), gate_weight(&x, &b, TAU), gate_weight(&x, &d, TAU)];
+    let gates = [
+        gate_weight(&x, &a, TAU),
+        gate_weight(&x, &b, TAU),
+        gate_weight(&x, &d, TAU),
+    ];
     for g in gates {
         assert!(g > 0.0 && g < 1.0, "S3: gate {g} outside (0,1)");
     }
     // Monotone: dot(x,A) > dot(x,B) > dot(x,D) implies w_A > w_B > w_D.
-    assert!(gates[0] > gates[1] && gates[1] > gates[2], "S3: gates must be monotone in dot");
+    assert!(
+        gates[0] > gates[1] && gates[1] > gates[2],
+        "S3: gates must be monotone in dot"
+    );
     // Denominator-free: three high-attendance options each above 0.7 —
     // their sum exceeds 1 by far; a softmax spelling would sum to exactly 1.
-    assert!(gates.iter().all(|g| *g > 0.7), "S3: fixture must be high-attendance");
-    assert!(gates.iter().sum::<f32>() > 2.0, "S3: sum of independent gates must exceed 1 by far (softmax sums to 1)");
+    assert!(
+        gates.iter().all(|g| *g > 0.7),
+        "S3: fixture must be high-attendance"
+    );
+    assert!(
+        gates.iter().sum::<f32>() > 2.0,
+        "S3: sum of independent gates must exceed 1 by far (softmax sums to 1)"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -241,7 +304,10 @@ fn s4_options_immutable_and_displacement_bounded() {
     let mut sc = SetRefineScratch::new(D, 3);
     refine_state_into(&x, &flat, &mut out, &cfg, &mut sc).unwrap();
     let after: Vec<u32> = flat.iter().map(|v| v.to_bits()).collect();
-    assert_eq!(before, after, "S4: option rows must be byte-identical after the call");
+    assert_eq!(
+        before, after,
+        "S4: option rows must be byte-identical after the call"
+    );
 
     // Bound (f64 accumulation; gate_weight matches the kernel's sigmoid to ~1 ULP).
     let n = 3 + 1;
@@ -252,7 +318,10 @@ fn s4_options_immutable_and_displacement_bounded() {
     }
     bound *= (GAMMA as f64) / (n as f64);
     let disp = norm(&(0..D).map(|m| out[m] - x[m]).collect::<Vec<_>>()) as f64;
-    assert!(disp <= bound + 1e-6, "S4: displacement {disp} exceeds bound {bound}");
+    assert!(
+        disp <= bound + 1e-6,
+        "S4: displacement {disp} exceeds bound {bound}"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -278,7 +347,9 @@ fn s5_gamma_zero_byte_identity() {
 fn lcg_vec(seed: &mut u64, len: usize) -> Vec<f32> {
     (0..len)
         .map(|_| {
-            *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            *seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             ((*seed >> 33) as f32) / (u32::MAX >> 1) as f32 - 1.0
         })
         .collect()
@@ -304,7 +375,10 @@ fn d256_refine_finite_permutation_stable() {
     let mut out = vec![0.0f32; D256];
     let mut sc = SetRefineScratch::new(D256, 8);
     refine_state_into(&x, &flat, &mut out, &cfg, &mut sc).unwrap();
-    assert!(out.iter().all(|v| v.is_finite()), "d256: refined state must be finite");
+    assert!(
+        out.iter().all(|v| v.is_finite()),
+        "d256: refined state must be finite"
+    );
 
     // Determinism: rerun bit-identical.
     let mut out2 = vec![0.0f32; D256];
@@ -321,9 +395,16 @@ fn d256_refine_finite_permutation_stable() {
     for m in 0..D256 {
         max_drift = max_drift.max((out[m] - xp[m]).abs());
     }
-    assert!(max_drift <= 1e-6, "d256: permuted drift {max_drift} exceeds 1e-6");
+    assert!(
+        max_drift <= 1e-6,
+        "d256: permuted drift {max_drift} exceeds 1e-6"
+    );
     let scores_p: Vec<f32> = opts.iter().map(|o| dot(&xp, o)).collect();
-    assert_eq!(argmax_lowest(&scores_p), winner, "d256: permuted winner must match");
+    assert_eq!(
+        argmax_lowest(&scores_p),
+        winner,
+        "d256: permuted winner must match"
+    );
 
     // gamma=0 verbatim copy at the wide dim too.
     let cfg_off = SetRefineConfig::new(1.0, 0.0, D256);

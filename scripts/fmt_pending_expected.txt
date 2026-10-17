@@ -10,10 +10,4 @@
 # `rustfmt --edition 2024 <file>` — and deleting the row in the SAME commit.
 # NEVER add a row for new drift: format the file instead. This list only shrinks.
 #
-crates/katgpt-core/src/set_refine.rs # held: live plan 627 claim (4090-setrefine, exp 2026-10-17T23:26Z) — drain after expiry
-crates/katgpt-core/tests/set_attention_g1_g5.rs # held: live plan 627 claim (4090-setrefine, exp 2026-10-17T23:26Z) — drain after expiry
-crates/katgpt-core/tests/set_refine_suite.rs # held: live plan 627 claim (4090-setrefine, exp 2026-10-17T23:26Z) — drain after expiry
-crates/katgpt-sense/src/lib.rs # held: live issue 939 claim (exp 2026-10-17T20:39Z) — drain after expiry
-crates/katgpt-sense/src/phase_belief.rs # held: live issue 939 claim (exp 2026-10-17T20:39Z) — drain after expiry
-crates/katgpt-sense/tests/phase_belief_gates.rs # held: live issue 939 claim (exp 2026-10-17T20:39Z) — drain after expiry
 crates/katgpt-transformer/src/swir/mod.rs # held: live plan 626 claim (katgpt-rs-idle-626, exp 2026-10-18T22:14Z) — drain after expiry

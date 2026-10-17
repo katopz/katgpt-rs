@@ -147,7 +147,10 @@ impl ModularPhaseCounter {
     /// `[cos φ, sin φ]` — the FULL phase code (both quadratures), injective
     /// on ℤ_m for every m. This is the paper's actual readout surface.
     pub fn readout_pair(&self) -> [f32; 2] {
-        [self.cos_lut[self.count as usize], self.sin_lut[self.count as usize]]
+        [
+            self.cos_lut[self.count as usize],
+            self.sin_lut[self.count as usize],
+        ]
     }
 
     /// The drive-shaped scalar readout: `fast_sigmoid(gain · cos φ)` —
@@ -258,21 +261,13 @@ impl DampedPhaseBlock {
     /// readout matches `count 0`).
     pub fn phase_cos(&self) -> f32 {
         let m = self.magnitude();
-        if m <= 0.0 {
-            1.0
-        } else {
-            self.z[0] / m
-        }
+        if m <= 0.0 { 1.0 } else { self.z[0] / m }
     }
 
     /// `sin φ` — the phase's quadrature partner (same zero-state convention).
     pub fn phase_sin(&self) -> f32 {
         let m = self.magnitude();
-        if m <= 0.0 {
-            0.0
-        } else {
-            self.z[1] / m
-        }
+        if m <= 0.0 { 0.0 } else { self.z[1] / m }
     }
 
     /// Drive-shaped readout `fast_sigmoid(gain · cos φ)`.

@@ -48,9 +48,9 @@ pub use bake::{
     DEFAULT_OBS_PRECISION, UNINFORMATIVE_PRECISION, bake_regularize, bake_update, bake_update_mean,
     bake_update_precision, exploration_priority, informed_prior_precision, precision_to_confidence,
 };
+pub use octree::{KgEmbedding, SenseOctreeBuilder};
 #[cfg(feature = "phase_belief")]
 pub use phase_belief::{DampedPhaseBlock, ModularPhaseCounter, PhaseBeliefError};
-pub use octree::{KgEmbedding, SenseOctreeBuilder};
 pub use reconstruction::{
     OctreeNodeId, ReconstructionConfig, ReconstructionResult, ReconstructionState, TraversalAction,
     TripleEvidence, compare_reconstruction,

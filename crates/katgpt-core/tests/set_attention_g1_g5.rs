@@ -284,11 +284,33 @@ fn legacy_stack_and_wide_bit_identical_at_small_d() {
         let mut out_legacy = vec![0.0f32; n * d];
         let mut out_wide = vec![0.0f32; n * d];
         set_sigmoid_attention_into(
-            &states, &w_q, &w_k, None, &mut out_legacy, &cfg, n, d, k, &mut sq, &mut sk, &mut sa,
+            &states,
+            &w_q,
+            &w_k,
+            None,
+            &mut out_legacy,
+            &cfg,
+            n,
+            d,
+            k,
+            &mut sq,
+            &mut sk,
+            &mut sa,
         )
         .unwrap();
         set_sigmoid_attention_wide_into(
-            &states, &w_q, &w_k, None, &mut out_wide, &cfg, n, d, k, &mut sq, &mut sk, &mut sa,
+            &states,
+            &w_q,
+            &w_k,
+            None,
+            &mut out_wide,
+            &cfg,
+            n,
+            d,
+            k,
+            &mut sq,
+            &mut sk,
+            &mut sa,
             &mut sum_av,
         )
         .unwrap();
