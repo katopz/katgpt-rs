@@ -1,6 +1,7 @@
 # Plan 620: katgpt-assign — Spec-Driven Constrained Assignment Solver (Rebalancer distillation)
 
 > **Status:** Active — Phase 1 LANDED 2026-10-07 (`feat:` + `docs:` commits; G1/G2/G4 green, feature OPT-IN per the verdict protocol). **Phase 2 LANDED 2026-10-17** (`feat:` commit; Bench 944; feature stays OPT-IN). Phase 3 pending consumers
+> **Claimed:** zed-m3-1087-target-assign, epoch=1792262036, expires 2026-10-19T18:33:56+00:00 — Phase 3 swarm target_claim centralized-alternative lane only
 > **Source:** Research 607 (OSDI'24 Rebalancer, facebook/rebalancer @ e4c35517980d893849275f71b3cb90f81164b6d5)
 > **Consumers:** riir-chain Issue 164 (primary — shard_assignment solver); riir-rethink Issue 029 (candidate; closed 2026-10-07 — record: riir-rethink HISTORY.md, the promote triggers folded there)
 
