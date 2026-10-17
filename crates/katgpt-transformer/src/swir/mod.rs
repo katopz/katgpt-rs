@@ -107,8 +107,8 @@ mod entropy;
 #[cfg(feature = "swir_anchor_exit")]
 pub mod anchor;
 // Issue 942: report-only latent pseudo-text readout + health sensors.
-pub mod pseudo_text;
 mod position_provenance;
+pub mod pseudo_text;
 mod signal_mix;
 mod soft_embedding;
 // Phase 12 T4.6 (2026-07-04): strategy_adapter moved here from katgpt-rs root.
@@ -121,10 +121,10 @@ pub use controller::SwiRController;
 pub use convex_hull_check::in_vocab_convex_hull;
 pub use entropy::{entropy_from_logits, shannon_entropy};
 pub use position_provenance::{PositionProvenance, ProvenanceLedger};
-pub use signal_mix::{SignalMixKind, mix_thinking_signal};
 pub use pseudo_text::{
     LatentLoopSensor, LatentReadoutBank, NearestToken, PseudoTextCollapseSensor, span_readability,
 };
+pub use signal_mix::{SignalMixKind, mix_thinking_signal};
 pub use soft_embedding::soft_embedding;
 pub use types::{ControlToken, StepAction, SwiRConfig, SwiRStats, ThinkMode};
 

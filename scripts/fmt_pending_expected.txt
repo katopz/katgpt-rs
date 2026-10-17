@@ -9,5 +9,3 @@
 # whose file is now clean (STALE). Drain a row by formatting the file —
 # `rustfmt --edition 2024 <file>` — and deleting the row in the SAME commit.
 # NEVER add a row for new drift: format the file instead. This list only shrinks.
-#
-crates/katgpt-transformer/src/swir/mod.rs # held: live plan 626 claim (katgpt-rs-idle-626, exp 2026-10-18T22:14Z) — drain after expiry

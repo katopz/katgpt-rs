@@ -1,6 +1,6 @@
 # Issue 946 — formatting policy: 832 tracked files disagree with bare rustfmt; no rustfmt.toml, no fmt gate anywhere (policy call)
 
-**Status:** Open — **VERDICT 2026-10-17: option 1 (adopt + gate), LANDED** — format commit `6760d76f5` (131 files, formatting only, in `.git-blame-ignore-revs`), `rustfmt.toml` (defaults + `edition`), gate `scripts/fmt_gate.py` wired as `full_gate.sh` Layer 7, policy in AGENTS.md §Formatting. Drain: 19 done 2026-10-17, 6 more 2026-10-18 (`627`/`939` claims expired, formatted + clippy-green at `set_refine`/`phase_belief` feature postures) — **1 row remains** (`swir/mod.rs`, held by the live plan 626 claim, exp 2026-10-18T22:14Z).
+**Status:** Open — **VERDICT 2026-10-17: option 1 (adopt + gate), LANDED** — format commit `6760d76f5` (131 files, formatting only, in `.git-blame-ignore-revs`), `rustfmt.toml` (defaults + `edition`), gate `scripts/fmt_gate.py` wired as `full_gate.sh` Layer 7, policy in AGENTS.md §Formatting. Drain: 19 done 2026-10-17, 6 more 2026-10-18 (`627`/`939` claims expired, formatted + clippy-green at `set_refine`/`phase_belief` feature postures) — **all 26 drained** (last row `swir/mod.rs` 2026-10-18 ICT — drained against the plan-626 lease EARLY: the holding plan is CLOSED-NEGATIVE since 2026-10-16, so the lease guards no live work; tree clean, holding session idle).
 
 ## Verdict + landing (2026-10-17, session zed-m3-idle-1017d — owner-gated call made per the "ask Claude for verdict" rule)
 
@@ -28,12 +28,19 @@ so the list can only shrink.
   `1 unpinned, 1 stale`, exit 1. Wired as `full_gate.sh` Layer 7 (LAST, so a stable-rot
   reflow never masks the lint verdict; not in docs_gate — that lane is toolchain-free by
   design).
-- [ ] T4 drain the 26 — format each when its lane is idle, delete its row in the same commit.
+- [x] T4 drain the 26 — format each when its lane is idle, delete its row in the same commit.
   **19 drained 2026-10-17** (none dirty, no commit in ≥13 h, no live claim covering them; a
   `rustfmt` recursion into held `set_refine.rs` via `lib.rs` was reverted). **7 held**, each
   row naming the live claim that holds it: plan 627 (3 files, exp 2026-10-17T23:26Z), issue
   939 (3, exp 20:39Z), plan 626 (`swir/mod.rs`, exp 2026-10-18T22:14Z) — drain each after
-  its claim expires.
+  its claim expires. **6 more drained 2026-10-18** (627/939 claims expired; formatted +
+  clippy-green at `set_refine`/`phase_belief` feature postures). **Last row drained
+  2026-10-18 ICT** — `swir/mod.rs` (module-ordering hunks only, no child recursion).
+  Drain note: the plan-626 lease (exp 2026-10-18T22:14Z) was still nominally live, but its
+  holding plan is CLOSED-NEGATIVE since 2026-10-16 — the lease guarded no live edit; the
+  katgpt-rs tree was clean, origin in sync, and the holding session idle. A format-clean
+  file cannot conflict with any future lane (a plan re-open would re-claim first). Row
+  deleted, `fmt_gate.py` green (0 unpinned, 0 stale over 2771 files). T4 COMPLETE.
 - [-] T5 sibling repos — DEFERRED by verdict 2026-10-17 (measured, read-only, tracked
   `.rs` inside each repo only): riir-ai **1,429 / 2,984 (48%)**, riir-chain **294 / 512
   (57%)**, riir-reflex **77 / 106 (73%)** diverge from rustfmt defaults, none has a
