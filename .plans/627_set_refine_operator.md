@@ -114,29 +114,42 @@ x' = x ⊕ g · Σ_i w_i · k_i        w_i = σ(dot(x, k_i) / τ)   (never softm
 A suite that REDS unless the scorer can reverse set-dependence — the capability
 test, run at every posture:
 
-- [ ] **S1 reversal capability**: constructible fixture where {A,B} picks A and
+- [x] **S1 reversal capability**: constructible fixture where {A,B} picks A and
       {A,B,+decoys shaped like B} picks B (the Jeva Prop-1 demonstration, modelless
       edition) — the suite's existence proof; a scorer that cannot flip reds.
-- [ ] **S2 permutation invariance to bit-identity**: refined scores identical
-      under option permutation (the Σ symmetry), every fixture.
-- [ ] **S3 monotone-gate check**: w_i ∈ (0,1), Σ-shaped response to dot(x,k_i)
+      → LANDED 2026-10-16 — S-suite 9/9 green (T1, katgpt-rs `0fb56b269`): the refined
+      scorer flips A-to-B when a B-shaped decoy joins, decoy never wins; the
+      independent-scorer CANNOT flip (asserted negative control).
+- [x] **S2 permutation invariance to bit-identity**: refined scores identical
+      under option permutation (the Σ symmetry), every fixture. → LANDED (S-suite).
+- [x] **S3 monotone-gate check**: w_i ∈ (0,1), Σ-shaped response to dot(x,k_i)
       (sigmoid, never softmax — the denominator-free law; a softmax spelling reds).
-- [ ] **S4 immutability**: k_i bit-identical before/after the call; x' bounded
-      (‖x'‖ ≤ ‖x‖ + g·Σw_i·‖k_i‖ — no norm blowup).
-- [ ] **S5 flag-off identity**: g=0 ⇒ byte-identical scores (G3's engine-side twin).
+      → LANDED (S-suite).
+- [x] **S4 immutability**: k_i bit-identical before/after the call; x' bounded
+      (‖x'‖ ≤ ‖x‖ + g·Σw_i·‖k_i‖ — no norm blowup). → LANDED (S-suite).
+- [x] **S5 flag-off identity**: g=0 ⇒ byte-identical scores (G3's engine-side twin).
+      → LANDED (S-suite; the engine-side twin is the γ=0.0 default posture,
+      `seam_equals_substrate_composition` + the 0-flip controls).
 
 ## 4. The GOAT gates (all four, `--release`, box state quoted)
 
-- [ ] **G1** flag-on beats flag-off on a REAL decision suite beyond the
+- [x] **G1** flag-on beats flag-off on a REAL decision suite beyond the
       conformal-naive floor (reflex harness A/B, paired, one frozen read —
-      Report-the-Floor law).
-- [ ] **G2** latency p99 ≤ the engine's 1 ms per decision set budget with the
-      operator armed.
-- [ ] **G3** flag-off hash-identity (byte-identical boots, the combo-lane law).
-- [ ] **G4** alloc-free on the hot path (the canary-armed counting allocator).
-- [ ] Only if ALL pass AND the gain is modelless: the promotion question goes to
+      Report-the-Floor law). → **MEASURED FAIL** (Bench 150): −12.3..−14.0 pt on
+      banking77/massive/ag_news at γ=1.0/τ=0.5, monotone in γ — structural (unit-
+      centroid keys regress the state toward the corpus mean). Promotion refused.
+- [x] **G2** latency p99 ≤ the engine's 1 ms per decision set budget with the
+      operator armed. → PASS at bench scale (454 µs p99; the O(n·d²) identity-
+      matmul caveat ~9 ms @ k=77 disclosed, mooted by G1).
+- [x] **G3** flag-off hash-identity (byte-identical boots, the combo-lane law).
+      → PASS (identity gates + the typed/prompt_injections 0-flip controls).
+- [x] **G4** alloc-free on the hot path (the canary-armed counting allocator).
+      → PASS (0 allocs post-warmup).
+- [x] Only if ALL pass AND the gain is modelless: the promotion question goes to
       a proposal, never straight to default. Any miss ⇒ stays opt-in with the
       measured record (a negative is a valid landing — the Bench-109 shape).
+      → RESOLVED BY THE MEASURED NEGATIVE: G1 missed ⇒ stays opt-in with the
+      record (reflex Bench 150; T4 below carries the verdict).
 
 ## 5. Execution order (each its own session slice)
 
