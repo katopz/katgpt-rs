@@ -1,6 +1,7 @@
 # Plan 620: katgpt-assign — Spec-Driven Constrained Assignment Solver (Rebalancer distillation)
 
 > **Status:** Active — Phase 1 LANDED 2026-10-07 (`feat:` + `docs:` commits; G1/G2/G4 green, feature OPT-IN per the verdict protocol; Phase 2/3 pending consumers)
+> **Claimed:** katgpt-rs-idle-620, 1792246201, expires 2026-10-19T14:10:01Z — Phase 2 (specs/moves/explain/policy)
 > **Source:** Research 607 (OSDI'24 Rebalancer, facebook/rebalancer @ e4c35517980d893849275f71b3cb90f81164b6d5)
 > **Consumers:** riir-chain Issue 164 (primary — shard_assignment solver); riir-rethink Issue 029 (candidate; closed 2026-10-07 — record: riir-rethink HISTORY.md, the promote triggers folded there)
 
