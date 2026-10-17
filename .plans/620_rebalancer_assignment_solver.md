@@ -39,7 +39,7 @@ New leaf member crate **`katgpt-assign`** — std-only, alloc allowed, **zero ex
 ## Phase 3 — consumer wiring (each is its own consumer-repo issue, not this plan)
 
 - [x] riir-chain Issue 164: shard→node assignment for `shard_assignment.rs` (solver-run location choice recorded there: leader-computes-commits-raw leaning; byte-equality test REQUIRED before any consensus-replayable use) — **CLOSED 2026-10-07, all four items**: leader-computes + commit-raw (owner call on Claude verdict) + follower feasibility check + audit header; opt-in `shard_solver` wiring `992cbf0b` over main `6a9d4d5a`; byte-identity + drained-node rebalance tests shipped
-- [ ] Game runtime follow-ups per Research 607 §3 (spawn placement, migration balancing) — respect brain+FSM law
+- [-] Game runtime follow-ups per Research 607 §3 (spawn placement, migration balancing) — respect brain+FSM law — **migration balancing LANDED 2026-10-18: riir-ai issue 1085 / `ecc5f7c97` — opt-in `shard_rebalance` in riir-games-civ (`measure_map_loads` + `propose_scaling` + the deterministic drain pass + `build_scaling_input` verify/audit half + the pre-event-diffed evacuation worklist; applied through the live-propagation `ShardAssignment` swap; 8/8 tests, guard Layer 1.9j floor 8, Bench 986 — bootstrap 11.9× spread at 28% moves, no-op idempotent, join ONE move, leave drains exactly its maps; wall-time = loaded-box record). Spawn placement + the swarm target_claim centralized alternative remain open**
 - [ ] riir-rethink Issue 029 candidate tracker: revisit only if escalate rows return to serve
 
 ## GOAT gate verdict protocol
