@@ -45,7 +45,7 @@ fn spec_declaration_order_does_not_change_the_result() {
     let mut rotated_p = problem.clone();
     rotated_p.specs = {
         let mut r = specs[1..].to_vec();
-        r.push(specs[0]);
+        r.push(specs[0].clone());
         r
     };
     assert_ne!(

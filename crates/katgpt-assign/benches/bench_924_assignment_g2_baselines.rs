@@ -115,8 +115,32 @@ fn run_case(rows: &mut Vec<Row>, name: &'static str, problem: &katgpt_assign::Pr
     }
 }
 
+fn run_case_with_limits(
+    rows: &mut Vec<Row>,
+    name: &'static str,
+    problem: &katgpt_assign::Problem,
+    seed: u64,
+    method: &'static str,
+    limits: &Limits,
+) {
+    let t = Instant::now();
+    let solution = solve(problem, Seed(seed), limits).unwrap();
+    let wall = t.elapsed().as_secs_f64() * 1e3;
+    rows.push(Row {
+        fixture: name,
+        method,
+        folded: solution.folded_objective,
+        violation: solution.violation_root,
+        spread: spread_of(problem, &solution.assignment.containers, 0),
+        moved: moved_of(problem, &solution.assignment.containers),
+        max_util: max_util_of(problem, &solution.assignment.containers, 0),
+        wall_ms: wall,
+        evals: solution.moves_evaluated,
+    });
+}
+
 fn main() {
-    println!("bench 924 — katgpt-assign G2 outside baselines (Plan 620 Phase 1)");
+    println!("bench 924 — katgpt-assign G2 outside baselines (Plan 620 Phase 1 + Phase 2)");
     println!();
 
     let mut rows = Vec::new();
@@ -190,8 +214,80 @@ fn main() {
         22,
     );
 
+    // ── Phase 2: escape stages on the partition-closure stall family ────
+    // The measured plain stall (singles+swaps cannot reach feasibility);
+    // the escape stages break it (Plan 620 Phase 2 record).
+    for seed in [4u64, 10, 27, 34] {
+        let name = "balance_stall";
+        let problem = fixtures::perfect_balance(seed, 4, 25, 6);
+        run_case_with_limits(&mut rows, name, &problem, seed, "local", &Limits::default());
+        run_case_with_limits(
+            &mut rows,
+            name,
+            &problem,
+            seed,
+            "local+3cyc",
+            &Limits {
+                triple_budget: 200_000,
+                ..Limits::default()
+            },
+        );
+        run_case_with_limits(
+            &mut rows,
+            name,
+            &problem,
+            seed,
+            "local+kl",
+            &Limits {
+                max_kl_passes: 8,
+                ..Limits::default()
+            },
+        );
+    }
+
+    // ── Phase 2: the new spec vocabulary at a mid size ──────────────────
+    {
+        let mut p = fixtures::random_instance(31, 500, 20, 2, 40);
+        p.specs = vec![
+            katgpt_assign::Spec::capacity(0, 6_000),
+            katgpt_assign::Spec::group_count((0..100).collect()),
+            katgpt_assign::Spec::avoid_moving(vec![0, 50, 250]),
+            katgpt_assign::Spec::AssignmentAffinities {
+                affinities: (0..50)
+                    .map(|o| katgpt_assign::Affinity {
+                        object: o,
+                        container: o % 20,
+                        weight: 5,
+                    })
+                    .collect(),
+            },
+            katgpt_assign::Spec::MinimizeMovement { weight: 1 },
+        ];
+        run_case_with_limits(
+            &mut rows,
+            "phase2_specs_500x20",
+            &p,
+            31,
+            "local",
+            &Limits::default(),
+        );
+        run_case_with_limits(
+            &mut rows,
+            "phase2_specs_500x20",
+            &p,
+            31,
+            "local+all",
+            &Limits {
+                triple_budget: 20_000,
+                max_kl_passes: 4,
+                single_sample: 8,
+                ..Limits::default()
+            },
+        );
+    }
+
     println!(
-        "{:<24} {:<7} {:>12} {:>10} {:>8} {:>7} {:>10} {:>9} {:>10}",
+        "{:<24} {:<12} {:>12} {:>10} {:>8} {:>7} {:>10} {:>9} {:>10}",
         "fixture",
         "method",
         "folded",
@@ -204,7 +300,7 @@ fn main() {
     );
     for r in &rows {
         println!(
-            "{:<24} {:<7} {:>12} {:>10} {:>8} {:>7} {:>10} {:>9.2} {:>10}",
+            "{:<24} {:<12} {:>12} {:>10} {:>8} {:>7} {:>10} {:>9.2} {:>10}",
             r.fixture,
             r.method,
             r.folded,

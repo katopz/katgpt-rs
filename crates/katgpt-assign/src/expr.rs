@@ -39,6 +39,16 @@ pub enum ExprNode {
     LeafMoved {
         object: u32,
     },
+    /// Placement leaf (Phase 2): value = 1 iff object `object` is currently
+    /// assigned to `container`, else 0. One per distinct `(object,
+    /// container)` the Phase 2 specs read (`AssignmentAffinities` entries
+    /// and `GroupCount` member×container pairs) — shared across specs, the
+    /// util-leaf sharing discipline. Delta construction lives solver-side
+    /// (the leaf changes only when the object's container changes).
+    LeafAt {
+        object: u32,
+        container: u32,
+    },
     Const {
         value: i64,
     },
@@ -88,6 +98,20 @@ impl DeltaScratch {
     pub fn last_new_root(&self, root: NodeId) -> i64 {
         self.new_vals[root as usize]
     }
+
+    /// Was `node` reached (recomputed) by the most recent `eval_delta`?
+    /// The `explain` surface reads this to pick overlay-vs-committed
+    /// values for nodes the candidate evaluation did not touch.
+    pub fn is_reached(&self, node: NodeId) -> bool {
+        self.stamp[node as usize] == self.generation
+    }
+
+    /// The candidate value of a REACHED node from the most recent
+    /// `eval_delta` (undefined for unreached nodes — pair with
+    /// [`Self::is_reached`]).
+    pub fn new_value(&self, node: NodeId) -> i64 {
+        self.new_vals[node as usize]
+    }
 }
 
 impl Dag {
@@ -133,9 +157,10 @@ impl Dag {
     pub fn eval_full(&self, values: &mut [i64]) {
         for id in 0..self.nodes.len() {
             let v = match &self.nodes[id] {
-                ExprNode::LeafUtil { .. } | ExprNode::LeafMoved { .. } | ExprNode::Const { .. } => {
-                    values[id]
-                }
+                ExprNode::LeafUtil { .. }
+                | ExprNode::LeafMoved { .. }
+                | ExprNode::LeafAt { .. }
+                | ExprNode::Const { .. } => values[id],
                 ExprNode::Sum => {
                     let mut sum = 0i64;
                     for &c in self.children(id as NodeId) {
@@ -183,7 +208,7 @@ impl Dag {
         for &(leaf, delta) in leaf_deltas {
             debug_assert!(matches!(
                 self.node(leaf),
-                ExprNode::LeafUtil { .. } | ExprNode::LeafMoved { .. }
+                ExprNode::LeafUtil { .. } | ExprNode::LeafMoved { .. } | ExprNode::LeafAt { .. }
             ));
             debug_assert!(
                 scratch.stamp[leaf as usize] != current_gen,
@@ -212,9 +237,9 @@ impl Dag {
         // Bottom-up recompute over reached nodes only.
         for &n in &scratch.dirty {
             let v = match self.node(n) {
-                ExprNode::LeafUtil { .. } | ExprNode::LeafMoved { .. } => {
-                    scratch.new_vals[n as usize]
-                }
+                ExprNode::LeafUtil { .. }
+                | ExprNode::LeafMoved { .. }
+                | ExprNode::LeafAt { .. } => scratch.new_vals[n as usize],
                 ExprNode::Const { value } => *value,
                 ExprNode::Sum => {
                     let mut sum = 0i64;
@@ -288,6 +313,14 @@ impl DagBuilder {
     pub fn push_leaf_moved(&mut self, object: u32) -> NodeId {
         let id = self.nodes.len() as NodeId;
         self.nodes.push(ExprNode::LeafMoved { object });
+        self.child_off.push(self.child_slab.len() as u32);
+        id
+    }
+
+    /// Phase 2 placement leaf: `1` iff `object` sits in `container`.
+    pub fn push_leaf_at(&mut self, object: u32, container: u32) -> NodeId {
+        let id = self.nodes.len() as NodeId;
+        self.nodes.push(ExprNode::LeafAt { object, container });
         self.child_off.push(self.child_slab.len() as u32);
         id
     }
