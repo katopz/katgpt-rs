@@ -65,11 +65,12 @@ fn main() {
     let line = PROBE_BUDGET_FRACTION * report.spend_units;
     println!(
         "probe evals {} → declared spend {probe_spend:.4} units vs escalation spend {:.1} units (10% line {line:.3}) — breach: {}",
-        report.probe_evals,
-        report.spend_units,
-        report.budget_fallback
+        report.probe_evals, report.spend_units, report.budget_fallback
     );
-    assert!(!report.budget_fallback, "the budget guard breached at the declared cost model");
+    assert!(
+        !report.budget_fallback,
+        "the budget guard breached at the declared cost model"
+    );
     assert!(
         probe_spend <= line,
         "probe declared spend {probe_spend:.4} exceeds the 10% line {line:.3} (C_ESC = {C_ESC})"

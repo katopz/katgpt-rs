@@ -133,13 +133,27 @@ fn main() {
                 *v = (*v + 0.0011).clamp(-1.0, 1.0);
             }
             let out_a = mla_forward_token_flashmemory_reconstruct(
-                &config, &weights, &mut a.cache, &mut a.scratch, &mut a.rope, &h,
-                &mut a.block_cache, &mut a.selector, step,
+                &config,
+                &weights,
+                &mut a.cache,
+                &mut a.scratch,
+                &mut a.rope,
+                &h,
+                &mut a.block_cache,
+                &mut a.selector,
+                step,
             );
             black_box(&out_a[..8.min(d)]);
             let out_b = mla_forward_token_flashmemory_absorbed(
-                &config, &weights, &mut b.cache, &mut b.scratch, &mut b.rope, &h,
-                &mut b.block_cache, &mut b.selector, step,
+                &config,
+                &weights,
+                &mut b.cache,
+                &mut b.scratch,
+                &mut b.rope,
+                &h,
+                &mut b.block_cache,
+                &mut b.selector,
+                step,
             );
             black_box(&out_b[..8.min(d)]);
         }
@@ -169,8 +183,15 @@ fn main() {
             }
             let t0 = Instant::now();
             let out = mla_forward_token_flashmemory_reconstruct(
-                &config, &weights, &mut a.cache, &mut a.scratch, &mut a.rope, &h,
-                &mut a.block_cache, &mut a.selector, step,
+                &config,
+                &weights,
+                &mut a.cache,
+                &mut a.scratch,
+                &mut a.rope,
+                &h,
+                &mut a.block_cache,
+                &mut a.selector,
+                step,
             );
             black_box(&out[..8.min(d)]);
             recon_us.push(t0.elapsed().as_secs_f64() * 1e6);
@@ -182,8 +203,15 @@ fn main() {
             }
             let t0 = Instant::now();
             let out = mla_forward_token_flashmemory_absorbed(
-                &config, &weights, &mut b.cache, &mut b.scratch, &mut b.rope, &h,
-                &mut b.block_cache, &mut b.selector, step,
+                &config,
+                &weights,
+                &mut b.cache,
+                &mut b.scratch,
+                &mut b.rope,
+                &h,
+                &mut b.block_cache,
+                &mut b.selector,
+                step,
             );
             black_box(&out[..8.min(d)]);
             abs_us.push(t0.elapsed().as_secs_f64() * 1e6);

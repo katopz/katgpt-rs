@@ -95,7 +95,15 @@ fn read_spcm(path: &Path) -> Result<Spcm, String> {
             buf.len() - cur.pos
         ));
     }
-    Ok(Spcm { model, n_layers, n_taps, widths, observed, max_abs, rms })
+    Ok(Spcm {
+        model,
+        n_layers,
+        n_taps,
+        widths,
+        observed,
+        max_abs,
+        rms,
+    })
 }
 
 struct Cursor<'a> {
@@ -242,14 +250,20 @@ fn run(model: &str, dir: &Path) -> Result<(), String> {
     let census: Value = serde_json::from_str(&census_raw)
         .map_err(|e| format!("parse {}: {e}", census_path.display()))?;
     if census["schema"].as_str() != Some("spike_census_v1") {
-        return Err(format!("{}: not a spike_census_v1 sidecar", census_path.display()));
+        return Err(format!(
+            "{}: not a spike_census_v1 sidecar",
+            census_path.display()
+        ));
     }
 
     // ── SPCM + blake3 verification (b3sum line shape) ──
     let spcm_path = dir.join(format!("{model}.calib.spcm"));
     let spcm = read_spcm(&spcm_path)?;
     if spcm.model != model {
-        return Err(format!("SPCM model '{}' != requested '{model}'", spcm.model));
+        return Err(format!(
+            "SPCM model '{}' != requested '{model}'",
+            spcm.model
+        ));
     }
     let blake_path = dir.join(format!("{model}.calib.spcm.blake3"));
     let blake_line = std::fs::read_to_string(&blake_path)
@@ -279,14 +293,19 @@ fn run(model: &str, dir: &Path) -> Result<(), String> {
     for b in blocks {
         let idx = b["idx"].as_u64().ok_or("census block missing idx")? as usize;
         if idx >= spcm.n_layers {
-            return Err(format!("census block {idx} >= SPCM layers {}", spcm.n_layers));
+            return Err(format!(
+                "census block {idx} >= SPCM layers {}",
+                spcm.n_layers
+            ));
         }
         let chans = b["channels"]
             .as_array()
             .ok_or_else(|| format!("census block {idx}: missing channels[]"))?;
         let mut census_top = Vec::with_capacity(chans.len());
         for c in chans {
-            let k = c["k"].as_u64().ok_or_else(|| format!("block {idx}: channel missing k"))?
+            let k = c["k"]
+                .as_u64()
+                .ok_or_else(|| format!("block {idx}: channel missing k"))?
                 as usize;
             if k >= spcm.widths[ffn_tap] {
                 return Err(format!(
@@ -327,7 +346,11 @@ fn run(model: &str, dir: &Path) -> Result<(), String> {
             .filter(|k| order[..top_k].contains(k))
             .count();
         let denom = census_top.len().min(top_k) as f64;
-        let p_at_k = if denom > 0.0 { hits as f64 / denom } else { 0.0 };
+        let p_at_k = if denom > 0.0 {
+            hits as f64 / denom
+        } else {
+            0.0
+        };
         // RMS-ranking leg (closes the single-token-max confound): same P@K
         // against the per-channel RMS order.
         let mut order_rms: Vec<usize> = (0..spcm.widths[ffn_tap]).collect();
@@ -341,7 +364,11 @@ fn run(model: &str, dir: &Path) -> Result<(), String> {
             .take(top_k)
             .filter(|k| order_rms[..top_k].contains(k))
             .count();
-        let p_at_k_rms = if denom > 0.0 { hits_rms as f64 / denom } else { 0.0 };
+        let p_at_k_rms = if denom > 0.0 {
+            hits_rms as f64 / denom
+        } else {
+            0.0
+        };
         reads.push(BlockRead {
             idx,
             census_top,
@@ -366,11 +393,21 @@ fn run(model: &str, dir: &Path) -> Result<(), String> {
     let summary = &census["summary"];
     let flagged: Vec<usize> = summary["spike_blocks"]
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_u64()).map(|v| v as usize).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_u64())
+                .map(|v| v as usize)
+                .collect()
+        })
         .unwrap_or_default();
     let emerging: Vec<usize> = summary["emerging_blocks_2x"]
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_u64()).map(|v| v as usize).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_u64())
+                .map(|v| v as usize)
+                .collect()
+        })
         .unwrap_or_default();
     let locality = summary["locality"].as_str().unwrap_or("?");
 
@@ -379,7 +416,9 @@ fn run(model: &str, dir: &Path) -> Result<(), String> {
         "# spike_census_validate: {model} | census locality={locality} spike_blocks={flagged:?} emerging={emerging:?} | SPCM observed={} tokens",
         spcm.observed
     );
-    println!("# block | census max_s | measured max/med | top/globalRMS | P@K | census top-K (k) | measured top-K (k, max_abs)");
+    println!(
+        "# block | census max_s | measured max/med | top/globalRMS | P@K | census top-K (k) | measured top-K (k, max_abs)"
+    );
     for r in &reads {
         let ct: Vec<String> = r.census_top.iter().map(|k| k.to_string()).collect();
         let mt: Vec<String> = r
@@ -447,15 +486,22 @@ fn run(model: &str, dir: &Path) -> Result<(), String> {
     );
     println!(
         "# Spearman(census max_s, measured max/median) = {}",
-        rho_s.map(|v| format!("{v:+.3}")).unwrap_or_else(|| "undefined".into())
+        rho_s
+            .map(|v| format!("{v:+.3}"))
+            .unwrap_or_else(|| "undefined".into())
     );
     println!(
         "# Spearman(census max_s, measured top1 max_abs) = {}",
-        rho_t.map(|v| format!("{v:+.3}")).unwrap_or_else(|| "undefined".into())
+        rho_t
+            .map(|v| format!("{v:+.3}"))
+            .unwrap_or_else(|| "undefined".into())
     );
     println!(
         "# magnitude context: max top/globalRMS = {:.1} (paper-class massive is O(10^2-10^3))",
-        reads.iter().map(|r| r.top_over_global_rms).fold(0.0, f64::max)
+        reads
+            .iter()
+            .map(|r| r.top_over_global_rms)
+            .fold(0.0, f64::max)
     );
     Ok(())
 }
@@ -549,10 +595,15 @@ fn self_test() {
             .partial_cmp(&spcm.max_abs[3][1][a])
             .unwrap()
     });
-    let hits1 = [10usize, 11, 12, 13].iter().filter(|k| order1[..4].contains(k)).count();
+    let hits1 = [10usize, 11, 12, 13]
+        .iter()
+        .filter(|k| order1[..4].contains(k))
+        .count();
     assert_eq!(hits1, 4, "selftest exact block");
     // Spearman sanity: perfect monotone pair.
-    assert!((spearman(&[1.0, 2.0, 3.0, 4.0], &[10.0, 20.0, 25.0, 40.0]).unwrap() - 1.0).abs() < 1e-9);
+    assert!(
+        (spearman(&[1.0, 2.0, 3.0, 4.0], &[10.0, 20.0, 25.0, 40.0]).unwrap() - 1.0).abs() < 1e-9
+    );
     // Zero-variance → None.
     assert!(spearman(&[1.0, 1.0, 1.0], &[2.0, 3.0, 4.0]).is_none());
     let _ = &rms;

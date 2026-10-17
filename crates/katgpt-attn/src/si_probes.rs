@@ -52,7 +52,7 @@
 //! softmax-entropy laws, adaptive-Simpson quadrature for the sigmoid arm —
 //! no RNG anywhere.
 
-use katgpt_core::scale_invariant::{gaussian_expectation, ScaleInvariantLut};
+use katgpt_core::scale_invariant::{ScaleInvariantLut, gaussian_expectation};
 
 // ──────────────────────────────────────────────────────────────────────
 // Schedule-derived constants (never hard-coded)
@@ -237,11 +237,7 @@ impl SigmoidCurveRow {
         let e_x = gaussian_expectation(m, a, |x| 1.0 / (1.0 + (-x).exp()));
         let neg = -gaussian_expectation(m, a, |x| {
             let s = 1.0 / (1.0 + (-x).exp());
-            if s > 0.0 {
-                s * s.ln()
-            } else {
-                0.0
-            }
+            if s > 0.0 { s * s.ln() } else { 0.0 }
         });
         SigmoidCurveRow {
             t,

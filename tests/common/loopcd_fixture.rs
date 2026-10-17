@@ -53,7 +53,9 @@
 #![allow(dead_code)]
 
 use katgpt_rs::hla::MultiLayerAhlaCache;
-use katgpt_rs::transformer::{forward_looped, ForwardContext, MultiLayerKVCache, TransformerWeights};
+use katgpt_rs::transformer::{
+    ForwardContext, MultiLayerKVCache, TransformerWeights, forward_looped,
+};
 use katgpt_rs::types::{Config, HybridPattern, LoopMode, ResidualGate, SdpaOutputGate};
 
 // ── Vocabulary layout ────────────────────────────────────────────────
@@ -137,7 +139,9 @@ impl LoopCdFixture {
         config.n_kv_head = 1;
         config.mlp_hidden = 4; // ≥ n_embd: the residual-gate path reuses ctx.hidden as an n-scratch
         config.n_layer = 1;
-        config.loop_mode = LoopMode::WeightShared { loop_count: MAX_LOOPS };
+        config.loop_mode = LoopMode::WeightShared {
+            loop_count: MAX_LOOPS,
+        };
         config.hybrid_pattern = HybridPattern::Uniform;
         config.loop_min = 0;
         config.loop_max = 0;
@@ -377,10 +381,12 @@ impl LoopCdFixture {
         token: usize,
         pos: usize,
         elastic: Option<usize>,
-        #[cfg(feature = "loop_guidance")]
-        guidance: Option<&mut katgpt_rs::transformer::loop_guidance::LoopGuidance>,
-        #[cfg(feature = "loop_guidance")]
-        settle: Option<&mut katgpt_rs::transformer::loop_guidance::SettleExit>,
+        #[cfg(feature = "loop_guidance")] guidance: Option<
+            &mut katgpt_rs::transformer::loop_guidance::LoopGuidance,
+        >,
+        #[cfg(feature = "loop_guidance")] settle: Option<
+            &mut katgpt_rs::transformer::loop_guidance::SettleExit,
+        >,
     ) -> &'a mut [f32] {
         let config = &self.config;
         forward_looped(
@@ -431,7 +437,11 @@ pub fn all_cases() -> Vec<LoopCdCase> {
             prefix.resize(na, SYM_A);
             prefix.resize(p, SYM_B);
             let answer = if na > nb { ANS_A } else { ANS_B };
-            cases.push(LoopCdCase { prefix, answer, imbalance: na as i32 - nb as i32 });
+            cases.push(LoopCdCase {
+                prefix,
+                answer,
+                imbalance: na as i32 - nb as i32,
+            });
         }
     }
     cases

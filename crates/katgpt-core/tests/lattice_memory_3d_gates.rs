@@ -20,12 +20,11 @@
 
 #[cfg(any(debug_assertions, feature = "alloc_tracking"))]
 #[global_allocator]
-static GATE_ALLOC: katgpt_core::alloc::TrackingAllocator =
-    katgpt_core::alloc::TrackingAllocator;
+static GATE_ALLOC: katgpt_core::alloc::TrackingAllocator = katgpt_core::alloc::TrackingAllocator;
 
 use katgpt_core::lattice_memory::{
-    grid_side_for, LatticeConfig, LatticeConfig3D, LatticeConfigError, LatticeMemory,
-    LatticeMemory3D,
+    LatticeConfig, LatticeConfig3D, LatticeConfigError, LatticeMemory, LatticeMemory3D,
+    grid_side_for,
 };
 
 /// The G6 posture: d = d_k = 32, R = 0.05σ — the exact cell Bench 919's
@@ -71,7 +70,11 @@ fn g6_memory_is_priced_before_the_build() {
     assert_eq!(side, 76, "⌈3.76/0.05⌉");
     let cfg = config3([side, side, side]);
     assert_eq!(cfg.cell_count(), 438_976, "76³");
-    assert_eq!(cfg.slab_bytes(), 1_798_045_696, "cells · 32·32 · 4 B = cells · 4096");
+    assert_eq!(
+        cfg.slab_bytes(),
+        1_798_045_696,
+        "cells · 32·32 · 4 B = cells · 4096"
+    );
     const TWO_GIB: usize = 2 * 1024 * 1024 * 1024;
     assert!(
         cfg.slab_bytes() <= TWO_GIB,
@@ -84,8 +87,16 @@ fn g6_memory_is_priced_before_the_build() {
     // 3D ≈ 4.76M (the remedy). Recomputed here, never quoted from
     // μLattice §4.7 (whose own scale-96 cell count carries an erratum).
     let n_max = |axes: u32| 0.35 * D as f32 * (3.76 / 0.05_f32).powi(axes as i32);
-    assert!((n_max(2) - 63_336.0).abs() < 5.0, "2D envelope {}", n_max(2));
-    assert!((n_max(3) - 4_762_900.0).abs() < 100.0, "3D envelope {}", n_max(3));
+    assert!(
+        (n_max(2) - 63_336.0).abs() < 5.0,
+        "2D envelope {}",
+        n_max(2)
+    );
+    assert!(
+        (n_max(3) - 4_762_900.0).abs() < 100.0,
+        "3D envelope {}",
+        n_max(3)
+    );
     // d_v = 64 doubles the cell — over the bar: the recorded boundary.
     let mut wide = config3([side, side, side]);
     wide.d_v = 64;
@@ -103,11 +114,16 @@ fn sized3_accepts_the_point_2d_refuses() {
     // capacity 11.2 — refused (OverCapacity, the Bench 919 negative).
     // 3D: cells = 438,976, λ = 2.278 ≤ 11.2 — accepted.
     let mut rng = fastrand::Rng::with_seed(0x938_0002);
-    let samples: Vec<Vec<f32>> =
-        (0..64).map(|_| (0..D).map(|_| rng.f32() * 2.0 - 1.0).collect()).collect();
+    let samples: Vec<Vec<f32>> = (0..64)
+        .map(|_| (0..D).map(|_| rng.f32() * 2.0 - 1.0).collect())
+        .collect();
     let refs: Vec<&[f32]> = samples.iter().map(|s| s.as_slice()).collect();
     match LatticeMemory::sized(D, D, D, 0x938, &refs, 1_000_000, 0.05, None) {
-        Err(LatticeConfigError::OverCapacity { cells, capacity_per_cell, .. }) => {
+        Err(LatticeConfigError::OverCapacity {
+            cells,
+            capacity_per_cell,
+            ..
+        }) => {
             // λ = 10⁶/5,776 = 173.1 against capacity 11.2 — the Bench 919
             // negative, as a constructor verdict.
             assert_eq!(cells, 76 * 76);
@@ -119,8 +135,9 @@ fn sized3_accepts_the_point_2d_refuses() {
     // The 3D accept — at d_k = d_v = 8 so the gate's slab stays a test-sized
     // 112 MB (the FULL 1.8 GB posture is the bench's cell, not a unit
     // test's; the pricing above pins its arithmetic).
-    let small: Vec<Vec<f32>> =
-        (0..64).map(|_| (0..D).map(|_| rng.f32() * 2.0 - 1.0).collect()).collect();
+    let small: Vec<Vec<f32>> = (0..64)
+        .map(|_| (0..D).map(|_| rng.f32() * 2.0 - 1.0).collect())
+        .collect();
     let small_refs: Vec<&[f32]> = small.iter().map(|s| s.as_slice()).collect();
     let lat = LatticeMemory3D::sized(D, 8, 8, 0x938, &small_refs, 1_000_000, 0.05, None)
         .expect("the 3D sizer must accept the point 2D refuses");
@@ -147,9 +164,15 @@ fn support_is_the_product_kernel_and_stays_graded() {
     let mut out = [0.0_f32; D];
     lat.read_blend(&key, &mut out);
     let g = out[0];
-    assert!(g > 0.0 && g <= 0.22, "3D blend factor {g} outside (0, 0.216]");
+    assert!(
+        g > 0.0 && g <= 0.22,
+        "3D blend factor {g} outside (0, 0.216]"
+    );
     for (o, &s) in out.iter().zip(v.iter()) {
-        assert!((o - g * s).abs() < 1e-6, "3D blend broke direction: {o} vs {g}·{s}");
+        assert!(
+            (o - g * s).abs() < 1e-6,
+            "3D blend broke direction: {o} vs {g}·{s}"
+        );
     }
     let mut direct = [9.0_f32; D];
     assert!(lat.read_direct(&key, &mut direct));
@@ -249,7 +272,10 @@ fn snapshot_roundtrip_restores_exact_state_at_3d() {
     assert_eq!(blend_before, blend_after, "thaw must be bitwise");
     let mut direct_after = [0.0_f32; D];
     assert!(lat.read_direct(&xa, &mut direct_after));
-    assert_eq!(direct_after, [2.0_f32; D], "the unblended lane thaws exactly");
+    assert_eq!(
+        direct_after, [2.0_f32; D],
+        "the unblended lane thaws exactly"
+    );
 }
 
 #[test]

@@ -66,7 +66,7 @@
 //! profile ever shows the band matters (per the plan: no third solver).
 
 use crate::karc::jacobi_eigen;
-use crate::linalg::symmetric_eig::{symmetric_eig, SymmetricEigScratch};
+use crate::linalg::symmetric_eig::{SymmetricEigScratch, symmetric_eig};
 
 /// Maximum documented dimension (`M` is d×d f64, caller-owned).
 pub const MAX_DIM: usize = 1024;
@@ -105,7 +105,10 @@ impl core::fmt::Display for BasisSplitError {
             }
             Self::ZeroVariance => write!(f, "difference moment has zero total variance"),
             Self::CovarianceNotPositiveDefinite => {
-                write!(f, "total covariance has a non-positive eigenvalue; whitening undefined")
+                write!(
+                    f,
+                    "total covariance has a non-positive eigenvalue; whitening undefined"
+                )
             }
             Self::ScratchTooShort { required } => {
                 write!(f, "scratch shorter than required {required}")
@@ -250,7 +253,11 @@ pub enum UnidentifiedReason {
     /// The boundary fails the eigengap test `λ_k / λ_{k+1} ≥ τ_gap` — the
     /// claimed block boundary is not actually a spectral gap. NaN gap (a
     /// zero-eigenvalue division) lands here too.
-    GapBelowTau { k: usize, gap_ratio: f64, tau_gap: f64 },
+    GapBelowTau {
+        k: usize,
+        gap_ratio: f64,
+        tau_gap: f64,
+    },
     /// `k` was supplied but out of range (`0` or `≥ d`).
     RankOutOfRange { k: usize },
 }
@@ -311,7 +318,10 @@ pub fn check_rank_gate(eigvals_desc: &[f64], k: Option<usize>, tau_gap: f64) -> 
     let (k, gap_ratio, k_from_gap) = match k {
         Some(k) => {
             if k == 0 || k >= d {
-                return (Verdict::Unidentified(UnidentifiedReason::RankOutOfRange { k }), false);
+                return (
+                    Verdict::Unidentified(UnidentifiedReason::RankOutOfRange { k }),
+                    false,
+                );
             }
             (k, eigvals_desc[k - 1] / eigvals_desc[k], false)
         }
@@ -332,7 +342,11 @@ pub fn check_rank_gate(eigvals_desc: &[f64], k: Option<usize>, tau_gap: f64) -> 
     // STRONGEST gap evidence (an exact-zero eigenvalue below the boundary —
     // the planted/degenerate-null case) and must pass.
     let verdict = if gap_ratio.is_nan() || gap_ratio < tau_gap {
-        Verdict::Unidentified(UnidentifiedReason::GapBelowTau { k, gap_ratio, tau_gap })
+        Verdict::Unidentified(UnidentifiedReason::GapBelowTau {
+            k,
+            gap_ratio,
+            tau_gap,
+        })
     } else {
         Verdict::SufficientVariation { k, gap_ratio }
     };
@@ -519,7 +533,15 @@ pub fn split(
             return Err(BasisSplitError::ScratchTooShort { required: d * d });
         }
         eigvals[..d].fill(0.0);
-        jacobi_eigen(eigvals, eigvecs, solve_moment, jacobi_scratch, d, 1e-14, 100);
+        jacobi_eigen(
+            eigvals,
+            eigvecs,
+            solve_moment,
+            jacobi_scratch,
+            d,
+            1e-14,
+            100,
+        );
     } else {
         sym_scratch.ensure_capacity(d);
         symmetric_eig(eigvals, eigvecs, solve_moment, sym_scratch, d, 200);
@@ -530,7 +552,10 @@ pub fn split(
     // Pin orthonormality exact (the QL path is near-orthonormal).
     for j in 0..d {
         let col = j * d;
-        let norm: f64 = (0..d).map(|r| eigvecs[col + r] * eigvecs[col + r]).sum::<f64>().sqrt();
+        let norm: f64 = (0..d)
+            .map(|r| eigvecs[col + r] * eigvecs[col + r])
+            .sum::<f64>()
+            .sqrt();
         if norm > 0.0 {
             for r in 0..d {
                 eigvecs[col + r] /= norm;
@@ -588,7 +613,10 @@ pub fn build_zca_whitener(
     if d == 0 || d > MAX_DIM {
         return Err(BasisSplitError::DimOutOfRange);
     }
-    if sigma.len() != d * d || whitener_out.len() < d * d || eigvals.len() < d || eigvecs.len() < d * d
+    if sigma.len() != d * d
+        || whitener_out.len() < d * d
+        || eigvals.len() < d
+        || eigvecs.len() < d * d
     {
         return Err(BasisSplitError::DimensionMismatch { expected: d * d });
     }
@@ -1017,7 +1045,10 @@ mod tests {
         let (verdict, report) = rig.run(&m, None, 10.0).unwrap();
         assert!(matches!(verdict, Verdict::SufficientVariation { .. }));
         assert!(report.k_from_gap);
-        assert_eq!(report.k, VK, "the largest gap in the planted world IS the block boundary");
+        assert_eq!(
+            report.k, VK,
+            "the largest gap in the planted world IS the block boundary"
+        );
     }
 
     /// Unwhitened refuses; degenerate (identical) pairs refuse; zero variance
@@ -1036,8 +1067,18 @@ mod tests {
         let mut m_scr = vec![0.0; D * D];
         let mut wh = vec![0.0; D * D];
         let (verdict, _) = split(
-            &m, D, None, Some(K), 10.0, &mut ev, &mut evec, &mut basis, &mut sym, &mut jac,
-            &mut m_scr, &mut wh,
+            &m,
+            D,
+            None,
+            Some(K),
+            10.0,
+            &mut ev,
+            &mut evec,
+            &mut basis,
+            &mut sym,
+            &mut jac,
+            &mut m_scr,
+            &mut wh,
         )
         .unwrap();
         assert_eq!(verdict, Verdict::Unwhitened);
@@ -1054,8 +1095,18 @@ mod tests {
             acc.finish();
         }
         let (verdict_deg, _) = split(
-            &m_deg, D, Some(Whitening::TotalCovariance(&identity_sigma())), Some(K), 10.0,
-            &mut ev, &mut evec, &mut basis, &mut sym, &mut jac, &mut m_scr, &mut wh,
+            &m_deg,
+            D,
+            Some(Whitening::TotalCovariance(&identity_sigma())),
+            Some(K),
+            10.0,
+            &mut ev,
+            &mut evec,
+            &mut basis,
+            &mut sym,
+            &mut jac,
+            &mut m_scr,
+            &mut wh,
         )
         .unwrap();
         assert!(matches!(verdict_deg, Verdict::Unidentified(_)));
@@ -1063,8 +1114,18 @@ mod tests {
         // Zero variance.
         let m_zero = vec![0.0; D * D];
         let err = split(
-            &m_zero, D, Some(Whitening::TotalCovariance(&identity_sigma())), Some(K), 10.0,
-            &mut ev, &mut evec, &mut basis, &mut sym, &mut jac, &mut m_scr, &mut wh,
+            &m_zero,
+            D,
+            Some(Whitening::TotalCovariance(&identity_sigma())),
+            Some(K),
+            10.0,
+            &mut ev,
+            &mut evec,
+            &mut basis,
+            &mut sym,
+            &mut jac,
+            &mut m_scr,
+            &mut wh,
         );
         assert!(matches!(err, Err(BasisSplitError::ZeroVariance)));
 
@@ -1139,7 +1200,16 @@ mod tests {
         let held_refs: Vec<&[f64]> = held.iter().map(|d| d.as_slice()).collect();
         let mut proj = vec![0.0; D];
         let mut bx = vec![0.0; VK];
-        held_out_leakage(&rig.basis, VK, D, &held_refs, &mut proj, &mut bx, &mut report).unwrap();
+        held_out_leakage(
+            &rig.basis,
+            VK,
+            D,
+            &held_refs,
+            &mut proj,
+            &mut bx,
+            &mut report,
+        )
+        .unwrap();
         let leakage = report.pair_leakage.expect("filled");
         let agreement = report.agreement_residual.expect("filled");
         assert!(
@@ -1401,7 +1471,11 @@ mod tests {
             &mut whit,
         )
         .unwrap();
-        assert!(report.gap_ratio.is_finite(), "gap_ratio {}", report.gap_ratio);
+        assert!(
+            report.gap_ratio.is_finite(),
+            "gap_ratio {}",
+            report.gap_ratio
+        );
         assert!(
             report.participation_ratio.is_finite(),
             "PR {}",

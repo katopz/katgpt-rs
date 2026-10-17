@@ -1322,7 +1322,9 @@ mod parallel_tests {
             let mut y = vec![0.0f32; rows];
             simd_ternary_group_matvec_parallel_chunked(&w, &x, &mut y, chunk);
             assert!(
-                y.iter().zip(&y_serial).all(|(a, b)| a.to_bits() == b.to_bits()),
+                y.iter()
+                    .zip(&y_serial)
+                    .all(|(a, b)| a.to_bits() == b.to_bits()),
                 "chunk {chunk}: not bit-identical to serial"
             );
         }

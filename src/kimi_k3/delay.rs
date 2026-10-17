@@ -57,9 +57,7 @@ use katgpt_core::simd::{
 };
 use katgpt_core::types::math::rmsnorm_with_gamma_eps;
 use katgpt_kv::shard_kv::rope::RopeFreqs;
-use katgpt_transformer::attn_res::{
-    AttnResBlockState, AttnResScratch, apply_attn_res,
-};
+use katgpt_transformer::attn_res::{AttnResBlockState, AttnResScratch, apply_attn_res};
 use katgpt_transformer::moe_backward::{
     moe_backward_routed_stream, moe_backward_shared_stream, moe_forward_token_split,
 };
@@ -70,8 +68,7 @@ use super::backward::{
 };
 use super::decoder_layer::{
     KimiAttentionConfig, KimiAttentionScratch, KimiAttentionState, KimiAttentionWeights,
-    KimiDecoderLayerConfig, KimiDecoderLayerWeights, KimiFfnConfig, KimiFfnScratch,
-    KimiFfnWeights,
+    KimiDecoderLayerConfig, KimiDecoderLayerWeights, KimiFfnConfig, KimiFfnScratch, KimiFfnWeights,
 };
 use super::loader::KimiK3ModelWeights;
 use super::model::{KimiK3ModelConfig, KimiK3Runtime};
@@ -448,32 +445,37 @@ fn forward_layer_delay(
             simd_add_inplace(&mut prefix_sum[..d], &saved.ffn_out[..d]);
         }
         (KimiFfnConfig::Moe(moe_cfg), KimiFfnWeights::Moe(moe_w)) => {
-            let (shared_out, routed_out, moe_saved) = if delay.anchor_routed()
-                && !delay.anchor_shared()
-            {
-                // δd=0, δe>0: the routed stream reads the ANCHOR — the
-                // layer-entry residual under the same site norm (a fresh
-                // buffer; scratch_hidden stays the shared stream's input).
-                let mut anchor = saved.prefix_sum_in.clone();
-                let sum_sq = simd_sum_sq(&anchor, d);
-                anchor_inv = 1.0 / ((sum_sq / d as f32 + eps).sqrt());
-                rmsnorm_with_gamma_eps(
-                    &mut anchor,
-                    &weights.post_attention_layernorm_weight,
-                    eps as f64,
-                );
-                moe_forward_token_split(moe_w, moe_cfg, scratch_hidden, &anchor, &mut ffn_scratch.moe)
-            } else {
-                // G0 (both streams read the standard normed input) or δd=1
-                // (both read the anchor) — one input for both streams.
-                moe_forward_token_split(
-                    moe_w,
-                    moe_cfg,
-                    scratch_hidden,
-                    scratch_hidden,
-                    &mut ffn_scratch.moe,
-                )
-            };
+            let (shared_out, routed_out, moe_saved) =
+                if delay.anchor_routed() && !delay.anchor_shared() {
+                    // δd=0, δe>0: the routed stream reads the ANCHOR — the
+                    // layer-entry residual under the same site norm (a fresh
+                    // buffer; scratch_hidden stays the shared stream's input).
+                    let mut anchor = saved.prefix_sum_in.clone();
+                    let sum_sq = simd_sum_sq(&anchor, d);
+                    anchor_inv = 1.0 / ((sum_sq / d as f32 + eps).sqrt());
+                    rmsnorm_with_gamma_eps(
+                        &mut anchor,
+                        &weights.post_attention_layernorm_weight,
+                        eps as f64,
+                    );
+                    moe_forward_token_split(
+                        moe_w,
+                        moe_cfg,
+                        scratch_hidden,
+                        &anchor,
+                        &mut ffn_scratch.moe,
+                    )
+                } else {
+                    // G0 (both streams read the standard normed input) or δd=1
+                    // (both read the anchor) — one input for both streams.
+                    moe_forward_token_split(
+                        moe_w,
+                        moe_cfg,
+                        scratch_hidden,
+                        scratch_hidden,
+                        &mut ffn_scratch.moe,
+                    )
+                };
             saved.moe_saved = Some(moe_saved);
 
             if delay.expert_delay == 0 {
@@ -567,13 +569,7 @@ pub fn kimi_k3_delay_backward_sequence(
         let saved = &saved_tokens[t].base;
 
         let mut d_fh = vec![0.0f32; d];
-        simd_transpose_matvec_into(
-            &mut d_fh,
-            &weights.lm_head_weight,
-            &d_logits[t],
-            v,
-            d,
-        );
+        simd_transpose_matvec_into(&mut d_fh, &weights.lm_head_weight, &d_logits[t], v, d);
         simd_outer_product_acc(
             &mut grads.lm_head_weight,
             &d_logits[t],
@@ -807,9 +803,7 @@ pub fn kimi_k3_delay_backward_sequence(
 
             let all_saved: Vec<MlaSavedActivations> = (0..l)
                 .map(|t| {
-                    saved_tokens[t]
-                        .base
-                        .layers[layer_idx]
+                    saved_tokens[t].base.layers[layer_idx]
                         .mla_saved
                         .clone()
                         .unwrap()
@@ -843,9 +837,7 @@ pub fn kimi_k3_delay_backward_sequence(
             };
             let all_saved_kda: Vec<KdaSavedActivations> = (0..l)
                 .map(|t| {
-                    saved_tokens[t]
-                        .base
-                        .layers[layer_idx]
+                    saved_tokens[t].base.layers[layer_idx]
                         .kda_saved
                         .clone()
                         .unwrap()
@@ -931,10 +923,7 @@ pub fn kimi_k3_delay_backward_sequence(
         }
         let token_id = saved_tokens[t].base.token_id as usize;
         let base = token_id * d;
-        simd_add_inplace(
-            &mut grads.embed_weight[base..base + d],
-            &d_prefix[t][..d],
-        );
+        simd_add_inplace(&mut grads.embed_weight[base..base + d], &d_prefix[t][..d]);
     }
 }
 
@@ -993,9 +982,7 @@ fn routed_source_backward_and_deposit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kimi_k3::backward::{
-        kimi_k3_backward_sequence, kimi_k3_forward_token_saved,
-    };
+    use crate::kimi_k3::backward::{kimi_k3_backward_sequence, kimi_k3_forward_token_saved};
     use katgpt_attn::gdn2::kda_forward::KdaConfig;
     use katgpt_attn::mla::MlaConfig;
     use katgpt_transformer::attn_res::AttnResConfig;
@@ -1062,11 +1049,7 @@ mod tests {
     fn assert_bits_eq(a: &[f32], b: &[f32], what: &str) {
         assert_eq!(a.len(), b.len(), "{what}: length");
         for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
-            assert_eq!(
-                x.to_bits(),
-                y.to_bits(),
-                "{what}: element {i}: {x} vs {y}"
-            );
+            assert_eq!(x.to_bits(), y.to_bits(), "{what}: element {i}: {x} vs {y}");
         }
     }
 
@@ -1204,11 +1187,7 @@ mod tests {
             assert_bits_eq(&e_s.up_proj, &e_d.up_proj, "G0 top expert up");
             assert_bits_eq(&e_s.down_proj, &e_d.down_proj, "G0 top expert down");
         }
-        for (e_s, e_d) in m_std
-            .shared_experts
-            .iter()
-            .zip(m_dly.shared_experts.iter())
-        {
+        for (e_s, e_d) in m_std.shared_experts.iter().zip(m_dly.shared_experts.iter()) {
             assert_bits_eq(&e_s.gate_proj, &e_d.gate_proj, "G0 top shared gate");
             assert_bits_eq(&e_s.up_proj, &e_d.up_proj, "G0 top shared up");
             assert_bits_eq(&e_s.down_proj, &e_d.down_proj, "G0 top shared down");
@@ -1279,12 +1258,7 @@ mod tests {
                     for (e_s, e_d) in s_m.experts.iter().zip(d_m.experts.iter()) {
                         assert_within_band(&e_s.gate_proj, &e_d.gate_proj, BAND, "G0 lower gate");
                         assert_within_band(&e_s.up_proj, &e_d.up_proj, BAND, "G0 lower up");
-                        assert_within_band(
-                            &e_s.down_proj,
-                            &e_d.down_proj,
-                            BAND,
-                            "G0 lower down",
-                        );
+                        assert_within_band(&e_s.down_proj, &e_d.down_proj, BAND, "G0 lower down");
                     }
                 }
                 if let (Some(s_d), Some(d_d)) = (s.dense_grads.as_ref(), dl.dense_grads.as_ref()) {
@@ -1447,7 +1421,11 @@ mod tests {
 
         // End-to-end through the entry deposits.
         for j in 0..4 {
-            fd_check!(&mut weights_mut.embed_weight[j], grads.embed_weight[j], format!("embed[{j}]"));
+            fd_check!(
+                &mut weights_mut.embed_weight[j],
+                grads.embed_weight[j],
+                format!("embed[{j}]")
+            );
         }
         fd_check!(
             &mut weights_mut.final_norm_weight[1],

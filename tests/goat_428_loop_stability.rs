@@ -65,11 +65,11 @@ fn run_forward_looped(
         None, // Issue 717: deep_run — None = bit-identical baseline
         #[cfg(feature = "cadence_gate")]
         None, // Issue 731: residual-exit probe — None = bit-identical baseline
-    #[cfg(feature = "loop_guidance")]
+        #[cfg(feature = "loop_guidance")]
         None, // Plan 617: LoopCD guidance - None = bit-identical baseline
         #[cfg(feature = "loop_guidance")]
         None,
-        );
+    );
     let elapsed = t0.elapsed().as_micros() as u64;
 
     // Clone logits first to release the mutable borrow on ctx, then read

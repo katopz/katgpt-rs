@@ -155,11 +155,11 @@ impl<'a> Runner<'a> {
             run,
             #[cfg(feature = "cadence_gate")]
             None,
-        #[cfg(feature = "loop_guidance")]
+            #[cfg(feature = "loop_guidance")]
             None, // Plan 617: LoopCD guidance - None = bit-identical baseline
             #[cfg(feature = "loop_guidance")]
             None,
-            )
+        )
         .to_vec()
     }
 }
@@ -605,11 +605,11 @@ fn g4_probe_path_is_alloc_free_when_warm() {
             Some(&mut run),
             #[cfg(feature = "cadence_gate")]
             None,
-        #[cfg(feature = "loop_guidance")]
+            #[cfg(feature = "loop_guidance")]
             None, // Plan 617: LoopCD guidance - None = bit-identical baseline
             #[cfg(feature = "loop_guidance")]
             None,
-            );
+        );
         kl_profile(&final_logits, run.stats.logit_snapshots(), &mut kl);
         write_fractions(run.stats.state_snapshots.iter().map(Vec::as_slice), &mut wf);
         std::hint::black_box((kl.len(), wf.len()));

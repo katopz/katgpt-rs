@@ -118,7 +118,10 @@ fn counted_pipeline(d: usize, k: usize, n: usize) -> (usize, bool) {
             &mut whitener,
         )
         .unwrap();
-        if !matches!(verdict, katgpt_core::basis_split::Verdict::SufficientVariation { .. }) {
+        if !matches!(
+            verdict,
+            katgpt_core::basis_split::Verdict::SufficientVariation { .. }
+        ) {
             return false;
         }
         project_invariant_into(&basis, d - k, d, &diffs[0], &mut bx, &mut proj).unwrap();
@@ -149,7 +152,10 @@ fn g4_zero_alloc_steady_state_d64() {
     let _serialize = SERIALIZE.lock().unwrap();
     let (count, ok) = counted_pipeline(64, 16, 2048);
     assert!(ok);
-    assert_eq!(count, 0, "G4 FAIL: {count} allocations on the steady-state split path (d=64)");
+    assert_eq!(
+        count, 0,
+        "G4 FAIL: {count} allocations on the steady-state split path (d=64)"
+    );
 }
 
 #[test]
@@ -157,5 +163,8 @@ fn g4_zero_alloc_steady_state_d16_jacobi() {
     let _serialize = SERIALIZE.lock().unwrap();
     let (count, ok) = counted_pipeline(16, 4, 1024);
     assert!(ok);
-    assert_eq!(count, 0, "G4 FAIL: {count} allocations on the steady-state Jacobi path (d=16)");
+    assert_eq!(
+        count, 0,
+        "G4 FAIL: {count} allocations on the steady-state Jacobi path (d=16)"
+    );
 }

@@ -20,10 +20,10 @@
 //! ```
 
 use katgpt_core::entropy_bounded_commit::EbCommitConfig;
+use katgpt_speculative::NoPruner;
 use katgpt_speculative::entropy_bounded::{
     EbBuildScratch, EbCommitScratch, build_dd_tree_eb_into, dflash_block_commit_eb_with,
 };
-use katgpt_speculative::NoPruner;
 use katgpt_types::Config;
 
 const DEPTHS: usize = 8;
@@ -132,7 +132,10 @@ fn ddtree_table(name: &str, seed: u64) {
         );
         // Count sanity: no EB arm stalls (every family here has candidates
         // at every depth), and fixed-k arms never exceed their cap.
-        assert_eq!(scratch.commit_histogram[0], 0, "{label}: no stalled expansion");
+        assert_eq!(
+            scratch.commit_histogram[0], 0,
+            "{label}: no stalled expansion"
+        );
         let cap = cfg.max_commit.min(VOCAB);
         assert!(
             scratch
@@ -190,11 +193,7 @@ fn dflash_table(name: &str, seed: u64) {
                 let d = rng.usize(..DFLASH_STEPS);
                 let src = rng.usize(..VOCAB);
                 let dst = rng.usize(..VOCAB);
-                let (lo, hi) = if src <= dst {
-                    (src, dst)
-                } else {
-                    (dst, src)
-                };
+                let (lo, hi) = if src <= dst { (src, dst) } else { (dst, src) };
                 let scale = 0.5 + rng.f32();
                 for (i, v) in block[d * VOCAB..(d + 1) * VOCAB].iter_mut().enumerate() {
                     *v = if i == lo {
@@ -234,9 +233,7 @@ fn dflash_table(name: &str, seed: u64) {
 
 fn main() {
     println!("╔══════════════════════════════════════════════════════════════════╗");
-    println!(
-        "║  Issue 917 T3 — EB lane wiring: commit-count + expansion counts  ║"
-    );
+    println!("║  Issue 917 T3 — EB lane wiring: commit-count + expansion counts  ║");
     println!("╚══════════════════════════════════════════════════════════════════╝");
     println!("counts only — no timing; fixed-k = EB with γ=∞ and cap=k (same order)");
 

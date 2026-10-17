@@ -53,10 +53,10 @@
 mod loopcd_fixture;
 
 use katgpt_rs::transformer::loop_guidance::{
-    adaptive_omega, GuidanceMode, LoopGuidance, LoopGuidanceConfig, SettleExit, SettleExitConfig,
+    GuidanceMode, LoopGuidance, LoopGuidanceConfig, SettleExit, SettleExitConfig, adaptive_omega,
 };
 use katgpt_rs::transformer::standard_lm_head;
-use loopcd_fixture::{all_cases, answer_margin, argmax, LoopCdCase, LoopCdFixture, MAX_LOOPS};
+use loopcd_fixture::{LoopCdCase, LoopCdFixture, MAX_LOOPS, all_cases, answer_margin, argmax};
 
 /// Half depth for the headline leg (b).
 const HALF_LOOPS: usize = MAX_LOOPS / 2;
@@ -101,7 +101,10 @@ fn apply_fixed_mask(v: &mut [f32]) {
 /// The Eq-4 adaptive gate shared by every combine arm:
 /// `ω = ω_max·(1 − margin(z_R))` on the pre-guidance readout.
 fn shared_omega(z_r: &[f32]) -> f32 {
-    adaptive_omega(INCUMBENT_OMEGA_MAX, katgpt_rs::transformer::loop_guidance::top_two_margin(z_r))
+    adaptive_omega(
+        INCUMBENT_OMEGA_MAX,
+        katgpt_rs::transformer::loop_guidance::top_two_margin(z_r),
+    )
 }
 
 /// Combine arms (incumbents + controls): `z′ = z_R + ω·(z_R − z_weak)` —
@@ -121,7 +124,13 @@ fn early_tap_logits(fixture: &LoopCdFixture, case: &LoopCdCase, depth: usize) ->
     let mut h_masked = h_r;
     apply_fixed_mask(&mut h_masked);
     let mut z_weak = vec![0.0f32; loopcd_fixture::VOCAB];
-    standard_lm_head(&mut z_weak, &h_masked, &fixture.weights.lm_head, loopcd_fixture::VOCAB, n);
+    standard_lm_head(
+        &mut z_weak,
+        &h_masked,
+        &fixture.weights.lm_head,
+        loopcd_fixture::VOCAB,
+        n,
+    );
     let omega = shared_omega(&z_r);
     combine(&z_r, &z_weak, omega)
 }
@@ -138,7 +147,12 @@ fn cheap_weak_logits(fixture: &LoopCdFixture, case: &LoopCdCase, depth: usize) -
 
 /// Product-policy incumbent: `0.5·log π̂(z_k) + 0.5·log π(z_R)` — the
 /// positive blend, weak side = the depth-`ref_loop` readout.
-fn product_policy_logits(fixture: &LoopCdFixture, case: &LoopCdCase, depth: usize, ref_loop: usize) -> Vec<f32> {
+fn product_policy_logits(
+    fixture: &LoopCdFixture,
+    case: &LoopCdCase,
+    depth: usize,
+    ref_loop: usize,
+) -> Vec<f32> {
     let z_k = fixture.run_case(case, ref_loop);
     let z_r = fixture.run_case(case, depth);
     let mut out = vec![0.0f32; z_r.len()];
@@ -148,10 +162,7 @@ fn product_policy_logits(fixture: &LoopCdFixture, case: &LoopCdCase, depth: usiz
 
 /// Settle-exit fusion arm: guided + settle (the aggressive-but-windowed
 /// config from the settle gates) — returns (answer, loops_used, fired).
-fn settle_fusion_arm(
-    fixture: &LoopCdFixture,
-    case: &LoopCdCase,
-) -> (usize, usize, bool) {
+fn settle_fusion_arm(fixture: &LoopCdFixture, case: &LoopCdCase) -> (usize, usize, bool) {
     let mut g = LoopGuidance::new(
         LoopGuidanceConfig {
             mode: GuidanceMode::Logits,
@@ -173,9 +184,17 @@ fn settle_fusion_arm(
         loopcd_fixture::VOCAB,
         fixture.config.n_embd,
     );
-    let logits = fixture.run_tokens_guided(&case.prefix, MAX_LOOPS, Some(&mut g), Some(&mut settle));
+    let logits =
+        fixture.run_tokens_guided(&case.prefix, MAX_LOOPS, Some(&mut g), Some(&mut settle));
     let budget = settle.last_budget().expect("budget");
-    (argmax(&logits), budget.loops_used, matches!(budget.exit, katgpt_rs::transformer::loop_guidance::ExitKind::Settled { .. }))
+    (
+        argmax(&logits),
+        budget.loops_used,
+        matches!(
+            budget.exit,
+            katgpt_rs::transformer::loop_guidance::ExitKind::Settled { .. }
+        ),
+    )
 }
 
 // ── the gate ─────────────────────────────────────────────────────────────
@@ -208,7 +227,16 @@ fn loopcd_goat_g1_ladder() {
         .collect();
     let guided_full: Vec<usize> = cases
         .iter()
-        .map(|c| argmax(&guided_logits(&fixture, c, MAX_LOOPS, GuidanceMode::Logits, 0.5, 1)))
+        .map(|c| {
+            argmax(&guided_logits(
+                &fixture,
+                c,
+                MAX_LOOPS,
+                GuidanceMode::Logits,
+                0.5,
+                1,
+            ))
+        })
         .collect();
     let a_unguided = acc(&unguided_full, &cases.iter().collect::<Vec<_>>());
     let a_guided = acc(&guided_full, &cases.iter().collect::<Vec<_>>());
@@ -220,7 +248,16 @@ fn loopcd_goat_g1_ladder() {
         .collect();
     let guided_half: Vec<usize> = cases
         .iter()
-        .map(|c| argmax(&guided_logits(&fixture, c, HALF_LOOPS, GuidanceMode::Logits, 0.5, 1)))
+        .map(|c| {
+            argmax(&guided_logits(
+                &fixture,
+                c,
+                HALF_LOOPS,
+                GuidanceMode::Logits,
+                0.5,
+                1,
+            ))
+        })
         .collect();
     let a_unguided_half = acc(&unguided_half, &cases.iter().collect::<Vec<_>>());
     let a_guided_half = acc(&guided_half, &cases.iter().collect::<Vec<_>>());
@@ -349,7 +386,7 @@ fn loopcd_goat_g1_ladder() {
 fn loopcd_goat_exit_only_incumbent() {
     use katgpt_rs::hla::MultiLayerAhlaCache;
     use katgpt_rs::pruners::self_advantage::AdvantageMarginGate;
-    use katgpt_rs::transformer::{forward_looped, ForwardContext, MultiLayerKVCache};
+    use katgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, forward_looped};
     use katgpt_rs::types::{ResidualGate, SdpaOutputGate};
 
     let fixture = LoopCdFixture::new();
@@ -366,9 +403,17 @@ fn loopcd_goat_exit_only_incumbent() {
         let mut gate = AdvantageMarginGate::default();
         for (p, &tok) in case.prefix.iter().enumerate() {
             let l = forward_looped(
-                &mut ctx, &fixture.weights, &mut cache, &mut ahla_cache, tok, p, config,
-                &residual_gate, &sdpa_gate,
-                None, None,
+                &mut ctx,
+                &fixture.weights,
+                &mut cache,
+                &mut ahla_cache,
+                tok,
+                p,
+                config,
+                &residual_gate,
+                &sdpa_gate,
+                None,
+                None,
                 #[cfg(feature = "weight_shared_advantage_gate")]
                 Some(&mut gate),
                 Some(1),
@@ -385,10 +430,17 @@ fn loopcd_goat_exit_only_incumbent() {
             let _ = l;
         }
         let l = forward_looped(
-            &mut ctx, &fixture.weights, &mut cache, &mut ahla_cache,
-            loopcd_fixture::QUERY, case.prefix.len(), config,
-            &residual_gate, &sdpa_gate,
-            None, None,
+            &mut ctx,
+            &fixture.weights,
+            &mut cache,
+            &mut ahla_cache,
+            loopcd_fixture::QUERY,
+            case.prefix.len(),
+            config,
+            &residual_gate,
+            &sdpa_gate,
+            None,
+            None,
             #[cfg(feature = "weight_shared_advantage_gate")]
             Some(&mut gate),
             Some(MAX_LOOPS),
@@ -456,7 +508,11 @@ fn loopcd_goat_g2_overhead_and_budget() {
     let cases = all_cases();
     // A fixed slice for the timing arms — a dozen cases spread across the
     // strata; the timing measures the STEP cost, not the accuracy.
-    let timing_cases: Vec<&LoopCdCase> = cases.iter().step_by(cases.len() / 12 + 1).take(12).collect();
+    let timing_cases: Vec<&LoopCdCase> = cases
+        .iter()
+        .step_by(cases.len() / 12 + 1)
+        .take(12)
+        .collect();
 
     let run_unguided = |i: usize| {
         let case = &timing_cases[i % timing_cases.len()];
@@ -588,13 +644,18 @@ fn loopcd_goat_posture_sweep_disclosure() {
 
     println!("== LoopCD posture sweep (unguided-full = {a0:.4}, close = {a0c:.4}) ==");
     let mut best: Option<(f64, f64, &str)> = None;
-    for (mode_name, mode) in [("logit", GuidanceMode::Logits), ("hidden", GuidanceMode::Hidden)] {
+    for (mode_name, mode) in [
+        ("logit", GuidanceMode::Logits),
+        ("hidden", GuidanceMode::Hidden),
+    ] {
         for ref_loop in [1usize, 3, 6, 9] {
             for omega_max in [0.1f32, 0.25, 0.5] {
                 let answers: Vec<usize> = cases
                     .iter()
                     .map(|c| {
-                        argmax(&guided_logits(&fixture, c, MAX_LOOPS, mode, omega_max, ref_loop))
+                        argmax(&guided_logits(
+                            &fixture, c, MAX_LOOPS, mode, omega_max, ref_loop,
+                        ))
                     })
                     .collect();
                 for a in &answers {
@@ -615,9 +676,7 @@ fn loopcd_goat_posture_sweep_disclosure() {
         }
     }
     if let Some((a, ac, _)) = best {
-        println!(
-            "best sweep posture: full {a:.4} | close {ac:.4} (vs unguided {a0:.4}/{a0c:.4})"
-        );
+        println!("best sweep posture: full {a:.4} | close {ac:.4} (vs unguided {a0:.4}/{a0c:.4})");
     }
 }
 

@@ -194,28 +194,51 @@ pub enum LatticeConfigError {
 impl core::fmt::Display for LatticeConfigError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::ZeroDimension => write!(f, "lattice config: d, d_k, d_v and every grid side must be non-zero"),
-            Self::BadWidth(axis) => write!(f, "lattice config: axis {axis} width must be finite and > 0"),
+            Self::ZeroDimension => write!(
+                f,
+                "lattice config: d, d_k, d_v and every grid side must be non-zero"
+            ),
+            Self::BadWidth(axis) => write!(
+                f,
+                "lattice config: axis {axis} width must be finite and > 0"
+            ),
             Self::OverBudget { required, budget } => {
-                write!(f, "lattice config: slab needs {required} B, byte_budget is {budget} B")
+                write!(
+                    f,
+                    "lattice config: slab needs {required} B, byte_budget is {budget} B"
+                )
             }
             Self::BadNearMissRadius(r) => {
-                write!(f, "lattice sizer: near-miss radius must be in (0, 10] σ, got {r}")
+                write!(
+                    f,
+                    "lattice sizer: near-miss radius must be in (0, 10] σ, got {r}"
+                )
             }
-            Self::OverCapacity { items, cells, capacity_per_cell, required_d_k } => write!(
+            Self::OverCapacity {
+                items,
+                cells,
+                capacity_per_cell,
+                required_d_k,
+            } => write!(
                 f,
                 "lattice sizer: {items} items over a {cells}-cell grid need λ = {:.1} per cell \
                  but d_k carries {:.1} — raise d_k to ≥ {required_d_k}, shrink items, or widen the radius",
                 *items as f32 / *cells as f32,
                 capacity_per_cell
             ),
-            Self::GridTooLarge { side_per_axis, axes } => write!(
+            Self::GridTooLarge {
+                side_per_axis,
+                axes,
+            } => write!(
                 f,
                 "lattice sizer: side {side_per_axis} per axis at {axes} axes overflows the \
                  cell count — widen the near-miss radius"
             ),
             Self::EmptySample => {
-                write!(f, "lattice sizer: no samples to fit the occupancy warp — use `new` instead")
+                write!(
+                    f,
+                    "lattice sizer: no samples to fit the occupancy warp — use `new` instead"
+                )
             }
         }
     }
@@ -259,13 +282,23 @@ pub enum LatticeSnapshotError {
     /// A written cell claims slab elements past the slab end (corrupt
     /// artifact) — refused here so the hot path's slab indexing stays
     /// unchecked-by-construction instead of panicking on a thawed lie.
-    CellOutOfBounds { cell_index: usize, offset: u32, len: u32, slab_len: usize },
+    CellOutOfBounds {
+        cell_index: usize,
+        offset: u32,
+        len: u32,
+        slab_len: usize,
+    },
 }
 
 impl std::fmt::Display for LatticeSnapshotError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::GeometryMismatch { expected_cells, found_cells, expected_slab, found_slab } => {
+            Self::GeometryMismatch {
+                expected_cells,
+                found_cells,
+                expected_slab,
+                found_slab,
+            } => {
                 write!(
                     f,
                     "lattice snapshot geometry mismatch: cells {found_cells} vs expected \
@@ -274,9 +307,17 @@ impl std::fmt::Display for LatticeSnapshotError {
                 )
             }
             Self::CursorOutOfBounds { cursor, slab_len } => {
-                write!(f, "lattice snapshot cursor {cursor} past its own slab length {slab_len} — corrupt snapshot")
+                write!(
+                    f,
+                    "lattice snapshot cursor {cursor} past its own slab length {slab_len} — corrupt snapshot"
+                )
             }
-            Self::CellOutOfBounds { cell_index, offset, len, slab_len } => {
+            Self::CellOutOfBounds {
+                cell_index,
+                offset,
+                len,
+                slab_len,
+            } => {
                 write!(
                     f,
                     "lattice snapshot cell {cell_index} claims [{offset}, {}) past slab length {slab_len} — corrupt snapshot",

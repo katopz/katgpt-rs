@@ -185,11 +185,20 @@ impl SplitMix64 {
 /// blocks — a real miss stream is not class-aligned, and a knowledge-first
 /// layout would hand the cap-only incumbent its best case by construction).
 #[must_use]
-pub fn planted_corpus(n_knowledge: usize, n_execution: usize, n_productive: usize, seed: u64) -> Vec<EvalState> {
+pub fn planted_corpus(
+    n_knowledge: usize,
+    n_execution: usize,
+    n_productive: usize,
+    seed: u64,
+) -> Vec<EvalState> {
     let mut rng = SplitMix64::new(seed);
     let mut out = Vec::with_capacity(n_knowledge + n_execution + n_productive);
     let mut id: u32 = 0;
-    let push_block = |rng: &mut SplitMix64, out: &mut Vec<EvalState>, class: PlantedClass, count: usize, id: &mut u32| {
+    let push_block = |rng: &mut SplitMix64,
+                      out: &mut Vec<EvalState>,
+                      class: PlantedClass,
+                      count: usize,
+                      id: &mut u32| {
         for _ in 0..count {
             let p = class.true_rate();
             let mut local_draws = [false; LOCAL_RETRIES as usize];
@@ -198,16 +207,40 @@ pub fn planted_corpus(n_knowledge: usize, n_execution: usize, n_productive: usiz
             }
             let escalation_draw = rng.next_bool(R_ESC);
             let ensemble = realize_ensemble(rng, p);
-            out.push(EvalState { planted: class, id: *id, local_draws, escalation_draw, ensemble });
+            out.push(EvalState {
+                planted: class,
+                id: *id,
+                local_draws,
+                escalation_draw,
+                ensemble,
+            });
             *id += 1;
         }
     };
     let mut knowledge = Vec::with_capacity(n_knowledge);
     let mut execution = Vec::with_capacity(n_execution);
     let mut productive = Vec::with_capacity(n_productive);
-    push_block(&mut rng, &mut knowledge, PlantedClass::KnowledgeLike, n_knowledge, &mut id);
-    push_block(&mut rng, &mut execution, PlantedClass::ExecutionLike, n_execution, &mut id);
-    push_block(&mut rng, &mut productive, PlantedClass::Productive, n_productive, &mut id);
+    push_block(
+        &mut rng,
+        &mut knowledge,
+        PlantedClass::KnowledgeLike,
+        n_knowledge,
+        &mut id,
+    );
+    push_block(
+        &mut rng,
+        &mut execution,
+        PlantedClass::ExecutionLike,
+        n_execution,
+        &mut id,
+    );
+    push_block(
+        &mut rng,
+        &mut productive,
+        PlantedClass::Productive,
+        n_productive,
+        &mut id,
+    );
     // Deterministic round-robin interleave (no RNG — layout is contract).
     let mut ki = 0;
     let mut ei = 0;
@@ -262,7 +295,11 @@ fn realize_ensemble(rng: &mut SplitMix64, p: f64) -> EnsembleDraws {
         let bin = 1 + (rng.next_u64() as usize) % (HIST_BINS - 1);
         histogram[bin] = histogram[bin].saturating_add(1);
     }
-    EnsembleDraws { passes_at_rung, rungs, histogram }
+    EnsembleDraws {
+        passes_at_rung,
+        rungs,
+        histogram,
+    }
 }
 
 /// One arm's per-corpus outcome.
@@ -373,7 +410,11 @@ impl Default for ProbeArmConfig {
         Self {
             epsilon: 0.05,
             n_max: 128,
-            option: EscalationOption { depth: 1, success_prior: R_ESC, corpus_distance: 0.0 },
+            option: EscalationOption {
+                depth: 1,
+                success_prior: R_ESC,
+                corpus_distance: 0.0,
+            },
             lambda: 0.1,
             r_min: 0.3,
             probe_eval_cost_units: PROBE_EVAL_COST_UNITS,
@@ -408,13 +449,21 @@ fn probe_state(state: &EvalState, cfg: &ProbeArmConfig, z95: f64) -> StateProbeR
         let input = ProbeInput {
             pass_count: state.ensemble.passes_at_rung[i],
             n: rung,
-            histogram: if i == N_RUNGS - 1 { &state.ensemble.histogram } else { &[] },
+            histogram: if i == N_RUNGS - 1 {
+                &state.ensemble.histogram
+            } else {
+                &[]
+            },
         };
         let est = probe(&input, z95);
         last_estimate = Some(est);
         match classifier.observe(&est, rung) {
             AdaptiveDecision::Settled(class) => {
-                return StateProbeRead { class, estimate: est, evals };
+                return StateProbeRead {
+                    class,
+                    estimate: est,
+                    evals,
+                };
             }
             AdaptiveDecision::Continue => {}
             AdaptiveDecision::CappedUndetermined => break,
@@ -476,7 +525,8 @@ pub fn arm_probe_gated(corpus: &[EvalState], cap_units: f64, cfg: &ProbeArmConfi
         }
         if local {
             r.rescues += 1;
-        } else if escalated && state.planted == PlantedClass::KnowledgeLike && state.escalation_draw {
+        } else if escalated && state.planted == PlantedClass::KnowledgeLike && state.escalation_draw
+        {
             r.rescues += 1;
             r.escalation_net_rescues += 1;
         }
@@ -513,9 +563,24 @@ mod tests {
         assert_eq!(c[1].planted, PlantedClass::ExecutionLike);
         assert_eq!(c[2].planted, PlantedClass::Productive);
         assert_eq!(c[3].planted, PlantedClass::KnowledgeLike);
-        assert_eq!(c.iter().filter(|s| s.planted == PlantedClass::KnowledgeLike).count(), 5);
-        assert_eq!(c.iter().filter(|s| s.planted == PlantedClass::ExecutionLike).count(), 3);
-        assert_eq!(c.iter().filter(|s| s.planted == PlantedClass::Productive).count(), 2);
+        assert_eq!(
+            c.iter()
+                .filter(|s| s.planted == PlantedClass::KnowledgeLike)
+                .count(),
+            5
+        );
+        assert_eq!(
+            c.iter()
+                .filter(|s| s.planted == PlantedClass::ExecutionLike)
+                .count(),
+            3
+        );
+        assert_eq!(
+            c.iter()
+                .filter(|s| s.planted == PlantedClass::Productive)
+                .count(),
+            2
+        );
     }
 
     /// The floor arm counts exactly the locally-rescuable states.
@@ -523,7 +588,10 @@ mod tests {
     fn floor_counts_local_only() {
         let c = planted_corpus(10, 10, 10, 42);
         let r = arm_never_escalate(&c);
-        let want = c.iter().filter(|s| s.local_draws.iter().any(|&d| d)).count() as u32;
+        let want = c
+            .iter()
+            .filter(|s| s.local_draws.iter().any(|&d| d))
+            .count() as u32;
         assert_eq!(r.rescues, want);
         assert_eq!(r.escalations, 0);
     }

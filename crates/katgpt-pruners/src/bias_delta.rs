@@ -177,7 +177,10 @@ impl BiasDeltaBuilder {
             "bias_delta: with_c/plain depth mismatch at layer {layer} site {}",
             site.name()
         );
-        assert!(layer < self.n_layers, "bias_delta: layer {layer} out of range");
+        assert!(
+            layer < self.n_layers,
+            "bias_delta: layer {layer} out of range"
+        );
         let idx = layer * BiasSite::ALL.len() + site.slot();
         let acc = self.slots[idx].get_or_insert_with(|| WindowAccum {
             sum: vec![0.0; with_c.len()],

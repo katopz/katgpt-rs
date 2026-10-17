@@ -42,13 +42,12 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use katgpt_types::sync_bank::{SyncBank, SYNC_BANK_LADDER};
+use katgpt_types::sync_bank::{SYNC_BANK_LADDER, SyncBank};
 use katgpt_types::temporal::TemporalDerivativeKernel;
 
 /// The fixture path (committed beside this test).
 fn fixture_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/sync_bank_g1b_boot_fixture.bin")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sync_bank_g1b_boot_fixture.bin")
 }
 
 /// One observation: tick, entity key, the bank's 8-dim input.
@@ -123,7 +122,9 @@ fn parse(data: &[u8]) -> Fixture {
 fn percentile(sorted: &[f32], p: f64) -> f32 {
     let n = sorted.len();
     assert!(n > 0, "percentile of empty population");
-    let idx = ((p * n as f64).ceil() as usize).saturating_sub(1).min(n - 1);
+    let idx = ((p * n as f64).ceil() as usize)
+        .saturating_sub(1)
+        .min(n - 1);
     sorted[idx]
 }
 
@@ -156,8 +157,7 @@ fn g1b_relation_surprise_beats_value_surprise_on_the_real_boot_fixture() {
     // changes the boot's shape re-reds here for a look, not silently).
     assert_eq!(fx.obs.len(), 3_229, "observation count");
     assert_eq!(fx.events.len(), 49, "labeled event count");
-    let entities: std::collections::BTreeSet<[u8; 16]> =
-        fx.obs.iter().map(|o| o.entity).collect();
+    let entities: std::collections::BTreeSet<[u8; 16]> = fx.obs.iter().map(|o| o.entity).collect();
     assert_eq!(entities.len(), 48, "entity count");
 
     // Per-entity streams in dump order (the bank's exact input sequence).
@@ -183,8 +183,7 @@ fn g1b_relation_surprise_beats_value_surprise_on_the_real_boot_fixture() {
     }
     assert_eq!(scores.len(), fx.obs.len(), "every observation scored");
 
-    let mut entity_ticks: BTreeMap<[u8; 16], std::collections::BTreeSet<u64>> =
-        BTreeMap::new();
+    let mut entity_ticks: BTreeMap<[u8; 16], std::collections::BTreeSet<u64>> = BTreeMap::new();
     for o in &fx.obs {
         entity_ticks.entry(o.entity).or_default().insert(o.tick);
     }
@@ -205,9 +204,10 @@ fn g1b_relation_surprise_beats_value_surprise_on_the_real_boot_fixture() {
                 event_keys.insert((ev.entity, *t));
             }
         }
-        let n_pre = rows.iter().filter(|(t, _)| {
-            (*t as i64) < ev.tick as i64 - WINDOW
-        }).count();
+        let n_pre = rows
+            .iter()
+            .filter(|(t, _)| (*t as i64) < ev.tick as i64 - WINDOW)
+            .count();
         if n_pre >= WARM_PRE {
             warm_events.push((ev, n_pre));
         } else {
@@ -242,20 +242,16 @@ fn g1b_relation_surprise_beats_value_surprise_on_the_real_boot_fixture() {
     // Per-event detection at a matched FP budget: threshold = the quiet
     // quantile; an event detects when ANY of its window's observations
     // crosses its OWN detector's threshold.
-    let detects = |flagged: &std::collections::HashSet<([u8; 16], u64)>,
-                   pop: &[(&Ev, usize)]|
-     -> usize {
-        pop.iter()
-            .filter(|(ev, _)| {
-                streams[&ev.entity]
-                    .iter()
-                    .any(|(t, _)| {
-                        t.abs_diff(ev.tick) <= WINDOW as u64
-                            && flagged.contains(&(ev.entity, *t))
+    let detects =
+        |flagged: &std::collections::HashSet<([u8; 16], u64)>, pop: &[(&Ev, usize)]| -> usize {
+            pop.iter()
+                .filter(|(ev, _)| {
+                    streams[&ev.entity].iter().any(|(t, _)| {
+                        t.abs_diff(ev.tick) <= WINDOW as u64 && flagged.contains(&(ev.entity, *t))
                     })
-            })
-            .count()
-    };
+                })
+                .count()
+        };
 
     let mut reported = String::with_capacity(512);
     reported.push_str(&format!(
@@ -312,8 +308,7 @@ fn g1b_relation_surprise_beats_value_surprise_on_the_real_boot_fixture() {
     // slip would blow through this).
     for fp in FP_BUDGETS {
         let s_thr = percentile(&quiet_s, 1.0 - fp);
-        let rate =
-            quiet.iter().filter(|(s, _)| *s >= s_thr).count() as f64 / quiet.len() as f64;
+        let rate = quiet.iter().filter(|(s, _)| *s >= s_thr).count() as f64 / quiet.len() as f64;
         assert!(
             rate <= fp * 1.5 + 1e-9,
             "quiet flag rate {rate} exceeds 1.5× the {fp} budget"

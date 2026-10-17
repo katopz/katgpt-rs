@@ -131,7 +131,9 @@ impl RunConfig {
             bos: matches!(std::env::var("K929_BOS").as_deref(), Ok("1") | Ok("true")),
             exemplars: env_or("K929_EXEMPLARS", 0),
             bootstrap_iters: env_or("K929_BOOTSTRAP_ITERS", boot),
-            max_items: std::env::var("K929_MAX_ITEMS").ok().and_then(|s| s.parse().ok()),
+            max_items: std::env::var("K929_MAX_ITEMS")
+                .ok()
+                .and_then(|s| s.parse().ok()),
             smoke,
         }
     }
@@ -305,7 +307,10 @@ fn auroc_table(
 ) -> (f64, String) {
     let labels: Vec<bool> = picked.iter().map(|r| label_of(r)).collect();
     let (pos, neg) = class_counts(&labels);
-    println!("\n== AUROC vs {title} (n={} pos={pos} neg={neg}) ==", picked.len());
+    println!(
+        "\n== AUROC vs {title} (n={} pos={pos} neg={neg}) ==",
+        picked.len()
+    );
     if pos == 0 || neg == 0 {
         println!("   UNDECIDABLE - a class is empty; AUROC is undefined (never a pass).");
         return (f64::NEG_INFINITY, String::from("undecidable"));
@@ -457,9 +462,7 @@ fn main() {
     // in-context examples (prompt + gold answer + blank line) and EXCLUDED
     // from the eval. Item prompts end on the bare `Answer:` cue, so appending
     // the gold name completes an exemplar exactly.
-    let n_exemplars = cfg
-        .exemplars
-        .min(fixture.items.len().saturating_sub(2));
+    let n_exemplars = cfg.exemplars.min(fixture.items.len().saturating_sub(2));
     let exemplar_text: String = fixture
         .items
         .iter()
@@ -469,7 +472,7 @@ fn main() {
     let eval_len = fixture.items.len() - n_exemplars;
     if n_exemplars > 0 {
         println!(
-            "  elicitation: {n_exemplars} solved exemplars prepended ({eval_len} eval items), bos={}" ,
+            "  elicitation: {n_exemplars} solved exemplars prepended ({eval_len} eval items), bos={}",
             cfg.bos as u8
         );
     }
@@ -503,7 +506,11 @@ fn main() {
         tokens += prompt_tokens.len();
         let outcome = run_item(&run, item, &prompt_tokens);
         forwards += prompt_tokens.len() + run.loops + outcome.generated.chars().count();
-        let kind = if item.is_two_hop { "two-hop" } else { "one-hop" };
+        let kind = if item.is_two_hop {
+            "two-hop"
+        } else {
+            "one-hop"
+        };
         println!(
             "[{:>3}] {:<7} ood={} pre={} first={} full={} gen={:?}",
             records.len() + 1,
@@ -566,17 +573,33 @@ fn main() {
         cfg.seed,
     );
     if !id.is_empty() {
-        let _ = auroc_table("final-answer match (ID pool only)", &id, |r| r.full_ok, cfg.loops, cfg.bootstrap_iters, cfg.seed);
+        let _ = auroc_table(
+            "final-answer match (ID pool only)",
+            &id,
+            |r| r.full_ok,
+            cfg.loops,
+            cfg.bootstrap_iters,
+            cfg.seed,
+        );
     }
     if !ood.is_empty() {
-        let _ = auroc_table("final-answer match (OOD pool only)", &ood, |r| r.full_ok, cfg.loops, cfg.bootstrap_iters, cfg.seed);
+        let _ = auroc_table(
+            "final-answer match (OOD pool only)",
+            &ood,
+            |r| r.full_ok,
+            cfg.loops,
+            cfg.bootstrap_iters,
+            cfg.seed,
+        );
     }
 
     // Mean trajectories, ID vs OOD (the cos-trajectory record T1.3 asks for).
     println!("\n== mean trajectories (ID vs OOD) ==");
     for k in 0..=cfg.loops {
         let grab = |rs: &[&ItemRecord], cos: bool| -> Vec<f32> {
-            rs.iter().map(|r| if cos { r.cos[k] } else { r.margin[k] }).collect()
+            rs.iter()
+                .map(|r| if cos { r.cos[k] } else { r.margin[k] })
+                .collect()
         };
         println!(
             " k={k:<2} cos id={:.4} ood={:.4}   margin id={:.4} ood={:.4}",
@@ -598,12 +621,22 @@ fn main() {
     } else {
         println!("  best row: {where_full} ci_lo={best_full:.3}");
         if best_full >= KILL_BAR {
-            println!("  verdict: SIGNAL PRESENT - the alignment signal separates correct from incorrect");
-            println!("           on non-loop-trained weights; Phase 2 injection arms may be drafted.");
+            println!(
+                "  verdict: SIGNAL PRESENT - the alignment signal separates correct from incorrect"
+            );
+            println!(
+                "           on non-loop-trained weights; Phase 2 injection arms may be drafted."
+            );
         } else {
-            println!("  verdict: SIGNAL ABSENT/WEAK - the DiscoLoop misalignment premise does not transfer");
-            println!("           to the kimi-k3-0.40B caller-side loop surface; record the negative beside");
-            println!("           Benches 847/850/906; reopen trigger = riir-train Plan 451 loop-trained artifact.");
+            println!(
+                "  verdict: SIGNAL ABSENT/WEAK - the DiscoLoop misalignment premise does not transfer"
+            );
+            println!(
+                "           to the kimi-k3-0.40B caller-side loop surface; record the negative beside"
+            );
+            println!(
+                "           Benches 847/850/906; reopen trigger = riir-train Plan 451 loop-trained artifact."
+            );
         }
     }
 

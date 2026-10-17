@@ -87,11 +87,7 @@ pub enum GateDecision {
 #[must_use]
 pub fn stay_utility(probe: &ProbeEstimate, epsilon: f64) -> f64 {
     let class = classify(probe, epsilon);
-    if class.is_knowledge_like() {
-        0.0
-    } else {
-        1.0
-    }
+    if class.is_knowledge_like() { 0.0 } else { 1.0 }
 }
 
 /// The escalate arm's utility for one option:
@@ -182,19 +178,35 @@ mod tests {
     fn failing_escalation_never_outscores_a_cheaper_success() {
         // r_d < r_min ⇒ U_esc = 0: a failing escalation stays at 0 forever.
         let ladder = [
-            EscalationOption { depth: 1, success_prior: 0.49, corpus_distance: 0.0 },
-            EscalationOption { depth: 2, success_prior: 0.9, corpus_distance: 0.0 },
+            EscalationOption {
+                depth: 1,
+                success_prior: 0.49,
+                corpus_distance: 0.0,
+            },
+            EscalationOption {
+                depth: 2,
+                success_prior: 0.9,
+                corpus_distance: 0.0,
+            },
         ];
         // Knowledge-like state: escalate to the PASSING depth (index 1).
         let g = gate(&input(est(0.0, 0.05), &ladder, 0.1), EPS, R_MIN);
         assert_eq!(g, GateDecision::Escalate { index: 1, depth: 2 });
         // The failing depth alone: stay (never escalate on a failing arm).
-        let only_failing = [EscalationOption { depth: 1, success_prior: 0.2, corpus_distance: 0.0 }];
+        let only_failing = [EscalationOption {
+            depth: 1,
+            success_prior: 0.2,
+            corpus_distance: 0.0,
+        }];
         let g = gate(&input(est(0.0, 0.05), &only_failing, 0.1), EPS, R_MIN);
         assert_eq!(g, GateDecision::StayLocal);
         // A PRODUCTIVE state with a passing escalation: stay wins — the
         // cheaper success (utility 1) out-scores the escalation (≤ 1).
-        let productive = [EscalationOption { depth: 1, success_prior: 0.99, corpus_distance: 0.0 }];
+        let productive = [EscalationOption {
+            depth: 1,
+            success_prior: 0.99,
+            corpus_distance: 0.0,
+        }];
         let g = gate(&input(est(0.3, 0.6), &productive, 0.0), EPS, R_MIN);
         assert_eq!(g, GateDecision::StayLocal);
         assert_eq!(stay_utility(&est(0.3, 0.6), EPS), 1.0);
@@ -208,9 +220,21 @@ mod tests {
         // below the near-depth and eventually to 0 — the escalation choice
         // moves DOWN the ladder and then to stay, never the reverse.
         let ladder = [
-            EscalationOption { depth: 3, success_prior: 0.9, corpus_distance: 0.9 },
-            EscalationOption { depth: 2, success_prior: 0.8, corpus_distance: 0.4 },
-            EscalationOption { depth: 1, success_prior: 0.7, corpus_distance: 0.1 },
+            EscalationOption {
+                depth: 3,
+                success_prior: 0.9,
+                corpus_distance: 0.9,
+            },
+            EscalationOption {
+                depth: 2,
+                success_prior: 0.8,
+                corpus_distance: 0.4,
+            },
+            EscalationOption {
+                depth: 1,
+                success_prior: 0.7,
+                corpus_distance: 0.1,
+            },
         ];
         let kl = est(0.0, 0.02);
         let lambdas = [0.0, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0];
@@ -250,11 +274,22 @@ mod tests {
         // back to (the byte-identity anchor; consumer-side seam adapters
         // are T3.2 composition).
         let ladder = [
-            EscalationOption { depth: 1, success_prior: 0.6, corpus_distance: 0.9 },
-            EscalationOption { depth: 2, success_prior: 0.55, corpus_distance: 0.99 },
+            EscalationOption {
+                depth: 1,
+                success_prior: 0.6,
+                corpus_distance: 0.9,
+            },
+            EscalationOption {
+                depth: 2,
+                success_prior: 0.55,
+                corpus_distance: 0.99,
+            },
         ];
         let cases = [
-            (est(0.0, 0.05), GateDecision::Escalate { index: 0, depth: 1 }),
+            (
+                est(0.0, 0.05),
+                GateDecision::Escalate { index: 0, depth: 1 },
+            ),
             (est(0.08, 0.4), GateDecision::StayLocal), // undetermined: conservative stay
             (est(0.2, 0.6), GateDecision::StayLocal),  // productive
         ];
@@ -271,20 +306,31 @@ mod tests {
 
     #[test]
     fn corrupt_inputs_stay_local_never_panic() {
-        let ladder = [EscalationOption { depth: 1, success_prior: 0.9, corpus_distance: 0.5 }];
+        let ladder = [EscalationOption {
+            depth: 1,
+            success_prior: 0.9,
+            corpus_distance: 0.5,
+        }];
         // NaN λ → every 1−λ·Ĉ is NaN → 0 → stay.
         assert_eq!(
             gate(&input(est(0.0, 0.05), &ladder, f64::NAN), EPS, R_MIN),
             GateDecision::StayLocal
         );
         // NaN prior → the r_min comparison fails → U_esc 0 → stay.
-        let nan_prior = [EscalationOption { depth: 1, success_prior: f64::NAN, corpus_distance: 0.0 }];
+        let nan_prior = [EscalationOption {
+            depth: 1,
+            success_prior: f64::NAN,
+            corpus_distance: 0.0,
+        }];
         assert_eq!(
             gate(&input(est(0.0, 0.05), &nan_prior, 0.1), EPS, R_MIN),
             GateDecision::StayLocal
         );
         // Empty ladder → stay.
-        assert_eq!(gate(&input(est(0.0, 0.05), &[], 0.1), EPS, R_MIN), GateDecision::StayLocal);
+        assert_eq!(
+            gate(&input(est(0.0, 0.05), &[], 0.1), EPS, R_MIN),
+            GateDecision::StayLocal
+        );
         // NaN probe bounds → undetermined class → stay (never a decisive KL).
         assert_eq!(
             classify(&est(f64::NAN, f64::NAN), EPS),
@@ -292,7 +338,15 @@ mod tests {
         );
         // λ·Ĉ > 1 floors at 0 (a discount, never a negative utility).
         assert_eq!(
-            escalate_utility(&EscalationOption { depth: 1, success_prior: 0.9, corpus_distance: 1.0 }, 2.0, R_MIN),
+            escalate_utility(
+                &EscalationOption {
+                    depth: 1,
+                    success_prior: 0.9,
+                    corpus_distance: 1.0
+                },
+                2.0,
+                R_MIN
+            ),
             0.0
         );
     }

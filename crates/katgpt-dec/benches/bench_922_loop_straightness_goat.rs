@@ -50,9 +50,7 @@ fn bench(label: &str, points: &[f32], stride: usize, weights: &[f32]) -> f64 {
         }
         best = best.min(t.elapsed().as_nanos() as f64 / 1000.0);
     }
-    println!(
-        "  {label}: {best:.1} ns/call (budget {BUDGET_NS:.0} ns) — sink {sink}"
-    );
+    println!("  {label}: {best:.1} ns/call (budget {BUDGET_NS:.0} ns) — sink {sink}");
     best
 }
 

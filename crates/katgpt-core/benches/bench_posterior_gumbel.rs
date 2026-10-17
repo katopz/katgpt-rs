@@ -155,7 +155,10 @@ fn main() {
             );
         }
         let delta = ALLOC_COUNT.load(std::sync::atomic::Ordering::Relaxed) - before;
-        assert_eq!(delta, 0, "posterior sampler allocated {delta}x in 1_000 calls");
+        assert_eq!(
+            delta, 0,
+            "posterior sampler allocated {delta}x in 1_000 calls"
+        );
         println!("[G4] zero allocs over 1_000 calls: PASS");
     }
 

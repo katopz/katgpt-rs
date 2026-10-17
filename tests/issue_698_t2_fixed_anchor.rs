@@ -234,11 +234,11 @@ fn run_once(
         None, // Issue 717: deep_run — None = bit-identical baseline
         #[cfg(feature = "cadence_gate")]
         None, // Issue 731: residual-exit probe — None = bit-identical baseline
-    #[cfg(feature = "loop_guidance")]
+        #[cfg(feature = "loop_guidance")]
         None, // Plan 617: LoopCD guidance - None = bit-identical baseline
         #[cfg(feature = "loop_guidance")]
         None,
-        );
+    );
     logits.to_vec()
 }
 
@@ -404,11 +404,11 @@ fn t698_t2_fixed_anchor_ab_ordering() {
             None, // Issue 717: deep_run — None = bit-identical baseline
             #[cfg(feature = "cadence_gate")]
             None, // Issue 731: residual-exit probe — None = bit-identical baseline
-        #[cfg(feature = "loop_guidance")]
+            #[cfg(feature = "loop_guidance")]
             None, // Plan 617: LoopCD guidance - None = bit-identical baseline
             #[cfg(feature = "loop_guidance")]
             None,
-            );
+        );
         assert_eq!(ctx.loop_anchor.len(), cfg_f.n_embd);
         assert_eq!(
             ctx.loop_anchor.capacity(),

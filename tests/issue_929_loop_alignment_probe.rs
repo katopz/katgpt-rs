@@ -14,7 +14,7 @@
 //! issue_929_loop_alignment_probe -- --nocapture`
 
 use katgpt_core::loop_alignment_probe::{
-    auroc, bootstrap_auroc_ci, generate_two_hop_fixture, probe_alignment, FactPhrase, FixtureSpec,
+    FactPhrase, FixtureSpec, auroc, bootstrap_auroc_ci, generate_two_hop_fixture, probe_alignment,
 };
 use katgpt_rs::hla::MultiLayerAhlaCache;
 use katgpt_rs::transformer::{
@@ -108,7 +108,10 @@ fn probe_reads_loopdeep_capture_end_to_end() {
 
     for (k, p) in first.iter().enumerate() {
         assert!(p.argmax < config.vocab_size, "loop {k}: argmax in vocab");
-        assert!(p.top1.is_finite() && p.top2.is_finite(), "loop {k}: finite top-2");
+        assert!(
+            p.top1.is_finite() && p.top2.is_finite(),
+            "loop {k}: finite top-2"
+        );
         assert!(
             p.cos_alignment >= -1.0 && p.cos_alignment <= 1.0,
             "loop {k}: cos in [-1, 1], got {}",

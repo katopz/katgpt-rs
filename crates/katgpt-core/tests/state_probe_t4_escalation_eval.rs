@@ -42,10 +42,19 @@ fn print_table(title: &str, floor: &ArmReport, incumbent: &ArmReport, probe: &Ar
         "{:<22} {:>8} {:>12} {:>10} {:>14} {:>12} {:>10}",
         "arm", "rescues", "esc-net", "escs", "spend (units)", "probe evals", "esc-prec"
     );
-    for (name, r) in [("never-escalate", floor), ("incumbent (cap)", incumbent), ("probe-gated", probe)] {
+    for (name, r) in [
+        ("never-escalate", floor),
+        ("incumbent (cap)", incumbent),
+        ("probe-gated", probe),
+    ] {
         println!(
             "{:<22} {:>8} {:>12} {:>10} {:>14.1} {:>12} {:>9.2}",
-            name, r.rescues, r.escalation_net_rescues, r.escalations, r.spend_units, r.probe_evals,
+            name,
+            r.rescues,
+            r.escalation_net_rescues,
+            r.escalations,
+            r.spend_units,
+            r.probe_evals,
             r.escalation_precision()
         );
     }
@@ -58,10 +67,22 @@ fn print_table(title: &str, floor: &ArmReport, incumbent: &ArmReport, probe: &Ar
 fn corpus_carries_both_classes_and_the_floor_leaves_headroom() {
     let c = corpus();
     assert_eq!(c.len(), N_KNOWLEDGE + N_EXECUTION + N_PRODUCTIVE);
-    let knowledge = c.iter().filter(|s| s.planted == PlantedClass::KnowledgeLike).count();
-    let execution = c.iter().filter(|s| s.planted == PlantedClass::ExecutionLike).count();
-    assert_eq!(knowledge, N_KNOWLEDGE, "the escalate-worthy class must be present");
-    assert_eq!(execution, N_EXECUTION, "the waste-prone class must be present");
+    let knowledge = c
+        .iter()
+        .filter(|s| s.planted == PlantedClass::KnowledgeLike)
+        .count();
+    let execution = c
+        .iter()
+        .filter(|s| s.planted == PlantedClass::ExecutionLike)
+        .count();
+    assert_eq!(
+        knowledge, N_KNOWLEDGE,
+        "the escalate-worthy class must be present"
+    );
+    assert_eq!(
+        execution, N_EXECUTION,
+        "the waste-prone class must be present"
+    );
 
     // Headroom: locally-unrescuable states exist at scale (escalation is
     // the only channel for them), so a gate that fires can beat the floor.
@@ -83,14 +104,28 @@ fn generous_cap_probe_fires_and_dominates_the_floor() {
     let floor = arm_never_escalate(&c);
     let incumbent = arm_incumbent(&c, CAP_GENEROUS);
     let probe_arm = arm_probe_gated(&c, CAP_GENEROUS, &cfg);
-    print_table("G1 generous cap (uncapped incumbent = every state)", &floor, &incumbent, &probe_arm);
+    print_table(
+        "G1 generous cap (uncapped incumbent = every state)",
+        &floor,
+        &incumbent,
+        &probe_arm,
+    );
 
     // THE GATE FIRES (the never-fires failure).
-    assert!(probe_arm.escalations > 0, "probe-gated never escalated — G1 fails by the floor law");
-    assert!(!probe_arm.budget_fallback, "the G2 budget breached at the declared cost model — the arm silently degraded");
+    assert!(
+        probe_arm.escalations > 0,
+        "probe-gated never escalated — G1 fails by the floor law"
+    );
+    assert!(
+        !probe_arm.budget_fallback,
+        "the G2 budget breached at the declared cost model — the arm silently degraded"
+    );
 
     // The probe is a strict improvement on the floor (escalation nets value)
-    assert!(probe_arm.rescues > floor.rescues, "probe-gated must beat the never-escalate floor");
+    assert!(
+        probe_arm.rescues > floor.rescues,
+        "probe-gated must beat the never-escalate floor"
+    );
     // …and never under-rescues the incumbent while spending far less — under
     // the scissors law the incumbent's extra escalations rescue nothing the
     // probe misses, so rescues TIE at generous cap and spend does not.
@@ -130,7 +165,12 @@ fn tight_cap_probe_strictly_beats_the_incumbent_at_matched_spend() {
     let incumbent = arm_incumbent(&c, CAP_TIGHT);
     let probe_arm = arm_probe_gated(&c, CAP_TIGHT, &cfg);
     let floor = arm_never_escalate(&c);
-    print_table("G1 tight cap (matched spend, corpus order)", &floor, &incumbent, &probe_arm);
+    print_table(
+        "G1 tight cap (matched spend, corpus order)",
+        &floor,
+        &incumbent,
+        &probe_arm,
+    );
 
     // Same cap ⇒ the probe's spend ≤ the incumbent's (it escalates less).
     assert!(probe_arm.spend_units <= incumbent.spend_units + 1e-9);
@@ -159,8 +199,12 @@ fn budget_holds_at_the_declared_cost_model() {
     let c = corpus();
     let cfg = ProbeArmConfig::default();
     let probe_arm = arm_probe_gated(&c, CAP_GENEROUS, &cfg);
-    assert!(!probe_arm.budget_fallback, "the guard breached at the declared model — re-price PROBE_EVAL_COST_UNITS or fix the ladder");
-    let probe_spend = f64::from(probe_arm.probe_evals) * katgpt_core::state_probe_eval::PROBE_EVAL_COST_UNITS;
+    assert!(
+        !probe_arm.budget_fallback,
+        "the guard breached at the declared model — re-price PROBE_EVAL_COST_UNITS or fix the ladder"
+    );
+    let probe_spend =
+        f64::from(probe_arm.probe_evals) * katgpt_core::state_probe_eval::PROBE_EVAL_COST_UNITS;
     assert!(
         probe_spend <= 0.1 * probe_arm.spend_units,
         "probe spend {probe_spend:.4} vs 10% of escalation spend {}",
@@ -181,7 +225,10 @@ fn budget_breach_falls_back_to_the_incumbent_loudly() {
         ..ProbeArmConfig::default()
     };
     let probe_arm = arm_probe_gated(&c, CAP_GENEROUS, &cfg);
-    assert!(probe_arm.budget_fallback, "an absurd probe cost must trip the guard");
+    assert!(
+        probe_arm.budget_fallback,
+        "an absurd probe cost must trip the guard"
+    );
     // The fallback posture escalates like the incumbent (cap-only), so its
     // escalation count approaches the incumbent's on the remaining states.
     let incumbent = arm_incumbent(&c, CAP_GENEROUS);

@@ -27,7 +27,7 @@
 #[path = "common/loopcd_fixture.rs"]
 mod loopcd_fixture;
 
-use loopcd_fixture::{all_cases, answer_margin, argmax, LoopCdFixture, MAX_LOOPS};
+use loopcd_fixture::{LoopCdFixture, MAX_LOOPS, all_cases, answer_margin, argmax};
 
 /// Close-decision threshold on the final two-answer margin. The stratum the
 /// GOAT's T3.3(c) leg reads; a saturated fixture would empty it.
@@ -43,7 +43,11 @@ const MIN_SLOPE: f64 = 0.25;
 fn fixture_is_non_degenerate() {
     let fixture = LoopCdFixture::new();
     let cases = all_cases();
-    assert!(cases.len() >= 40, "case space unexpectedly small: {}", cases.len());
+    assert!(
+        cases.len() >= 40,
+        "case space unexpectedly small: {}",
+        cases.len()
+    );
 
     // Per-depth accuracy + per-case diagnostics.
     let mut acc = [0.0f64; MAX_LOOPS];
@@ -100,7 +104,10 @@ fn fixture_is_non_degenerate() {
     // Diagnostics first (the strata table tuning reads) — assertions after,
     // so a failing floor still prints the evidence it failed on.
     println!("== LoopCD fixture non-degeneracy table ==");
-    println!("cases={} close(max)={close_at_max} disagree(1 vs {MAX_LOOPS})={disagree}", cases.len());
+    println!(
+        "cases={} close(max)={close_at_max} disagree(1 vs {MAX_LOOPS})={disagree}",
+        cases.len()
+    );
     println!("accuracy by depth: {:?}", acc);
     println!("len imb  amax(1) margin(max) amax(max) correct(max)");
     for row in &per_case {

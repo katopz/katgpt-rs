@@ -565,20 +565,20 @@ mod tests {
         let n = std::thread::available_parallelism().map_or(1, |n| n.get());
         let w = default_workers();
         assert!(w < n.max(1), "{w} workers on {n} cores");
-    #[cfg(target_os = "macos")]
-    if let Some(p) = performance_cores() {
-        assert!(p <= n, "perflevel0 {p} > {n} cores");
-    }
-    #[cfg(not(target_os = "macos"))]
-    if std::env::var("KATGPT_SPIN_POOL_WORKERS").is_err() {
-        // Issue 936 T4 promotion: default-on at n ≥ 8 (the measured floor),
-        // 0 below it — and always strictly less than the core count.
-        if n >= 8 {
-            assert_eq!(w, n - 1, "off macOS the default is n − 1 workers");
-        } else {
-            assert_eq!(w, 0, "under 8 CPUs the pool stays opt-in (unmeasured)");
+        #[cfg(target_os = "macos")]
+        if let Some(p) = performance_cores() {
+            assert!(p <= n, "perflevel0 {p} > {n} cores");
         }
-    }
+        #[cfg(not(target_os = "macos"))]
+        if std::env::var("KATGPT_SPIN_POOL_WORKERS").is_err() {
+            // Issue 936 T4 promotion: default-on at n ≥ 8 (the measured floor),
+            // 0 below it — and always strictly less than the core count.
+            if n >= 8 {
+                assert_eq!(w, n - 1, "off macOS the default is n − 1 workers");
+            } else {
+                assert_eq!(w, 0, "under 8 CPUs the pool stays opt-in (unmeasured)");
+            }
+        }
     }
 
     #[test]

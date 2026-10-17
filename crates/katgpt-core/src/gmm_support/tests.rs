@@ -5,12 +5,12 @@
 //! `cargo test --features`).
 
 use super::certify::{
-    bound_acceptance, canary_fire_rate, certify, CertifyConfig, LinearDiscriminatorGate,
+    CertifyConfig, LinearDiscriminatorGate, bound_acceptance, canary_fire_rate, certify,
 };
-use super::em::{fit_diag_gmm, EmConfig};
+use super::em::{EmConfig, fit_diag_gmm};
 use super::fixture::build_fixture;
 use super::gate::{GateError, GateSmoother, SupportGate};
-use super::mixture::{lse, DiagGmm, MixtureError};
+use super::mixture::{DiagGmm, MixtureError, lse};
 use super::projector::JlProjector;
 
 // ── Mixture (G1: closed-form anchors) ─────────────────────────────────────
@@ -32,9 +32,7 @@ fn k1_matches_closed_form_gaussian() {
     let terms: f32 = [1.0f32, 4.0, 0.25, 2.0]
         .iter()
         .zip(x.iter().zip(centroids[0].iter()))
-        .map(|(&v, (&xi, &mi))| {
-            -0.5 * (LN_2PI + v.ln()) - (xi - mi) * (xi - mi) / (2.0 * v)
-        })
+        .map(|(&v, (&xi, &mi))| -0.5 * (LN_2PI + v.ln()) - (xi - mi) * (xi - mi) / (2.0 * v))
         .sum();
     assert!(
         (got - terms).abs() < 1e-3,
@@ -50,8 +48,7 @@ fn construction_normalizes_weights() {
     const K: usize = 3;
     let centroids = [[0f32; E]; K];
     let variances = [[1.0f32; E]; K];
-    let gmm = DiagGmm::<E, K>::new(centroids, [5.0, 5.0, 5.0], variances)
-        .expect("valid params");
+    let gmm = DiagGmm::<E, K>::new(centroids, [5.0, 5.0, 5.0], variances).expect("valid params");
     let sum: f32 = gmm.log_weights.iter().map(|w| w.exp()).sum();
     assert!((sum - 1.0).abs() < 1e-5, "weights sum to {sum}, not 1");
     // And the uniform case passes through.
@@ -82,8 +79,16 @@ fn construction_refuses_invalid_params() {
 fn commitment_is_deterministic_and_tamper_sensitive() {
     const E: usize = 3;
     const K: usize = 2;
-    let a = DiagGmm::<E, K>::new_unchecked([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], [0.0, 0.0], [[1.0; E]; K]);
-    let b = DiagGmm::<E, K>::new_unchecked([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], [0.0, 0.0], [[1.0; E]; K]);
+    let a = DiagGmm::<E, K>::new_unchecked(
+        [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+        [0.0, 0.0],
+        [[1.0; E]; K],
+    );
+    let b = DiagGmm::<E, K>::new_unchecked(
+        [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+        [0.0, 0.0],
+        [[1.0; E]; K],
+    );
     assert_eq!(a.commitment(), b.commitment());
     assert!(a.verify());
     let mut tampered = b.clone();
@@ -157,7 +162,11 @@ fn em_recovers_blob_structure() {
     for tc in fix.true_pos.centroids.iter() {
         let mut best = f32::INFINITY;
         for fc in fitted.centroids.iter() {
-            let d: f32 = tc.iter().zip(fc.iter()).map(|(a, b)| (a - b) * (a - b)).sum();
+            let d: f32 = tc
+                .iter()
+                .zip(fc.iter())
+                .map(|(a, b)| (a - b) * (a - b))
+                .sum();
             best = best.min(d).sqrt();
         }
         max_dist = max_dist.max(best);
@@ -296,14 +305,8 @@ fn gate_and_smoother_refuse_invalid_knobs() {
         SupportGate::<E, K>::unfitted(0.0).unwrap_err(),
         GateError::InvalidTau
     );
-    assert_eq!(
-        GateSmoother::new(0.0).unwrap_err(),
-        GateError::InvalidAlpha
-    );
-    assert_eq!(
-        GateSmoother::new(1.5).unwrap_err(),
-        GateError::InvalidAlpha
-    );
+    assert_eq!(GateSmoother::new(0.0).unwrap_err(), GateError::InvalidAlpha);
+    assert_eq!(GateSmoother::new(1.5).unwrap_err(), GateError::InvalidAlpha);
 }
 
 /// A fitted gate opens on its own support and closes off it (the E=8
@@ -406,8 +409,7 @@ fn bound_acceptance_holds_and_is_monotone() {
     assert!(
         rep.holds,
         "excess {} > l1 {} + slack — the fixture-scoped bound failed",
-        rep.excess_mass,
-        rep.l1_estimate
+        rep.excess_mass, rep.l1_estimate
     );
 
     // Monotonicity in ε: inject controlled fit error — interpolate the
@@ -426,7 +428,8 @@ fn bound_acceptance_holds_and_is_monotone() {
                 *v *= 1.0 - delta;
             }
         }
-        let drifted = DiagGmm::new_unchecked(drifted.centroids, drifted.log_weights, drifted.variances);
+        let drifted =
+            DiagGmm::new_unchecked(drifted.centroids, drifted.log_weights, drifted.variances);
         let gate_d = SupportGate::new(drifted.clone(), fix.neg.clone(), 1.0).expect("tau");
         let rep_d = bound_acceptance(&fix.true_pos, &drifted, &fix.neg, &gate_d, &cfg);
         assert!(
@@ -439,7 +442,10 @@ fn bound_acceptance_holds_and_is_monotone() {
             "excess not monotone in injected error ({tag}): {} vs {prev_excess}",
             rep_d.excess_mass
         );
-        assert!(rep_d.holds, "drifted arm {tag} must still satisfy the bound");
+        assert!(
+            rep_d.holds,
+            "drifted arm {tag} must still satisfy the bound"
+        );
         prev_l1 = rep_d.l1_estimate;
         prev_excess = rep_d.excess_mass;
     }
@@ -467,7 +473,13 @@ fn bound_acceptance_at_e64() {
     let refs: Vec<&[f32]> = fix.pos_train.iter().map(|v| v.as_slice()).collect();
     let fitted = fit_diag_gmm::<E, K>(&refs, &EmConfig::default()).expect("fit");
     let gate = SupportGate::new(fitted.clone(), fix.neg.clone(), 1.0).expect("valid tau");
-    let rep = bound_acceptance(&fix.true_pos, &fitted, &fix.neg, &gate, &CertifyConfig::default());
+    let rep = bound_acceptance(
+        &fix.true_pos,
+        &fitted,
+        &fix.neg,
+        &gate,
+        &CertifyConfig::default(),
+    );
     assert!(rep.holds, "E=64 bound arm failed: {rep:?}");
 }
 

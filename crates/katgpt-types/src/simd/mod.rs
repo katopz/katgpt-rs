@@ -150,6 +150,8 @@ pub use research::{
     simd_sum_sq_quartic,
 };
 pub use sparse::{simd_sparse_dot_f32, simd_sparse_matmul_rows};
+#[cfg(feature = "decode_spin_pool")]
+pub use spin_pool::{SpinPool, SyncMutPtr, spin_pool_run, spin_row_chunks, with_spin_pool};
 pub use ternary::simd_ternary_dot_f32;
 #[cfg(feature = "plasma_path")]
 pub use ternary::{
@@ -160,20 +162,17 @@ pub use ternary::{
 pub use ternary_group::{
     simd_ternary_group_matmul_batch, simd_ternary_group_matvec, simd_ternary_group_matvec_folded,
     simd_ternary_group_matvec_hoisted, simd_ternary_group_matvec_parallel,
-    simd_ternary_group_matvec_parallel_chunked,
-    ternary_group_matvec_scalar,
+    simd_ternary_group_matvec_parallel_chunked, ternary_group_matvec_scalar,
 };
 #[cfg(feature = "ternary_group_q8_act")]
 pub use ternary_group_q8::{
     quantize_activations_q8, simd_ternary_group_matvec_q8_parallel, ternary_group_q8_rows_scalar,
 };
-#[cfg(feature = "decode_spin_pool")]
-pub use spin_pool::{SpinPool, SyncMutPtr, spin_pool_run, spin_row_chunks, with_spin_pool};
 #[cfg(feature = "ternary_q2_q8")]
 pub use ternary_q2_q8::{
     Q2Block, TernaryQ2Weights, permute_activations_q2, q2_fast_path_available,
-    simd_ternary_q2_matvec_q8_parallel, simd_ternary_q2_matvec_q8_parallel_n, simd_ternary_q2_matvec_q8_parallel_pair,
-    ternary_q2_q8_rows_scalar,
+    simd_ternary_q2_matvec_q8_parallel, simd_ternary_q2_matvec_q8_parallel_n,
+    simd_ternary_q2_matvec_q8_parallel_pair, ternary_q2_q8_rows_scalar,
 };
 #[cfg(feature = "ternary_trit_pack")]
 pub use ternary_trit::{

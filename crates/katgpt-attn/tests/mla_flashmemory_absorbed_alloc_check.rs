@@ -68,8 +68,15 @@ fn g4_fm_absorbed_decode_steady_state_allocates_nothing() {
             *v = (*v + step as f32 * 0.01).clamp(-1.0, 1.0);
         }
         let out = mla_forward_token_flashmemory_absorbed(
-            &config, &weights, &mut cache, &mut scratch, &mut rope, &h,
-            &mut block_cache, &mut selector, step,
+            &config,
+            &weights,
+            &mut cache,
+            &mut scratch,
+            &mut rope,
+            &h,
+            &mut block_cache,
+            &mut selector,
+            step,
         );
         std::hint::black_box(&out[..8.min(d)]);
     }
@@ -88,8 +95,15 @@ fn g4_fm_absorbed_decode_steady_state_allocates_nothing() {
             }
             cache.rewind_to(steady);
             let out = mla_forward_token_flashmemory_absorbed(
-                &config, &weights, &mut cache, &mut scratch, &mut rope, &step_input,
-                &mut block_cache, &mut selector, step,
+                &config,
+                &weights,
+                &mut cache,
+                &mut scratch,
+                &mut rope,
+                &step_input,
+                &mut block_cache,
+                &mut selector,
+                step,
             );
             std::hint::black_box(&out[..8.min(d)]);
         }

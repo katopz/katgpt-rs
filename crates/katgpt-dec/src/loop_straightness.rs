@@ -61,11 +61,7 @@ pub fn path_action(points: &[f32], stride: usize, weights: &[f32]) -> (f32, f32,
     debug_assert!(weights.len() + 1 == knots, "one weight per delta");
     let mut weighted = 0.0f32;
     let mut weight_sum = 0.0f32;
-    for (k, w) in weights
-        .iter()
-        .enumerate()
-        .take(knots.saturating_sub(1))
-    {
+    for (k, w) in weights.iter().enumerate().take(knots.saturating_sub(1)) {
         let base = k * stride;
         let mut delta_sq = 0.0f32;
         for d in 0..stride {
@@ -116,9 +112,7 @@ mod tests {
         assert_eq!(action_efficiency(&points, 1, &weights), 1.0f32);
         // 2-D diagonal straight path, same dyadic split on BOTH coords
         // (5 knots × 2 dims — one weight per delta).
-        let pts2 = [
-            0.0f32, 0.0, 0.5, 0.5, 0.75, 0.75, 0.875, 0.875, 1.0, 1.0,
-        ];
+        let pts2 = [0.0f32, 0.0, 0.5, 0.5, 0.75, 0.75, 0.875, 0.875, 1.0, 1.0];
         assert_eq!(action_efficiency(&pts2, 2, &weights), 1.0f32);
     }
 
@@ -174,7 +168,13 @@ mod tests {
                 }
             }
             let weights: Vec<f32> = (0..k)
-                .map(|i| if case % 2 == 0 { 1.0 } else { 1.0 / (i as f32 + 1.0) })
+                .map(|i| {
+                    if case % 2 == 0 {
+                        1.0
+                    } else {
+                        1.0 / (i as f32 + 1.0)
+                    }
+                })
                 .collect();
             let eta = action_efficiency(&points, dim, &weights);
             assert!(eta <= 1.0 + 1e-5, "floor violated: eta={eta}");

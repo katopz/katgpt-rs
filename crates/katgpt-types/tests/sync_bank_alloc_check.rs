@@ -11,7 +11,7 @@
 //! katgpt-types is the leaf — a dev-dependency on katgpt-core would invert
 //! the dependency direction.
 
-use katgpt_types::sync_bank::{SyncBank, SYNC_BANK_LADDER};
+use katgpt_types::sync_bank::{SYNC_BANK_LADDER, SyncBank};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -104,5 +104,8 @@ fn sync_bank_observe_and_readouts_zero_alloc() {
     }
     std::hint::black_box(sink);
     let alloc_delta = ALLOC_COUNT.load(Ordering::Relaxed) - alloc_before;
-    assert_eq!(alloc_delta, 0, "D=64 observe allocated {alloc_delta} times (expected 0)");
+    assert_eq!(
+        alloc_delta, 0,
+        "D=64 observe allocated {alloc_delta} times (expected 0)"
+    );
 }

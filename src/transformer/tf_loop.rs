@@ -43,8 +43,7 @@ pub fn forward_training_free_loop<'a>(
     // Plan 617 T1.3 — LoopCD guidance on the TrainingFree lane. The window
     // loop's iteration-`ref_loop` refined state (post sub-step) is the h_k
     // analog. `None` = bit-identical to pre-Plan-617 behavior.
-    #[cfg(feature = "loop_guidance")]
-    guidance: Option<&mut super::loop_guidance::LoopGuidance>,
+    #[cfg(feature = "loop_guidance")] guidance: Option<&mut super::loop_guidance::LoopGuidance>,
 ) -> &'a mut [f32] {
     use crate::tf_loop::{anchor_blend, sub_step_damped_euler};
     use katgpt_core::types::{CacheStrategy, IterationMode, SubStepStrategy};

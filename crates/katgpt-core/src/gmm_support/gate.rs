@@ -151,10 +151,7 @@ impl GateSmoother {
         if !alpha.is_finite() || alpha <= 0.0 || alpha > 1.0 {
             return Err(GateError::InvalidAlpha);
         }
-        Ok(Self {
-            alpha,
-            state: 0.5,
-        })
+        Ok(Self { alpha, state: 0.5 })
     }
 
     /// Push a gate signal `g ∈ [0, 1]` (the binary `1[ℓ>0]` or the

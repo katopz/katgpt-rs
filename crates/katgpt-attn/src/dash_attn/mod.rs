@@ -84,6 +84,6 @@ pub use routing::{compute_routing_bias, score_blocks_entmax, score_blocks_entmax
 // PISA pyramid selection (Plan 612) — gated with its module above.
 #[cfg(feature = "pyramid_topk")]
 pub use pyramid_topk::{
-    coarse_to_fine_select, PyramidDecodeCache, PyramidKeyHierarchy, PyramidLevels, PyramidScorer,
-    PyramidScoreMode, PyramidScratch, PYRAMID_BLOCK_SIZE, PYRAMID_BRANCHING,
+    PYRAMID_BLOCK_SIZE, PYRAMID_BRANCHING, PyramidDecodeCache, PyramidKeyHierarchy, PyramidLevels,
+    PyramidScoreMode, PyramidScorer, PyramidScratch, coarse_to_fine_select,
 };

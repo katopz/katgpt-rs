@@ -27,7 +27,10 @@ struct Lcg(u64);
 impl Lcg {
     fn next_f32(&mut self) -> f32 {
         // Numerical Recipes LCG constants; top 24 bits to [0, 1).
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((self.0 >> 40) as f32) / ((1u64 << 24) as f32)
     }
     /// Standard-normal via Box–Muller (cached second draw).
@@ -128,7 +131,11 @@ fn tilr_arm_recovers_planted_invariant_block_by_principal_angles() {
 
     let (basis, r) = katgpt_core::tilr::discover_invariant_subspace(&refs, 0.99)
         .expect("planted fixture must discover");
-    assert_eq!(r, D - K, "τ=0.99 must select the full variant rank 48, got {r}");
+    assert_eq!(
+        r,
+        D - K,
+        "τ=0.99 must select the full variant rank 48, got {r}"
+    );
     assert_eq!(basis.len(), r * D);
 
     // True invariant basis: the first K coordinate axes (d×k flattened
@@ -224,5 +231,8 @@ fn tilr_arm_allocation_census_recorded() {
             katgpt_core::tilr::discover_invariant_subspace(&refs, 0.99).expect("discovers");
     });
     println!("tilr_arm G4 census: {count} allocations per discover call (N={N}, d={D})");
-    assert!(count > 0, "TILR is expected to allocate (the recorded gap); 0 would mean the census is broken");
+    assert!(
+        count > 0,
+        "TILR is expected to allocate (the recorded gap); 0 would mean the census is broken"
+    );
 }

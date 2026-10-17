@@ -91,10 +91,10 @@ use katgpt_tetris::sim as tetris_sim;
 // crate root (`crate::tetris_sim` etc.) — the shared single-instance law.
 #[path = "common/flappy_sim.rs"]
 mod flappy_sim;
-#[path = "common/lanes_sim.rs"]
-mod lanes_sim;
 #[path = "common/grammar_tables.rs"]
 mod grammar_tables;
+#[path = "common/lanes_sim.rs"]
+mod lanes_sim;
 
 use rayon::prelude::*;
 
@@ -451,7 +451,10 @@ impl WireArm {
     }
     /// Index into the rank/level arrays (the WIRE_ARMS order).
     fn idx(self) -> usize {
-        WIRE_ARMS.iter().position(|&w| w == self).expect("arm in WIRE_ARMS")
+        WIRE_ARMS
+            .iter()
+            .position(|&w| w == self)
+            .expect("arm in WIRE_ARMS")
     }
 }
 
@@ -750,7 +753,14 @@ fn train(g1: &Genome, seeds: &[u64], cap: usize) -> TrainOut {
     let (occ1, occ2) = (occ(&t1), occ(&t2));
     let occ3 = t3.values().filter(|c| c.n >= TABLE_MIN).count();
     TrainOut {
-        dec: Decoder { t1, t2, t3, t1d, t3d, lin },
+        dec: Decoder {
+            t1,
+            t2,
+            t3,
+            t1d,
+            t3d,
+            lin,
+        },
         lam,
         loo,
         rows,
@@ -805,10 +815,7 @@ fn self_test() {
         piece: 6,
     };
     assert_eq!(t2_key(1499, sk), 1499 * 7 + 6);
-    assert_eq!(
-        t3_key(1499, sk),
-        ((10499u32 * 3 + 2) * 5 + 4) * 10 + 7
-    );
+    assert_eq!(t3_key(1499, sk), ((10499u32 * 3 + 2) * 5 + 4) * 10 + 7);
     // State-key mirror pin: the computed clauses appear in the rendered
     // sentence, on real boards across shapes (the render is the contract).
     let hw_words = ["low", "of medium height", "tall"];
@@ -840,9 +847,15 @@ fn self_test() {
                     "lowest drift: {s:?}"
                 );
             } else {
-                assert!(stem.contains("the surface is mostly flat"), "flat drift: {s:?}");
+                assert!(
+                    stem.contains("the surface is mostly flat"),
+                    "flat drift: {s:?}"
+                );
             }
-            assert!(s.contains(hole_clauses[k.holes as usize]), "holes drift: {s:?}");
+            assert!(
+                s.contains(hole_clauses[k.holes as usize]),
+                "holes drift: {s:?}"
+            );
             assert!(
                 s.contains(&format!("The {} piece is falling.", piece.spoken())),
                 "piece drift: {s:?}"
@@ -893,7 +906,12 @@ fn main() {
     let total = held_seeds.len() * REGIMES.len() * (WIRE_ARMS.len() + 1);
     let jobs: Vec<(Option<WireArm>, usize, u64)> = {
         let mut v = Vec::new();
-        for arm in WIRE_ARMS.iter().copied().map(Some).chain(std::iter::once(None)) {
+        for arm in WIRE_ARMS
+            .iter()
+            .copied()
+            .map(Some)
+            .chain(std::iter::once(None))
+        {
             for ri in 0..REGIMES.len() {
                 for &s in &held_seeds {
                     v.push((arm, ri, s));
@@ -903,8 +921,8 @@ fn main() {
         v
     };
 
-/// One evaluated game: (arm, regime index, seed, outcome, rank stats).
-type GameResult = (Option<WireArm>, usize, u64, Outcome, Option<RankPartial>);
+    /// One evaluated game: (arm, regime index, seed, outcome, rank stats).
+    type GameResult = (Option<WireArm>, usize, u64, Outcome, Option<RankPartial>);
 
     let results: Vec<GameResult> = jobs
         .par_iter()
@@ -937,7 +955,12 @@ type GameResult = (Option<WireArm>, usize, u64, Outcome, Option<RankPartial>);
         "{:<11} {:>8} {:>9} {:>8} {:>8} {:>8} {:>7}",
         "arm", "regime", "points", "lines", "tetrises", "pieces", "n/top"
     );
-    for arm in WIRE_ARMS.iter().copied().map(Some).chain(std::iter::once(None)) {
+    for arm in WIRE_ARMS
+        .iter()
+        .copied()
+        .map(Some)
+        .chain(std::iter::once(None))
+    {
         for (ri, _) in REGIMES.iter().enumerate() {
             let rs: Vec<_> = results.iter().filter(|r| r.0 == arm && r.1 == ri).collect();
             let n = rs.len();
@@ -961,7 +984,12 @@ type GameResult = (Option<WireArm>, usize, u64, Outcome, Option<RankPartial>);
 
     println!("\n== overall per arm ==");
     let mut overall: HashMap<Option<WireArm>, (f64, f64, f64, f64)> = HashMap::new();
-    for arm in WIRE_ARMS.iter().copied().map(Some).chain(std::iter::once(None)) {
+    for arm in WIRE_ARMS
+        .iter()
+        .copied()
+        .map(Some)
+        .chain(std::iter::once(None))
+    {
         let rs: Vec<_> = results.iter().filter(|r| r.0 == arm).collect();
         let n = rs.len().max(1) as f64;
         let pts = rs.iter().map(|r| r.3.points).sum::<u64>() as f64 / n;
@@ -1049,7 +1077,14 @@ type GameResult = (Option<WireArm>, usize, u64, Outcome, Option<RankPartial>);
         let mix: Vec<f64> = (0..4)
             .map(|i| rs.iter().map(|r| r.3.levels[i]).sum::<u64>() as f64 / decs as f64)
             .collect();
-        println!("{:<11} {:.3} / {:.3} / {:.3} / {:.3}", w.name(), mix[0], mix[1], mix[2], mix[3]);
+        println!(
+            "{:<11} {:.3} / {:.3} / {:.3} / {:.3}",
+            w.name(),
+            mix[0],
+            mix[1],
+            mix[2],
+            mix[3]
+        );
     }
 
     // The pre-declared verdict (t3 — the maximal ADDITIVE-class decoder of
@@ -1100,11 +1135,17 @@ type GameResult = (Option<WireArm>, usize, u64, Outcome, Option<RankPartial>);
         agree_best <= 0.85 || (sp_best < 0.05 && best_pts_ratio <= 0.80),
     );
     if v3 && vbest {
-        println!("VERDICT: WIRE-SUFFICIENT — the five ordinals carry the champion's 1-ply ranking under both decoder classes; no wire widening.");
+        println!(
+            "VERDICT: WIRE-SUFFICIENT — the five ordinals carry the champion's 1-ply ranking under both decoder classes; no wire widening."
+        );
     } else if must3 && mustbest {
-        println!("VERDICT: WIRE-MUST-WIDEN — no wire-constrained decoder class carries champion-level ranking (absolute-cell-mean AND demeaned tables both fail); the Instinct lane needs the raw afterstate grid (or its classes).");
+        println!(
+            "VERDICT: WIRE-MUST-WIDEN — no wire-constrained decoder class carries champion-level ranking (absolute-cell-mean AND demeaned tables both fail); the Instinct lane needs the raw afterstate grid (or its classes)."
+        );
     } else {
-        println!("VERDICT: MIXED — the two decoder classes disagree; adjudicate on the board outcomes before any wire redesign.");
+        println!(
+            "VERDICT: MIXED — the two decoder classes disagree; adjudicate on the board outcomes before any wire redesign."
+        );
     }
 
     println!(

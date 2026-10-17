@@ -123,10 +123,10 @@ pub use stokes_calculus::{
     boundary_flux_mass_only, circulation_integral, line_integral,
 };
 
-#[cfg(feature = "motor_gated_field")]
-pub use motor_gated::{evolve_motor_gated_field, relu_gate_into};
 #[cfg(feature = "loop_straightness")]
 pub use loop_straightness::{action_efficiency, path_action};
+#[cfg(feature = "motor_gated_field")]
+pub use motor_gated::{evolve_motor_gated_field, relu_gate_into};
 
 // Plan 454 T4 — stochastic birth/death NCA growth step (modelless, opt-in).
 // The 3D sibling of `evolve_motor_gated_field`: composes the shipped DEC

@@ -36,10 +36,10 @@
 //! decouples the grid from the projected range: tails clamp into the
 //! boundary cells, so `L` is free of the ±4σ coverage arithmetic entirely.
 
-use super::address::{split_coordinate, LshAxes};
+use super::LatticeMemoryG;
+use super::address::{LshAxes, split_coordinate};
 use super::cdf::CdfWarp;
 use super::types::{BumpKernel, LatticeConfigError, LatticeConfigG};
-use super::LatticeMemoryG;
 
 /// Cells per support radius: the median CDF slope `0.399·L/σ` inverted —
 /// a ±1.5-cell support spans `3.76σ/L` raw units. The sizer's one constant.
@@ -65,7 +65,10 @@ const DEFAULT_TARGET_RECALL: f32 = 0.5;
 /// On `e_cos2 ≤ 0`/non-finite, or `target_recall` outside `(0, 1)`.
 #[must_use]
 pub fn capacity_per_cell_eroded(d_k: usize, e_cos2: f32, target_recall: f32) -> f32 {
-    assert!(e_cos2 > 0.0 && e_cos2.is_finite(), "e_cos2 must be finite > 0");
+    assert!(
+        e_cos2 > 0.0 && e_cos2.is_finite(),
+        "e_cos2 must be finite > 0"
+    );
     assert!(
         target_recall > 0.0 && target_recall < 1.0,
         "target_recall must be in (0, 1), got {target_recall}"
@@ -303,7 +306,12 @@ impl<const A: usize> LatticeMemoryG<A> {
         let side = grid_side_for(near_miss_sigma);
         let cells = match (side as usize).checked_pow(A as u32) {
             Some(c) => c,
-            None => return Err(LatticeConfigError::GridTooLarge { side_per_axis: side, axes: A }),
+            None => {
+                return Err(LatticeConfigError::GridTooLarge {
+                    side_per_axis: side,
+                    axes: A,
+                });
+            }
         };
         let lambda = expected_items as f32 / cells as f32;
         // Axes + projections + warp: ONE construction shared by the erosion
@@ -366,8 +374,8 @@ impl<const A: usize> LatticeMemoryG<A> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::types::{BumpKernel, LatticeConfigError};
     use super::super::LatticeMemory;
+    use super::super::types::{BumpKernel, LatticeConfigError};
     use super::{capacity_per_cell, capacity_per_cell_eroded, grid_side_for, support_radius};
 
     /// Deterministic standard Gaussian embeddings (Box–Muller over a seeded
@@ -436,7 +444,10 @@ mod tests {
         let side = lat.config().grid[0];
         assert_eq!(side, 76); // ⌈3.76/0.05⌉
         let delivered = support_radius(side);
-        assert!(delivered <= 0.05 && delivered > 0.05 * 0.98, "delivered {delivered}");
+        assert!(
+            delivered <= 0.05 && delivered > 0.05 * 0.98,
+            "delivered {delivered}"
+        );
         for s in &samples {
             lat.write_value(s, &[1.0; 4]);
         }
@@ -476,7 +487,10 @@ mod tests {
         }
         let mut out = [0.0_f32; 4];
         lat.read_blend(&q, &mut out);
-        assert!(out.iter().sum::<f32>() > 0.0, "sized-lattice near-miss read a cliff");
+        assert!(
+            out.iter().sum::<f32>() > 0.0,
+            "sized-lattice near-miss read a cliff"
+        );
     }
 
     #[test]
@@ -508,7 +522,10 @@ mod tests {
             raw_max >= 3 * wrapped_max.max(1),
             "unwrapped peak {raw_max} must dwarf the wrapped peak {wrapped_max}"
         );
-        assert!(raw_max >= 12, "unwrapped peak {raw_max} below the overload floor");
+        assert!(
+            raw_max >= 12,
+            "unwrapped peak {raw_max} below the overload floor"
+        );
     }
 
     #[test]
@@ -538,7 +555,10 @@ mod tests {
         // this pin, never adopted: T1.3 measures OUR fixtures), d_k = 32:
         // 0.35/0.083 ≈ 4.2 associations, not 11.2.
         let cap = capacity_per_cell_eroded(32, 0.083, 0.5);
-        assert!((cap - 4.216).abs() < 5e-3, "eroded capacity {cap} off the law");
+        assert!(
+            (cap - 4.216).abs() < 5e-3,
+            "eroded capacity {cap} off the law"
+        );
         // Target recall moves it the other way: demanding 0.9 survival
         // tightens the load (ln(1/0.9) < ln 2).
         let strict = capacity_per_cell_eroded(32, 1.0 / 32.0, 0.9);
@@ -583,12 +603,17 @@ mod tests {
         let clustered_refs: Vec<&[f32]> = clustered.iter().map(|s| s.as_slice()).collect();
         // 64 items into a 0.5σ grid (side 8 → 64 cells → λ = 1) at d_k = 8:
         // capacity 2.8 — `sized` accepts.
-        let plain =
-            LatticeMemory::sized(d, d_k, 4, 7, &clustered_refs, 64, 0.5, None);
-        assert!(plain.is_ok(), "random-key law must accept the clustered point");
+        let plain = LatticeMemory::sized(d, d_k, 4, 7, &clustered_refs, 64, 0.5, None);
+        assert!(
+            plain.is_ok(),
+            "random-key law must accept the clustered point"
+        );
         // `sized_eroded` measures the correlation and refuses.
         match LatticeMemory::sized_eroded(d, d_k, 4, 7, &clustered_refs, 64, 0.5, None) {
-            Err(LatticeConfigError::OverCapacity { capacity_per_cell: cap, .. }) => {
+            Err(LatticeConfigError::OverCapacity {
+                capacity_per_cell: cap,
+                ..
+            }) => {
                 assert!(
                     cap < 0.35 * d_k as f32,
                     "measured erosion must TIGHTEN the capacity: {cap}"

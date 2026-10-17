@@ -1326,17 +1326,32 @@ pub fn mla_forward_token_flashmemory<'s>(
     #[cfg(feature = "mla_absorbed")]
     {
         static RECONSTRUCT_FORCED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        let forced = *RECONSTRUCT_FORCED.get_or_init(|| {
-            std::env::var("KATGPT_MLA_RECONSTRUCT").is_ok_and(|v| v == "1")
-        });
+        let forced = *RECONSTRUCT_FORCED
+            .get_or_init(|| std::env::var("KATGPT_MLA_RECONSTRUCT").is_ok_and(|v| v == "1"));
         if !forced {
             return mla_forward_token_flashmemory_absorbed(
-                config, weights, cache, scratch, rope_freqs, h, block_cache, selector, step,
+                config,
+                weights,
+                cache,
+                scratch,
+                rope_freqs,
+                h,
+                block_cache,
+                selector,
+                step,
             );
         }
     }
     mla_forward_token_flashmemory_reconstruct(
-        config, weights, cache, scratch, rope_freqs, h, block_cache, selector, step,
+        config,
+        weights,
+        cache,
+        scratch,
+        rope_freqs,
+        h,
+        block_cache,
+        selector,
+        step,
     )
 }
 
@@ -1457,7 +1472,15 @@ pub fn mla_forward_token_flashmemory_reconstruct<'s>(
     let n_h = config.n_heads;
 
     let (seq, selection) = flashmemory_decode_prefix(
-        config, weights, cache, scratch, rope_freqs, h, block_cache, selector, step,
+        config,
+        weights,
+        cache,
+        scratch,
+        rope_freqs,
+        h,
+        block_cache,
+        selector,
+        step,
     );
     let scale = config.attn_scale();
 
@@ -1671,7 +1694,15 @@ pub fn mla_forward_token_flashmemory_absorbed<'s>(
     let n_h = config.n_heads;
 
     let (seq, selection) = flashmemory_decode_prefix(
-        config, weights, cache, scratch, rope_freqs, h, block_cache, selector, step,
+        config,
+        weights,
+        cache,
+        scratch,
+        rope_freqs,
+        h,
+        block_cache,
+        selector,
+        step,
     );
     let scale = config.attn_scale();
 

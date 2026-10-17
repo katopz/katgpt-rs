@@ -102,7 +102,14 @@ pub fn symmetric_eig_par(
     // Loud refusal if phase 1 ever produced a non-finite d/e — same seam as
     // the serial path (Issue 931).
     if n > 0 {
-        super::refuse_non_finite_intermediate("after tridiagonalize", eigvals, &scratch.subdiag, n, 0, 0);
+        super::refuse_non_finite_intermediate(
+            "after tridiagonalize",
+            eigvals,
+            &scratch.subdiag,
+            n,
+            0,
+            0,
+        );
     }
 
     // Phase 2: batched-parallel implicit-shift QL.

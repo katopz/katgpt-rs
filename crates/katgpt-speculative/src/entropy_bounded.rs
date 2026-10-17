@@ -111,8 +111,7 @@ impl EbBuildScratch {
     /// tokens are skipped before the lookup).
     fn cache_log_marginals(&mut self, marginals: &[&[f32]]) {
         if self.log_marginals.len() < marginals.len() {
-            self.log_marginals
-                .resize_with(marginals.len(), Vec::new);
+            self.log_marginals.resize_with(marginals.len(), Vec::new);
         } else {
             self.log_marginals.truncate(marginals.len());
         }
@@ -168,7 +167,8 @@ impl EbBuildScratch {
         if self.parent_tokens.len() < depth {
             self.parent_tokens.resize(depth, 0);
         }
-        let n_tokens = extract_parent_tokens_into(parent_path, depth, &mut self.parent_tokens).len();
+        let n_tokens =
+            extract_parent_tokens_into(parent_path, depth, &mut self.parent_tokens).len();
         self.candidates.clear();
         for (i, &prob) in row.iter().enumerate() {
             // `prob > 0.0` also rejects NaN; `is_finite` rejects +inf, whose
@@ -299,8 +299,7 @@ pub fn build_dd_tree_eb_into<'a>(
         if config.early_exit_patience > 0
             && config.early_exit_gap > 0.0
             && consecutive_dominant >= config.early_exit_patience
-            && best_score.unwrap_or(0.0) - second_best_score.unwrap_or(0.0)
-                > config.early_exit_gap
+            && best_score.unwrap_or(0.0) - second_best_score.unwrap_or(0.0) > config.early_exit_gap
         {
             break;
         }
@@ -414,14 +413,8 @@ pub fn dflash_block_commit_eb(
 ) -> Vec<usize> {
     let mut scratch = EbCommitScratch::default();
     let mut tokens = vec![0usize; steps];
-    let k = dflash_block_commit_eb_with(
-        marginals_flat,
-        steps,
-        vocab,
-        &mut scratch,
-        &mut tokens,
-        cfg,
-    );
+    let k =
+        dflash_block_commit_eb_with(marginals_flat, steps, vocab, &mut scratch, &mut tokens, cfg);
     tokens.truncate(k);
     tokens
 }

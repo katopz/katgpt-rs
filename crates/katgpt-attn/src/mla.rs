@@ -61,9 +61,9 @@
 //!
 //! For Kimi-K3-0.40B: `(128 + 32) = 160` elements/token/layer vs `1024` for MHA.
 
-use katgpt_core::simd::{simd_dot_f32, simd_matmul_rows};
 #[cfg(feature = "mla_absorbed")]
 use katgpt_core::simd::simd_transpose_matvec_into;
+use katgpt_core::simd::{simd_dot_f32, simd_matmul_rows};
 use katgpt_kv::shard_kv::rope::RopeFreqs;
 
 // ─── Config ─────────────────────────────────────────────────────────────────
@@ -405,7 +405,7 @@ pub struct MlaForwardScratch {
     // per-head absorbed queries `[d_c * n_h]` + one latent accumulator `[d_c]`.
     // Pre-allocated here so the absorbed hot path allocates nothing per step.
     #[cfg(feature = "mla_absorbed")]
-    pub(crate) q_abs: Vec<f32>,   // [d_c * n_h]
+    pub(crate) q_abs: Vec<f32>, // [d_c * n_h]
     #[cfg(feature = "mla_absorbed")]
     pub(crate) lat_acc: Vec<f32>, // [d_c]
 }
@@ -939,9 +939,8 @@ pub fn mla_forward_token_dispatched<'s>(
     #[cfg(feature = "mla_absorbed")]
     {
         static RECONSTRUCT_FORCED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        let forced = *RECONSTRUCT_FORCED.get_or_init(|| {
-            std::env::var("KATGPT_MLA_RECONSTRUCT").is_ok_and(|v| v == "1")
-        });
+        let forced = *RECONSTRUCT_FORCED
+            .get_or_init(|| std::env::var("KATGPT_MLA_RECONSTRUCT").is_ok_and(|v| v == "1"));
         if !forced {
             return mla_forward_token_absorbed(config, weights, cache, scratch, rope_freqs, h);
         }

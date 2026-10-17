@@ -15,10 +15,10 @@
 //! ```
 
 use katgpt_core::entropy_bounded_commit::{EbCommitConfig, ErrorProxy};
+use katgpt_speculative::NoPruner;
 use katgpt_speculative::entropy_bounded::{
     EbBuildScratch, EbCommitScratch, build_dd_tree_eb_into, dflash_block_commit_eb_with,
 };
-use katgpt_speculative::NoPruner;
 use katgpt_types::Config;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;
@@ -105,7 +105,10 @@ fn eb_lane_wiring_steady_state_is_alloc_free() {
         black_box(&eb_cfg),
     );
     assert!(!tree.is_empty(), "DDTree EB build liveness");
-    assert!(tree_scratch.children_committed >= 1, "build no-stall liveness");
+    assert!(
+        tree_scratch.children_committed >= 1,
+        "build no-stall liveness"
+    );
 
     let mut block_scratch = EbCommitScratch::default();
     let mut tokens = vec![0usize; STEPS];
@@ -145,10 +148,9 @@ fn eb_lane_wiring_steady_state_is_alloc_free() {
     }
     let after = allocated_bytes();
     black_box(acc);
-    assert!(acc >= 2200, "every pass committed (liveness of the audited loops)");
-    assert_eq!(
-        after - before,
-        0,
-        "EB lane steady state must not allocate"
+    assert!(
+        acc >= 2200,
+        "every pass committed (liveness of the audited loops)"
     );
+    assert_eq!(after - before, 0, "EB lane steady state must not allocate");
 }

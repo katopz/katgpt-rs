@@ -80,9 +80,7 @@ fn planted_p0_declared_knowledge_like_within_n64() {
         "p=0 must settle knowledge-like within N ≤ 64"
     );
     assert!(
-        cl.flips()
-            .iter()
-            .any(|f| f.to == ProbeClass::KnowledgeLike),
+        cl.flips().iter().any(|f| f.to == ProbeClass::KnowledgeLike),
         "the flip to knowledge-like must be DISCLOSED"
     );
     assert!(
@@ -126,7 +124,11 @@ fn planted_p005_knowledge_like_by_n64_but_never_early() {
         "at N=8 the interval is wide — undetermined, keep sampling"
     );
     for f in cl.flips() {
-        assert_ne!(f.to, ProbeClass::Productive, "no flip may land productive at p=0.05");
+        assert_ne!(
+            f.to,
+            ProbeClass::Productive,
+            "no flip may land productive at p=0.05"
+        );
     }
 }
 
@@ -152,7 +154,10 @@ fn planted_p02_never_knowledge_like() {
             saw_productive = true;
         }
     }
-    assert!(saw_productive, "p=0.2 should reach Productive at N ∈ {{64,128}}");
+    assert!(
+        saw_productive,
+        "p=0.2 should reach Productive at N ∈ {{64,128}}"
+    );
 }
 
 #[test]
@@ -171,8 +176,16 @@ fn planted_p05_either_but_disclosed() {
         let _ = cl.observe(&probe_at(&mut rng, n, 0.5), n);
     }
     for f in cl.flips() {
-        assert_ne!(f.to, ProbeClass::KnowledgeLike, "p=0.5 never flips knowledge-like");
-        assert!(f.interval_width > 0.0, "flip at n={} carries its width", f.at_n);
+        assert_ne!(
+            f.to,
+            ProbeClass::KnowledgeLike,
+            "p=0.5 never flips knowledge-like"
+        );
+        assert!(
+            f.interval_width > 0.0,
+            "flip at n={} carries its width",
+            f.at_n
+        );
     }
     assert_eq!(cl.settled_class(), Some(ProbeClass::Productive));
 }
@@ -254,7 +267,11 @@ fn capped_undetermined_at_n_max_and_full_log_drops_loud() {
         interval_width: 0.0,
     }; 16];
     let mut cl = AdaptiveClassifier::new(EPSILON, 8, &mut log);
-    assert_eq!(cl.observe(&straddling, 4), AdaptiveDecision::Continue, "n < n_max: keep sampling");
+    assert_eq!(
+        cl.observe(&straddling, 4),
+        AdaptiveDecision::Continue,
+        "n < n_max: keep sampling"
+    );
     assert_eq!(
         cl.observe(&straddling, 8),
         AdaptiveDecision::CappedUndetermined,
@@ -291,10 +308,22 @@ fn capped_undetermined_at_n_max_and_full_log_drops_loud() {
         interval_width: 0.0,
     }; 1];
     let mut cl = AdaptiveClassifier::new(EPSILON, 4096, &mut tiny);
-    let _ = cl.observe(&und, 8);  // Undetermined — seeds `last`
-    let _ = cl.observe(&kl, 16);  // flip 1: Und→KL — fills the 1-entry log
+    let _ = cl.observe(&und, 8); // Undetermined — seeds `last`
+    let _ = cl.observe(&kl, 16); // flip 1: Und→KL — fills the 1-entry log
     let _ = cl.observe(&productive, 32); // flip 2: KL→Prod — DROPPED
-    assert_eq!(cl.flips().len(), 1, "a full log drops further flips (documented)");
-    assert_eq!(cl.flips()[0].to, ProbeClass::KnowledgeLike, "the RETAINED flip is the first");
-    assert_eq!(cl.settled_class(), Some(ProbeClass::Productive), "the class still advances");
+    assert_eq!(
+        cl.flips().len(),
+        1,
+        "a full log drops further flips (documented)"
+    );
+    assert_eq!(
+        cl.flips()[0].to,
+        ProbeClass::KnowledgeLike,
+        "the RETAINED flip is the first"
+    );
+    assert_eq!(
+        cl.settled_class(),
+        Some(ProbeClass::Productive),
+        "the class still advances"
+    );
 }

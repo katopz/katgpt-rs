@@ -111,11 +111,19 @@ fn fixture(entries: usize) -> Fixture {
     for e in 0..entries {
         // Distinct scales per summary so the RMS term matters.
         let scale = 0.5 + e as f32 * 0.37;
-        let v: Vec<f32> = fill(100 + e as u64, d).into_iter().map(|x| x * scale).collect();
+        let v: Vec<f32> = fill(100 + e as u64, d)
+            .into_iter()
+            .map(|x| x * scale)
+            .collect();
         state.push(&v);
     }
     let prefixes = (0..16).map(|k| fill(1000 + k, d)).collect();
-    Fixture { config, weights, state, prefixes }
+    Fixture {
+        config,
+        weights,
+        state,
+        prefixes,
+    }
 }
 
 fn assert_bit_identical(a: &[f32], b: &[f32], what: &str) {
@@ -134,7 +142,8 @@ fn live_and_prepared_are_bit_identical_to_the_pre_933_kernel() {
         let mut s_prep = AttnResScratch::new(&f.config, entries);
         s_prep.recompute_score_weight(&f.weights);
         for p in &f.prefixes {
-            let r = apply_attn_res_ref(&f.config, &f.weights, f.state.residuals(), &mut s_ref, p).to_vec();
+            let r = apply_attn_res_ref(&f.config, &f.weights, f.state.residuals(), &mut s_ref, p)
+                .to_vec();
             let l = apply_attn_res(&f.config, &f.weights, &f.state, &mut s_live, p).to_vec();
             let q = apply_attn_res_prepared(&f.config, &f.state, &mut s_prep, p).to_vec();
             assert_bit_identical(&r, &l, &format!("live N={entries}"));
@@ -154,7 +163,10 @@ fn the_sum_sq_cache_follows_clear_and_repush() {
     state.clear();
     // Re-push different content into the recycled slots, at very different scales.
     for e in 0..4u64 {
-        let v: Vec<f32> = fill(500 + e, d).into_iter().map(|x| x * (3.0 + e as f32)).collect();
+        let v: Vec<f32> = fill(500 + e, d)
+            .into_iter()
+            .map(|x| x * (3.0 + e as f32))
+            .collect();
         state.push(&v);
     }
     let mut s_ref = AttnResScratch::new(&f.config, 4);
@@ -166,7 +178,10 @@ fn the_sum_sq_cache_follows_clear_and_repush() {
     // And the re-pushed content really moved the answer (the canary is live).
     let mut s_old = AttnResScratch::new(&f.config, 4);
     let old = apply_attn_res(&f.config, &f.weights, &f.state, &mut s_old, p).to_vec();
-    assert!(old.iter().zip(&l).any(|(a, b)| a.to_bits() != b.to_bits()), "re-push changed nothing");
+    assert!(
+        old.iter().zip(&l).any(|(a, b)| a.to_bits() != b.to_bits()),
+        "re-push changed nothing"
+    );
 }
 
 #[test]

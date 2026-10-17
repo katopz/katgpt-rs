@@ -401,7 +401,9 @@ mod tests {
     /// Bitwise equality for f32 slices (NaN-safe, ±0.0 distinguished) —
     /// the bit-identity pins compare bit PATTERNS, not float equality.
     fn bits_eq(a: &[f32], b: &[f32]) -> bool {
-        a.iter().zip(b.iter()).all(|(x, y)| x.to_bits() == y.to_bits())
+        a.iter()
+            .zip(b.iter())
+            .all(|(x, y)| x.to_bits() == y.to_bits())
     }
 
     // ── G1: sample_conc_into — closed-form mean / variance / covariance ──
@@ -702,7 +704,10 @@ mod tests {
                 *v *= beta;
             }
             naive[cls] += 1.0 - beta;
-            assert!(bits_eq(ema.mean(), &naive), "h must be bit-identical to the plain EMA at the same op order");
+            assert!(
+                bits_eq(ema.mean(), &naive),
+                "h must be bit-identical to the plain EMA at the same op order"
+            );
         }
         // Pre-wrap (N = 12 ≤ M = 8? no — 12 > 8, so wrap; use a shorter
         // history for the shares == h half of the pin).
@@ -897,6 +902,9 @@ mod tests {
         let mut w = [0.0f32; 3];
         ema.drawn_weights(4.0, 23, &mut w);
         let (count, _bytes) = get_alloc_stats();
-        assert_eq!(count, 0, "hot paths must be allocation-free, got {count} allocs");
+        assert_eq!(
+            count, 0,
+            "hot paths must be allocation-free, got {count} allocs"
+        );
     }
 }

@@ -24,7 +24,7 @@
 //! Inputs must be PROJECTED points (`&[f32]` of len `E`), never raw
 //! D-space vectors — see the mixture module docs.
 
-use super::mixture::{lse, DiagGmm};
+use super::mixture::{DiagGmm, lse};
 use crate::factorized_action::fit_codebook_kmeans_into;
 use crate::factorized_action::types::EffectCodebook;
 
@@ -287,10 +287,7 @@ fn component_loglik_f64<const E: usize, const K: usize>(
 
 /// Nearest centroid by squared Euclidean distance (first argmin wins —
 /// the deterministic tie rule, matching the codebook module's).
-fn nearest_centroid<const E: usize, const K: usize>(
-    s: &[f32],
-    means: &[[f32; E]; K],
-) -> usize {
+fn nearest_centroid<const E: usize, const K: usize>(s: &[f32], means: &[[f32; E]; K]) -> usize {
     let mut best = 0usize;
     let mut best_d2 = f32::INFINITY;
     for (i, c) in means.iter().enumerate() {

@@ -42,10 +42,10 @@
 #![cfg(feature = "gmm_support")]
 
 use katgpt_core::gmm_support::{
-    bound_acceptance, canary_fire_rate, certify, fit_diag_gmm, CertifyConfig,
-    LinearDiscriminatorGate, SupportGate,
+    CertifyConfig, LinearDiscriminatorGate, SupportGate, bound_acceptance, canary_fire_rate,
+    certify, fit_diag_gmm,
 };
-use katgpt_core::gmm_support::{build_fixture, EmConfig, JlProjector};
+use katgpt_core::gmm_support::{EmConfig, JlProjector, build_fixture};
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -393,7 +393,10 @@ fn main() {
     g2_throughput_table();
 
     let g4 = g4_alloc_canary();
-    println!("G4 alloc canary .................... {}  (0 allocs / 1024 gate evals)", ok(g4));
+    println!(
+        "G4 alloc canary .................... {}  (0 allocs / 1024 gate evals)",
+        ok(g4)
+    );
 
     let g5 = g5_certification();
     println!(
@@ -412,9 +415,5 @@ fn main() {
 }
 
 fn ok(v: bool) -> &'static str {
-    if v {
-        "PASS"
-    } else {
-        "FAIL"
-    }
+    if v { "PASS" } else { "FAIL" }
 }

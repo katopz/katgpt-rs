@@ -28,9 +28,9 @@
 mod loopcd_fixture;
 
 use katgpt_rs::transformer::loop_guidance::{
-    default_adaptive_config, ExitKind, LoopGuidance, SettleExit, SettleExitConfig, SettleReadout,
+    ExitKind, LoopGuidance, SettleExit, SettleExitConfig, SettleReadout, default_adaptive_config,
 };
-use loopcd_fixture::{all_cases, argmax, LoopCdFixture, MAX_LOOPS};
+use loopcd_fixture::{LoopCdFixture, MAX_LOOPS, all_cases, argmax};
 
 fn settle_config(enabled: bool, d_min: usize, patience: usize) -> SettleExitConfig {
     SettleExitConfig {
@@ -51,12 +51,8 @@ fn run_guided(
     let gcfg = default_adaptive_config();
     let mut guidance = LoopGuidance::new(gcfg, loopcd_fixture::VOCAB, fixture.config.n_embd);
     let mut settle = SettleExit::new(settle_cfg, loopcd_fixture::VOCAB, fixture.config.n_embd);
-    let logits = fixture.run_tokens_guided(
-        &case.prefix,
-        depth,
-        Some(&mut guidance),
-        Some(&mut settle),
-    );
+    let logits =
+        fixture.run_tokens_guided(&case.prefix, depth, Some(&mut guidance), Some(&mut settle));
     let budget = settle
         .last_budget()
         .expect("settle_exit must report a budget after every forward");
@@ -76,7 +72,11 @@ fn budget_only_posture_is_a_no_op() {
     let case = &all_cases()[0];
     let base = fixture.run_case(case, 4);
 
-    let mut settle = SettleExit::new(settle_config(false, 1, 2), loopcd_fixture::VOCAB, fixture.config.n_embd);
+    let mut settle = SettleExit::new(
+        settle_config(false, 1, 2),
+        loopcd_fixture::VOCAB,
+        fixture.config.n_embd,
+    );
     let logits = fixture.run_tokens_guided(&case.prefix, 4, None, Some(&mut settle));
     assert_eq!(logits, base, "accounting-only settle must not touch logits");
     let budget = settle.last_budget().expect("budget reported");
@@ -104,7 +104,12 @@ fn guaranteed_window_fires_with_budget_and_savings() {
     let mut total_loops = 0usize;
 
     for case in &cases {
-        let (_, budget) = run_guided(&fixture, case, MAX_LOOPS, settle_config(true, D_MIN, PATIENCE));
+        let (_, budget) = run_guided(
+            &fixture,
+            case,
+            MAX_LOOPS,
+            settle_config(true, D_MIN, PATIENCE),
+        );
         total_loops += budget.loops_used;
         match budget.exit {
             ExitKind::Settled { at_loop } => {
@@ -151,8 +156,13 @@ fn exit_answer_equals_full_depth_answer_unguided() {
     let fixture = LoopCdFixture::new();
     for case in &all_cases() {
         // Unguided settle-armed run vs unguided full depth.
-        let mut settle = SettleExit::new(settle_config(true, D_MIN, PATIENCE), loopcd_fixture::VOCAB, fixture.config.n_embd);
-        let exit_answer = argmax(&fixture.run_tokens_guided(&case.prefix, MAX_LOOPS, None, Some(&mut settle)));
+        let mut settle = SettleExit::new(
+            settle_config(true, D_MIN, PATIENCE),
+            loopcd_fixture::VOCAB,
+            fixture.config.n_embd,
+        );
+        let exit_answer =
+            argmax(&fixture.run_tokens_guided(&case.prefix, MAX_LOOPS, None, Some(&mut settle)));
         let budget = settle.last_budget().expect("budget reported");
         if budget.exit == ExitKind::Exhausted {
             continue; // never fired — full depth IS the exit; nothing to pin
@@ -176,7 +186,12 @@ fn guided_lane_depth_sensitivity_is_measured() {
     let mut moved = 0usize;
     let mut total = 0usize;
     for case in &all_cases() {
-        let (exit_answer, budget) = run_guided(&fixture, case, MAX_LOOPS, settle_config(true, D_MIN, PATIENCE));
+        let (exit_answer, budget) = run_guided(
+            &fixture,
+            case,
+            MAX_LOOPS,
+            settle_config(true, D_MIN, PATIENCE),
+        );
         if budget.exit == ExitKind::Exhausted {
             continue;
         }
@@ -270,10 +285,18 @@ fn candidate_set_readout_agrees_with_full() {
             enabled: true,
             d_min: D_MIN,
             settle_patience: PATIENCE,
-            readout: SettleReadout::CandidateSet { top_m: 2, refresh_every: 3 },
+            readout: SettleReadout::CandidateSet {
+                top_m: 2,
+                refresh_every: 3,
+            },
         };
         let (_, budget_cs) = run_guided(&fixture, case, MAX_LOOPS, cfg);
-        let (_, budget_full) = run_guided(&fixture, case, MAX_LOOPS, settle_config(true, D_MIN, PATIENCE));
+        let (_, budget_full) = run_guided(
+            &fixture,
+            case,
+            MAX_LOOPS,
+            settle_config(true, D_MIN, PATIENCE),
+        );
         assert_eq!(
             budget_cs.exit, budget_full.exit,
             "CandidateSet must decide identically to Full on the fixture \
@@ -291,20 +314,36 @@ fn candidate_set_readout_agrees_with_full() {
 
 #[test]
 fn settle_config_validation_refuses_degenerate_values() {
-    assert!(settle_config(true, 0, 2).validate().is_err(), "d_min 0 refused");
-    assert!(settle_config(true, 1, 0).validate().is_err(), "patience 0 refused");
-    assert!(SettleExitConfig {
-        readout: SettleReadout::CandidateSet { top_m: 0, refresh_every: 1 },
-        ..settle_config(true, 1, 2)
-    }
-    .validate()
-    .is_err());
-    assert!(SettleExitConfig {
-        readout: SettleReadout::CandidateSet { top_m: 4, refresh_every: 0 },
-        ..settle_config(true, 1, 2)
-    }
-    .validate()
-    .is_err());
+    assert!(
+        settle_config(true, 0, 2).validate().is_err(),
+        "d_min 0 refused"
+    );
+    assert!(
+        settle_config(true, 1, 0).validate().is_err(),
+        "patience 0 refused"
+    );
+    assert!(
+        SettleExitConfig {
+            readout: SettleReadout::CandidateSet {
+                top_m: 0,
+                refresh_every: 1
+            },
+            ..settle_config(true, 1, 2)
+        }
+        .validate()
+        .is_err()
+    );
+    assert!(
+        SettleExitConfig {
+            readout: SettleReadout::CandidateSet {
+                top_m: 4,
+                refresh_every: 0
+            },
+            ..settle_config(true, 1, 2)
+        }
+        .validate()
+        .is_err()
+    );
     assert!(settle_config(true, 1, 2).validate().is_ok());
 }
 
@@ -319,9 +358,9 @@ fn constructor_panics_on_invalid_settle_config() {
 #[cfg(feature = "cadence_gate")]
 #[test]
 fn superseded_budget_when_cadence_exit_wins() {
-    use katgpt_rs::types::{Config, HybridPattern, LoopMode, ResidualGate, SdpaOutputGate};
     use katgpt_rs::hla::MultiLayerAhlaCache;
-    use katgpt_rs::transformer::{forward_looped, ForwardContext, MultiLayerKVCache};
+    use katgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, forward_looped};
+    use katgpt_rs::types::{Config, HybridPattern, LoopMode, ResidualGate, SdpaOutputGate};
 
     let mut config = Config::micro();
     config.loop_mode = LoopMode::WeightShared { loop_count: 6 };
@@ -337,7 +376,11 @@ fn superseded_budget_when_cadence_exit_wins() {
     // Fires at d_min=2 (huge tau = every window reads settled); the settle
     // exit's own d_min=100 never evaluates → Superseded at 2 completed loops.
     let mut exit = katgpt_core::convergence_cadence::LoopResidualExit::new(1e9, 2);
-    let mut settle = SettleExit::new(settle_config(true, 100, 2), config.vocab_size, config.n_embd);
+    let mut settle = SettleExit::new(
+        settle_config(true, 100, 2),
+        config.vocab_size,
+        config.n_embd,
+    );
 
     let _ = forward_looped(
         &mut ctx,

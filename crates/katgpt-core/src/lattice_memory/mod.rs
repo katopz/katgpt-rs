@@ -39,13 +39,13 @@ pub mod types;
 
 use types::LatticeConfigG;
 
-pub use address::{split_coordinate, LshAxes};
-pub use bump::{axis_weights, axis_weights_cos2, build_lut, weights_direct, AxisWeights, BumpLut};
+pub use address::{LshAxes, split_coordinate};
+pub use bump::{AxisWeights, BumpLut, axis_weights, axis_weights_cos2, build_lut, weights_direct};
 pub use cdf::CdfWarp;
 pub use sizer::{capacity_per_cell, capacity_per_cell_eroded, grid_side_for, support_radius};
 pub use types::{
-    validate, BumpKernel, LatticeCell, LatticeConfig, LatticeConfigError, LatticeSnapshot,
-    LatticeSnapshotError,
+    BumpKernel, LatticeCell, LatticeConfig, LatticeConfigError, LatticeSnapshot,
+    LatticeSnapshotError, validate,
 };
 
 /// The shipped 2-axis lattice (Plan 619) — the default monomorphization.
@@ -134,7 +134,15 @@ impl<const A: usize> LatticeMemoryG<A> {
         let cells = vec![LatticeCell::unwritten(); config.cell_count()];
         let slab = vec![0.0_f32; config.cell_count() * config.cell_len()];
         let scratch = vec![0.0_f32; config.d_v];
-        Ok(Self { config, axes, lut: build_lut(), cells, slab, cursor: 0, scratch })
+        Ok(Self {
+            config,
+            axes,
+            lut: build_lut(),
+            cells,
+            slab,
+            cursor: 0,
+            scratch,
+        })
     }
 
     /// The validated config this lattice was built from.
@@ -190,7 +198,10 @@ impl<const A: usize> LatticeMemoryG<A> {
         for axis in 0..A {
             clamped[axis] = cell[axis].clamp(0, i64::from(self.config.grid[axis]) - 1) as usize;
         }
-        Located { cell: clamped, delta }
+        Located {
+            cell: clamped,
+            delta,
+        }
     }
 
     /// Row-major flat index of a cell coordinate tuple (strides derived from
@@ -228,7 +239,10 @@ impl<const A: usize> LatticeMemoryG<A> {
     pub fn write_delta(&mut self, x: &[f32], k: &[f32], v: &[f32], beta: f32) {
         assert_eq!(k.len(), self.config.d_k, "key width must be d_k");
         assert_eq!(v.len(), self.config.d_v, "value width must be d_v");
-        assert!(beta > 0.0 && beta <= 1.0, "beta must be in (0, 1], got {beta}");
+        assert!(
+            beta > 0.0 && beta <= 1.0,
+            "beta must be in (0, 1], got {beta}"
+        );
         let located = self.locate(x);
         let idx = self.cell_index(located.cell);
         let len = self.config.cell_len();
@@ -294,8 +308,7 @@ impl<const A: usize> LatticeMemoryG<A> {
         }
         let cell = self.cells[idx];
         let d_v = self.config.d_v;
-        let dst =
-            &mut self.slab[cell.offset as usize..cell.offset as usize + d_v];
+        let dst = &mut self.slab[cell.offset as usize..cell.offset as usize + d_v];
         dst.copy_from_slice(v);
         self.cells[idx].writes += 1;
     }
@@ -360,7 +373,10 @@ impl<const A: usize> LatticeMemoryG<A> {
     #[must_use]
     pub fn read_scored(&self, x: &[f32], q: &[f32], out: &mut [f32], lambda: f32) -> f32 {
         assert_eq!(q.len(), self.config.d_k, "query width must be d_k");
-        assert!(lambda > 0.0 && lambda.is_finite(), "lambda must be finite > 0");
+        assert!(
+            lambda > 0.0 && lambda.is_finite(),
+            "lambda must be finite > 0"
+        );
         let wf = self.read_impl(x, Query::Dense(q), out);
         crate::sigmoid(lambda * (2.0 * wf - 1.0))
     }
@@ -375,7 +391,11 @@ impl<const A: usize> LatticeMemoryG<A> {
     /// write/read path only, and this is neither.
     #[must_use]
     pub fn snapshot(&self) -> LatticeSnapshot {
-        LatticeSnapshot { cells: self.cells.clone(), slab: self.slab.clone(), cursor: self.cursor }
+        LatticeSnapshot {
+            cells: self.cells.clone(),
+            slab: self.slab.clone(),
+            cursor: self.cursor,
+        }
     }
 
     /// Thaw: replace the current state with a snapshot taken from a lattice
@@ -581,9 +601,9 @@ impl<const A: usize> LatticeMemoryG<A> {
 
 #[cfg(test)]
 mod tests {
+    use super::LatticeMemory;
     use super::cdf::CdfWarp;
     use super::types::{BumpKernel, LatticeConfig, LatticeConfigError};
-    use super::LatticeMemory;
 
     fn config(grid: [u32; 2], w: [f32; 2]) -> LatticeConfig {
         LatticeConfig {
@@ -665,8 +685,7 @@ mod tests {
             }
             prev_cell = row;
         }
-        let boundary =
-            boundary.expect("a 1.0-width lattice must have a boundary within the sweep");
+        let boundary = boundary.expect("a 1.0-width lattice must have a boundary within the sweep");
         let mut out = [0.0_f32; 4];
         let mut graded = Vec::new();
         for k in 1..=8_u32 {
@@ -835,7 +854,10 @@ mod tests {
         lat.read_cells(&x, &e0, &mut dense);
         lat.read_blend(&x, &mut blend);
         for (a, b) in dense.iter().zip(blend.iter()) {
-            assert!((a - b).abs() < 1e-6, "row-0 paths disagree: {dense:?} vs {blend:?}");
+            assert!(
+                (a - b).abs() < 1e-6,
+                "row-0 paths disagree: {dense:?} vs {blend:?}"
+            );
         }
     }
 
@@ -852,7 +874,10 @@ mod tests {
         let v = [0.5_f32, -0.25, 1.0, 0.0];
         lat.write_value(&x, &v);
         let mut direct = [0.0_f32; 4];
-        assert!(lat.read_direct(&x, &mut direct), "written cell must read true");
+        assert!(
+            lat.read_direct(&x, &mut direct),
+            "written cell must read true"
+        );
         assert_eq!(direct, v, "read_direct must be the exact round trip");
         // The blended read is GRADED, not exact: direction preserved (every
         // component scaled by one factor — the written cell's normalized
@@ -864,15 +889,30 @@ mod tests {
         let mut blend = [0.0_f32; 4];
         lat.read_blend(&x, &mut blend);
         let g = blend[0] / v[0];
-        assert!(g > 0.0 && g <= 1.0 + 1e-6, "blend factor {g} outside (0, 1]");
+        assert!(
+            g > 0.0 && g <= 1.0 + 1e-6,
+            "blend factor {g} outside (0, 1]"
+        );
         for (b, &s) in blend.iter().zip(v.iter()) {
-            assert!((b - g * s).abs() < 1e-6, "blend broke direction: {b} vs {g}·{s}");
+            assert!(
+                (b - g * s).abs() < 1e-6,
+                "blend broke direction: {b} vs {g}·{s}"
+            );
         }
-        assert!((g - 1.0).abs() > 1e-6, "blend must be DILUTED, not exact (g = {g})");
+        assert!(
+            (g - 1.0).abs() > 1e-6,
+            "blend must be DILUTED, not exact (g = {g})"
+        );
         // Unwritten cell: zeros + false.
         let mut out = [9.0_f32; 4]; // poisoned
-        assert!(!lat.read_direct(&[0.99; 16], &mut out), "unwritten must read false");
-        assert!(out.iter().all(|&o| o == 0.0), "unwritten read must zero-fill");
+        assert!(
+            !lat.read_direct(&[0.99; 16], &mut out),
+            "unwritten must read false"
+        );
+        assert!(
+            out.iter().all(|&o| o == 0.0),
+            "unwritten read must zero-fill"
+        );
     }
 
     #[test]
@@ -889,7 +929,10 @@ mod tests {
         lat.restore(&snap).expect("restore");
         let mut after = [0.0_f32; 4];
         assert!(lat.read_direct(&x, &mut after));
-        assert_eq!(before, after, "thaw must preserve the unblended lane bitwise");
+        assert_eq!(
+            before, after,
+            "thaw must preserve the unblended lane bitwise"
+        );
     }
 
     // ── T1.6: sigmoid-only scoring ────────────────────────────────────────
@@ -905,7 +948,10 @@ mod tests {
         let k = unit_key(0, 4);
         let mut out = [0.0_f32; 4];
         let empty = lat.read_scored(&x, &k, &mut out, 4.0);
-        assert!(empty < 0.05, "empty support must score ≈ σ(−4), got {empty}");
+        assert!(
+            empty < 0.05,
+            "empty support must score ≈ σ(−4), got {empty}"
+        );
         // Dense coverage: 1000 jittered writes around x fill the cells of
         // x's neighborhood (16×16 grid, w=1 — the jitter stays within a few
         // cells of x on every axis).
@@ -918,7 +964,10 @@ mod tests {
             lat.write_value(&q, &[1.0; 4]);
         }
         let full = lat.read_scored(&x, &k, &mut out, 4.0);
-        assert!(full > 0.9, "densely-written support must score ≈ σ(+4), got {full}");
+        assert!(
+            full > 0.9,
+            "densely-written support must score ≈ σ(+4), got {full}"
+        );
         assert!(empty < full && (0.0..=1.0).contains(&empty) && (0.0..=1.0).contains(&full));
         // λ scales the sharpness: a small λ pulls both ends toward 0.5.
         let soft = lat.read_scored(&x, &k, &mut out, 0.2);
@@ -994,8 +1043,16 @@ mod tests {
         // histogram gate lives in sizer.rs).
         let mut cfg = config([64, 64], [1.0, 1.0]);
         cfg.warp = Some([
-            CdfWarp { mean: 0.0, inv_std: 1.0, cells: 64.0 },
-            CdfWarp { mean: 0.0, inv_std: 1.0, cells: 64.0 },
+            CdfWarp {
+                mean: 0.0,
+                inv_std: 1.0,
+                cells: 64.0,
+            },
+            CdfWarp {
+                mean: 0.0,
+                inv_std: 1.0,
+                cells: 64.0,
+            },
         ]);
         let mut lat = LatticeMemory::new(cfg).unwrap();
         let key = [0.5_f32; 16];
@@ -1009,6 +1066,9 @@ mod tests {
         // And the read must still be graded, not a cliff.
         let mut out = [0.0_f32; 4];
         lat.read_blend(&q, &mut out);
-        assert!(out.iter().sum::<f32>() > 0.0, "warped near-miss read a cliff");
+        assert!(
+            out.iter().sum::<f32>() > 0.0,
+            "warped near-miss read a cliff"
+        );
     }
 }

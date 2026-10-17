@@ -33,8 +33,16 @@ fn lcg_unit(seed: u64) -> impl FnMut() -> f64 {
 fn g4_zero_alloc_classify_and_gate() {
     let hist = [3u16, 1, 0, 2];
     let ladder = [
-        EscalationOption { depth: 1, success_prior: 0.7, corpus_distance: 0.2 },
-        EscalationOption { depth: 2, success_prior: 0.9, corpus_distance: 0.6 },
+        EscalationOption {
+            depth: 1,
+            success_prior: 0.7,
+            corpus_distance: 0.2,
+        },
+        EscalationOption {
+            depth: 2,
+            success_prior: 0.9,
+            corpus_distance: 0.6,
+        },
     ];
     let mut unit = lcg_unit(0x0621_A11C);
     let mut run = || {
@@ -47,10 +55,24 @@ fn g4_zero_alloc_classify_and_gate() {
         let mut cl = AdaptiveClassifier::new(0.1, 64, &mut log);
         for n in [8u32, 16, 32] {
             let k = (unit() * f64::from(n)) as u32;
-            let e = probe(&ProbeInput { pass_count: k, n, histogram: &hist }, 1.959_963_984_540_054);
+            let e = probe(
+                &ProbeInput {
+                    pass_count: k,
+                    n,
+                    histogram: &hist,
+                },
+                1.959_963_984_540_054,
+            );
             let _ = cl.observe(&e, n);
         }
-        let e = probe(&ProbeInput { pass_count: 0, n: 64, histogram: &hist }, 1.959_963_984_540_054);
+        let e = probe(
+            &ProbeInput {
+                pass_count: 0,
+                n: 64,
+                histogram: &hist,
+            },
+            1.959_963_984_540_054,
+        );
         gate(
             &GateInput {
                 probe: e,

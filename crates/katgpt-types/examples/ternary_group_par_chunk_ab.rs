@@ -64,7 +64,9 @@ fn main() {
 
     for &(rows, cols) in &shapes {
         let w = fixture(rows, cols, 0x935 + rows as u64);
-        let x: Vec<f32> = (0..cols).map(|i| ((i * 37) % 101) as f32 * 0.01 - 0.5).collect();
+        let x: Vec<f32> = (0..cols)
+            .map(|i| ((i * 37) % 101) as f32 * 0.01 - 0.5)
+            .collect();
         let shipped = rows.div_ceil(threads);
         let chunks = [shipped, 256, 128, 64, 32, 16];
 
@@ -75,7 +77,9 @@ fn main() {
         for &c in &chunks {
             simd_ternary_group_matvec_parallel_chunked(&w, &x, &mut y, c);
             assert!(
-                y.iter().zip(&y_ref).all(|(a, b)| a.to_bits() == b.to_bits()),
+                y.iter()
+                    .zip(&y_ref)
+                    .all(|(a, b)| a.to_bits() == b.to_bits()),
                 "chunk {c} not bit-identical"
             );
         }

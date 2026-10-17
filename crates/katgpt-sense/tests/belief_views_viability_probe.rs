@@ -75,7 +75,9 @@ fn acf_half_life(xs: &[f32]) -> Option<usize> {
         return None;
     }
     for lag in 1..n / 2 {
-        let c: f32 = (0..n - lag).map(|i| (xs[i] - mean) * (xs[i + lag] - mean)).sum();
+        let c: f32 = (0..n - lag)
+            .map(|i| (xs[i] - mean) * (xs[i + lag] - mean))
+            .sum();
         if c / var < 0.5 {
             return Some(lag);
         }
@@ -147,7 +149,9 @@ fn belief_views_viability_probe() {
         half_lives.first(),
         half_lives.last()
     );
-    println!("[932 probe] interior self-dynamics drift (two inits, same evidence): {max_interior_drift:e}");
+    println!(
+        "[932 probe] interior self-dynamics drift (two inits, same evidence): {max_interior_drift:e}"
+    );
 
     // Comparison arm — the modality-additive kernel (default-on feature, no
     // workspace consumer today): a convex per-dim EMA of a sigmoid drive, so
@@ -181,7 +185,10 @@ fn belief_views_viability_probe() {
             add_half.len(),
             add_half.get(add_half.len() / 2)
         );
-        assert_eq!(add_clamped, 0, "additive kernel is convex — the clamp must never bind");
+        assert_eq!(
+            add_clamped, 0,
+            "additive kernel is convex — the clamp must never bind"
+        );
     }
 
     // Structural saturation (any evidence stream): once Σ evidence ≥ 1 the
@@ -195,5 +202,8 @@ fn belief_views_viability_probe() {
 
     // Pinned premise: `leaky_step` has no self-dynamics — the interior map is
     // a pure translation, so b_{t-1} = b_t − δ_t exactly (T3 closed form).
-    assert!(max_interior_drift < 1e-5, "evolve_belief gained self-dynamics: {max_interior_drift}");
+    assert!(
+        max_interior_drift < 1e-5,
+        "evolve_belief gained self-dynamics: {max_interior_drift}"
+    );
 }

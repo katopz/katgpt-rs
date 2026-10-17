@@ -659,7 +659,13 @@ pub fn moe_forward_token_split(
                 d_ffn,
                 d_moe,
             );
-            simd_matmul_rows(up_buf, &expert.up_proj, &scratch.latent_hidden, d_ffn, d_moe);
+            simd_matmul_rows(
+                up_buf,
+                &expert.up_proj,
+                &scratch.latent_hidden,
+                d_ffn,
+                d_moe,
+            );
 
             expert_gate_inter[k * d_ffn..(k + 1) * d_ffn].copy_from_slice(gate_buf);
             expert_up_inter[k * d_ffn..(k + 1) * d_ffn].copy_from_slice(up_buf);
@@ -1253,7 +1259,13 @@ fn moe_backward_nonlatent(
             config.situ_linear_beta,
         );
 
-        simd_outer_product_acc(&mut expert_grad.gate_proj, &d_gate, saved.routed_h(), d_ffn, d);
+        simd_outer_product_acc(
+            &mut expert_grad.gate_proj,
+            &d_gate,
+            saved.routed_h(),
+            d_ffn,
+            d,
+        );
         simd_outer_product_acc(&mut expert_grad.up_proj, &d_up, saved.routed_h(), d_ffn, d);
 
         simd_transpose_matvec_acc(dh_out, &expert.gate_proj, &d_gate, d_ffn, d);
@@ -1511,7 +1523,10 @@ mod split_tests {
     fn assert_vecs_close(a: &[f32], b: &[f32], tol: f32, what: &str) {
         assert_eq!(a.len(), b.len(), "{what}: length");
         for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
-            assert!((x - y).abs() <= tol, "{what}: element {i}: {x} vs {y} (tol {tol})");
+            assert!(
+                (x - y).abs() <= tol,
+                "{what}: element {i}: {x} vs {y} (tol {tol})"
+            );
         }
     }
 
@@ -1551,7 +1566,8 @@ mod split_tests {
         let mut fused_scratch = MoeForwardScratch::new(&config);
         let mut split_scratch = MoeForwardScratch::new(&config);
 
-        let (fused_out, _) = moe_forward_token_with_saved(&weights, &config, &h, &mut fused_scratch);
+        let (fused_out, _) =
+            moe_forward_token_with_saved(&weights, &config, &h, &mut fused_scratch);
         let (shared_out, routed_out, _) =
             moe_forward_token_split(&weights, &config, &h, &h, &mut split_scratch);
 
@@ -1589,8 +1605,7 @@ mod split_tests {
         );
 
         // Split (fresh forward — deterministic w.r.t. scratch state)
-        let (_, _, split_saved) =
-            moe_forward_token_split(&weights, &config, &h, &h, &mut scratch);
+        let (_, _, split_saved) = moe_forward_token_split(&weights, &config, &h, &h, &mut scratch);
         let mut split_grads = MoeGradients::zeros_like(&weights);
         let mut dh_shared = vec![0.0f32; config.d()];
         let mut dh_routed = vec![0.0f32; config.d()];

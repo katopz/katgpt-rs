@@ -562,9 +562,7 @@ pub fn feature_expand_higher_order<B: KarcBasis<M>, const M: usize, const R: usi
             }
             debug_assert_eq!(idx, d_h_1 * (d_h_1 + 1) / 2, "pair buffer size mismatch");
         }
-        _ => panic!(
-            "feature_expand_higher_order: R={R} not implemented (only R ∈ {{1,2}})"
-        ),
+        _ => panic!("feature_expand_higher_order: R={R} not implemented (only R ∈ {{1,2}})"),
     }
 }
 
@@ -799,7 +797,6 @@ pub struct LowRankFitScratch {
     //
     // The dominant allocation is `eigvecs_g` at `d_h × d_h` f64 — e.g.
     // ~2.6 GB at d_h = 18_720 (the Issue 185 K=8/M=8/R=2 target).
-
     /// Eigenvalues of `G = XᵀX`, length `d_h` f64. Computed once per fit
     /// (outside the ALS loop) by [`low_rank_fit_jacobi_bstep`].
     pub eigvals_g: Vec<f64>,

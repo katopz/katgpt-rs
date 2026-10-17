@@ -24,9 +24,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use katgpt_rs::hla::MultiLayerAhlaCache;
 use katgpt_rs::transformer::loop_guidance::{
-    adaptive_omega, top_two_margin, GuidanceMode, LoopGuidance, LoopGuidanceConfig,
+    GuidanceMode, LoopGuidance, LoopGuidanceConfig, adaptive_omega, top_two_margin,
 };
-use katgpt_rs::transformer::{forward_looped, ForwardContext, MultiLayerKVCache, TransformerWeights};
+use katgpt_rs::transformer::{
+    ForwardContext, MultiLayerKVCache, TransformerWeights, forward_looped,
+};
 use katgpt_rs::types::{Config, HybridPattern, LoopMode, ResidualGate, Rng, SdpaOutputGate};
 
 static ALLOCS: AtomicU64 = AtomicU64::new(0);
@@ -179,7 +181,11 @@ fn top_two_margin_degenerate_rows_fail_closed() {
     // Non-finite value → fail closed (settled, ω withheld).
     let mut row = vec![1.0f32; 8];
     row[2] = f32::NAN;
-    assert_eq!(top_two_margin(&row), 1.0, "NaN row must read settled (ω withheld)");
+    assert_eq!(
+        top_two_margin(&row),
+        1.0,
+        "NaN row must read settled (ω withheld)"
+    );
 }
 
 // ── (c) determinism ─────────────────────────────────────────────────────
@@ -226,7 +232,11 @@ fn logit_mode_capture_writes_logit_scratch() {
     let mut g = LoopGuidance::new(cfg, config.vocab_size, config.n_embd);
     let guided = run_once_with(&config, &weights, 0, Some(&mut g));
     assert!(g.guidance_active(), "logit capture must fire at ref_loop=1");
-    assert_ne!(guided, baseline(&config, &weights, 0), "ω=0.4 must move the decode");
+    assert_ne!(
+        guided,
+        baseline(&config, &weights, 0),
+        "ω=0.4 must move the decode"
+    );
 }
 
 #[test]
@@ -244,11 +254,18 @@ fn hidden_mode_changes_state_not_head_count() {
     let mut g = LoopGuidance::new(cfg, config.vocab_size, config.n_embd);
     let guided = run_once_with(&config, &weights, 0, Some(&mut g));
     assert!(g.guidance_active());
-    assert_ne!(guided, baseline(&config, &weights, 0), "hidden contrast must move the decode");
+    assert_ne!(
+        guided,
+        baseline(&config, &weights, 0),
+        "hidden contrast must move the decode"
+    );
     // Hidden mode carries the OUTPUT margin for the next step (the
     // one-head-pass law: no in-step z_R exists). This is the pinned
     // deviation — a future session changing it must rewrite this pin.
-    assert!(g.last_margin().is_some(), "hidden mode must record the output margin");
+    assert!(
+        g.last_margin().is_some(),
+        "hidden mode must record the output margin"
+    );
 }
 
 #[test]
@@ -266,7 +283,11 @@ fn ref_loop_beyond_loop_count_never_guides() {
     let mut g = LoopGuidance::new(cfg, config.vocab_size, config.n_embd);
     let guided = run_once_with(&config, &weights, 0, Some(&mut g));
     assert!(!g.guidance_active(), "no capture → no guidance");
-    assert_eq!(guided, baseline(&config, &weights, 0), "no-reference step is a no-op");
+    assert_eq!(
+        guided,
+        baseline(&config, &weights, 0),
+        "no-reference step is a no-op"
+    );
 }
 
 // ── (e) validation ──────────────────────────────────────────────────────
@@ -280,7 +301,10 @@ fn negative_omega_refused() {
         adaptive: false,
         ref_loop: 1,
     };
-    assert!(cfg.validate().is_err(), "negative ω universally degrades (paper §G.1)");
+    assert!(
+        cfg.validate().is_err(),
+        "negative ω universally degrades (paper §G.1)"
+    );
 }
 
 #[test]

@@ -554,11 +554,11 @@ fn proof_9_looped_logits_finite_t4() {
             None, // Issue 717: deep_run — None = bit-identical baseline
             #[cfg(feature = "cadence_gate")]
             None, // Issue 731: residual-exit probe — None = bit-identical baseline
-        #[cfg(feature = "loop_guidance")]
+            #[cfg(feature = "loop_guidance")]
             None, // Plan 617: LoopCD guidance - None = bit-identical baseline
             #[cfg(feature = "loop_guidance")]
             None,
-            );
+        );
 
         for (i, &l) in logits.iter().enumerate() {
             assert!(

@@ -304,7 +304,10 @@ impl<'a> SiArm<'a> {
     #[inline]
     #[must_use]
     pub fn uncalibrated(lut: &'a ScaleInvariantLut) -> Self {
-        Self { lut, head_scale: 1.0 }
+        Self {
+            lut,
+            head_scale: 1.0,
+        }
     }
 
     /// The calibrated arm — `head_scale` is the head's measured σ from the
@@ -449,7 +452,11 @@ impl HeadCalibration {
         let mut h = blake3::Hasher::new();
         h.update(&SIDECAR_MAGIC);
         h.update(&version.to_le_bytes());
-        h.update(&u32::try_from(scales.len()).expect("head count fits u32").to_le_bytes());
+        h.update(
+            &u32::try_from(scales.len())
+                .expect("head count fits u32")
+                .to_le_bytes(),
+        );
         for s in scales {
             h.update(&s.to_le_bytes());
         }
@@ -497,7 +504,11 @@ impl HeadCalibration {
         let mut out = Vec::with_capacity(5 + 4 + 4 + self.scales.len() * 4 + 32);
         out.extend_from_slice(&SIDECAR_MAGIC);
         out.extend_from_slice(&SIDECAR_VERSION.to_le_bytes());
-        out.extend_from_slice(&u32::try_from(self.scales.len()).expect("head count fits u32").to_le_bytes());
+        out.extend_from_slice(
+            &u32::try_from(self.scales.len())
+                .expect("head count fits u32")
+                .to_le_bytes(),
+        );
         for s in &self.scales {
             out.extend_from_slice(&s.to_le_bytes());
         }
@@ -557,7 +568,10 @@ impl HeadCalibration {
                 ));
             }
         }
-        Ok(Self { scales, digest: claimed })
+        Ok(Self {
+            scales,
+            digest: claimed,
+        })
     }
 }
 
@@ -651,7 +665,10 @@ mod tests {
         let mut s = vec![1.5f32, -2.0, 0.25];
         let before = s.clone();
         lut.apply_inplace(&mut s, 3, 3, 1.0);
-        assert_eq!(s, before, "distance-0 application must be bit-exact identity");
+        assert_eq!(
+            s, before,
+            "distance-0 application must be bit-exact identity"
+        );
     }
 
     #[test]
@@ -750,7 +767,10 @@ mod tests {
         lut.apply_inplace(&mut s, 5, 0, 1.0);
         assert_eq!(s[0], before[0], "sink key must be untouched");
         for j in 6..8 {
-            assert_eq!(s[j], before[j], "future key {j} must be untouched (incl. −0.0)");
+            assert_eq!(
+                s[j], before[j],
+                "future key {j} must be untouched (incl. −0.0)"
+            );
         }
         // Sanity: causal keys DID move (the test is not vacuous).
         assert_ne!(s[4], before[4], "causal key 4 must transform");
@@ -1069,7 +1089,10 @@ mod tests {
         let (a, m) = lut.pair(t);
         let s = row[j];
         let expected = a * (s / sigma) + m;
-        assert!((calibrated[j] - expected).abs() <= 1.0e-6, "fused form at t={t}");
+        assert!(
+            (calibrated[j] - expected).abs() <= 1.0e-6,
+            "fused form at t={t}"
+        );
     }
 
     #[test]
@@ -1108,7 +1131,11 @@ mod tests {
                 .sum::<f64>()
                 / (n - 1.0);
             let got = acc.std_estimate(h).expect("n ≥ 2");
-            assert!((got - var.sqrt()).abs() < 1e-9, "head {h}: {got} vs {}", var.sqrt());
+            assert!(
+                (got - var.sqrt()).abs() < 1e-9,
+                "head {h}: {got} vs {}",
+                var.sqrt()
+            );
         }
         assert_eq!(acc.heads(), 2);
         // Below 2 observations: None, never a fake σ (and never NaN).
@@ -1146,19 +1173,26 @@ mod tests {
         let scale_region = 13;
         corrupted[scale_region] ^= 0x80;
         let err = HeadCalibration::from_sidecar(&corrupted).unwrap_err();
-        assert!(err.contains("digest"), "the failure names the digest: {err}");
+        assert!(
+            err.contains("digest"),
+            "the failure names the digest: {err}"
+        );
         // Bad magic.
         let mut bad_magic = bytes.clone();
         bad_magic[0] = b'X';
-        assert!(HeadCalibration::from_sidecar(&bad_magic)
-            .unwrap_err()
-            .contains("magic"));
+        assert!(
+            HeadCalibration::from_sidecar(&bad_magic)
+                .unwrap_err()
+                .contains("magic")
+        );
         // Bad version.
         let mut bad_version = bytes.clone();
         bad_version[5] = 9;
-        assert!(HeadCalibration::from_sidecar(&bad_version)
-            .unwrap_err()
-            .contains("version"));
+        assert!(
+            HeadCalibration::from_sidecar(&bad_version)
+                .unwrap_err()
+                .contains("version")
+        );
         // Build-side validity: zero / negative / NaN / empty all refuse.
         assert!(HeadCalibration::build(vec![]).is_err());
         assert!(HeadCalibration::build(vec![0.0]).is_err());
@@ -1173,7 +1207,10 @@ mod tests {
         let last_scale = 13 + 2 * 4;
         zeroed[last_scale..last_scale + 4].copy_from_slice(&0.0f32.to_le_bytes());
         let err = HeadCalibration::from_sidecar(&zeroed).unwrap_err();
-        assert!(err.contains("digest"), "digest covers the scale bytes: {err}");
+        assert!(
+            err.contains("digest"),
+            "digest covers the scale bytes: {err}"
+        );
     }
 
     /// The full pipeline (the Phase-3 contract end to end): synthetic
@@ -1207,8 +1244,7 @@ mod tests {
                 let c = &r[1..];
                 let n = c.len() as f64;
                 let mean = c.iter().map(|&x| f64::from(x)).sum::<f64>() / n;
-                (c
-                    .iter()
+                (c.iter()
                     .map(|&x| {
                         let d = f64::from(x) - mean;
                         d * d

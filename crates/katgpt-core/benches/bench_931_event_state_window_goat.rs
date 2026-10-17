@@ -95,8 +95,16 @@ fn main() {
     let g_small = 1.0e-3f32;
     assert_eq!(event_state_window(50.0, 0.0, 100.0, 10.0, g_small), 1.0);
     assert_eq!(event_state_window(5.0, 0.0, 100.0, 10.0, g_small), 0.0);
-    assert_eq!(event_state_window(50.0, 100.0, 50.0, 10.0, 5.0), 0.0, "inverted support → exact zero");
-    assert_eq!(event_state_window(f32::NAN, 0.0, 100.0, 10.0, 5.0), 0.0, "NaN t → exact zero");
+    assert_eq!(
+        event_state_window(50.0, 100.0, 50.0, 10.0, 5.0),
+        0.0,
+        "inverted support → exact zero"
+    );
+    assert_eq!(
+        event_state_window(f32::NAN, 0.0, 100.0, 10.0, 5.0),
+        0.0,
+        "NaN t → exact zero"
+    );
     println!("G1 posture re-pin: hard-indicator 1.0/0.0 + inverted/NaN zero ✓");
 
     // ── G2a: window per-call latency (bar ≤ 20 ns) ──────────────────────
@@ -136,7 +144,10 @@ fn main() {
     println!(
         "G2a window per-call: p50 {wp50} ns | p90 {wp90} ns | p99 {wp99} ns  (batch={BATCH}, n={BATCHES} batches, tail@p99={bsupport})  [bar ≤ 20 ns]"
     );
-    assert!(wp99 <= 20, "G2a FAIL: p99 {wp99} ns > 20 ns per window call");
+    assert!(
+        wp99 <= 20,
+        "G2a FAIL: p99 {wp99} ns > 20 ns per window call"
+    );
 
     // The consumer shape: all K states evaluated per tick (the partition row).
     let mut ksum = 0.0f32;
@@ -239,14 +250,12 @@ fn main() {
 
     // ── Determinism: double-summary bit-identity + BLAKE3 anchors ───────
     let digest = |s: &katgpt_core::event_state_window::StateSummary| -> Vec<u8> {
-        [
-            s.mean, s.spread, s.p10, s.p25, s.p50, s.p75, s.p90,
-        ]
-        .iter()
-        .flat_map(|f| f.to_le_bytes())
-        .chain(s.supports.iter().flat_map(|u| u.to_le_bytes()))
-        .chain(std::iter::once(s.n as u8))
-        .collect()
+        [s.mean, s.spread, s.p10, s.p25, s.p50, s.p75, s.p90]
+            .iter()
+            .flat_map(|f| f.to_le_bytes())
+            .chain(s.supports.iter().flat_map(|u| u.to_le_bytes()))
+            .chain(std::iter::once(s.n as u8))
+            .collect()
     };
     let s1 = population_state_summary(&values, &mut scratch);
     let s2 = population_state_summary(&values, &mut scratch);
@@ -256,7 +265,10 @@ fn main() {
         rev.reverse();
         population_state_summary(&rev, &mut scratch)
     };
-    assert_eq!(s1, s3, "reversed order → bit-identical summary (the G1 invariance, bench posture)");
+    assert_eq!(
+        s1, s3,
+        "reversed order → bit-identical summary (the G1 invariance, bench posture)"
+    );
     println!("determinism: double-build + reversed-order bit-identical ✓");
     println!("  summary blake3     : {}", blake3::hash(&digest(&s1)));
     println!("G4: alloc gate = tests/event_state_window_alloc_check.rs (separate binary)");

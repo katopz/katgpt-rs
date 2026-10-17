@@ -37,7 +37,9 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use katgpt_core::engram::{EngramHash, EngramTable, EngramTableBuilder, InMemoryEngramTable, K_MAX};
+use katgpt_core::engram::{
+    EngramHash, EngramTable, EngramTableBuilder, InMemoryEngramTable, K_MAX,
+};
 use katgpt_core::lattice_memory::{
     LatticeConfig, LatticeConfig3D, LatticeMemory, LatticeMemory3D, support_radius,
 };
@@ -47,8 +49,7 @@ use katgpt_core::lattice_memory::{
 // carries no allocator.
 #[cfg(any(debug_assertions, feature = "alloc_tracking"))]
 #[global_allocator]
-static BENCH_ALLOC: katgpt_core::alloc::TrackingAllocator =
-    katgpt_core::alloc::TrackingAllocator;
+static BENCH_ALLOC: katgpt_core::alloc::TrackingAllocator = katgpt_core::alloc::TrackingAllocator;
 
 /// Embedding / key width — the Bench 919 posture (d == d_k: the key IS the
 /// normalized embedding).
@@ -77,9 +78,13 @@ fn main() {
     println!("bench_938_lattice_3d_goat — Issue 938 T2.3–T2.5");
     println!(
         "box: {} cores · d={D} d_k={D} d_v={D_V} · N={N} · queries={QUERIES} · window={WINDOW} · rounds={ROUNDS}",
-        std::thread::available_parallelism().map(|n| n.get()).unwrap_or(0),
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(0),
     );
-    println!("⚠ latency numbers are workstation readings (M3 Max, shared box) — quote them with a box-state caveat.\n");
+    println!(
+        "⚠ latency numbers are workstation readings (M3 Max, shared box) — quote them with a box-state caveat.\n"
+    );
 
     // ── G6: the pricing, before anything allocates ──────────────────────
     let side = (3.76_f32 / DESIRED_R).ceil() as u32;
@@ -128,7 +133,11 @@ fn main() {
     println!(
         "G1 recall@1 exact keys @10⁶: 3D lattice {:.4} (floor 0.90) — {}",
         lattice_recall,
-        if lattice_recall >= 0.90 { "PASS" } else { "FAIL" }
+        if lattice_recall >= 0.90 {
+            "PASS"
+        } else {
+            "FAIL"
+        }
     );
     assert!(
         lattice_recall >= 0.90,
@@ -137,8 +146,10 @@ fn main() {
 
     // ── G5: the ε sweep vs Engram (and PKM, for the record) ─────────────
     let support = support_radius(side);
-    let mut epsilons: Vec<f32> =
-        [0.0_f32, 0.1, 0.3, 1.0, 2.0].iter().map(|f| f * support).collect();
+    let mut epsilons: Vec<f32> = [0.0_f32, 0.1, 0.3, 1.0, 2.0]
+        .iter()
+        .map(|f| f * support)
+        .collect();
     if !epsilons.iter().any(|&e| (e - 0.05).abs() < 1e-6) {
         epsilons.push(0.05);
     }
@@ -183,13 +194,28 @@ fn main() {
         pkm_curve.push((eps, f(ph)));
     }
     let pick = |c: &[(f32, f32)], e: f32| {
-        c.iter().find(|(x, _)| (*x - e).abs() < 1e-6).map(|(_, r)| *r).unwrap_or(f32::NAN)
+        c.iter()
+            .find(|(x, _)| (*x - e).abs() < 1e-6)
+            .map(|(_, r)| *r)
+            .unwrap_or(f32::NAN)
     };
     println!(
         "G5 @N={N} (3D support {support:.4}σ): lattice {} | engram {} | pkm {}",
-        lat_curve.iter().map(|(e, r)| format!("{e:.3}→{r:.3}")).collect::<Vec<_>>().join(" "),
-        eng_curve.iter().map(|(e, r)| format!("{e:.3}→{r:.3}")).collect::<Vec<_>>().join(" "),
-        pkm_curve.iter().map(|(e, r)| format!("{e:.3}→{r:.3}")).collect::<Vec<_>>().join(" "),
+        lat_curve
+            .iter()
+            .map(|(e, r)| format!("{e:.3}→{r:.3}"))
+            .collect::<Vec<_>>()
+            .join(" "),
+        eng_curve
+            .iter()
+            .map(|(e, r)| format!("{e:.3}→{r:.3}"))
+            .collect::<Vec<_>>()
+            .join(" "),
+        pkm_curve
+            .iter()
+            .map(|(e, r)| format!("{e:.3}→{r:.3}"))
+            .collect::<Vec<_>>()
+            .join(" "),
     );
     let lattice_005 = pick(&lat_curve, 0.05);
     let engram_005 = pick(&eng_curve, 0.05);
@@ -198,11 +224,17 @@ fn main() {
         "G5 @ε=0.05σ: 3D lattice {:.3} vs Engram {:.3} → {}",
         lattice_005,
         engram_005,
-        if g5_win { "PASS (graded recovery past the cliff)" } else { "FAIL" }
+        if g5_win {
+            "PASS (graded recovery past the cliff)"
+        } else {
+            "FAIL"
+        }
     );
 
     // ── G2: interleaved read latency at 10⁶ vs PKM / Engram ─────────────
-    let pq: Vec<&[f32]> = (0..QUERIES).map(|i| items.keys[(i * 7) % N].as_slice()).collect();
+    let pq: Vec<&[f32]> = (0..QUERIES)
+        .map(|i| items.keys[(i * 7) % N].as_slice())
+        .collect();
     let mut best = [u128::MAX; 3]; // lattice3d, pkm, engram
     for _ in 0..ROUNDS {
         let t = Instant::now();
@@ -232,7 +264,11 @@ fn main() {
         best[0],
         best[1],
         best[2],
-        if g2_win { "PASS (3D beats PKM)" } else { "RECORDED NEGATIVE (3D slower than PKM)" }
+        if g2_win {
+            "PASS (3D beats PKM)"
+        } else {
+            "RECORDED NEGATIVE (3D slower than PKM)"
+        }
     );
 
     // ── the tap-cost arm: 27 vs 9 taps at matched cells ──────────────────
@@ -243,7 +279,11 @@ fn main() {
     println!("\n════════ 3D VERDICT (Issue 938 T2.5) ════════");
     println!(
         "G1 {} · G5 {} · G2 {} · G6 {} → {}",
-        if lattice_recall >= 0.90 { "PASS" } else { "FAIL" },
+        if lattice_recall >= 0.90 {
+            "PASS"
+        } else {
+            "FAIL"
+        },
         if g5_win { "PASS" } else { "FAIL" },
         if g2_win { "PASS" } else { "FAIL" },
         if under_budget { "PASS" } else { "FAIL" },
@@ -285,7 +325,9 @@ fn tap_cost_arm(items: &Items) {
         lat2.write_delta(k, &kn, m, 1.0);
         lat3.write_delta(k, &kn, m, 1.0);
     }
-    let pq: Vec<&[f32]> = (0..QUERIES).map(|i| items.keys[(i * 7) % TAP_N].as_slice()).collect();
+    let pq: Vec<&[f32]> = (0..QUERIES)
+        .map(|i| items.keys[(i * 7) % TAP_N].as_slice())
+        .collect();
     let mut out = vec![0.0_f32; D_V];
     let mut best2 = u128::MAX;
     let mut best3 = u128::MAX;
@@ -429,11 +471,18 @@ fn build_pkm(items: &Items, n: usize) -> Pkm {
     let k = (n as f32).sqrt().ceil() as usize;
     let half = D / 2;
     let stride = (n / k).max(1);
-    let bank1: Vec<Vec<f32>> =
-        (0..k).map(|i| items.keys[(i * stride) % n][..half].to_vec()).collect();
-    let bank2: Vec<Vec<f32>> =
-        (0..k).map(|i| items.keys[(i * stride) % n][half..].to_vec()).collect();
-    let mut pkm = Pkm { bank1, bank2, values: vec![0.0; k * k * D_V], k2: k };
+    let bank1: Vec<Vec<f32>> = (0..k)
+        .map(|i| items.keys[(i * stride) % n][..half].to_vec())
+        .collect();
+    let bank2: Vec<Vec<f32>> = (0..k)
+        .map(|i| items.keys[(i * stride) % n][half..].to_vec())
+        .collect();
+    let mut pkm = Pkm {
+        bank1,
+        bank2,
+        values: vec![0.0; k * k * D_V],
+        k2: k,
+    };
     for (i, key) in items.keys.iter().enumerate() {
         let c1 = argmax_dot(&pkm.bank1, &key[..half]);
         let c2 = argmax_dot(&pkm.bank2, &key[half..]);
@@ -476,7 +525,10 @@ fn build_engram(items: &Items, n: usize) -> EngramArm {
     for (key, marker) in items.keys.iter().zip(items.markers.iter()) {
         table.add_pattern(EngramHash(key_hash(key)), marker);
     }
-    EngramArm { table: table.build(), slots: vec![0.0; K_MAX * D_V] }
+    EngramArm {
+        table: table.build(),
+        slots: vec![0.0; K_MAX * D_V],
+    }
 }
 
 impl EngramArm {

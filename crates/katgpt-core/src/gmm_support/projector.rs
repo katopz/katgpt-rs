@@ -66,7 +66,10 @@ impl<const D: usize, const E: usize> JlProjector<D, E> {
     /// both carries generics and hard-errors): `E >= 32` (the Issue 139
     /// law) and `D > 0`. Instantiating the projector with a violating shape
     /// is a COMPILE error, not a runtime surprise.
-    const SHAPE_GUARD: () = assert!(E >= MIN_E && D > 0, "JlProjector requires E >= 32 (Issue 139) and D > 0");
+    const SHAPE_GUARD: () = assert!(
+        E >= MIN_E && D > 0,
+        "JlProjector requires E >= 32 (Issue 139) and D > 0"
+    );
 
     /// Generate from `seed`. Deterministic: the packed sign words are the
     /// SplitMix64 stream read row-major.

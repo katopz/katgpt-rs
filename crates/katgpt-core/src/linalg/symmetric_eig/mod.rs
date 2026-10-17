@@ -98,7 +98,14 @@ fn refuse_non_finite_input(a: &[f64], n: usize) {
 }
 
 /// Loud refusal on a non-finite intermediate produced mid-solve.
-fn refuse_non_finite_intermediate(what: &str, d: &[f64], e: &[f64], n: usize, l: usize, iter: usize) {
+fn refuse_non_finite_intermediate(
+    what: &str,
+    d: &[f64],
+    e: &[f64],
+    n: usize,
+    l: usize,
+    iter: usize,
+) {
     for k in l..n {
         if !d[k].is_finite() {
             panic!(

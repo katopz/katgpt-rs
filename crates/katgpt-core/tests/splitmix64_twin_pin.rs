@@ -27,7 +27,14 @@ use katgpt_core::types::rng::SplitMix64 as TypesSplitMix64;
 /// on the FIRST draw, so the loop length is cheap insurance, not the gate.
 #[test]
 fn splitmix64_twin_streams_bit_identical() {
-    for seed in [0u64, 1, 42, 0xDEAD_BEEF_CAFE_F00D, u64::MAX / 2 + 1, u64::MAX] {
+    for seed in [
+        0u64,
+        1,
+        42,
+        0xDEAD_BEEF_CAFE_F00D,
+        u64::MAX / 2 + 1,
+        u64::MAX,
+    ] {
         let mut home = TypesSplitMix64::new(seed);
         let mut twin = AssignSplitMix64::new(seed);
         for i in 0..10_000u32 {

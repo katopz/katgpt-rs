@@ -76,7 +76,8 @@ pub fn ternary_group_q8_rows_scalar(
             for c in g * GROUP_SIZE..(g + 1) * GROUP_SIZE {
                 let idx = r * w.blocks64 + (c >> 6);
                 let bit = 1u64 << (c & 63);
-                let s = ((w.pos_bits[idx] & bit) != 0) as i32 - ((w.neg_bits[idx] & bit) != 0) as i32;
+                let s =
+                    ((w.pos_bits[idx] & bit) != 0) as i32 - ((w.neg_bits[idx] & bit) != 0) as i32;
                 isum += s * xq[c] as i32;
             }
             let scale = w.group_scale[r * w.groups_per_row + g].to_f32() * xs[g];
@@ -144,7 +145,10 @@ unsafe fn neon_q8_row_range(
                         acc[k] = vdotq_s32(acc[k], sign, vld1q_s8(xb.add(16 * k)));
                     }
                 }
-                let isum = vaddvq_s32(vaddq_s32(vaddq_s32(acc[0], acc[1]), vaddq_s32(acc[2], acc[3])));
+                let isum = vaddvq_s32(vaddq_s32(
+                    vaddq_s32(acc[0], acc[1]),
+                    vaddq_s32(acc[2], acc[3]),
+                ));
                 let scale = (*scales.add(g)).to_f32() * xs[g];
                 row_sum += scale * isum as f32;
             }
@@ -202,8 +206,14 @@ unsafe fn avx2_q8_row_range(
                 for k in 0..GROUP_SIZE / 32 {
                     let wi = g * (GROUP_SIZE / 32) + k;
                     // Little-endian: u32 word wi of the plane = cols 32wi..32wi+32.
-                    let pw = _mm256_shuffle_epi8(_mm256_set1_epi32(pos.add(wi).read_unaligned() as i32), shuf);
-                    let nw = _mm256_shuffle_epi8(_mm256_set1_epi32(neg.add(wi).read_unaligned() as i32), shuf);
+                    let pw = _mm256_shuffle_epi8(
+                        _mm256_set1_epi32(pos.add(wi).read_unaligned() as i32),
+                        shuf,
+                    );
+                    let nw = _mm256_shuffle_epi8(
+                        _mm256_set1_epi32(neg.add(wi).read_unaligned() as i32),
+                        shuf,
+                    );
                     let pm = _mm256_cmpeq_epi8(_mm256_and_si256(pw, bit), bit);
                     let nm = _mm256_cmpeq_epi8(_mm256_and_si256(nw, bit), bit);
                     // mask lanes are -1 where set: neg − pos = +1 pos, −1 neg.
@@ -213,7 +223,10 @@ unsafe fn avx2_q8_row_range(
                     acc16 = _mm256_add_epi16(acc16, _mm256_maddubs_epi16(ones_u8, sx));
                 }
                 let acc32 = _mm256_madd_epi16(acc16, ones_i16);
-                let s128 = _mm_add_epi32(_mm256_castsi256_si128(acc32), _mm256_extracti128_si256::<1>(acc32));
+                let s128 = _mm_add_epi32(
+                    _mm256_castsi256_si128(acc32),
+                    _mm256_extracti128_si256::<1>(acc32),
+                );
                 let s64 = _mm_add_epi32(s128, _mm_unpackhi_epi64(s128, s128));
                 let s32 = _mm_add_epi32(s64, _mm_shuffle_epi32::<0b01>(s64));
                 let isum = _mm_cvtsi128_si32(s32);
@@ -299,7 +312,9 @@ pub fn simd_ternary_group_matvec_q8_parallel(w: &TernaryGroupWeights, x: &[f32],
             return;
         }
         #[cfg(feature = "decode_spin_pool")]
-        if super::spin_pool::spin_row_chunks(y, super::PAR_MATVEC_CHUNK_ROWS, &|c, row0| q8_row_range(w, xq, xs, c, row0)) {
+        if super::spin_pool::spin_row_chunks(y, super::PAR_MATVEC_CHUNK_ROWS, &|c, row0| {
+            q8_row_range(w, xq, xs, c, row0)
+        }) {
             return;
         }
         let chunk = super::par_matvec_chunk(w.rows);
@@ -348,7 +363,6 @@ mod tests {
             .collect()
     }
 
-
     /// Issue 936: the spin-pool arm is the rayon arm, bit-for-bit.
     #[cfg(feature = "decode_spin_pool")]
     #[test]
@@ -356,12 +370,21 @@ mod tests {
         let pool = crate::simd::spin_pool::SpinPool::new(3);
         for &(rows, cols) in &[(300, 256), (1025, 384)] {
             let w = fixture(rows, cols, 0x936 ^ rows as u64);
-            let x: Vec<f32> = (0..cols).map(|i| ((i * 37) % 101) as f32 * 0.01 - 0.5).collect();
+            let x: Vec<f32> = (0..cols)
+                .map(|i| ((i * 37) % 101) as f32 * 0.01 - 0.5)
+                .collect();
             let mut want = vec![0.0f32; rows];
             simd_ternary_group_matvec_q8_parallel(&w, &x, &mut want);
             let mut got = vec![f32::NAN; rows];
-            crate::simd::spin_pool::with_spin_pool(&pool, || simd_ternary_group_matvec_q8_parallel(&w, &x, &mut got));
-            assert!(got.iter().zip(&want).all(|(a, b)| a.to_bits() == b.to_bits()), "{rows}x{cols}");
+            crate::simd::spin_pool::with_spin_pool(&pool, || {
+                simd_ternary_group_matvec_q8_parallel(&w, &x, &mut got)
+            });
+            assert!(
+                got.iter()
+                    .zip(&want)
+                    .all(|(a, b)| a.to_bits() == b.to_bits()),
+                "{rows}x{cols}"
+            );
         }
     }
     #[test]
@@ -374,7 +397,11 @@ mod tests {
         for c in 0..512 {
             let g = c / GROUP_SIZE;
             let err = (xq[c] as f32 * xs[g] - x[c]).abs();
-            assert!(err <= 0.5 * xs[g] + 1e-6, "col {c}: err {err} > half step {}", xs[g]);
+            assert!(
+                err <= 0.5 * xs[g] + 1e-6,
+                "col {c}: err {err} > half step {}",
+                xs[g]
+            );
         }
         // The group max hits ±127 exactly.
         assert!(xq[..GROUP_SIZE].iter().any(|&q| q.unsigned_abs() == 127));
@@ -427,7 +454,9 @@ mod tests {
             }
         }
         // x = ±1 alternating by row parity of the sign → every xq = ±127.
-        let x: Vec<f32> = (0..cols).map(|c| if (c / 7) % 2 == 0 { 1.0 } else { -1.0 }).collect();
+        let x: Vec<f32> = (0..cols)
+            .map(|c| if (c / 7) % 2 == 0 { 1.0 } else { -1.0 })
+            .collect();
         let mut xq = vec![0i8; cols];
         let mut xs = vec![0.0f32; cols / GROUP_SIZE];
         quantize_activations_q8(&x, &mut xq, &mut xs);
@@ -440,7 +469,12 @@ mod tests {
         simd_ternary_group_matvec(&w, &x, &mut y_f32);
         for r in 0..rows {
             // ±1 activations quantize exactly, so every arm agrees with f32 too.
-            assert!((y[r] - y_f32[r]).abs() <= 1e-3, "row {r}: {} vs f32 {}", y[r], y_f32[r]);
+            assert!(
+                (y[r] - y_f32[r]).abs() <= 1e-3,
+                "row {r}: {} vs f32 {}",
+                y[r],
+                y_f32[r]
+            );
             if q8_fast_path_available() {
                 assert_eq!(y[r].to_bits(), y_ref[r].to_bits(), "row {r}");
             }

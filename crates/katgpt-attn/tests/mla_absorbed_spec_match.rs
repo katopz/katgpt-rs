@@ -59,9 +59,21 @@ fn run_pair(
     let mut abs_last = Vec::new();
     let mut max_pair_diff = 0.0f32;
     for h in tokens {
-        let out_recon = mla_forward_token(config, weights, &mut cache_a, &mut scratch_a, &mut rope_a, h);
+        let out_recon = mla_forward_token(
+            config,
+            weights,
+            &mut cache_a,
+            &mut scratch_a,
+            &mut rope_a,
+            h,
+        );
         let out_abs = mla_forward_token_absorbed(
-            config, weights, &mut cache_b, &mut scratch_b, &mut rope_b, h,
+            config,
+            weights,
+            &mut cache_b,
+            &mut scratch_b,
+            &mut rope_b,
+            h,
         );
         let step_diff = out_recon
             .iter()
@@ -75,7 +87,13 @@ fn run_pair(
     (recon_last, abs_last, vec![max_pair_diff])
 }
 
-fn assert_pair(config: &MlaConfig, weights: &MlaWeights, tokens: &[Vec<f32>], tol: f32, label: &str) {
+fn assert_pair(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    tokens: &[Vec<f32>],
+    tol: f32,
+    label: &str,
+) {
     let (recon, abs, diffs) = run_pair(config, weights, tokens);
     let max_diff = diffs[0];
     assert!(

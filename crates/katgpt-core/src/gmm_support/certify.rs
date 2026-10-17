@@ -144,8 +144,16 @@ impl LinearDiscriminatorGate {
             *wi = (*wi as f64 * inv) as f32;
         }
         // Bias: midpoint of the class-mean projections.
-        let bias_a: f32 = w.iter().zip(mean_a.iter()).map(|(&wi, &m)| wi * m as f32).sum();
-        let bias_b: f32 = w.iter().zip(mean_b.iter()).map(|(&wi, &m)| wi * m as f32).sum();
+        let bias_a: f32 = w
+            .iter()
+            .zip(mean_a.iter())
+            .map(|(&wi, &m)| wi * m as f32)
+            .sum();
+        let bias_b: f32 = w
+            .iter()
+            .zip(mean_b.iter())
+            .map(|(&wi, &m)| wi * m as f32)
+            .sum();
         Ok(Self {
             w,
             bias: 0.5 * (bias_a + bias_b),

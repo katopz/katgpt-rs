@@ -89,7 +89,11 @@ mod tests {
         let omega = 0.5f32;
         let mut out = z.to_vec();
         affine_combine(&mut out, &k, 1.0 + omega);
-        let want: Vec<f32> = z.iter().zip(k.iter()).map(|(&a, &b)| a + omega * (a - b)).collect();
+        let want: Vec<f32> = z
+            .iter()
+            .zip(k.iter())
+            .map(|(&a, &b)| a + omega * (a - b))
+            .collect();
         assert_eq!(out, want);
     }
 

@@ -81,12 +81,26 @@ fn run_pair(
     let mut max_pair_diff = 0.0f32;
     for (step, h) in tokens.iter().enumerate() {
         let out_recon = mla_forward_token_flashmemory_reconstruct(
-            config, weights, &mut cache_a, &mut scratch_a, &mut rope_a, h,
-            &mut block_cache_a, &mut selector_a, step,
+            config,
+            weights,
+            &mut cache_a,
+            &mut scratch_a,
+            &mut rope_a,
+            h,
+            &mut block_cache_a,
+            &mut selector_a,
+            step,
         );
         let out_abs = mla_forward_token_flashmemory_absorbed(
-            config, weights, &mut cache_b, &mut scratch_b, &mut rope_b, h,
-            &mut block_cache_b, &mut selector_b, step,
+            config,
+            weights,
+            &mut cache_b,
+            &mut scratch_b,
+            &mut rope_b,
+            h,
+            &mut block_cache_b,
+            &mut selector_b,
+            step,
         );
         let step_diff = out_recon
             .iter()
@@ -151,7 +165,14 @@ fn g1_fm_absorbed_single_token_zero_position() {
         threshold: 0.3,
     };
     let tokens = token_seq(&config, 1, 1);
-    assert_pair(&config, &fm_config, &weights, &tokens, 1e-4, "pos=0 single token");
+    assert_pair(
+        &config,
+        &fm_config,
+        &weights,
+        &tokens,
+        1e-4,
+        "pos=0 single token",
+    );
 }
 
 #[test]
@@ -167,7 +188,14 @@ fn g1_fm_absorbed_multi_block_selection() {
         threshold: 0.3,
     };
     let tokens = token_seq(&config, 24, 2);
-    assert_pair(&config, &fm_config, &weights, &tokens, 1e-4, "multi-block selection");
+    assert_pair(
+        &config,
+        &fm_config,
+        &weights,
+        &tokens,
+        1e-4,
+        "multi-block selection",
+    );
 }
 
 #[test]
@@ -183,7 +211,14 @@ fn g1_fm_absorbed_fallback_recent_block() {
         threshold: 0.999,
     };
     let tokens = token_seq(&config, 12, 3);
-    assert_pair(&config, &fm_config, &weights, &tokens, 1e-4, "fallback recent block");
+    assert_pair(
+        &config,
+        &fm_config,
+        &weights,
+        &tokens,
+        1e-4,
+        "fallback recent block",
+    );
 }
 
 #[test]
@@ -199,7 +234,14 @@ fn g1_fm_absorbed_periodic_refresh_cached_selection() {
         threshold: 0.5,
     };
     let tokens = token_seq(&config, 12, 4);
-    assert_pair(&config, &fm_config, &weights, &tokens, 1e-4, "periodic refresh cached selection");
+    assert_pair(
+        &config,
+        &fm_config,
+        &weights,
+        &tokens,
+        1e-4,
+        "periodic refresh cached selection",
+    );
 }
 
 #[test]
@@ -245,7 +287,14 @@ fn g1_fm_absorbed_kimi_k3_0_40b_full_dims() {
         threshold: 0.3,
     };
     let tokens = token_seq(&config, 4, 7);
-    assert_pair(&config, &fm_config, &weights, &tokens, 1e-3, "kimi full dims");
+    assert_pair(
+        &config,
+        &fm_config,
+        &weights,
+        &tokens,
+        1e-3,
+        "kimi full dims",
+    );
 }
 
 #[test]
@@ -261,5 +310,12 @@ fn g1_fm_absorbed_longer_sequence_small_config() {
         threshold: 0.4,
     };
     let tokens = token_seq(&config, 64, 8);
-    assert_pair(&config, &fm_config, &weights, &tokens, 1e-4, "64-token rollout");
+    assert_pair(
+        &config,
+        &fm_config,
+        &weights,
+        &tokens,
+        1e-4,
+        "64-token rollout",
+    );
 }

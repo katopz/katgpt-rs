@@ -76,8 +76,8 @@ use std::time::Instant;
 
 use katgpt_attn::dash_attn::block_topk::argtopk_with_scratch;
 use katgpt_attn::dash_attn::pyramid_topk::{
-    coarse_to_fine_select, PyramidKeyHierarchy, PyramidLevels, PyramidScoreMode, PyramidScorer,
-    PyramidScratch, FORCED_LEAF_SLOTS, PYRAMID_BLOCK_SIZE,
+    FORCED_LEAF_SLOTS, PYRAMID_BLOCK_SIZE, PyramidKeyHierarchy, PyramidLevels, PyramidScoreMode,
+    PyramidScorer, PyramidScratch, coarse_to_fine_select,
 };
 
 const TOP_K: usize = 8;
@@ -111,11 +111,12 @@ fn read_u32(path: &Path) -> Vec<u32> {
 }
 
 fn verify_blake3(path: &Path, expected: &str) {
-    let bytes = fs::read(path)
-        .unwrap_or_else(|e| panic!("read {} for BLAKE3 verify: {e}", path.display()));
+    let bytes =
+        fs::read(path).unwrap_or_else(|e| panic!("read {} for BLAKE3 verify: {e}", path.display()));
     let got = blake3::hash(&bytes).to_hex().to_string();
     assert_eq!(
-        got, expected,
+        got,
+        expected,
         "BLAKE3 mismatch for {} — fixture corruption",
         path.display()
     );
@@ -123,7 +124,9 @@ fn verify_blake3(path: &Path, expected: &str) {
 
 /// Map a manifest-relative path ("commit/x" / "full/x") onto a real dir.
 fn resolve(rel: &str, full_dir: Option<&Path>) -> PathBuf {
-    let name = rel.trim_start_matches("commit/").trim_start_matches("full/");
+    let name = rel
+        .trim_start_matches("commit/")
+        .trim_start_matches("full/");
     match rel.split('/').next() {
         Some("full") => {
             let dir = full_dir.unwrap_or_else(|| {
@@ -168,7 +171,12 @@ fn load_k_bins(m: &serde_json::Value, full_dir: Option<&Path>, use_full: bool) -
             let data = read_f32(&path);
             let row_len = e["row_len_f32"].as_u64().unwrap() as usize;
             let rows = e["rows"].as_u64().unwrap() as usize;
-            assert_eq!(data.len(), rows * row_len, "bin shape for {}", path.display());
+            assert_eq!(
+                data.len(),
+                rows * row_len,
+                "bin shape for {}",
+                path.display()
+            );
             let positions = if use_full {
                 None
             } else {
@@ -408,7 +416,12 @@ fn eval_family(
     // m-block selection is the top-m mass — the theorem, stated exactly).
     let mut truth_idx = Vec::new();
     let mut truth_pairs = Vec::new();
-    argtopk_with_scratch(&block_mass, TOP_K.min(n_leaves), &mut truth_idx, &mut truth_pairs);
+    argtopk_with_scratch(
+        &block_mass,
+        TOP_K.min(n_leaves),
+        &mut truth_idx,
+        &mut truth_pairs,
+    );
     let truth: Vec<usize> = truth_idx.to_vec();
     let mut mass_desc = block_mass.clone();
     mass_desc.sort_by(|a, b| b.partial_cmp(a).unwrap());
@@ -434,7 +447,10 @@ fn eval_family(
         (3, PyramidScoreMode::MeanPlusHalfVar),
         (4, PyramidScoreMode::ExactLse),
     ] {
-        let scorer = PyramidScorer { mode, scale: ctx.scale };
+        let scorer = PyramidScorer {
+            mode,
+            scale: ctx.scale,
+        };
         let heads: Vec<&[f32]> = (0..group)
             .map(|h| &qmat.data[(q0 + h) * d..(q0 + h + 1) * d])
             .collect();
@@ -445,9 +461,15 @@ fn eval_family(
             out.len() <= TOP_K + FORCED_LEAF_SLOTS,
             "pyramid output shape: {out:?}"
         );
-        assert!(out.windows(2).all(|w| w[0] < w[1]), "sorted+deduped: {out:?}");
+        assert!(
+            out.windows(2).all(|w| w[0] < w[1]),
+            "sorted+deduped: {out:?}"
+        );
         for &f in &forced {
-            assert!(out.contains(&f), "forced leaf {f} missing from pyramid {out:?}");
+            assert!(
+                out.contains(&f),
+                "forced leaf {f} missing from pyramid {out:?}"
+            );
         }
         selections[slot] = out;
     }
@@ -516,7 +538,11 @@ fn run_quality(use_full: bool) -> Vec<FamilyOutcome> {
     let fd = full_dir();
     let fd = if use_full {
         let d = fd.unwrap_or_else(|| panic!("PYRAMID_612_FULL_DIR not set"));
-        assert!(d.is_dir(), "PYRAMID_612_FULL_DIR={} is not a dir", d.display());
+        assert!(
+            d.is_dir(),
+            "PYRAMID_612_FULL_DIR={} is not a dir",
+            d.display()
+        );
         Some(d)
     } else {
         None
@@ -546,7 +572,13 @@ fn run_quality(use_full: bool) -> Vec<FamilyOutcome> {
                 .iter()
                 .find(|q| q.layer == kbin.layer && q.position == p)
                 .unwrap_or_else(|| panic!("no Q bin for layer {} pos {p}", kbin.layer));
-            let mut ctx = EvalCtx { head_dim, n_kv_head, n_head, scale, storage: &mut storage };
+            let mut ctx = EvalCtx {
+                head_dim,
+                n_kv_head,
+                n_head,
+                scale,
+                storage: &mut storage,
+            };
             out.push(eval_family(&mut ctx, kbin, prefix, qmat, prefix - 1));
         }
     }
@@ -563,7 +595,9 @@ fn print_report(families: &[FamilyOutcome], source: &str) {
         }
     }
     keys.sort_unstable();
-    println!("\n[612] == G1 quality ({source}) — mean recall@{TOP_K}/mass-ratio per group (non-trivial families) ==");
+    println!(
+        "\n[612] == G1 quality ({source}) — mean recall@{TOP_K}/mass-ratio per group (non-trivial families) =="
+    );
     let header = ARMS
         .iter()
         .map(|a| format!("{:>11}", a.label()))
@@ -573,7 +607,9 @@ fn print_report(families: &[FamilyOutcome], source: &str) {
     for (l, h, len) in &keys {
         let grp: Vec<&FamilyOutcome> = families
             .iter()
-            .filter(|f| f.layer == *l && f.head == *h && f.length == *len && f.n_leaves >= MIN_LEAVES)
+            .filter(|f| {
+                f.layer == *l && f.head == *h && f.length == *len && f.n_leaves >= MIN_LEAVES
+            })
             .collect();
         if grp.is_empty() {
             continue;
@@ -581,19 +617,38 @@ fn print_report(families: &[FamilyOutcome], source: &str) {
         let cells: Vec<String> = (0..5)
             .map(|slot| {
                 let r: f32 = grp.iter().map(|f| f.recall[slot]).sum::<f32>() / grp.len() as f32;
-                let mr: f32 = grp.iter().map(|f| f.mass_ratio[slot]).sum::<f32>() / grp.len() as f32;
+                let mr: f32 =
+                    grp.iter().map(|f| f.mass_ratio[slot]).sum::<f32>() / grp.len() as f32;
                 format!("{:5.3}/{:5.3}", r, mr)
             })
             .collect();
-        println!("[612] {:>4}/{:>2}/{:>5} | {} | {}", l, h, len, cells.join(" "), grp.len());
+        println!(
+            "[612] {:>4}/{:>2}/{:>5} | {} | {}",
+            l,
+            h,
+            len,
+            cells.join(" "),
+            grp.len()
+        );
     }
-    let nt: Vec<&FamilyOutcome> = families.iter().filter(|f| f.n_leaves >= MIN_LEAVES).collect();
+    let nt: Vec<&FamilyOutcome> = families
+        .iter()
+        .filter(|f| f.n_leaves >= MIN_LEAVES)
+        .collect();
     if !nt.is_empty() {
-        println!("[612] overall over {} non-trivial families (leaves >= {MIN_LEAVES}):", nt.len());
+        println!(
+            "[612] overall over {} non-trivial families (leaves >= {MIN_LEAVES}):",
+            nt.len()
+        );
         for (slot, arm) in ARMS.iter().enumerate() {
             let r: f32 = nt.iter().map(|f| f.recall[slot]).sum::<f32>() / nt.len() as f32;
             let mr: f32 = nt.iter().map(|f| f.mass_ratio[slot]).sum::<f32>() / nt.len() as f32;
-            println!("[612]   {:>15} recall {:6.4}  mass-ratio {:6.4}", arm.label(), r, mr);
+            println!(
+                "[612]   {:>15} recall {:6.4}  mass-ratio {:6.4}",
+                arm.label(),
+                r,
+                mr
+            );
         }
         let diffs: Vec<f32> = nt.iter().map(|f| f.recall[4] - f.recall[1]).collect();
         let mean = diffs.iter().sum::<f32>() / diffs.len() as f32;
@@ -619,11 +674,16 @@ fn g1_quality_committed_real_tensors() {
 #[test]
 fn g1_quality_full_set_and_iso_quality_bar() {
     if full_dir().is_none() {
-        println!("[612] SKIP-LOUD: PYRAMID_612_FULL_DIR unset — the true-length quality axis and the 32K+ iso-quality bar are DEFERRED (committed-subset quality ran in its own test)");
+        println!(
+            "[612] SKIP-LOUD: PYRAMID_612_FULL_DIR unset — the true-length quality axis and the 32K+ iso-quality bar are DEFERRED (committed-subset quality ran in its own test)"
+        );
         return;
     }
     let families = run_quality(true);
-    assert!(!families.is_empty(), "full set configured but empty — a loader defect");
+    assert!(
+        !families.is_empty(),
+        "full set configured but empty — a loader defect"
+    );
     print_report(&families, "full");
 
     let nt: Vec<&FamilyOutcome> = families
@@ -654,7 +714,9 @@ fn g1_quality_full_set_and_iso_quality_bar() {
         nt.len()
     );
     if verdict == "FAIL" {
-        println!("[612]   documented negative: the walk's per-level K=8 pruning loses more recall than the exact scan as depth grows — feature stays opt-in, no promotion (Bench 612)");
+        println!(
+            "[612]   documented negative: the walk's per-level K=8 pruning loses more recall than the exact scan as depth grows — feature stays opt-in, no promotion (Bench 612)"
+        );
     }
 }
 
@@ -668,18 +730,26 @@ type LatRow = (usize, f64, f64, f64);
 fn median(v: &mut [f64]) -> f64 {
     v.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let n = v.len();
-    if n % 2 == 1 { v[n / 2] } else { (v[n / 2 - 1] + v[n / 2]) / 2.0 }
+    if n % 2 == 1 {
+        v[n / 2]
+    } else {
+        (v[n / 2 - 1] + v[n / 2]) / 2.0
+    }
 }
 
 #[test]
 fn g2_latency_slope_and_crossover() {
     if full_dir().is_none() {
-        println!("[612] SKIP-LOUD: PYRAMID_612_FULL_DIR unset — the latency-slope axis is DEFERRED (needs true-length tensors)");
+        println!(
+            "[612] SKIP-LOUD: PYRAMID_612_FULL_DIR unset — the latency-slope axis is DEFERRED (needs true-length tensors)"
+        );
         return;
     }
     let release = cfg!(not(debug_assertions));
     if !release {
-        println!("[612] debug build: latency REPORT-ONLY — asserts are release-gated (a latency gate in debug measures an unoptimized binary)");
+        println!(
+            "[612] debug build: latency REPORT-ONLY — asserts are release-gated (a latency gate in debug measures an unoptimized binary)"
+        );
     }
 
     let m = manifest();
@@ -702,9 +772,7 @@ fn g2_latency_slope_and_crossover() {
             .iter()
             .find(|q| q.layer == 3 && q.position == p_last)
             .expect("deepest q position exists");
-        let heads: Vec<&[f32]> = (0..group)
-            .map(|h| &qmat.data[h * d..(h + 1) * d])
-            .collect();
+        let heads: Vec<&[f32]> = (0..group).map(|h| &qmat.data[h * d..(h + 1) * d]).collect();
         // Precomputed group-summed query (the quality path folds it inside
         // the selector; the scan arms need the same vector by hand).
         let mut u = vec![0.0f32; d];
@@ -717,7 +785,10 @@ fn g2_latency_slope_and_crossover() {
         let mut storage = vec![0.0f32; PyramidKeyHierarchy::required_len(prefix, d) + 8];
         let hier = PyramidKeyHierarchy::build(keys, prefix, d, &mut storage);
         let mut scratch = PyramidScratch::new();
-        let scorer = PyramidScorer { mode: PyramidScoreMode::ExactLse, scale };
+        let scorer = PyramidScorer {
+            mode: PyramidScoreMode::ExactLse,
+            scale,
+        };
         let n_leaves = prefix.div_ceil(PYRAMID_BLOCK_SIZE);
         let leaf_means = hier.level_rows(0).to_vec();
 
@@ -731,7 +802,9 @@ fn g2_latency_slope_and_crossover() {
         for r in 0..reps + warm {
             // pyramid arm
             let t0 = Instant::now();
-            blackhole += coarse_to_fine_select(&hier, keys, &heads, p_last, TOP_K, scorer, &mut scratch) as f32;
+            blackhole +=
+                coarse_to_fine_select(&hier, keys, &heads, p_last, TOP_K, scorer, &mut scratch)
+                    as f32;
             let t1 = Instant::now();
 
             // single_lse arm: full scan — exact LSE per leaf over every key.
@@ -784,7 +857,10 @@ fn g2_latency_slope_and_crossover() {
         "\n[612] == G2 per-query selection latency (µs, median of {} reps, release={release}) ==",
         if release { 30 } else { 5 }
     );
-    println!("[612] {:>7} {:>12} {:>12} {:>12}", "N", "pyramid_lse", "single_lse", "single_mean");
+    println!(
+        "[612] {:>7} {:>12} {:>12} {:>12}",
+        "N", "pyramid_lse", "single_lse", "single_mean"
+    );
     for (n, p, sl, sm) in &rows {
         println!("[612] {n:>7} {p:>12.1} {sl:>12.1} {sm:>12.1}");
     }
@@ -796,7 +872,11 @@ fn g2_latency_slope_and_crossover() {
         let n = xs.len() as f64;
         let mx = xs.iter().sum::<f64>() / n;
         let my = ys.iter().sum::<f64>() / n;
-        let sxy = xs.iter().zip(ys.iter()).map(|(x, y)| (x - mx) * (y - my)).sum::<f64>();
+        let sxy = xs
+            .iter()
+            .zip(ys.iter())
+            .map(|(x, y)| (x - mx) * (y - my))
+            .sum::<f64>();
         let sxx = xs.iter().map(|x| (x - mx) * (x - mx)).sum::<f64>();
         sxy / sxx
     };
@@ -807,7 +887,10 @@ fn g2_latency_slope_and_crossover() {
         "[612] aggregate slope (t_query × N vs N, log-log): pyramid_lse {slope_p:.2}  single_lse {slope_sl:.2}  single_mean {slope_sm:.2} (claim: pyramid ≈ 1 vs single ≈ 2)"
     );
     if let Some(&(nmax, p, sl, _)) = rows.last() {
-        println!("[612] at N={nmax}: pyramid_lse {p:.1}µs vs single_lse {sl:.1}µs ({:.2}×)", sl / p);
+        println!(
+            "[612] at N={nmax}: pyramid_lse {p:.1}µs vs single_lse {sl:.1}µs ({:.2}×)",
+            sl / p
+        );
         if release {
             assert!(
                 p < sl,
@@ -842,15 +925,27 @@ fn t25_canary_position_zero_degenerate() {
     let kbin = kbins.iter().find(|k| k.layer == 3 && k.head == 0).unwrap();
     let qmat = qs.iter().find(|q| q.layer == 3 && q.position == 0).unwrap();
     let mut storage = vec![0.0f32; PyramidKeyHierarchy::required_len(kbin.rows, head_dim) + 8];
-    let mut ctx = EvalCtx { head_dim, n_kv_head, n_head, scale, storage: &mut storage };
+    let mut ctx = EvalCtx {
+        head_dim,
+        n_kv_head,
+        n_head,
+        scale,
+        storage: &mut storage,
+    };
     let out = eval_family(&mut ctx, kbin, 1, qmat, 0);
-    assert_eq!(out.n_leaves, 1, "position-0 family is the single-leaf degenerate");
+    assert_eq!(
+        out.n_leaves, 1,
+        "position-0 family is the single-leaf degenerate"
+    );
     for (slot, arm) in ARMS.iter().enumerate() {
         assert_eq!(
-            out.recall[slot], 1.0,
+            out.recall[slot],
+            1.0,
             "{} must select the only leaf in the degenerate family",
             arm.label()
         );
     }
-    println!("[612] T2.5 canary: position-0 real-tensor family — all arms select exactly [0] (N<=C contract on live data)");
+    println!(
+        "[612] T2.5 canary: position-0 real-tensor family — all arms select exactly [0] (N<=C contract on live data)"
+    );
 }

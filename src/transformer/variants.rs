@@ -222,8 +222,7 @@ pub fn forward_looped<'a>(
     // strong−weak contrast to whichever prediction is FINALLY decoded
     // (exit-iteration or loop-R) — the exit family above operates on
     // UNGUIDED per-iteration readouts and composes with this.
-    #[cfg(feature = "loop_guidance")]
-    guidance: Option<&mut super::loop_guidance::LoopGuidance>,
+    #[cfg(feature = "loop_guidance")] guidance: Option<&mut super::loop_guidance::LoopGuidance>,
     // Plan 617 T2.1/T2.2 — decision-level settle exit + loop-budget
     // accounting. `None` = bit-identical to pre-T2.1 behavior (the
     // `cadence_gate` precedent: the slot exists only when `loop_guidance`
@@ -233,8 +232,7 @@ pub fn forward_looped<'a>(
     // `argmax(z_τ)` has been stable for `settle_patience` evaluated
     // iterations after `d_min`. Evaluates LAST among the per-iteration
     // exits — cheap representation-space exits win same-iteration ties.
-    #[cfg(feature = "loop_guidance")]
-    settle_exit: Option<&mut super::loop_guidance::SettleExit>,
+    #[cfg(feature = "loop_guidance")] settle_exit: Option<&mut super::loop_guidance::SettleExit>,
 ) -> &'a mut [f32] {
     use crate::types::HybridPattern;
 

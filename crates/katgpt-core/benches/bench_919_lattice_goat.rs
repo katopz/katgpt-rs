@@ -52,8 +52,7 @@ use katgpt_core::lattice_memory::{BumpKernel, LatticeMemory, support_radius};
 // carries no allocator.
 #[cfg(any(debug_assertions, feature = "alloc_tracking"))]
 #[global_allocator]
-static BENCH_ALLOC: katgpt_core::alloc::TrackingAllocator =
-    katgpt_core::alloc::TrackingAllocator;
+static BENCH_ALLOC: katgpt_core::alloc::TrackingAllocator = katgpt_core::alloc::TrackingAllocator;
 
 /// Embedding / key width (d == d_k: the key IS the normalized embedding —
 /// the Spotlight semantic the near-miss gate needs).
@@ -93,9 +92,13 @@ fn main() {
     println!("bench_919_lattice_goat — Plan 619 T1.7/T1.8");
     println!(
         "box: {} cores · d={D} d_k={D} d_v={D_V} · queries={QUERIES} · window={WINDOW} · rounds={ROUNDS}",
-        std::thread::available_parallelism().map(|n| n.get()).unwrap_or(0),
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(0),
     );
-    println!("⚠ latency numbers are workstation readings (M3 Max, shared box) — quote them with a box-state caveat.\n");
+    println!(
+        "⚠ latency numbers are workstation readings (M3 Max, shared box) — quote them with a box-state caveat.\n"
+    );
 
     let mut results = Vec::new();
     for &n in N_POINTS.iter() {
@@ -154,7 +157,11 @@ fn main() {
             "FLOOR: NOT PROMOTED{} — record the negative (Plan 619 T1.7). \
              The support×capacity law caps the class: N_max ≈ 0.35·d_k·(3.76/R)² \
              = {} items at d_k={D}, R={DESIRED_R}σ.",
-            if !g5_win { " (G5 bar beyond this point's support)" } else { "" },
+            if !g5_win {
+                " (G5 bar beyond this point's support)"
+            } else {
+                ""
+            },
             (0.35 * D as f32 * (3.76 / DESIRED_R).powi(2)) as usize,
         );
     }
@@ -212,7 +219,11 @@ fn normalize(v: &mut [f32]) {
 }
 
 fn l2(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b.iter()).map(|(x, y)| (x - y) * (x - y)).sum::<f32>().sqrt()
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y) * (x - y))
+        .sum::<f32>()
+        .sqrt()
 }
 
 /// The deterministic marker window for query index `i` over `n` items.
@@ -256,7 +267,9 @@ fn lattice_read(lat: &LatticeMemory, q: &[f32], out: &mut [f32]) {
 /// is 5× beyond the support, which is exactly the tradeoff the floor
 /// verdict is here to measure.
 fn auto_radius(n: usize) -> f32 {
-    DESIRED_R.min((6.0 * LAMBDA_HEADROOM / n as f32).sqrt()).max(0.001)
+    DESIRED_R
+        .min((6.0 * LAMBDA_HEADROOM / n as f32).sqrt())
+        .max(0.001)
 }
 
 fn build_lattice(items: &Items, n: usize, kernel: BumpKernel) -> LatticeMemory {
@@ -308,11 +321,19 @@ fn build_pkm(items: &Items, n: usize) -> Pkm {
     let k = (n as f32).sqrt().ceil() as usize;
     let half = D / 2;
     let stride = (n / k).max(1);
-    let bank1: Vec<Vec<f32>> =
-        (0..k).map(|i| items.keys[(i * stride) % n][..half].to_vec()).collect();
-    let bank2: Vec<Vec<f32>> =
-        (0..k).map(|i| items.keys[(i * stride) % n][half..].to_vec()).collect();
-    let mut pkm = Pkm { bank1, bank2, values: vec![0.0; k * k * D_V], k1: k, k2: k };
+    let bank1: Vec<Vec<f32>> = (0..k)
+        .map(|i| items.keys[(i * stride) % n][..half].to_vec())
+        .collect();
+    let bank2: Vec<Vec<f32>> = (0..k)
+        .map(|i| items.keys[(i * stride) % n][half..].to_vec())
+        .collect();
+    let mut pkm = Pkm {
+        bank1,
+        bank2,
+        values: vec![0.0; k * k * D_V],
+        k1: k,
+        k2: k,
+    };
     for (i, key) in items.keys.iter().enumerate() {
         let c1 = argmax_dot(&pkm.bank1, &key[..half]);
         let c2 = argmax_dot(&pkm.bank2, &key[half..]);
@@ -359,7 +380,10 @@ fn build_engram(items: &Items, n: usize) -> EngramArm {
     for (key, marker) in items.keys.iter().zip(items.markers.iter()) {
         table.add_pattern(EngramHash(key_hash(key)), marker);
     }
-    EngramArm { table: table.build(), slots: vec![0.0; K_MAX * D_V] }
+    EngramArm {
+        table: table.build(),
+        slots: vec![0.0; K_MAX * D_V],
+    }
 }
 
 impl EngramArm {
@@ -460,7 +484,9 @@ fn run_point(n: usize) -> PointResult {
     // G2: interleaved best-of-arms read latency (absolute ns/op, min over
     // ROUNDS interleaved rounds — never a sequential ratio).
     let batch = QUERIES.min(n).max(1);
-    let pq: Vec<&[f32]> = (0..batch).map(|i| items.keys[(i * 7) % n].as_slice()).collect();
+    let pq: Vec<&[f32]> = (0..batch)
+        .map(|i| items.keys[(i * 7) % n].as_slice())
+        .collect();
     let mut best_lat = [u128::MAX; 3]; // lattice, pkm, engram
     for _ in 0..ROUNDS {
         let t = Instant::now();
@@ -575,9 +601,22 @@ fn g3_gate() {
         && old_dot < 0.5
         && far_dot > 0.2
         && far_dot > 5.0 * old_dot.max(1e-3);
-    println!("G3: {}", if pass { "PASS (≥ Engram + structural win)" } else { "FAIL" });
-    assert!(lattice_newest && engram_newest, "G3: newest-recall below Engram");
-    assert!(old_dot < 0.5, "G3: old value not forgotten along k₀ (dot {old_dot:.3})");
+    println!(
+        "G3: {}",
+        if pass {
+            "PASS (≥ Engram + structural win)"
+        } else {
+            "FAIL"
+        }
+    );
+    assert!(
+        lattice_newest && engram_newest,
+        "G3: newest-recall below Engram"
+    );
+    assert!(
+        old_dot < 0.5,
+        "G3: old value not forgotten along k₀ (dot {old_dot:.3})"
+    );
     // Retention is a CONTRAST: the far association reads at kernel scale
     // (≈ φ_primary ≈ 0.36 — the blend's ceiling) while the eroded k₀ reads
     // at noise scale; the absolute bar (0.2) plus the ≥5× contrast pin it.
@@ -658,15 +697,34 @@ fn near_miss_curves(label: &str, n: usize, kernel: BumpKernel) -> NearMiss {
         pkm_curve.push((eps, f(ph)));
     }
     let pick = |c: &[(f32, f32)], e: f32| {
-        c.iter().find(|(x, _)| (*x - e).abs() < 1e-6).map(|(_, r)| *r).unwrap_or(f32::NAN)
+        c.iter()
+            .find(|(x, _)| (*x - e).abs() < 1e-6)
+            .map(|(_, r)| *r)
+            .unwrap_or(f32::NAN)
     };
     println!(
         "{label} @N={n} ({} support {:.4}σ): lattice {} | engram {} | pkm {}",
-        if kernel == BumpKernel::Tent { "tent" } else { "cos²" },
+        if kernel == BumpKernel::Tent {
+            "tent"
+        } else {
+            "cos²"
+        },
         support,
-        lat_curve.iter().map(|(e, r)| format!("{e:.3}→{r:.3}")).collect::<Vec<_>>().join(" "),
-        eng_curve.iter().map(|(e, r)| format!("{e:.3}→{r:.3}")).collect::<Vec<_>>().join(" "),
-        pkm_curve.iter().map(|(e, r)| format!("{e:.3}→{r:.3}")).collect::<Vec<_>>().join(" "),
+        lat_curve
+            .iter()
+            .map(|(e, r)| format!("{e:.3}→{r:.3}"))
+            .collect::<Vec<_>>()
+            .join(" "),
+        eng_curve
+            .iter()
+            .map(|(e, r)| format!("{e:.3}→{r:.3}"))
+            .collect::<Vec<_>>()
+            .join(" "),
+        pkm_curve
+            .iter()
+            .map(|(e, r)| format!("{e:.3}→{r:.3}"))
+            .collect::<Vec<_>>()
+            .join(" "),
     );
     NearMiss {
         support,
@@ -699,7 +757,9 @@ fn t18_kernel_ab() {
     if a_cos2 > a_tent && exact_cos2 >= exact_tent - 1e-3 {
         println!("T1.8 VERDICT: Cos2 wins — promote BumpKernel::Cos2 to default (pin in types.rs)");
     } else {
-        println!("T1.8 VERDICT: Tent wins (or cos² failed the exact-recall floor) — default stays Tent, Cos2 stays selectable");
+        println!(
+            "T1.8 VERDICT: Tent wins (or cos² failed the exact-recall floor) — default stays Tent, Cos2 stays selectable"
+        );
     }
     assert!(
         exact_tent > 0.9,
@@ -726,11 +786,16 @@ fn g4_gate() {
         lattice_read(&lat, &items.keys[0], &mut out);
         // Precompute the normalized keys OUTSIDE the measured region — the
         // gate measures the PRIMITIVE's hot path, not the harness's.
-        let norm_keys: Vec<Vec<f32>> = items.keys.iter().take(2_000).map(|k| {
-            let mut kk = k.clone();
-            normalize(&mut kk);
-            kk
-        }).collect();
+        let norm_keys: Vec<Vec<f32>> = items
+            .keys
+            .iter()
+            .take(2_000)
+            .map(|k| {
+                let mut kk = k.clone();
+                normalize(&mut kk);
+                kk
+            })
+            .collect();
         katgpt_core::alloc::reset_alloc_stats();
         for (i, key) in items.keys.iter().enumerate().take(2_000) {
             lat.write_delta(key, &norm_keys[i], &items.markers[i], 1.0);

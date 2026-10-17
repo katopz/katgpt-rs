@@ -82,12 +82,12 @@
 
 use arrayvec::ArrayVec;
 use katgpt_core::two_fidelity_bai::{
-    two_fidelity_search, Cost, MinimaxSpace, NodeInterval, NodeKind, NodeStat, RngCore,
-    SearchConfig, TwoFidelityResult, MAX_CHILDREN, NODE_CAP,
+    Cost, MAX_CHILDREN, MinimaxSpace, NODE_CAP, NodeInterval, NodeKind, NodeStat, RngCore,
+    SearchConfig, TwoFidelityResult, two_fidelity_search,
 };
 use std::collections::HashMap;
 use std::io::Write as _;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 #[path = "../tests/common/mod.rs"]
 mod common;
@@ -153,8 +153,8 @@ struct BenchTree {
     vstar: Vec<f64>, // exact minimax values (ground truth; every node — also
     //                 the slow-oracle mean: leaves carry their drawn mean,
     //                 internals fold it up)
-    fast: Vec<f32>,  // fast-oracle values with the chosen adversarial sign
-    flipped: bool,   // did the adversarial sign flip the fast-only root pick?
+    fast: Vec<f32>, // fast-oracle values with the chosen adversarial sign
+    flipped: bool,  // did the adversarial sign flip the fast-only root pick?
     noise_amp: f32,
 }
 
@@ -240,7 +240,13 @@ impl BenchTree {
         }
         let kind: Vec<NodeKind> = level
             .iter()
-            .map(|&l| if l % 2 == 0 { NodeKind::Max } else { NodeKind::Min })
+            .map(|&l| {
+                if l % 2 == 0 {
+                    NodeKind::Max
+                } else {
+                    NodeKind::Min
+                }
+            })
             .collect();
         let mut rng = Xs(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(0x615));
         let mut mu = vec![0.0_f64; n];
@@ -599,7 +605,11 @@ impl<'a> LucbSearch<'a> {
             let mut best_key = self.endpoint_key(best, upper);
             for &k in kids.iter().skip(1) {
                 let key = self.endpoint_key(k, upper);
-                let improves = if want_max { key > best_key } else { key < best_key };
+                let improves = if want_max {
+                    key > best_key
+                } else {
+                    key < best_key
+                };
                 if improves || (key == best_key && k < best) {
                     best = k;
                     best_key = key;
@@ -625,8 +635,11 @@ impl<'a> LucbSearch<'a> {
     fn sample_leaf(&mut self, leaf: u32, path: &[u32], rng: &mut Xs) {
         let y = self.tree.slow_sample(leaf, rng);
         let (sigma, delta_v) = (SIGMA, self.delta_v());
-        self.nodes.get_mut(&leaf).expect("leaf revealed")
-            .interval.observe_slow(y, sigma, delta_v);
+        self.nodes
+            .get_mut(&leaf)
+            .expect("leaf revealed")
+            .interval
+            .observe_slow(y, sigma, delta_v);
         self.samples += 1;
         // Bottom-up Eq. 6 refresh along the sampled path only. Unrevealed
         // siblings contribute the neutral sentinel (−∞, +∞) — they widen the
@@ -643,8 +656,11 @@ impl<'a> LucbSearch<'a> {
                 let _ = pairs.try_push(pair);
             }
             if !pairs.is_empty() {
-                self.nodes.get_mut(&v).expect("path node")
-                    .interval.set_child_backup(kind, pairs.as_slice());
+                self.nodes
+                    .get_mut(&v)
+                    .expect("path node")
+                    .interval
+                    .set_child_backup(kind, pairs.as_slice());
             }
         }
     }
@@ -728,8 +744,7 @@ fn slow_only(tree: &BenchTree, rng: &mut Xs) -> (u32, u64) {
     let m = tree.starts[l_star + 1] - tree.starts[l_star];
     let delta_node = DELTA / m as f64;
     let half = f64::from(EPSILON) / 2.0;
-    let n_per = (2.0 * SIGMA * SIGMA * (2.0 * m as f64 / delta_node).ln()
-        / (half * half))
+    let n_per = (2.0 * SIGMA * SIGMA * (2.0 * m as f64 / delta_node).ln() / (half * half))
         .ceil()
         .max(1.0) as u64;
     let mut means = vec![0.0_f64; m];
@@ -827,7 +842,9 @@ fn run_2ffs_with(
         trace_nodes: std::env::var("B615_2FFS_TRACE").is_ok(),
         lazy_discharge,
     };
-    let mut rng = Xs(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(0xB10C));
+    let mut rng = Xs(seed
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        .wrapping_add(0xB10C));
     two_fidelity_search(tree, 0, &config, &mut rng)
 }
 
@@ -849,9 +866,7 @@ fn dump_2ffs_trace(results: &[TwoFidelityResult], d: u8, b: u8) {
             targets.push((st.target_width, st.slow_n));
         }
     }
-    eprintln!(
-        "      TRACE d{d}b{b}: {total_nodes} sampled nodes / {total_samples} slow samples"
-    );
+    eprintln!("      TRACE d{d}b{b}: {total_nodes} sampled nodes / {total_samples} slow samples");
     for (depth, (nodes, samples)) in &by_depth {
         eprintln!(
             "        depth {depth:>2}: {nodes:>5} nodes {samples:>8} samples ({}%)",
@@ -936,9 +951,7 @@ fn ln_gamma(z: f64) -> f64 {
         1.505_632_735_149_311_6e-7,
     ];
     if z < 0.5 {
-        std::f64::consts::PI.ln()
-            - (std::f64::consts::PI * z).sin().ln().abs()
-            - ln_gamma(1.0 - z)
+        std::f64::consts::PI.ln() - (std::f64::consts::PI * z).sin().ln().abs() - ln_gamma(1.0 - z)
     } else {
         let z = z - 1.0;
         let mut x = C[0];
@@ -1321,7 +1334,10 @@ fn main() {
     println!("║ Plan 615 Phase 2 — Two-Fidelity Certified BAI GOAT (T2.1–T2.5) ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     let trees = trees_per_setting();
-    println!("settings {:?}, trees/setting {trees}, ε={EPSILON} δ={DELTA} c={SLOW_COST} σ={SIGMA}", SETTINGS);
+    println!(
+        "settings {:?}, trees/setting {trees}, ε={EPSILON} δ={DELTA} c={SLOW_COST} σ={SIGMA}",
+        SETTINGS
+    );
     if std::env::var("B615_2FFS_AB").is_ok() {
         // Resolver A/B only (Issue 916 b-lever) — skips the gated suite.
         let ok = ab_lazy_discharge(trees);
@@ -1329,7 +1345,9 @@ fn main() {
     }
 
     // ── CANARY (first — impossible floors must fire) ──
-    let mut gates = Gates { failures: Vec::new() };
+    let mut gates = Gates {
+        failures: Vec::new(),
+    };
     gates.run("CANARY gate-machinery-fires", || {
         let fired = catch_unwind(AssertUnwindSafe(|| {
             gate(false, "impossible-floor canary — must fire");
@@ -1350,7 +1368,10 @@ fn main() {
             let v: Vec<u8> = Vec::with_capacity(1024);
             v
         });
-        gate(moved > 0, "counting allocator did not move on a known allocation");
+        gate(
+            moved > 0,
+            "counting allocator did not move on a known allocation",
+        );
     });
     if !gates.failures.is_empty() {
         println!("⛔ canaries failed — every later gate would be unmeasured");
@@ -1458,10 +1479,7 @@ fn main() {
         print!("── setting (D={d}, b={b}): running {trees} trees … ");
         std::io::stdout().flush().ok();
         let r = run_setting(d, b, trees);
-        println!(
-            "done (flipped {}/{})",
-            r.flipped_trees, trees
-        );
+        println!("done (flipped {}/{})", r.flipped_trees, trees);
         println!(
             "   2FFS:  err {}/{}  cert {}/{}  cost mean {:.0} (fast {:.0} slow {:.0})",
             r.f2_errs,
@@ -1549,43 +1567,52 @@ fn main() {
             );
             gate(
                 lb > 0.0,
-                &format!("no strict win vs BAI-MCTS at (D={},b={}): LB95 {lb}", r.d, r.b),
+                &format!(
+                    "no strict win vs BAI-MCTS at (D={},b={}): LB95 {lb}",
+                    r.d, r.b
+                ),
             );
         }
     });
 
     // ── G2(b): paired win vs negamax-UCT at matched accuracy, per setting ──
-    gates.run("G2 paired win vs negamax-UCT (matched accuracy, per setting)", || {
-        for r in &results {
-            let checkpoints: Vec<u64> = (0..12).map(|j| 4096u64 << j).collect();
-            let b_star = checkpoints
-                .iter()
-                .zip(r.uct_errs_at.iter())
-                .find(|(_, e)| **e <= r.f2_errs)
-                .map_or(
-                    f64::from(SLOW_COST) * (UCT_MAX_BUDGET as f64 + 1.0),
-                    |(b, _)| f64::from(SLOW_COST) * (*b as f64),
+    gates.run(
+        "G2 paired win vs negamax-UCT (matched accuracy, per setting)",
+        || {
+            for r in &results {
+                let checkpoints: Vec<u64> = (0..12).map(|j| 4096u64 << j).collect();
+                let b_star = checkpoints
+                    .iter()
+                    .zip(r.uct_errs_at.iter())
+                    .find(|(_, e)| **e <= r.f2_errs)
+                    .map_or(
+                        f64::from(SLOW_COST) * (UCT_MAX_BUDGET as f64 + 1.0),
+                        |(b, _)| f64::from(SLOW_COST) * (*b as f64),
+                    );
+                let diffs: Vec<f64> = r.f2_cost.iter().map(|f| b_star - f).collect();
+                let lb = lb95(&diffs);
+                println!(
+                    "      (D={},b={}): 2FFS errs {}, B* = {b_star:.0} ({}), LB95 {:.0}",
+                    r.d,
+                    r.b,
+                    r.f2_errs,
+                    if b_star > f64::from(SLOW_COST) * (UCT_MAX_BUDGET as f64) {
+                        "no checkpoint matched — cost understated, conservative"
+                    } else {
+                        "matched"
+                    },
+                    lb,
                 );
-            let diffs: Vec<f64> = r.f2_cost.iter().map(|f| b_star - f).collect();
-            let lb = lb95(&diffs);
-            println!(
-                "      (D={},b={}): 2FFS errs {}, B* = {b_star:.0} ({}), LB95 {:.0}",
-                r.d,
-                r.b,
-                r.f2_errs,
-                if b_star > f64::from(SLOW_COST) * (UCT_MAX_BUDGET as f64) {
-                    "no checkpoint matched — cost understated, conservative"
-                } else {
-                    "matched"
-                },
-                lb,
-            );
-            gate(
-                lb > 0.0,
-                &format!("no strict win vs negamax-UCT at (D={},b={}): LB95 {lb}", r.d, r.b),
-            );
-        }
-    });
+                gate(
+                    lb > 0.0,
+                    &format!(
+                        "no strict win vs negamax-UCT at (D={},b={}): LB95 {lb}",
+                        r.d, r.b
+                    ),
+                );
+            }
+        },
+    );
 
     // ── G4: zero per-iteration allocation ──
     gates.run("G4 zero per-iteration allocation", || {

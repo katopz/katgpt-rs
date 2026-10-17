@@ -31,7 +31,7 @@
 #![cfg(feature = "scale_invariant_attn")]
 #![cfg(test)]
 
-use katgpt_core::scale_invariant::{gaussian_expectation, ScaleInvariantLut};
+use katgpt_core::scale_invariant::{ScaleInvariantLut, gaussian_expectation};
 
 // ── Lean spec mirrors (f64 — closer to the ℝ contract than f32) ─────────
 
@@ -204,10 +204,7 @@ fn spec_tilt_transfer_identity_and_halving() {
             "gap identity drift: t={t}: {gap_lhs} vs {gap_rhs}"
         );
         // (3) the monotone drift toward the halved constant, from below.
-        assert!(
-            c < 0.5,
-            "c must approach 1/2 from below (t={t}: {c})"
-        );
+        assert!(c < 0.5, "c must approach 1/2 from below (t={t}: {c})");
         if t > 1.0 {
             assert!(c > prev_c, "c must increase monotonically (t={t})");
         }
@@ -256,9 +253,7 @@ fn spec_dominates_comparators() {
     let q = (-kappa).exp();
     let mut prev_alibi = f64::INFINITY;
     for &t in &[1u64, 10, 100, 1000] {
-        let mass: f64 = ((t + 1)..=(t * 2))
-            .map(|k| c1 * q.powi(k as i32))
-            .sum();
+        let mass: f64 = ((t + 1)..=(t * 2)).map(|k| c1 * q.powi(k as i32)).sum();
         let bound = c1 * q.powi((t + 1) as i32) / (1.0 - q);
         assert!(
             mass <= bound,

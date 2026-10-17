@@ -33,7 +33,9 @@ const ROUNDS: usize = 31;
 fn weights(seed: u64) -> TernaryQ2Weights {
     let mut s = seed;
     let mut next = move || {
-        s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        s = s
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (s >> 33) as u32
     };
     let n = ROWS * COLS / 128;
@@ -45,7 +47,10 @@ fn weights(seed: u64) -> TernaryQ2Weights {
                     *b |= ((next() % 3) as u8) << (2 * k);
                 }
             }
-            Q2Block { d: half::f16::from_f32(0.01 + (next() % 7) as f32 * 0.03).to_bits(), qs }
+            Q2Block {
+                d: half::f16::from_f32(0.01 + (next() % 7) as f32 * 0.03).to_bits(),
+                qs,
+            }
         })
         .collect();
     TernaryQ2Weights::from_blocks(ROWS, COLS, blocks)
@@ -70,17 +75,32 @@ fn median(v: &mut [f64]) -> f64 {
 fn main() {
     let threads: Vec<usize> = std::env::var("Q2_BW_THREADS")
         .ok()
-        .map(|s| s.split(',').map(|v| v.trim().parse().expect("Q2_BW_THREADS: comma-separated counts")).collect())
+        .map(|s| {
+            s.split(',')
+                .map(|v| {
+                    v.trim()
+                        .parse()
+                        .expect("Q2_BW_THREADS: comma-separated counts")
+                })
+                .collect()
+        })
         .unwrap_or_else(|| vec![rayon::current_num_threads(), 8, 10, 12]);
     let pools: Vec<rayon::ThreadPool> = threads
         .iter()
-        .map(|&t| rayon::ThreadPoolBuilder::new().num_threads(t).build().expect("rayon pool"))
+        .map(|&t| {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(t)
+                .build()
+                .expect("rayon pool")
+        })
         .collect();
     println!("arms (threads) {threads:?} | {MATS} x {ROWS}x{COLS} Q2_0");
 
     let ws: Vec<TernaryQ2Weights> = (0..MATS as u64).map(|i| weights(0x937 + i)).collect();
     let bytes: usize = ws.iter().map(TernaryQ2Weights::storage_bytes).sum();
-    let x: Vec<f32> = (0..COLS).map(|i| ((i * 37) % 101) as f32 * 0.01 - 0.5).collect();
+    let x: Vec<f32> = (0..COLS)
+        .map(|i| ((i * 37) % 101) as f32 * 0.01 - 0.5)
+        .collect();
     let mut y = vec![0.0f32; ROWS];
 
     // G1: every arm bit-identical to the first, on every matrix.
@@ -90,7 +110,9 @@ fn main() {
         for (pool, t) in pools.iter().zip(&threads).skip(1) {
             pool.install(|| simd_ternary_q2_matvec_q8_parallel(w, &x, &mut y));
             assert!(
-                y.iter().zip(&y_ref).all(|(a, b)| a.to_bits() == b.to_bits()),
+                y.iter()
+                    .zip(&y_ref)
+                    .all(|(a, b)| a.to_bits() == b.to_bits()),
                 "{t} threads is not bit-identical"
             );
         }

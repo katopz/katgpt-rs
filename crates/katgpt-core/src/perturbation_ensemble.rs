@@ -114,7 +114,10 @@ pub fn bucket_dropout_into(q: &[f32], out: &mut [f32], seed: u64, p_drop: f32) {
     let mut uniforms = [0f32; 8];
     let mut norm_sq = 0f32;
     for (block, (q_chunk, o_chunk)) in q.chunks(8).zip(out.chunks_mut(8)).enumerate() {
-        blake3_uniform_fill(seed.wrapping_add(block as u64), &mut uniforms[..q_chunk.len()]);
+        blake3_uniform_fill(
+            seed.wrapping_add(block as u64),
+            &mut uniforms[..q_chunk.len()],
+        );
         for (i, (src, dst)) in q_chunk.iter().zip(o_chunk.iter_mut()).enumerate() {
             if uniforms[i] < p_drop {
                 *dst = 0.0;
@@ -372,7 +375,11 @@ mod tests {
         // collision would need every draw to coincide; pinned seed pair).
         let mut c = [0f32; 16];
         bucket_dropout_into(&Q, &mut c, 8, 0.3);
-        assert!(a.iter().zip(c.iter()).any(|(x, y)| x.to_bits() != y.to_bits()));
+        assert!(
+            a.iter()
+                .zip(c.iter())
+                .any(|(x, y)| x.to_bits() != y.to_bits())
+        );
     }
 
     #[test]
@@ -380,9 +387,15 @@ mod tests {
         let mut out = [0f32; 16];
         bucket_dropout_into(&Q, &mut out, 3, 0.25);
         let kept = out.iter().filter(|x| **x != 0.0).count();
-        assert!(kept > 0 && kept < 16, "p=0.25 on 16 buckets must keep a strict subset");
+        assert!(
+            kept > 0 && kept < 16,
+            "p=0.25 on 16 buckets must keep a strict subset"
+        );
         let norm: f32 = out.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!((norm - 1.0).abs() < 1e-5, "survivor set must be re-normalized: {norm}");
+        assert!(
+            (norm - 1.0).abs() < 1e-5,
+            "survivor set must be re-normalized: {norm}"
+        );
         // Kept slots scale by ONE common factor: dst/src is constant across kept slots.
         let ratios: Vec<f32> = out
             .iter()

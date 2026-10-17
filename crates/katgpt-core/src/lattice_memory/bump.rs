@@ -59,7 +59,11 @@ pub fn weights_direct(delta: f32) -> AxisWeights {
     let d = delta.clamp(-0.5, 0.5);
     let abs = d.abs();
     let denom = 5.0 - 2.0 * abs;
-    ((1.0 - 2.0 * d) / denom, (3.0 - 2.0 * abs) / denom, (1.0 + 2.0 * d) / denom)
+    (
+        (1.0 - 2.0 * d) / denom,
+        (3.0 - 2.0 * abs) / denom,
+        (1.0 + 2.0 * d) / denom,
+    )
 }
 
 /// One axis's 3-tap weights from the LUT: `(w(m−1), w(m), w(m+1))` for the
@@ -70,7 +74,11 @@ pub fn axis_weights(lut: &BumpLut, delta: f32) -> AxisWeights {
     // Map δ ∈ [-0.5, 0.5] → bin index; the `.clamp` after the cast guards
     // the round-up at the top edge (δ = 0.5 must index LUT_N−1, not LUT_N).
     let scaled = (delta + 0.5) * LUT_N as f32;
-    let idx = if scaled <= 0.0 { 0 } else { (scaled as usize).min(LUT_N - 1) };
+    let idx = if scaled <= 0.0 {
+        0
+    } else {
+        (scaled as usize).min(LUT_N - 1)
+    };
     lut[idx]
 }
 
@@ -100,7 +108,7 @@ pub fn axis_weights_cos2(delta: f32) -> AxisWeights {
 
 #[cfg(test)]
 mod tests {
-    use super::{axis_weights, build_lut, weights_direct, LUT_N};
+    use super::{LUT_N, axis_weights, build_lut, weights_direct};
 
     #[test]
     fn lut_matches_direct_within_1e6() {
@@ -120,7 +128,11 @@ mod tests {
         // The partition-of-unity law — LUT bins and the direct form both.
         let lut = build_lut();
         for &(a, b, c) in lut.iter() {
-            assert!((a + b + c - 1.0).abs() <= 1e-6, "lut sum {} at ({a},{b},{c})", a + b + c);
+            assert!(
+                (a + b + c - 1.0).abs() <= 1e-6,
+                "lut sum {} at ({a},{b},{c})",
+                a + b + c
+            );
         }
         let steps = 4096;
         for s in 0..=steps {
@@ -144,7 +156,10 @@ mod tests {
         for s in 1..256 {
             let delta = s as f32 / 512.0; // (0, 0.5)
             let (p, _, n) = weights_direct(delta);
-            assert!(p > 0.0 && n > 0.0, "interior taps must stay positive at δ={delta}");
+            assert!(
+                p > 0.0 && n > 0.0,
+                "interior taps must stay positive at δ={delta}"
+            );
             assert!(p < prev_far, "far-tap mass must decay toward the boundary");
             prev_far = p;
         }
@@ -161,7 +176,10 @@ mod tests {
         assert!(np > pp, "δ>0 must weight the next cell more");
         let (_, c0, _) = weights_direct(0.0);
         let (_, ch, _) = weights_direct(0.25);
-        assert!(c0 > ch, "center weight must decay away from the cell center");
+        assert!(
+            c0 > ch,
+            "center weight must decay away from the cell center"
+        );
     }
 
     #[test]
@@ -190,7 +208,13 @@ mod tests {
         // (cos²(3π/8) normalized ≈ 0.078); the near tap never falls below
         // the center (equal is the truncation's ceiling at the boundary).
         let (far, center, near) = axis_weights_cos2(0.5);
-        assert!(far > 0.05 && far < 0.12, "far-tap leak {far} outside the documented band");
-        assert!(near >= center - 1e-6, "near tap {near} below center {center} at δ=+0.5");
+        assert!(
+            far > 0.05 && far < 0.12,
+            "far-tap leak {far} outside the documented band"
+        );
+        assert!(
+            near >= center - 1e-6,
+            "near tap {near} below center {center} at δ=+0.5"
+        );
     }
 }

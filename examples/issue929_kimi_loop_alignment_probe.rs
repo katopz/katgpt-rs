@@ -32,14 +32,14 @@
 //! `{CARGO_MANIFEST_DIR}/data/kimi-k3-0.40b`.
 
 use katgpt_core::loop_alignment_probe::{
-    bootstrap_auroc_ci, generate_two_hop_fixture, probe_alignment, FixtureSpec,
+    FixtureSpec, bootstrap_auroc_ci, generate_two_hop_fixture, probe_alignment,
 };
-use katgpt_rs::kimi_k3::loader::{load_kimi_k3, KimiK3ModelWeights};
-use katgpt_rs::kimi_k3::model::{
-    kimi_k3_forward_token, kimi_k3_forward_token_hidden, KimiK3ModelConfig, KimiK3Runtime,
-};
-use katgpt_rs::kimi_k3::tiktoken::{load_tiktoken_bpe, TiktokenTokenizer};
 use katgpt_core::simd::{simd_dot_f32, simd_sum_sq};
+use katgpt_rs::kimi_k3::loader::{KimiK3ModelWeights, load_kimi_k3};
+use katgpt_rs::kimi_k3::model::{
+    KimiK3ModelConfig, KimiK3Runtime, kimi_k3_forward_token, kimi_k3_forward_token_hidden,
+};
+use katgpt_rs::kimi_k3::tiktoken::{TiktokenTokenizer, load_tiktoken_bpe};
 
 /// Prompt facts per query (gold facts + same-pool distractors). Trimmed from
 /// the default 24 to keep the prefill bill at ~150 tokens/query.
@@ -99,8 +99,8 @@ fn main() {
         tokenizer.eos_id()
     );
 
-    let weights = load_kimi_k3(&format!("{model_dir}/model.safetensors"))
-        .expect("model.safetensors");
+    let weights =
+        load_kimi_k3(&format!("{model_dir}/model.safetensors")).expect("model.safetensors");
     let config = KimiK3ModelConfig::kimi_k3_0_40b();
     let dim = config.hidden_size;
     eprintln!(
@@ -147,11 +147,7 @@ fn main() {
             answer: item.answer.clone(),
         })
         .collect();
-    let queries_max_prompt = queries
-        .iter()
-        .map(|q| q.tokens.len())
-        .max()
-        .unwrap_or(0);
+    let queries_max_prompt = queries.iter().map(|q| q.tokens.len()).max().unwrap_or(0);
     eprintln!("[fixture] max prompt {queries_max_prompt} tokens");
 
     let max_extra = LOOPS + ANSWER_TOKENS; // per-arm appends: last token +
@@ -187,19 +183,26 @@ fn main() {
                     reinject_hidden(&mut runtime, &weights, v, alpha, dim);
                     kimi_k3_forward_token_hidden(&config, &weights, &mut runtime);
                 }
-                let probe =
-                    probe_alignment(&runtime.hidden, &runtime.logits, &weights.lm_head_weight, dim);
-                let cos_bridge =
-                    cosine_rows(&runtime.hidden, &weights.lm_head_weight, q.bridge_first, dim);
+                let probe = probe_alignment(
+                    &runtime.hidden,
+                    &runtime.logits,
+                    &weights.lm_head_weight,
+                    dim,
+                );
+                let cos_bridge = cosine_rows(
+                    &runtime.hidden,
+                    &weights.lm_head_weight,
+                    q.bridge_first,
+                    dim,
+                );
                 // Correctness: greedy-continue THROUGH the runtime, then
                 // decode. The continuation mutates the runtime state — fine,
                 // this is the loop's LAST observation for this arm.
                 let correct = if k == LOOPS - 1 {
                     let logits_owned = runtime.logits.clone();
-                    let text = greedy_continue(
-                        &config, &weights, &mut runtime, &tokenizer, &logits_owned,
-                    );
-                if qi < 3 && arm == 0 {
+                    let text =
+                        greedy_continue(&config, &weights, &mut runtime, &tokenizer, &logits_owned);
+                    if qi < 3 && arm == 0 {
                         eprintln!(
                             "[dbg] q{qi} answer={:?} gen={:?}",
                             q.answer,

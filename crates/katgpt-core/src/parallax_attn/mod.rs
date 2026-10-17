@@ -1074,8 +1074,7 @@ fn tiled_attention_core(
     mut attn_matrix: Option<&mut [f32]>,
     #[cfg(feature = "ssmax_temperature")] ssmax: Option<&crate::ssmax::SsmaxMode>,
     #[cfg(feature = "prior_logit_lane")] prior_logits: Option<&[f32]>,
-    #[cfg(feature = "scale_invariant_attn")]
-    si: Option<&crate::scale_invariant::ScaleInvariantLut>,
+    #[cfg(feature = "scale_invariant_attn")] si: Option<&crate::scale_invariant::ScaleInvariantLut>,
 ) {
     let d = head_dim;
     let n = seq_len;

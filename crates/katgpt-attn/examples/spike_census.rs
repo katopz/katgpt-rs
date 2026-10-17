@@ -335,12 +335,9 @@ impl Gguf {
                 for r in 0..rows {
                     for g in 0..bpr {
                         let off = base + (r * bpr + g) * 34;
-                        let d = f16_to_f32(u16::from_le_bytes([
-                            self.data[off],
-                            self.data[off + 1],
-                        ]));
-                        let dst =
-                            &mut v[r * cols + g * 32..r * cols + g * 32 + 32];
+                        let d =
+                            f16_to_f32(u16::from_le_bytes([self.data[off], self.data[off + 1]]));
+                        let dst = &mut v[r * cols + g * 32..r * cols + g * 32 + 32];
                         for (j, slot) in dst.iter_mut().enumerate() {
                             let q = self.data[off + 2 + j] as i8;
                             *slot = d * f32::from(q);
@@ -362,10 +359,8 @@ impl Gguf {
                 for r in 0..rows {
                     for g in 0..bpr {
                         let off = base + (r * bpr + g) * 144;
-                        let d = f16_to_f32(u16::from_le_bytes([
-                            self.data[off],
-                            self.data[off + 1],
-                        ]));
+                        let d =
+                            f16_to_f32(u16::from_le_bytes([self.data[off], self.data[off + 1]]));
                         let dmin = f16_to_f32(u16::from_le_bytes([
                             self.data[off + 2],
                             self.data[off + 3],
@@ -423,9 +418,11 @@ impl Gguf {
                                 let sc3 = self.data[off + 192 + sc_off + is + 4] as i8 as f32;
                                 let sc4 = self.data[off + 192 + sc_off + is + 6] as i8 as f32;
                                 let q1 = ((ql[l] & 0x0F) | ((qh[l] & 3) << 4)) as i32 - 32;
-                                let q2 = ((ql[l + 32] & 0x0F) | (((qh[l] >> 2) & 3) << 4)) as i32 - 32;
+                                let q2 =
+                                    ((ql[l + 32] & 0x0F) | (((qh[l] >> 2) & 3) << 4)) as i32 - 32;
                                 let q3 = ((ql[l] >> 4) | (((qh[l] >> 4) & 3) << 4)) as i32 - 32;
-                                let q4 = ((ql[l + 32] >> 4) | (((qh[l] >> 6) & 3) << 4)) as i32 - 32;
+                                let q4 =
+                                    ((ql[l + 32] >> 4) | (((qh[l] >> 6) & 3) << 4)) as i32 - 32;
                                 out[l] = d * sc * q1 as f32;
                                 out[l + 32] = d * sc2 * q2 as f32;
                                 out[l + 64] = d * sc3 * q3 as f32;
@@ -452,10 +449,8 @@ impl Gguf {
                 for r in 0..rows {
                     for g in 0..bpr {
                         let off = base + (r * bpr + g) * 34;
-                        let d = f16_to_f32(u16::from_le_bytes([
-                            self.data[off],
-                            self.data[off + 1],
-                        ]));
+                        let d =
+                            f16_to_f32(u16::from_le_bytes([self.data[off], self.data[off + 1]]));
                         let qs = &self.data[off + 2..off + 34];
                         let dst = &mut v[r * cols + g * 128..r * cols + g * 128 + 128];
                         for (j, slot) in dst.iter_mut().enumerate() {
@@ -519,10 +514,7 @@ struct BlockTensors<'a> {
 
 /// Screening census for one FFN block (Research 605 recipe steps 1–3).
 /// Deterministic: ties keep the lowest index.
-fn census_block(
-    t: &BlockTensors,
-    opts: CensusOpts,
-) -> Result<BlockCensus, String> {
+fn census_block(t: &BlockTensors, opts: CensusOpts) -> Result<BlockCensus, String> {
     let (idx, wdown, wgate, wup, gamma) = (t.idx, t.wdown, t.wgate, t.wup, t.gamma);
     let (n_embd, n_ff, d_model) = (t.n_embd, t.n_ff, t.d_model);
     if wdown.len() != n_embd * n_ff || wgate.len() != n_ff * d_model || wup.len() != n_ff * d_model
@@ -747,15 +739,23 @@ impl Args {
             match arg.as_str() {
                 "--model" => a.model = Some(PathBuf::from(val_for("--model")?)),
                 "--out" => a.out = Some(PathBuf::from(val_for("--out")?)),
-                "--top-k" => a.top_k = val_for("--top-k")?.parse().map_err(|e| format!("--top-k: {e}"))?,
+                "--top-k" => {
+                    a.top_k = val_for("--top-k")?
+                        .parse()
+                        .map_err(|e| format!("--top-k: {e}"))?
+                }
                 "--entry-z" => {
-                    a.entry_z = val_for("--entry-z")?.parse().map_err(|e| format!("--entry-z: {e}"))?
+                    a.entry_z = val_for("--entry-z")?
+                        .parse()
+                        .map_err(|e| format!("--entry-z: {e}"))?
                 }
                 "--gamma-plus-one" => match val_for("--gamma-plus-one")?.as_str() {
                     "on" => a.gamma = GammaArg::On,
                     "off" => a.gamma = GammaArg::Off,
                     "auto" => a.gamma = GammaArg::Auto,
-                    other => return Err(format!("--gamma-plus-one: unknown {other} (on|off|auto)")),
+                    other => {
+                        return Err(format!("--gamma-plus-one: unknown {other} (on|off|auto)"));
+                    }
                 },
                 "--blocks" => a.blocks = Some(val_for("--blocks")?),
                 "--self-test" => a.self_test = true,
@@ -845,8 +845,7 @@ fn run(args: &Args) -> Result<(), String> {
         let down_name = format!("blk.{b}.ffn_down.weight");
         let gate_name = format!("blk.{b}.ffn_gate.weight");
         let up_name = format!("blk.{b}.ffn_up.weight");
-        let scale_aware =
-            matches!(gg.tensor_type(&down_name), Some(TY_Q2_0_G128) | Some(142));
+        let scale_aware = matches!(gg.tensor_type(&down_name), Some(TY_Q2_0_G128) | Some(142));
         let (nr, nc, wdown) = gg.tensor_f32(&down_name)?;
         if !gg.tensors.contains_key(&gate_name) || !gg.tensors.contains_key(&up_name) {
             skipped.push((b, "missing ffn_gate/ffn_up".into()));
@@ -866,13 +865,17 @@ fn run(args: &Args) -> Result<(), String> {
         // post_attention_norm → FFN, no separate pre-FFN norm exists), else
         // γ=1 with the honest gamma_found=false (a constant γ preserves the
         // per-block argmax over k, it only unscales the reported score).
-        let gamma_name = ["ffn_norm.gamma", "ffn_norm.weight", "post_attention_norm.weight"]
-            .iter()
-            .find_map(|s| {
-                gg.tensors
-                    .contains_key(&format!("blk.{b}.{s}"))
-                    .then(|| format!("blk.{b}.{s}"))
-            });
+        let gamma_name = [
+            "ffn_norm.gamma",
+            "ffn_norm.weight",
+            "post_attention_norm.weight",
+        ]
+        .iter()
+        .find_map(|s| {
+            gg.tensors
+                .contains_key(&format!("blk.{b}.{s}"))
+                .then(|| format!("blk.{b}.{s}"))
+        });
         let (gamma, gamma_found) = match &gamma_name {
             Some(name) => {
                 let (_, _, g) = gg.tensor_f32(name)?;
@@ -880,7 +883,10 @@ fn run(args: &Args) -> Result<(), String> {
             }
             None => (vec![1.0f32; d_model], false),
         };
-        let opts_b = CensusOpts { scale_aware, ..opts };
+        let opts_b = CensusOpts {
+            scale_aware,
+            ..opts
+        };
         let t = BlockTensors {
             idx: b,
             wdown: &wdown,
@@ -913,7 +919,10 @@ fn run(args: &Args) -> Result<(), String> {
     maxima.sort_by(|a, b| a.total_cmp(b));
     let median = maxima[n_total / 2];
     let (spike_blocks, emerging): (Vec<&BlockCensus>, Vec<&BlockCensus>) = if median <= 0.0 {
-        (censuses.iter().filter(|c| c.max_s > 0.0).collect(), Vec::new())
+        (
+            censuses.iter().filter(|c| c.max_s > 0.0).collect(),
+            Vec::new(),
+        )
     } else {
         (
             censuses
@@ -962,9 +971,7 @@ fn run(args: &Args) -> Result<(), String> {
     let mut trigger_cos = 0f64;
     for i in 0..classified.len() {
         for j in (i + 1)..classified.len() {
-            trigger_cos = trigger_cos.max(
-                cos_dirs(&classified[i].s_star, &classified[j].s_star),
-            );
+            trigger_cos = trigger_cos.max(cos_dirs(&classified[i].s_star, &classified[j].s_star));
         }
     }
 
@@ -973,9 +980,10 @@ fn run(args: &Args) -> Result<(), String> {
     fn jnum(x: f64) -> serde_json::Value {
         serde_json::Number::from_f64(x).map_or(serde_json::Value::Null, serde_json::Value::Number)
     }
-    let file_name = model
-        .file_name()
-        .map_or_else(|| "<unnamed>".to_string(), |s| s.to_string_lossy().into_owned());
+    let file_name = model.file_name().map_or_else(
+        || "<unnamed>".to_string(),
+        |s| s.to_string_lossy().into_owned(),
+    );
     let mut root = serde_json::Map::new();
     root.insert("schema".into(), "spike_census_v1".into());
     root.insert("model_file".into(), file_name.clone().into());
@@ -985,7 +993,10 @@ fn run(args: &Args) -> Result<(), String> {
     root.insert("entry_z".into(), jnum(args.entry_z));
     root.insert("n_blocks_censused".into(), n_total.into());
     root.insert("median_max_s".into(), jnum(median));
-    root.insert("skipped".into(), serde_json::to_value(&skipped).unwrap_or_default());
+    root.insert(
+        "skipped".into(),
+        serde_json::to_value(&skipped).unwrap_or_default(),
+    );
     let mut jblocks = Vec::with_capacity(censuses.len());
     for c in &censuses {
         let mut jb = serde_json::Map::new();
@@ -1005,11 +1016,7 @@ fn run(args: &Args) -> Result<(), String> {
             })
             .collect();
         jb.insert("channels".into(), jch.into());
-        let star: Vec<serde_json::Value> = c
-            .s_star
-            .iter()
-            .map(|v| jnum(f64::from(*v)))
-            .collect();
+        let star: Vec<serde_json::Value> = c.s_star.iter().map(|v| jnum(f64::from(*v))).collect();
         jb.insert("s_star".into(), star.into());
         jblocks.push(serde_json::Value::Object(jb));
     }
@@ -1017,21 +1024,11 @@ fn run(args: &Args) -> Result<(), String> {
     let mut summary = serde_json::Map::new();
     summary.insert(
         "spike_blocks".into(),
-        serde_json::Value::Array(
-            spike_blocks
-                .iter()
-                .map(|c| c.idx.into())
-                .collect(),
-        ),
+        serde_json::Value::Array(spike_blocks.iter().map(|c| c.idx.into()).collect()),
     );
     summary.insert(
         "emerging_blocks_2x".into(),
-        serde_json::Value::Array(
-            emerging
-                .iter()
-                .map(|c| c.idx.into())
-                .collect(),
-        ),
+        serde_json::Value::Array(emerging.iter().map(|c| c.idx.into()).collect()),
     );
     summary.insert("early_step_up".into(), early.clone().into());
     summary.insert("mid".into(), mid.clone().into());
@@ -1067,7 +1064,9 @@ fn run(args: &Args) -> Result<(), String> {
         println!("[census] emerging (2-10x median): {}", idxs.join(", "));
     }
     for c in classified {
-        let Some(top) = c.channels.first() else { continue };
+        let Some(top) = c.channels.first() else {
+            continue;
+        };
         println!(
             "[census] blk {:>3}: top k={:<5} i={:<6} s={:.3e} cos(g,u)={:.3} z={:.1} gamma_found={}",
             c.idx, top.k, top.i, top.s, top.cos_gate_up, top.z_entry, c.gamma_found
@@ -1166,16 +1165,20 @@ fn st_fixture(ternary: bool) -> Fixture {
             *slot = (rng.next_f64() * 0.1) as f32;
         }
     }
-    let gamma: Vec<f32> = (0..ST_D_MODEL)
-        .map(|j| 0.5 + 0.01 * j as f32)
-        .collect();
+    let gamma: Vec<f32> = (0..ST_D_MODEL).map(|j| 0.5 + 0.01 * j as f32).collect();
     let trigger = st_trigger();
     for (j, v) in trigger.iter().enumerate() {
         wgate[ST_I * ST_D_MODEL + j] = 30.0 * v;
         wup[ST_I * ST_D_MODEL + j] = 25.0 * v;
     }
     wdown[ST_K * ST_N_FF + ST_I] = if ternary { 100.0 } else { 50.0 };
-    Fixture { wdown, wgate, wup, gamma, trigger }
+    Fixture {
+        wdown,
+        wgate,
+        wup,
+        gamma,
+        trigger,
+    }
 }
 
 fn self_test_impl() -> Result<(), String> {
@@ -1234,7 +1237,10 @@ fn self_test_impl() -> Result<(), String> {
     // 2. Scale-aware (ternary): the screen is skipped, ranking still finds
     //    the planted channel via the anomalous group scale.
     let f = st_fixture(true);
-    let opts = CensusOpts { scale_aware: true, ..opts };
+    let opts = CensusOpts {
+        scale_aware: true,
+        ..opts
+    };
     let c = mk(&f, opts)?;
     if c.z_screen_fired {
         return Err("self-test: scale-aware mode must skip the z-screen".into());
@@ -1257,7 +1263,13 @@ fn self_test_impl() -> Result<(), String> {
     //    hand-banded.
     let f = st_fixture(false);
     let plain = mk(&f, opts)?;
-    let plus = mk(&f, CensusOpts { gamma_plus_one: true, ..opts })?;
+    let plus = mk(
+        &f,
+        CensusOpts {
+            gamma_plus_one: true,
+            ..opts
+        },
+    )?;
     let (mut num, mut den) = (0f64, 0f64);
     for (u, g) in f.trigger.iter().zip(f.gamma.iter()) {
         num += (f64::from(*u) * (1.0 + f64::from(*g))).powi(2);
@@ -1290,7 +1302,8 @@ fn main() {
         }
     };
     let r = if args.self_test {
-        self_test_impl().map(|_| println!("[self-test] PASS (3 arms: continuous / scale-aware / (1+γ))"))
+        self_test_impl()
+            .map(|_| println!("[self-test] PASS (3 arms: continuous / scale-aware / (1+γ))"))
     } else {
         run(&args)
     };

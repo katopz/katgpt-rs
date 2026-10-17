@@ -131,7 +131,7 @@ pub fn split_coordinate(c: f32) -> (i64, f32) {
 
 #[cfg(test)]
 mod tests {
-    use super::{split_coordinate, LshAxes};
+    use super::{LshAxes, split_coordinate};
 
     fn axes_for<const A: usize>(d: usize, w: [f32; A], seed: u64) -> LshAxes<A> {
         LshAxes::new(d, w, seed, &[7, 15])

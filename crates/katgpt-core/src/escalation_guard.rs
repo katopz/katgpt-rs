@@ -119,7 +119,10 @@ impl RollingRateLatch {
     /// `min_rate` that fails [`rate_bounds_valid`] against `max_rate`.
     #[must_use]
     pub fn with_window(window: usize, min_rate: Option<f64>, max_rate: f64) -> Self {
-        assert!(window > 0, "escalation_guard: window must be > 0, got {window}");
+        assert!(
+            window > 0,
+            "escalation_guard: window must be > 0, got {window}"
+        );
         assert!(
             max_rate.is_finite() && 0.0 < max_rate && max_rate < 1.0,
             "escalation_guard: max_rate {max_rate} must be finite with 0 < max_rate < 1"
@@ -441,7 +444,10 @@ mod tests {
         assert!(demote_only_decode(Some("true")));
         assert!(demote_only_decode(Some("")), "empty string is junk, armed");
         assert!(demote_only_decode(Some("junk")));
-        assert!(demote_only_decode(Some(" 0")), "leading space is not the literal");
+        assert!(
+            demote_only_decode(Some(" 0")),
+            "leading space is not the literal"
+        );
         assert!(demote_only_decode(Some("0.0")), "not the literal");
         assert!(!demote_only_decode(Some("0")), "the exact literal demotes");
     }
@@ -452,7 +458,14 @@ mod tests {
         // `matches!(v, Some("0"))`) fires on exactly the value this decode
         // demotes on — one truth table, two polarities, pinned together so
         // neither drifts.
-        for v in [None, Some("1"), Some("true"), Some(""), Some("junk"), Some("0")] {
+        for v in [
+            None,
+            Some("1"),
+            Some("true"),
+            Some(""),
+            Some("junk"),
+            Some("0"),
+        ] {
             assert_eq!(
                 demote_only_decode(v),
                 !matches!(v, Some("0")),
@@ -477,8 +490,14 @@ mod tests {
     fn receipt_tiers_namespace_parameterized() {
         use super::receipt::*;
         assert_eq!(tier_think("REFINE"), "REFINE:think");
-        assert_eq!(tier_cheap("REFINE", "clippy_lints"), "REFINE:cheap(clippy_lints)");
-        assert_eq!(tier_demoted("REFINE", "rust_perf"), "REFINE:demoted(rust_perf)");
+        assert_eq!(
+            tier_cheap("REFINE", "clippy_lints"),
+            "REFINE:cheap(clippy_lints)"
+        );
+        assert_eq!(
+            tier_demoted("REFINE", "rust_perf"),
+            "REFINE:demoted(rust_perf)"
+        );
     }
 
     // ------------------------------------------------------------------

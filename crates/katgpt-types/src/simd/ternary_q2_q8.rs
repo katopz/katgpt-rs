@@ -70,10 +70,22 @@ impl TernaryQ2Weights {
     /// # Panics
     /// `cols % GROUP_SIZE != 0` or `blocks.len() != rows * cols / GROUP_SIZE`.
     pub fn from_blocks(rows: usize, cols: usize, blocks: Vec<Q2Block>) -> Self {
-        assert!(cols.is_multiple_of(GROUP_SIZE), "Q2_0 needs cols % {GROUP_SIZE} == 0, got {cols}");
+        assert!(
+            cols.is_multiple_of(GROUP_SIZE),
+            "Q2_0 needs cols % {GROUP_SIZE} == 0, got {cols}"
+        );
         let groups_per_row = cols / GROUP_SIZE;
-        assert_eq!(blocks.len(), rows * groups_per_row, "block count must be rows * cols / {GROUP_SIZE}");
-        Self { rows, cols, groups_per_row, blocks }
+        assert_eq!(
+            blocks.len(),
+            rows * groups_per_row,
+            "block count must be rows * cols / {GROUP_SIZE}"
+        );
+        Self {
+            rows,
+            cols,
+            groups_per_row,
+            blocks,
+        }
     }
 
     /// Repack bit-plane weights (lossless: the scale is copied verbatim).
@@ -81,7 +93,11 @@ impl TernaryQ2Weights {
     /// # Panics
     /// `w.cols % GROUP_SIZE != 0`, or a column set in both planes (not ternary).
     pub fn from_group(w: &TernaryGroupWeights) -> Self {
-        assert!(w.cols.is_multiple_of(GROUP_SIZE), "Q2_0 needs cols % {GROUP_SIZE} == 0, got {}", w.cols);
+        assert!(
+            w.cols.is_multiple_of(GROUP_SIZE),
+            "Q2_0 needs cols % {GROUP_SIZE} == 0, got {}",
+            w.cols
+        );
         let gpr = w.cols / GROUP_SIZE;
         let mut blocks = Vec::with_capacity(w.rows * gpr);
         for r in 0..w.rows {
@@ -100,10 +116,18 @@ impl TernaryQ2Weights {
                     };
                     qs[j / 4] |= q << (2 * (j % 4));
                 }
-                blocks.push(Q2Block { d: w.group_scale[r * w.groups_per_row + g].to_bits(), qs });
+                blocks.push(Q2Block {
+                    d: w.group_scale[r * w.groups_per_row + g].to_bits(),
+                    qs,
+                });
             }
         }
-        Self { rows: w.rows, cols: w.cols, groups_per_row: gpr, blocks }
+        Self {
+            rows: w.rows,
+            cols: w.cols,
+            groups_per_row: gpr,
+            blocks,
+        }
     }
 
     /// Inverse of [`Self::from_group`] (lossless). Code `3` (`+2`) has no
@@ -134,7 +158,9 @@ impl TernaryQ2Weights {
     /// bit-plane repack enforces at load. Branch-free per byte: a pair is
     /// `0b11` iff both of its bits are set.
     pub fn is_ternary(&self) -> bool {
-        self.blocks.iter().all(|b| b.qs.iter().all(|&q| q & (q >> 1) & 0x55 == 0))
+        self.blocks
+            .iter()
+            .all(|b| b.qs.iter().all(|&q| q & (q >> 1) & 0x55 == 0))
     }
 
     /// Storage bytes (34 per 128 weights = 2.125 bits/weight).
@@ -169,7 +195,13 @@ pub fn permute_activations_q2(xq: &[i8], xperm: &mut [i8], xsum: &mut [i32]) {
 
 /// Scalar reference over the UNPERMUTED activations — rows `row_offset ..
 /// row_offset + y.len()`. Same accumulation order as the bit-plane q8 scalar.
-pub fn ternary_q2_q8_rows_scalar(w: &TernaryQ2Weights, xq: &[i8], xs: &[f32], y: &mut [f32], row_offset: usize) {
+pub fn ternary_q2_q8_rows_scalar(
+    w: &TernaryQ2Weights,
+    xq: &[i8],
+    xs: &[f32],
+    y: &mut [f32],
+    row_offset: usize,
+) {
     for (i, y_slot) in y.iter_mut().enumerate() {
         let r = row_offset + i;
         let mut row_sum = 0.0f32;
@@ -221,10 +253,26 @@ unsafe fn neon_q2_row_range(
                 // Two accumulators: the (h=0, h=1) sdot chains run in parallel.
                 let mut a0 = vdotq_s32(vdupq_n_s32(0), c(vandq_u8(lo, m3)), vld1q_s8(x));
                 let mut a1 = vdotq_s32(vdupq_n_s32(0), c(vandq_u8(hi, m3)), vld1q_s8(x.add(16)));
-                a0 = vdotq_s32(a0, c(vandq_u8(vshrq_n_u8::<2>(lo), m3)), vld1q_s8(x.add(32)));
-                a1 = vdotq_s32(a1, c(vandq_u8(vshrq_n_u8::<2>(hi), m3)), vld1q_s8(x.add(48)));
-                a0 = vdotq_s32(a0, c(vandq_u8(vshrq_n_u8::<4>(lo), m3)), vld1q_s8(x.add(64)));
-                a1 = vdotq_s32(a1, c(vandq_u8(vshrq_n_u8::<4>(hi), m3)), vld1q_s8(x.add(80)));
+                a0 = vdotq_s32(
+                    a0,
+                    c(vandq_u8(vshrq_n_u8::<2>(lo), m3)),
+                    vld1q_s8(x.add(32)),
+                );
+                a1 = vdotq_s32(
+                    a1,
+                    c(vandq_u8(vshrq_n_u8::<2>(hi), m3)),
+                    vld1q_s8(x.add(48)),
+                );
+                a0 = vdotq_s32(
+                    a0,
+                    c(vandq_u8(vshrq_n_u8::<4>(lo), m3)),
+                    vld1q_s8(x.add(64)),
+                );
+                a1 = vdotq_s32(
+                    a1,
+                    c(vandq_u8(vshrq_n_u8::<4>(hi), m3)),
+                    vld1q_s8(x.add(80)),
+                );
                 a0 = vdotq_s32(a0, c(vshrq_n_u8::<6>(lo)), vld1q_s8(x.add(96)));
                 a1 = vdotq_s32(a1, c(vshrq_n_u8::<6>(hi)), vld1q_s8(x.add(112)));
                 let isum = vaddvq_s32(vaddq_s32(a0, a1)) - xsum[g];
@@ -280,7 +328,10 @@ unsafe fn avx2_q2_row_range(
                     _mm256_maddubs_epi16(c3, _mm256_loadu_si256(x.add(3))),
                 );
                 let acc32 = _mm256_madd_epi16(_mm256_add_epi16(p01, p23), ones_i16);
-                let s128 = _mm_add_epi32(_mm256_castsi256_si128(acc32), _mm256_extracti128_si256::<1>(acc32));
+                let s128 = _mm_add_epi32(
+                    _mm256_castsi256_si128(acc32),
+                    _mm256_extracti128_si256::<1>(acc32),
+                );
                 let s64 = _mm_add_epi32(s128, _mm_unpackhi_epi64(s128, s128));
                 let s32 = _mm_add_epi32(s64, _mm_shuffle_epi32::<0b01>(s64));
                 let isum = _mm_cvtsi128_si32(s32) - xsum[g];
@@ -398,11 +449,16 @@ pub fn simd_ternary_q2_matvec_q8_parallel(w: &TernaryQ2Weights, x: &[f32], y: &m
 /// matrices, one flat task index each. `false` (nothing run) when no pool is
 /// installed. Same per-row kernel as the rayon arm ⇒ bit-identical.
 #[cfg(feature = "decode_spin_pool")]
-fn q2_rows_on_spin_pool<const N: usize>(ws: [&TernaryQ2Weights; N], ys: &mut [&mut [f32]; N], acts: Q2Acts<'_>) -> bool {
+fn q2_rows_on_spin_pool<const N: usize>(
+    ws: [&TernaryQ2Weights; N],
+    ys: &mut [&mut [f32]; N],
+    acts: Q2Acts<'_>,
+) -> bool {
     use super::spin_pool::SyncMutPtr;
     const CHUNK: usize = super::PAR_MATVEC_CHUNK_ROWS;
     let (xq, xperm, xsum, xs) = acts;
-    let outs: [(SyncMutPtr<f32>, usize); N] = std::array::from_fn(|i| (SyncMutPtr(ys[i].as_mut_ptr()), ys[i].len()));
+    let outs: [(SyncMutPtr<f32>, usize); N] =
+        std::array::from_fn(|i| (SyncMutPtr(ys[i].as_mut_ptr()), ys[i].len()));
     let n_tasks: usize = ws.iter().map(|w| w.rows.div_ceil(CHUNK)).sum();
     super::spin_pool::spin_pool_run(n_tasks, &|mut t| {
         for (w, &(ptr, len)) in ws.iter().zip(&outs) {
@@ -440,7 +496,11 @@ pub fn simd_ternary_q2_matvec_q8_parallel_n<const N: usize>(
     use rayon::prelude::*;
 
     for (w, y) in ws.iter().zip(&ys) {
-        assert_eq!(x.len(), w.cols, "x vector length must match every weight's cols");
+        assert_eq!(
+            x.len(),
+            w.cols,
+            "x vector length must match every weight's cols"
+        );
         assert_eq!(y.len(), w.rows, "ys[i] length must match ws[i] rows");
     }
     with_q2_activations(x, |(xq, xperm, xsum, xs)| {
@@ -491,7 +551,9 @@ mod tests {
         let mut w = TernaryGroupWeights::new(rows, cols);
         let mut s = seed;
         let mut next = move || {
-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             s >> 33
         };
         for r in 0..rows {
@@ -537,7 +599,13 @@ mod tests {
             a.sort_unstable();
             b.sort_unstable();
             assert_eq!(a, b, "group {g} must be a permutation");
-            assert_eq!(sum[g], xq[g * 128..(g + 1) * 128].iter().map(|&v| v as i32).sum::<i32>());
+            assert_eq!(
+                sum[g],
+                xq[g * 128..(g + 1) * 128]
+                    .iter()
+                    .map(|&v| v as i32)
+                    .sum::<i32>()
+            );
         }
         // Spot-check the documented index map: xperm[32s + 16h + i] = xq[64h + 4i + s].
         assert_eq!(xp[32 * 3 + 16 + 5], xq[64 + 4 * 5 + 3]);
@@ -550,7 +618,10 @@ mod tests {
         assert_eq!(q.storage_bytes(), 3 * 2 * 34);
         assert!(q.is_ternary());
         let back = q.to_group();
-        assert_eq!((back.pos_bits.clone(), back.neg_bits.clone()), (w.pos_bits.clone(), w.neg_bits.clone()));
+        assert_eq!(
+            (back.pos_bits.clone(), back.neg_bits.clone()),
+            (w.pos_bits.clone(), w.neg_bits.clone())
+        );
         assert_eq!(back.group_scale, w.group_scale);
         let mut bad = q.clone();
         bad.blocks[1].qs[7] |= 0b11 << 4;
@@ -569,7 +640,12 @@ mod tests {
     /// the serial (< 256 rows total) and the parallel posture.
     #[test]
     fn pair_matches_two_single_calls() {
-        for &(ra, rb, cols) in &[(3, 5, 128), (100, 155, 256), (300, 700, 640), (1024, 1024, 384)] {
+        for &(ra, rb, cols) in &[
+            (3, 5, 128),
+            (100, 155, 256),
+            (300, 700, 640),
+            (1024, 1024, 384),
+        ] {
             let a = TernaryQ2Weights::from_group(&fixture(ra, cols, 0xA5 ^ ra as u64));
             let b = TernaryQ2Weights::from_group(&fixture(rb, cols, 0x5A ^ rb as u64));
             let x = activations(cols);
@@ -593,7 +669,9 @@ mod tests {
             let ws: Vec<_> = shapes
                 .iter()
                 .enumerate()
-                .map(|(i, &r)| TernaryQ2Weights::from_group(&fixture(r, cols, 0x3A ^ (i * 977 + r) as u64)))
+                .map(|(i, &r)| {
+                    TernaryQ2Weights::from_group(&fixture(r, cols, 0x3A ^ (i * 977 + r) as u64))
+                })
                 .collect();
             let x = activations(cols);
             let singles: Vec<Vec<f32>> = ws
@@ -604,8 +682,13 @@ mod tests {
                     y
                 })
                 .collect();
-            let (mut q, mut k, mut v) = (vec![f32::NAN; rq], vec![f32::NAN; rkv], vec![f32::NAN; rkv]);
-            simd_ternary_q2_matvec_q8_parallel_n([&ws[0], &ws[1], &ws[2]], &x, [&mut q, &mut k, &mut v]);
+            let (mut q, mut k, mut v) =
+                (vec![f32::NAN; rq], vec![f32::NAN; rkv], vec![f32::NAN; rkv]);
+            simd_ternary_q2_matvec_q8_parallel_n(
+                [&ws[0], &ws[1], &ws[2]],
+                &x,
+                [&mut q, &mut k, &mut v],
+            );
             let bits = |v: &[f32]| v.iter().map(|f| f.to_bits()).collect::<Vec<_>>();
             for (i, got) in [&q, &k, &v].into_iter().enumerate() {
                 assert_eq!(bits(got), bits(&singles[i]), "{rq}/{rkv}x{cols} arm {i}");
@@ -624,22 +707,39 @@ mod tests {
             let ws: Vec<_> = [r0, r1, r1]
                 .iter()
                 .enumerate()
-                .map(|(i, &r)| TernaryQ2Weights::from_group(&fixture(r, cols, 0x936 ^ (i * 31 + r) as u64)))
+                .map(|(i, &r)| {
+                    TernaryQ2Weights::from_group(&fixture(r, cols, 0x936 ^ (i * 31 + r) as u64))
+                })
                 .collect();
             let x = activations(cols);
             let mut want = vec![0.0f32; r0];
             simd_ternary_q2_matvec_q8_parallel(&ws[0], &x, &mut want);
             let mut got = vec![f32::NAN; r0];
-            super::super::spin_pool::with_spin_pool(&pool, || simd_ternary_q2_matvec_q8_parallel(&ws[0], &x, &mut got));
+            super::super::spin_pool::with_spin_pool(&pool, || {
+                simd_ternary_q2_matvec_q8_parallel(&ws[0], &x, &mut got)
+            });
             assert_eq!(bits(&got), bits(&want), "single {r0}x{cols}");
 
             let (mut a, mut b, mut c) = (vec![0.0f32; r0], vec![0.0f32; r1], vec![0.0f32; r1]);
-            simd_ternary_q2_matvec_q8_parallel_n([&ws[0], &ws[1], &ws[2]], &x, [&mut a, &mut b, &mut c]);
-            let (mut sa, mut sb, mut sc) = (vec![f32::NAN; r0], vec![f32::NAN; r1], vec![f32::NAN; r1]);
+            simd_ternary_q2_matvec_q8_parallel_n(
+                [&ws[0], &ws[1], &ws[2]],
+                &x,
+                [&mut a, &mut b, &mut c],
+            );
+            let (mut sa, mut sb, mut sc) =
+                (vec![f32::NAN; r0], vec![f32::NAN; r1], vec![f32::NAN; r1]);
             super::super::spin_pool::with_spin_pool(&pool, || {
-                simd_ternary_q2_matvec_q8_parallel_n([&ws[0], &ws[1], &ws[2]], &x, [&mut sa, &mut sb, &mut sc])
+                simd_ternary_q2_matvec_q8_parallel_n(
+                    [&ws[0], &ws[1], &ws[2]],
+                    &x,
+                    [&mut sa, &mut sb, &mut sc],
+                )
             });
-            assert_eq!((bits(&sa), bits(&sb), bits(&sc)), (bits(&a), bits(&b), bits(&c)), "n-way {r0}/{r1}x{cols}");
+            assert_eq!(
+                (bits(&sa), bits(&sb), bits(&sc)),
+                (bits(&a), bits(&b), bits(&c)),
+                "n-way {r0}/{r1}x{cols}"
+            );
         }
     }
 
@@ -659,8 +759,16 @@ mod tests {
             let mut y = vec![0.0f32; rows];
             simd_ternary_q2_matvec_q8_parallel(&q, &x, &mut y);
             for r in 0..rows {
-                assert_eq!(y_scalar[r].to_bits(), y_ref[r].to_bits(), "scalar {rows}x{cols} row {r}");
-                assert_eq!(y[r].to_bits(), y_ref[r].to_bits(), "simd {rows}x{cols} row {r}");
+                assert_eq!(
+                    y_scalar[r].to_bits(),
+                    y_ref[r].to_bits(),
+                    "scalar {rows}x{cols} row {r}"
+                );
+                assert_eq!(
+                    y[r].to_bits(),
+                    y_ref[r].to_bits(),
+                    "simd {rows}x{cols} row {r}"
+                );
             }
         }
     }
@@ -680,7 +788,9 @@ mod tests {
             }
         }
         let q = TernaryQ2Weights::from_group(&w);
-        let x: Vec<f32> = (0..cols).map(|c| if (c / 7) % 2 == 0 { 1.0 } else { -1.0 }).collect();
+        let x: Vec<f32> = (0..cols)
+            .map(|c| if (c / 7) % 2 == 0 { 1.0 } else { -1.0 })
+            .collect();
         let (xq, xs) = quantized(&x);
         assert!(xq.iter().all(|&v| v.unsigned_abs() == 127));
         let mut y_ref = vec![0.0f32; rows];

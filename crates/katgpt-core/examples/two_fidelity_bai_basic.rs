@@ -13,7 +13,7 @@
 
 use arrayvec::ArrayVec;
 use katgpt_core::two_fidelity_bai::{
-    two_fidelity_search, MinimaxSpace, NodeKind, RngCore, SearchConfig, MAX_CHILDREN,
+    MAX_CHILDREN, MinimaxSpace, NodeKind, RngCore, SearchConfig, two_fidelity_search,
 };
 
 // ── Synthetic minimax tree ────────────────────────────────────────────────

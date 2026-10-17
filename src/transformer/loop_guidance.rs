@@ -111,7 +111,9 @@ impl LoopGuidanceConfig {
     /// `omega_max ≥ omega`, `ref_loop ≥ 1`.
     pub fn validate(&self) -> Result<(), &'static str> {
         if !self.omega.is_finite() || self.omega < 0.0 {
-            return Err("loop_guidance: omega must be finite and >= 0 (negative omega universally degrades, paper §G.1)");
+            return Err(
+                "loop_guidance: omega must be finite and >= 0 (negative omega universally degrades, paper §G.1)",
+            );
         }
         if !self.omega_max.is_finite() || self.omega_max < self.omega {
             return Err("loop_guidance: omega_max must be finite and >= omega");
@@ -431,7 +433,11 @@ impl SettleExitConfig {
         if self.settle_patience == 0 {
             return Err("settle_exit: settle_patience must be >= 1");
         }
-        if let SettleReadout::CandidateSet { top_m, refresh_every } = self.readout {
+        if let SettleReadout::CandidateSet {
+            top_m,
+            refresh_every,
+        } = self.readout
+        {
             if top_m == 0 {
                 return Err("settle_exit: CandidateSet top_m must be >= 1");
             }
@@ -458,7 +464,8 @@ impl Default for SettleExitConfig {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExitKind {
     /// This settle exit fired (argmax stability reached).
-    Settled { /// 1-based iteration at which the exit fired.
+    Settled {
+        /// 1-based iteration at which the exit fired.
         at_loop: usize,
     },
     /// All `loop_count` iterations ran; stability was never reached.
@@ -528,9 +535,7 @@ impl SettleExit {
             .expect("settle_exit: invalid config passed to SettleExit::new");
         let (top_m, full_cap) = match config.readout {
             SettleReadout::Full => (0usize, vocab_size),
-            SettleReadout::CandidateSet { top_m, .. } => {
-                (top_m.min(vocab_size), vocab_size)
-            }
+            SettleReadout::CandidateSet { top_m, .. } => (top_m.min(vocab_size), vocab_size),
         };
         Self {
             config,
@@ -591,18 +596,15 @@ impl SettleExit {
                 standard_lm_head(&mut self.full_scratch, hidden, lm_head, self.vocab_size, n);
                 argmax_full(&self.full_scratch)
             }
-            SettleReadout::CandidateSet { top_m, refresh_every } => {
+            SettleReadout::CandidateSet {
+                top_m,
+                refresh_every,
+            } => {
                 let m = top_m.min(self.vocab_size);
                 let due = self.since_refresh == 0 || self.since_refresh >= refresh_every;
                 if due {
                     self.full_scratch.resize(self.vocab_size, 0.0);
-                    standard_lm_head(
-                        &mut self.full_scratch,
-                        hidden,
-                        lm_head,
-                        self.vocab_size,
-                        n,
-                    );
+                    standard_lm_head(&mut self.full_scratch, hidden, lm_head, self.vocab_size, n);
                     select_top_m(&self.full_scratch, m, &mut self.candidates);
                     self.since_refresh = 1;
                 } else {
@@ -679,8 +681,9 @@ fn select_top_m(v: &[f32], m: usize, out: &mut Vec<usize>) {
             }
             best = match best {
                 None => Some(i),
-                Some(b) if katgpt_core::float_order::cmp_for_max(val, v[b])
-                    == std::cmp::Ordering::Greater =>
+                Some(b)
+                    if katgpt_core::float_order::cmp_for_max(val, v[b])
+                        == std::cmp::Ordering::Greater =>
                 {
                     Some(i)
                 }

@@ -482,10 +482,8 @@ fn keyed_unit_interval(seed: u64, position: u64, token_id: u32) -> f64 {
     // Nested finalize — insurance against structured collisions between
     // the key parts: the seed⊕position mix is finished BEFORE the token
     // joins, then the whole key is finished again.
-    let z = fin(
-        fin(seed ^ position.wrapping_mul(0x9E37_79B9_7F4A_7C15))
-            ^ (token_id as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9),
-    );
+    let z = fin(fin(seed ^ position.wrapping_mul(0x9E37_79B9_7F4A_7C15))
+        ^ (token_id as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9));
     let inv = 1.0f64 / (1u64 << 53) as f64;
     ((z >> 11) as f64) * inv + inv * 0.5
 }
@@ -545,11 +543,7 @@ pub fn keyed_gumbel_max_sample(logits: &[f32], seed: u64, position: u64) -> u32 
 /// token 0 deterministically. The full-vocab sort is O(v log v) — the
 /// Phase-2 correctness posture accepts it (the keyed sample itself is
 /// already a full scan); the Phase-3 GPU sampler replaces both.
-pub fn truncation_keep_mask(
-    logits: &[f32],
-    top_k: Option<usize>,
-    top_p: Option<f32>,
-) -> Vec<bool> {
+pub fn truncation_keep_mask(logits: &[f32], top_k: Option<usize>, top_p: Option<f32>) -> Vec<bool> {
     let v = logits.len();
     let mut mask = vec![false; v];
     if v == 0 {
@@ -1263,14 +1257,15 @@ mod tests {
         // All-non-finite: nothing eligible → all false (the masked
         // sampler's first-index convention then picks token 0).
         let bad = [f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
-        assert!(truncation_keep_mask(&bad, Some(2), Some(0.9)).iter().all(|&b| !b));
+        assert!(
+            truncation_keep_mask(&bad, Some(2), Some(0.9))
+                .iter()
+                .all(|&b| !b)
+        );
         // The masked sampler on the NaN row with the survivor mask: picks
         // the survivor (the NaN, even masked, could never win — NaN > x is
         // false — but the mask keeps the pick inside the nucleus).
-        assert_eq!(
-            keyed_gumbel_max_sample_masked(&logits, 9, 3, 0.6, &m),
-            1
-        );
+        assert_eq!(keyed_gumbel_max_sample_masked(&logits, 9, 3, 0.6, &m), 1);
     }
 
     #[test]
@@ -1300,10 +1295,7 @@ mod tests {
         // logit gap to the rest dwarfs the noise bound.
         let keep = [false, false, true, true];
         for p in 0..100u64 {
-            assert_eq!(
-                keyed_gumbel_max_sample_masked(&logits, 5, p, 0.6, &keep),
-                2
-            );
+            assert_eq!(keyed_gumbel_max_sample_masked(&logits, 5, p, 0.6, &keep), 2);
         }
         // temperature <= 0: the plain argmax over survivors, NO noise —
         // bit-stable for any seed/position and equal to the T→0 limit arm.
@@ -1317,7 +1309,10 @@ mod tests {
         );
         // A keep row shorter than the logits is a caller bug → 0, never a
         // silent full-vocab fallback outside the intended support.
-        assert_eq!(keyed_gumbel_max_sample_masked(&logits, 5, 42, 0.6, &[true]), 0);
+        assert_eq!(
+            keyed_gumbel_max_sample_masked(&logits, 5, 42, 0.6, &[true]),
+            0
+        );
         // The one-call composition equals mask-then-sample.
         let truncated = keyed_gumbel_max_sample_truncated(&logits, 5, 41, 0.6, Some(1), None);
         assert_eq!(truncated, 1);
@@ -1365,10 +1360,8 @@ mod tests {
                 let z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
                 z ^ (z >> 31)
             }
-            let z = fin(
-                fin(seed ^ position.wrapping_mul(0x9E37_79B9_7F4A_7C15))
-                    ^ (token_id as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9),
-            );
+            let z = fin(fin(seed ^ position.wrapping_mul(0x9E37_79B9_7F4A_7C15))
+                ^ (token_id as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9));
             let inv = 1.0f64 / (1u64 << 53) as f64;
             let u = ((z >> 11) as f64) * inv + inv * 0.5;
             (-(-u.ln()).ln()) as f32
@@ -1409,10 +1402,14 @@ mod tests {
     fn mean_std(xs: &[f32]) -> (f64, f64) {
         let n = xs.len() as f64;
         let mean = xs.iter().map(|&x| x as f64).sum::<f64>() / n;
-        let var = xs.iter().map(|&x| {
-            let d = x as f64 - mean;
-            d * d
-        }).sum::<f64>() / (n - 1.0);
+        let var = xs
+            .iter()
+            .map(|&x| {
+                let d = x as f64 - mean;
+                d * d
+            })
+            .sum::<f64>()
+            / (n - 1.0);
         (mean, var.sqrt())
     }
 
@@ -1556,9 +1553,7 @@ mod tests {
         assert!(ks_l < KS_PASS, "loser KS {ks_l}");
         let ks_tl = ks_two_sample(&mut smp_top_loser, &mut ref_top_loser);
         assert!(ks_tl < KS_PASS, "top-loser KS {ks_tl}");
-        eprintln!(
-            "[G1b] KS winner {ks_w:.4} · pooled losers {ks_l:.4} · top-loser {ks_tl:.4}"
-        );
+        eprintln!("[G1b] KS winner {ks_w:.4} · pooled losers {ks_l:.4} · top-loser {ks_tl:.4}");
 
         // Moment checks (means within 4 joint SEs; the filtered prior and
         // the posterior share one law, so any real drift is a bug).

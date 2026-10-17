@@ -137,8 +137,17 @@ fn d2f_commit_set_no_stall_on_flat_rows() {
     let flat = eb_rows(n, &[0.0f32; VOCAB]);
     let tokens = vec![MASK; n];
     let mut scratch = D2fEbScratch::new(n);
-    let (k, masked) =
-        d2f_commit_set_eb(&flat, &tokens, 0, n, MASK, VOCAB, &mut scratch, 0.1, usize::MAX);
+    let (k, masked) = d2f_commit_set_eb(
+        &flat,
+        &tokens,
+        0,
+        n,
+        MASK,
+        VOCAB,
+        &mut scratch,
+        0.1,
+        usize::MAX,
+    );
     assert_eq!(masked, n);
     assert_eq!(k, 1, "flat rows: the EB singleton commits where τ stalls");
 }
@@ -150,8 +159,17 @@ fn d2f_commit_set_no_stall_on_one_dominant_and_degenerate_zero() {
     let flat = eb_rows(n, &one_hot_logits(VOCAB, 3));
     let tokens = vec![MASK; n];
     let mut scratch = D2fEbScratch::new(n);
-    let (k, _) =
-        d2f_commit_set_eb(&flat, &tokens, 0, n, MASK, VOCAB, &mut scratch, 0.0, usize::MAX);
+    let (k, _) = d2f_commit_set_eb(
+        &flat,
+        &tokens,
+        0,
+        n,
+        MASK,
+        VOCAB,
+        &mut scratch,
+        0.0,
+        usize::MAX,
+    );
     assert_eq!(k, n, "zero-entropy block commits whole at γ = 0 (no-stall)");
 
     // One dominant row among flat ones: ≥ 1 commit at every armed γ ≥ 0.
@@ -187,8 +205,17 @@ fn d2f_commit_set_matches_bruteforce_sum_minus_max() {
         let tokens = vec![MASK; n];
         let masked: Vec<usize> = (0..n).collect();
         let gamma = rng.f32() * 4.0;
-        let (k, m) =
-            d2f_commit_set_eb(&flat, &tokens, 0, n, MASK, VOCAB, &mut scratch, gamma, usize::MAX);
+        let (k, m) = d2f_commit_set_eb(
+            &flat,
+            &tokens,
+            0,
+            n,
+            MASK,
+            VOCAB,
+            &mut scratch,
+            gamma,
+            usize::MAX,
+        );
         assert_eq!(m, n);
         assert!(k >= 1, "no-stall: finite-entropy rows must commit ≥ 1");
         let expected = expected_commit_set(&flat, &masked, VOCAB, gamma, usize::MAX);
@@ -196,7 +223,11 @@ fn d2f_commit_set_matches_bruteforce_sum_minus_max() {
         // Independent brute-force residual on the committed prefix.
         let hs: Vec<f32> = expected
             .iter()
-            .map(|&p| position_stats(&flat[p * VOCAB..(p + 1) * VOCAB]).entropy.max(0.0))
+            .map(|&p| {
+                position_stats(&flat[p * VOCAB..(p + 1) * VOCAB])
+                    .entropy
+                    .max(0.0)
+            })
             .collect();
         let sum: f32 = hs.iter().sum();
         let max = hs.iter().cloned().fold(0.0f32, f32::max);
@@ -254,7 +285,10 @@ fn d2f_commit_set_deterministic_and_permutation_invariant() {
     let k_fwd = run(&forward);
     let reversed: Vec<usize> = (0..6).rev().collect();
     let k_rev = run(&reversed);
-    assert_eq!(k_fwd, k_rev, "row multiset permutation keeps the commit count");
+    assert_eq!(
+        k_fwd, k_rev,
+        "row multiset permutation keeps the commit count"
+    );
     assert!(k_fwd >= 1);
 }
 
@@ -309,17 +343,44 @@ fn d2f_commit_set_nan_never_commits() {
     flat.extend_from_slice(&[-0.5f32; VOCAB]);
     let tokens = vec![MASK; 3];
     let mut scratch = D2fEbScratch::new(3);
-    let (k, _) =
-        d2f_commit_set_eb(&flat, &tokens, 0, 3, MASK, VOCAB, &mut scratch, 10.0, usize::MAX);
+    let (k, _) = d2f_commit_set_eb(
+        &flat,
+        &tokens,
+        0,
+        3,
+        MASK,
+        VOCAB,
+        &mut scratch,
+        10.0,
+        usize::MAX,
+    );
     let sel = selected_positions(&scratch, k, 3);
     assert!(!sel.contains(&1), "NaN row never committed");
     assert_eq!(sel, vec![0, 2], "the good rows commit around it");
 
-    let (k_nan_gamma, _) =
-        d2f_commit_set_eb(&flat, &tokens, 0, 3, MASK, VOCAB, &mut scratch, f32::NAN, usize::MAX);
+    let (k_nan_gamma, _) = d2f_commit_set_eb(
+        &flat,
+        &tokens,
+        0,
+        3,
+        MASK,
+        VOCAB,
+        &mut scratch,
+        f32::NAN,
+        usize::MAX,
+    );
     assert_eq!(k_nan_gamma, 0, "NaN γ commits nothing");
-    let (k_neg_gamma, m) =
-        d2f_commit_set_eb(&flat, &tokens, 0, 3, MASK, VOCAB, &mut scratch, -1.0, usize::MAX);
+    let (k_neg_gamma, m) = d2f_commit_set_eb(
+        &flat,
+        &tokens,
+        0,
+        3,
+        MASK,
+        VOCAB,
+        &mut scratch,
+        -1.0,
+        usize::MAX,
+    );
     assert_eq!((k_neg_gamma, m), (0, 3), "negative γ commits nothing");
 }
 
@@ -344,8 +405,8 @@ fn synthetic_decode(decode_config: &D2fDecodeConfig) -> D2fBlockResult {
 #[test]
 fn d2f_eb_armed_decode_fully_denoises_and_is_deterministic() {
     let decode_config = D2fDecodeConfig {
-        denoise_steps: 8,  // ≥ block size: the ≥1-commit-per-pass floor
-        eb_gamma: 0.1,     // ARMED (UNCALIBRATED wiring default)
+        denoise_steps: 8, // ≥ block size: the ≥1-commit-per-pass floor
+        eb_gamma: 0.1,    // ARMED (UNCALIBRATED wiring default)
         ..D2fDecodeConfig::with_block_size(4)
     };
     let a = synthetic_decode(&decode_config);
@@ -355,7 +416,10 @@ fn d2f_eb_armed_decode_fully_denoises_and_is_deterministic() {
         "the EB no-stall floor must denoise a 4-slot block in 8 steps"
     );
     let b = synthetic_decode(&decode_config);
-    assert_eq!(a.tokens, b.tokens, "EB decode is deterministic under a fixed seed");
+    assert_eq!(
+        a.tokens, b.tokens,
+        "EB decode is deterministic under a fixed seed"
+    );
 }
 
 #[test]
@@ -392,7 +456,10 @@ fn d2f_eb_disarmed_matches_legacy_tau_decode() {
     );
     assert_eq!(a.steps_used, 1, "τ = 0: fully denoised at the first pass");
     let b = synthetic_decode(&decode_config);
-    assert_eq!(a.tokens, b.tokens, "the disarmed (legacy) decode is deterministic");
+    assert_eq!(
+        a.tokens, b.tokens,
+        "the disarmed (legacy) decode is deterministic"
+    );
 }
 
 // ── Cousin lanes (Issue 917 T2, 2026-10-08): eligibility filter, ──
@@ -416,13 +483,19 @@ struct CousinForward {
 mod set_diffusion_cousins {
     use super::*;
     use katgpt_forward::d2f::d2f_commit_set_eb_where;
-    use katgpt_forward::set_diffusion::{SetCausalForwardFn, set_diffusion_decode, SetDiffusionConfig};
+    use katgpt_forward::set_diffusion::{
+        SetCausalForwardFn, SetDiffusionConfig, set_diffusion_decode,
+    };
 
     impl SetCausalForwardFn for CousinForward {
         fn forward_set_causal(&self, tokens: &[usize], _gen_steps: &[u32]) -> Vec<f32> {
             let mut logits = Vec::with_capacity(tokens.len() * self.vocab);
             for (p, &t) in tokens.iter().enumerate() {
-                let target = if t == MASK { (p + 1) % self.vocab } else { t % self.vocab };
+                let target = if t == MASK {
+                    (p + 1) % self.vocab
+                } else {
+                    t % self.vocab
+                };
                 logits.extend_from_slice(&one_hot_logits(self.vocab, target));
             }
             logits
@@ -462,8 +535,17 @@ mod set_diffusion_cousins {
         // The unfiltered form over the same rows commits all five at γ = 0 —
         // the filter is the only difference.
         let mut scratch2 = D2fEbScratch::new(n);
-        let (k_all, _) =
-            d2f_commit_set_eb(&flat, &tokens, 0, n, MASK, VOCAB, &mut scratch2, 0.0, usize::MAX);
+        let (k_all, _) = d2f_commit_set_eb(
+            &flat,
+            &tokens,
+            0,
+            n,
+            MASK,
+            VOCAB,
+            &mut scratch2,
+            0.0,
+            usize::MAX,
+        );
         assert_eq!(k_all, n);
 
         // A γ the ELIGIBLE budget cannot afford stays confined to the one
@@ -486,7 +568,11 @@ mod set_diffusion_cousins {
             0.1,
             usize::MAX,
         );
-        assert_eq!((k1, m1), (1, 1), "the single eligible flat row commits its singleton");
+        assert_eq!(
+            (k1, m1),
+            (1, 1),
+            "the single eligible flat row commits its singleton"
+        );
     }
 
     #[test]
@@ -513,10 +599,16 @@ mod set_diffusion_cousins {
             result.converged,
             "the EB no-stall floor must decode the whole region"
         );
-        assert!(result.tokens.iter().all(|&t| t != MASK), "no position left masked");
+        assert!(
+            result.tokens.iter().all(|&t| t != MASK),
+            "no position left masked"
+        );
         let mut rng2 = Rng::new(917);
         let result2 = set_diffusion_decode(&forward, &config, &[], &gen_steps, &mut rng2);
-        assert_eq!(result.tokens, result2.tokens, "EB set-diffusion decode is deterministic");
+        assert_eq!(
+            result.tokens, result2.tokens,
+            "EB set-diffusion decode is deterministic"
+        );
     }
 
     #[test]
@@ -537,7 +629,10 @@ mod set_diffusion_cousins {
         let forward = CousinForward { vocab: VOCAB };
         let mut rng = Rng::new(5);
         let result = set_diffusion_decode(&forward, &config, &[], &gen_steps, &mut rng);
-        assert!(result.converged, "armed EB must decode where τ = 1.1 stalls");
+        assert!(
+            result.converged,
+            "armed EB must decode where τ = 1.1 stalls"
+        );
     }
 
     #[test]
@@ -605,6 +700,9 @@ mod flashar_cousins {
             "the EB no-stall floor must denoise the block through the anchor seam"
         );
         let b = run();
-        assert_eq!(a.tokens, b.tokens, "EB anchor-fill is deterministic under a fixed seed");
+        assert_eq!(
+            a.tokens, b.tokens,
+            "EB anchor-fill is deterministic under a fixed seed"
+        );
     }
 }

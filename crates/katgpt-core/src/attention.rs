@@ -257,9 +257,7 @@ fn tiled_attention_forward_impl(
     scale: f32,
     scores_buf: Option<&mut [f32]>,
     o_tile: Option<&mut [f32]>,
-    #[cfg(feature = "scale_invariant_attn")] si: Option<
-        crate::scale_invariant::SiArm<'_>,
-    >,
+    #[cfg(feature = "scale_invariant_attn")] si: Option<crate::scale_invariant::SiArm<'_>>,
 ) {
     let expected = seq_len * head_dim;
     debug_assert_eq!(q.len(), expected, "Q slice length mismatch");
@@ -1035,8 +1033,9 @@ mod si_tests {
         for i in 0..seq_len {
             let mut scores: Vec<f32> = (0..seq_len)
                 .map(|j| {
-                    let dot: f32 =
-                        (0..head_dim).map(|e| q[i * head_dim + e] * k[j * head_dim + e]).sum();
+                    let dot: f32 = (0..head_dim)
+                        .map(|e| q[i * head_dim + e] * k[j * head_dim + e])
+                        .sum();
                     dot * scale
                 })
                 .collect();
@@ -1141,8 +1140,9 @@ mod si_tests {
         for i in 0..seq_len {
             let mut scores: Vec<f32> = (0..seq_len)
                 .map(|j| {
-                    let dot: f32 =
-                        (0..head_dim).map(|e| q[i * head_dim + e] * k[j * head_dim + e]).sum();
+                    let dot: f32 = (0..head_dim)
+                        .map(|e| q[i * head_dim + e] * k[j * head_dim + e])
+                        .sum();
                     dot * scale
                 })
                 .collect();
@@ -1184,26 +1184,10 @@ mod si_tests {
             let (q, k, v) = gen_qkv(seq_len, head_dim);
             let mut out = vec![0.0f32; seq_len * head_dim];
             tiled_attention_forward_si_calibrated(
-                &q,
-                &k,
-                &v,
-                &mut out,
-                seq_len,
-                head_dim,
-                scale,
-                &lut,
-                head_scale,
+                &q, &k, &v, &mut out, seq_len, head_dim, scale, &lut, head_scale,
             );
-            let reference = naive_si_calibrated_forward(
-                &q,
-                &k,
-                &v,
-                seq_len,
-                head_dim,
-                scale,
-                &lut,
-                head_scale,
-            );
+            let reference =
+                naive_si_calibrated_forward(&q, &k, &v, seq_len, head_dim, scale, &lut, head_scale);
             for (i, (&x, &y)) in out.iter().zip(&reference).enumerate() {
                 assert!(
                     (x - y).abs() <= 1e-5,

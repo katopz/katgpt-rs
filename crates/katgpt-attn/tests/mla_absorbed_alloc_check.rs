@@ -58,7 +58,12 @@ fn g4_absorbed_decode_steady_state_allocates_nothing() {
             }
             cache.rewind_to(steady);
             let out = mla_forward_token_absorbed(
-                &config, &weights, &mut cache, &mut scratch, &mut rope, &step_input,
+                &config,
+                &weights,
+                &mut cache,
+                &mut scratch,
+                &mut rope,
+                &step_input,
             );
             std::hint::black_box(&out[..8.min(d)]);
         }

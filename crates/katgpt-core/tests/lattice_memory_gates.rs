@@ -24,8 +24,7 @@
 
 #[cfg(any(debug_assertions, feature = "alloc_tracking"))]
 #[global_allocator]
-static GATE_ALLOC: katgpt_core::alloc::TrackingAllocator =
-    katgpt_core::alloc::TrackingAllocator;
+static GATE_ALLOC: katgpt_core::alloc::TrackingAllocator = katgpt_core::alloc::TrackingAllocator;
 
 use katgpt_core::lattice_memory::{
     BumpKernel, LatticeCell, LatticeConfig, LatticeMemory, LatticeSnapshot, LatticeSnapshotError,
@@ -102,8 +101,7 @@ fn sized_constructor_reports_but_hot_path_stays_clean() {
         .map(|_| (0..16).map(|_| rng.f32() * 2.0 - 1.0).collect())
         .collect();
     let refs: Vec<&[f32]> = samples.iter().map(|s| s.as_slice()).collect();
-    let mut lat =
-        LatticeMemory::sized(16, 4, 4, 7, &refs, 64, 0.1, None).expect("sized lattice");
+    let mut lat = LatticeMemory::sized(16, 4, 4, 7, &refs, 64, 0.1, None).expect("sized lattice");
     let x = samples[0].clone();
     let k = [0.5_f32; 4];
     let mut out = [0.0_f32; 4];
@@ -128,8 +126,9 @@ fn snapshot_roundtrip_restores_exact_state() {
     let mut lat = LatticeMemory::new(config()).unwrap();
     let k = [0.5_f32; 4];
     let xa = [0.35_f32; 16];
-    let xb =
-        [0.9_f32, 0.1, 0.0, 0.8, 0.2, 0.0, 0.7, 0.3, 0.0, 0.6, 0.4, 0.0, 0.5, 0.5, 0.0, 0.4];
+    let xb = [
+        0.9_f32, 0.1, 0.0, 0.8, 0.2, 0.0, 0.7, 0.3, 0.0, 0.6, 0.4, 0.0, 0.5, 0.5, 0.0, 0.4,
+    ];
     lat.write_delta(&xa, &k, &[1.0, 0.0, 0.0, 0.0], 1.0);
     lat.write_delta(&xb, &k, &[0.0, 1.0, 0.0, 0.0], 0.5);
     lat.write_value(&xa, &[2.0, 0.0, 0.0, 0.0]);
@@ -148,7 +147,10 @@ fn snapshot_roundtrip_restores_exact_state() {
     // The artifact survives a serde round trip untouched.
     let bytes = serde_json::to_vec(&snap).expect("serialize snapshot");
     let thawed: LatticeSnapshot = serde_json::from_slice(&bytes).expect("deserialize snapshot");
-    assert_eq!(snap.cells, thawed.cells, "serde round trip altered the cell table");
+    assert_eq!(
+        snap.cells, thawed.cells,
+        "serde round trip altered the cell table"
+    );
     assert_eq!(snap.slab, thawed.slab, "serde round trip altered the slab");
 
     lat.restore(&thawed).expect("restore");
@@ -156,10 +158,20 @@ fn snapshot_roundtrip_restores_exact_state() {
     let mut cells_after = [0.0_f32; 4];
     lat.read_blend(&xa, &mut blend_after);
     lat.read_cells(&xb, &k, &mut cells_after);
-    assert_eq!(blend_a, blend_after, "blend must be bitwise identical after thaw");
-    assert_eq!(cells_b, cells_after, "cell read must be bitwise identical after thaw");
+    assert_eq!(
+        blend_a, blend_after,
+        "blend must be bitwise identical after thaw"
+    );
+    assert_eq!(
+        cells_b, cells_after,
+        "cell read must be bitwise identical after thaw"
+    );
     assert_eq!(lat.written_cells(), written_at_snap);
-    assert_eq!(lat.cursor(), cursor_at_snap, "thaw must restore the slab cursor exactly");
+    assert_eq!(
+        lat.cursor(),
+        cursor_at_snap,
+        "thaw must restore the slab cursor exactly"
+    );
 
     // Writes continue from the restored cursor: a post-thaw write to a
     // FRESH cell (not one of the two already-written primaries) claims slab
@@ -180,8 +192,15 @@ fn snapshot_roundtrip_restores_exact_state() {
     }
     let xc = fresh.expect("no fresh primary cell in 64 probes");
     lat.write_delta(&xc, &k, &[0.0, 0.0, 0.0, 1.0], 1.0);
-    assert_eq!(lat.written_cells(), written_at_snap + 1, "fresh cell not claimed post-thaw");
-    assert!(lat.cursor() > cursor_at_snap, "cursor did not continue past thaw");
+    assert_eq!(
+        lat.written_cells(),
+        written_at_snap + 1,
+        "fresh cell not claimed post-thaw"
+    );
+    assert!(
+        lat.cursor() > cursor_at_snap,
+        "cursor did not continue past thaw"
+    );
 }
 
 #[test]
@@ -193,7 +212,11 @@ fn commitment_binds_content_and_geometry() {
     };
     let a = build();
     let b = build();
-    assert_eq!(a.commitment(), b.commitment(), "identical state must commit identically");
+    assert_eq!(
+        a.commitment(),
+        b.commitment(),
+        "identical state must commit identically"
+    );
 
     // Empty lattices of different geometry never share a commitment (the
     // geometry header), even before any write.
@@ -201,18 +224,31 @@ fn commitment_binds_content_and_geometry() {
     let mut small_cfg = config();
     small_cfg.grid = [32, 32];
     let empty_small = LatticeMemory::new(small_cfg).unwrap();
-    assert_ne!(empty_a.commitment(), empty_small.commitment(), "geometry is in the header");
+    assert_ne!(
+        empty_a.commitment(),
+        empty_small.commitment(),
+        "geometry is in the header"
+    );
 
     // One extra write moves the commitment; the freeze/thaw identity holds.
-    let x2 =
-        [0.9_f32, 0.1, 0.0, 0.8, 0.2, 0.0, 0.7, 0.3, 0.0, 0.6, 0.4, 0.0, 0.5, 0.5, 0.0, 0.4];
+    let x2 = [
+        0.9_f32, 0.1, 0.0, 0.8, 0.2, 0.0, 0.7, 0.3, 0.0, 0.6, 0.4, 0.0, 0.5, 0.5, 0.0, 0.4,
+    ];
     let mut c = build();
     let frozen = c.commitment();
     let snap = c.snapshot();
     c.write_delta(&x2, &[0.5_f32; 4], &[0.0, 1.0, 0.0, 0.0], 0.5);
-    assert_ne!(frozen, c.commitment(), "a written byte must move the commitment");
+    assert_ne!(
+        frozen,
+        c.commitment(),
+        "a written byte must move the commitment"
+    );
     c.restore(&snap).expect("restore");
-    assert_eq!(frozen, c.commitment(), "thaw must return the frozen commitment");
+    assert_eq!(
+        frozen,
+        c.commitment(),
+        "thaw must return the frozen commitment"
+    );
 }
 
 #[test]
@@ -225,7 +261,11 @@ fn restore_refuses_mismatched_geometry_and_corrupt_snapshots() {
     other_cfg.grid = [32, 32];
     let mut other = LatticeMemory::new(other_cfg).unwrap();
     match other.restore(&snap) {
-        Err(LatticeSnapshotError::GeometryMismatch { expected_cells, found_cells, .. }) => {
+        Err(LatticeSnapshotError::GeometryMismatch {
+            expected_cells,
+            found_cells,
+            ..
+        }) => {
             assert_eq!(expected_cells, 32 * 32);
             assert_eq!(found_cells, snap.cells.len());
         }
@@ -243,7 +283,11 @@ fn restore_refuses_mismatched_geometry_and_corrupt_snapshots() {
     // A cell claiming past the slab → refusal (a thawed lie can never
     // reach the hot path's slab indexing).
     let mut liar = snap.clone();
-    liar.cells[0] = LatticeCell { offset: liar.slab.len() as u32 - 1, len: 8, writes: 1 };
+    liar.cells[0] = LatticeCell {
+        offset: liar.slab.len() as u32 - 1,
+        len: 8,
+        writes: 1,
+    };
     assert!(matches!(
         lat.restore(&liar),
         Err(LatticeSnapshotError::CellOutOfBounds { .. })
@@ -253,7 +297,11 @@ fn restore_refuses_mismatched_geometry_and_corrupt_snapshots() {
     let untouched = lat.commitment();
     lat.restore(&bad_cursor).unwrap_err();
     lat.restore(&liar).unwrap_err();
-    assert_eq!(untouched, lat.commitment(), "a refused restore must not tear state");
+    assert_eq!(
+        untouched,
+        lat.commitment(),
+        "a refused restore must not tear state"
+    );
 }
 
 // ── Issue 938 T1.3 — the measured-erosion gate ─────────────────────────
@@ -289,7 +337,10 @@ fn survival_after(
     lat.read_cells(x, k0, &mut out);
     let base = proj(&out);
     // base = φ·‖v₀‖² > 0 always (v₀ is unit); the guard stays defensive.
-    assert!(base.abs() > 1e-4, "pre-overwrite read vanished (base = {base})");
+    assert!(
+        base.abs() > 1e-4,
+        "pre-overwrite read vanished (base = {base})"
+    );
     for i in 1..lam {
         let kw = keys_for(i);
         let vw = values_for(i);
@@ -414,8 +465,7 @@ fn erosion_survival_brackets_the_predicted_curve() {
     // The value ladder: 40 unit values. Each rung orthogonalizes its picks
     // against that rung's v₀ (see `orthogonal_to`) — the measured survival
     // is then the erosion product itself.
-    let value_ladder: Vec<Vec<f32>> =
-        (0..40).map(|_| draw_value_unit(&mut rng, D_V)).collect();
+    let value_ladder: Vec<Vec<f32>> = (0..40).map(|_| draw_value_unit(&mut rng, D_V)).collect();
     for _ in 0..trials {
         let mut row = Vec::with_capacity(EROSION_RUNGS.len());
         for (ri, &lam) in EROSION_RUNGS.iter().enumerate() {
@@ -431,10 +481,18 @@ fn erosion_survival_brackets_the_predicted_curve() {
                 .iter()
                 .map(|vw| orthogonal_to(vw, &v0r))
                 .collect();
-            let s = survival_after(&cfg, &x, &k0, &v0r, lam, &mut |i| {
-                // Deterministic per-overwrite key from the pre-drawn ladder.
-                ladder_keys[(i as usize + ri * 7) % ladder_keys.len()].clone()
-            }, &mut |i| rung_values[(i as usize + ri * 5) % rung_values.len()].clone());
+            let s = survival_after(
+                &cfg,
+                &x,
+                &k0,
+                &v0r,
+                lam,
+                &mut |i| {
+                    // Deterministic per-overwrite key from the pre-drawn ladder.
+                    ladder_keys[(i as usize + ri * 7) % ladder_keys.len()].clone()
+                },
+                &mut |i| rung_values[(i as usize + ri * 5) % rung_values.len()].clone(),
+            );
             row.push(s);
         }
         random_survival.push(row);
@@ -505,11 +563,19 @@ fn erosion_survival_brackets_the_predicted_curve() {
                 .iter()
                 .map(|vw| orthogonal_to(vw, &v0r))
                 .collect();
-            let s = survival_after(&cfg, &x, &k0, &v0r, lam, &mut |i| {
-                // Never the k₀ slot itself — a same-key rewrite resets the
-                // erosion and would flatter the curve.
-                cluster[(i as usize - 1) % (cluster.len() - 1) + 1].clone()
-            }, &mut |i| rung_values[(i as usize + t as usize * 3) % rung_values.len()].clone());
+            let s = survival_after(
+                &cfg,
+                &x,
+                &k0,
+                &v0r,
+                lam,
+                &mut |i| {
+                    // Never the k₀ slot itself — a same-key rewrite resets the
+                    // erosion and would flatter the curve.
+                    cluster[(i as usize - 1) % (cluster.len() - 1) + 1].clone()
+                },
+                &mut |i| rung_values[(i as usize + t as usize * 3) % rung_values.len()].clone(),
+            );
             row.push(s);
         }
         clustered_survival.push((e_hat, row));

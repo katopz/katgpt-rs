@@ -171,8 +171,10 @@ pub use variants::forward_with_domain_latent;
 #[cfg(feature = "loop_guidance")]
 pub mod loop_guidance;
 #[cfg(feature = "loop_guidance")]
-pub use loop_guidance::{adaptive_omega, default_adaptive_config, top_two_margin,
-                        GuidanceMode, LoopGuidance, LoopGuidanceConfig};
+pub use loop_guidance::{
+    GuidanceMode, LoopGuidance, LoopGuidanceConfig, adaptive_omega, default_adaptive_config,
+    top_two_margin,
+};
 
 // Issue 717 — deep-loop instrumentation + stabilization knobs. The stats
 // surface is ungated (an `Option` parameter on `forward_looped`, the

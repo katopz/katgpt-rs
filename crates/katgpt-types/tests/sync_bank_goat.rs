@@ -16,7 +16,7 @@
 //! posture) so the target never reports a silent green zero: in debug you see
 //! `1 ignored`, never `ok. 0 passed`.
 
-use katgpt_types::sync_bank::{SyncBank, SYNC_BANK_LADDER};
+use katgpt_types::sync_bank::{SYNC_BANK_LADDER, SyncBank};
 use std::time::Instant;
 
 /// Box-state guard (AGENTS.md §Feature Flag Discipline G2 — a latency number
@@ -28,27 +28,27 @@ fn skip_if_box_loaded(test_name: &str) -> bool {
     let cores = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1);
-    let load = match std::fs::read_to_string("/proc/loadavg")
-        .or_else(|_| {
-            // macOS: no /proc — shell out to uptime once.
-            let out = std::process::Command::new("sh")
-                .arg("-c")
-                .arg("uptime")
-                .output();
-            out.map(|o| {
-                let text = String::from_utf8_lossy(&o.stdout).into_owned();
-                // "load averages: 60.06 60.86 52.93" — first number
-                text
-                    .split("load averages:")
-                    .nth(1)
-                    .and_then(|rest| {
-                        rest.split_whitespace().next().and_then(|f| f.parse::<f64>().ok())
-                    })
-                    .unwrap_or(0.0)
-                    .to_string()
-            })
-            .map_err(|_| ())
-        }) {
+    let load = match std::fs::read_to_string("/proc/loadavg").or_else(|_| {
+        // macOS: no /proc — shell out to uptime once.
+        let out = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("uptime")
+            .output();
+        out.map(|o| {
+            let text = String::from_utf8_lossy(&o.stdout).into_owned();
+            // "load averages: 60.06 60.86 52.93" — first number
+            text.split("load averages:")
+                .nth(1)
+                .and_then(|rest| {
+                    rest.split_whitespace()
+                        .next()
+                        .and_then(|f| f.parse::<f64>().ok())
+                })
+                .unwrap_or(0.0)
+                .to_string()
+        })
+        .map_err(|_| ())
+    }) {
         Ok(text) => text
             .split_whitespace()
             .next()
@@ -95,7 +95,10 @@ fn observe_ns_per<const D: usize, const K: usize>(iters: u32) -> f64 {
 }
 
 #[test]
-#[cfg_attr(debug_assertions, ignore = "latency gate — run with --release (debug numbers are meaningless)")]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "latency gate — run with --release (debug numbers are meaningless)"
+)]
 fn g2b_observe_latency_d8_sub_microsecond() {
     if skip_if_box_loaded("g2b_observe_latency_d8") {
         return;
@@ -109,7 +112,10 @@ fn g2b_observe_latency_d8_sub_microsecond() {
 }
 
 #[test]
-#[cfg_attr(debug_assertions, ignore = "latency gate — run with --release (debug numbers are meaningless)")]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "latency gate — run with --release (debug numbers are meaningless)"
+)]
 fn g2b_observe_latency_d64_microsecond_class() {
     if skip_if_box_loaded("g2b_observe_latency_d64") {
         return;
@@ -123,7 +129,10 @@ fn g2b_observe_latency_d64_microsecond_class() {
 }
 
 #[test]
-#[cfg_attr(debug_assertions, ignore = "latency gate — run with --release (debug numbers are meaningless)")]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "latency gate — run with --release (debug numbers are meaningless)"
+)]
 fn g2b_readout_latency_d8_cheap() {
     if skip_if_box_loaded("g2b_readout_latency_d8") {
         return;
@@ -146,6 +155,9 @@ fn g2b_readout_latency_d8_cheap() {
     let elapsed = start.elapsed().as_secs_f64();
     std::hint::black_box(sink);
     let ns = elapsed / 200_000.0 * 1e9;
-    assert!(ns < 2_000.0, "D=8 readouts {ns:.1} ns exceed the 2 µs ceiling");
+    assert!(
+        ns < 2_000.0,
+        "D=8 readouts {ns:.1} ns exceed the 2 µs ceiling"
+    );
     println!("sync_bank readouts D=8 K=3: {ns:.1} ns/pair (ceiling 2000 ns)");
 }

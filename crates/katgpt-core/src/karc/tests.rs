@@ -1,4 +1,3 @@
-
 use super::*;
 
 fn approx_eq(a: f32, b: f32, tol: f32) -> bool {
@@ -61,10 +60,7 @@ fn bspline_partition_of_unity() {
     for x in (0..=100).map(|i| i as f32 / 100.0) {
         basis.eval_into(x, &mut out);
         let sum: f32 = out.iter().sum();
-        assert!(
-            approx_eq(sum, 1.0, 1e-3),
-            "B-spline sum at x={x} = {sum}"
-        );
+        assert!(approx_eq(sum, 1.0, 1e-3), "B-spline sum at x={x} = {sum}");
     }
 }
 
@@ -567,10 +563,7 @@ fn frozen_a_fit_forecaster_method_works() {
     }
     // B must be non-trivial (not all zeros — the fit found a solution).
     let b_norm: f32 = f.b_low_rank.iter().map(|v| v * v).sum::<f32>().sqrt();
-    assert!(
-        b_norm > 1e-6,
-        "frozen-A B is all zeros: b_norm={b_norm:e}"
-    );
+    assert!(b_norm > 1e-6, "frozen-A B is all zeros: b_norm={b_norm:e}");
     // Forecast must produce finite values at several probe points.
     let mut max_abs = 0.0f32;
     for probe_t in 0..10i32 {

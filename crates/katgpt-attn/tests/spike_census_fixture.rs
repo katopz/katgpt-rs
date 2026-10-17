@@ -58,7 +58,10 @@ fn sidecars_stay_internally_consistent() {
             .iter()
             .map(|b| b["max_s"].as_f64().expect("max_s f64"))
             .collect();
-        assert!(maxima.iter().all(|s| s.is_finite()), "{name}: non-finite max_s");
+        assert!(
+            maxima.iter().all(|s| s.is_finite()),
+            "{name}: non-finite max_s"
+        );
         maxima.sort_by(|a, b| a.total_cmp(b));
         let median = maxima[maxima.len() / 2];
 
@@ -91,13 +94,20 @@ fn sidecars_stay_internally_consistent() {
             .map(|b| b["idx"].as_u64().unwrap() as usize)
             .collect();
         assert_eq!(spike, want_spike, "{name}: spike_blocks drifted");
-        assert_eq!(emerging, want_emerging, "{name}: emerging_blocks_2x drifted");
+        assert_eq!(
+            emerging, want_emerging,
+            "{name}: emerging_blocks_2x drifted"
+        );
 
         // Every block carries its top_k channels with the block's max_s at
         // the head, and spike/emerging blocks carry a normalized s⋆.
         for b in blocks {
             let channels = b["channels"].as_array().expect("channels array");
-            assert!(!channels.is_empty(), "{name} blk {}: empty channels", b["idx"]);
+            assert!(
+                !channels.is_empty(),
+                "{name} blk {}: empty channels",
+                b["idx"]
+            );
             let top_s = channels[0]["s"].as_f64().expect("s f64");
             assert!(
                 (top_s - b["max_s"].as_f64().unwrap()).abs() < 1e-30,
@@ -108,7 +118,11 @@ fn sidecars_stay_internally_consistent() {
                 || emerging.contains(&(b["idx"].as_u64().unwrap() as usize));
             if is_flagged {
                 let star = b["s_star"].as_array().expect("s_star array");
-                assert!(!star.is_empty(), "{name} blk {}: flagged but no s⋆", b["idx"]);
+                assert!(
+                    !star.is_empty(),
+                    "{name} blk {}: flagged but no s⋆",
+                    b["idx"]
+                );
                 let norm: f64 = star
                     .iter()
                     .map(|x| x.as_f64().unwrap().powi(2))
@@ -145,9 +159,7 @@ fn calib_sidecars_match_their_blake3_pins_and_headers() {
             "{name}: calib sidecar does not match its pin"
         );
 
-        let le_u32 = |off: usize| {
-            u32::from_le_bytes(body[off..off + 4].try_into().expect("u32"))
-        };
+        let le_u32 = |off: usize| u32::from_le_bytes(body[off..off + 4].try_into().expect("u32"));
         assert_eq!(&body[0..4], b"SPCM", "{name}: magic");
         assert_eq!(le_u32(4), 1, "{name}: version");
         let name_len = le_u32(8) as usize;
@@ -182,7 +194,10 @@ fn calib_sidecars_match_their_blake3_pins_and_headers() {
         );
         for chunk in body[off..].as_chunks::<4>().0.iter().step_by(97) {
             let v = f32::from_le_bytes(*chunk);
-            assert!(v.is_finite() && v >= 0.0, "{name}: non-finite/negative stat");
+            assert!(
+                v.is_finite() && v >= 0.0,
+                "{name}: non-finite/negative stat"
+            );
         }
     }
 }

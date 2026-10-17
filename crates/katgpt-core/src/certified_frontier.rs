@@ -57,8 +57,6 @@
 //! valid, and no test in this module can see it. The uncertainty model is
 //! conservative; the Lipschitz budget is the caller's proof obligation.
 
-
-
 /// Lipschitz constant of the logistic sigmoid — `sup |s'(z)| = s'(0) = 1/4`.
 ///
 /// The `L_s` of the paper's `beta_t` schedule and of `L = L_s * L_g`.

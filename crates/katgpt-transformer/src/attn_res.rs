@@ -703,12 +703,8 @@ mod tests {
         let mut scratch = AttnResScratch::new(&config, max_entries(&config));
 
         let prefix_sum: Vec<f32> = (0..config.d()).map(|i| (i as f32).sin() * 0.1).collect();
-        let out = apply_attn_res_depth_profile(
-            &block_state,
-            &mut scratch,
-            f32::INFINITY,
-            &prefix_sum,
-        );
+        let out =
+            apply_attn_res_depth_profile(&block_state, &mut scratch, f32::INFINITY, &prefix_sum);
         for i in 0..config.d() {
             assert_eq!(
                 out[i].to_bits(),
@@ -748,8 +744,7 @@ mod tests {
         let mut prev = f32::MAX;
         for lambda in [0.5f32, 1.0, 2.0, 4.0, 8.0] {
             let mut scratch = AttnResScratch::new(&config, max_entries(&config));
-            let out =
-                apply_attn_res_depth_profile(&block_state, &mut scratch, lambda, &prefix_sum);
+            let out = apply_attn_res_depth_profile(&block_state, &mut scratch, lambda, &prefix_sum);
             assert!(
                 out[0] < 5.0,
                 "λ={lambda}: recency must pull below the uniform mean, got {}",
@@ -772,8 +767,7 @@ mod tests {
         let prefix_sum: Vec<f32> = (0..config.d()).map(|i| (i as f32) * 0.25).collect();
         for lambda in [0.0f32, 2.0, 100.0, f32::INFINITY] {
             let mut scratch = AttnResScratch::new(&config, max_entries(&config));
-            let out =
-                apply_attn_res_depth_profile(&block_state, &mut scratch, lambda, &prefix_sum);
+            let out = apply_attn_res_depth_profile(&block_state, &mut scratch, lambda, &prefix_sum);
             for i in 0..config.d() {
                 assert_eq!(
                     out[i].to_bits(),
@@ -788,8 +782,16 @@ mod tests {
     fn depth_profile_deterministic_same_inputs_same_output() {
         let config = AttnResConfig::kimi_k3_0_40b();
         let mut block_state = AttnResBlockState::new(config.d());
-        block_state.push(&(0..config.d()).map(|i| (i as f32).sin() * 0.1).collect::<Vec<_>>());
-        block_state.push(&(0..config.d()).map(|i| (i as f32).cos() * 0.1).collect::<Vec<_>>());
+        block_state.push(
+            &(0..config.d())
+                .map(|i| (i as f32).sin() * 0.1)
+                .collect::<Vec<_>>(),
+        );
+        block_state.push(
+            &(0..config.d())
+                .map(|i| (i as f32).cos() * 0.1)
+                .collect::<Vec<_>>(),
+        );
         let prefix_sum: Vec<f32> = (0..config.d()).map(|i| (i as f32) * 0.05 - 1.0).collect();
 
         let mut s1 = AttnResScratch::new(&config, max_entries(&config));
@@ -797,7 +799,11 @@ mod tests {
         let o1 = apply_attn_res_depth_profile(&block_state, &mut s1, 1.5, &prefix_sum).to_vec();
         let o2 = apply_attn_res_depth_profile(&block_state, &mut s2, 1.5, &prefix_sum);
         for i in 0..config.d() {
-            assert_eq!(o1[i].to_bits(), o2[i].to_bits(), "non-deterministic at [{i}]");
+            assert_eq!(
+                o1[i].to_bits(),
+                o2[i].to_bits(),
+                "non-deterministic at [{i}]"
+            );
         }
     }
 }

@@ -59,9 +59,17 @@ impl CdfWarp {
         assert!(cells > 0, "CdfWarp::fit needs a positive grid side");
         let n = projected.len() as f32;
         let mean = projected.iter().sum::<f32>() / n;
-        let var = projected.iter().map(|&s| (s - mean) * (s - mean)).sum::<f32>() / n;
+        let var = projected
+            .iter()
+            .map(|&s| (s - mean) * (s - mean))
+            .sum::<f32>()
+            / n;
         let std = var.max(0.0).sqrt().max(1e-12);
-        Self { mean, inv_std: 1.0 / std, cells: cells as f32 }
+        Self {
+            mean,
+            inv_std: 1.0 / std,
+            cells: cells as f32,
+        }
     }
 
     /// The warped continuous coordinate in `[0, cells)` — the value the
@@ -120,13 +128,17 @@ fn erf(x: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{erf, phi, CdfWarp};
+    use super::{CdfWarp, erf, phi};
 
     #[test]
     fn erf_known_values_pinned() {
         assert_eq!(erf(0.0), 0.0);
         // A–S 7.1.26's documented accuracy class: |err| ≤ 1.5e-7.
-        assert!((erf(1.0) - 0.842_700_8).abs() < 2e-6, "erf(1) = {}", erf(1.0));
+        assert!(
+            (erf(1.0) - 0.842_700_8).abs() < 2e-6,
+            "erf(1) = {}",
+            erf(1.0)
+        );
         assert!((erf(-1.0) + 0.842_700_8).abs() < 2e-6);
         assert!((erf(2.0) - 0.995_322_3).abs() < 2e-6);
     }
@@ -187,13 +199,20 @@ mod tests {
         // cell anyway (the sizer gate relies on this, not on tail shape).
         let lo = warp.apply(mean - 100.0);
         let hi = warp.apply(mean + 100.0);
-        assert!((0.0..=64.0).contains(&lo) && (0.0..=64.0).contains(&hi), "{lo} {hi}");
+        assert!(
+            (0.0..=64.0).contains(&lo) && (0.0..=64.0).contains(&hi),
+            "{lo} {hi}"
+        );
     }
 
     #[test]
     fn apply_monotone_and_locality_safe() {
         // Monotone across the whole operating range at warp resolution.
-        let warp = CdfWarp { mean: 3.0, inv_std: 0.25, cells: 128.0 };
+        let warp = CdfWarp {
+            mean: 3.0,
+            inv_std: 0.25,
+            cells: 128.0,
+        };
         let mut prev = warp.apply(-100.0);
         let mut c = -99.9;
         while c <= 100.0 {

@@ -90,8 +90,7 @@ fn g1_decade_mass_flat_at_one_million() {
     for t in t_lo..=t_hi {
         ref_sum += alpha() / (t as f64 / tau + 1.0);
     }
-    let lo_bound =
-        alpha() * tau * ((big_t as f64 + 1.0 + tau) / (t_win as f64 + 1.0 + tau)).ln();
+    let lo_bound = alpha() * tau * ((big_t as f64 + 1.0 + tau) / (t_win as f64 + 1.0 + tau)).ln();
     let hi_bound = alpha() * tau * ((big_t as f64 + tau) / (t_win as f64 + tau)).ln();
     assert!(
         lo_bound <= ref_sum && ref_sum <= hi_bound,
@@ -144,7 +143,11 @@ fn g2_lut_build_under_1ms_at_64k() {
     // Warmup (page the 512 KB table, spin the transcendentals' caches).
     let warm = ScaleInvariantLut::build(10.0, MAX_CTX);
     let (a0, m0) = warm.pair(0);
-    assert_eq!((a0, m0), (1.0, 0.0), "boundary pin must hold on every build");
+    assert_eq!(
+        (a0, m0),
+        (1.0, 0.0),
+        "boundary pin must hold on every build"
+    );
     let (a_top, m_top) = warm.pair(MAX_CTX);
     assert!(
         (a_top as f64).is_finite() && (m_top as f64).is_finite(),
@@ -165,7 +168,9 @@ fn g2_lut_build_under_1ms_at_64k() {
     let ms = best * 1e3;
     if cfg!(debug_assertions) {
         // Dev profile: report, don't gate. The bar belongs to --release.
-        println!("g2_lut_build_under_1ms_at_64k: dev profile, measured {ms:.3} ms — bar SKIPPED (run --release)");
+        println!(
+            "g2_lut_build_under_1ms_at_64k: dev profile, measured {ms:.3} ms — bar SKIPPED (run --release)"
+        );
     } else {
         assert!(
             ms < 1.0,
@@ -219,7 +224,11 @@ fn g4_apply_is_allocation_free() {
     // pristine inputs at the transformed positions, and the sink must not
     // have moved.
     let pristine: Vec<f32> = (0..=max_ctx).map(|i| (i as f32 * 0.01).sin()).collect();
-    assert_ne!(full[1..], pristine[1..], "apply was a no-op — the canary measured nothing");
+    assert_ne!(
+        full[1..],
+        pristine[1..],
+        "apply was a no-op — the canary measured nothing"
+    );
     assert_eq!(full[0], pristine[0], "the sink (key 0) must be untouched");
     assert_ne!(mid[17..], pristine[17..], "mid-row apply was a no-op");
 }

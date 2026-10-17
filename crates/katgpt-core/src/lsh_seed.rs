@@ -50,7 +50,12 @@ mod tests {
 
     /// Independent re-derivation of the original algorithm (not the shared
     /// fn) so the test cannot pass by construction.
-    fn golden_for(logit_dim: u64, num_buckets: u64, bucket_capacity: u64, hamming_radius: u64) -> u64 {
+    fn golden_for(
+        logit_dim: u64,
+        num_buckets: u64,
+        bucket_capacity: u64,
+        hamming_radius: u64,
+    ) -> u64 {
         const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
         const PRIME: u64 = 0x0000_0100_0000_01b3;
         let mut h = OFFSET;

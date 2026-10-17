@@ -23,7 +23,9 @@ use katgpt_rs::hla::MultiLayerAhlaCache;
 use katgpt_rs::transformer::loop_guidance::{
     GuidanceMode, LoopGuidance, LoopGuidanceConfig, SettleExit, SettleExitConfig,
 };
-use katgpt_rs::transformer::{forward_looped, ForwardContext, MultiLayerKVCache, TransformerWeights};
+use katgpt_rs::transformer::{
+    ForwardContext, MultiLayerKVCache, TransformerWeights, forward_looped,
+};
 use katgpt_rs::types::{Config, HybridPattern, LoopMode, ResidualGate, Rng, SdpaOutputGate};
 
 static ALLOCS: AtomicU64 = AtomicU64::new(0);

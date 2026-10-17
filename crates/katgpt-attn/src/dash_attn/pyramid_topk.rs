@@ -333,11 +333,7 @@ impl PyramidLevels for PyramidKeyHierarchy<'_> {
     }
 
     fn leaf_count(&self) -> usize {
-        if self.n_levels == 0 {
-            0
-        } else {
-            self.lens[0]
-        }
+        if self.n_levels == 0 { 0 } else { self.lens[0] }
     }
 
     fn n_levels(&self) -> usize {
@@ -914,11 +910,13 @@ mod tests {
             mode: PyramidScoreMode::ExactLse,
             scale: 1.0 / (d as f32).sqrt(),
         };
-        let scored = coarse_to_fine_select(&hier, &keys, &heads, query_pos, k, scorer, &mut scratch);
+        let scored =
+            coarse_to_fine_select(&hier, &keys, &heads, query_pos, k, scorer, &mut scratch);
         let out = &scratch.out;
 
-        let bound =
-            1 + PYRAMID_BRANCHING * (k + FORCED_LEAF_SLOTS) * ceil_log2_usize(n.div_ceil(PYRAMID_BLOCK_SIZE));
+        let bound = 1 + PYRAMID_BRANCHING
+            * (k + FORCED_LEAF_SLOTS)
+            * ceil_log2_usize(n.div_ceil(PYRAMID_BLOCK_SIZE));
         assert!(scored <= bound, "scored {scored} > bound {bound}");
         assert!(scored > 0, "selection scored nothing on a live hierarchy");
 
@@ -928,7 +926,10 @@ mod tests {
             assert!(out.contains(&f), "forced leaf {f} missing from {out:?}");
         }
         assert!(out.len() <= k + FORCED_LEAF_SLOTS);
-        assert!(out.windows(2).all(|w| w[0] < w[1]), "sorted + deduped: {out:?}");
+        assert!(
+            out.windows(2).all(|w| w[0] < w[1]),
+            "sorted + deduped: {out:?}"
+        );
         assert!(out.iter().all(|&b| b < n_leaves));
     }
 
@@ -947,7 +948,10 @@ mod tests {
         let one = vec![q_sum.as_slice()];
 
         let mut scratch = PyramidScratch::new();
-        let mhs = PyramidScorer { mode: PyramidScoreMode::MeanPlusHalfVar, scale: 1.0 };
+        let mhs = PyramidScorer {
+            mode: PyramidScoreMode::MeanPlusHalfVar,
+            scale: 1.0,
+        };
         let scored_two = coarse_to_fine_select(&hier, &keys, &two, 999, k, mhs, &mut scratch);
         let out_two = scratch.out.clone();
         let scored_one = coarse_to_fine_select(&hier, &keys, &one, 999, k, mhs, &mut scratch);
@@ -968,9 +972,11 @@ mod tests {
         let q: Vec<f32> = (0..d).map(|_| rng.f32()).collect();
         let heads = one_head(&q);
         let mut scratch = PyramidScratch::new();
-        let scorer = PyramidScorer { mode: PyramidScoreMode::ExactLse, scale: 1.0 };
-        let scored =
-            coarse_to_fine_select(&hier, &keys, &heads, 7, 4, scorer, &mut scratch);
+        let scorer = PyramidScorer {
+            mode: PyramidScoreMode::ExactLse,
+            scale: 1.0,
+        };
+        let scored = coarse_to_fine_select(&hier, &keys, &heads, 7, 4, scorer, &mut scratch);
         assert_eq!(scored, 0);
         assert_eq!(scratch.out, vec![0]);
 
@@ -978,15 +984,7 @@ mod tests {
         // own zero-key provenance)
         let mut empty_storage: [f32; 0] = [];
         let empty = PyramidKeyHierarchy::build(&[], 0, d, &mut empty_storage);
-        let scored2 = coarse_to_fine_select(
-            &empty,
-            &keys[..0],
-            &heads,
-            0,
-            4,
-            scorer,
-            &mut scratch,
-        );
+        let scored2 = coarse_to_fine_select(&empty, &keys[..0], &heads, 0, 4, scorer, &mut scratch);
         assert_eq!((scored2, scratch.out.as_slice()), (0, [].as_slice()));
     }
 
@@ -1001,7 +999,10 @@ mod tests {
         let heads = one_head(&q);
 
         let mut scratch = PyramidScratch::new();
-        let scorer = PyramidScorer { mode: PyramidScoreMode::ExactLse, scale: 1.0 };
+        let scorer = PyramidScorer {
+            mode: PyramidScoreMode::ExactLse,
+            scale: 1.0,
+        };
         coarse_to_fine_select(&hier, &keys, &heads, n - 1, k, scorer, &mut scratch);
         let out = &scratch.out;
         let n_leaves = n.div_ceil(PYRAMID_BLOCK_SIZE);
@@ -1038,7 +1039,11 @@ mod tests {
             for t in 0..cache.n_levels() {
                 let cache_flat = cache.level_rows(t);
                 let hier_flat = hier.level_rows(t);
-                assert_eq!(cache_flat.len(), hier_flat.len(), "rows mismatch at n={n}, t={t}");
+                assert_eq!(
+                    cache_flat.len(),
+                    hier_flat.len(),
+                    "rows mismatch at n={n}, t={t}"
+                );
                 for (cv, hv) in cache_flat.iter().zip(hier_flat.iter()) {
                     assert!(
                         (cv - hv).abs() <= 1e-4,
@@ -1062,10 +1067,17 @@ mod tests {
         let q: Vec<f32> = (0..d).map(|_| rng.f32()).collect();
         let heads = one_head(&q);
         let mut scratch = PyramidScratch::new();
-        let scorer = PyramidScorer { mode: PyramidScoreMode::ExactLse, scale: 1.0 };
+        let scorer = PyramidScorer {
+            mode: PyramidScoreMode::ExactLse,
+            scale: 1.0,
+        };
         coarse_to_fine_select(&cache, &keys, &heads, total - 1, k, scorer, &mut scratch);
         let n_leaves = total.div_ceil(PYRAMID_BLOCK_SIZE);
-        assert_eq!(*scratch.out.last().unwrap(), n_leaves - 1, "current leaf forced");
+        assert_eq!(
+            *scratch.out.last().unwrap(),
+            n_leaves - 1,
+            "current leaf forced"
+        );
         assert!(scratch.out.windows(2).all(|w| w[0] < w[1]));
     }
 
@@ -1087,17 +1099,25 @@ mod tests {
         let q: Vec<f32> = (0..d).map(|_| rng.f32() - 0.5).collect();
         let scale = 1.0f32 / (d as f32).sqrt();
         let mut logits = [0.0f32; PYRAMID_BLOCK_SIZE];
-        let scorer = PyramidScorer { mode: PyramidScoreMode::ExactLse, scale };
+        let scorer = PyramidScorer {
+            mode: PyramidScoreMode::ExactLse,
+            scale,
+        };
 
         let n_leaves = n.div_ceil(PYRAMID_BLOCK_SIZE);
         for leaf in 0..n_leaves {
-            let lse = score_candidate(
-                &hier, &keys, &q, &scorer, 0, leaf, &mut logits,
-            );
+            let lse = score_candidate(&hier, &keys, &q, &scorer, 0, leaf, &mut logits);
             let mean = score_candidate(
-                &hier, &keys, &q,
-                &PyramidScorer { mode: PyramidScoreMode::Mean, scale },
-                0, leaf, &mut logits,
+                &hier,
+                &keys,
+                &q,
+                &PyramidScorer {
+                    mode: PyramidScoreMode::Mean,
+                    scale,
+                },
+                0,
+                leaf,
+                &mut logits,
             );
             let base = leaf * PYRAMID_BLOCK_SIZE;
             let cnt = (n - base).min(PYRAMID_BLOCK_SIZE);
@@ -1138,7 +1158,10 @@ mod tests {
         let heads = one_head(&u);
         let mut scratch = PyramidScratch::new();
 
-        let lse = PyramidScorer { mode: PyramidScoreMode::ExactLse, scale: 1.0 };
+        let lse = PyramidScorer {
+            mode: PyramidScoreMode::ExactLse,
+            scale: 1.0,
+        };
         coarse_to_fine_select(&hier, &keys, &heads, n - 1, k, lse, &mut scratch);
         assert!(
             scratch.out.contains(&needle_leaf),
@@ -1156,13 +1179,18 @@ mod tests {
         // lives: the leaf score ladder ordering on the needle block.
         let mut logits = [0.0f32; PYRAMID_BLOCK_SIZE];
         let mean_score = score_candidate(
-            &hier, &keys, &u,
-            &PyramidScorer { mode: PyramidScoreMode::Mean, scale: 1.0 },
-            0, needle_leaf, &mut logits,
+            &hier,
+            &keys,
+            &u,
+            &PyramidScorer {
+                mode: PyramidScoreMode::Mean,
+                scale: 1.0,
+            },
+            0,
+            needle_leaf,
+            &mut logits,
         );
-        let lse_score = score_candidate(
-            &hier, &keys, &u, &lse, 0, needle_leaf, &mut logits,
-        );
+        let lse_score = score_candidate(&hier, &keys, &u, &lse, 0, needle_leaf, &mut logits);
         // LSE ≈ ln(e^40 + 63·e^±small) ≈ 40; mean ≈ 40/64 + (hay mean)/64.
         assert!(
             lse_score > needle_gain * 0.9,

@@ -20,12 +20,12 @@
 //! ```
 
 use katgpt_core::entropy_bounded_commit::{ErrorProxy, position_stats};
+use katgpt_speculative::NoPruner;
 use katgpt_speculative::dflash::{DflashCache, DflashCtx};
 use katgpt_speculative::entropy_bounded::{
     EbBuildScratch, EbCommitConfig, EbCommitScratch, build_dd_tree_eb, build_dd_tree_eb_into,
     dflash_block_commit_eb_with, dflash_predict_eb_with,
 };
-use katgpt_speculative::NoPruner;
 use katgpt_types::Config;
 
 fn test_config(vocab: usize, budget: usize) -> Config {
@@ -103,7 +103,9 @@ fn ddtree_eb_no_stall_on_degenerate_one_hot() {
     // Degenerate zero-entropy rows: exactly one candidate per expansion —
     // the singleton floor commits it at any γ ≥ 0.
     let (depths, vocab) = (5usize, 8usize);
-    let rows: Vec<Vec<f32>> = (0..depths).map(|d| one_hot_probs(vocab, d % vocab)).collect();
+    let rows: Vec<Vec<f32>> = (0..depths)
+        .map(|d| one_hot_probs(vocab, d % vocab))
+        .collect();
     let refs: Vec<&[f32]> = rows.iter().map(|r| r.as_slice()).collect();
     let config = test_config(vocab, 64);
 
@@ -117,7 +119,11 @@ fn ddtree_eb_no_stall_on_degenerate_one_hot() {
             &eb(gamma, usize::MAX, ErrorProxy::Entropy),
         )
         .to_vec();
-        assert_eq!(tree.len(), depths, "γ={gamma}: the chain is fully committed");
+        assert_eq!(
+            tree.len(),
+            depths,
+            "γ={gamma}: the chain is fully committed"
+        );
         assert_eq!(
             scratch.children_committed, depths,
             "γ={gamma}: no stall on a degenerate distribution"
@@ -149,8 +155,7 @@ fn ddtree_eb_commits_wide_when_probs_are_close() {
     )
     .to_vec();
     assert_eq!(
-        scratch.commit_histogram[2],
-        scratch.expansions as u64,
+        scratch.commit_histogram[2], scratch.expansions as u64,
         "root + both depth-0 pops"
     );
     assert_eq!(tree.len(), 6, "2 roots × 2 children");
@@ -189,8 +194,7 @@ fn ddtree_eb_cap_bounds_per_expansion_children() {
         "cap bounds every expansion's commit count"
     );
     assert_eq!(
-        scratch.commit_histogram[2],
-        scratch.expansions as u64,
+        scratch.commit_histogram[2], scratch.expansions as u64,
         "every expansion had ≥ 2 candidates and hit the cap"
     );
     assert_eq!(
@@ -323,7 +327,10 @@ fn dflash_block_commit_no_stall_flat_and_degenerate() {
         &mut tokens,
         &eb(0.0, usize::MAX, ErrorProxy::Entropy),
     );
-    assert_eq!(k, steps, "degenerate block: zero entropy commits everything");
+    assert_eq!(
+        k, steps,
+        "degenerate block: zero entropy commits everything"
+    );
     for (d, &t) in tokens.iter().enumerate() {
         assert_eq!(t, d % vocab, "argmax token of depth {d}");
     }
@@ -406,7 +413,10 @@ fn dflash_commit_matches_bruteforce_sum_minus_max() {
         got.sort_unstable();
         let mut want = expected.clone();
         want.sort_unstable();
-        assert_eq!(got, want, "case {case}: committed set (proxy {proxy:?}, γ {gamma})");
+        assert_eq!(
+            got, want,
+            "case {case}: committed set (proxy {proxy:?}, γ {gamma})"
+        );
         assert_eq!(k, n_expected, "case {case}: committed count");
 
         // Every emitted token is the argmax of its committed depth, in
@@ -414,16 +424,19 @@ fn dflash_commit_matches_bruteforce_sum_minus_max() {
         // by the emit) and compare slot-wise against the emitted tokens.
         let mut sorted: Vec<usize> = expected.iter().map(|&d| d as usize).collect();
         sorted.sort_unstable();
-        assert!(tokens[..k].iter().enumerate().all(|(s, &t)| {
-            let row = &flat[sorted[s] * vocab..(sorted[s] + 1) * vocab];
-            let argmax = row
-                .iter()
-                .enumerate()
-                .max_by(|(_, a), (_, b)| a.total_cmp(b))
-                .map(|(i, _)| i)
-                .unwrap_or(0);
-            t == argmax
-        }), "case {case}: emitted tokens are the committed depths' argmaxes");
+        assert!(
+            tokens[..k].iter().enumerate().all(|(s, &t)| {
+                let row = &flat[sorted[s] * vocab..(sorted[s] + 1) * vocab];
+                let argmax = row
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, a), (_, b)| a.total_cmp(b))
+                    .map(|(i, _)| i)
+                    .unwrap_or(0);
+                t == argmax
+            }),
+            "case {case}: emitted tokens are the committed depths' argmaxes"
+        );
     }
 }
 
@@ -635,7 +648,10 @@ fn dflash_predict_eb_with_end_to_end() {
         .iter()
         .map(|&d| d as usize)
         .collect();
-    assert!(depths.iter().enumerate().all(|(s, &d)| s <= d), "ascending depth order");
+    assert!(
+        depths.iter().enumerate().all(|(s, &d)| s <= d),
+        "ascending depth order"
+    );
     for (slot, &d) in depths.iter().enumerate() {
         let row = &marginals[d * config.vocab_size..(d + 1) * config.vocab_size];
         let sum: f32 = row.iter().sum();

@@ -193,7 +193,7 @@ pub fn population_state_summary(values: &[f32], scratch: &mut [f32]) -> StateSum
 
 #[cfg(test)]
 mod tests {
-    use super::{event_state_window, population_state_summary, StateSummary};
+    use super::{StateSummary, event_state_window, population_state_summary};
 
     /// Deterministic LCG (the global-RNG gate's seeded-local law).
     struct Lcg(u64);
@@ -273,10 +273,7 @@ mod tests {
         for t in [0.001f32, 5.0, 10.0, 15.0, 19.999] {
             let left = event_state_window(t, bp - 1.0e4, 0.0, 0.0, gamma);
             // left state's fall edge AT b=0: sigma((0 - t)/gamma) < 1/2.
-            assert!(
-                left < 0.5,
-                "left state claims settle t={t}: w={left}"
-            );
+            assert!(left < 0.5, "left state claims settle t={t}: w={left}");
             let right = event_state_window(t, 0.0, 1.0e4, d, gamma);
             // right state's rise edge AT b+delta=20: sigma((t-20)/gamma) < 1/2.
             assert!(right < 0.5, "right state claims settle t={t}: w={right}");
@@ -370,11 +367,7 @@ mod tests {
                 let u = rng.f32_unit();
                 if i % 97 == 0 {
                     // inject degenerate widths at a known rate
-                    if i % 3 == 0 {
-                        0.0
-                    } else {
-                        -u.abs()
-                    }
+                    if i % 3 == 0 { 0.0 } else { -u.abs() }
                 } else {
                     0.01 + u.abs() * 50.0
                 }
@@ -438,20 +431,30 @@ mod tests {
             values.swap(i, i + 1);
         }
         let b = population_state_summary(&values, &mut scratch);
-        assert_eq!(a, b, "bit-identical under permutation (PartialEq on f32 is bit equality for these fields)");
+        assert_eq!(
+            a, b,
+            "bit-identical under permutation (PartialEq on f32 is bit equality for these fields)"
+        );
     }
 
     #[test]
     fn summary_empty_and_single() {
         let mut scratch: Vec<f32> = Vec::new();
-        assert_eq!(population_state_summary(&[], &mut scratch), StateSummary::EMPTY);
+        assert_eq!(
+            population_state_summary(&[], &mut scratch),
+            StateSummary::EMPTY
+        );
         let mut one = [0.0f32; 1];
         let s = population_state_summary(&[42.0], &mut one);
         assert_eq!(s.n, 1);
         assert_eq!(s.mean, 42.0);
         assert_eq!(s.spread, 0.0);
         assert_eq!(s.p50, 42.0);
-        assert_eq!(s.supports, [1, 1, 1, 1, 1], "n=1: every percentile is the max — support says so");
+        assert_eq!(
+            s.supports,
+            [1, 1, 1, 1, 1],
+            "n=1: every percentile is the max — support says so"
+        );
     }
 
     #[test]

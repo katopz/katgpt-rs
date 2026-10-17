@@ -186,8 +186,16 @@ impl NodeInterval {
         let prev_lo = self.slow_lo;
         let prev_hi = self.slow_hi;
         // Running intersection: min-of-lower / max-of-upper.
-        self.slow_lo = if self.slow_n == 1 { lo } else { prev_lo.max(lo) };
-        self.slow_hi = if self.slow_n == 1 { hi } else { prev_hi.min(hi) };
+        self.slow_lo = if self.slow_n == 1 {
+            lo
+        } else {
+            prev_lo.max(lo)
+        };
+        self.slow_hi = if self.slow_n == 1 {
+            hi
+        } else {
+            prev_hi.min(hi)
+        };
         debug_assert!(
             self.slow_lo >= prev_lo.max(f64::NEG_INFINITY) - 1e-12
                 && self.slow_hi <= prev_hi.min(f64::INFINITY) + 1e-12,
@@ -658,10 +666,7 @@ pub fn two_fidelity_search<S: MinimaxSpace, R: RngCore>(
         // detectable E_δ violation — terminate + default action, certified
         // = false. On honest oracles this never fires (every interval
         // contains V* on E_δ, and max/min backups preserve containment).
-        if root_children
-            .iter()
-            .any(|c| search.is_empty(*c))
-        {
+        if root_children.iter().any(|c| search.is_empty(*c)) {
             return search.finish(root_children, false);
         }
 
@@ -685,8 +690,8 @@ pub fn two_fidelity_search<S: MinimaxSpace, R: RngCore>(
 
         // Refine the coarser unresolved side of the leader/challenger pair
         // (tie → the leader's L-side, deterministic).
-        let challenger = search
-            .pick_extreme_excluding(root_children.as_slice(), Side::Upper, true, leader);
+        let challenger =
+            search.pick_extreme_excluding(root_children.as_slice(), Side::Upper, true, leader);
         if config.lazy_discharge {
             // Reference `root_obligation`: the leader's L-side at its active
             // scale vs the challenger's coarser contender side; no finite
@@ -812,7 +817,9 @@ impl<'a, S: MinimaxSpace, R: RngCore> Searcher<'a, S, R> {
             let _ = pairs.try_push((lo, hi));
         }
         if !pairs.is_empty() {
-            self.state(node).interval.set_child_backup(kind, pairs.as_slice());
+            self.state(node)
+                .interval
+                .set_child_backup(kind, pairs.as_slice());
         }
     }
 
@@ -835,7 +842,11 @@ impl<'a, S: MinimaxSpace, R: RngCore> Searcher<'a, S, R> {
             let better = match best {
                 None => true,
                 Some(b) => {
-                    let improves = if want_max { key > best_key } else { key < best_key };
+                    let improves = if want_max {
+                        key > best_key
+                    } else {
+                        key < best_key
+                    };
                     improves || (key == best_key && child < b)
                 }
             };
@@ -870,7 +881,11 @@ impl<'a, S: MinimaxSpace, R: RngCore> Searcher<'a, S, R> {
             let better = match best {
                 None => true,
                 Some(b) => {
-                    let improves = if want_max { key > best_key } else { key < best_key };
+                    let improves = if want_max {
+                        key > best_key
+                    } else {
+                        key < best_key
+                    };
                     improves || (key == best_key && child < b)
                 }
             };
@@ -889,7 +904,9 @@ impl<'a, S: MinimaxSpace, R: RngCore> Searcher<'a, S, R> {
         let sample = self.space.slow_sample(node, self.rng);
         self.cost.slow += 1;
         self.state(node).slow_n += 1;
-        self.state(node).interval.observe_slow(sample, sigma, delta_v);
+        self.state(node)
+            .interval
+            .observe_slow(sample, sigma, delta_v);
         f64::from(self.config.slow_cost)
     }
 
@@ -927,8 +944,7 @@ impl<'a, S: MinimaxSpace, R: RngCore> Searcher<'a, S, R> {
         // correctness-bearing: both routes only tighten valid intervals).
         let bias = f64::from(self.space.bias_envelope(depth));
         if self.stage_radii.is_none() {
-            self.stage_radii =
-                Some(stage_radii(self.config.delta_for_node(), self.config.sigma));
+            self.stage_radii = Some(stage_radii(self.config.delta_for_node(), self.config.sigma));
         }
         let m = m_samples_with(self.stage_radii.as_deref().unwrap_or(&[]), rho / 2.0);
         let gamma = gamma_v(bias, rho, self.config.slow_cost, m);
@@ -1287,7 +1303,11 @@ impl<'a, S: MinimaxSpace, R: RngCore> Searcher<'a, S, R> {
     /// Freeze the result: leader (argmax L, tie → lowest handle), the cost
     /// ledger, and the root children's effective intervals. When tracing,
     /// emit the per-node sample ledger (Issue 916 cause-(b) measurement).
-    fn finish(&self, root_children: ArrayVec<u32, MAX_CHILDREN>, certified: bool) -> TwoFidelityResult {
+    fn finish(
+        &self,
+        root_children: ArrayVec<u32, MAX_CHILDREN>,
+        certified: bool,
+    ) -> TwoFidelityResult {
         let best_action = self.pick_extreme(root_children.as_slice(), Side::Lower, true);
         let mut root_intervals = Vec::with_capacity(root_children.len());
         for child in root_children.iter() {
@@ -1603,8 +1623,7 @@ mod tests {
         }
 
         fn slow_sample(&self, node: u32, rng: &mut impl RngCore) -> f32 {
-            self.slow[node as usize]
-                + ((rng.f64() - 0.5) * 2.0 * f64::from(self.noise_amp)) as f32
+            self.slow[node as usize] + ((rng.f64() - 0.5) * 2.0 * f64::from(self.noise_amp)) as f32
         }
     }
 

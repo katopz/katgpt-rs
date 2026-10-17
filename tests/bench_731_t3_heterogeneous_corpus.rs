@@ -446,11 +446,11 @@ fn run_one(
         None,
         None,  // Issue 717: deep_run — None = bit-identical baseline
         probe, // Issue 731: the residual-exit probe (cadence_gate builds)
-    #[cfg(feature = "loop_guidance")]
+        #[cfg(feature = "loop_guidance")]
         None, // Plan 617: LoopCD guidance - None = bit-identical baseline
         #[cfg(feature = "loop_guidance")]
         None,
-        )
+    )
     .to_vec()
 }
 
@@ -504,11 +504,11 @@ fn run_on_prefix(
             None,
             None,
             None,
-        #[cfg(feature = "loop_guidance")]
+            #[cfg(feature = "loop_guidance")]
             None, // Plan 617: LoopCD guidance - None = bit-identical baseline
             #[cfg(feature = "loop_guidance")]
             None,
-            );
+        );
     }
     forward_looped(
         &mut ctx,
@@ -529,11 +529,11 @@ fn run_on_prefix(
         None,
         None,
         probe,
-    #[cfg(feature = "loop_guidance")]
+        #[cfg(feature = "loop_guidance")]
         None, // Plan 617: LoopCD guidance - None = bit-identical baseline
         #[cfg(feature = "loop_guidance")]
         None,
-        )
+    )
     .to_vec()
 }
 

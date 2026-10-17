@@ -511,14 +511,7 @@ fn graded_matrix_issue931_scales() {
         let mut eigvals = vec![0.0_f64; n];
         let mut eigvecs = vec![0.0_f64; n * n];
         let mut scratch = SymmetricEigScratch::new();
-        symmetric_eig(
-            &mut eigvals,
-            &mut eigvecs,
-            &a_scaled,
-            &mut scratch,
-            n,
-            200,
-        );
+        symmetric_eig(&mut eigvals, &mut eigvecs, &a_scaled, &mut scratch, n, 200);
         // Accuracy bar: ±1e-9 vs the known spectrum — but the spectrum scales
         // too, so compare against the scaled λ (tolerance scales with ‖A‖).
         let mut lambda_scaled = lambda.clone();

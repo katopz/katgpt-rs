@@ -171,18 +171,21 @@ fn read_u32(path: &Path) -> Vec<u32> {
 }
 
 fn verify_blake3(path: &Path, expected: &str) {
-    let bytes = fs::read(path)
-        .unwrap_or_else(|e| panic!("read {} for BLAKE3 verify: {e}", path.display()));
+    let bytes =
+        fs::read(path).unwrap_or_else(|e| panic!("read {} for BLAKE3 verify: {e}", path.display()));
     let got = blake3::hash(&bytes).to_hex().to_string();
     assert_eq!(
-        got, expected,
+        got,
+        expected,
         "BLAKE3 mismatch for {} — fixture corruption",
         path.display()
     );
 }
 
 fn resolve(rel: &str, full_dir: Option<&Path>) -> PathBuf {
-    let name = rel.trim_start_matches("commit/").trim_start_matches("full/");
+    let name = rel
+        .trim_start_matches("commit/")
+        .trim_start_matches("full/");
     match rel.split('/').next() {
         Some("full") => {
             let dir = full_dir.unwrap_or_else(|| {
@@ -224,7 +227,12 @@ fn load_k_bins(m: &serde_json::Value, full_dir: Option<&Path>, use_full: bool) -
             let data = read_f32(&path);
             let row_len = e["row_len_f32"].as_u64().unwrap() as usize;
             let rows = e["rows"].as_u64().unwrap() as usize;
-            assert_eq!(data.len(), rows * row_len, "bin shape for {}", path.display());
+            assert_eq!(
+                data.len(),
+                rows * row_len,
+                "bin shape for {}",
+                path.display()
+            );
             let positions: Vec<usize> = if use_full {
                 (0..rows).collect()
             } else {
@@ -861,8 +869,8 @@ fn eval_family(
             wmu.clear();
             wmu.extend(apply_w(&fit.w, &mu, d));
             fit_score[b] = dot(u, &wmu);
-            let rms = (wmu.iter().map(|x| (*x as f64) * (*x as f64)).sum::<f64>() / d as f64)
-                .sqrt() as f32;
+            let rms = (wmu.iter().map(|x| (*x as f64) * (*x as f64)).sum::<f64>() / d as f64).sqrt()
+                as f32;
             if rms > 1e-12 {
                 let g = fit.tau / rms;
                 fit_rms_score[b] = dot(u, &wmu.iter().map(|x| x * g).collect::<Vec<f32>>());
@@ -880,7 +888,13 @@ fn eval_family(
         for (b, ms) in mixed_score.iter_mut().enumerate() {
             let base = b * PYRAMID_BLOCK_SIZE;
             let cnt = (prefix_rows - base).min(PYRAMID_BLOCK_SIZE);
-            permute_rows(&keys[base * d..(base + cnt) * d], &pair_map, cnt, d, &mut block_perm);
+            permute_rows(
+                &keys[base * d..(base + cnt) * d],
+                &pair_map,
+                cnt,
+                d,
+                &mut block_perm,
+            );
             let pos = &kbin.positions[base..base + cnt];
             let span = pos[cnt - 1] - pos[0];
             let summarizer = MixedRopeSummarizer::new(d, inv_freq.clone(), span);
@@ -921,7 +935,11 @@ fn eval_family(
 
     if n_leaves == 1 {
         for sel in &selections {
-            assert_eq!(sel, &[0], "degenerate canary: position-0 family must select [0]");
+            assert_eq!(
+                sel,
+                &[0],
+                "degenerate canary: position-0 family must select [0]"
+            );
         }
     }
 
@@ -970,7 +988,11 @@ fn run_probe(use_full: bool) -> ProbeRun {
     let fd = full_dir();
     let fd = if use_full {
         let d = fd.unwrap_or_else(|| panic!("PYRAMID_612_FULL_DIR not set"));
-        assert!(d.is_dir(), "PYRAMID_612_FULL_DIR={} is not a dir", d.display());
+        assert!(
+            d.is_dir(),
+            "PYRAMID_612_FULL_DIR={} is not a dir",
+            d.display()
+        );
         Some(d)
     } else {
         None
@@ -1016,7 +1038,10 @@ fn run_probe(use_full: bool) -> ProbeRun {
     for (gi, (glayer, ghead)) in groups.iter().enumerate() {
         // Fit families: same layer, other heads.
         let mut fit_families: Vec<FamilySlice> = Vec::new();
-        for kbin in kbins.iter().filter(|k| k.layer == *glayer && k.head != *ghead) {
+        for kbin in kbins
+            .iter()
+            .filter(|k| k.layer == *glayer && k.head != *ghead)
+        {
             for &p in &q_positions_for(&m, kbin.src_l) {
                 let prefix = row_of(kbin, p) + 1;
                 let qmat = qs
@@ -1040,7 +1065,10 @@ fn run_probe(use_full: bool) -> ProbeRun {
         // Eval families: the held-out group.
         let mut fold_recalls = [0.0f64; 6];
         let mut n_nt = 0usize;
-        for kbin in kbins.iter().filter(|k| k.layer == *glayer && k.head == *ghead) {
+        for kbin in kbins
+            .iter()
+            .filter(|k| k.layer == *glayer && k.head == *ghead)
+        {
             for &p in &q_positions_for(&m, kbin.src_l) {
                 let prefix = row_of(kbin, p) + 1;
                 let qmat = qs
@@ -1088,9 +1116,7 @@ fn print_report(run: &ProbeRun, source: &str) {
         .iter()
         .filter(|f| f.n_leaves >= MIN_LEAVES)
         .collect();
-    println!(
-        "\n[925] == per-fold mean recall@{TOP_K} (non-trivial families) — {source} =="
-    );
+    println!("\n[925] == per-fold mean recall@{TOP_K} (non-trivial families) — {source} ==");
     let header = ARMS
         .iter()
         .map(|a| format!("{:>10}", a.label()))
@@ -1112,23 +1138,24 @@ fn print_report(run: &ProbeRun, source: &str) {
 
     println!("\n[925] == group table (layer/head/L pooled over folds, non-trivial) ==");
     let mut keys: Vec<(usize, usize, usize)> = Vec::new();
-    for f in run
-        .outcomes
-        .iter()
-        .filter(|f| f.n_leaves >= MIN_LEAVES)
-    {
+    for f in run.outcomes.iter().filter(|f| f.n_leaves >= MIN_LEAVES) {
         let k = (f.layer, f.head, f.length);
         if !keys.contains(&k) {
             keys.push(k);
         }
     }
     keys.sort_unstable();
-    println!("[925] {:>6}/{:>3}/{:>6} | {header} | n", "layer", "head", "L");
+    println!(
+        "[925] {:>6}/{:>3}/{:>6} | {header} | n",
+        "layer", "head", "L"
+    );
     for (l, h, len) in &keys {
         let grp: Vec<&FamilyOutcome> = run
             .outcomes
             .iter()
-            .filter(|f| f.layer == *l && f.head == *h && f.length == *len && f.n_leaves >= MIN_LEAVES)
+            .filter(|f| {
+                f.layer == *l && f.head == *h && f.length == *len && f.n_leaves >= MIN_LEAVES
+            })
             .collect();
         if grp.is_empty() {
             continue;
@@ -1142,7 +1169,14 @@ fn print_report(run: &ProbeRun, source: &str) {
             })
             .collect::<Vec<_>>()
             .join(" ");
-        println!("[925] {:>6}/{:>3}/{:>6} | {} | {}", l, h, len, cells, grp.len());
+        println!(
+            "[925] {:>6}/{:>3}/{:>6} | {} | {}",
+            l,
+            h,
+            len,
+            cells,
+            grp.len()
+        );
     }
 
     println!("\n[925] == length-axis breakdown (pooled over folds, non-trivial) ==");
@@ -1174,11 +1208,20 @@ fn print_report(run: &ProbeRun, source: &str) {
     }
 
     println!("\n[925] == overall (pooled; every family evaluated exactly once) ==");
-    println!("[925] {:>10} | {:>8} {:>8} | n", "arm", "recall@8", "mass-r");
+    println!(
+        "[925] {:>10} | {:>8} {:>8} | n",
+        "arm", "recall@8", "mass-r"
+    );
     for (slot, arm) in ARMS.iter().enumerate() {
         let r = nt.iter().map(|f| f.recall[slot] as f64).sum::<f64>() / nt.len() as f64;
         let mr = nt.iter().map(|f| f.mass_ratio[slot] as f64).sum::<f64>() / nt.len() as f64;
-        println!("[925] {:>10} | {:8.4} {:8.4} | {}", arm.label(), r, mr, nt.len());
+        println!(
+            "[925] {:>10} | {:8.4} {:8.4} | {}",
+            arm.label(),
+            r,
+            mr,
+            nt.len()
+        );
     }
 
     // Paired deltas + the pre-registered verdict rule.
@@ -1264,7 +1307,10 @@ fn svd_procrustes_selftest_pins() {
             max_err = max_err.max((w[i * d + j] as f64 - r[i * d + j]).abs());
         }
     }
-    assert!(max_err < 1e-6, "Procrustes known-answer pin: max |W−R| = {max_err:.2e}");
+    assert!(
+        max_err < 1e-6,
+        "Procrustes known-answer pin: max |W−R| = {max_err:.2e}"
+    );
 
     // Rank-deficient completion: a rank-1 M still yields an orthogonal W.
     let mut m1 = vec![0.0f64; d * d];
@@ -1277,7 +1323,10 @@ fn svd_procrustes_selftest_pins() {
     }
     let w1 = procrustes_w(&m1, d);
     let orth1 = frob_orthonormality_gap(&w1, d);
-    assert!(orth1 <= 1e-3, "rank-deficient orthonormality pin: {orth1:.2e}");
+    assert!(
+        orth1 <= 1e-3,
+        "rank-deficient orthonormality pin: {orth1:.2e}"
+    );
     // W acts as identity on the fit's row space (span of μ): Wμ = μ here.
     let muf: Vec<f32> = mu.iter().map(|x| *x as f32).collect();
     let wmu = apply_w(&w1, &muf, d);
@@ -1286,7 +1335,10 @@ fn svd_procrustes_selftest_pins() {
         .zip(muf.iter())
         .map(|(a, b)| ((*a - *b) as f64).abs())
         .sum::<f64>();
-    assert!(err < 1e-4, "range-action pin: Wμ must equal μ on the fit range ({err:.2e})");
+    assert!(
+        err < 1e-4,
+        "range-action pin: Wμ must equal μ on the fit range ({err:.2e})"
+    );
 
     // rope_pair_map sanity: rotary pairs hit (i, i+rp); tail pairs are consecutive.
     let map = rope_pair_map(256, 32);
@@ -1343,14 +1395,20 @@ fn probe_925_committed_real_tensors() {
     );
     println!(
         "[925] comparability vs 612 committed: mean {:.4} (612 {:.4}) lse {:.4} (612 {:.4}) — within ±{}",
-        pooled(MEAN), SIX12_COMMIT_MEAN, pooled(LSE), SIX12_COMMIT_LSE, SIX12_TOL
+        pooled(MEAN),
+        SIX12_COMMIT_MEAN,
+        pooled(LSE),
+        SIX12_COMMIT_LSE,
+        SIX12_TOL
     );
 }
 
 #[test]
 fn probe_925_full_set() {
     let Some(_) = full_dir() else {
-        println!("[925] full set not configured (PYRAMID_612_FULL_DIR unset) — SKIP LOUD (a deferral, never a green)");
+        println!(
+            "[925] full set not configured (PYRAMID_612_FULL_DIR unset) — SKIP LOUD (a deferral, never a green)"
+        );
         return;
     };
     let run = run_probe(true);
@@ -1375,6 +1433,10 @@ fn probe_925_full_set() {
     );
     println!(
         "[925] comparability vs 612 full: mean {:.4} (612 {:.4}) lse {:.4} (612 {:.4}) — within ±{}",
-        pooled(MEAN), SIX12_FULL_MEAN, pooled(LSE), SIX12_FULL_LSE, SIX12_TOL
+        pooled(MEAN),
+        SIX12_FULL_MEAN,
+        pooled(LSE),
+        SIX12_FULL_LSE,
+        SIX12_TOL
     );
 }

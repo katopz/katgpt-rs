@@ -52,13 +52,13 @@ pub mod mixture;
 pub mod projector;
 
 pub use certify::{
-    bound_acceptance, canary_fire_rate, certify, CertificationReport, CertifyConfig,
-    CertifyError, LinearDiscriminatorGate, SupportDecision,
+    CertificationReport, CertifyConfig, CertifyError, LinearDiscriminatorGate, SupportDecision,
+    bound_acceptance, canary_fire_rate, certify,
 };
-pub use em::{fit_diag_gmm, EmConfig, EmError};
-pub use fixture::{build_fixture, FixtureSet};
-pub use gate::{GateError, GateSmoother, SupportGate, DEFAULT_TAU};
-pub use mixture::{compute_mixture_commitment, DiagGmm, MixtureError};
+pub use em::{EmConfig, EmError, fit_diag_gmm};
+pub use fixture::{FixtureSet, build_fixture};
+pub use gate::{DEFAULT_TAU, GateError, GateSmoother, SupportGate};
+pub use mixture::{DiagGmm, MixtureError, compute_mixture_commitment};
 pub use projector::JlProjector;
 
 #[cfg(test)]

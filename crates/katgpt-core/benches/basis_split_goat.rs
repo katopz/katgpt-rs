@@ -108,11 +108,7 @@ fn principal_angle_cosines(basis: &[f64], k: usize, d: usize, true_k: usize) -> 
 
 /// True invariant basis entry [t, j] (first `true_k` coordinate axes).
 fn pv_axis(t: usize, j: usize) -> f32 {
-    if t == j {
-        1.0
-    } else {
-        0.0
-    }
+    if t == j { 1.0 } else { 0.0 }
 }
 
 /// One full G1 recovery check at (d, k); panics on failure (the bench FAILS,

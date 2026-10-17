@@ -209,8 +209,7 @@ impl<const D: usize, const K: usize> SyncBank<D, K> {
         let inv = 1.0 / mass;
         let tri = Self::tri_len();
         let idx = packed_index(D, i, j);
-        self.sums[k * tri + idx] * inv
-            - self.means[k * D + i] * self.means[k * D + j] * inv * inv
+        self.sums[k * tri + idx] * inv - self.means[k * D + i] * self.means[k * D + j] * inv * inv
     }
 
     /// `δ_level` readout: per bank, `Σ_ij |C_ij|` (coupling STATE — high on a
@@ -240,10 +239,7 @@ impl<const D: usize, const K: usize> SyncBank<D, K> {
             for i in 0..D {
                 let mi = m[i];
                 let row_len = D - i;
-                for (off, (sv, mj)) in s[idx..idx + row_len]
-                    .iter()
-                    .zip(m[i..D].iter())
-                    .enumerate()
+                for (off, (sv, mj)) in s[idx..idx + row_len].iter().zip(m[i..D].iter()).enumerate()
                 {
                     let c = sv * inv - mi * mj * inv2;
                     let a = c.abs();
@@ -350,7 +346,9 @@ mod tests {
     }
     impl Stream {
         fn new(seed: u64) -> Self {
-            Self { rng: Rng::new(seed) }
+            Self {
+                rng: Rng::new(seed),
+            }
         }
         fn u(&mut self, lo: f32, hi: f32) -> f32 {
             lo + (self.rng.next() >> 40) as f32 / 16_777_216.0 * (hi - lo)
@@ -542,8 +540,7 @@ mod tests {
             base.push(flip_tick(&PLUS, &mut bank, &mut tk, &mut st));
         }
         let base_surprise_max = base.iter().map(|(s, _)| *s).fold(0.0f32, f32::max);
-        let base_surprise_mean: f32 =
-            base.iter().map(|(s, _)| *s).sum::<f32>() / base.len() as f32;
+        let base_surprise_mean: f32 = base.iter().map(|(s, _)| *s).sum::<f32>() / base.len() as f32;
         let base_value = base.iter().map(|(_, v)| *v).fold(0.0f32, f32::max);
 
         // post-flip window (anti-coupled)

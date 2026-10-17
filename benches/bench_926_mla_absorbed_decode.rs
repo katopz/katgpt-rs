@@ -76,8 +76,14 @@ fn main() {
     let d_r = config.d_r();
 
     println!("bench_926_mla_absorbed_decode — absorbed vs reconstruct MLA decode");
-    println!("config: kimi_k3_0_40b (d_h={}, d_c={}, d_r={}, v_h={}, n_h={})",
-        config.d_h(), d_c, d_r, config.v_head_dim, config.n_heads);
+    println!(
+        "config: kimi_k3_0_40b (d_h={}, d_c={}, d_r={}, v_h={}, n_h={})",
+        config.d_h(),
+        d_c,
+        d_r,
+        config.v_head_dim,
+        config.n_heads
+    );
     println!("feature mla_absorbed: ON (both arms compiled; reconstruct = reference)\n");
 
     let mut rng = Lcg(0x926_926_926_926);
@@ -109,7 +115,12 @@ fn main() {
                 mla_forward_token(&config, &weights, &mut cache, &mut scratch, &mut rope, &h)
             } else {
                 mla_forward_token_absorbed(
-                    &config, &weights, &mut cache, &mut scratch, &mut rope, &h,
+                    &config,
+                    &weights,
+                    &mut cache,
+                    &mut scratch,
+                    &mut rope,
+                    &h,
                 )
             };
             black_box(&out[..8.min(d)]);
@@ -146,7 +157,12 @@ fn main() {
             }
             let t0 = Instant::now();
             let out = mla_forward_token_absorbed(
-                &config, &weights, &mut cache, &mut scratch, &mut rope, &h,
+                &config,
+                &weights,
+                &mut cache,
+                &mut scratch,
+                &mut rope,
+                &h,
             );
             black_box(&out[..8.min(d)]);
             abs_us.push(t0.elapsed().as_secs_f64() * 1e6);
@@ -170,12 +186,12 @@ fn main() {
             (min(&recon_us) / m_r - 1.0) * 100.0,
             (max(&recon_us) / m_r - 1.0) * 100.0,
         );
-        println!(
-            "  absorbed:    median {m_a:>10.1} µs/step  (spread {spread:.1}%)",
-        );
+        println!("  absorbed:    median {m_a:>10.1} µs/step  (spread {spread:.1}%)",);
         println!("  speedup:     {ratio:.2}×  (absorbed/recon wall-clock)");
         println!();
-        row_summary.push(format!("seq={seq}: {ratio:.2}× (recon {m_r:.1} µs, absorbed {m_a:.1} µs)"));
+        row_summary.push(format!(
+            "seq={seq}: {ratio:.2}× (recon {m_r:.1} µs, absorbed {m_a:.1} µs)"
+        ));
     }
 
     println!("── summary (G2 rows) ──");

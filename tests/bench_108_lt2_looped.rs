@@ -330,11 +330,11 @@ fn bench_lt2_ahla_loop() {
                 None, // Issue 717: deep_run — None = bit-identical baseline
                 #[cfg(feature = "cadence_gate")]
                 None, // Issue 731: residual-exit probe — None = bit-identical baseline
-            #[cfg(feature = "loop_guidance")]
+                #[cfg(feature = "loop_guidance")]
                 None, // Plan 617: LoopCD guidance - None = bit-identical baseline
                 #[cfg(feature = "loop_guidance")]
                 None,
-                );
+            );
         }
     }
 
@@ -365,11 +365,11 @@ fn bench_lt2_ahla_loop() {
                 None, // Issue 717: deep_run — None = bit-identical baseline
                 #[cfg(feature = "cadence_gate")]
                 None, // Issue 731: residual-exit probe — None = bit-identical baseline
-            #[cfg(feature = "loop_guidance")]
+                #[cfg(feature = "loop_guidance")]
                 None, // Plan 617: LoopCD guidance - None = bit-identical baseline
                 #[cfg(feature = "loop_guidance")]
                 None,
-                ));
+            ));
         }
     }
     let elapsed = start.elapsed();
@@ -443,11 +443,11 @@ fn bench_lt2_hybrid() {
                 None, // Issue 717: deep_run — None = bit-identical baseline
                 #[cfg(feature = "cadence_gate")]
                 None, // Issue 731: residual-exit probe — None = bit-identical baseline
-            #[cfg(feature = "loop_guidance")]
+                #[cfg(feature = "loop_guidance")]
                 None, // Plan 617: LoopCD guidance - None = bit-identical baseline
                 #[cfg(feature = "loop_guidance")]
                 None,
-                );
+            );
         }
     }
 
@@ -478,11 +478,11 @@ fn bench_lt2_hybrid() {
                 None, // Issue 717: deep_run — None = bit-identical baseline
                 #[cfg(feature = "cadence_gate")]
                 None, // Issue 731: residual-exit probe — None = bit-identical baseline
-            #[cfg(feature = "loop_guidance")]
+                #[cfg(feature = "loop_guidance")]
                 None, // Plan 617: LoopCD guidance - None = bit-identical baseline
                 #[cfg(feature = "loop_guidance")]
                 None,
-                ));
+            ));
         }
     }
     let elapsed = start.elapsed();
@@ -599,11 +599,11 @@ fn proof_lt2_hybrid_throughput() {
                 None, // Issue 717: deep_run — None = bit-identical baseline
                 #[cfg(feature = "cadence_gate")]
                 None, // Issue 731: residual-exit probe — None = bit-identical baseline
-            #[cfg(feature = "loop_guidance")]
+                #[cfg(feature = "loop_guidance")]
                 None, // Plan 617: LoopCD guidance - None = bit-identical baseline
                 #[cfg(feature = "loop_guidance")]
                 None,
-                );
+            );
         }
     }
 
@@ -634,11 +634,11 @@ fn proof_lt2_hybrid_throughput() {
                 None, // Issue 717: deep_run — None = bit-identical baseline
                 #[cfg(feature = "cadence_gate")]
                 None, // Issue 731: residual-exit probe — None = bit-identical baseline
-            #[cfg(feature = "loop_guidance")]
+                #[cfg(feature = "loop_guidance")]
                 None, // Plan 617: LoopCD guidance - None = bit-identical baseline
                 #[cfg(feature = "loop_guidance")]
                 None,
-                ));
+            ));
         }
     }
     let hybrid_elapsed = start.elapsed();

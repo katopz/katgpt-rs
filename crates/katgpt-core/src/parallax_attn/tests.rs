@@ -1545,9 +1545,7 @@ mod scale_invariant_tests {
         for i in 0..n {
             let mut scores: Vec<f32> = (0..n)
                 .map(|j| {
-                    let dot: f32 = (0..d)
-                        .map(|e| q[i * d + e] * k[j * d + e])
-                        .sum();
+                    let dot: f32 = (0..d).map(|e| q[i * d + e] * k[j * d + e]).sum();
                     dot * scale
                 })
                 .collect();
@@ -1588,7 +1586,9 @@ mod scale_invariant_tests {
     }
 
     fn gen_qkv(n: usize, d: usize, phase: f32) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
-        let q: Vec<f32> = (0..n * d).map(|i| ((i as f32) * 0.017 + phase).sin()).collect();
+        let q: Vec<f32> = (0..n * d)
+            .map(|i| ((i as f32) * 0.017 + phase).sin())
+            .collect();
         let k: Vec<f32> = (0..n * d).map(|i| ((i as f32) * 0.023).cos()).collect();
         let v: Vec<f32> = (0..n * d).map(|i| ((i as f32) * 0.011).sin()).collect();
         (q, k, v)
@@ -1623,9 +1623,7 @@ mod scale_invariant_tests {
                 ..Default::default()
             };
             let mut out = vec![0.0f32; n * d];
-            tiled_attention_parallax_forward(
-                &q, &k, &v, &mut out, n, d, scale, &r, &x, &cfg, None,
-            );
+            tiled_attention_parallax_forward(&q, &k, &v, &mut out, n, d, scale, &r, &x, &cfg, None);
             let reference = reference_forward(&q, &k, &v, n, d, scale, Some(&lut), activation);
             compare(&out, &reference, 1e-4, &format!("core {activation:?}"));
             // Non-vacuity: the schedule must actually move the output.
@@ -1636,10 +1634,23 @@ mod scale_invariant_tests {
             };
             let mut out_off = vec![0.0f32; n * d];
             tiled_attention_parallax_forward(
-                &q, &k, &v, &mut out_off, n, d, scale, &r, &x, &cfg_off, None,
+                &q,
+                &k,
+                &v,
+                &mut out_off,
+                n,
+                d,
+                scale,
+                &r,
+                &x,
+                &cfg_off,
+                None,
             );
             let diffs = out.iter().zip(&out_off).filter(|(a, b)| a != b).count();
-            assert!(diffs > 0, "core {activation:?}: schedule must change output");
+            assert!(
+                diffs > 0,
+                "core {activation:?}: schedule must change output"
+            );
         }
     }
 
@@ -1651,7 +1662,9 @@ mod scale_invariant_tests {
         let d = 4;
         let scale = 1.0 / (d as f32).sqrt();
         let (q, k, v) = gen_qkv(n, d, 0.5);
-        let r: Vec<f32> = (0..d * d).map(|i| ((i as f32) * 0.05).sin() * 0.3).collect();
+        let r: Vec<f32> = (0..d * d)
+            .map(|i| ((i as f32) * 0.05).sin() * 0.3)
+            .collect();
         let x: Vec<f32> = (0..d).map(|i| i as f32 * 0.1).collect();
         let lut = std::sync::Arc::new(ScaleInvariantLut::build(TAU, MAX_CTX));
         for activation in [ParallaxActivation::Softmax, ParallaxActivation::Sigmoid] {
@@ -1662,14 +1675,11 @@ mod scale_invariant_tests {
                 ..Default::default()
             };
             let mut out = vec![0.0f32; n * d];
-            tiled_attention_parallax_forward(
-                &q, &k, &v, &mut out, n, d, scale, &r, &x, &cfg, None,
-            );
+            tiled_attention_parallax_forward(&q, &k, &v, &mut out, n, d, scale, &r, &x, &cfg, None);
             // Reference: schedule-weighted attention, then the Parallax
             // correction o −= gate_scale · Σ_KV · ρ spelled from the SAME
             // normalized weights.
-            let mut reference =
-                reference_forward(&q, &k, &v, n, d, scale, Some(&lut), activation);
+            let mut reference = reference_forward(&q, &k, &v, n, d, scale, Some(&lut), activation);
             // column sums from the reference weights
             let mut col = vec![0.0f32; n];
             for i in 0..n {
@@ -1754,8 +1764,32 @@ mod scale_invariant_tests {
         };
         let mut out_on = vec![0.0f32; n * d];
         let mut out_off = vec![0.0f32; n * d];
-        tiled_attention_parallax_forward(&q, &k, &v, &mut out_on, n, d, scale, &r, &x, &cfg_on, None);
-        tiled_attention_parallax_forward(&q, &k, &v, &mut out_off, n, d, scale, &r, &x, &cfg_off, None);
+        tiled_attention_parallax_forward(
+            &q,
+            &k,
+            &v,
+            &mut out_on,
+            n,
+            d,
+            scale,
+            &r,
+            &x,
+            &cfg_on,
+            None,
+        );
+        tiled_attention_parallax_forward(
+            &q,
+            &k,
+            &v,
+            &mut out_off,
+            n,
+            d,
+            scale,
+            &r,
+            &x,
+            &cfg_off,
+            None,
+        );
         assert_eq!(out_on, out_off, "n=1 (all-sink row) must be bit-identical");
     }
 

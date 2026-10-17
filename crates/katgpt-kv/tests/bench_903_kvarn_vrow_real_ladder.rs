@@ -90,8 +90,7 @@ fn main() {
 
     // ── parse the header ──
     assert_eq!(&bytes[0..7], b"VROW001", "bad fixture magic");
-    let n_layers =
-        u32::from_le_bytes(bytes[7..11].try_into().unwrap()) as usize;
+    let n_layers = u32::from_le_bytes(bytes[7..11].try_into().unwrap()) as usize;
     let kv_dim = u32::from_le_bytes(bytes[11..15].try_into().unwrap()) as usize;
     let rows_per_layer = u32::from_le_bytes(bytes[15..19].try_into().unwrap()) as usize;
     let corpus_blake3 = String::from_utf8(bytes[19..83].to_vec()).expect("corpus blake3 utf8");
@@ -110,7 +109,11 @@ fn main() {
     // bytemuck alignment law). One aligned copy of the payload (~0.2 s for
     // 218 MB) beats re-specifying the capture format.
     let mut aligned = Vec::with_capacity(want);
-    aligned.extend(payload.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())));
+    aligned.extend(
+        payload
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap())),
+    );
     let rows_f32: &[f32] = &aligned;
     println!(
         "# fixture: {n_layers} layers × {rows_per_layer} rows × kv_dim {kv_dim} | corpus blake3 {corpus_blake3}"
@@ -123,8 +126,16 @@ fn main() {
         ("plain-b2 (skip-varn+g4, with_config)", 2, None),
         ("plain-b3 (varn, with_config)", 3, None),
         ("plain-b4 (varn, with_config)", 4, None),
-        ("cross-b3-on-b2-machinery (skip-varn+g4)", 3, Some((true, 4))),
-        ("cross-b4-on-b2-machinery (skip-varn+g4)", 4, Some((true, 4))),
+        (
+            "cross-b3-on-b2-machinery (skip-varn+g4)",
+            3,
+            Some((true, 4)),
+        ),
+        (
+            "cross-b4-on-b2-machinery (skip-varn+g4)",
+            4,
+            Some((true, 4)),
+        ),
         ("cross-b2-on-varn-machinery", 2, Some((false, 0))),
     ];
 
@@ -193,23 +204,42 @@ fn main() {
 
     // ── the attribution verdict ──
     println!("\n# ── attribution (machinery vs width) ──");
-    let get = |name: &str| table.iter().find(|(l, _, _)| l.starts_with(name)).map(|(_, m, _)| *m).expect("arm present");
+    let get = |name: &str| {
+        table
+            .iter()
+            .find(|(l, _, _)| l.starts_with(name))
+            .map(|(_, m, _)| *m)
+            .expect("arm present")
+    };
     let b2 = get("plain-b2");
     let b3 = get("plain-b3");
     let b4 = get("plain-b4");
     let b3x = get("cross-b3-on-b2-machinery");
     let b4x = get("cross-b4-on-b2-machinery");
     let b2x = get("cross-b2-on-varn-machinery");
-    println!("# plain ladder:      b2 {b2:.6}  b3 {b3:.6}  b4 {b4:.6}  (monotone in bits? {})", b2 <= b3 && b3 <= b4);
-    println!("# crossed:           b3→b2-machinery {b3x:.6}   b4→b2-machinery {b4x:.6}   b2→varn {b2x:.6}");
+    println!(
+        "# plain ladder:      b2 {b2:.6}  b3 {b3:.6}  b4 {b4:.6}  (monotone in bits? {})",
+        b2 <= b3 && b3 <= b4
+    );
+    println!(
+        "# crossed:           b3→b2-machinery {b3x:.6}   b4→b2-machinery {b4x:.6}   b2→varn {b2x:.6}"
+    );
     let toward_b2 = ((b3x - b2).abs() < (b3x - b3).abs()) as i32;
     let width_kept = ((b3x - b3).abs() < (b3x - b2).abs()) as i32;
     if toward_b2 == 1 && width_kept == 0 {
-        println!("# VERDICT: b3's excess error FOLLOWS THE MACHINERY — forced down the b2 path it collapses toward b2-class error. The var-norm path at 3 bits is the defect site; the fix is local to the var-norm machinery.");
+        println!(
+            "# VERDICT: b3's excess error FOLLOWS THE MACHINERY — forced down the b2 path it collapses toward b2-class error. The var-norm path at 3 bits is the defect site; the fix is local to the var-norm machinery."
+        );
     } else if width_kept == 1 && toward_b2 == 0 {
-        println!("# VERDICT: b3's excess error FOLLOWS THE WIDTH — forced onto the b2 machinery it stays b3-class. 3-bit RTN resolution itself is the cost; the machinery is exonerated and the inversion is a width artifact of the var-norm scale field.");
+        println!(
+            "# VERDICT: b3's excess error FOLLOWS THE WIDTH — forced onto the b2 machinery it stays b3-class. 3-bit RTN resolution itself is the cost; the machinery is exonerated and the inversion is a width artifact of the var-norm scale field."
+        );
     } else {
-        println!("# VERDICT: MIXED — the crossed arm lands between both classes (b3x {b3x:.6} vs b2 {b2:.6} / b3 {b3:.6}); the error is a machinery×width INTERACTION. Read the full table before naming a defect site.");
+        println!(
+            "# VERDICT: MIXED — the crossed arm lands between both classes (b3x {b3x:.6} vs b2 {b2:.6} / b3 {b3:.6}); the error is a machinery×width INTERACTION. Read the full table before naming a defect site."
+        );
     }
-    println!("\n# consumer rule (lands either way): never interpolate V-row quality across KVarN bit arms — each arm is a distinct quantizer (Issue 907).");
+    println!(
+        "\n# consumer rule (lands either way): never interpolate V-row quality across KVarN bit arms — each arm is a distinct quantizer (Issue 907)."
+    );
 }
