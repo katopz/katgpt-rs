@@ -4,6 +4,7 @@
 > **Date:** 2025-02, distilled 2026-06
 > **Verdict: HIGH VALUE FOR BPE-SCALE — Target activations compose with DFlash (orthogonal: activation-level vs token-level conditioning). Shared KV saves redundant prompt processing. Clustered LM head eliminates the vocab × hidden matmul bottleneck at scale. All three threshold-gate cleanly: zero cost for game models, automatic activation for BPE-scale.**
 > **PASS-Redirects (synthesis):** Godey & Artzi [arXiv:2603.10145 "Lost in Backpropagation: The LM Head is a Gradient Bottleneck"] — proves alternative/mixture heads (MoS/Mixtape/Sigsoftmax class) do NOT fix the *gradient* bottleneck (any gθ: R^D→R^V has rank-D Jacobian), so our clustered LM head stays a pure inference-compute win; the training-side head-width knob lives in riir-train Research 416.
+> **PASS-Redirects (2026-10-18):** Godey & Artzi [arXiv:2610.19247 "Copy-Paste Language Models"] — the pointer-head exception to the fixed-head claim above: a Copy-Paste head (t×D key backward operator) partially mitigates the gradient bottleneck during pretraining. Training-only; inference verdict here unchanged. Recipe lives in riir-train Research 476 / Plan 463.
 
 ## TL;DR
 
