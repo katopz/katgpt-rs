@@ -124,8 +124,7 @@ fn resolution_w_floor(z: &[f32], c: f32) -> f32 {
     }
     let q = sigmoid(c).clamp(1e-6, 1.0 - 1e-6);
     let ulp = (f32::from_bits(q.to_bits() + 1) - q).max(f32::MIN_POSITIVE);
-    (RESOLUTION_FLOOR_ULPS * ulp / (q * (1.0 - q) * dz_min))
-        .clamp(W_MIN, RESOLUTION_FLOOR_MAX)
+    (RESOLUTION_FLOOR_ULPS * ulp / (q * (1.0 - q) * dz_min)).clamp(W_MIN, RESOLUTION_FLOOR_MAX)
 }
 /// Commitment format version (bump on any change to the canonical bytes or
 /// to the fit behavior — v2: the LLW solver fix, Issue 910; the same
@@ -1160,10 +1159,7 @@ mod tests {
     /// (Report-the-Floor at the window level — see the audit test).
     #[test]
     fn real_windows_get_the_true_mle_at_the_llw_solver() {
-        for (suite, w_lo, w_hi) in [
-            ("banking77", 6.0f32, 11.0f32),
-            ("xnli_en", 0.05f32, 0.6f32),
-        ] {
+        for (suite, w_lo, w_hi) in [("banking77", 6.0f32, 11.0f32), ("xnli_en", 0.05f32, 0.6f32)] {
             let pairs = load_window_fixture(suite);
             assert!(pairs.len() >= 64, "{suite}: window must clear min_obs");
             let cal = replay_window(&pairs);
@@ -1207,7 +1203,10 @@ mod tests {
         let cal = replay_window(&pairs);
         let (w, c) = cal.params_raw();
         assert!((w, c) != (1.0, 0.0), "the sane fit must survive");
-        assert!((3.5..3.8).contains(&w), "the reference MLE w≈3.63 must hold");
+        assert!(
+            (3.5..3.8).contains(&w),
+            "the reference MLE w≈3.63 must hold"
+        );
         let (t, _b) = cal.params();
         assert!((0.1..=1.0).contains(&t), "measured T≈0.275, got {t}");
     }
@@ -1289,7 +1288,9 @@ mod tests {
                         for i in 0..n {
                             let z = z0 + band * (i as f32 + rng.f01()) / n as f32;
                             // base rate via an intercept; signal via the slope.
-                            let p_true = sigmoid(signal.mul_add(z - z0 - band / 2.0, (base / (1.0 - base)).ln()));
+                            let p_true = sigmoid(
+                                signal.mul_add(z - z0 - band / 2.0, (base / (1.0 - base)).ln()),
+                            );
                             cal.observe(sigmoid(z), rng.bernoulli(p_true));
                         }
                         assert!(cal.refit(), "window must fit");
@@ -1298,7 +1299,8 @@ mod tests {
                         let l_fit = smoothed_loss(&t, &zvec, wf, cf);
                         // The floor: constant at the smoothed-target mean.
                         let mean_t = (t.iter().map(|&ti| ti as f64).sum::<f64>()) / t.len() as f64;
-                        let l_const = smoothed_loss(&t, &zvec, W_MIN, (mean_t / (1.0 - mean_t)).ln() as f32);
+                        let l_const =
+                            smoothed_loss(&t, &zvec, W_MIN, (mean_t / (1.0 - mean_t)).ln() as f32);
                         // The floor comparison allows the resolution
                         // floor's clamp cost (measured ≤ ~1e-5 relative on
                         // the tightest noise cells — the loss is flat in w
@@ -1331,7 +1333,10 @@ mod tests {
                 }
             }
         }
-        assert!(n_checked >= 48, "the sweep must cover ≥48 cells (got {n_checked})");
+        assert!(
+            n_checked >= 48,
+            "the sweep must cover ≥48 cells (got {n_checked})"
+        );
     }
 
     // ── Issue 909 repair 3: the Newton early-break audit ──
@@ -1387,7 +1392,13 @@ mod tests {
                     let p = sigmoid64(w.mul_add(zi, c));
                     let d = p - ti;
                     let r = p * (1.0 - p);
-                    (g0 + d * zi, g1 + d, h00 + r * zi * zi, h01 + r * zi, h11 + r)
+                    (
+                        g0 + d * zi,
+                        g1 + d,
+                        h00 + r * zi * zi,
+                        h01 + r * zi,
+                        h11 + r,
+                    )
                 },
             )
         };
@@ -1400,10 +1411,13 @@ mod tests {
         let solve_c_at_w64 = |w: f64| -> f64 {
             let mut c = 0.0f64;
             for _ in 0..NEWTON_MAX_ITERS {
-                let (g, h) = t.iter().zip(&z).fold((0.0f64, 0.0f64), |(g, h), (&ti, &zi)| {
-                    let p = sigmoid64(w.mul_add(zi, c));
-                    (g + p - ti, h + p * (1.0 - p))
-                });
+                let (g, h) = t
+                    .iter()
+                    .zip(&z)
+                    .fold((0.0f64, 0.0f64), |(g, h), (&ti, &zi)| {
+                        let p = sigmoid64(w.mul_add(zi, c));
+                        (g + p - ti, h + p * (1.0 - p))
+                    });
                 if h < f64::EPSILON {
                     break;
                 }
@@ -1532,16 +1546,36 @@ mod tests {
         let y_info: Vec<bool> = (0..64).map(|i| i >= 32).collect();
         // Saturated-at-1.0 map: every output exactly 1.0 in f32 → cal AUC
         // collapses to chance while raw separates perfectly (AUC 1.0).
-        assert!(!window_preserves_ranking(&z, &y_flags_from(&y_info), 2.0, 34.5));
+        assert!(!window_preserves_ranking(
+            &z,
+            &y_flags_from(&y_info),
+            2.0,
+            34.5
+        ));
         // (c) gentle monotone map: AUC preserved.
-        assert!(window_preserves_ranking(&z, &y_flags_from(&y_info), 2.0, 6.5));
+        assert!(window_preserves_ranking(
+            &z,
+            &y_flags_from(&y_info),
+            2.0,
+            6.5
+        ));
         // (b) signal-free: outcomes alternate by sorted position → raw AUC
         // exactly ½; the constant map ties everything → cal AUC ½ → allowed.
         let y_noise: Vec<bool> = (0..64).map(|i| i % 2 == 0).collect();
-        assert!(window_preserves_ranking(&z, &y_flags_from(&y_noise), 2.0, 34.5));
+        assert!(window_preserves_ranking(
+            &z,
+            &y_flags_from(&y_noise),
+            2.0,
+            34.5
+        ));
         // Single-class window: vacuous pass (AUC undefined).
         let y_all: Vec<bool> = vec![true; 64];
-        assert!(window_preserves_ranking(&z, &y_flags_from(&y_all), 2.0, 34.5));
+        assert!(window_preserves_ranking(
+            &z,
+            &y_flags_from(&y_all),
+            2.0,
+            34.5
+        ));
     }
 
     /// The resolution floor (Issue 911) — ties stopped at their source: on a

@@ -1011,19 +1011,19 @@ pub use types::{BinaryWeights, GROUP_SIZE as BINARY_GROUP_SIZE};
 // per-128 f16 group scale. Neither shipped tier could hold it (plasma_path has
 // the zero state but per-row scale; binary_plasma has the group scale but no
 // zero state).
-#[cfg(feature = "ternary_group_scale")]
-pub use simd::{
-    simd_ternary_group_matmul_batch, simd_ternary_group_matvec, simd_ternary_group_matvec_parallel,
-    ternary_group_matvec_scalar,
-};
-#[cfg(feature = "ternary_group_q8_act")]
-pub use simd::{quantize_activations_q8, simd_ternary_group_matvec_q8_parallel};
-#[cfg(feature = "decode_spin_pool")]
-pub use simd::{SpinPool, SyncMutPtr, spin_pool_run, spin_row_chunks, with_spin_pool};
 #[cfg(feature = "ternary_q2_q8")]
 pub use simd::{
     Q2Block, TernaryQ2Weights, q2_fast_path_available, simd_ternary_q2_matvec_q8_parallel,
     simd_ternary_q2_matvec_q8_parallel_n, simd_ternary_q2_matvec_q8_parallel_pair,
+};
+#[cfg(feature = "decode_spin_pool")]
+pub use simd::{SpinPool, SyncMutPtr, spin_pool_run, spin_row_chunks, with_spin_pool};
+#[cfg(feature = "ternary_group_q8_act")]
+pub use simd::{quantize_activations_q8, simd_ternary_group_matvec_q8_parallel};
+#[cfg(feature = "ternary_group_scale")]
+pub use simd::{
+    simd_ternary_group_matmul_batch, simd_ternary_group_matvec, simd_ternary_group_matvec_parallel,
+    ternary_group_matvec_scalar,
 };
 #[cfg(feature = "ternary_group_scale")]
 pub use types::{TernaryFfnHook, TernaryGroupWeights, TernaryInputProjHook, TernaryMatvecHook};
@@ -2511,7 +2511,9 @@ pub use set_attention::{clr_reliability_scores, clr_weighted_set_attention_into}
 #[cfg(feature = "set_refine")]
 pub mod set_refine;
 #[cfg(feature = "set_refine")]
-pub use set_refine::{SetRefineConfig, SetRefineError, SetRefineScratch, gate_weight, refine_state_into};
+pub use set_refine::{
+    SetRefineConfig, SetRefineError, SetRefineScratch, gate_weight, refine_state_into,
+};
 
 // Depth-Invariance Diagnostic + Magnitude-Regularized Residual — the
 // root-cause counterpart to four symptom-only detectors (BeliefRankPruner,

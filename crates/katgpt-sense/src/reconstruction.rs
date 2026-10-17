@@ -17,7 +17,7 @@ use katgpt_types::SenseModule;
 use katgpt_types::TemporalDerivativeKernel;
 
 #[cfg(feature = "sync_bank")]
-use katgpt_types::sync_bank::{SyncBank, SYNC_BANK_LADDER};
+use katgpt_types::sync_bank::{SYNC_BANK_LADDER, SyncBank};
 
 /// Morton-code identifier for an octree node.
 /// Encodes spatial position in the KG latent embedding space.
@@ -1421,10 +1421,7 @@ mod tests {
     #[test]
     fn sync_bank_accessor_arms_observes_and_reads() {
         let mut state = ReconstructionState::with_config([0.5; 8], ReconstructionConfig::default());
-        assert!(
-            state.sync_bank().is_none(),
-            "unarmed state must read None"
-        );
+        assert!(state.sync_bank().is_none(), "unarmed state must read None");
 
         state.arm_sync_bank();
         let bank = state.sync_bank().expect("armed → Some");

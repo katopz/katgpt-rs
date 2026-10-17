@@ -995,7 +995,8 @@ mod tests {
     /// HashMap order doesn't put the min-id entry last.
     #[test]
     fn fallback_ucb_tie_resolves_by_lowest_id_not_hash_order() {
-        let entries: Vec<SketchEntry> = (0..12).map(|_| make_entry_with_visits(1000.0, 5)).collect();
+        let entries: Vec<SketchEntry> =
+            (0..12).map(|_| make_entry_with_visits(1000.0, 5)).collect();
         let sampler = make_sampler_with_entries(entries);
         let mut rng = Rng::with_seed(42);
         let best = sampler

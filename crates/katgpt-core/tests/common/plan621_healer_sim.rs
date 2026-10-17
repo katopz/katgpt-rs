@@ -42,7 +42,7 @@
 // the aggregates only.
 #![allow(dead_code)]
 
-use katgpt_core::escalation_probe_gate::{GateDecision, GateInput, EscalationOption, gate};
+use katgpt_core::escalation_probe_gate::{EscalationOption, GateDecision, GateInput, gate};
 use katgpt_core::state_probe::{
     AdaptiveClassifier, AdaptiveDecision, ClassFlip, ProbeClass, ProbeInput, probe,
 };
@@ -288,7 +288,11 @@ pub fn run_floor(corpus: &Corpus, draws: &OutcomeStream) -> ArmRun {
         }
         let r = used as f64 * C_PROBE;
         results.push(ActionResult {
-            action: if rescued { Action::LocalRescue } else { Action::Stay },
+            action: if rescued {
+                Action::LocalRescue
+            } else {
+                Action::Stay
+            },
             draws_used: used,
             rescued,
             spend: r,
@@ -323,12 +327,23 @@ pub fn run_incumbent_cap(
             if within_cap {
                 esc_spend += c_depth;
                 let rescued = draws.escalation_rescued(i, s.r_esc);
-                (Action::Escalate { breach_fallback: false }, rescued, POOL as f64 * C_PROBE + c_depth)
+                (
+                    Action::Escalate {
+                        breach_fallback: false,
+                    },
+                    rescued,
+                    POOL as f64 * C_PROBE + c_depth,
+                )
             } else {
                 (Action::Stay, false, POOL as f64 * C_PROBE)
             }
         };
-        results.push(ActionResult { action, rescued, draws_used: POOL, spend });
+        results.push(ActionResult {
+            action,
+            rescued,
+            draws_used: POOL,
+            spend,
+        });
     }
     finish(results, ArmOutcome::default())
 }
@@ -374,7 +389,11 @@ pub fn run_probe_gated(corpus: &Corpus, draws: &OutcomeStream, c_depth: f64, n_m
             }
             // Probe the accumulated all-fail pool.
             let est = probe(
-                &ProbeInput { pass_count: 0, n, histogram: &[] },
+                &ProbeInput {
+                    pass_count: 0,
+                    n,
+                    histogram: &[],
+                },
                 Z95,
             );
             outcome.probe_observations += 1;
@@ -400,7 +419,11 @@ pub fn run_probe_gated(corpus: &Corpus, draws: &OutcomeStream, c_depth: f64, n_m
                             corpus_distance: s.corpus_distance,
                         }];
                         let g = gate(
-                            &GateInput { probe: est, options: &ladder_state, lambda: LAMBDA },
+                            &GateInput {
+                                probe: est,
+                                options: &ladder_state,
+                                lambda: LAMBDA,
+                            },
                             EPSILON,
                             R_MIN,
                         );
@@ -416,7 +439,9 @@ pub fn run_probe_gated(corpus: &Corpus, draws: &OutcomeStream, c_depth: f64, n_m
                     }
                     if !done {
                         rescued = draws.escalation_rescued(i, s.r_esc);
-                        action = Action::Escalate { breach_fallback: breach };
+                        action = Action::Escalate {
+                            breach_fallback: breach,
+                        };
                         done = true;
                     }
                 }
@@ -441,8 +466,17 @@ pub fn run_probe_gated(corpus: &Corpus, draws: &OutcomeStream, c_depth: f64, n_m
             }
         }
         let spend = f64::from(n) * C_PROBE
-            + if matches!(action, Action::Escalate { .. }) { c_depth } else { 0.0 };
-        results.push(ActionResult { action, rescued, draws_used: n, spend });
+            + if matches!(action, Action::Escalate { .. }) {
+                c_depth
+            } else {
+                0.0
+            };
+        results.push(ActionResult {
+            action,
+            rescued,
+            draws_used: n,
+            spend,
+        });
     }
     finish(results, outcome)
 }
@@ -495,11 +529,7 @@ pub fn table_row(name: ArmName, run: &ArmRun) -> TableRow {
 }
 
 /// The full default-posture table (T4.2) — floor, incumbent, probe-gated.
-pub fn default_table(
-    corpus: &Corpus,
-    draws: &OutcomeStream,
-    c_depth: f64,
-) -> [TableRow; 3] {
+pub fn default_table(corpus: &Corpus, draws: &OutcomeStream, c_depth: f64) -> [TableRow; 3] {
     let floor = run_floor(corpus, draws);
     let incumbent = run_incumbent_cap(corpus, draws, c_depth, None);
     let probe = run_probe_gated(corpus, draws, c_depth, N_MAX);
@@ -588,9 +618,7 @@ pub fn print_table(rows: &[TableRow], corpus_n: usize, c_depth: f64) {
     }
     for r in rows {
         if let Some(c) = r.coverage {
-            println!(
-                "  CI coverage (probe arm): {c:.4} over the run's observations (95% nominal)"
-            );
+            println!("  CI coverage (probe arm): {c:.4} over the run's observations (95% nominal)");
         }
     }
 }

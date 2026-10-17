@@ -181,7 +181,8 @@ pub(crate) fn project_to_scalars_bridge(
         // Issue 940 (MB-1): the projected scalars ARE the synced affect
         // channel — the reduction order is pinned to the sequential fold,
         // never a platform-lane SIMD kernel.
-        let dot = katgpt_types::simd::dot_f32_ordered(state, &directions[row_start..row_start + dim]);
+        let dot =
+            katgpt_types::simd::dot_f32_ordered(state, &directions[row_start..row_start + dim]);
         out[k_idx] = fast_sigmoid(dot);
     }
 }

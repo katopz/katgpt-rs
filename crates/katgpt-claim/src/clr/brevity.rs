@@ -213,7 +213,10 @@ mod tests {
         // 0.9e-3 < tiebreak_eps 1e-3 → inside the band → the SHORTER
         // representative (cluster 1) wins despite lower reliability.
         let picked = brevity_tiebreak(&candidates, &trajectories, 1e-3);
-        assert_eq!(picked, 1, "in-band shorter cluster must win (leniency is by design)");
+        assert_eq!(
+            picked, 1,
+            "in-band shorter cluster must win (leniency is by design)"
+        );
     }
 
     /// Issue 940 (TOL) pin, outside side: 1.1e-3 below the max is OUT of the

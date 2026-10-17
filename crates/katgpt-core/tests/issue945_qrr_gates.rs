@@ -29,8 +29,7 @@
 
 use katgpt_core::gain_cost_halt::{GainCostLoopHalter, HaltDecision, HaltReason};
 use katgpt_core::qrr_convergence::{
-    ModeFitter, ModeKind, OscillationVerdict, R1Certificate, settling_steps,
-    tolerance_for_budget,
+    ModeFitter, ModeKind, OscillationVerdict, R1Certificate, settling_steps, tolerance_for_budget,
 };
 
 /// Deterministic SplitMix64 — no global RNG (the workspace RNG-pinning law).
@@ -61,9 +60,7 @@ const PATIENCE: u8 = 10;
 
 /// Settling alternating flip: `Δh_t = (−r)^t·v` — `gain = r^t`, `cosθ = −1`.
 fn flip_stream(r: f32, n: usize) -> Stream {
-    (1..=n)
-        .map(|t| (r.powi(t as i32), 0.0, -1.0))
-        .collect()
+    (1..=n).map(|t| (r.powi(t as i32), 0.0, -1.0)).collect()
 }
 
 /// Spiral: `Δh_t = ρ^t·(cos tθ, sin tθ)` — `gain = ρ^t`, `cosθ = cos θ`
@@ -137,7 +134,9 @@ fn p1_alternating_flip_recovers_s_minus_r_through_the_ridge() {
             f.observe(d);
             d *= -r;
         }
-        let m = f.estimate().expect("flip window must fit through the ridge");
+        let m = f
+            .estimate()
+            .expect("flip window must fit through the ridge");
         assert_eq!(m.kind, ModeKind::RealFlip, "flip r {r}");
         assert!((m.r - r).abs() < 5e-3, "flip r {r}: recovered r {}", m.r);
     }
@@ -209,7 +208,15 @@ fn p2_settling_flip_never_halts_on_oscillation() {
     // Incumbent: halts (the false halt-and-damp the tension law forbids).
     let inc = run(&mut unarmed(), &flip_stream(0.7, 64));
     assert!(
-        matches!(inc.last(), Some((_, HaltDecision::Halt { reason: HaltReason::Oscillation }))),
+        matches!(
+            inc.last(),
+            Some((
+                _,
+                HaltDecision::Halt {
+                    reason: HaltReason::Oscillation
+                }
+            ))
+        ),
         "incumbent must false-halt on a settling flip (the premise under repair)"
     );
     // Armed: never.
@@ -217,7 +224,12 @@ fn p2_settling_flip_never_halts_on_oscillation() {
     let dec = run(&mut h, &flip_stream(0.7, 64));
     for (loop_idx, d) in &dec {
         assert!(
-            !matches!(d, HaltDecision::Halt { reason: HaltReason::Oscillation }),
+            !matches!(
+                d,
+                HaltDecision::Halt {
+                    reason: HaltReason::Oscillation
+                }
+            ),
             "armed halter Oscillation-halted a settling flip at loop {loop_idx}"
         );
     }
@@ -236,11 +248,19 @@ fn p2_settling_spiral_never_halts_on_oscillation() {
     let dec = run(&mut h, &spiral_stream(0.9, 2.5, 64));
     for (loop_idx, d) in &dec {
         assert!(
-            !matches!(d, HaltDecision::Halt { reason: HaltReason::Oscillation }),
+            !matches!(
+                d,
+                HaltDecision::Halt {
+                    reason: HaltReason::Oscillation
+                }
+            ),
             "armed halter Oscillation-halted a settling spiral at loop {loop_idx}"
         );
     }
-    assert_eq!(h.last_oscillation_verdict(), Some(OscillationVerdict::OscillatingButSettling));
+    assert_eq!(
+        h.last_oscillation_verdict(),
+        Some(OscillationVerdict::OscillatingButSettling)
+    );
 }
 
 /// Limit-cycle flip (r = 1.0): the armed halter keeps the incumbent halt at
@@ -252,16 +272,35 @@ fn p2_limit_cycle_halts_at_unchanged_latency() {
     let arm = run(&mut armed(), &stream);
     let inc_halt = inc
         .iter()
-        .find_map(|(i, d)| matches!(d, HaltDecision::Halt { reason: HaltReason::Oscillation }).then_some(*i))
+        .find_map(|(i, d)| {
+            matches!(
+                d,
+                HaltDecision::Halt {
+                    reason: HaltReason::Oscillation
+                }
+            )
+            .then_some(*i)
+        })
         .expect("incumbent must halt a limit cycle");
     let arm_halt = arm
         .iter()
-        .find_map(|(i, d)| matches!(d, HaltDecision::Halt { reason: HaltReason::Oscillation }).then_some(*i))
+        .find_map(|(i, d)| {
+            matches!(
+                d,
+                HaltDecision::Halt {
+                    reason: HaltReason::Oscillation
+                }
+            )
+            .then_some(*i)
+        })
         .expect("armed halter must halt a limit cycle");
     assert_eq!(inc_halt, arm_halt, "true-halt latency must be maintained");
     let mut h = armed();
     let _ = run(&mut h, &stream);
-    assert_eq!(h.last_oscillation_verdict(), Some(OscillationVerdict::LimitCycle));
+    assert_eq!(
+        h.last_oscillation_verdict(),
+        Some(OscillationVerdict::LimitCycle)
+    );
 }
 
 /// Expanding spiral (ρ = 1.1): a growth mode is a limit/exceeding cycle —
@@ -271,8 +310,12 @@ fn p2_expanding_spiral_still_halts() {
     let stream = spiral_stream(1.1, 2.5, 64);
     let dec = run(&mut armed(), &stream);
     assert!(
-        dec.iter()
-            .any(|(_, d)| matches!(d, HaltDecision::Halt { reason: HaltReason::Oscillation })),
+        dec.iter().any(|(_, d)| matches!(
+            d,
+            HaltDecision::Halt {
+                reason: HaltReason::Oscillation
+            }
+        )),
         "an expanding spiral must still Oscillation-halt when armed"
     );
 }
@@ -292,7 +335,10 @@ fn p2_nan_gain_is_safe() {
             "settling flip must be suppressed at loop {t}"
         );
     }
-    assert_eq!(h.last_oscillation_verdict(), Some(OscillationVerdict::OscillatingButSettling));
+    assert_eq!(
+        h.last_oscillation_verdict(),
+        Some(OscillationVerdict::OscillatingButSettling)
+    );
     // Corrupt loop: NaN gain at a reversal — no panic, the dropped feed keeps
     // the last good verdict, and the decision stays the safe (continue) one.
     let d = h.halt_decision(25, f32::NAN, 0.0, -1.0);
@@ -376,7 +422,9 @@ fn calibration_run(rho: f32, theta: Option<f32>, seed: u64, sigma: f32) -> (f32,
             None => -1.0, // flip
         };
         f.observe_signed(gain * cos + rng.noise(sigma) * gain.abs().max(1e-6), cos);
-        if t == (n * 2) / 3 && let Some(m) = f.estimate() {
+        if t == (n * 2) / 3
+            && let Some(m) = f.estimate()
+        {
             fitted_at_mark = Some(m.r);
         }
     }
@@ -425,7 +473,9 @@ fn p3_budget_calibration_within_2x_on_95pct_of_corpus() {
         .sum::<f32>()
         / total as f32;
     println!("qrr p3 calibration: {within}/{total} within 2x (share {share:.3})");
-    println!("qrr p3 floor: constant budget {worst_member_budget:.1} vs mean predicted {mean_predicted:.1}");
+    println!(
+        "qrr p3 floor: constant budget {worst_member_budget:.1} vs mean predicted {mean_predicted:.1}"
+    );
     assert!(
         share >= 0.95,
         "calibration {within}/{total} below the 95% bar (worst ratio {worst_ratio:.2})"
@@ -447,8 +497,15 @@ fn p3_certificate_is_two_sided() {
         limit.observe_signed(1.0, -1.0);
         let _ = limit.estimate();
     }
-    assert!(limit.near_one_streak() >= 3, "unit flip must build a near-one streak");
-    let fires = R1Certificate { near_one: true, complement_stagnant: stagnant }.fires();
+    assert!(
+        limit.near_one_streak() >= 3,
+        "unit flip must build a near-one streak"
+    );
+    let fires = R1Certificate {
+        near_one: true,
+        complement_stagnant: stagnant,
+    }
+    .fires();
     assert!(fires, "r=1 + stagnant complement must fire");
 
     // Settling member (ρ = 0.9 flip): the modulus half must FAIL even though
@@ -466,14 +523,22 @@ fn p3_certificate_is_two_sided() {
         "a settling flip must never enter the near-one band"
     );
     assert!(
-        !R1Certificate { near_one: false, complement_stagnant: stagnant }.fires(),
+        !R1Certificate {
+            near_one: false,
+            complement_stagnant: stagnant
+        }
+        .fires(),
         "mode half missing → must not fire"
     );
 
     // Progressing complement (growing spiral): modulus half may hold but the
     // complement is moving → must not fire.
     assert!(
-        !R1Certificate { near_one: true, complement_stagnant: progressing }.fires(),
+        !R1Certificate {
+            near_one: true,
+            complement_stagnant: progressing
+        }
+        .fires(),
         "complement half missing → must not fire"
     );
 }

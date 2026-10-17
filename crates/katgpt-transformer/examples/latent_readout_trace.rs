@@ -83,7 +83,10 @@ fn run_span(bank: &LatentReadoutBank, table: &[f32], cfg: &SpanCfg, min_steps: u
         let filled = bank.readout_topk_into(&v, &mut top, &mut scores);
         tops.push(top[..filled].to_vec());
         if filled > 0 {
-            let near = NearestToken { token: top[0].0, cos: top[0].1 };
+            let near = NearestToken {
+                token: top[0].0,
+                cos: top[0].1,
+            };
             max_cos.push(near.cos);
             collapse_states.push(collapse_sensor.observe(near));
         } else {
@@ -119,10 +122,26 @@ fn main() {
         .unwrap_or_else(|e| panic!("synthetic table must build: {e}"));
 
     let spans = [
-        SpanCfg { title: "healthy walk", steps: 12, kind: Kind::Walk },
-        SpanCfg { title: "loop span", steps: 8, kind: Kind::Loop },
-        SpanCfg { title: "collapse span", steps: 8, kind: Kind::Collapse },
-        SpanCfg { title: "blind span (zero steps inspected)", steps: 0, kind: Kind::Blind },
+        SpanCfg {
+            title: "healthy walk",
+            steps: 12,
+            kind: Kind::Walk,
+        },
+        SpanCfg {
+            title: "loop span",
+            steps: 8,
+            kind: Kind::Loop,
+        },
+        SpanCfg {
+            title: "collapse span",
+            steps: 8,
+            kind: Kind::Collapse,
+        },
+        SpanCfg {
+            title: "blind span (zero steps inspected)",
+            steps: 0,
+            kind: Kind::Blind,
+        },
     ];
 
     let mut out = String::new();

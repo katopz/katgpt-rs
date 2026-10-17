@@ -497,9 +497,7 @@ impl GainCostLoopHalter {
     /// demotion is decision-only).
     #[cfg(feature = "qrr_convergence")]
     #[inline]
-    pub fn last_oscillation_verdict(
-        &self,
-    ) -> Option<crate::qrr_convergence::OscillationVerdict> {
+    pub fn last_oscillation_verdict(&self) -> Option<crate::qrr_convergence::OscillationVerdict> {
         self.last_mode_verdict
     }
 
@@ -517,7 +515,8 @@ impl GainCostLoopHalter {
         };
         let verdict = crate::qrr_convergence::OscillationVerdict::from_mode(&estimate);
         self.last_mode_verdict = Some(verdict);
-        self.mode_verdict_enabled && verdict == crate::qrr_convergence::OscillationVerdict::OscillatingButSettling
+        self.mode_verdict_enabled
+            && verdict == crate::qrr_convergence::OscillationVerdict::OscillatingButSettling
     }
 
     /// Update the previous-loop step size (gain signal) for the next iteration's

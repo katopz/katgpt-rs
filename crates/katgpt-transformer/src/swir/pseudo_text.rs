@@ -67,7 +67,11 @@ pub struct NearestToken {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReadoutBankError {
     /// `table.len() < vocab * dim` — the caller passed a short buffer.
-    TableTooSmall { vocab: usize, dim: usize, len: usize },
+    TableTooSmall {
+        vocab: usize,
+        dim: usize,
+        len: usize,
+    },
     /// Row `row` has (near-)zero norm: it can never be a nearest neighbour
     /// and signals a corrupt table the instrument must not paper over.
     ZeroRow { row: usize },
@@ -82,7 +86,10 @@ impl fmt::Display for ReadoutBankError {
                 vocab * dim
             ),
             ReadoutBankError::ZeroRow { row } => {
-                write!(f, "embedding row {row} has (near-)zero norm — corrupt table")
+                write!(
+                    f,
+                    "embedding row {row} has (near-)zero norm — corrupt table"
+                )
             }
         }
     }
@@ -114,7 +121,11 @@ impl LatentReadoutBank {
     /// default test lane.
     pub fn build(table: &[f32], vocab: usize, dim: usize) -> Result<Self, ReadoutBankError> {
         if dim == 0 || table.len() < vocab * dim {
-            return Err(ReadoutBankError::TableTooSmall { vocab, dim, len: table.len() });
+            return Err(ReadoutBankError::TableTooSmall {
+                vocab,
+                dim,
+                len: table.len(),
+            });
         }
         let mut rows = table[..vocab * dim].to_vec();
         for v in 0..vocab {
@@ -215,7 +226,10 @@ impl LatentReadoutBank {
             }
         }
         debug_assert_ne!(best, usize::MAX, "vocab > 0 guaranteed at build");
-        Some(NearestToken { token: best, cos: best_cos })
+        Some(NearestToken {
+            token: best,
+            cos: best_cos,
+        })
     }
 
     /// Top-k cosine-nearest tokens, sorted by cos descending (Issue 942 D1).
@@ -529,7 +543,14 @@ mod tests {
         let dim = 4;
         // Short buffer.
         let e = LatentReadoutBank::build(&[0.0; 3], 2, dim).unwrap_err();
-        assert_eq!(e, ReadoutBankError::TableTooSmall { vocab: 2, dim, len: 3 });
+        assert_eq!(
+            e,
+            ReadoutBankError::TableTooSmall {
+                vocab: 2,
+                dim,
+                len: 3
+            }
+        );
         // Zero row.
         let mut t = synth_table(3, dim);
         for x in t[2 * dim..3 * dim].iter_mut() {
@@ -563,7 +584,11 @@ mod tests {
             crate::swir::soft_embedding(&probs, &table, dim, &mut emb);
             let near = bank.readout_into(&emb, &mut scores).unwrap();
             assert_eq!(near.token, j, "argmax mismatch at one-hot {j}");
-            assert!((near.cos - 1.0).abs() < 1e-5, "cos at one-hot {j}: {}", near.cos);
+            assert!(
+                (near.cos - 1.0).abs() < 1e-5,
+                "cos at one-hot {j}: {}",
+                near.cos
+            );
             // Top-k agrees too, head first.
             let filled = bank.readout_topk_into(&emb, &mut top, &mut scores);
             assert_eq!(filled, 3);
@@ -631,9 +656,18 @@ mod tests {
     #[test]
     fn collapse_sensor_constant_high_score_window() {
         let mut s = PseudoTextCollapseSensor::new(3, 0.8);
-        let hit = NearestToken { token: 41, cos: 0.95 };
-        let other = NearestToken { token: 7, cos: 0.95 };
-        let low = NearestToken { token: 41, cos: 0.5 };
+        let hit = NearestToken {
+            token: 41,
+            cos: 0.95,
+        };
+        let other = NearestToken {
+            token: 7,
+            cos: 0.95,
+        };
+        let low = NearestToken {
+            token: 41,
+            cos: 0.5,
+        };
         assert!(!s.observe(hit)); // window not full
         assert!(!s.observe(hit));
         assert!(s.observe(hit)); // full + constant + all > theta -> fires
@@ -656,8 +690,18 @@ mod tests {
     fn render_contains_glyphs_and_blindness_floor() {
         let top = [(41usize, 0.912f32), (7, 0.804), (13, 0.771)];
         let rows = [
-            TraceRow { step: 0, top: &top, loop_fired: false, collapse_fired: false },
-            TraceRow { step: 5, top: &top, loop_fired: true, collapse_fired: true },
+            TraceRow {
+                step: 0,
+                top: &top,
+                loop_fired: false,
+                collapse_fired: false,
+            },
+            TraceRow {
+                step: 5,
+                top: &top,
+                loop_fired: true,
+                collapse_fired: true,
+            },
         ];
         let md = render_trace_markdown(&rows, Some(0.83), 8, "healthy span");
         assert!(md.contains("## Latent pseudo-text trace - healthy span"));

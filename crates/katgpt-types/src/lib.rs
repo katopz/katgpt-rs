@@ -52,6 +52,9 @@ pub use depth_invariance::{
     DepthInvarianceConfig, DepthInvarianceDiagnostic, DepthInvarianceKind, MagnitudeRegularization,
     Scratch, apply_magnitude_regularization, classify_chain, classify_chain_batched,
 };
+/// Checked approximation contracts — the one ULP metric behind the
+/// test/bench float-exactness gates, with one stated edge law (Issue 944).
+pub mod approx;
 /// Binary `{-1,+1}` bit-plane packed weights (Issue 145, `binary_plasma` feature).
 #[cfg(feature = "binary_plasma")]
 pub mod binary;
@@ -63,9 +66,6 @@ mod enums;
 mod gpart;
 mod hydra;
 mod inference;
-/// Checked approximation contracts — the one ULP metric behind the
-/// test/bench float-exactness gates, with one stated edge law (Issue 944).
-pub mod approx;
 /// QuantizedKVCache trait — shared extension point for all KV backends.
 /// Promoted from `katgpt-rs/src/types.rs` (Issue 015 Phase 1) so backend
 /// crates can depend on the trait without pulling the whole root crate.

@@ -1,6 +1,6 @@
 # Issue 946 — formatting policy: 832 tracked files disagree with bare rustfmt; no rustfmt.toml, no fmt gate anywhere (policy call)
 
-**Status:** Open — **VERDICT 2026-10-17: option 1 (adopt + gate), LANDED** — format commit `6760d76f5` (131 files, formatting only, in `.git-blame-ignore-revs`), `rustfmt.toml` (defaults + `edition`), gate `scripts/fmt_gate.py` wired as `full_gate.sh` Layer 7, policy in AGENTS.md §Formatting. Remaining: drain the 26-file list (T4) — held back because a commit touched each in the prior 48 h.
+**Status:** Open — **VERDICT 2026-10-17: option 1 (adopt + gate), LANDED** — format commit `6760d76f5` (131 files, formatting only, in `.git-blame-ignore-revs`), `rustfmt.toml` (defaults + `edition`), gate `scripts/fmt_gate.py` wired as `full_gate.sh` Layer 7, policy in AGENTS.md §Formatting. Remaining: drain the last 7 of the 26-file list (T4; 19 drained 2026-10-17) — held back because a commit touched each in the prior 48 h.
 
 ## Verdict + landing (2026-10-17, session zed-m3-idle-1017d — owner-gated call made per the "ask Claude for verdict" rule)
 
@@ -29,6 +29,11 @@ so the list can only shrink.
   reflow never masks the lint verdict; not in docs_gate — that lane is toolchain-free by
   design).
 - [ ] T4 drain the 26 — format each when its lane is idle, delete its row in the same commit.
+  **19 drained 2026-10-17** (none dirty, no commit in ≥13 h, no live claim covering them; a
+  `rustfmt` recursion into held `set_refine.rs` via `lib.rs` was reverted). **7 held**, each
+  row naming the live claim that holds it: plan 627 (3 files, exp 2026-10-17T23:26Z), issue
+  939 (3, exp 20:39Z), plan 626 (`swir/mod.rs`, exp 2026-10-18T22:14Z) — drain each after
+  its claim expires.
 - [ ] T5 sibling repos (riir-ai, riir-chain, riir-reflex are known drifted) — same recipe,
   per-repo, only on owner pull; not started.
 

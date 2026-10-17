@@ -375,8 +375,11 @@ impl SketchPopulation {
     /// by HashMap iteration order (a bare stable sort keeps that order).
     pub fn sorted_by_elo(&self) -> Vec<&SketchEntry> {
         let mut entries: Vec<&SketchEntry> = self.sketches.values().collect();
-        entries
-            .sort_by(|a, b| b.elo_rating.total_cmp(&a.elo_rating).then(a.id.0.cmp(&b.id.0)));
+        entries.sort_by(|a, b| {
+            b.elo_rating
+                .total_cmp(&a.elo_rating)
+                .then(a.id.0.cmp(&b.id.0))
+        });
         entries
     }
 

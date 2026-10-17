@@ -214,7 +214,11 @@ impl ModeFitter {
             if self.filled == MODE_WINDOW {
                 // Evict the oldest triple's contributions, then overwrite.
                 let base = self.head * 3;
-                let (ox1, ox2, oy) = (self.window[base], self.window[base + 1], self.window[base + 2]);
+                let (ox1, ox2, oy) = (
+                    self.window[base],
+                    self.window[base + 1],
+                    self.window[base + 2],
+                );
                 self.s11 -= (ox1 * ox1) as f64;
                 self.s22 -= (ox2 * ox2) as f64;
                 self.s12 -= (ox1 * ox2) as f64;
@@ -310,7 +314,11 @@ impl ModeFitter {
                 return None;
             }
             let omega = (a / (2.0 * r as f64)).clamp(-1.0, 1.0).acos() as f32;
-            return Some(ModeEstimate { kind: ModeKind::ComplexPair, r, omega: Some(omega) });
+            return Some(ModeEstimate {
+                kind: ModeKind::ComplexPair,
+                r,
+                omega: Some(omega),
+            });
         }
         let sq = disc.sqrt();
         let l1 = ((a + sq) * 0.5) as f32;
@@ -319,8 +327,16 @@ impl ModeFitter {
         if !dominant.is_finite() {
             return None;
         }
-        let kind = if dominant < 0.0 { ModeKind::RealFlip } else { ModeKind::RealPositive };
-        Some(ModeEstimate { kind, r: dominant.abs(), omega: None })
+        let kind = if dominant < 0.0 {
+            ModeKind::RealFlip
+        } else {
+            ModeKind::RealPositive
+        };
+        Some(ModeEstimate {
+            kind,
+            r: dominant.abs(),
+            omega: None,
+        })
     }
 }
 
@@ -590,8 +606,17 @@ pub fn energy_split(
     }
     let coupled: Vec<f64> = (0..v.len()).map(|i| p_row(p, i, w[0], w[1])).collect();
     let intrinsic = norm2(&v);
-    let total = norm2(&v.iter().zip(&coupled).map(|(a, b)| a + b).collect::<Vec<_>>());
-    EnergySplit { coupled: norm2(&coupled), intrinsic, total }
+    let total = norm2(
+        &v.iter()
+            .zip(&coupled)
+            .map(|(a, b)| a + b)
+            .collect::<Vec<_>>(),
+    );
+    EnergySplit {
+        coupled: norm2(&coupled),
+        intrinsic,
+        total,
+    }
 }
 
 /// P6 — prediction-match tolerance for [`alpha_replay_check`]. The identity
@@ -660,7 +685,11 @@ pub fn alpha_replay_check(
         let drive: Vec<f64> = (0..e.len())
             .map(|i| blocks.b[2 + i][0] as f64 * u[0] + blocks.b[2 + i][1] as f64 * u[1])
             .collect();
-        e = matvec_a(&blocks.a, &e).iter().zip(drive).map(|(x, d)| x + d).collect();
+        e = matvec_a(&blocks.a, &e)
+            .iter()
+            .zip(drive)
+            .map(|(x, d)| x + d)
+            .collect();
         u = matvec_s(&blocks.s, &u);
     }
     // Closed form: A^k(e₀ − αPu₀) + α·P S^k u₀ (linearity folds α into u₀).
@@ -677,7 +706,11 @@ pub fn alpha_replay_check(
         .zip((0..v.len()).map(|i| p_row(p, i, w[0], w[1])))
         .map(|(x, c)| x + c)
         .collect();
-    let deviation = e.iter().zip(&closed).map(|(x, c)| (x - c).abs()).fold(0.0_f64, f64::max);
+    let deviation = e
+        .iter()
+        .zip(&closed)
+        .map(|(x, c)| (x - c).abs())
+        .fold(0.0_f64, f64::max);
     AlphaReplayVerdict {
         alpha,
         measured: norm2(&e),
@@ -719,7 +752,11 @@ mod tests {
         for _ in 0..MODE_WINDOW + 4 {
             f.observe(0.0);
         }
-        assert_eq!(f.estimate(), None, "an exactly-still window must report None");
+        assert_eq!(
+            f.estimate(),
+            None,
+            "an exactly-still window must report None"
+        );
     }
 
     /// Non-finite feeds are dropped, never poison the sums.
@@ -733,7 +770,9 @@ mod tests {
             f.observe_signed(d, -1.0);
             d *= 0.5;
         }
-        let m = f.estimate().expect("finite window after dropped feeds must fit");
+        let m = f
+            .estimate()
+            .expect("finite window after dropped feeds must fit");
         assert!((m.r - 0.5).abs() < 1e-3);
     }
 }

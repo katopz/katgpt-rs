@@ -16,7 +16,7 @@
 #[path = "common/plan621_healer_sim.rs"]
 mod sim;
 
-use sim::{ArmName, EPSILON, N_EXEC, N_KNOWLEDGE, N_MIDDLE, N_MAX, PROBE_COST_FRAC};
+use sim::{ArmName, EPSILON, N_EXEC, N_KNOWLEDGE, N_MAX, N_MIDDLE, PROBE_COST_FRAC};
 
 /// The default record posture: a hosted-expert escalation costs 500 local
 /// draft+verify evaluations. The mid posture of the sweep {100, 250, 500,
@@ -38,8 +38,16 @@ fn draws(c: &sim::Corpus) -> sim::OutcomeStream {
 fn t41_corpus_plants_both_classes_and_class_counts_hold() {
     let c = corpus();
     assert_eq!(c.states.len(), N_EXEC + N_KNOWLEDGE + N_MIDDLE);
-    let exec = c.states.iter().filter(|s| s.kind == sim::Kind::Exec).count();
-    let kl = c.states.iter().filter(|s| s.kind == sim::Kind::Knowledge).count();
+    let exec = c
+        .states
+        .iter()
+        .filter(|s| s.kind == sim::Kind::Exec)
+        .count();
+    let kl = c
+        .states
+        .iter()
+        .filter(|s| s.kind == sim::Kind::Knowledge)
+        .count();
     assert_eq!(exec, N_EXEC, "the execution-like class must be planted");
     assert_eq!(kl, N_KNOWLEDGE, "the knowledge-like class must be planted");
     // The classes are separated where it matters: every knowledge-like true
@@ -80,7 +88,9 @@ fn t41_gate_fires_on_knowledge_states_and_floor_arm_never_escalates() {
         .states
         .iter()
         .zip(&probe.results)
-        .filter(|(s, r)| s.kind == sim::Kind::Knowledge && matches!(r.action, sim::Action::Escalate { .. }))
+        .filter(|(s, r)| {
+            s.kind == sim::Kind::Knowledge && matches!(r.action, sim::Action::Escalate { .. })
+        })
         .count();
     // Upper bound: knowledge states that could NOT escalate because a lucky
     // local pass rescued them first (the local channel legitimately closes
@@ -108,9 +118,7 @@ fn t41_gate_fires_on_knowledge_states_and_floor_arm_never_escalates() {
         .states
         .iter()
         .zip(&probe.results)
-        .filter(|(s, r)| {
-            s.kind == sim::Kind::Knowledge && r.action == sim::Action::Stay
-        })
+        .filter(|(s, r)| s.kind == sim::Kind::Knowledge && r.action == sim::Action::Stay)
         .count();
     assert_eq!(
         kl_stayed, 0,
@@ -124,7 +132,9 @@ fn t41_gate_fires_on_knowledge_states_and_floor_arm_never_escalates() {
         .states
         .iter()
         .zip(&probe.results)
-        .filter(|(s, r)| s.kind == sim::Kind::Exec && matches!(r.action, sim::Action::Escalate { .. }))
+        .filter(|(s, r)| {
+            s.kind == sim::Kind::Exec && matches!(r.action, sim::Action::Escalate { .. })
+        })
         .count();
     assert!(
         exec_escalated <= 3,
@@ -194,7 +204,8 @@ fn t42_super_goat_beats_the_incumbent_at_matched_spend() {
     let probe = sim::run_probe_gated(&c, &d, C_DEPTH_DEFAULT, N_MAX);
 
     // Hand the incumbent EXACTLY the fusion's budget (binary-searched cap).
-    let (cap, incumbent_capped) = sim::incumbent_cap_for_spend(&c, &d, C_DEPTH_DEFAULT, probe.outcome.spend);
+    let (cap, incumbent_capped) =
+        sim::incumbent_cap_for_spend(&c, &d, C_DEPTH_DEFAULT, probe.outcome.spend);
     println!(
         "── T4.4 Super-GOAT at matched spend (incumbent cap {cap:.0} ≈ probe spend {:.0}) ──",
         probe.outcome.spend
@@ -352,7 +363,10 @@ fn t44_probe_ci_coverage_measured_on_the_run() {
     let c = corpus();
     let d = draws(&c);
     let probe = sim::run_probe_gated(&c, &d, C_DEPTH_DEFAULT, N_MAX);
-    assert!(probe.outcome.probe_observations > 100, "the run took too few observations to measure coverage");
+    assert!(
+        probe.outcome.probe_observations > 100,
+        "the run took too few observations to measure coverage"
+    );
     let coverage = probe.outcome.coverage_hits as f64 / probe.outcome.probe_observations as f64;
     println!(
         "── G1 UQ note — Wilson CI empirical coverage on the run: {coverage:.4} over {} observations ──",

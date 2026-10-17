@@ -39,7 +39,6 @@
 //! duplicate history entries + latent pseudo-argmaxes leaking into the bench
 //! scoring path) — this module owns only the katgpt-rs contract.
 
-
 /// Provenance of one decode position fed to a [`DecodeBackend`](super::bench::DecodeBackend).
 ///
 /// `Tok` positions are real and persist; `Lat` positions are think-brain
@@ -54,10 +53,7 @@ pub enum PositionProvenance {
     /// `token_id = None`). MUST NOT enter M(L). `span` identifies the latent
     /// span (host-assigned, monotonically increasing per entry), `step` the
     /// position within the span.
-    Lat {
-        span: u32,
-        step: u32,
-    } = 1,
+    Lat { span: u32, step: u32 } = 1,
 }
 
 /// The provenance ledger and its materialized view M(L).

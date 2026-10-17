@@ -1852,8 +1852,7 @@ mod exact_sigmoid_tests {
         let mut max_ulp = 0u32;
         let mut x = -90.0f32;
         while x <= 90.0 {
-            let d = ulp_distance(exact_sigmoid(x), f64_ref(x))
-                .expect("sigmoid outputs are finite");
+            let d = ulp_distance(exact_sigmoid(x), f64_ref(x)).expect("sigmoid outputs are finite");
             assert!(d <= 2, "x={x}: {d} ULP vs f64 reference");
             max_ulp = max_ulp.max(d);
             x += 0.0137;

@@ -27,7 +27,7 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use katgpt_hla::{ahla_step, hla_state_update, AhlaQHeadState, HlaQHeadState};
+use katgpt_hla::{AhlaQHeadState, HlaQHeadState, ahla_step, hla_state_update};
 use katgpt_types::simd::{dot_f32_ordered, simd_dot_f32};
 
 /// Deterministic xorshift — seeded, local, never the global RNG.
@@ -170,16 +170,7 @@ fn main() {
 
         let ns = best_of_ns(ROUNDS, LAYER_ITERS, |_| {
             for h in heads.iter_mut() {
-                hla_state_update(
-                    black_box(&mut sk),
-                    h,
-                    &q,
-                    &k,
-                    &v,
-                    hd,
-                    gamma,
-                    &mut tmp_k_cqv,
-                );
+                hla_state_update(black_box(&mut sk), h, &q, &k, &v, hd, gamma, &mut tmp_k_cqv);
             }
         });
         black_box((&sk, &heads));
