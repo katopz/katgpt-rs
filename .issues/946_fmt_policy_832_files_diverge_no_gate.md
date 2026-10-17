@@ -34,8 +34,16 @@ so the list can only shrink.
   row naming the live claim that holds it: plan 627 (3 files, exp 2026-10-17T23:26Z), issue
   939 (3, exp 20:39Z), plan 626 (`swir/mod.rs`, exp 2026-10-18T22:14Z) — drain each after
   its claim expires.
-- [ ] T5 sibling repos (riir-ai, riir-chain, riir-reflex are known drifted) — same recipe,
-  per-repo, only on owner pull; not started.
+- [-] T5 sibling repos — DEFERRED by verdict 2026-10-17 (measured, read-only, tracked
+  `.rs` inside each repo only): riir-ai **1,429 / 2,984 (48%)**, riir-chain **294 / 512
+  (57%)**, riir-reflex **77 / 106 (73%)** diverge from rustfmt defaults, none has a
+  `rustfmt.toml`. At that rate this issue's premise — "the repo IS default-styled, the
+  drift is hand-drift" (katgpt-rs: 5.7%) — does NOT transfer; each repo needs its own
+  residual-curve audit before any format commit, and riir-ai has live sessions. ⚠ Hazard
+  found: `cargo fmt --all` in a sibling also rewrites FOREIGN files reached through
+  `path =` deps (riir-ai 1,295, riir-chain 2,430, riir-reflex 138 outside the repo —
+  other agents' worktrees). Never run a bare `cargo fmt --all` in a sibling; use
+  `rustfmt <file>`.
 
 ## Audit (2026-10-17, session zed-m3-idle-1017b, M3) — the 832 is a header count; true divergence 158 files (5.7%)
 
