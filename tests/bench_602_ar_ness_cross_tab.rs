@@ -197,6 +197,10 @@ fn g3_gap_predictor_matches_or_beats_fixed_on_both_regimes() {
             denoise_steps: 8,
             confidence_threshold: tau,
             temperature: 0.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let gen_steps = mdlm_gen_steps(G3_SEQ_LEN - 1);
         let mut rng = Rng::new(G3_SEED + 7);
@@ -285,6 +289,10 @@ fn g3_gap_predictor_matches_or_beats_fixed_on_both_regimes() {
             denoise_steps: 8,
             confidence_threshold: best_tau,
             temperature: 0.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let sched = PositionOffsetSchedule::new(0.5);
         let mut order_rng = Rng::new(G3_SEED + 11);

@@ -726,8 +726,8 @@ mod tests {
 
         let prefix_sum = vec![4.0; config.d()];
         let out = apply_attn_res_depth_profile(&block_state, &mut scratch, 0.0, &prefix_sum);
-        for i in 0..config.d() {
-            assert_eq!(out[i], 3.0, "λ=0 must be the exact uniform mean at [{i}]");
+        for (i, &v) in out[..config.d()].iter().enumerate() {
+            assert_eq!(v, 3.0, "λ=0 must be the exact uniform mean at [{i}]");
         }
     }
 

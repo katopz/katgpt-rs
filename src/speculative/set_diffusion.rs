@@ -99,6 +99,10 @@ mod tests {
             denoise_steps: 8,
             confidence_threshold: 0.5,
             temperature: 0.0, // Greedy for determinism.
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let gen_steps = mdlm_gen_steps(8);
         let mut rng = Rng::new(42);
@@ -136,6 +140,10 @@ mod tests {
             denoise_steps: 8,
             confidence_threshold: 0.5,
             temperature: 0.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let gen_steps = block_causal_gen_steps(8, 4);
         let mut rng = Rng::new(42);
@@ -178,6 +186,10 @@ mod tests {
             denoise_steps: 8,
             confidence_threshold: 0.5,
             temperature: 0.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         let schedule = PositionOffsetSchedule::diffusion();
         let mut rng = Rng::new(42);
@@ -225,6 +237,10 @@ mod tests {
             denoise_steps: 8,
             confidence_threshold: 0.5,
             temperature: 0.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         // 2-token prompt establishes the (a, b) pair. Decode 6 more positions
         // to complete an 8-token alternating sequence [a, b, ?, ?, ?, ?, ?, ?].
@@ -419,6 +435,10 @@ mod tests {
             denoise_steps: 8,
             confidence_threshold: 0.5,
             temperature: 0.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_gamma: -1.0,
+            #[cfg(feature = "entropy_bounded_commit")]
+            eb_max_commit: usize::MAX,
         };
         // 2-token prompt anchors the Markov chain (positions 0,1 = [3, 5]).
         // Decode 6 more positions with AR gen-steps (strict left-to-right).
