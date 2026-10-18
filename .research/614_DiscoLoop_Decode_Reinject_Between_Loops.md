@@ -2,7 +2,7 @@
 
 > **Source:** "DiscoLoop: Looping Discrete Embeddings and Continuous Hidden States for Multi-hop Reasoning" — [arXiv:2607.00341](https://arxiv.org/abs/2607.00341), Fu, Guo, Wang, Zhu, Lee, Jiao, Russell, Mei (UC Berkeley + Princeton, NeurIPS 2026)
 > **Date:** 2026-10-09
-> **Status:** Active — modelless track filed as Issue 929 (probe-first PoC); training track filed as riir-train Plan 451 (toy composition lab)
+> **Status:** Active — modelless track filed as Issue 929 (probe-first PoC); training track filed as riir-train Plan 451 (toy composition lab). **Δ 2026-10-18 (track-c, Bench 646): Plan 451 T1.3's §5-protocol replication REPLICATED the mechanism sign 3/3 seeds on the M3** (Stage-1/K=1 collapse earlier+sharper for the channel arm in every seed; the ID jump coincides with the collapse; final ID 0.558-0.718 vs vanilla 0.054-0.068) — the earlier v1/v2 no-lift reads were out-of-protocol (Stage-1 metric unmeasured, 8% coverage, ~128 epochs vs the paper's 3,000). HONEST DIVERGENCE: OOD does not materialize in either arm at the toy posture (the paper's headline OOD gain is not geometry-robust here). Phase 2 (CPT go/no-go) unblocked at its owner-gated 4090 window; Issue 929's reopen trigger (the trained artifact) rides that window.
 > **Related Research:** 602 (LoopCD — the 0-for-3 guidance negative), 073 (LT2 looped inference), 097 (training-free loop wrapper), 414 (loop stability / readout blind spot)
 > **Related Plans:** 108 (lt2_looped), 136 (tf_loop), 428 (loop_stability_fix), 304 (gain_cost_halt), 431 (cross_stage_relocation), 617 (loop_guidance, NEGATIVE); riir-train 451 (this note's track-c plan)
 > **Classification:** Public
