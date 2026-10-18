@@ -1,6 +1,6 @@
 # Issue 948 — Terminal-RSI modelless extractions: family-calibrated partial-credit grader + success-offset lexicographic ordering
 
-**Status:** T1+T2 LANDED 2026-10-18 — `fdr_credit` + `spr_order` opt-in features in `katgpt-pruners` (13 tests, clippy clean both postures, flag-OFF compiles to nothing; feature catalog §151; landing commit appended here at close). No promotion claim — T1's GOAT (G1 ordering + bootstrap stability, G4 alloc-free) and T2's frozen-corpus paired read are deferred to a corpus/bench window; T3 (decay-free reshape vs shipped 0.7 decay, pinned-posture bench) deferred. Origin: fusion-idea intake from riir-train Research 477 (arXiv:2610.22192 Terminal-RSI, 2026-10-18 panel). Consumers verified at the architecture level; no auto-promotion.
+**Status:** T1+T2 LANDED 2026-10-18 at `1f0c9300b` — `fdr_credit` + `spr_order` opt-in features in `katgpt-pruners` (13 tests, clippy clean both postures, flag-OFF compiles to nothing; feature catalog §151). No promotion claim — T1's GOAT (G1 ordering + bootstrap stability, G4 alloc-free) and T2's frozen-corpus paired read are deferred to a corpus/bench window; T3 (decay-free reshape vs shipped 0.7 decay, pinned-posture bench) deferred. Origin: fusion-idea intake from riir-train Research 477 (arXiv:2610.22192 Terminal-RSI, 2026-10-18 panel). Consumers verified at the architecture level; no auto-promotion.
 
 ## T1 — FDR family-calibrated partial-credit grader (STRONGEST)
 
