@@ -104,6 +104,16 @@ the grid verdicts.
 - **The phrasing decision is queued for the lane/owner** (issue 929): flip
   `B929_PHRASE`'s default to standard (the live axis) or keep possessive
   (dead axis) — one string, redefines the shared instrument.
+  **→ RESOLVED 2026-10-18 (Claude verdict AGREE, round 1): DEFAULT FLIPPED
+  to standard** — riir-infer `c43d36b`. Conditions honored in the same
+  commit: the mid-adjudication freeze comment retired (Bench 943 closed the
+  reinject leg — nothing was mid-adjudication), the header prints the phrase
+  on BOTH arms (old records' empty suffix = possessive), and the env matches
+  `standard`/`possessive` exactly with a loud refusal for anything else
+  (parsed pre-model-load, so a typo costs nothing). Possessive stays
+  reachable via `B929_PHRASE=possessive` for replicating 927–934. Scope:
+  bin-only — the katgpt-core `FixtureSpec` library default is unchanged
+  (its consumers set the arm explicitly).
 
 Raw artifacts: `/tmp/issue929_smoke_chat.json` (possessive n=8),
 `/tmp/issue929_smoke_chat_std.json` (standard n=8),
