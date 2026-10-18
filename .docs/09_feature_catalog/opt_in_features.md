@@ -5389,11 +5389,18 @@ parallel commit under a factorized proposal.
   the file so the target's `required-features` row is unchanged. Gates: clippy
   green at default / feature / feature+cousins postures; 205/155/131 lib tests
   at those postures.
-- Promotion pending the lane G2/G3 A/B only: the D2F τ_conf A/B stays blocked
-  on the trained checkpoint (riir-train Plan 437 Phase 4, owner-gated 4090
-  windows); the γ dial is uncalibrated until that lane A/B runs. T2 wiring is
-  complete; the riir-side `gemma2_d2f` GPU model-forward commit policy is the
-  one unwired lane, a future slice only if the A/B wants it.
+- **Lane A/B EXECUTED 2026-10-18** (riir-train Bench 645 = Plan 437 T0.2, the
+  Phase-0 0.4B checkpoint, M3 Metal): EB converges 16/16 at 8.00 NFE vs every
+  τ ∈ {0.5, 0.7, 0.9} stuck at 16.00 — the near-uniform ~0.02 committed
+  confidence never crosses any fixed τ — at matched confidence (0.0202 vs
+  0.0199) and the same 0/128 floor; a policy-behavior read on the weak
+  checkpoint, priced as such by the 2026-10-08 owner verdict. **Promotion
+  stays pending a separating checkpoint** (plan-410 T3 / Plan 437 Phase 4,
+  owner-gated 4090 windows): the A/B re-runs with the quality axis live; the
+  γ dial stays uncalibrated for production until then. The riir-side
+  `gemma2_d2f` GPU model-forward commit policy wired 2026-10-16 (riir-infer
+  `44ca3cb` + riir-gpu `34e462835`, `Gemma2D2fConfig.eb_gamma` disarm-default).
+  Issue 917 closed 2026-10-19; the record lives in katgpt-rs HISTORY.md.
 
 ## 142. gmm_support — Density-Ratio Support Gate (Plan 618 / Research 604, arXiv:2610.02126)
 

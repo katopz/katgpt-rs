@@ -1,6 +1,6 @@
 # Bench 917 — EB-Sampler-class entropy-bounded commit: modelless oracle A/B
 
-**Status:** MEASURED 2026-10-03 — oracle-lane PASS (G1 no-stall, G2 vs fixed-k and vs the floored τ incumbent, G3 validity); the LANE verdict (D2F / DDTree / DFlash, Issue 917 T2/T3) is still OPEN and blocked on a trained diffusion checkpoint. Not a promotion basis on its own.
+**Status:** MEASURED 2026-10-03 — oracle-lane PASS (G1 no-stall, G2 vs fixed-k and vs the floored τ incumbent, G3 validity); the LANE verdict (D2F / DDTree / DFlash, Issue 917 T2/T3) is still OPEN and blocked on a trained diffusion checkpoint. Not a promotion basis on its own. **UPDATED 2026-10-19:** the lane A/B has since EXECUTED on the Phase-0 0.4B checkpoint (riir-train Bench 645): EB 16/16 @ 8.00 NFE vs τ 0/16 @ 16.00 — a policy-behavior read on the weak checkpoint; promotion still pending a separating checkpoint. Issue 917 closed; record in katgpt-rs HISTORY.md.
 
 **Owner:** Issue 917 (T1 primitive `katgpt-core/src/entropy_bounded_commit.rs`, feature `entropy_bounded_commit`).
 **Target:** `crates/katgpt-core/tests/bench_917_entropy_bounded_commit_goat.rs` (deterministic, seeded, no timing — every number below is a reproducible count).
