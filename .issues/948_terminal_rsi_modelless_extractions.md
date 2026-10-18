@@ -1,6 +1,7 @@
 # Issue 948 — Terminal-RSI modelless extractions: family-calibrated partial-credit grader + success-offset lexicographic ordering
 
 **Status:** OPEN — fusion-idea intake from riir-train Research 477 (arXiv:2610.22192 Terminal-RSI, 2026-10-18 panel). Closed-world scoring math (no training, no domain semantics); novelty TBD at the GOAT level per item. Consumers verified at the architecture level; no auto-promotion.
+**Claimed:** zed-948-fdr-spr, epoch=1792336029, expires 2026-10-20T15:10:00Z
 
 ## T1 — FDR family-calibrated partial-credit grader (STRONGEST)
 
