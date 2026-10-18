@@ -226,6 +226,18 @@ pub use g_zero::{
     DeltaGatedConfig, GeneratedPair, HintDelta, LogProbResult, QueryTemplate, TemplateProposer,
 };
 
+// FDR family-calibrated partial credit (issue 948 T1) — the freeze/credit table
+// plus the calibrated absorb adapter on DeltaGatedAbsorbCompress.
+#[cfg(feature = "fdr_credit")]
+pub use g_zero::fdr_credit::{FdrCalibration, FreezeError, FreezeRefusal, MIN_TAIL_SUPPORT};
+
+// SPR success-offset lexicographic ordering (issue 948 T2) — the strict class
+// dominates; the pair ordering is canonical, the float form is transport.
+#[cfg(feature = "spr_order")]
+pub mod spr_order;
+#[cfg(feature = "spr_order")]
+pub use spr_order::{SprKey, mass_on_failures, mm_squash, spr_reward};
+
 #[cfg(feature = "ropd_rubric")]
 pub mod ropd_rubric;
 

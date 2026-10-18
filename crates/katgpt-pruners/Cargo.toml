@@ -68,6 +68,16 @@ echo_env_predictor = ["bandit", "katgpt-speculative/echo_env_predictor"]
 # Bandit dependents
 delta_mem = ["bandit"]
 g_zero = ["bandit"]
+
+# FDR family-calibrated partial credit (issue 948 T1, Terminal-RSI extraction):
+# frozen per-family p90 divisors with a tail-support freeze gate + the
+# calibrated absorb adapter on DeltaGatedAbsorbCompress.
+fdr_credit = ["g_zero"]
+
+# SPR success-offset lexicographic ordering (issue 948 T2, Terminal-RSI extraction):
+# the strict class dominates; pair ordering canonical, float form transport.
+spr_order = []
+
 dreamer = ["bandit"]
 ropd_rubric = ["bandit"]
 subterranean = ["bandit"]

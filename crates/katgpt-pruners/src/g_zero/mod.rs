@@ -23,6 +23,8 @@
 pub mod bomber_templates;
 pub mod delta_absorb;
 pub mod delta_bandit;
+#[cfg(feature = "fdr_credit")]
+pub mod fdr_credit;
 #[cfg(all(feature = "g_zero", feature = "fft"))]
 pub mod fft_templates;
 pub mod template_proposer;

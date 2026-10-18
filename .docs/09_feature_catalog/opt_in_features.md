@@ -5804,3 +5804,52 @@ tension law), Research 623. Source:
   quotient residual (`r_G`) may ever be wired into `forward_looped` or the
   halter — non-equivariant loops are the paper's own 23%-false-halt
   ablation.
+
+## 151. fdr_credit + spr_order — Terminal-RSI Modelless Extractions (Issue 948 / riir-train Research 477, arXiv:2610.22192)
+
+Two closed-world scoring primitives from the Terminal-RSI paper's reward
+family — no training, no domain semantics; the modelless residue of its
+dense-reward design. Both OPT-IN landings with **no promotion claim** (the
+issue's GOAT shapes are named, not yet run).
+
+- **`fdr_credit` — the Family Dense Reward `R = max(P/D_f, 0)`.**
+  `FdrCalibration::freeze` computes per-family p90 divisors from a reference
+  corpus and `credit()` scores raw values against them
+  (`crates/katgpt-pruners/src/g_zero/fdr_credit.rs`; zero-alloc hot path:
+  binary search + one division; unknown family → `None`, the caller keeps
+  the incumbent raw hinge — the primitive never invents a divisor). Three
+  pinned laws: the
+  **freeze gate** refuses any family whose tail support `n − idx` is under
+  `MIN_TAIL_SUPPORT = 10` at the nearest-rank p90 index (the
+  percentile-index audit lesson — `sorted[(n·0.9) as usize]` reports the MAX
+  as a percentile for every n ≤ 10; ≥ 90 rows freeze, 89 refuse, loud
+  `FreezeError`, never a silent thin-corpus divisor); a non-positive or
+  non-finite p90 divisor refuses (ratio semantics); the table is
+  deterministic under input/sample reordering and BLAKE3-stamped
+  (`digest()` — byte-identical freezes agree). Adapter:
+  `DeltaGatedAbsorbCompress::observe_hint_delta_calibrated` — the arm index
+  is the family key (the template that produced the hint); unfrozen arms
+  keep the raw hinge byte-identically. The paper independently converged on
+  our own harness lesson ("fused-gate birth thresholds do NOT transfer: fit
+  per suite") — normalization is frozen per family, never per batch.
+- **`spr_order` — the Success-Prioritized Reward ordering law.** The strict
+  class dominates: **no amount of partial credit ever promotes a failure
+  over a success**. `SprKey { passed, partial }` is the CANONICAL pair
+  ordering (total_cmp inside a class — NaN partials sort deterministically
+  and never poison the separation; executable property test over 11
+  edge-valued partials including inf/NaN); `mm_squash` is the Michaelis-
+  Menten saturating squash `P/(P+D')` in the overflow-free reciprocal form
+  `1/(1 + D'/P)`, fails soft (no panic, no NaN on the ranking path);
+  `spr_reward = S + squash` is the documented TRANSPORT form — in real
+  arithmetic its order equals the pair order (squash < 1), at f32 width the
+  guarantee is non-strict and the rounding corner (failure's squash rounds
+  up to 1.0 against a zero-pass success) is executed in a test, not
+  hand-waved; `mass_on_failures` is the paper's F1 eval-board diagnostic
+  (fraction of reward mass on failures) — sequential fold, local-only.
+- **Deferred (per the issue's own split)**: T1's GOAT (G1 FDR-vs-raw-P
+  ordering on adjudicated held-out quality + bootstrap D_f stability + G4
+  alloc-free scoring) and T2's paired read on a frozen candidate corpus
+  (byte-identical-to-incumbent = honest no-op, kept as a drift guard) —
+  both need corpus/bench windows; T3 (decay-free bounded-credit reshape vs
+  the shipped 0.7 decay) is a pinned-posture bench campaign, deferred with
+  the issue.

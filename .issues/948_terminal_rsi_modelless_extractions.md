@@ -1,7 +1,6 @@
 # Issue 948 — Terminal-RSI modelless extractions: family-calibrated partial-credit grader + success-offset lexicographic ordering
 
-**Status:** OPEN — fusion-idea intake from riir-train Research 477 (arXiv:2610.22192 Terminal-RSI, 2026-10-18 panel). Closed-world scoring math (no training, no domain semantics); novelty TBD at the GOAT level per item. Consumers verified at the architecture level; no auto-promotion.
-**Claimed:** zed-948-fdr-spr, epoch=1792336029, expires 2026-10-20T15:10:00Z
+**Status:** T1+T2 LANDED 2026-10-18 — `fdr_credit` + `spr_order` opt-in features in `katgpt-pruners` (13 tests, clippy clean both postures, flag-OFF compiles to nothing; feature catalog §151; landing commit appended here at close). No promotion claim — T1's GOAT (G1 ordering + bootstrap stability, G4 alloc-free) and T2's frozen-corpus paired read are deferred to a corpus/bench window; T3 (decay-free reshape vs shipped 0.7 decay, pinned-posture bench) deferred. Origin: fusion-idea intake from riir-train Research 477 (arXiv:2610.22192 Terminal-RSI, 2026-10-18 panel). Consumers verified at the architecture level; no auto-promotion.
 
 ## T1 — FDR family-calibrated partial-credit grader (STRONGEST)
 
