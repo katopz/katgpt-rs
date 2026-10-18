@@ -92,6 +92,14 @@
 //! streams over `&str` bytes into a stack BLAKE3 hasher (the answer String is
 //! never materialized), and every table is a fixed `[…; 8]` array. Pinned by
 //! the integration target's G4 audit (10k+ steps, counting allocator).
+//!
+//! Issue 699 T1-T3 — structural CoT halting (TRACE, arXiv:2510.07880):
+//! answer-space cycle detection on reasoning traces — the black-box halt
+//! family (no logits/hidden states/LLM rater). A third independent halt-vote
+//! family beside the numeric arbiter above; the two compose via
+//! structural_cot_halt::vote_from_numeric when BOTH features are on.
+//! Opt-in (not default-on) — T4 defend-wrong PoC (riir-poc) + T5 GOAT gate
+//! (≥30% token savings at ≤1% accuracy delta) are pending.
 
 #![allow(clippy::float_cmp)] // float comparisons in tests against exact constants
 

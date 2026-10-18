@@ -81,6 +81,18 @@
 //! **unchanged**, so the Issue 707 G8 gate keeps its number and the refusal is
 //! available to any consumer that wants it — which is what made "should it
 //! REFUSE?" a non-question rather than an owner call.
+//!
+//! TPR (Tensor Product Representation) binding algebra — the modelless rank-m
+//! generalization of the single-direction-vector latent ops (Issue 707,
+//! Research 527, arXiv:2608.29530 McCoy/Soulos/Linzen/Smolensky 2026). Four
+//! zero-alloc runtime ops (bind / unbind / constituent surgery / structural
+//! projection) over a frozen BLAKE3-committed artifact, fitted offline by
+//! closed-form ridge-ALS (no gradient descent anywhere). Ships its own GOAT
+//! instruments: the atomic-dictionary null, the withheld-pair OOD eval, the
+//! BoW structure router and BIC scheme selection. Sibling to the R299 Clifford
+//! wedge (`linalg::geometric_product`) and the R491/R389 steering families.
+//! Opt-in: the Issue 707 gates ALL PASS (Bench 698); promotion waits on a
+//! consumer that wants it on ITS default path (no-default-consumer rule).
 
 pub mod als;
 pub mod types;

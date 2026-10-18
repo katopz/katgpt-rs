@@ -70,6 +70,17 @@
 //! feeds the plateau run and can only push the verdict toward
 //! [`CadenceVerdict::Churning`]). A non-finite window mean classifies as
 //! [`CadenceVerdict::Churning`] — loud, never a silent `Settled`.
+//!
+//! Issue 720 T1 — ConvergenceCadence (Research 529, HRM mechanistic dissection,
+//! Finding 4): windowed update-magnitude OUTCOME classifier — solved runs'
+//! ‖Δz‖ decays (0.30 by step 7-8), failed runs plateau HIGH (1.46, ~4.9×).
+//! The outcome read the halt-only families above lack: halt ≠ classify, and
+//! plateau-high churn warrants ESCALATION (damp per Issue 717 — tangential-
+//! first, cos_updates ≈ 0 — deliberate per NPC think loops, restart per CGSP).
+//! Three laws pinned in-module: absolute Δ (never relative — R35/717-T6
+//! trap), windowed shape (never single-step), tangential-first. Zero-alloc
+//! fixed ring, caller-fed norms. Opt-in — T2 A/B (riir-poc `b18b7b2bb`) +
+//! T3 consumer (mmorpg Issue 054 L2, riir-ai `681786288`) LANDED 2026-09-04.
 
 /// Verdict of a full cadence window.
 #[derive(Debug, Clone, Copy, PartialEq)]

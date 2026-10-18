@@ -85,6 +85,16 @@
 //! for per-channel). Zero allocation after scratch init. The inner mix loop is
 //! a textbook FMA kernel (`c·a + s·b`) — LLVM auto-vectorises the 4-wide
 //! chunked form into NEON/AVX2.
+//!
+//! Phase-Modulated Subspace Rotation Gate — norm-preserving latent coupling
+//! `cos α ⊙ a + sin α ⊙ b` with phase from a sigmoid projection onto a frozen
+//! direction vector (Plan 322, Research 305, arxiv 2605.12700 UFO). The
+//! genuinely-new operation class: every other latent op in the crate is
+//! additive / convex-combo / dot-projection / wedge-detection / linear-transport
+//! / spatial-sum — none has the `sin²α+cos²α=1` Pythagorean norm-preservation
+//! invariant. §3.5 modelless Path 2 unblock: the trained `γ_θ` is replaced with
+//! `α = sigmoid(⟨state, direction⟩ · λ) · π/2` (closed-form). DEFAULT-ON (Plan 322 Phase 2, 2026-06-25):
+//! G1–G4 ALL PASS (G1 norm-preservation <1e-4 is the kill switch).
 
 use crate::simd;
 use core::f32::consts::FRAC_PI_2;

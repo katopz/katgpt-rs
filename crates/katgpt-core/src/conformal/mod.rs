@@ -36,6 +36,28 @@
 //! Issue 010).
 //!
 //! [`update_residual`]: ConformalIntervalCalibrator::update_residual
+//!
+//! Conformal Predictive Intervals — modelless UQ overlay (Plan 340, Research
+//! 322, arXiv:2605.03789 CSP + arXiv:2606.09473 "Report the Floor"). Wraps any
+//! PointForecaster with a per-channel × per-horizon-bucket exp-recency-
+//! weighted residual ring buffer, reads empirical quantiles to produce
+//! coverage-guaranteed predictive intervals. The
+//! ConformalIntervalCalibrator<SeasonalNaiveForecaster> with m=1 is the
+//! canonical conformal-naive floor per the "Report the Floor" rule (Issue 010,
+//! AGENTS.md Feature Flag Discipline). DEFAULT-ON (Plan 468 promotion,
+//! 2026-07-20): primitive-level G1–G4 GOAT PASSed (Bench 340, 2026-06-30);
+//! runtime-consumer promotion gate satisfied by Bench 564 (MCTS collapse) +
+//! Bench 565 (Salience Tri-Gate ΔF1=+0.3145 at 6.3× margin). Plan 513 width-
+//! definition fix vindicated Bench 565 bit-identically. Consumer-level gates
+//! (riir-engine karc_conformal_width + salience_conformal_width + 4 probes)
+//! STAY opt-in — this promotion removes the katgpt-core re-forward friction
+//! only; consumers still choose.
+//!
+//! Plan 340 Phase 2 (T2.1) — KARC adapter for the conformal overlay.
+//! Gated on BOTH features: needs the conformal substrate AND the KARC forecaster.
+//!
+//! Issue 010 T2 — "Report the Floor" comparison harness. Re-exported for
+//! T3–T7 (BoMSampler, Sleep-Time, Best-Belief, Alien Sampler adapters).
 
 use core::cmp::Ordering;
 

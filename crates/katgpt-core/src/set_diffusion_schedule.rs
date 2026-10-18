@@ -64,6 +64,19 @@
 //! RNG (`katgpt_types::Rng`, `fastrand::Rng`, etc.) without forcing a hard
 //! dependency. A `fastrand::Rng` convenience wrapper is provided because
 //! katgpt-core already depends on `fastrand`.
+//!
+//! Position-Offset Reveal-Time Schedule for Set Diffusion (Research 376).
+//! Canonical source for `PositionOffsetSchedule` — pure math (CDF/inverse-CDF/
+//! ordering), RNG-agnostic via closure-based sampling. No feature gate because
+//! it's a zero-dep math substrate consumed by both katgpt-rs (runtime) and
+//! riir-train (training). Eliminates the 3-way DRY violation that previously
+//! had copies in katgpt-rs/src/dllm.rs, riir-train/.../set_diffusion_schedule.rs,
+//! and riir-ai/crates/riir-poc/.
+//!
+//! Plan 602 T2.3: optional decode-order schedule variants (same feature;
+//! defined in set_diffusion_schedule.rs per the plan target — that module
+//! stays always-on, only these variants are gated; promote-only-on-G3,
+//! demote silently if the Phase-3 G3 GOAT fails).
 
 use serde::{Deserialize, Serialize};
 

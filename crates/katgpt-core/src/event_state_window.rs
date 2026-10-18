@@ -50,6 +50,16 @@
 //! `katgpt-kv::drift_segment::sigmoid_gated_readout` (slot-gated, not
 //! time-anchored), `kinematics::perception::Regime` (motion classification),
 //! `habituation_filter` (anchorless EMA).
+//!
+//! event_state_windows — the TWS distillation (Plan 623 Phase 1): the
+//! two-sided sigmoid event-anchored state window (settle transition excluded
+//! from both states) + the identity-free population state summary (order
+//! statistics over a caller-sorted scratch buffer, zero-alloc). Consumes
+//! only always-on substrate (simd::fast_sigmoid + stats::nearest_rank — the
+//! percentile-of-record, its tail supports carried verbatim). Δ is a
+//! parameter (settling_ticks is the caller's wiring-time derivation, not a
+//! wrapper here). DEFAULT-ON 2026-10-10 — the Phase-2 riir-ai PoC (bench 978)
+//! confirmed the Type-A index (1.000) and the plan's promotion gate is met.
 
 #![cfg(feature = "event_state_windows")]
 

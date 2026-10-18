@@ -62,6 +62,12 @@
 //!
 //! See: `katgpt-rs/.research/320_Red_Queen_Godel_Machine_Selective_Erasure_Best_Belief.md`
 //! See: `katgpt-rs/.plans/336_controlled_utility_primitives.md`
+//!
+//! best_belief — ε-quantile Beta lower bound for conservative selection
+//! (Plan 336, Research 320, RQGM arXiv:2606.26294 Prop. 4). Complements
+//! `sample_beta` (Thompson sampling for EXPLORATION) with a conservative
+//! EXPLOITATION / SELECTION counterpart. DEFAULT-ON (Phase 2 G2-unblock,
+//! 2026-06-28): LUT hot path 3.38ns, G1 3.099e-5<1e-4, G4 0 allocs.
 
 // ──────────────────────────────────────────────────────────────────────────
 // Tunables

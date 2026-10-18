@@ -67,6 +67,19 @@
 //! - Plan 449 — execution plan
 //! - Research 449 — math + novelty gate
 //! - riir-ai/.research/319 — private game-runtime selling-point guide
+//!
+//! Plan 449: Poincaré Adapter — closed-form latent navigation primitive.
+//! Distillation of arXiv:2607.14228 (Chen et al., *SeeSE3: Emergence of 3D
+//! Space in Vision Features*, DeepMind, 15 Jul 2026). Research 449 ran the
+//! novelty gate (4/4 Super-GOAT). The open primitive ships a frozen
+//! `PoincareAdapter` Pod + the closed-form navigator `poincare_navigate_into`
+//! + the multi-step variant + an offline closed-form ridge fit. Private game-
+//! runtime selling point (NPC imagination) lives in riir-ai/.research/319.
+//!
+//! Pure modelless (closed-form PCA + ridge + SVD pseudoinverse; no gradient
+//! descent). Reuses Plan 301's `thin_svd_into` + Plan 308's
+//! `ridge_solve_direct_f32`. Gated on `subspace_phase_gate` for the SVD. DEFAULT-ON
+//! (Plan 449 Phase 3, 2026-07-18): G1–G7 ALL PASS — see .benchmarks/449_poincare_goat.md.
 
 #![allow(clippy::needless_range_loop)]
 #![allow(non_snake_case)] // `W`, `W_pinv` match paper notation (arXiv:2607.14228)

@@ -91,6 +91,14 @@
 //! Pure linear algebra — no game/chain/shard semantics, no platform APIs, no
 //! `std::time` in `src/` (cross-compiles to wasm32). Private consumers wire
 //! it separately (riir-neuron-db Plan 329, riir-train Plan 397).
+//!
+//! slice_tca — modelless slice-rank decomposition for 3rd-order tensors
+//! (Plan 596 / Research 309, Pellegrino et al. Nat Neurosci 2024): three
+//! single-class truncated-SVD factorizations + closed-form covariability
+//! classifier (sigmoid routing, never softmax) + deterministic joint ALS
+//! demixer (HOSVD init) + invariance canonicalization. Consumes
+//! subspace_phase_gate SVD + linalg::tucker. DEFAULT-ON since 2026-09-12
+//! (Bench 714 GOAT G1–G4 ALL PASS).
 
 mod als;
 mod rank;

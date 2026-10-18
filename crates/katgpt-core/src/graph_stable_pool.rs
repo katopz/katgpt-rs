@@ -96,6 +96,15 @@
 //! Pure index arithmetic over `std` `Vec`/`Option` — no weights, no inference,
 //! no `std::arch`, no deps. wasm32-clean by construction (the whole-module
 //! check runs in CI lanes).
+//!
+//! graph_stable_pool — the append-only + free-list + never-invalidate slot
+//! pool (Issue 800 Arm C): the DRY extraction of the contract that ships four
+//! times under four names — katgpt-kv `radix_prefix` nodes,
+//! katgpt-transformer `PagedKVCache` pages, riir-gpu `Qwen38LaneSet` arenas,
+//! and this crate's `BranchBank` slots. INDEX-stable allocation (live slot
+//! indices never move); see the module docs for the index-vs-address
+//! stability verdict and the per-site re-point deltas. Phase 1: type +
+//! contract tests only; consumer re-points are incremental follow-ups.
 
 /// The slot pool. See the [module docs](self) for the contract and the
 /// four-site comparison.

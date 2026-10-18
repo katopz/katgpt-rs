@@ -62,6 +62,19 @@
 //! anti-cheat: the [`Regime`] enum crosses the sync boundary.
 //!
 //! [`crate::subspace_phase_gate`]: crate::subspace_phase_gate
+//!
+//! Mean-Field Crowd Oscillation Regime Classifier — crowd-level (κ, κ_a, Q)
+//! order-parameter aggregator + closed-form 2×2 Jacobian Hopf boundary check +
+//! four-way regime taxonomy (Static / NoiseSustainedOscillation /
+//! IrregularSwitching / GlobalLimitCycle). Distilled from Zheng, Miller, Fiete
+//! (arXiv:2606.30366, MIT, Jun 2026). The paper's algorithmic content is ~80%
+//! covered by shipped primitives (LinOSS, `subspace_phase_gate`, `temporal_deriv`,
+//! `MicroRecurrentBeliefState`, `ict::BranchingDetector`); this ships the
+//! missing 20% — the crowd-scale mean-field view + oscillatory-instability
+//! detector + regime taxonomy. Extends Plan 301's `subspace_phase_gate` from
+//! real-eigenvalue phase transitions (`N ≥ d` input sufficiency) to complex-
+//! eigenvalue (Hopf) phase transitions. DEFAULT-ON (Plan 371 Phase 6, 2026-07-03): G1+G2+G3+G4+G5 PASS +
+//! mandatory defend-wrong PoC (Plan 371 Phase 5 T5.1) pass.
 
 // ─── HopfParams ─────────────────────────────────────────────────────────────
 

@@ -52,6 +52,19 @@
 //! when the rotation is precomputed. `bias_row` is `O(1)` (returns a slice
 //! into the prefix sum). The path-integral bias `b_h(t, j) = prefix[t] −
 //! prefix[j]` falls out of the prefix-sum structure.
+//!
+//! GRAPE-AP — Vector-Similarity Path-Integral Decay Gates (GRAPE §5).
+//! Content-aware extension of Wall Attention: ψ_h(t,ℓ) = α·g(⟨p_t, R_ℓ·p_ℓ⟩/d)
+//! with g = log_sigmoid. Tokens whose positional embedding matches the query's
+//! decay slower; mismatching tokens decay faster. The headline gain in the
+//! GRAPE paper (+1.15 avg on 770M FineWeb-Edu). Wall Attention is the scalar
+//! special case (endpoint-independent embeddings). The positional-embedding
+//! projection is user-supplied (modelless); learning it is → riir-train.
+//! STAYS OPT-IN — G1–G5 GOAT gate ALL PASS (Bench 459, 2026-07-17); promotion
+//! deferred: positional-embedding projection is user-supplied; no hot-path
+//! consumer yet. The G5 magnitude gate was revised from "divergence > 2× noise
+//! floor" (infeasible on unit-norm synthetic) to a direction check; the
+//! magnitude gate is deferred to riir-train integration.
 
 use crate::simd::simd_dot_f32;
 

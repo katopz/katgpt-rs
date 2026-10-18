@@ -14,6 +14,23 @@
 //!
 //! Gain/cost signals are local latent (per-loop hidden-state deltas). The halt
 //! count L is a deterministic raw scalar safe to sync/replay.
+//!
+//! Gain/Cost Loop Halting Primitive — open substrate-agnostic kernel for per-loop
+//! halting decisions (Plan 304, Research 282, arXiv:2606.18023, LoopCoder-v2).
+//!
+//! halt when marginal refinement gain < marginal drift cost × τ; oscillation
+//! early-halt via cos θ < 0; L_min floor protects representational capacity.
+//! Composes with the shipped elastic-loop override (Issue 035) — Phase 2 will wire
+//! this into `forward_looped()` (separate scope). Phase 1 ships the kernel only.
+//!
+//! Latent vs Raw: gain/cost signals are local latent (per-loop hidden-state
+//! deltas); the halt count L is a deterministic raw scalar safe to sync/replay.
+//!
+//! STAYS OPT-IN — G2/G3/G4 GOAT gate ALL PASS (Bench 304, 2026-06-23); synthetic
+//! kernel-only bench confirms the contract on three reference regimes (crowd-NPC
+//! savings, important-NPC no-regression, oscillation detection). Real-world
+//! validation requires actual game loops → riir-ai Plan 330 is the gating
+//! dependency. The cost_floor is the load-bearing knob for G2.
 
 #![allow(clippy::float_cmp)] // float comparisons in tests against exact constants
 

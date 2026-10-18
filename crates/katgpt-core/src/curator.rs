@@ -8,6 +8,8 @@
 //!
 //! GOAT targets: verify < 2µs, freeze/thaw < 1µs, sample+update < 100ns.
 //! Feature-gated behind `merkle_octree`.
+//!
+//! Curator verification layer for Merkle octree (Plan 253).
 
 use std::collections::HashMap;
 

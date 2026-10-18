@@ -69,6 +69,16 @@
 //! `resident_ids_into` into a caller-owned buffer) never allocate. The
 //! fair-turn `had_turn` vector grows ONLY on universe growth — a cold
 //! event, amortized, never on the per-cycle path.
+//!
+//! pool_admission — hysteresis admission policy for a fixed-capacity resident
+//! set (Issue 873 primitive A; Research 581 rows #6/#7/#8): margin ×1.10 over
+//! caller-supplied want-scores, dwell-from-ADMISSION-tick newborn immunity
+//! (no last-use field by construction — the clock law), terminating
+//! fair-turn sweep, apply-by-identity readout. The admission complement of
+//! kv_eviction (which scores whom to KEEP); want-scores caller-supplied, slot
+//! allocation stays graph_stable_pool's concern. Zero steady-state allocs,
+//! pure std. OPT-IN pending first consumer GOAT (riir-ai working sets /
+//! PagedKVCache, riir-neuron-db zone_cache).
 
 use crate::float_order;
 

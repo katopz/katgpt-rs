@@ -54,6 +54,16 @@
 //! | Plan 423 `spectral_rewire` | Global SVD of W₀ | None | DECOMPOSITION (weights) |
 //! | Plan 425 `tilr` | Global U_r | γ-alignment | INJECTION |
 //! | **MANCE (this)** | **Local k-NN tangent** | **σ^α + ε·r_i** | **ERASURE** |
+//!
+//! NOTE: `basis_split::participation_ratio` (the f64 report-only wrapper) is
+//! deliberately NOT re-exported at the root — the root name is the existing
+//! `subspace_phase_gate` f32 primitive; the wrapper resolves via the module
+//! path only.
+//!
+//! Plan 426: MANCE — Manifold-Aware Concept Erasure. Local tangent + spectral
+//! weighting + trust-bounded erasure. Pure modelless linear algebra (k-NN +
+//! thin SVD + dot-product projections). Gated on subspace_phase_gate for the
+//! local tangent SVD (Plan 301 thin_svd_into).
 
 use crate::simd::{simd_dot_f32, simd_fused_scale_acc};
 

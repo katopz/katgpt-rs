@@ -78,6 +78,20 @@
 //! - Survey: Guérin et al., arXiv:2501.08416
 //! - Closest shipped cousin: `riir-neuron-db::neighbor_heal` (fixed alpha,
 //!   sigmoid-gated cosine weights — no error scaling, no neighborhood expansion)
+//!
+//! Elasticity-Gated Update — DSOM error-scaled neighborhood update primitive
+//! (Plan 429, Research 415, Rougier & Boniface 2010 ⟨inria-00495827⟩).
+//! Time-invariant, error-scaled latent update: step scales with error,
+//! neighborhood weights are error-gated Gaussian. Pure modelless (exp +
+//! weighted average). Zero-alloc (stack [f32;32] weights, &mut [f32] output).
+//! STAYS OPT-IN in katgpt-core (consumer enables transitively) — Consumer
+//! GOAT PASS (riir-neuron-db, 2026-07-12, Bench 429): G1–G6 ALL PASS; consumer
+//! feature `elasticity_gated_heal` PROMOTED to default-on in riir-neuron-db
+//! (behavior opt-in via `.with_neighbor_eta(1.0)`). Primary consumer: neighbor_heal.
+//!
+//! Plan 429 Phase 5 T5.1: Error-weighted graph Laplacian — DSOM neighborhood
+//! weights composed with the DEC graph Laplacian. Requires both
+//! `dec_operators` and `elasticity_gated_update` features.
 
 #![allow(clippy::needless_range_loop)] // explicit indexing aids SIMD auto-vectorization
 

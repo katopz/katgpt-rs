@@ -27,6 +27,12 @@
 //! The 0-for-3 loop-intervention record on this stack (Benches 847/850/906)
 //! is why this module is probe-FIRST: it measures whether the misalignment
 //! signal even exists before any injection arm is built.
+//!
+//! Issue 929 — loop-alignment probe (Research 614, arXiv:2607.00341 DiscoLoop):
+//! state-vs-decode-manifold alignment `cos(H, W[v̂])` + decode margin per loop
+//! iteration, the deterministic AUROC/bootstrap readout, and the paper §2
+//! two-hop fixture generator (in-context rendering for pretrained probes).
+//! Pure measurement — no forward-path coupling, allocation-free probe read.
 
 use crate::pruners::margin_gate::margin_split;
 use crate::simd::{simd_dot_f32, simd_sum_sq};

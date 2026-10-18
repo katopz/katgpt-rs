@@ -40,6 +40,12 @@
 //!
 //! Feature: `switch_cost` (opt-in). Promotion requires a riir-ai consumer A/B
 //! (F1: SkE-gated preemptive re-estimation vs the coherence-only arm).
+//!
+//! SwitchCostTable — directed pairwise switch-difficulty table (skill-entropy
+//! distillation, Research 484 / arXiv:2608.05139, Issue 663). Opt-in per the
+//! issue's GOAT-gate discipline: promotion to default requires a riir-ai
+//! consumer A/B (F1: SkE-gated preemptive re-estimation vs the coherence-only
+//! arm on the Issue-054 stuck-rate scenario).
 
 use bytemuck::{Pod, Zeroable};
 

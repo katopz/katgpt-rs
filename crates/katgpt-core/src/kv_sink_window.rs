@@ -54,6 +54,10 @@
 //!
 //! None. Pure classification over caller-owned state. Zero allocation on
 //! every path that takes an `out` buffer; no RNG, no globals, no `Instant`.
+//!
+//! Permanent attention sinks + a bounded KV window (Issue 841) — a
+//! deterministic RAM ceiling for decode. Composes with `kv_eviction`'s
+//! selector rather than replacing it. Opt-in (`kv_sink_window`).
 
 use crate::float_order;
 

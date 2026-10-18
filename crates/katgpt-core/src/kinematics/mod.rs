@@ -87,6 +87,19 @@
 //! Pure f32 arithmetic, zero heap, zero deps, `#[repr(C)]` POD state,
 //! per-channel independent (SIMD-able). The `Sched` family replaces the
 //! paper's learned `tanh`-MLP residual with deterministic closed forms.
+//!
+//! Kinematic rollout primitive (Plan 578 / Research 506, arXiv:2608.09926 —
+//! LDR, Li et al.): the modelless core of latent dynamics reasoning —
+//! finite-difference state (order ladder 0→3), O(1) Newton-backward closed-
+//! form k-step rollout exact on degree ≤ 3 motion (the provable ID-OOD gap ≡ 0
+//! strengthening of the paper's empirical ~20×), deterministic jerk/drag
+//! schedules, looming time-to-contact, regime predicates with sigmoid
+//! hysteresis, residual-surprise events (z/CUSUM/impulse + restitution),
+//! two-body closest approach/intercept, and the UQ-bearing extrapolation-
+//! horizon admission bound (RANK-ONLY verdict vs the conformal floor —
+//! .benchmarks/677). Pure f32 math, zero deps, zero allocs, #[repr(C)] POD
+//! state. DEFAULT-ON since 2026-08-26 (Bench 677 GOAT G1–G4 ALL PASS — the
+//! KARC precedent); consumer PoC: riir-ai Issue 757.
 
 pub mod fixture;
 pub mod perception;

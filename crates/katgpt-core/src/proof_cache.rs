@@ -19,6 +19,12 @@
 //! Per-decode-step cache scope: created fresh per decode step, not persisted
 //! across steps. This avoids stale entries and keeps memory bounded.
 //! Transposition tables (e.g., GoState) handle cross-step caching separately.
+//!
+//! Proof goal deduplication cache core types (GoalHash, GoalResult,
+//! GoalVerifier, ProofGoalCache). Extracted from `katgpt-pruners::proof::goal_cache`
+//! (Plan 388 Phase 2) to break the katgpt-pruners ↔ katgpt-speculative cycle.
+//! Pure substrate (blake3 + HashMap + AtomicU64). Re-exported by
+//! katgpt-pruners::proof::goal_cache for backwards compatibility.
 
 use std::collections::HashMap;
 use std::fmt;

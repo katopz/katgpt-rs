@@ -57,6 +57,11 @@
 //!
 //! None. Pure structure over caller-owned state; no allocation on any read
 //! path; no `Instant`, no RNG, no globals.
+//!
+//! Legal-token-set enumeration + the restricted-projection decision (Issue
+//! 841) — `CsrLegalSet` inverts "is this token valid?" into "which tokens
+//!      are", and `ProjectionPlan` says how much of the vocabulary projection that
+//!      justifies skipping. Opt-in (`legal_token_set`).
 
 use crate::traits::ConstraintPruner;
 

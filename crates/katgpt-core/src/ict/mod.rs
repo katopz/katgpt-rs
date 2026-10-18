@@ -37,6 +37,18 @@
 //! - G8 (riir-ai Plan 324): runtime fusion validated on real NPCs.
 //!
 //! G3 alone is necessary but not sufficient per Plan 294 §Phase 8 T8.4.
+//!
+//! ICT Distributional Branching-Point Detector — open generic math (Plan 294,
+//! Research 270, arxiv 2606.19771). Collision purity β(π) = Σ π² (proven
+//! unconditionally monotone, ICT §A.2.5 — H₁ is wrong below π > e⁻¹ ≈ 0.37),
+//! Rényi H₂, Jensen-Shannon divergence to group mean, BranchingDetector
+//! (top-k% selector over K candidate trajectories + per-step β EMA), and the
+//! Bebop H₁→H₂ acceptance-forecast upgrade. No game semantics, no chain;
+//! runtime fusion (CLR gating, HLA updates, KG emission) is riir-ai Plan 324.
+//! STAYS OPT-IN — G3 (Spearman ρ < 0.5) PASS (Bench 294/3) AND G10
+//! (Bebop H₁→H₂ upgrade) PASS (Bench 294/10). Default-on promotion requires
+//! G8 (riir-ai Plan 324 runtime validation) per Plan 294 §Phase 8 T8.4 — G3
+//! alone is necessary but not sufficient. See .benchmarks/294_ict_promotion.md.
 
 pub mod bebop_upgrade;
 pub mod branching;

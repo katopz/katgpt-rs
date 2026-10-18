@@ -110,6 +110,14 @@
 //! - T5.4 PARTIAL verdict (real Kimi-K3 depth trajectory): `katgpt-rs/.benchmarks/012_kimi_k3_trajectory_geometry.md`
 //! - Substrate: Plan 342 (`latent_trajectory_geometry`), Plan 321
 //!   (`committed_field_blend`)
+//!
+//! SWE Trajectory Freezer — modelless committed freeze of an inference
+//! attempt's trajectory geometry (Proposal 011 Phase 5, Task T5.5). Composes
+//! latent_trajectory_geometry + committed_field_blend + a local BLAKE3
+//! envelope. Opt-in — research-validation primitive; promotion requires the
+//! T5.6 G5 gate (cross-snapshot discrimination) to pass on real-model
+//! trajectories (currently PARTIAL — T5.4 G3 FAIL at 29% on Kimi-K3 depth
+//! trajectories; see .benchmarks/012_kimi_k3_trajectory_geometry.md).
 
 // (Module gating is handled by `#[cfg(feature = "swe_trajectory_freeze")]`
 // on the `mod` declaration in `lib.rs`; this file must NOT duplicate it.)

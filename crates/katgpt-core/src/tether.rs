@@ -93,6 +93,17 @@
 //! ## G4 (allocation)
 //!
 //! Scalar accumulators only — no heap, ever, no warm-up phase to amortize.
+//!
+//! tether — closed-form outcome-fit estimator blend (Issue 675, Research 426
+//! via arXiv:2608.16739 "Le Critique" TETHER baseline): ρ* per window by OLS
+//! against realized outcomes with the exact in-sample never-worse guarantee,
+//! the lag law encoded as API shape (same-window application unrepresentable),
+//! EMA smoothing, an explained-variance accumulator + control-variate gate,
+//! and the horizon-decay LUT λ = c^(1/L). Two documented hazards in-source:
+//! Report-the-Floor (blending does not discharge the promotion gate) and
+//! prediction-vs-ranking (measured NEGATIVE on a ranking consumer, Bench 042
+//! — fit ρ against the consumer's own metric). Consumers: riir-train
+//! loss_grpo TETHER baseline (Plan 345). Opt-in; G1–G4 PASS (Bench 670).
 
 /// Default initial mixing weight: **0.0** — no evidence yet, so do not blend.
 ///

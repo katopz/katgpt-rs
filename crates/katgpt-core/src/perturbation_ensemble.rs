@@ -53,6 +53,10 @@
 //! - **sigmoid, never softmax**: the fused-gate projection
 //!   (`instability_gate`) is a single sigmoid on the U statistic; LCB ranking
 //!   is arithmetic on moments with no normalization competition.
+//!
+//! Input-perturbation ensemble UQ — the third provenance member beside VFD
+//! (inter-member) and the DRM head (intra-model, external). Opt-in (Plan:
+//! reflex 008 / Issue 055).
 
 use crate::welford::WelfordVariance;
 

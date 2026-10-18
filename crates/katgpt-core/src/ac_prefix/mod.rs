@@ -69,6 +69,19 @@
 //! G1 0.0 diff vs iterative-MLM (modelless `attends_dedup` unblock eliminates
 //! the doubled-signal bias), G2 27.258x speedup, G3 0 mismatches, G4 0 allocs.
 //! Multi-layer equivalence remains a non-blocking riir-train follow-up.
+//!
+//! AC-GPT Arbitrary-Conditional Prefix — modelless mask builder + sequence
+//! augmenter that turns any causal Transformer forward into a single-pass
+//! arbitrary-conditional forward p(xe | xc) via position-aware copies of xc at
+//! the front and a [xc-bidirectional | causal-everywhere-else] attention mask
+//! (Lu et al., Mila, arXiv:2606.14943, Plan 313, Research 295). Phase 1 ships
+//! types + bit math only — no attention kernel dep, no SVD. DEFAULT-ON (Plan 313, 2026-06-24): G1–G4 PASS via modelless Path 2 (`attends_dedup`) — see .benchmarks/313_ac_prefix_modelless.md. Multi-layer equivalence remains a non-blocking riir-train follow-up.
+//!
+//! The keyed-Gumbel verify-sampling pair (position-keyed noise — the
+//! order-invariant shared stream drafter proposals and target verify
+//! samples consume; Plan-614 substrate row) plus the truncated-sampling
+//! triple the Phase-2 target side composes (mask → scale → keyed argmax)
+//! and the posterior inverse sampler (Issue 918).
 
 mod forward;
 mod types;

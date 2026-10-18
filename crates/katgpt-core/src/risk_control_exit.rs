@@ -54,6 +54,13 @@
 //! Zero-allocation steady state: `exit()` is pure arithmetic;
 //! `calibrate_into` reuses caller-owned [`CalibrateScratch`] (per-grid-point
 //! curves, `resize`-grown once, `clear`-reused thereafter).
+//!
+//! risk_control_exit — modelless dual-threshold compute-exit (Plan 575,
+//! Research 494, "Conformal Thinking" arXiv:2602.03814): stop-when-confident
+//! upper threshold + parametric stop-when-not-progressing lower schedule,
+//! offline UCB/Hoeffding calibration with guaranteed realized exit-risk,
+//! efficiency-loss selection among feasible pairs, App. C disarm tripwire.
+//! Opt-in pending the Bench 681 GOAT.
 
 use crate::sigmoid;
 

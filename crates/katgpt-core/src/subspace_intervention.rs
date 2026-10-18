@@ -54,6 +54,11 @@
 //!
 //! λ is a probe-time diagnostic instrument — freeze/consolidation-seam
 //! adjacency, never a per-tick signal.
+//!
+//! subspace_intervention — the three-arm subspace-intervention protocol
+//! (Issue 779 T1 / Research 557 / arXiv:2607.01987): modelless ridge probe +
+//! aligned/random/residual projection triad + task→layer affinity sweep,
+//! promoted from the Issue-778 POC harness. OPT-IN (no-default-consumer rule).
 
 #![allow(dead_code)]
 

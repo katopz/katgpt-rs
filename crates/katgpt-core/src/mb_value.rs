@@ -61,6 +61,19 @@
 //! frozen-weight replay (the TMNF-C `mb_replay` discipline) is the natural
 //! thaw proof. No softmax anywhere (house rule); the readout is a linear
 //! signed projection.
+//!
+//! mb_value — bounded three-factor (dopamine) plasticity value circuit
+//! (Issue 767 / riir-ai Research 380, distilled from adonis-singh/TMNF-C @
+//! eb6be045; mechanism after Bennett/Nowotny Nat. Commun. 12:2569 2021).
+//! Fixed random sparse projection → top-k KC code → approach-minus-avoid
+//! readout, with ONE bounded local rule as the entire learning machinery
+//! (w ← clamp(w − η·code·RPE·sign, 0, w0) — the rating.rs Elo precedent for
+//! legal online error-driven latent-state mutation). Value FORMATION feeding
+//! external selection; no softmax; not UQ-bearing (point value for ranking);
+//! no connectome data ships (seeded random wiring; fly-scale SHAPE classes
+//! only). Calibration is measurement, not learning (z-scores, quantile
+//! thresholds, 17-step action-gain bisection, derived η — ΔV-per-RPE ≈ α).
+//! Opt-in — GOAT gate in .benchmarks/761_mb_value_goat.md.
 
 // ─── Construction RNG (the house module-local SplitMix64 pattern) ───────────
 //

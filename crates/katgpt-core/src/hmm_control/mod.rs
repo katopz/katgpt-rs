@@ -46,6 +46,15 @@
 //!   (the two-mode homeostat composition with `mop`)
 //! - Classical lineage (honesty): stochastic shortest-path reachability —
 //!   the novelty claim is scoped to the game-runtime fusion, not the math.
+//!
+//! HMM homeostatic control (Plan 590 / Research 543, arXiv:2609.07508) —
+//! the exact setpoint-reachability drive solver: multiplicative backward
+//! messages β_t(x) = P(y_{t:T}=yd|x) bounded [0,1] by construction + a
+//! strictly deterministic argmax policy (the paper's linearity-in-π
+//! theorem). The setpoint-drive sibling of `mop` (range drives); shares
+//! `tabular_kernel` with it. DEFAULT-ON since 2026-09-10 (Plan 590 T4.1
+//! owner call — Phase 30 in Cargo.toml is the evidence chain: Bench 704
+//! + riir-ai Benches 904/905/906, the production swarm consumer).
 
 pub mod solve;
 pub mod types;

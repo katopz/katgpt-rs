@@ -39,6 +39,20 @@
 //! structurally: [`ChunkedContentStore::verify_proof`] is an associated fn
 //! that takes only the proof + leaf hash — no `&self`. Pure modelless +
 //! zero-cost-unless-invoked.
+//!
+//! NOTE: `apply_operator_into` is NOT re-exported at crate root — it collides with
+//! `analytic_lattice::apply_operator_into` when both features are on. Access it
+//! via `katgpt_core::mag::apply_operator_into`.
+//!
+//! ChunkedContentStore — Lore-distilled chunked content-addressed Merkle store (Plan 448, Research 262).
+//! Open primitive: chunks → BLAKE3 → dedup via papaya → binary Merkle root. No game/chain IP.
+//! Consumed by riir-ai Plan 319 (Executable Asset Vessel + Quorum Gitflow).
+//!
+//! NOTE: the binary-Merkle `MerkleProof` here is renamed on re-export to
+//! `BinaryMerkleProof` to avoid colliding with `merkle_octree::MerkleProof`
+//! when both features are active simultaneously (caught by `cargo check
+//! --all-features`). Internal callers still reach the type via
+//! `crate::content_store::MerkleProof`.
 
 // `trait` is a reserved keyword; the source file is `trait.rs` but the module
 // is referenced via the raw identifier `r#trait`. Re-exports below hide this.

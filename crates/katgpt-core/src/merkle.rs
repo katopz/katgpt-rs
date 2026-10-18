@@ -13,6 +13,8 @@
 //! now a thin re-export shim — `katgpt_core::merkle::*` paths are preserved
 //! bit-for-bit. Tests stay here and exercise the surface through the
 //! re-export.
+//!
+//! Merkle octree — hierarchical BLAKE3 commitment for KG latent octree nodes (Plan 221-M).
 
 pub use katgpt_types::merkle::{
     HASH_SIZE, MERKLE_OCTREE_BRANCHING, MERKLE_OCTREE_DEPTH, MERKLE_OCTREE_INTERNAL,

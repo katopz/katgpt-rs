@@ -57,6 +57,17 @@
 //! Feature: `sterling_primitives` (opt-in). Promotion to default requires a
 //! consumer GOAT to pass (riir-ai Issue 732 — the exact-emotion-ledger NPC
 //! decision surface — is the first candidate consumer).
+//!
+//! Sterling-derived modelless primitives (Issue 672 / Research 491,
+//! arXiv:2608.07594 Steerling-8B): ReLU-gated logit suppression (the naive
+//! subtraction promotes anti-aligned tokens), exact-decomposition readout
+//! (Σ parts + residual == fused, bit-identical by fixed summation order),
+//! lift-set steering targets (two-pass corpus statistic), γ=τ/peak logit-space
+//! calibration, + the HSIC-style cross-covariance gauge (measure-only). The
+//! noisy-OR rider lives UNGATED at the crate root (`noisy_or` / `noisy_or_stable`)
+//! because the riir-games-civ salience gate delegates to it under the DEFAULT
+//! feature set. Opt-in — promotion requires a consumer GOAT (riir-ai Issue 732,
+//! the exact-emotion-ledger NPC decision surface, is the first candidate).
 
 // ─────────────────────────────────────────────────────────────────────────────
 // T1 — ReLU-gated suppression (paper §6.2)

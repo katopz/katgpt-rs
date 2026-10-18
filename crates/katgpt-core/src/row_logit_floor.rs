@@ -44,6 +44,12 @@
 //! floors real entries and pays the envelope row by row.
 //!
 //! Pure arithmetic, no allocation, no dependency. Opt-in (`row_logit_floor`).
+//!
+//! Row-relative sink-exempt logit floor + b-bit logit codec (Issue 882 P2 /
+//! Research 586) — `l̃ = max(l, m_r − w)` over non-sink, unmasked keys bounds
+//! the row to `[m_r − w, m_r]`, codable in `b` bits with a `2^b`-entry exp
+//! table, under a closed-form softmax error envelope. Opt-in
+//! (`row_logit_floor`).
 
 /// Code for a masked (`−∞`) key. Real codes are in `[−L, L]`, `L = 2^{b−1} − 1`.
 pub const MASKED: i8 = i8::MIN;

@@ -26,6 +26,14 @@
 //! partitions on every platform. The fixture gate
 //! (`tests/minmax_partition_fixture.rs`) pins an externally measured
 //! S-matrix's m table as a cross-repo known answer.
+//!
+//! Min-max DP partition under a pairwise-distance ε oracle (Plan 616 — the
+//! TWT phase-collapse lane's partition primitive, promoted verbatim from
+//! riir-infer `twt::partition`, Issue 022 T2.1 / Research 594 row 2).
+//! NEIGHBOR of `ugc_schedule::dp_partition` (min-SUM fixed-k, paper Eq 39)
+//! — the generalize-vs-neighbor decision and the cross-link live in the
+//! module doc. Opt-in per the no-default-consumer rule; first consumer is
+//! riir-infer's twt lane (re-exporting since the promotion commit).
 
 /// Errors returned by the min-max partition primitives. Hand-rolled
 /// `Display` + `Error` impls (the house convention — katgpt-core carries

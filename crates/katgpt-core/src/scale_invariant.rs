@@ -88,6 +88,27 @@
 //! - Plan 622 — open-primitive spec (Phases 1–7)
 //! - Research 610 — distillation + the sigmoid tilt transfer
 //! - arXiv:2505.17083 — the paper
+//!
+//! Scale-Invariant Attention — the position-dependent affine logit schedule
+//! (Plan 622, Research 610 — arXiv:2505.17083 Anson/Wang/Aitchison NeurIPS
+//! 2025). Distance-indexed `L_t → a_t·L_t + m_t` LUT: the position-DEPENDENT
+//! generalization of ssmax's position-INDEPENDENT scalar (the signal-diff
+//! justifying a separate primitive — Research 610 §3.6). α = β = e^0.5
+//! derived from the (a₀², m₀) = (1, 0) boundary pin; single knob τ.
+//! ORDERING LAW: ssmax and scale_invariant are BOTH length temperatures —
+//! arming both stacks two sharpeners; the ParallaxConfig combination is a
+//! loud config error (pinned by test). SINK CARVE-OUT: key 0 (BOS) is
+//! excluded from the transform (the paper's Gaussianity premise, App. J).
+//! Serves both arms — SDPA (`tiled_attention_forward_si`, FlexAttention
+//! score_mod shape) and parallax (`ParallaxConfig::scale_invariant`, the
+//! a_t multiplicative + m_t additive lanes over softmax AND normalized
+//! sigmoid; the sigmoid tilt transfer E[σ(L_t)] = (α/2+o(1))/(t/τ+1) is the
+//! novel fusion half, Research 610). PHASE 3 CALIBRATION: raw-logit
+//! checkpoints normalize per head before the schedule — `SpreadAccumulator`
+//! (the load-pass σ probe) → `HeadCalibration` (BLAKE3-checked sidecar,
+//! loud-fail) → `tiled_attention_forward_si_calibrated`; runtime data under
+//! this one feature, head_scale = 1.0 bit-identical (G3). Opt-in until
+//! G1–G4 (Plan 622 Phase 7).
 
 // ──────────────────────────────────────────────────────────────────────────
 // Types

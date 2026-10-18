@@ -58,6 +58,15 @@
 //!
 //! See: `katgpt-rs/.research/370_manifold_bandits_latent_task_tree_hierarchical_thompson.md`
 //! See: `katgpt-rs/.plans/370_manifold_bandit_latent_task_tree.md`
+//!
+//! Manifold Bandits — Latent Task Tree + Hierarchical Thompson Sampler +
+//! BayesianFilterArm (Plan 370, Research 370, arXiv:2606.19750 McKenzie et al.
+//! UCSD 2026). Modelless inference-time routing primitive: frozen, BLAKE3-
+//! committable hierarchical clustering of an arm space + top-down Beta posterior
+//! descent + per-arm non-stationary Bayesian filtering. Closes the contextual +
+//! non-stationary bandit gap (Plans 030/032/025). The BMC training curriculum
+//! routes to riir-train; this ships the modelless inference-time routing
+//! primitive. DEFAULT-ON (Plan 370 Phase 2, 2026-07-03): G1+G3+G4+G5 PASS; G2 FAIL is plan-level expectation (curriculum-learning-specific).
 
 // ──────────────────────────────────────────────────────────────────────────
 // Constants

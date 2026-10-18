@@ -25,6 +25,11 @@
 //! weights, zero deps beyond `arrayvec`. Opt-in feature `two_fidelity_bai`;
 //! never promoted to default (the default search slot keeps `mcts_search`;
 //! this fills the empty *certified-search* slot).
+//!
+//! two_fidelity_bai — certified two-fidelity BAI for minimax trees (Plan 615,
+//! Research 601, arXiv:2606.01708): interval minimax backup + time-uniform
+//! slow CIs + ε-stop with first-class certificates. Opt-in
+//! (`two_fidelity_bai`); the default search slot keeps mcts_search.
 
 use arrayvec::ArrayVec;
 use std::collections::HashMap;

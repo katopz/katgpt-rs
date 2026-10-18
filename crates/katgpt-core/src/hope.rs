@@ -74,6 +74,19 @@
 //! Pure closed-form math (erf approximation + rank-2 SVD + arithmetic). No
 //! training, no backprop, no gradient descent. DEFT's gradient elasticity step
 //! is out of scope (→ riir-train).
+//!
+//! HOPE — Hilbert-Schmidt Capacity Kernel + Optimal Rank-1 Parent (Plan 469,
+//! Research 454, arXiv:2607.21366 Mobahi & Bartlett, Google DeepMind 2026-07-24).
+//! Closed-form math for scale-invariant capacity metric + optimal rank-1 merge
+//! of two PH-1 neurons modeled as rank-1 Hilbert-Schmidt operators.
+//! Distilled modelless core (ReLU self/cross kernels, principal eigenvector of
+//! rank-2 AᵀA, optimal scale s*=(a+b·E_rem)/(2·E_rem+b), capacity + prune/merge/
+//! block-eviction costs, Dantzig greedy selection). Fixes the AM single-query
+//! rank-1 collapse failure documented in Issue 001 / Plan 319 T5.6 G5 FAIL.
+//! Pure modelless — no training, no gradient descent. Zero runtime cost unless
+//! a caller invokes hope_capacity / optimal_rank1_parent / hope_greedy_select.
+//! DEFAULT-ON (Phase 23, 2026-07-24, Plan 469 Phase 4 T4.6 promotion — G1+G2+G3+G4
+//! ALL PASS per bench_469_hope_kernel_goat; see Cargo.toml default block).
 
 use crate::simd;
 

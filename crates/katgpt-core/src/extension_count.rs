@@ -48,6 +48,13 @@
 //! the cell→context partition (O(cells)) — selection-time cost, NOT a
 //! hot-path primitive; the [`ExtensionOccupancy`] struct maintains per-
 //! context counts incrementally for O(1) gain queries.
+//!
+//! Extension-count (freedom-of-function) selection criterion — closed-form
+//! near-best selection over a declared finite output partition (Research 486,
+//! arXiv:2608.05423, Issue 665). Opt-in PoC-gated: promotion to default
+//! requires the Issue 665 PoC gate (freedom-guided near-best beats min-loss
+//! AND random-near-best under a declared distribution shift) plus a
+//! production consumer.
 
 /// Natural-log freedom of a permission profile: `Σ_c ln(2^{a_c} − 1)`.
 ///

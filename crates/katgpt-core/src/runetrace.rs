@@ -50,6 +50,15 @@
 //! Opt-in (`runetrace`) per the no-default-consumer rule — the consumers are
 //! the seal-remake panels and the instinct/rethink lanes (Proposal 005
 //! Phases 3–4); promotion rides the GOAT gate.
+//!
+//! Runetrace — the scene-as-text format (seal-remake Proposal 005, Plan
+//! 624): every entity's strategy as a glyph-led pseudo-code condition +
+//! DAG block, rendered BYTE-DETERMINISTICALLY (pinned float spelling,
+//! fixed field order) with a BLAKE3 digest over the canonical text. The
+//! SIBLING of `decision_wire` for the scene-in / judgment-out shape —
+//! panels, LLM reasoning lanes, and sleep-time consolidation read it;
+//! raw stays raw (never a sync surface). Cold path by construction;
+//! opt-in (`runetrace`).
 
 use serde::{Deserialize, Serialize};
 

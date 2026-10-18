@@ -25,6 +25,12 @@
 //! `TieredKvStore` is a generic trait + reference impl with no attention-layer
 //! dependencies. It's useful for any future route-and-fetch pattern, not just
 //! HGA. Keep it ungated; the HGA-specific code that consumes it is gated by `hga`.
+//!
+//! Tiered Hot/Warm/Cold K/V Store — the route-and-fetch substrate for sparse
+//! long-context attention (Plan 397, Research 379, arxiv 2606.30709). Generic
+//! trait + in-memory reference impl. Always-on (no feature gate) because it's
+//! a generic primitive with no attention-layer deps; the HGA-specific consumer
+//! is gated by `hga`.
 
 pub mod in_memory;
 

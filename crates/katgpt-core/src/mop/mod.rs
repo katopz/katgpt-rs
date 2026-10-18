@@ -50,6 +50,12 @@
 //! - Defend-wrong PoC: `riir-ai/crates/riir-poc/src/mop_poc.rs` (Bench 679;
 //!   the permanent §3.6 regression check — NOT a source template for this
 //!   crate; this implementation is fresh from the paper's math)
+//!
+//! MOP — Maximum Occupancy Principle value-iteration primitive (Plan 573 /
+//! Research 478, arXiv:2205.10316). The paper's Eq. 7 fixed-point map in
+//! log-space LSE form over a frozen tabular kernel — reward-free optimal
+//! policy with emergent survival (absorbing states V=0 bit-exact) and a β
+//! risk knob. Opt-in `mop_path_entropy`. Consumers: riir-ai Plan 538.
 
 pub mod arenas;
 pub mod solve;

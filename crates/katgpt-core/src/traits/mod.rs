@@ -19,6 +19,14 @@
 //! - [`NoScreeningPruner`] — returns 1.0 for everything
 //! - [`RandomRolloutPolicy`] — uniform random action selection
 //! - [`ActionSpaceLog`] — per-tick branching factor metrics
+//!
+//! Re-export consolidated traits (Plan 107 Phase 0)
+//!
+//! RecursionLogits — opt-in trait for generators that expose pre/post recursion
+//! logits so AdvantageMarginGate can wrap them (Plan 283 T2.3, arxiv:2511.16886).
+//! Opt-in: not in default feature list. Non-recursing generators do not implement it.
+//!
+//! Q-Guided Flow (Plan 268) — test-time Q-gradient guidance primitive.
 
 use std::fmt;
 

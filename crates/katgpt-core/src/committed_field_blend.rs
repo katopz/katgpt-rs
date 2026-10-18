@@ -62,6 +62,21 @@
 //! - Source paper: arxiv 2510.00621 — FAME (Gao/Chen/Zhang, NeurIPS 2025)
 //! - Closest shipped cousin (per-layer, drifting): Plan 297
 //!   (`PersonalityWeightedComposition`)
+//!
+//! ── Committed Field Blend (Plan 321, Research 302) ───────────────────────
+//!
+//! Open MIT-licensed primitive: the sampling-invariant half of the FAME
+//! Super-GOAT. A `CommittedFieldBlend<N, D>` computes blend weights pi ONCE
+//! from a trajectory summary via sigmoid projection, then FREEZES them for
+//! the entity's lifetime. The blended field f_pi(z) = Σ_k sigmoid(pi_k/tau) ·
+//! f_k(z) governs dynamics; because both pi and the fields are frozen, the
+//! trajectory is sampling-invariant (FAME Proposition 3 / Young-integral).
+//! Zero-alloc apply + BLAKE3-committed. Reuses personality_composition's
+//! sigmoid + simd::simd_fused_scale_acc (DRY).
+//! DEFAULT-ON since 2026-06-28 (Issue 005 executed): Plan 321 G1–G5 + riir-ai
+//! Plan 336 G6a–G6e + G7a ALL PASS. G2 (sampling invariance, the make-or-break
+//! gate) worst-case Δpi=1.19e-6/100 entities. Private selling-point guide at
+//! riir-ai/.research/158.
 
 use crate::personality_composition::sigmoid::sigmoid;
 use crate::simd::{simd_dot_f32, simd_fused_scale_acc};

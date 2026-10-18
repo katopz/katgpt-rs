@@ -109,6 +109,16 @@
 //! 7. `beta_limits_mean_and_hard_min` — β = 0.003 ⇒ `meld ≈
 //!    tanh(κ·W[(u+v)/2])` within 1e-3 at moderate separation; β = 1e6 ⇒
 //!    exact hard-min mixture for well-separated daughters.
+//!
+//! meld — bounded non-associative composition law (Issue 801 T3, Research 560,
+//! arXiv:2609.14384 §4.9.1): meld(u,v) = sat(κ·W·[λ⋆u+(1−λ⋆)v]) — pointwise
+//! soft-min mixture λ⋆ (offset-corrected Rényi-2 gate argmin; β→0 mean,
+//! β→∞ hard min), tied orthogonal non-permutation W (normalized Hadamard —
+//! the second-order bracketing separator), tanh saturation κ=2 (+ divisive-
+//! normalization and unsaturated law-8 arms). Commutative EXACTLY (swap-
+//! symmetric argmin), non-associative by construction, disagreement-coding.
+//! Zero-alloc fixed-size [f32; D] (D a power of two). OPT-IN pending the
+//! Issue 801 T4 riir-poc PoC verdict.
 
 /// κ — the saturation gain applied inside the tanh transfer (paper §4.9.1
 /// fixes κ = 2; Research 560 §1.6 "tanh(κW[λ⋆u + (1−λ⋆)v]), κ=2").

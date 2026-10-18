@@ -36,6 +36,13 @@
 //! - Token-level analog: [`crate::funcattn`] (Tikhonov k×k spectral transport)
 //! - Asymmetric generalization: [`crate::cross_resolution`]
 //! - DCT-II audit inspiration: arxiv 2606.02427
+//!
+//! Analytic Lattice — k×k transport operator chain composer + ASOC trait shapes
+//! + direction-vector SIMD decoder + spectral audit (Plan 330, Research 311).
+//! katgpt-core half: pure math primitives + generic trait shapes (NO GpuFuture
+//! import — leaf-clean). The ComposerTick: GpuFuture impl + Join3 combinator
+//! ship in riir-engine under the `analytic_lattice_runtime` feature (Phase 1b).
+//! Opt-in until G1–G6 GOAT gate passes.
 
 pub mod asoc;
 pub mod audit;

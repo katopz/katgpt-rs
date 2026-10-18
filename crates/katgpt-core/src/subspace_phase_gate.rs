@@ -40,6 +40,15 @@
 //! inside the math (callers may wrap SIMD themselves), no floating-point
 //! reordering. This is required for anti-cheat: the phase-transition gate
 //! decision must be bit-identical across quorum nodes.
+//!
+//! Subspace phase-gate primitives — participation ratio, numerical rank, N≥d
+//! phase-transition gate (Wang et al. Thm 4, arXiv:2409.02426), and runtime
+//! Jacobian SVD via forward differences (Plan 301, Research 279). Pure numeric,
+//! no game/shard/chain semantics. Consumers (riir-neuron-db Plan 002, future
+//! riir-ai HLA self-discovery plan) apply these to their own maps.
+//! DEFAULT-ON (Plan 301 Phase 5 T5.1, 2026-07-02): G1 PASS + G3-precursor PASS
+//! + T3.4 latency PASS + G4 PASS. Transitively enabled via viable_manifold_graph
+//! + tucker_factorization (both default-on).
 // (Module gating is handled by `#[cfg(feature = "subspace_phase_gate")]` on the
 // `mod` declaration in `lib.rs`; this file must NOT duplicate it.)
 

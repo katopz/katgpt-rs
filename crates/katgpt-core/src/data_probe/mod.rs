@@ -48,6 +48,24 @@
 //! here from root `src/data_probe/`. They're pure substrate (only deps:
 //! katgpt-core + intra-module). Root keeps re-export shims so every
 //! historical `katgpt_rs::data_probe::*` path resolves.
+//!
+//! Sink-Aware Attention — NOP/Broadcast classifier + dual-policy sigmoid gate
+//! (Plan 287, Research 258, arxiv 2606.08105, Fesser et al.). Per-head
+//! classifier (value-norm-ratio + stable-rank-of-update) decides whether a
+//! sink is Adaptive NOP (gate it via sigmoid) or Broadcast (preserve it).
+//! Staged integration: the policy enum + standalone apply_dual_policy_gate
+//! ship here; direct wiring into parallax_attn / funcattn forward paths is
+//! deferred until synthetic G2 + latency G3 gates pass on a real model
+//! (validation fallback per Plan 287 §Validation).
+//!
+//! Plan 404 (2026-07-06): the parent module is now always-on. The pure
+//! information-theoretic substrate (markov/nll/typical_set/dirichlet_energy/
+//! claim) moved here from root `src/data_probe/`. The sink-aware classifier
+//! (`sink_classify`) + `geometry` remain gated `sink_aware_attn` inside the
+//! module. The gated re-exports below preserve `crate::data_probe::SinkKind`
+//! etc. for internal consumers (notably `parallax_attn.rs`). The always-on
+//! re-exports (markov/nll/typical_set/dirichlet_energy/claim) live in
+//! `data_probe/mod.rs`.
 
 // ── Always-on submodules (pure information-theoretic substrate) ─────────
 

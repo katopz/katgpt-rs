@@ -36,6 +36,19 @@
 //!
 //! Opt-in (`escalation_guard`). No deps, no unsafe, wasm32-clean by
 //! construction (plain arithmetic + `std::env` on the non-hot helper).
+//!
+//! escalation_guard — the shared serving-escalation guard primitives
+//! (Issue 923 / riir-refine Plan 202 R1): extracted ONCE from riir-rethink's
+//! ESC lane so every escalation lane in the stack consumes ONE definition —
+//! RollingRateLatch (rolling N-decision window over escalation flags, rate()
+//! None until full, sticky latched demotion, O(1) alloc-free observe;
+//! both-bounds and cost-ceiling-only shapes), the exact-literal demote-only
+//! kill-switch decode (absence-armed; ONLY "0" demotes — the manifest-only
+//! arming law; tpr::parse_kill is the same truth table at inverted polarity,
+//! cross-pinned by tests), and the namespace-parameterized receipt tiers
+//! (ESC:think|cheap|demoted — rethink's bytes reproduced exactly). Sibling
+//! vocabulary for greps: EscRateGuard, kill_switch_decode,
+//! RATE_GUARD_WINDOW, ESC_POSTURES. OPT-IN (`escalation_guard`).
 
 /// The grammar-locked rolling window (riir-rethink Issue 017 T5's bound,
 /// the GOAT's [15%, 60%] acceptance axis): the last N decisions'

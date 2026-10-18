@@ -91,6 +91,35 @@
 //!
 //! Phase 2 adds the gradient-guided policy (paper Alg 3) behind the
 //! `grad_policy` sub-feature.
+//!
+//! Transformer Inversion — SipIt open primitive (Plan 561, Research 232
+//! Gain-Redirects, arXiv:2510.15511 Nikolaou et al. ICLR 2026). Modelless,
+//! O(T·|V|) exact prompt recovery from a layer-ℓ hidden state matrix via
+//! per-position vocabulary search. Public-engine adoption hook for
+//! transparency / interpretability / audit tooling on standard decoder-only
+//! text transformers; NOT applicable to HLA (sigmoid-bounded 8-dim belief
+//! kernel, not a real-analytic text transformer) and NOT a sync-boundary
+//! compression primitive (transmitting a T×d hidden-state matrix is a
+//! ~7000× bandwidth INCREASE over the 20-byte scalar sync).
+//!
+//! Phase 1 (this module): skeleton + RandomPolicy (uniform-without-
+//! replacement) + G1 exact-recovery tests on a toy 2-layer GELU transformer.
+//! Phase 2 (gated on `grad_policy` sub-feature): GradientGuidedPolicy
+//! (paper Alg 3). Phase 3 (deferred): G2 latency + G4 alloc-free benches.
+//!
+//! Gain-tier parking rationale: §1.55 mandates the verdict (modelless +
+//! not shipped → Gain). The Gain tier routing "Plan only, behind feature
+//! flag" implies code ships feature-gated; promotion to default-on
+//! requires a concrete consumer that demonstrates a gain at the GOAT gate
+//! (Plan 561 T5.1 — unmet as of 2026-07-29: zero production consumers across
+//! the 7-repo stack; re-verified via grep for `transformer_inversion` /
+//! `katgpt_core::inversion` across all 7 repos — only self-references in
+//! this module + bench_561 + this lib.rs export + the
+//! `examples/transformer_inversion_01_forensics.rs` reference harness).
+//! The feature ships as adoption-hook infrastructure; the forensics demo
+//! (2026-07-29) closes the documentation gap (every public primitive in
+//! katgpt-rs ships an example harness) but is NOT a production consumer.
+//! Re-evaluate at the 2026-10-26 timeout (T5.2).
 
 pub mod policy;
 pub mod recovery;

@@ -1,3 +1,10 @@
+//! Gromov–Wasserstein quotient alignment (Issue 743 / riir-ai Issue 912 T4
+//! BUILD decision, Research 371) — structure-only cross-space alignment of
+//! two distance matrices (no shared coordinates, no correspondence prior):
+//! the case `mag::transfer::Wasserstein1d` and RSA are structurally blind to.
+//! Product-graph power iteration over a preallocated scratch; fixed init +
+//! fixed iters + no RNG ⇒ bit-deterministic. Opt-in `gw_alignment`.
+
 // Gromov–Wasserstein quotient alignment (Issue 743 / riir-ai Issue 912 T4
 // BUILD decision, Research 371) — structure-only cross-space alignment of two
 // precomputed distance matrices `D_A` (n×n) and `D_B` (m×m), n,m ≤

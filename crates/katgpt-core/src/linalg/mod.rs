@@ -14,6 +14,15 @@
 //!
 //! Unification is tracked as future work once a generic-over-`T: Float` Cholesky
 //! is benchmarked to be bit-identical to the current f64 specialisation.
+//!
+//! Shared linear-algebra kernels. Originally extracted for `karc`'s ridge-style
+//! solvers (Plan 308); the f32 Cholesky/ridge path lives here as a standalone
+//! extraction of the PEIRA `(N + λI)⁻¹` pattern — see the module note for why
+//! PEIRA's f64 path is left untouched. Plan 319 (Clifford geometric product)
+//! and Plan 326 (Tucker/HOSVD tensor factorization) ship peers under `linalg::`
+//! — each must also gate this `pub mod` so the crate compiles when only that
+//! feature is on. Issue 684 (`svd_cca`) joins the same rule for its
+//! `symmetric_eig` consumption.
 
 pub mod ridge_solve;
 

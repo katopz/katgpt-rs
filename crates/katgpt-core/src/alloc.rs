@@ -40,6 +40,14 @@
 //! A profile is not a capability; a feature is. Gating a *measurement* on
 //! `debug_assertions` couples "can I measure this?" to "am I optimised?", and
 //! those are independent questions.
+//!
+//! Issue 741: the gate for the WHOLE alloc-tracking module lives here, once.
+//! It used to be `debug_assertions`, repeated on all 9 items inside alloc.rs,
+//! which made every alloc gate (G4/G5/G7) in the workspace compile to an empty
+//! binary under `--release` — the profile AGENTS.md mandates for gates — and
+//! print `ok. 0 passed`, exit 0. `alloc_tracking` decouples "can I measure
+//! allocations?" from "am I optimised?". Shipped release without the feature is
+//! byte-identical to before: no module, no TLS read on the alloc path.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;

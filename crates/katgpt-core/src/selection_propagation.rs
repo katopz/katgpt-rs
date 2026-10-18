@@ -55,6 +55,15 @@
 //! # Feature flag
 //! `selection_propagation` — opt-in (Issue 655; promotion depends on the G1
 //! head-to-head vs the shipped BFS-decay traversal).
+//!
+//! Selection-Set Fixpoint Propagation — KEEP M3 in house operator vocabulary
+//! (Issue 655 / Research 483, KEEP arXiv:2602.23592; HippoRAG PPR class). The
+//! one genuinely-unshipped composition from the Research 483 audit: a
+//! query-seeded importance propagation iterated until the top-r selected set
+//! stabilizes (membership fixpoint). Sigmoid-gated membership, CLR-reliability
+//! edge weighting, zero-alloc caller scratch, deterministic CSR order.
+//! Opt-in — promotion depends on the Issue 655 G1 head-to-head vs the shipped
+//! BFS-decay traversal (riir-rag fuse_graph_candidates) + downstream consumers.
 
 use crate::sigmoid;
 

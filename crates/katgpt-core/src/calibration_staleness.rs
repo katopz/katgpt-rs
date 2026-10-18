@@ -62,6 +62,11 @@
 //! that method is named to be greppable for exactly that reason.
 //!
 //! Zero allocation on every path. Opt-in (`calibration_staleness`).
+//!
+//! Calibration staleness at the freeze/thaw seam (Issue 841 §B-3) — a
+//! snapshot swap invalidates every attached calibration head; `SnapshotBound`
+//! returns `None` + one loud warning instead of a stale plausible score.
+//! Opt-in (`calibration_staleness`).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 

@@ -49,6 +49,12 @@
 //! Applying the order and re-canonicalizing yields the identity permutation:
 //! the ordered keys are already sorted, and the index tie-break over a sorted
 //! run preserves position. Pinned in the unit tests and in Bench 897 G1a.
+//!
+//! Canonical context assembly (Issue 882 P4 rider (a) / Research 586) — a
+//! deterministic total order over retrieved/context items (BLAKE3 content key
+//! or caller key, index tie-break; or score-descending with content-key
+//! tie-break) so an order-sensitive eval's permutation spread is 0 by
+//! construction. Zero-alloc, NaN-safe. Opt-in (`canonical_context`).
 
 use crate::float_order;
 

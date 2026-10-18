@@ -66,6 +66,30 @@
 //! `fastrand::Rng` directly (not `impl rand::Rng`) to match the rest of
 //! katgpt-core. Callers construct one with `fastrand::Rng::with_seed(...)`
 //! for determinism.
+//!
+//! Renoise-CE Self-Verifier — perturb a completed state, re-resolve through the
+//! same operator, measure drift as a verifier-free correctness score (Plan 406,
+//! Research 369, arxiv 2606.29150). Third orthogonal self-eval signal alongside
+//! CLR (claim-vote) and CoE (trajectory-shape). Operator-agnostic trait over any
+//! state->state map. DEFAULT-ON (Phase 10, 2026-07-04). NOT a UQ primitive
+//! (raw ranking signal; conformal wrapping required for any UQ claim).
+//!
+//! Freedom-guided sibling of best_of_n_stability (Issue 665 / Research 486):
+//! near-best drift gate + Δ-log-extension-count selection over a caller-owned
+//! occupancy table. Gated on freedom_selection (implies renoise_ce).
+//!
+//! Issue 875 T2 / Research 582: the (T−t)-weighted renoise-CE draw schedule —
+//! k_draws sampled over [floor·L, cap·L] from the remaining-horizon density
+//! instead of one fixed level. Combined-gate surface: needs both features
+//! (renoise_ce is default-on; horizon_weights is the opt-in arm).
+//!
+//! Issue 875 T4 / Research 582: the target-anchored renoise-CE probe mode —
+//! each re-resolved draw is scored against a caller-supplied frozen TARGET
+//! anchor (distributional surprise vs the prior) instead of the candidate
+//! itself (self-consistency). Flow-relative novelty: states at the prior's
+//! own distance but in a foreign basin separate only through the flow
+//! (Bench 879). Consumer sketch: consolidation surprise ordering.
+//! renoise_ce_surprise implies renoise_ce, so the single gate suffices.
 
 use fastrand::Rng;
 

@@ -35,6 +35,14 @@
 //! no-op returning 0, `execution_share` returns 0.5, and
 //! `metabolic_drag_threshold` returns NaN for a non-viable regime
 //! (`eps <= repl_cost`) where the break-even concept is undefined.
+//!
+//! Research 550 / riir-ai Plan 585 (arXiv:2609.10817) — Metabolic Gate:
+//! energy-coupled compute gating, the compute-budget family's STOCK axis
+//! (gain_cost_halt gates on a utility flow). depth_factor σ((stock−base)/scale)
+//! + the Theorem-1 starvation law 2ε < L(1+(1−α)δ) + the Lemma-1 break-even
+//! K(ε,L) bisection + conservation-exact steal_lossy + execution_share
+//! scheduling. Zero-alloc f32, NaN-never-fires. Opt-in — consumer riir-ai
+//! Plan 585; re-gate before any default promotion (no-default-consumer rule).
 
 #![allow(clippy::float_cmp)] // float comparisons in tests against exact constants
 

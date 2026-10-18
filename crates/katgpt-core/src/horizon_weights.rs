@@ -76,6 +76,15 @@
 //! saturating cast to index 0 — documented there). This is a weight
 //! schedule, not a sync-boundary value; callers on the sync path feed
 //! clamped time fractions.
+//!
+//! horizon_weights (Issue 875 T1 / Research 582, arXiv:2605.09071): the PFD
+//! (T−t) Fubini accumulation law + the exact w(t) = ½(T−t)g²c² closed form
+//! (c = exp(−∫a)), with the BLAKE3-committed fixed-grid table form (the
+//! static_cal pattern, exact — no calibration pass). Future-looking
+//! remaining-horizon weighting — mechanism-distinct from
+//! tether::horizon_decay's past-looking staleness fading. T2 consumer
+//! shipped as the combined-gate renoise_ce_score_horizon (Bench 877);
+//! the feature itself stays OPT-IN per the T5 promotion rule.
 
 /// Fixed grid density for [`HorizonWeightTable`]. 64 points covers the
 /// schedule shapes the PFD paper anneals over (`[0.02T, 0.98T] → [0.02T,

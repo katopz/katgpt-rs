@@ -57,6 +57,23 @@
 //!
 //! Opt-in until the consumer (riir-neuron-db Issue 614 E2) lands; no GOAT
 //! bench claim until then (the `cond_audit` precedent).
+//!
+//! Leakage Probe — modelless attribute-transfer leak score for stored vector
+//! stores (Issue 736, Research 540; threat model from arXiv:2505.12540 vec2vec,
+//! NeurIPS 2025). Defender-side audit: given OUR stored vectors + an
+//! adversary-capable sample in a FOREIGN embedding space (shared label
+//! ontology), transports ours into the foreign space via a fully GD-free
+//! chain — deterministic subspace iteration → PCA whitening → entropic-
+//! Sinkhorn self-labeling → orthogonal-Procrustes polar factor (reusing the
+//! always-on `linalg::symmetric_eig`) — then scores kNN attribute-transfer
+//! top-1 against the majority-class chance baseline + the neighborhood-hit
+//! + alignment-quality diagnostics. Distinguishes from
+//! `latent_confounder_audit` (single-space, counterfactual slices over OUR
+//! directions) by operating ACROSS two spaces with no encoder access. Zero
+//! deps; audit-cadence allocation (the analytic_lattice::audit precedent).
+//! Opt-in — the consumer is riir-neuron-db Issue 614 E2 (the security-test
+//! adoption); no GOAT bench claim until that consumer lands (the cond_audit
+//! precedent).
 
 mod transport;
 

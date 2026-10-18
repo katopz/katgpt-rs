@@ -36,6 +36,13 @@
 //!
 //! Pure modelless arithmetic — no deps, no allocs, no_std-compatible ops
 //! only (`powf`/`log10`/`max`). Zero-cost-unless-invoked.
+//!
+//! rating — Elo + Plackett-Luce rating primitives (Issue 686, promoted from
+//! four in-stack copies: katgpt-pruners arena EloCalculator + proof
+//! lambda_to_elo, riir-ai riir-games ruliology ParadigmRanking, riir-clippy
+//! src/elo.rs). Pure modelless arithmetic; bit-identical expression trees;
+//! f64 canonical + f32 twins (riir-clippy's persisted ratings keep their
+//! exact numerics). Zero-cost-unless-invoked.
 
 /// Standard-chess K-factor (per-match maximum movement) — every in-stack
 /// copy used 32.

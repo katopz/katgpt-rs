@@ -59,6 +59,11 @@
 //!
 //! Zero allocation (G4): the caller owns the candidate buffer; the function
 //! sorts it in place and returns the committed prefix length.
+//!
+//! Issue 917 T1 (2026-10-03): EB-Sampler-class entropy-bounded commitment
+//! (arXiv:2505.24857) — the largest error-proxy-ordered prefix with
+//! Σ H − max H ≤ γ; zero-alloc, deterministic, no-stall by construction.
+//! Opt-in pending the T2/T3 lane A/B (G2 NFE at matched quality).
 
 use crate::simd::logsumexp_parts;
 use std::cmp::Ordering;

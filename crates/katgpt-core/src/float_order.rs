@@ -47,6 +47,14 @@
 //! selection comparators are both natural-ascending and differ only in where
 //! NaN lands. Workspace sweep record: riir-ai Issue 832 (the first fixed
 //! instance was riir-rag's `score_cmp_desc`, which [`desc`] generalizes).
+//!
+//! float_order — NaN-safe total-order f32/f64 comparators (generalizes riir-rag
+//! score_cmp_desc; the workspace partial_cmp-unwrap_or(Equal) panic class):
+//! NaN sinks under both directions, -0.0 ties +0.0, NaN-free ordering is
+//! identical to the replaced idiom. Always compiled (ungated) — sorts run in
+//! every build, including --no-default-features consumers (riir-ai Issue 832
+//! T1: the cfg had landed on this module instead of `rating`, inverting both
+//! modules' documented gating).
 
 /// Normalizes an f32 into a total-order-safe sort key.
 ///

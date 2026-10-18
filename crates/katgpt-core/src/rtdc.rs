@@ -38,6 +38,19 @@
 //! - Chain quorum over 3 roots — riir-chain Plan 003.
 //!
 //! Plan 302 Phase 1 (T1.1–T1.6). Open primitive, public MIT.
+//!
+//! RTDC — Resolution-Tiered Deterministic Commitment (Plan 302, Research 280).
+//! Wraps `MerkleOctree` with 3 per-depth roots aligned to SLoD σ-boundaries,
+//! enabling trust-minimized semantic zoom: a light client verifies its
+//! fog-of-war view is a faithful sub-summation of the chain-committed full KG,
+//! with O(log n) proof at the abstraction level it operates at.
+//!
+//! Phase 1 ships the open primitive (types + trait + depth-2 sound proofs).
+//! Cross-depth soundness (`subtree_inclusion`) is Phase 3: Candidate C
+//! (probabilistic sampling) shipped behind `rtdc_subtree_inclusion`.
+//! Candidate A (Pedersen deterministic) research closed dormant — see
+//! `riir-chain/.research/006_RTDC_Candidate_A_Pedersen_Resolution.md`.
+//! LatCal-backed `DeterministicLeafEncode` impl lives in riir-chain (Plan 003).
 
 use crate::merkle::{
     HASH_SIZE, MERKLE_OCTREE_BRANCHING, MERKLE_OCTREE_INTERNAL, MERKLE_OCTREE_LEAVES, MerkleOctree,

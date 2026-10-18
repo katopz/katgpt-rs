@@ -101,6 +101,15 @@
 //! f32_to_bf16_rne_into(&f32s, &mut back);
 //! assert_eq!(back, bf16_bits);
 //! ```
+//!
+//! bf16_convert — SIMD bf16⇄f32 batch conversion (Issue 800 Arm A). Widening
+//! u16→f32 is lossless (bits<<16); narrowing ships RNE (bit-exact vs `half`)
+//! with truncation as the explicit fast opt-in arm (pufferlib's scalar >>16
+//! shape, biased — we take the kernel shape, not the rounding). NEON + AVX2
+//! (target_feature-gated) + scalar fallback; into_buf APIs write into
+//! caller-owned buffers, zero alloc. OPT-IN pending the Bench 800 GOAT gate
+//! (≥4× the scalar loop at 8 lanes); consumer = riir-engine weight_tensor
+//! dequantize_row BF16 arm.
 
 // ──────────────────────────────────────────────────────────────────────────
 // Single-element semantics — the spec every SIMD lane must reproduce.

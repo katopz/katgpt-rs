@@ -119,6 +119,27 @@
 //!
 //! [`signed_coupling`]: crate::signed_coupling
 //! [`SusceptibilityAccumulator`]: crate::signed_coupling::SusceptibilityAccumulator
+//!
+//! Plan 589 / Research 542 (arXiv:2603.24676 Tanaka, Mar 2026): Quantized
+//! Simplex Gossip — the minimal statistical mechanics of multi-agent BELIEF
+//! interaction. N agents hold K-option simplex beliefs; each interaction a
+//! random speaker SAMPLES a length-m message from its belief and the listener
+//! EMA-blends toward it at adaptation rate α. Quantized communication injects
+//! sampling variance even under perfect neutrality ("memetic drift" —
+//! consensus is a lottery), and the paper derives + experimentally validates
+//! (GPT-4o / Claude Haiku naming games) the closed-form laws the kernel is
+//! gated on: extra collapse drift α²/(mN²)·E[1−‖x_S‖²] (speaker uncertainty is
+//! the fuel, message length m divides it), t_cons ≈ (mN²/α²)·log(...), and the
+//! drift-vs-selection crossover Γh = mNh/α with logistic fixation. SIBLING to
+//! signed_coupling (temperature axis T): here the axes are bandwidth m +
+//! adaptation α on persistent simplex state (memoryless resample vs EMA
+//! blend; binary stance vs K-option belief — do not blur, compose). K=2 at
+//! α=1 reduces to the voter model (winner prob = x̄_k(0), pinned by test).
+//! The m axis is the NpcCommsBus wire budget read as a DYNAMICAL dial. Pure
+//! modelless, zero-alloc, RNG-free (caller-supplied uniforms, replayable).
+//! Opt-in — promotion waits on a production consumer (riir-ai Issue 907; the
+//! signed_coupling precedent). Physics GOAT gate: tests/bench_703 +
+//! .benchmarks/703_qsg_gossip_goat.md.
 
 /// Hard capacity for one belief vector in stack-buffer paths ([`QsgConfig::k`]
 /// must not exceed this). The paper's experiments use K = 2…10; 16 leaves

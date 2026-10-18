@@ -6,6 +6,12 @@
 //! freeze/thaw snapshot semantics on a `Vec<u8>`.
 //!
 //! Plan 285 (Research 256, revised to GOAT).
+//!
+//! CompressionDrafter — Hot-tier modelless LZ4 corpus-as-model drafter (Plan 285,
+//! Research 256, nathan.rs/gzip-lm). The compressor IS the model: score candidate
+//! continuations by compressed length against a frozen corpus. Corpus is appendable
+//! for online learning and is itself the wired format (bytes + BLAKE3).
+//! Opt-in until G1–G3 GOAT gate passes.
 
 use lz4_flex::block::{CompressTable, compress_into_with_table, get_maximum_output_size};
 use lz4_flex::compress_prepend_size;

@@ -34,6 +34,19 @@
 //!
 //! Entire module is `#[cfg(feature = "closure_instrument")]`. Zero cost when
 //! disabled — every public API vanishes from the build.
+//!
+//! Closure-Expansion Instrument (CEI) — PTG recorder + motif miner + PRI/CDG/TaR metrics
+//! (Plan 290, Research 264, arxiv 2606.15386, Momennejad & Raileanu). Open measurement
+//! layer: turns open-ended inference into observable metrics. DEFAULT-ON
+//! (Plan 290 T4.7 + G4 fix, 2026-06-26): G1 67us<100us, G2 638us<5ms, G3
+//! synthetic-proxy monotone, G4 0.296MB<1MB. 55/55 tests green.
+//!
+//! Issue 040 — PTG × latent_functor edge composition. Ships `FunctorPtg`
+//! (composite wrapper over an unchanged `PrimitiveTransitionGraph`),
+//! `FunctorEdgeParams` (per-edge continuous-functor params), and
+//! `apply_functor_edge_into` (zero-alloc sigmoid-gated apply path). Gated by
+//! `ptg_functor_edges` (implies `closure_instrument`). Wire-format safe: the
+//! inner PTG is byte-identical to a bare PTG.
 
 pub mod admit;
 pub mod bridge;

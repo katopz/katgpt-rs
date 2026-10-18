@@ -109,6 +109,14 @@
 //! **opt-in as a diagnostic surface**; the live consumer axis is cross-regime
 //! triage — the KARC regime-mismatch probe of Research 488 §4, which is the
 //! grain where the sign is correct.
+//!
+//! Effective Degree — function-space simplicity via polynomial representations
+//! along data-anchored interpolation paths (Research 488 / arXiv:2605.29823,
+//! Issue 668). Modelless measurement only; the paper's differentiable
+//! regularizer is training-side (riir-train). Reuses `karc::ChebyshevBasis` +
+//! `linalg`'s damped Cholesky, so the feature implies `karc_forecaster`.
+//! Opt-in: promotion to default is blocked on a consumer verdict
+//! (riir-neuron-db Issue 602 freeze-gate PoC — does ED beat `output_flatness`?).
 
 use crate::karc::{ChebyshevBasis, KarcBasis};
 use crate::linalg::{chol_solve_f64, cholesky_f64};

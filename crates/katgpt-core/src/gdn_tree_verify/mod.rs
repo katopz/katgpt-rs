@@ -37,6 +37,15 @@
 //! Opt-in feature `gdn_tree_verify`. Not default — only relevant for
 //! `QwenDeltaNet` / GDN-layer configs (themselves opt-in via
 //! `deltanet_inference`). Complements Plan 012's KV-rollback attention verify.
+//!
+//! GDN Rollback-Free Tree Verification — masked triangular solve for delta-rule
+//! speculative trees (Plan 424, Research 407, arXiv:2607.06763 §3.4). Reduces
+//! tree verification for GDN recurrent layers to (I+X)U=βV, eliminating state
+//! rollback entirely. Pure-math substrate: flat &[f32] slices, no Gdn2State/Config
+//! dep. STAYS OPT-IN — G1–G4 GOAT gate PASS (Bench 424, 2026-07-10; G2 wins on
+//! deep draft trees); not promoted to default because it only activates on
+//! opt-in GDN/QwenDeltaNet configs and provides significant speedup only on
+//! deep trees.
 
 use crate::simd::simd_dot_f32;
 

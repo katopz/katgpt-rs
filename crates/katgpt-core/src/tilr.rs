@@ -46,6 +46,18 @@
 //! [`tilr_refine_into`] is zero-alloc on the hot path — the caller pre-allocates a
 //! [`TilrScratch`] once and reuses it across calls. [`tilr_refine`] is the
 //! allocating convenience wrapper for non-hot paths.
+//!
+//! TILR — Trajectory-Invariant Latent Refinement (alignment-gated subspace
+//! correction). Plan 425, Research 408, arXiv:2606.29164 (ICML 2026 Mech Interp
+//! Workshop). The alignment-gated member of the subspace-projection family:
+//! projects a contrastive direction onto a frozen SVD basis, modulates the step
+//! size by the alignment fraction γ = ‖Πd‖/‖d‖ so that γ→0 bit-recovers the
+//! uncorrected input (strict no-harm guarantee). Pure linear algebra — flat
+//! &[f32] slices + SIMD dot products, zero `crate::` deps. Consumes a
+//! pre-computed SVD basis (Plan 301 thin_svd_into); does not compute it.
+//! DEFAULT-ON (2026-07-09): G1–G4 ALL PASS — see .benchmarks/425_tilr_goat.md.
+//!
+//! Phase 3 calibration helper needs Plan 301's thin SVD — gated on both features.
 
 use crate::simd::{simd_dot_f32, simd_fused_scale_acc};
 

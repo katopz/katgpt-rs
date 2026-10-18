@@ -43,6 +43,19 @@
 //! row), riir-engine gated `LoRAHotSwap` dispatch (guide row,
 //! `riir-ai/.research/394`). Opt-in (`gmm_support`) per the
 //! no-default-consumer rule — promotion rides a consumer's GOAT.
+//!
+//! Density-ratio support gate (Plan 618 / Research 604, arXiv:2610.02126
+//! "Local Support Learning") — the continuous-latent two-density member
+//! of the gate family: a diagonal-GMM pair (positive fit on the
+//! suite/adapter's own training distribution, negative on a generic
+//! reference corpus) whose log-ratio gates admission to the training
+//! support, with the revived JL projector at E ≥ 32 (packed sign-bit
+//! storage), EM refinement seeded from the shipped k-means, an EMA
+//! smoother, and the offline excess/deficit certification instruments
+//! (the leak-by-construction canary included). Fit in the PROJECTED
+//! space, never raw (the measured fit-space law). Opt-in
+//! (`gmm_support`) per the no-default-consumer rule — promotion rides a
+//! consumer's GOAT (riir-reflex Issue 066 is the first).
 
 pub mod certify;
 pub mod em;

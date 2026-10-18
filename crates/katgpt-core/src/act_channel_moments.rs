@@ -47,6 +47,12 @@
 //! [`ActChannelMoments::observe`] beside `LayeredVkCalibration::observe_layer`
 //! in the same tapped loop. 883's grand `Σx²` is over K/V and is NOT a
 //! substitute for this diagonal.
+//!
+//! Per-input-channel activation moments `{mean|x|, E[x²]}` per linear layer
+//! — the activation-diagonal collector for activation-aware weight-quant
+//! fitting (Issue 886 P0 / Research 588; consumer: katgpt-types
+//! `act_aware_fit`). BLAKE3-committed canonical table. Opt-in
+//! (`act_channel_moments`).
 
 use std::fmt;
 

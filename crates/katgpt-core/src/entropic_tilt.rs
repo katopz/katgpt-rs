@@ -64,6 +64,14 @@
 //! competition between additive gates. Here the Boltzmann normalization is the
 //! published objective's tilting mechanism, and its output is an ADVANTAGE
 //! (signed, zero-sum over the group — not a competing gate).
+//!
+//! entropic_tilt — KL-budgeted max-seeking advantage tilt (TTT-Discover
+//! arXiv:2601.16175; prior art RS-GRPO / RSPO). The max-seeking counterpart to
+//! `best_belief` above: that scores a candidate from its OWN history counts,
+//! this scores it from the SHAPE of the current group. Shared math with exactly
+//! two consumers — riir-clippy `selection_entropic` (Issue 026, ranking) and
+//! riir-train `loss_grpo` (Plan 341, gradient scaling) — hoisted here rather
+//! than forked. Opt-in pending the Plan 341 Phase 2/3 GOAT.
 
 /// KL budget γ — the paper's default `ln 2`.
 pub const KL_BUDGET_LN2: f32 = core::f32::consts::LN_2;

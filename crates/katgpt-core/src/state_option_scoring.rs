@@ -51,6 +51,19 @@
 //! score is `exact_sigmoid(scale · cos)` in (0, 1). A zero vector passes
 //! through normalization: "no direction" reads as cosine 0 against
 //! everything, never NaN.
+//!
+//! state_option_scoring — per-option centroid-cosine scoring over a fixed
+//! option table + the pinned lowest-index argmax (Plan 607 T1). Upstreams
+//! riir-reflex Issue 004 T7's route_terms shape (sigmoid(dot(state, centroid)
+//! · scale) per option; the compression drafter stays OUT of the hot loop —
+//! reflex measured drafter deltas cannot rank short options). Generic by law
+//! (R4): (state vector, option matrix) in, decision out — nothing
+//! arena-specific. Consumes exact_sigmoid + cmp_for_max + distance_abstain's
+//! unit normalize (feature implication, not a fork of a bit-parity-critical
+//! helper). T3 adds `head::FittedHead` — the corpus-fitted linear head
+//! (closed-form ridge LS over frozen features) consuming `linalg::
+//! ridge_solve`'s f64 path (KARC Plan 308's fit math). Opt-in pending the
+//! Plan 607 GOAT (bench_876 T1 + bench_878 T3).
 
 use crate::float_order::cmp_for_max;
 

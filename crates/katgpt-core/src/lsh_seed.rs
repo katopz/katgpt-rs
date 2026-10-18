@@ -12,6 +12,12 @@
 //! over the configuration scalars' little-endian `u64` encodings, in feed
 //! order. The only property anyone may rely on: the same configuration yields
 //! the same seed. It is NOT a hash for any other purpose.
+//!
+//! Deterministic configuration-seeded draws — the shared LSH seed discipline
+//! (the Issue 809 T3 law: same configuration → same projection stream). Moved
+//! DOWN from katgpt-pruners/lsh_cache.rs (Plan 619 substrate duty — ships
+//! once, here; pruners re-exports). Ungated: local-only compute, the
+//! config-audit precedent; lsh_cache (always-on) consumes it unconditionally.
 
 /// FNV-1a over the configuration scalars' little-endian `u64` bytes, in order.
 ///

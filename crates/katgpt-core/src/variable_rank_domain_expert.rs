@@ -54,6 +54,24 @@
 //!
 //! Opt-in — Plan 558 GOAT gate pending. Promotion to default-on requires
 //! release-mode latency ≤1.0× baseline at 10K NPCs.
+//!
+//! ── Variable-Rank Domain Expert Clusters (Plan 558, Research 453) ─────────
+//!
+//! Open MIT-licensed composition layer: applies LatentMoE's transferable
+//! principle (arXiv:2601.18089 — the paper itself is PASS; this distills the
+//! principle) to per-NPC cognition. Different NPC tasks have different
+//! intrinsic feature ranks (movement ~8 dims, combat ~16, quest/social ~32).
+//! Compressing each domain to its rank ℓ_d and scaling expert count by
+//! α = D_full/ℓ_d preserves total K×D compute while boosting archetype
+//! diversity (1.63× entropy gain validated in Research 453 PoC).
+//!
+//! Three small primitives over the existing `CommittedFieldBlend<N, D>`
+//! (Plan 321, DEFAULT-ON): pick_domain (argmax routing), project_guided
+//! (zero-cost dim gather — NOT blind JL/PCA, mitigates Plan 230 cautionary
+//! flag), VariableRankRouter<DOMAINS> (heterogeneous-rank dispatch).
+//!
+//! Opt-in — Plan 558 GOAT gate pending; promotion to default requires
+//! release-mode latency ≤1.0× baseline at 10K NPCs.
 
 use crate::committed_field_blend::{ArchetypeFieldSource, CommittedFieldBlend};
 

@@ -38,6 +38,19 @@
 //! GOAT gate passed: `RerankMethod::SmoothMinAligned` in katgpt-attn-match
 //! achieved recall@5 = 1.000 vs Cosine 0.495 (+50.5pp) on position-aligned
 //! multi-token retrieval.
+//!
+//! Smooth-min soft pattern matching — modelless latent-space utility for
+//! fuzzy multi-token retrieval (Research 385, SoftMatcha 2, Issue 041; Issue 041 removed, see git history).
+//! GOAT PoC PASS: +12pp recall@5 over plain cosine, ~0ns overhead.
+//! Consumer GOAT PASS (T6 SmoothMinAligned): recall@5 = 1.000 vs Cosine 0.495
+//! (+50.5pp) on position-aligned multi-token retrieval.
+//! DEFAULT-ON (2026-07-12): first consumer GOAT gate passes with modelless gain.
+//!
+//! recos — Rearrangement-Inequality Cosine Similarity (Plan 437, Research 421,
+//! arXiv:2602.05266). Saturates under ordinal concordance — wider capture range
+//! than cosine. Sits inside the `similarity` module (which is gated on
+//! smooth_min_similarity; `recos` implies smooth_min_similarity so the module
+//! compiles under --no-default-features). Opt-in until the Phase 2 GOAT gate.
 
 /// Smooth-minimum similarity for variable-length soft pattern matching.
 ///

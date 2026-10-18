@@ -15,6 +15,10 @@
 //! OPT-IN pending the Phase-3 G3 GOAT (predictor-chosen (w, block size)
 //! matches or beats fixed settings at matched NFE) — promotion to default is
 //! NOT claimed here.
+//!
+//! Plan 602 (2026-09-20): decode-order AR-ness instruments for the DLM lane
+//! (ALR/AGR over per-position unmask steps). katgpt-forward's π-logging
+//! forwards this same feature.
 
 pub mod arness;
 

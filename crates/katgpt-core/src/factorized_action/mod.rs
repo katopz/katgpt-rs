@@ -53,6 +53,18 @@
 //! The relevance gate uses `sigmoid(β·(relevance − τ))`, NEVER softmax.
 //! Per AGENTS.md §2 and the paper's own design (sigmoid gating
 //! throughout, verified in `otf_lam/model.py::GateNetwork.forward()`).
+//!
+//! Factorized Transition Action Abstraction — modelless compositional action
+//! latent primitive distilled from Nam et al., *Latent Actions from Factorized
+//! Transition Effects under Agent Ambiguity* (arXiv:2606.30544, Brown, 2026-06-30).
+//! Research 374, Plan 375. The factorized/compositional cousin of the shipped
+//! monolithic `latent_functor` (riir-ai Plan 273): frozen codebook of K D-dim
+//! effect primitives + Top-1 patch assignment + sigmoid relevance gate +
+//! normalized weighted average → compact action latent. Codebook constructed
+//! modellessly via Lloyd's k-means (Path 2 of AGENTS.md §3.5 — deterministic,
+//! no gradient descent). Sigmoid gating throughout (NEVER softmax per AGENTS.md
+//! §2, verified in `otf_lam/model.py::GateNetwork.forward()`). Opt-in until the
+//! G1–G6 GOAT gate (bench_375_factorized_action_goat) passes.
 
 pub mod codebook;
 pub mod kernel;

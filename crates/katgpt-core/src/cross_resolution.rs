@@ -60,6 +60,13 @@
 //!
 //! For `Φ_src^T Φ_src` and `Ψ_dst^T Ψ_dst` to be `I_k` (full rank `k`),
 //! `k ≤ min(d_src, d_dst)` is **required**. Enforced in [`CrossResolutionBases::new`].
+//!
+//! Cross-Resolution Spectral Transport — asymmetric-basis FUNCATTN (Plan 310,
+//! Research 291, arxiv 2605.31559). Generalizes FUNCATTN to d_src ≠ d_dst,
+//! enabling train-on-small-deploy-on-large latent transfer without retraining.
+//! Open primitive: frozen BLAKE3-committed bases + zero-alloc transport.
+//! DEFAULT-ON (Plan 310 Phase 4, 2026-06-23): G1 mean cos 0.8944>=0.85, G2-A rank
+//! preservation, G3 elbow k=8, G4 0 allocs.
 
 use crate::simd;
 

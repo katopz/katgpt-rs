@@ -12,6 +12,11 @@
 //! now a thin re-export shim — `katgpt_core::temporal_deriv::*` paths are
 //! preserved bit-for-bit. Tests stay here and exercise the kernel through
 //! the re-export.
+//!
+//! Temporal Derivative Kernel — dual fast/slow EMA surprise signal (Plan 277, Research 243).
+//! Turns any streaming latent vector into a signed "surprise" signal — the implicit
+//! prediction-error channel for credit assignment, computed locally with no backprop.
+//! DEFAULT-ON (Plan 277, 2026-06-16): 4/4 fusion gates PASS — see .benchmarks/277_temporal_deriv_goat.md.
 
 #![allow(clippy::needless_range_loop)]
 

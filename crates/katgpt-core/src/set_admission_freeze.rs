@@ -45,6 +45,11 @@
 //! unfilled backfill from the const table's tail rows — the envelope's
 //! commitment pins the exact mix either way. No training, no gradient
 //! descent: this is selection-time geometry, inside the modelless mandate.
+//!
+//! set_admission_freeze — the T4.4 self-adaptive freeze surface (Plan 599
+//! track b): re-freeze improved direction banks from runtime evidence into a
+//! BLAKE3-committed 1 KB artifact (the local MerkleFrozenEnvelope pattern),
+//! consumed through `fan_cap_ladder_into_bank`. Opt-in with `set_admission`.
 
 use crate::set_admission::{BANK_SIZE, BANK_THRESHOLD, DIM, DIRECTION_BANK};
 

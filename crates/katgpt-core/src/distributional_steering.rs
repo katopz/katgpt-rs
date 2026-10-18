@@ -73,6 +73,12 @@
 //! }
 //! // log_w now carries the FK tilt; μ̂ = Σ e^{log_w_i} δ_{X_i} ≈ μ*(λ)
 //! ```
+//!
+//! distributional_steering — population steering toward a measure-defined
+//! target (Plan 577, Research 505, arXiv:2608.08770): MeasureReward
+//! first-variation table + Feynman-Kac log-weights with the mean-field Ψ̇
+//! Picard correction + weighted empirical measure exposure. Opt-in pending
+//! the Bench 682 targeting gate.
 
 // ──────────────────────────────────────────────────────────────────────────
 // Reward table (Plan 577 T1.1 / T1.2)

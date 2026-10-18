@@ -7,6 +7,11 @@
 //! katgpt-pruners ↔ katgpt-speculative cycle. Pure stdlib (Path + fs + mem),
 //! no pruners-specific knowledge. `katgpt-pruners::freeze` re-exports this
 //! module for backwards compatibility.
+//!
+//! Shared freeze/thaw disk I/O for `repr(C)` knowledge structs.
+//! Extracted from `katgpt-pruners::freeze` (Plan 388 Phase 1) to break the
+//! katgpt-pruners ↔ katgpt-speculative cycle. Pure stdlib (Path + fs + mem).
+//! Re-exported by katgpt-pruners::freeze for backwards compatibility.
 
 use std::path::Path;
 

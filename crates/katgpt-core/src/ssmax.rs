@@ -61,6 +61,15 @@
 //! - arXiv:2607.01538 — Gollapudi et al. (paper)
 //! - arXiv:2501.19399 — Uszacorek et al., *Scalable-Softmax is Superior for
 //!   Attention* (SSMax source paper, cited as `[9]` in 2607.01538)
+//!
+//! SSMax — length-aware log-N attention temperature (Plan 411, Research 392,
+//! arxiv 2607.01538 Gollapudi et al. *Drowning in Documents at Million Token
+//! Scale*). Multiplicative pre-attention logit rescaling that cancels the
+//! attention dilution at large N. Default `s_L = 1.0` is truly modelless.
+//! Composes with parallax_attn (sigmoid) and attention.rs (SDPA); does NOT
+//! apply to funcattn (Research 261 closed negative: basis-mode has no (n,n)
+//! attention matrix → no dilution). DEFAULT-ON (Plan 411 Phase 5, 2026-07-07):
+//! G1+G2+G3+G4+G5 ALL PASS.
 
 // ──────────────────────────────────────────────────────────────────────────
 // Types

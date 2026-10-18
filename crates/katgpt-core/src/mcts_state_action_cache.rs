@@ -64,6 +64,15 @@
 //! search, or when actions are stochastic so `(s, a)` does NOT determine `s'`).
 //! This module generalizes both to the `(state, action)` key for the
 //! deterministic-transition regime.
+//!
+//! State-Action Pair Cache for MCTS over Deterministic Inference Actions
+//! (Plan 390, Research 386, arXiv:2602.04344 UnMaskFork).
+//!
+//! Opt-in extension to [`mcts`]: a standalone search over an opaque
+//! `InferenceActionSpace` (no `GameState` / game-IP coupling), backed by a
+//! lock-free `StateActionCache` keyed on `(blake3::Hash, InferenceAction)`.
+//! Gated behind `mcts_state_action_cache` so the always-on `mcts` substrate
+//! stays dep-free.
 
 use arrayvec::ArrayVec;
 use papaya::HashMap as PapayaHashMap;

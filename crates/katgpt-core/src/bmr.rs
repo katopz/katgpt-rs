@@ -64,6 +64,13 @@
 //! caller-supplied scratch. Column values live in fixed-size [`Counts`]
 //! stores (bounded by [`MAX_OUT`] rows / [`MAX_COLS`] columns) so nothing on
 //! the hot path touches the heap.
+//!
+//! bmr — Bayesian Model Reduction + EFE-over-models (Plan 597 / Research
+//! 551, Friston et al. Nat Commun 2026): closed-form Dirichlet model
+//! evidence, posterior over models, predictive model posterior (sparse-delta),
+//! EFE model-gain term, Occam commit statistic, isomorphic rule enumerator.
+//! Discovery axis only (anti-FEP scope guard, Research 551 §2.4).
+//! DEFAULT-ON since 2026-09-12 (Bench 715 GOAT G1–G4 ALL PASS).
 
 use crate::special_fn::ln_gamma;
 use arrayvec::ArrayVec;

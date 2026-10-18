@@ -30,6 +30,12 @@
 //! Opt-in (`feature = "lattice_memory"`) until the Plan 619 GOAT gate
 //! (T1.7) passes; the gate designs live in the plan, never here. Name
 //! disambiguation: NOT `analytic_lattice` (Plan 330 transport operators).
+//!
+//! LatticeMemory — E2LSH-addressed delta-rule cell lattice (Plan 619, research
+//! note 233): continuous per-axis LSH addressing + 3-tap bump interpolation
+//! + flat-slab delta cells. The candidate fifth retrieval complexity class.
+//! NOT analytic_lattice (Plan 330 transport operators). Opt-in until the
+//! Plan 619 T1.7 GOAT gate; consumer = riir-refine Plan 199.
 
 mod address;
 mod bump;

@@ -51,6 +51,15 @@
 //! Offline report methods (`r_squared`, `sorted_counts_desc`,
 //! `coverage_curve`) allocate — they run once per calibration, never in
 //! the observe loop.
+//!
+//! Fitted anchor tables — the SHARED streaming table-builder substrate
+//! (Issues 882+883 P0 / Research 586+587, the F1 fusion: one calibration
+//! pass, two consumers). Per-key streaming mean rows (they ARE the table
+//! product) + f64 one-way-ANOVA sufficient statistics (the R² dashboard:
+//! per-dim and variance-weighted token-explained fractions, exact from
+//! accumulated stats) + James–Stein shrinkage `n/(n+λ)` + the tail-lump
+//! lower-bound law + Zipf coverage curves. Q-side consumers: 882's
+//! anchors; V-side: 883's E_l[s] tables. Opt-in (`fitted_anchor_tables`).
 
 /// James–Stein shrinkage factor `n/(n+λ)` — the Zipf-tail control shared
 /// by every fitted-table consumer. `λ = 0` ⇒ factor exactly 1 (the plain

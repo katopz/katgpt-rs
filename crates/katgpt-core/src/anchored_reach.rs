@@ -70,6 +70,19 @@
 //! issue's GOAT shape the headline promotion gate for the PAIR is T3's
 //! CLR crowd-panic PoC; until any consumer lands this is an unproven
 //! extraction, not a GOAT.
+//!
+//! RVM modelless extraction (Issue 696 / Research 433, riir-train,
+//! arXiv:2608.23664 — anchored reward-weighted velocity regression, Choi et
+//! al.): the DT2 ANTI-COMMON-MODE scalar gate (peak-quantile statistic +
+//! context-scaled threshold + median subtraction over the hack-carrying
+//! population + band window — resists capture by the population-dominant
+//! degenerate mode; the CLR crowd-panic failure is the named consumer, T3
+//! PoC pending) and the ANCHORED SIGNED-REACH blend operator (out = anchor
+//! + A·(cand − anchor); five regimes clamp/blend/adopt/overshoot/repel;
+//! bit-identical pole fast paths at A ∈ {0,1}; A(r) schedules linear /
+//! 2σ(kr)−1 / (2r−1)/β̄). Both zero-alloc, modelless,
+//! sigmoid-not-softmax by construction. Opt-in POC — promotion only via the
+//! issue's consumer PoC gates (T3 headline; T4 operator A/Bs).
 
 use crate::simd::fast_sigmoid;
 

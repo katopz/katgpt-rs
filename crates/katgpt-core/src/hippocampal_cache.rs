@@ -60,6 +60,14 @@
 //!   sharpening analog. Use `read_cache_into_per_key_rescale`.
 //!
 //! If both fail G4, γ-tuning is deferred to riir-train (tracked in the G5 issue).
+//!
+//! HOLA Hippocampal Exact KV Cache — surprise-evicted (β·‖e‖) bounded KV cache with
+//! decoupled RMSNorm-γ read (Plan 395, Research 378, arxiv 2607.02303). Complements
+//! the GDN2 fixed-size recurrent state with a top-w exact KV set for long-range
+//! retrieval. STAYS OPT-IN — G1–G4 GOAT PASS + consumer wiring PASS (modelless
+//! gain, Issue 038 production wiring in forward_gdn2 via HippocampalCacheDyn);
+//! promotion deferred to G5 riir-train gate (perplexity on real text). Pure
+//! stdlib + katgpt-types.
 
 #![allow(clippy::needless_range_loop)]
 

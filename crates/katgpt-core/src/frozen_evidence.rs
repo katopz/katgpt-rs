@@ -35,6 +35,11 @@
 //! Think-brain consumers ONLY (strategic decisions over belief-derived
 //! scalars). Never the physics/anti-cheat raw path — raw sync correctness
 //! is always-on by contract.
+//!
+//! Frozen-evidence deliberation kernel + step-drift metric (Issue riir-ai 953 /
+//! katgpt-rs Research 555, arXiv:2609.06746 CVRR). Convex-mix sigmoid-gated
+//! re-read of FROZEN evidence rows within one think cycle + the
+//! decorative-recurrence drift detector. Opt-in; think-brain consumers only.
 
 /// Evidence block: `k × d` row-major frozen rows (`row_len = d`).
 ///

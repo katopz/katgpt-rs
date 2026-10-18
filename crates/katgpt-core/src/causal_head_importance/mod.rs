@@ -33,6 +33,20 @@
 //! pass is supplied by the caller via a closure. This keeps katgpt-core
 //! leaf-clean (no transformer dep) and matches the FaithfulnessProbe pattern
 //! (probe is generic, consumer supplies the behavior metric).
+//!
+//! Causal Head-Importance Calibration & Scale-Normalized Heterogeneous Fusion
+//! (Plan 358, Research 362, arXiv:2606.20097 HydraHead). Modelless
+//! causal-intervention head scorer: activation patching (Eq 10) + path patching
+//! (Eq 11) + span-level logit-diff readout (Eq 9) + cross-capability fusion
+//! (Eq 12) + head partition mirroring RTPurbo's HeadCalibration. Plus
+//! scale-normalized heterogeneous-branch fusion (Eq 13–14, currently unused).
+//! Pure numeric over `&[f32]` + a caller-supplied patched-forward-pass closure;
+//! the patched forward pass itself lives in riir-engine. Sibling of
+//! `faithfulness_probe` (causal-intervention diagnostic pattern). Opt-in until
+//! G1–G4 GOAT gate passes; competes for the RTPurbo calibration slot.
+//!
+//! Adaptive Causal Calibration (Proposal 004) — cheap-proxy escalate. Opt-in.
+//! Re-exported alongside the causal head-importance primitives it builds on.
 
 pub mod fusion;
 pub mod patching;

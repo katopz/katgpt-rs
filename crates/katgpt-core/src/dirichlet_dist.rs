@@ -70,6 +70,13 @@
 //! NOT bind these primitives; it binds any future consumer that claims
 //! calibrated uncertainty. No default-on promotion. Thinning is NOT claimed
 //! as a general mean-preserving operator.
+//!
+//! Dirichlet-distribution primitives (Issue 912 T2+T3 / Research 596) — the
+//! exact explore dial `Dir(c·p)` (mean exact by construction, log-space
+//! sampling so α ≲ 0.02 stays exact), the thinning transition (exact ONLY
+//! under Dirichlet input — NOT mean-preserving on fixed vectors), and the
+//! Dirichlet-EMA belief memory (recursive mean path + randomized drawn path
+//! with the ring-truncation named). Opt-in (`dirichlet_dist`).
 
 /// Sample one Gamma(α, 1) variate's natural log — Marsaglia–Tsang
 /// squeeze-rejection with the small-α boost taken IN LOG SPACE.

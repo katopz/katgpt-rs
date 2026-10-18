@@ -52,6 +52,12 @@
 //! Seed-pinned splitmix64 (the T1.2 fixture convention). Same seed + same
 //! corpus shape ⇒ bit-identical reports; the benchmark record freezes one
 //! read and cites the seed.
+//!
+//! state_probe_eval — Plan 621 Phase 4's healer-lane evaluation instrument
+//! (T4.1–T4.3): the planted two-class fix-miss corpus, the three comparison
+//! arms (never-escalate floor / incumbent cap-only / probe-gated), and the
+//! G2 probe-cost budget guard. Declared-model simulator behind the .benchmarks
+//! record; NOT production telemetry (the doc law is at the module head).
 
 use crate::escalation_probe_gate::{EscalationOption, GateDecision, GateInput, gate};
 use crate::state_probe::{

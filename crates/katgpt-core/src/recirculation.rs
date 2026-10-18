@@ -50,6 +50,15 @@
 //! defend-wrong PoC (ppl reduction > 0 on ≥2 datasets AND strictly safer
 //! than the R417 overwrite at equal layer pairs) — see the Phase 4 gate in
 //! the issue. Default stays OFF until then.
+//!
+//! Recirculation — cross-step residual mixture operator (Issue 673 Phase 1 /
+//! Research 492, arXiv:2608.17981 Mozer et al. DeepMind): leaks a convex,
+//! norm-matched mixture of the previous step's deep-layer state into a
+//! shallow destination layer at the NEXT input step. Sibling of RelocateOp
+//! (R417/Plan 431 — whose defend-wrong PoC refuted the overwrite semantics
+//! this mixture answers). Opt-in — promotion requires the Phase 2 defend-wrong
+//! PoC on gemma-2-2b (ppl reduction > 0 on ≥2 datasets AND strictly safer than
+//! the overwrite at equal layer pairs); default stays OFF until then.
 
 /// Destination band as a fraction of stack depth L (paper Table B.1:
 /// destinations sit shallow — {4/26, 9/34, 16/48} = 0.15–0.33).

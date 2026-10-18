@@ -77,6 +77,19 @@
 //!   Li & Merrill, AI2, Jun 2026.
 //! - Theoretical predecessor: Research 242 (Mozer et al. 2026,
 //!   arXiv:2604.17121 — topological state-tracking diagnosis).
+//!
+//! PairedLossGap — generic modelless paired token-level loss gap diagnostic
+//! (Plan 335, Research 319, arXiv:2606.20936 Li & Merrill AI2). Pure
+//! measurement tool: given two log-prob traces over the same prefixes, compute
+//! per-token Δ_i = ℓ_A − ℓ_B, stratify by token class, report filtered
+//! aggregates (ALL / TOP-K∩NO-COPY / COPY-N-ONLY) that amplify small
+//! architecture gaps aggregate loss hides. ClassSizeBound exposes Proposition 1
+//! (DKL ≤ log|V_τ|) — the volume-of-support bound justifying raw-vs-latent
+//! sync. Generic math, no game/chain/shard semantics — legitimately public.
+//! NOT an inference mechanism (measurement tool only) → not Super-GOAT.
+//! STAYS OPT-IN — G1 + G2 + G2-alloc + G3 + G4 GOAT gate ALL PASS (Bench 335,
+//! 2026-06-27); not promoted to default because it's a measurement tool by
+//! nature — opt-in is the right shape (consumers opt in when running A/B).
 
 mod gap;
 mod tagger;

@@ -45,6 +45,20 @@
 //!   `DensityBudget` (riir-ai Plan 311, Research 133)
 //! - CompressionDrafter failure precedent: Plan 285/287,
 //!   [`.benchmarks/285_compression_drafter_goat.md`](../../../.benchmarks/285_compression_drafter_goat.md)
+//!
+//! BabelCodec — Readability-relaxed semantic codec (Plan 331, Research 312,
+//! arXiv:2606.19857 BabelTele). Successor text codec to CompressionDrafter:
+//! where CompressionDrafter failed G2 twice on the RPG corpus (byte-level LZ4
+//! matching on short quest-grammar strings), BabelCodec operates on semantic
+//! STRUCTURE (BT-P8 fixed symbolic mapping rules) — purpose-built for KG-triple
+//! / entity-attribute / config / quest-grammar surfaces. Ships three pieces:
+//! (1) generic `BabelCodec` trait, (2) `FixedRuleTextCodec` (deterministic BT-P8
+//! text codec, the modelless subset of BabelTele), (3) `SigmoidLatentCodec<D>`
+//! (generic-trait facade over existing DensityBudget infrastructure, latent-level
+//! analog — value is API uniformity, NOT new capability), plus BLAKE3 commitment
+//! for the future LatCal chain bridge (Issue 002, resolved + removed). Sigmoid, not softmax.
+//! Opt-in until the G1–G5 GOAT gate passes — the same G2 (≥ 2× on real corpus)
+//! gate that killed CompressionDrafter twice.
 
 pub mod commitment;
 pub mod fixed_rule;

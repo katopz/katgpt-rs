@@ -97,6 +97,24 @@
 //! - Underlying NSM method: [arXiv:2508.21501](https://arxiv.org/abs/2508.21501)
 //! - Closest cousin: [`crate::induced_cwm`] (Plan 296, Research 275)
 //! - Gap closed: `katgpt-rs/.research/264_Compositional_Open_Ended_Intelligence_Framework.md` §2.2
+//!
+//! ── Bisimulation Operator Inference (Plan 324, Research 308, arxiv 2602.19260) ─
+//!
+//! Open primitive: quotient an observed transition graph into bisimulation-
+//! equivalent state classes (signature-based partition refinement, O((S+E)
+//! log² S log d)) and infer an abstract PDDL-like operator schema. The
+//! lighter-weight PDDL-side counterpart to Induced CWM (Plan 296): where CWM
+//! induces executable *code* via an LLM, this induces an *operator schema* via
+//! a deterministic graph algorithm. Closes Research 264 §2.2 gaps #1 (PTG) +
+//! #2 (motif mining). Opt-in by design — downstream pipelines (riir-ai NPC
+//! runtime, riir-chain LatCal consumer) opt in by enabling the feature.
+//!
+//! Issue 586 — rule-application consistency metric (BDH-CQ §6.4 analog):
+//! 3-bin strict/partial/none task histogram + sigmoid-guarded gap +
+//! structure-preservation breakdown + complexity-cluster regime detection.
+//! Gates `infer_operators` output via `promotion_verdict`; the
+//! ComplexityClustered regime is the exemplar-seeking trigger consumed by
+//! riir-ai Issue 672.
 
 #[cfg(feature = "operator_consistency")]
 pub mod consistency;

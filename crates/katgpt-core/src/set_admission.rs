@@ -74,6 +74,14 @@
 //!   same pool + config → identical indices, bytes included.
 //! - Opt-in: feature `set_admission = ["certified_frontier",
 //!   "spectral_pencil"]` — consumes both substrates, forks neither.
+//!
+//! set_admission — counter-anchored set admission (Plan 599, Research 564,
+//! arXiv:2603.06397 "R4T"): greedy set admission scoring g + α·cos(x,q₀) +
+//! κ·log(1 + x̂ᵀM⁻¹x̂) under the 0.95 colinearity cap (Sherman–Morrison M⁻¹,
+//! incremental participation-ratio tripwire), exact cosine-kernel Vendi
+//! certificate via d×d eigenduality through the pinned spectral_pencil
+//! Jacobi + certified_frontier's vendi_diversity. Opt-in; both substrates
+//! consumed, neither forked.
 
 use crate::certified_frontier::vendi_diversity;
 use crate::distributional_steering::systematic_resample_into;

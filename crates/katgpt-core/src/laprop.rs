@@ -42,6 +42,12 @@
 //! to ±1 — a heavy-tailed-intake site where one pathological trajectory delta
 //! jerks the direction and the clamp hides it asymmetrically. Migration is a
 //! follow-up in that repo (behavior-change A/B behind its own gate).
+//!
+//! laprop — LaProp normalize-before-accumulate momentum (Issue 689, from
+//! riir-train Research 428 C2/C3): EMA over RMS-normalized intake with the
+//! closed-form accumulator bound |m| ≤ 1/√(1−ν) — downstream accumulators
+//! delete their clamps and get a theorem instead. Vector + scalar twins;
+//! opt-in until a consumer adopts.
 
 /// Default numerical floor inside the normalization denominator.
 pub const DEFAULT_EPS: f32 = 1e-8;

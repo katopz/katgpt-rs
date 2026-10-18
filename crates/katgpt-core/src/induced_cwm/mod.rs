@@ -61,6 +61,19 @@
 //! - Direct ancestor: Plan 056 (`GameState` forward model + generic MCTS)
 //! - Private Super-GOAT guide: `riir-ai/.research/145_CWM_Runtime_Induced_Game_Rules_Guide.md`
 //! - Private runtime plan: `riir-ai/.plans/326_cwm_npc_runtime_integration.md`
+//!
+//! ── Induced Code World Model (Plan 296, Research 275, arxiv 2510.04542) ───────
+//!
+//! Open half of the CWM Super-GOAT: a marker trait over `GameState` for forward
+//! models that are verifiable, BLAKE3-committable, and hot-swappable. The
+//! LLM-induction pipeline that *produces* an `InducedCwmKernel` impl is private
+//! (riir-ai Plan 326). The runtime never sees the LLM — only the frozen kernel.
+//!
+//! Phase 2 (Plan 296 T2.1–T2.5): Information-Set MCTS over an induced CWM +
+//! belief fn. Self-contained search tree (does NOT reuse root-crate
+//! `mcts_search` — that lives in katgpt-rs/src, katgpt-core cannot depend on the
+//! root). Gated by `induced_cwm_ismcts` (which auto-enables
+//! `induced_cwm`).
 
 pub mod belief;
 pub mod commitment;

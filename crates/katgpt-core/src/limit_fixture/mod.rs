@@ -37,6 +37,9 @@
 //!
 //! # Feature flag
 //! `limit_fixture` — Issue 580
+//!
+//! Issue 580: the LIMIT adversarial retrieval fixture (arXiv:2508.21038 §5.2).
+//! Opt-in — a cold-path eval fixture, never linked into production builds.
 
 /// A document in the corpus.
 #[derive(Debug, Clone, PartialEq)]

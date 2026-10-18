@@ -60,6 +60,17 @@
 //!
 //! Zero-allocation steady state: the estimator is three Welford
 //! accumulators (O(1) memory, no heap); all outputs are by-value structs.
+//!
+//! hint_regret — paired-rollout value-of-information estimation (Plan 576,
+//! Research 496 SPADE arXiv:2608.19197 / Research 500 EnvHarness, game-side
+//! guide riir-ai .research/340). The frontier-curriculum discriminator: how
+//! much would ONE hint (demo / revealed arm) improve the return on this
+//! content? Paired CRN estimator (Welford, zero-alloc) + Hoeffding /
+//! empirical-Bernstein machinery + sigmoid band gate + three-regime triage
+//! + Beta-LCB frontier ordering (DRY over best_belief) + regret-scored
+//! memory with absorbing-intractable eviction. Opt-in pending the GOAT
+//! verdict; consumers: riir-ai Guide 340 P0 (supersedes the mmorpg inline
+//! collapse), riir-train Plan 346 arena opponent selection.
 
 pub mod gate;
 pub mod memory;

@@ -56,6 +56,16 @@
 //! [`CertifiedFrontier::reachability_dilation`] certify cells that are not
 //! valid, and no test in this module can see it. The uncertainty model is
 //! conservative; the Lipschitz budget is the caller's proof obligation.
+//!
+//! Certified Frontier — modelless safe-set expansion (Plan 580, Research 510,
+//! arXiv:2606.08802 De Santi et al.; SAFEOPT lineage). The acquisition half of
+//! the grow-then-navigate stack whose navigation half is `viable_manifold_graph`
+//! above: grow a monotone provably-valid cell set from binary verifier outcomes,
+//! then answer where to look next and when to stop. Phase 0 PASS (Bench 687:
+//! 0 violations, monotone, 51.4x frontier-vs-passive). Opt-in.
+//!
+//! Plan 580 T4.1 — grow-then-navigate: certified cells become the node source
+//! the Viable Manifold Graph was missing. Needs both halves.
 
 /// Lipschitz constant of the logistic sigmoid — `sup |s'(z)| = s'(0) = 1/4`.
 ///

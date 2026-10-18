@@ -87,6 +87,19 @@
 //!
 //! Feature-gated behind `#[cfg(feature = "funcattn")]`. Not in default
 //! features — Gain-tier primitive awaiting LLM-domain GOAT evidence.
+//!
+//! Functional Attention — closed-form Tikhonov spectral transport operator
+//! (Plan 286, Research 257, arxiv 2605.31559, Xiao et al. ICML 2026). DUAL FORM
+//! matching the reference implementation (`.raw/FUNCATTN/PDE-StandardBenchmark/model/
+//! Functional_attention.py`): convex-combo regularization `(1-α)·K̃ᵀK̃ + α·I_d`,
+//! column-normalized slice tokens, per-slice-token to_q/to_k/to_v linear
+//! projections. Sigmoid-basis default per AGENTS.md (partition-of-unity holds
+//! for any row-normalized non-negative kernel). Gain-tier open primitive:
+//! paper itself defers NLP validation (§6); promote only after G1–G5 GOAT
+//! gate passes.
+//!
+//! Plan 332 — principled multi-scale basis constructors (DCT-log, Haar-packet).
+//! gated by the dedicated `funcattn_structured_basis` feature (implies funcattn).
 
 use crate::simd;
 

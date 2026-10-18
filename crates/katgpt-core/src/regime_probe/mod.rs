@@ -39,6 +39,20 @@
 //! gates (G1 discriminative validity, G2 bound-holds, G3 bit-determinism,
 //! G4 zero-alloc) **and** a later promotion decision — see
 //! `.benchmarks/702_regime_probe_goat.md`.
+//!
+//! Issue 740 — Regime probes for frozen predictors (Research 541, arXiv:2604.26841
+//! UDDMs-as-associative-memories): per-position conditional entropy (shared
+//! logsumexp kernel with breakeven/fidelity), two-sample entropy-gap detector,
+//! corrupt→renovate→recover basin probe (eq 12), and the Gardner capacity LUT
+//! (1/γ_c = (1+κ²)Φ(κ) + κφ(κ), basin radius via κ > 2√ρ). Every probe consumes
+//! only serving-path output categoricals and emits RAW scalars (entropy nats,
+//! gap, ρ bound) — the sanctioned latent-read→scalar-out bridge direction. Zero
+//! deps (blake3 already non-optional; RNG is the data_probe-markov fastrand
+//! convention). GOAT-gated on the constructed memorizer/generalizer pair (G1),
+//! the hebbian_kernel_memory bound-holds sweep (G2), bit-determinism (G3),
+//! zero-alloc scratch protocol (G4): .benchmarks/702_regime_probe_goat.md.
+//! Opt-in (no-default-consumer rule); promotion needs the GOAT gates AND a
+//! later promotion decision.
 
 pub mod basin;
 pub mod entropy;

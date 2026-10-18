@@ -17,6 +17,13 @@
 //!
 //! Based on Zhao et al. 2026 (arxiv 2601.22436), "Large Language Model Agents Are
 //! Not Always Faithful Self-Evolvers".
+//!
+//! FaithfulnessProbe — causal intervention diagnostic for injected memory (Plan 278, Research 244).
+//! Moved from katgpt root to katgpt-core so riir-engine (Plan 308) can consume via katgpt-core.
+//! Two features:
+//! - `triggered_injection` (default-ON after GOAT G3): sigmoid-thresholded inject/skip hot-path gate.
+//! - `faithfulness_probe` (opt-in, audit cadence): full intervention suite + perturbation + attribution.
+//! The module is compiled when EITHER feature is on; submodules are individually gated in `mod.rs`.
 
 // `types` and `gate` are always available when the module is compiled
 // (either feature on). They have no dependencies on the heavier submodules.

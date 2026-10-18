@@ -30,6 +30,14 @@
 //! Zero-alloc, `Copy`, no deps. Distilled from the upstream controller's
 //! published behavior; no code copied (the upstream repo carries no
 //! license).
+//!
+//! Log-frontier budget tracker (Issue 879 / Research 584) — the modelless
+//! extraction of MAttr's `AdaptiveLogK`: one log-space budget ceiling moved
+//! by ±lr sign steps against a scalar accuracy target, with a
+//! probe-cadence arm (probe_frac) that samples exactly k_max. Consumes
+//! only `acc: f32` — the k-supervision dial for `DensityBudget` ladders,
+//! `thermal_lod` tier elbows, and the riir-clippy Issue 133 lane. Opt-in
+//! (`exact_mass_admit` — one feature, one primitive family).
 
 /// Deterministic log-space budget controller over a scalar accuracy signal
 /// (MAttr `AdaptiveLogK`, modelless extraction).

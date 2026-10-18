@@ -51,6 +51,14 @@
 //! (Sibling for contrast: katgpt-spectral's `gate_sigmoid_topk_into` — the
 //! hard-cut, uncalibrated-mass operator this module must never be confused
 //! with.)
+//!
+//! Exact-mass sigmoid admission (Issue 879 / Research 584, arXiv:2609.25518
+//! "Matryoshka attribution") — the calibrated-mass "sigmoid top-k": bisect
+//! τ until Σσ((s−τ)/T) = k, emit the soft mask mᵢ = σ((sᵢ−τ)/T). Sum-to-k,
+//! shift-invariant, nested-in-k, zero-alloc. Distinct from
+//! katgpt-spectral's `gate_sigmoid_topk` (hard cut, uncalibrated mass) —
+//! the naming split is load-bearing. Offline/calibration-tier posture;
+//! Bench 884 records the cost. Opt-in (`exact_mass_admit`).
 
 use crate::simd::exact_sigmoid_f64;
 

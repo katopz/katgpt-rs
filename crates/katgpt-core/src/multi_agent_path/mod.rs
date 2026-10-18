@@ -63,6 +63,12 @@
 //! let mut lacam = LifelongLaCam::new(warm_start);
 //! let action = lacam.tick(&config, &goals, &mut guidance, &mut hindrance, &mut rng);
 //! ```
+//!
+//! Lifelong LaCAM Multi-Agent Pathfinding Substrate (Plan 440, Research 424,
+//! arXiv:2605.16855). Paper-faithful LLLG with four pluggable seams
+//! (CostFn, LocalGuidanceSource, WarmStartScheme, HindranceEstimator) for the
+//! Super-GOAT fusion (riir-ai/318: HLA × Crowd MCGS × P350). Pure modelless
+//! (heuristic only, no training). Opt-in until GOAT gate G1–G4 pass.
 
 #![allow(clippy::too_many_arguments)]
 

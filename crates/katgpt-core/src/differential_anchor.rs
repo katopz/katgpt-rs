@@ -61,6 +61,14 @@
 //! Opt-in feature `differential_anchor` (implies `fitted_anchor_tables`)
 //! per the no-default-consumer rule; promotion rides a live consumer's
 //! GOAT (882 P0 rider: the healer rerank lane).
+//!
+//! Differential anchor scoring (Issue 882 P0 / Research 586) — the
+//! subtract arm of the attention-noise-control family: `q̂ = q − λ·ā`, one
+//! axpy, λ=0 bit-identical; hub candidates lose their generic mass,
+//! query-specific candidates keep theirs. Ships the anchor builders
+//! (mean-query / mean-corpus, A/B'd per domain), the frozen λinit const
+//! table + neutral-at-zero reparam, and λ* by direct grid evaluation
+//! (never GD). Opt-in (`differential_anchor`).
 
 use crate::fitted_anchor_table::StreamingMeanTable;
 

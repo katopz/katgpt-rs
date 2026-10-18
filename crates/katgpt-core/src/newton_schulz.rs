@@ -10,6 +10,12 @@
 //! ```
 //! Constants a=3.4445, b=-4.7750, c=2.0315 from the AMUSE paper —
 //! converges for singular values in [0, 1].
+//!
+//! Newton-Schulz orthogonalization + Muon momentum (Plan 152, Research 114,
+//! GOAT 25/25 Bench 050). Pure substrate — self-contained f32 linear algebra,
+//! zero crate:: deps, zero external deps. Extracted from katgpt-rs/src/ per
+//! Issue 355 Phase 1a. Re-exported by katgpt-rs root so historical
+//! `katgpt_rs::newton_schulz::*` paths continue to resolve.
 
 #![allow(clippy::needless_range_loop)]
 

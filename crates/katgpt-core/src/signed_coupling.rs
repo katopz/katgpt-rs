@@ -115,6 +115,21 @@
 //!
 //! They compose rather than compete: a Sheaf conviction vector is a natural
 //! source for this module's per-agent intrinsic field `g_i`.
+//!
+//! Issue 680: Signed-Coupling Opinion Dynamics — Glauber (heat-bath) update on
+//! a SIGNED social graph plus the three crowd order parameters, distilled from
+//! "Physics of Agents" (El et al., arXiv:2608.16578; Research 497). The kernel
+//! is CLR set attention's sibling — the same σ(gated weighted sum) shape, but
+//! with signed, tie-typed couplings on a stance instead of unsigned relevance
+//! weights: h_i = β⁺Σ J⁺s + β⁻Σ J⁻s + β₀Σ|J|s + g_i, collapsed to one
+//! branch-free O(edges) pass over a CSR row. Ships the three reducers nothing
+//! else in the stack had: net_opinion (mean), crowd_conviction (mean of
+//! squares — genuinely new), and the χ = N·Var_t(|n|) susceptibility
+//! accumulator whose peak over a temperature sweep locates the critical social
+//! temperature. Pure modelless (the paper's only gradient descent fits ~19
+//! scalars to real LLM transitions; a game crowd AUTHORS its couplings, so the
+//! paper's fitted ranges become designer-facing defaults). OPT-IN — promotion
+//! waits on a production consumer, the CLR precedent.
 
 use crate::sigmoid;
 

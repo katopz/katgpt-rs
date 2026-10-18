@@ -84,6 +84,15 @@
 //!   (single SVD correction vs N iterated RTN corrections).
 //! - [`simd_lut_dequant`](../src/simd_lut_dequant.rs) — Phase 3 fusion
 //!   target (fused multi-stage LUT dequant+dot kernel).
+//!
+//! Plan 568: Recurrent Residual Quantization (RRQ) — single-checkpoint
+//! multi-precision weight representation via iterated 2-bit RTN residual
+//! corrections (Luo et al. Intel, arXiv:2608.04048 Aug 2026; Research 467).
+//! W̃(t) = Ŵ0 + Σ residuals — base + N stages, each 2-bit RTN with per-group
+//! f16 scale + zero-point. Default 1+3 → 2/4/6/8-bit prefixes. Pure modelless
+//! PTQ (no Hessian, no calibration). prefix_dot_into exploits matmul linearity.
+//! Verdict: Gain (not Super-GOAT — no concrete consumer today). Opt-in until a
+//! multi-precision LLM / per-NPC expert base / incremental-upgrade consumer lands.
 
 use half::f16;
 

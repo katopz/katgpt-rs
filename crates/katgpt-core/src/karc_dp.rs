@@ -64,6 +64,15 @@
 //! KarcShard use case) but inadequate for protecting user PII. For
 //! high-stakes privacy, the caller should supply their own CSPRNG-derived
 //! seed via [`KarcDpNoiseConfig::seed`].
+//!
+//! KarcShard DP Output Perturbation (Issue 370 T4) — post-hoc Gaussian noise
+//! on a fitted ridge Wout matrix to provide formal (ε,δ)-DP for the committed
+//! KarcShard parameters. Defends PARAMETER-INSPECTION MI (attacker reads Wout
+//! to detect memorized patterns). Does NOT defend Yeom loss-threshold MI —
+//! see karc_dp module docs and riir-ai/.benchmarks/399 for the structural
+//! insufficiency analysis. Modelless (post-hoc noise on a closed-form solve).
+//! Gated on karc_forecaster since it operates on the Wout produced by
+//! KarcForecaster::fit_ridge.
 
 /// Configuration for differential-privacy output perturbation on a fitted
 /// ridge `Wout` matrix.

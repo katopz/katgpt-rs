@@ -23,6 +23,11 @@
 //! these without forcing interior mutability. Mock / stateless impls ignore
 //! the mutability. This matches the shape the SDK already ships, so its
 //! existing `MockInferenceBackend` impl carries over unchanged.
+//!
+//! Prompt-backend trait — generic prompt→string inference contract (Issue 580).
+//! Hoisted from riir-game-sdk::gm::prompt so multiple consumers (riir-agents
+//! Phase 2, the SDK's gm::prompt module, future callers) share one trait.
+//! Always-on: pure trait + zero-dep mock, no feature gate needed.
 
 /// Trait for prompt→string inference backends.
 ///

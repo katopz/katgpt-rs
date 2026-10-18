@@ -106,6 +106,16 @@
 //! - [Plan 571](../.plans/571_phase_separation_probe.md) — execution plan.
 //! - [Research 056](../.research/056_OpenAI_Unit_Distance_Disproof.md) —
 //!   same combinatorial family (chromatic number bounds on distance graphs).
+//!
+//! Plan 571: Phase Separation Probe — per-entity minimum circular distance on
+//! a phase circle, distilled from the Lonely Runner Conjecture (Barajas & Serra
+//! 2007, arXiv:0710.4495; proven for N≤7, conjectured beyond). The LRC
+//! guarantees every entity cycles through phase_separation ≥ 1/N — a coverage
+//! guarantee no existing primitive provides. Three modelless paths (O(N),
+//! O(N²), O(N log N)) + two bridge helpers (raw time-phase, latent projection).
+//! Pure modelless (closed-form modular arithmetic + sigmoid + dot-product).
+//! DEFAULT-ON (2026-08-07, Plan 571) — G1–G4 GOAT gate ALL PASS
+//! (bench_571_phase_separation_goat).
 
 // ──────────────────────────────────────────────────────────────────────────
 // Core distance primitive

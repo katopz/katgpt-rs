@@ -40,6 +40,12 @@
 //!
 //! Every function takes slices / scalars by value or reference and returns a
 //! `Copy` value. No `Vec`, `Box`, `String` or collecting iterator.
+//!
+//! Grouped-evidence noise-weighting primitives (Issue 913, riir-train
+//! Research 463 ← arXiv:2609.36802 EasyPPO, the modelless half): Popoviciu
+//! variance floor, filter-bias bound, exogenous-σ̂ weighted Beta LCB with Kish
+//! `n_eff` disclosed, and noise-scaled rating K. Opt-in
+//! (`grouped_evidence_weighting`).
 
 use crate::best_belief::{best_belief_score, beta_quantile};
 use crate::rating;

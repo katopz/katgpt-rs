@@ -47,6 +47,13 @@
 //! T6 (attribution), T7 (shape DSL), T8 (canonical gauge), T9
 //! (invertible warp), T10 (bench + GOAT), T11 (module doc), T12 (UQ
 //! floor follow-through) land in follow-up cycles per the issue.
+//!
+//! spectral_pencil — the affine matrix pencil scalar gate f(x) =
+//! λk(A₀ + Σ xᵢAᵢ) (Issue 676, Research 495, arXiv:2608.08003 "The
+//! Spectral Neuron"). Shape-by-construction + coefficient transparency
+//! + seeded γk ≥ ½ init. Opt-in; see the module doc for the determinism
+//! policy (pinned Jacobi/Sturm/QR — no library eigensolver on committed
+//! paths).
 
 pub mod attribution;
 pub mod bounds;

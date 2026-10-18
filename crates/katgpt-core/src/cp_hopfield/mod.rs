@@ -80,6 +80,27 @@
 //!
 //! See `.research/466_CPd_minus_1_Hopfield_Top_Eigenvector_Recall.md` and
 //! `.plans/567_cp_hopfield_top_eigenvector_recall.md`.
+//!
+//! CP^(d-1) Symmetric-Space Hopfield — Top-Eigenvector Recall (Plan 567,
+//! Research 466, Galitski "High-Capacity Generalized Hopfield Networks",
+//! alphaXiv 2607.hopfield-networks, JQI/UMD 2026-07-31).
+//!
+//! Associative-memory recall on the symmetric space CP^(d-1) = SU(d)/U(d-1)
+//! instead of the sphere. The memory kernel K_i = Σ_μ O_μ^(i) |ξ_i^μ⟩⟨ξ_i^μ| is a
+//! d×d Hermitian SPIKED random matrix and recall aligns the neuron with its TOP
+//! EIGENVECTOR, which is BBP-protected against GUE crosstalk. That gap is why
+//! CP^(d-1) capacity grows with d (α_c ≈ 0.62 at d=3, 2.41 at d=4) where gapless
+//! vector alignment on S^(n-1) decays as 4/(27n) — and it is the mechanism the
+//! Plan 276 AttractorKernel lacked when it failed G2.1 at random init.
+//!
+//! Pure modelless: closed-form SU(d) basis construction + Hebbian outer-product
+//! kernel + Rayleigh-quotient ascent. No gradient descent, so memories load from a
+//! frozen snapshot (freeze/thaw Path 1) rather than being trained.
+//!
+//! OPT-IN pending the Plan 567 GOAT gate. Load-bearing gates are G5 (the Plan 276
+//! modelless unblock) and G7 (whether the BBP gap survives at N=8/N=64 rather than
+//! only asymptotically in N). Zero runtime cost unless a caller constructs a
+//! CpHopfieldRecaller.
 
 mod basis;
 pub mod capacity;

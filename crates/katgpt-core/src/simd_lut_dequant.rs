@@ -36,6 +36,16 @@
 //!
 //! See: `katgpt-rs/.research/418_StreamDQ_SIMD_LUT_DeQuant.md`
 //! See: `katgpt-rs/.plans/452_simd_lut_dequant.md`
+//!
+//! SIMD LUT Dequantization — software analog of StreamDQ near-memory DQ
+//! (Plan 431, Research 418, arXiv:2607.08993 Jeong et al. SK Hynix 2026). Generic
+//! format-parameterized dequantize primitive that replaces the per-element
+//! integer-arithmetic INT→FP cast with a pre-computed f32 LUT lookup. INT4 LUT
+//! is [f32;16] = one cache line; INT8 is [f32;256] = 1 KB. Phase 1 ships the
+//! scalar reference; NEON/AVX2 inner loops land in Phase 2; fused dequant+dot
+//! in Phase 3. DEFAULT-ON (2026-07-18): G1+G2 PASS — see .benchmarks/432_simd_lut_dequant_goat.md.
+//! Realistic target 1.0-1.5x (the paper's
+//! 7x is hardware-only). Pure modelless (LUT build + indexed reads).
 
 // ──────────────────────────────────────────────────────────────────────────
 // Phase 1: scalar reference. SIMD inner loops land in Phase 2.

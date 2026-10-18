@@ -21,6 +21,11 @@
 //! cannot be shared because the const-generic versions operate on `&[f32; D]`
 //! (fixed-size arrays) while the dynamic versions operate on `&[f32]` (slices).
 //! The logic is identical; only the types differ.
+//!
+//! HOLA dynamic (runtime D/W) variant — the production consumer for forward_gdn2
+//! which uses runtime config.head_dim. Same algorithm as HippocampalCache<D,W>
+//! but Vec-based for runtime dimensions. Alloc-free read path (pre-allocated
+//! scratch). Plan 395 Phase 5 (Issue 038 production wiring).
 
 #![allow(clippy::needless_range_loop)]
 

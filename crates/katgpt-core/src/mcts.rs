@@ -24,6 +24,12 @@
 //! Operates on [`GameState`], [`RolloutPolicy`], and [`StateHeuristic`] from
 //! [`crate::traits`]. Any crate can `cargo add katgpt-core` and run MCTS over
 //! its own `GameState` implementation.
+//!
+//! Generic Monte Carlo Tree Search over any [`crate::traits::GameState`].
+//!
+//! Always-on substrate. Composition that needs root-only types
+//! (`BanditRolloutPolicy` depends on `crate::pruners::bandit::BanditStats`)
+//! stays in the consuming crate.
 
 use arrayvec::ArrayVec;
 use fastrand::Rng;

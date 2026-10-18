@@ -70,6 +70,9 @@
 //! `child[cursor[s] + k]` — O(1) per symbol, no allocation, no per-step
 //! vocabulary rescan. Serve/escalation-seam adjacency, never a per-tick
 //! signal.
+//!
+//! Plan 598 / Research 559 — single-pass token→byte marginal with the
+//! terminal-mass certificate. OPT-IN (no-default-consumer rule).
 
 #![allow(dead_code)]
 

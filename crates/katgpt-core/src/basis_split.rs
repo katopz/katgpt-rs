@@ -64,6 +64,15 @@
 //! `linalg::symmetric_eig` (Householder+QL). The 16 < d < 256 crossover band
 //! routes to `symmetric_eig` as well — measure a dedicated solver only if a
 //! profile ever shows the band matters (per the plan: no third solver).
+//!
+//! basis_split — Plan 625 / Research 618 (SplitJEPA, arXiv:2610.12349):
+//! matched-pair block identification — variant basis (top eigenspace of the
+//! whitened pair-difference second moment), invariant projector, the
+//! refuse-loud eigengap identifiability verdict, and the held-out
+//! `pair_leakage` generalization residual. f64 zero-alloc; composes
+//! `karc::jacobi_eigen` + `linalg::symmetric_eig` only. OPT-IN per the
+//! no-default-consumer rule — promotion needs the GOAT bench + a wired
+//! consumer (reflex Issue 086 presentation certificate is the first).
 
 use crate::karc::jacobi_eigen;
 use crate::linalg::symmetric_eig::{SymmetricEigScratch, symmetric_eig};

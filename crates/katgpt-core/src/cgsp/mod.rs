@@ -31,6 +31,18 @@
 //! let target = Target::new(pool[0].clone());
 //! let result = loop_.cycle(&target, &mut scratch);
 //! ```
+//!
+//! CGSP — Curiosity-Guided Self-Play modelless triad (Plan 274, Research 240).
+//! Self-contained: Direction/Target/Candidate, CgspLoop, PoolConjecturer,
+//! BeliefGridProjectionGuide, BreakevenDifficultyFilter, ColinearityBatchGate,
+//! EntropyCollapse, CuriosityPrioritySnapshot (BLAKE3-committed).
+//! Consumed by riir-engine Plan 299 (NPC curiosity runtime).
+//!
+//! CGSP dual-pool extension — DecentMem distillation (Plan 282, Research 249).
+//!
+//! Issue 364 T4 — modelless k_npc selector (wraps GainCostLoopHalter, Plan 304).
+//! Needs both cgsp (the host module) and gain_cost_halt (the halter kernel).
+//! Consumed by riir-ai's per-NPC CLR cadence wiring (Phase 30 of tick_map).
 
 // Per-arm trajectory-aligned curiosity gate (Plan 610, Research 591).
 // Opt-in until the Plan 610 GOAT gate passes.

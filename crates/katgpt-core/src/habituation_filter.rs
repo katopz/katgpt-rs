@@ -67,6 +67,14 @@
 //! promotion rides T2's GOAT (2 FMA + 1 fast-sigmoid per channel, the
 //! 11–12 ns/NPC/tick envelope). Fixed `[f32; P]` state — zero alloc by
 //! construction (G4).
+//!
+//! Differential habituation filter (riir-ai Issue 1006 T1 / Research 586) —
+//! the subtract arm transplanted from the score axis to the TIME axis:
+//! `n = s − λ·EMA(s)`, a first-order high-pass with DC gain exactly (1−λ).
+//! Respond to changes, not constants; constant input settles to (1−λ)·s
+//! (deliberately NOT zeroed — contrast `temporal_deriv`'s derivative).
+//! Per-channel scalar sigmoid gate + closed-form settling law. Opt-in
+//! (`habituation_filter`).
 
 use katgpt_types::simd::fast_sigmoid;
 

@@ -26,6 +26,12 @@
 //! Validation: `benches/bench_845_distance_abstain_goat.rs` (T1.6 — two
 //! error worlds on one geometry, risk–coverage vs the score-threshold
 //! baseline).
+//!
+//! Corpus-distance abstain gate (Proposal 014 T1.6 / Issue 863) — the
+//! Research 576 §2.1 extraction: max-cosine similarity to registered
+//! corpus exemplars → sigmoid → abstain when the decision state is far
+//! from every corpus region (the OOD failure mode a score-threshold
+//! ABSTAIN is blind to). Opt-in (`distance_abstain`).
 
 /// Unit-normalize `v` in place-on-stack; a zero vector passes through
 /// (its dots are 0 — "no direction" reads as mid-corpus distance, never NaN).

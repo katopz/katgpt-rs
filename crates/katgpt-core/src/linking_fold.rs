@@ -53,6 +53,18 @@
 //! - Plan 410 — open-primitive spec
 //! - Research 391 — math + prior-art table + Q1–Q4 novelty gate
 //! - arXiv:2606.31856 — Ren & Lim ICML 2026 (paper)
+//!
+//! linking_fold — Linking-Number Detector + Fold Correction (Plan 410,
+//! Research 391, arXiv:2606.31856 Ren & Lim ICML 2026). SPLIT (Plan 410 T4.4
+//! Option C, 2026-07-07) into two independently-gated sub-features:
+//!   - linking_fold_fold     (hot-path |x−c| fold correction) — DEFAULT-ON
+//!   - linking_fold_detector (cold-path Algorithm-1 linking detector) — opt-in
+//!   - linking_fold          (umbrella = fold + detector) — opt-in
+//! The fold passes every GOAT gate modellessly and ships default-on; the
+//! detector's G2 budget is the audit-cadence-appropriate 500 ms @ n=2×200
+//! (Issue 050 Option A, resolved 2026-07-07) and it stays opt-in. The
+//! module root exists when EITHER sub-feature is on; submodules gate their own
+//! parts.
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Module layout: fold (hot-path) first, then linking_detector (cold-path) as

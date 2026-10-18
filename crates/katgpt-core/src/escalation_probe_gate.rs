@@ -39,6 +39,13 @@
 //! priors + distances). The corpus-distance signal is CONSUMER-SUPPLIED
 //! (`CorpusDistanceGate` on the reflex side; rescue-mining on the refine
 //! side) — this module never computes one.
+//!
+//! escalation_probe_gate — the cost-aware escalation selection utility
+//! (Plan 621 Phase 3): U = I[pred-success]·(1−λ·Ĉ) over {stay-local,
+//! escalate(d)}, the scissors law generalized; FlyBy's asymmetry is
+//! structural (failing escalation scores 0, productive stay scores 1).
+//! Consumer-supplied corpus distance — reflex-free. Opt-in pending Phase
+//! 4's healer-lane eval; implies state_probe (the classifier feeds it).
 
 use crate::state_probe::{ProbeEstimate, classify};
 

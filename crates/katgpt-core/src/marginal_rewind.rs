@@ -76,6 +76,17 @@
 //! vs additive renoise at equal budget vs naive full-variance resample vs
 //! hard restart, on a stuck-attractor synthetic); promotion to default is
 //! owner-gated (the `saddle_escape`/525 precedent).
+//!
+//! Issue 746 Row 2 (arXiv:2609.11801 "Thinking with Looped Flows", Eq 18
+//! minus the denoiser) — marginal-calibrated backtrack for interpolant
+//! flow states: transport the CURRENT state to an earlier confidence level
+//! at the exact marginal variance (a = s/t; identity
+//! a²(1−t)² + (1−s)² − (a−s)² = (1−s)²), no clean-point knowledge — the
+//! reactive recovery operator that cgsp collapse detection (proactive
+//! dual-pool only) currently lacks. γ-dial form for continuous rewind
+//! depth. Zero-alloc, RNG-free. Opt-in — quality claims gated on the
+//! Issue-746 defend-wrong PoC (tests/marginal_rewind_poc.rs); promotion
+//! owner-gated (saddle_escape/525 precedent).
 
 /// Rewind plan solved from `(t, s)` — the pre-computed operator constants.
 ///

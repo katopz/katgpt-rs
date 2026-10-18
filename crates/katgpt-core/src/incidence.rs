@@ -43,6 +43,10 @@
 //! Think-brain local: masks, α counts, and tier weights are never synced.
 //! What crosses a sync surface stays raw (contagion intensity, witness
 //! counts — the "sync the scalars" doctrine).
+//!
+//! riir-ai Issue 874 T1 / Research 364 — thought × agent incidence-mask
+//! algebra (α counts, tier weights, shared/private + retention counter,
+//! Hall feasibility, mask audit). Opt-in; zero deps; zero-alloc hot path.
 
 use crate::sigmoid;
 

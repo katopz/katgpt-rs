@@ -45,6 +45,15 @@
 //! Nothing arena-specific lives here: the surface is (grammar table,
 //! sentence) → (template, fills). The game vocabulary — templates, fills,
 //! and the fill→feature mappings — lives in the consumer.
+//!
+//! template_decode — bounded template decode over CLOSED sentence grammars
+//! (Plan 607 T2). A table of literal/slot templates with closed fill
+//! vocabularies; decode returns (template, fill indices) and REFUSES
+//! anything else (Unknown / Ambiguous — never a guess). Decode-only,
+//! corpus-limited per protocol version; `verify_closed` proves each table
+//! ambiguity-free over its full fill product. The losslessness-measurement
+//! + laya-traffic-intake arm of the game-decision lane (Lz4FlexDrafter
+//! lineage, Plan 285). Opt-in; zero deps; zero-alloc decode.
 
 /// Maximum slots per template (`u8` fill indices keep the match buffer
 /// stack-local; the build refuses anything wider).

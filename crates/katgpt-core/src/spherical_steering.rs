@@ -89,6 +89,18 @@
 //! See Research 382 §2.3 for the cousin comparison and §2.4 for the F1 fusion
 //! hook (Slerp × CommittedFieldBlend × HLA divergence = "personality drift
 //! auto-correction").
+//!
+//! Spherical Steering — single-target geodesic Slerp rotation
+//! `sin((1−t)θ)/sin θ · ĥ + sin(tθ)/sin θ · μ_T` toward a unit-norm target
+//! direction on S^{d-1}, with sigmoid-translated vMF confidence gate (Plan 405,
+//! Research 382, arxiv 2602.08169 You/Deng/Chen ICML 2026). Sibling to Plan 322's
+//! 2-subspace phase rotation — same norm-preservation thesis, different
+//! parameterization: Plan 322 rotates *within* the (a,b) plane; Plan 405 rotates
+//! *toward* a target outside the input's direction (Slerp identity holds for all
+//! θ ∈ (0,π)). vMF gate reduces to sigmoid via Eq 17:
+//! `δ = -tanh(κ·s_T) = 1 − 2·sigmoid(2κ·s_T)`. §3.5 modelless Path 3 (closed-form
+//! trig + sigmoid; no training). DEFAULT-ON (Plan 405 Phase 2, 2026-07-06):
+//! G1-G5 ALL PASS.
 
 use crate::simd;
 use core::f32::consts::PI;

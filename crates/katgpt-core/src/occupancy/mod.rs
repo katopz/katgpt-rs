@@ -71,6 +71,21 @@
 //!   theorem eventually; treat it as a research hypothesis until proven.
 //!
 //! See [`kl_contraction`] for the theorem statement.
+//!
+//! ── FORE — Fitted Occupancy-Ratio Estimator (Plan 438, Research 423, arxiv 2607.05375) ─
+//!
+//! Open primitive: generic modelless fitted-iteration estimator for the
+//! discounted occupancy ratio ω_π,γ = d^π,γ / d_ν in offline policy evaluation.
+//! The substrate-independent contribution is the adjoint Bellman KL contraction
+//! (paper Lemma 3.1): each fitted KL projection contracts relative entropy by
+//! factor γ, so convergence requires only realizability of the target ratio —
+//! no Bellman completeness of a value/critic class. Three downstream fusion
+//! targets (CLR re-estimation stabilization, freeze/thaw convergence guarantee,
+//! FORE-ratio state equivalence) are tracked in Research 423 as out-of-scope
+//! follow-ups requiring PoC validation. Phase 1 ships the type/trait surface
+//! only; Phase 2 adds the fitted-iteration loop once Algorithm 1 is verified.
+//! Opt-in — promotion to default-on requires a downstream consumer to
+//! demonstrate the gain empirically (riir-poc Fusion A).
 
 mod linear;
 mod solve;

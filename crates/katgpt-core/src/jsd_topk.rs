@@ -75,6 +75,13 @@
 //! assert instead). [`jsd_topk`] is the convenience form: it allocates two
 //! `Vec`s per call, honestly and by design — allocation outside hot loops is
 //! acceptable there; the G4 gate is on the INTO form.
+//!
+//! jsd_topk — NaN-safe bounded top-K Jensen–Shannon divergence kernel
+//! (Issue 802 item 2): JSD = H(M) − ½H(P) − ½H(Q) over renormalized top-K
+//! slices; disjoint supports → EXACTLY ln 2 (never the KL +∞/NaN trap that
+//! poisons gates). Known-answer gates + throughput bench. Prerequisite for
+//! Issue 802's commitment-gap calibration tables and graded tri_mode
+//! verdicts. OPT-IN.
 
 use core::f32::consts::LN_2;
 use std::cmp::Ordering;

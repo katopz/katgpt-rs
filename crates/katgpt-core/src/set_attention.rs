@@ -47,6 +47,35 @@
 //! `&mut [f32]`. It has no opinion on what the vectors *mean*. The sync
 //! boundary is the caller's responsibility (see the riir-ai runtime plan 355
 //! for the HLA-specific wiring + the unchanged 5-scalar bridge).
+//!
+//! Cross-Datapoint Set Attention — sigmoid-gated, permutation-equivariant
+//! cross-entity refinement kernel (Plan 354, Research 354, arXiv:2106.02584
+//! Kossen et al. NeurIPS 2021, Non-Parametric Transformers). The inference-time
+//! operator only — training of Q/K/V via BERT-style masking stays in riir-train.
+//! Substrate-agnostic: `&[f32]` → `&mut [f32]`, no opinion on what the vectors
+//! mean. The riir-ai runtime (Plan 355) wires it onto HLA belief states for
+//! crowd-scale NPC joint inference; the open primitive is just the math.
+//!
+//! Sigmoid gates (NEVER softmax per AGENTS.md §2) — each pair α_ij ∈ (0,1)
+//! independently, so an entity may attend to 0 peers (lonely), 1 peer (paired),
+//! or many peers (formation). Softmax would force artificial competition.
+//!
+//! Permutation-equivariant by construction (NPT Lemma 4, Appendix A) —
+//! shuffling input rows shuffles output rows identically. The G1 test
+//! verifies this bit-exactly.
+//!
+//! Latent vs Raw: the primitive is substrate-agnostic. The sync boundary is
+//! the caller's responsibility (see the riir-ai runtime plan 355 for the
+//! HLA-specific wiring + the unchanged 5-scalar bridge).
+//!
+//! DEFAULT-ON since 2026-07-01 (Plan 354 Phase 2 + Plan 355 G6/G7/G9):
+//! G1 permutation equivariance bit-exact, G2 identity-floor meaningfulness,
+//! G3 latency 21.96µs at N=64, G4 0 allocs/100 calls, G5 sigmoid-not-softmax
+//! lonely-query correctness. riir-ai runtime G6 fusion cosine sim <0.95 (fusion
+//! adds value over identity), G7 crowd stability <5% drift over 100×2000 ticks,
+//! G9 production latency 75.7µs mean/tick at 100 NPCs. G8 collective inference
+//! FAILED (Super-GOAT→GOAT) — averaging cannot amplify detection; use-case
+//! limitation, NOT a primitive defect. Validated selling point: crowd coherence.
 
 #![allow(clippy::too_many_arguments)] // perf kernel — explicit args beat struct builders
 #![allow(clippy::needless_range_loop)] // explicit indexing aids SIMD auto-vectorization

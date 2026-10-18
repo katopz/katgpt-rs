@@ -58,6 +58,16 @@
 //! it AFTER the protection factorial (Bench 697 T3.7): if the policy's
 //! recall deficit is explained by keystone loss, fix protection first —
 //! the recall comparison is only meaningful at matched protection.
+//!
+//! Usage-Rate (Mass/Age) KV Eviction Scoring + Generation-Runaway Canary
+//! (Plan 585, Research 523, arXiv:2608.19920 "Learning how to Forget" Seeger
+//! et al., AWS 2026). The paper's normalized H2O score `cum_mass / max(1,
+//! age)` — O(1)/row/step over caller-supplied attention-mass increments (the
+//! `suspect_indices` house pattern; mass producers are consumer-side, riir-ai
+//! Issue 836 pull-gated on this plan's GOAT). Plus `RunawayStats` /
+//! `runaway_gate`: the R/p128 generation-runaway canary, the promotion gate
+//! the Issue 750 lossy-surface rule lacks on the generation axis. Opt-in
+//! (Plan 585; GOAT .benchmarks/697).
 
 use crate::float_order;
 

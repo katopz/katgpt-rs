@@ -114,6 +114,21 @@
 //! chunked 4-wide to hint LLVM auto-vectorisation (matches the pattern in
 //! [`crate::phase_rotation::phase_rotation_gate_into`] and
 //! `dec::operators::exterior_derivative_into`).
+//!
+//! GRAPE-M — Rank-2 Rodrigues Exponential for arbitrary plane (a, b).
+//! Distilled from Zhang et al. *GRAPE* (arXiv:2512.07805, ICLR 2026 §2.3).
+//! O(d) closed-form application of `exp(n·ω·L)·x` where `L = abᵀ − baᵀ` (rank-2
+//! skew) — two dot products + one FMA triad, never materialises the d×d matrix
+//! (beats LieRE's O(d³) torch.matrix_exp). Subsumes phase_rotation's scalar
+//! 2D rotation as the canonical-basis special case `a = e_i, b = e_{i+D/2}`;
+//! the new capability is rotation in a *learned* plane (per-NPC HLA personality
+//! rotation, per-shard rotation in MerkleFrozenEnvelope — see Issue 159).
+//! Pure modelless float arithmetic; learning the plane is → riir-train.
+//! STAYS OPT-IN — G1–G4 GOAT gate ALL PASS (Bench 457, 2026-07-17); promotion
+//! deferred per Issue 159 T6: gain is modelless but perf-only on a NEW capability
+//! (arbitrary-plane rotation), not a faster way to do something the crate already
+//! does. Re-evaluate when a concrete consumer lands (riir-ai HLA personality
+//! rotation, riir-neuron-db per-shard rotation).
 
 use crate::simd;
 

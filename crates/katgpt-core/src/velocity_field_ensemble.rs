@@ -81,6 +81,33 @@
 //! - **Sibling composition path:** `crates/katgpt-core/src/committed_field_blend.rs`
 //!   (Plan 321) — sigmoid-projected weights (voting); this module is the
 //!   regression-optimal counterpart (least-squares).
+//!
+//! Velocity-Field Ensemble — Algebraic Combination of Pre-Trained Models
+//! (Plan 376, Research 375, arXiv:2602.20070 Coeurdoux et al. ICML 2026 SPIGM).
+//! Combine P frozen pre-trained velocity fields (any forward model: LLM
+//! drafter, HLA forecaster, KARC forecaster, archetype operator field) into a
+//! single regression-optimal combined drift b̂(x) = Σ_i η_i · b_i(x), where η
+//! is solved once from N data pairs via the existing linalg::ridge_solve
+//! P×P Cholesky path (the SAME math KARC uses — KARC's basis is delay-embedded
+//! features; this primitive's basis is P frozen model forward outputs).
+//!
+//! The contribution is the *basis construction*, NOT the ridge solve — anyone
+//! reviewing should grep `ridge_solve_direct_f32` and confirm KARC's `fit_direct`
+//! is the same linear-algebra operation. No duplicate math; pure DRY reuse.
+//!
+//! η CAN be negative (signed combination, not probabilistic mixture). No
+//! softmax anywhere; no sigmoid on η either (η is regression-solved, not
+//! projected). The sigmoid-not-softmax rule applies to *gating*, not to
+//! regression-optimal weights.
+//!
+//! Includes the optimal-diffusion SDE integrator (paper Algorithm 1, eq. 14
+//! with D*_t = α_t γ_t / β_t) as a decoupled utility — composes with any drift
+//! source, not just the ensemble.
+//!
+//! DEFAULT-ON (Plan 376 Phase 3, 2026-07-04): G1–G4 ALL PASS. G2 (cross-domain
+//! quality) is the make-or-break gate — the paper proves cross-domain
+//! composition for image generation only; Phase 2 PoC is mandatory before any
+//! quality-parity claim for game AI.
 
 use crate::linalg::ridge_solve::ridge_solve_direct_f32;
 use crate::simd::simd_dot_f32;

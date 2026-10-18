@@ -74,6 +74,13 @@
 //! - R438 / Plan 407 — `sheaf_admm` (the diffusion-mode sibling).
 //! - Plan 359 — `heat_kernel` (the parabolic family this is the hyperbolic
 //!   twin of).
+//!
+//! PC-ALM dual accumulator + closed-form rate laws (Issue 775, Research 554).
+//! The dual half of the interleaved primal-dual pair: ballistic (wave-mode)
+//! credit propagation with Jury-certified rates + the exact-adjoint-at-KKT
+//! readout. α=0 bit-identical to the incumbent penalty path. The DEC twin
+//! (wave-mode interleave on CochainField pairs) is katgpt-dec's
+//! `wave_kernel`, behind the same-named flag there. Opt-in.
 
 // ---------------------------------------------------------------------------
 // T1 — the accumulator arithmetic (zero-alloc, slice-based)

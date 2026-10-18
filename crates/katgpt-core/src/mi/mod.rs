@@ -100,6 +100,16 @@
 //!
 //! Opt-in feature `mi_est` (no default consumer yet — the no-default-consumer
 //! rule; promotion only after the T3.4/T3.5 consumer GOAT gates pass).
+//!
+//! mi_est — Modelless Mutual-Information Estimator over fixed critics
+//! (Plan 583, Research 521 — MINE arXiv:1801.04062 modelless extraction).
+//! DV/NWJ/InfoNCE/JS bound VALUES in nats + LOO bias control + K-ladder
+//! tightness + permutation calibration (uniform/circular/block/stratified,
+//! dCor non-vacuity control) + a Gaussian closed-form arm gated by the shipped
+//! `sketched_gaussianity` + the frozen-representation IB ratio. Opt-in
+//! feature `mi_est` — diagnostic surface with no default consumer yet
+//! (no-default-consumer rule); consumers: riir-train dist-guard third audit
+//! axis (T3.4), quant-fidelity probes (T3.5), riir-train plan 365 DV core.
 
 use blake3::Hasher;
 

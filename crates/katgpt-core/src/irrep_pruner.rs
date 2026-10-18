@@ -27,6 +27,10 @@
 //!     // accept token
 //! }
 //! ```
+//!
+//! Spectral Irrep Pruner - spectral flatness-based speculative decoding pruning (Plan 246).
+//! Prunes tokens when logit spectrum shows competing modes (high spectral flatness).
+//! GOAT PASS: +3.6% overhead, default-ON.
 
 use crate::traits::ConstraintPruner;
 use rustfft::{FftPlanner, num_complex::Complex32};

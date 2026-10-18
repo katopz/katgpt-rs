@@ -47,6 +47,13 @@
 //!
 //! All operations are deterministic and platform-independent: no SIMD dispatch
 //! inside the math, no floating-point reordering.
+//!
+//! Latent Trajectory Geometry — probe-free geometric diagnostic (length +
+//! mean turning-angle curvature + min adjacent cosine + bifurcation ratio).
+//! Distilled from Pandey et al., arXiv:2606.09287 (Plan 342, Research 324).
+//! Pure numeric over `&[&[f32]]`, no extra deps. Opt-in until the Phase 3
+//! game-related gate (curvature catches the oscillation failure mode entropy
+//! misses) passes; promotion to a routing role is a separate follow-up plan.
 
 // (Module gating is handled by `#[cfg(feature = "latent_trajectory_geometry")]`
 // on the `mod` declaration in `lib.rs`; this file must NOT duplicate it.)

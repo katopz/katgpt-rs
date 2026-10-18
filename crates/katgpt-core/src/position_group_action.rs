@@ -70,6 +70,19 @@
 //!   `dim()`. Length mismatches trip the impl's error path (panic in debug,
 //!   `debug_assert` no-op in release — matches the `phase_rotation` convention).
 //! - `apply_at(0, x, out)` is always identity (`out = x`).
+//!
+//! PositionGroupAction — unified trait (RoPE / ALiBi / FoX / Wall / NoPE /
+//! GRAPE-M) per GRAPE §2.2 + §4.1. Vocabulary bridge for position-encoding-
+//! agnostic tooling (KV compaction, attention matching). Every positional
+//! encoding is an instance of G(n) = exp(n·ω·L); the trait abstracts over
+//! where the generator L lives (SO(d) multiplicative vs GL(d+2) additive
+//! homogeneous lift). Hot-path code keeps using PositionFreeCompactor /
+//! WallDiagonalGate directly; the trait is for cold-path interop.
+//! Implies grapem_rodrigues (GrapeMAction wraps Rank2Plane).
+//! STAYS OPT-IN — G1–G4 GOAT gate ALL PASS (Bench 458, 2026-07-17); promotion
+//! deferred per Issue 160 T4: vocabulary bridge — no hot-path consumer today.
+//! Re-evaluate when a position-encoding-agnostic tool (KV compactor, attention
+//! matcher) lands. Should be promoted together with grapem_rodrigues.
 
 use crate::grapem::Rank2Plane;
 

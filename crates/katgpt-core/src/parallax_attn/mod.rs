@@ -121,6 +121,17 @@
 //! Feature-gated behind `#[cfg(feature = "parallax_attn")]` for the vanilla
 //! forward and `#[cfg(all(feature = "parallax_attn", feature = "sink_aware_attn"))]`
 //! for the sink-aware composition.
+//!
+//! Per-query thinking mode tag. Extracted from `katgpt-pruners` (Plan 388
+//! Phase 3) to break the katgpt-pruners ↔ katgpt-speculative cycle. Pure
+//! 4-variant `#[repr(u8)]` enum, no pruners-specific knowledge. Re-exported
+//! by katgpt-pruners and katgpt_rs::speculative for backwards compatibility.
+//!
+//! Sink-aware composition (Plan 289). Requires both parallax_attn (for the
+//! forward) and sink_aware_attn (for the classifier + flat gate). The
+//! `tiled_attention_parallax_forward_sink_aware` entry point short-circuits to
+//! vanilla parallax when policy = Uniform, so this is a zero-cost abstraction
+//! for callers who construct the scratch but never enable DualPolicy.
 
 use crate::simd;
 

@@ -52,6 +52,14 @@
 //! - **UQ discipline** (Plan 340 rule): the weighted measure is a
 //!   ranking/steering signal; any future distribution/coverage claim must
 //!   first beat the conformal-naive floor.
+//!
+//! twist_cache — Plan 581 opaque-reward twisted-SMC steering + modelless
+//! twist amortization (Research 517, arXiv:2605.23346 CDM): x̂₀ posterior-mean
+//! reward proxy (1 query/particle-step vs M rollouts), BLAKE3 state-keyed
+//! value memo, one-shot ridge readout table, β/KL-budget selection
+//! (entropic_tilt hoist rule). Consistency for any positive ψ — amortization
+//! is variance reduction, never correctness. Opt-in; the trained-head
+//! counterpart is riir-train Plan 361 (same GOAT gate, two arms — Bench 692).
 
 use core::sync::atomic::{AtomicU64, Ordering};
 

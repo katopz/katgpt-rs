@@ -58,6 +58,27 @@
 //! - Research: `katgpt-rs/.research/278_Engram_Conditional_Memory_Latent_Lookup_Fusion.md`
 //! - Source paper: [arXiv:2601.07372](https://arxiv.org/pdf/2601.07372) —
 //!   Engram, Cheng et al. 2026.
+//!
+//! ── Engram — Hash-Addressed Pattern Memory (Plan 299, Research 278) ───────
+//!
+//! Open MIT-licensed primitive: the first conditional-MEMORY axis in the
+//! katgpt stack (complementary to Raven's conditional-COMPUTATION axis).
+//! N-gram-suffix → multi-head hash → O(1) slot lookup → sigmoid gate (RMSNorm
+//! dot σ) → residual-fuse into hidden state. Frozen table, atomic swaps for
+//! updates, BLAKE3 commitment as sync-boundary audit artifact.
+//!
+//! CRITICAL: sigmoid, not softmax — per AGENTS.md. No `softmax` symbol here.
+//!
+//! Open half of the Engram Super-GOAT: private selling-point guide lives in
+//! riir-ai Guide 147; chain commitment bridge is riir-chain R001 (TODO).
+//! Compiled in default transitively via cognitive_architecture_root → engram chain (Issue 039). G1+G2+G4 PASS; G6 (effective depth) deferred to riir-ai integration (requires live inference pipeline).
+//!
+//! Issue 656 — counterfactual privilege gating for engram fusion (modelless δ
+//! from LOPD, riir-train Research 419 §5.2). Adds the missing *utility* axis to
+//! the similarity-only gate: `out = (base_gate · σ((Δ_slot − m)/s)) · v`, where
+//! Δ is an outcome-weighted EMA of the counterfactual advantage
+//! `score(state + fuse) − score(state)`. Modelless — two evaluations and a
+//! comparison, no gradients. Opt-in.
 
 // All engram submodules are now landed (Phases 1–8). Phase 7 GOAT gate
 // results live in katgpt-rs/.benchmarks/299_engram_goat.md.

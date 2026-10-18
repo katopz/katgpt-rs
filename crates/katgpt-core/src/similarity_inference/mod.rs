@@ -150,6 +150,26 @@
 //!   Conitzer, Foerster. *Similarity-based cooperative equilibrium.* NeurIPS
 //!   2024. (Requires externally-provided similarity scores; this primitive
 //!   *infers* them.)
+//!
+//! Similarity Inference — endogenous correlation device for embedded equilibrium
+//! (Plan 526, Research 471, arXiv:2608.03958 Meulemans et al. *Paradigms of
+//! Intelligence* Aug 2026). Per-focal `SimilarityPosterior ω ∈ (0,1)` updated
+//! incrementally from joint-action history via the paper's §H.2 closed form
+//! `ω_T = α/(α+(1−α)·|A|^(−T))`; `embedded_best_response` switches from
+//! competitive-best-response (Nash) to cooperative-best-response (CCE) when ω
+//! crosses a payoff-derived threshold (exactly 0.5 for canonical PD). Pure
+//! modelless closed-form math; O(1) observe, O(A²) best-response, zero allocs
+//! after construction. The mechanism is genuinely novel per R471 §3.5: the
+//! shipped `CceLp<N,A>` (Plan 295, DEFAULT-ON) uses an *exogenous*
+//! designer-set correlation device ζ; this primitive *infers* an *endogenous*
+//! correlation device ω from interaction history. NOT a sync-boundary primitive
+//! (ω is latent per-focal; only the final cooperate/defect u8 action crosses).
+//! Sigmoid, not softmax (ω is a posterior probability, not a categorical).
+//! OPT-IN (demoted 2026-09-04 per riir-ai Issue 867 T1.3 — 24 days DEFAULT-ON
+//! 2026-08-11..09-03 with zero consumers workspace-wide) — Plan 526 Phase 1-5
+//! GOAT G1–G8 ALL PASS (Bench 579: G1 closed-form reproduction, G2 emergent
+//! cooperation, G5 indirect inference, G7 UQ floor, G8 PD threshold); see the
+//! Cargo.toml feature-def comment for the full gate + demotion record.
 
 pub mod best_response;
 pub mod posterior;

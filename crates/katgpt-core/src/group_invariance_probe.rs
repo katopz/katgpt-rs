@@ -100,6 +100,17 @@
 //!   paper-specific closed forms from IMIR §3.2. No sampling, no linear
 //!   system — direct construction. Use when the group matches one of these
 //!   known structures.
+//!
+//! Group Invariance Probe — modelless symmetry discovery on a hypothesis Lie
+//! group (Plan 356, Research 355 — distilled from LieFlow, arXiv:2512.20043).
+//! Generalizes `subspace_phase_gate` from "subspace of R^d" to "subgroup of G":
+//! score each sampled g ∈ G by direct invariance testing σ(β·(1−d(q, g·q))),
+//! then classify the discovered H as Discrete / Continuous / Partial / None via
+//! a participation-ratio-style concentration measure on the score histogram.
+//! Pure numeric, no game/shard/chain semantics, zero deps. Sibling of
+//! `subspace_phase_gate`. STAYS OPT-IN — 8/8 GOAT gates PASS (Bench 356,
+//! 2026-07-01); not promoted to default because no shipped consumer exists yet
+//! (Issue 011 Q2+Q3 verdict + riir-ai fusion plan still pending).
 
 // ── Invariance score ───────────────────────────────────────────────────────
 

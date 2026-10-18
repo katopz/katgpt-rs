@@ -72,6 +72,37 @@
 //! - Source paper: [arXiv:2601.00671](https://arxiv.org/abs/2601.00671) —
 //!   Zhao & Jones, "Fast-weight Product Key Memory", Sakana AI, Feb 2026
 //!   (distills the PKM factorization from Lample et al. 2019 §2.2).
+//!
+//! ── Product Key Memory — O(√N) Factored Retrieval (Plan 408, Research 387) ─
+//!
+//! Open MIT-licensed primitive: the fourth complexity class in the retrieval
+//! stack (Raven O(1) / Engram O(1)-hash / δ-Mem O(r) / PKM O(√N)). Splits a
+//! d_k-dim query into two halves, scores two √N codebooks, takes top-k of the
+//! k² Cartesian product — yielding `2√N + k²` cost instead of `N`. Scales to
+//! ~10⁶ slots at sub-linear retrieval cost.
+//!
+//! Modelless (constraint #1): the FwPKM paper's gradient-descent half (L_mem
+//! GD on V, L_addr GD on K, n-iter TTT) is forbidden. Replaced by shipped
+//! δ-rule analog (Plan 053). This primitive ships ONLY the inference-time
+//! factored retrieval; the optional δ-rule write path lands in Phase 5
+//! (product_key_memory_episodic).
+//!
+//! Phase 1 (this commit): types only — const-generic
+//! `ProductKeyMemory<SQRT_N, D_K, D_V>`, `ScoreFn` (Dot/Idw), fixed-size
+//! `PkQuery<K>`. Leaf-clean (zero deps). Phase 2 ships the kernel + GOAT gate.
+//! DEFAULT-ON since 2026-07-07 (Plan 408 Phase 3 GOAT): G1 latency 1670×
+//! speedup, G2 top-k Jaccard 1.0000 vs brute-force, G3 IDW centroid-ness PASS,
+//! G4 0 allocs/1000 steady-state query_into calls. See `.benchmarks/408_pkm_goat.md`.
+//!
+//! Phase 4 (F4 fusion) — freeze/thaw wrapper around ProductKeyMemory. Gated
+//! separately so the leaf-clean retrieval primitive (above) stays usable
+//! without the Arc<RwLock<Arc<...>>> + BLAKE3 commitment machinery. See
+//! `product_key_memory/freeze.rs` for the pattern rationale (mirrors
+//! `induced_cwm/hot_swap.rs`).
+//!
+//! Plan 408 Phase 5 — δ-rule write gate over PKM (F1 fusion: PKM × δ-Mem).
+//! PkmEpisodicStore wraps FrozenProductKeyMemory + a mutable working copy.
+//! Gated on `product_key_memory_episodic` (implies `product_key_memory_freeze`).
 
 // Phase 4 — freeze/thaw wrapper (Plan 408 T4.1). Gated separately so the
 // leaf-clean retrieval primitive stays usable without pulling in the

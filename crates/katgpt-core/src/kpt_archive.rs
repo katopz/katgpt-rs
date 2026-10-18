@@ -57,6 +57,14 @@
 //! and the copying path [`KptArchive::to_ternary_weights`] still works).
 //! Zero-copy views additionally require a little-endian host (every target
 //! this workspace ships: x86_64, aarch64, wasm32).
+//!
+//! .kpt single-file weight-archive POC (Issue 841 / Research 568 fusion 2):
+//! .cact-style nameless positional layer-major file × BLAKE3/Merkle integrity
+//! × atomic file-replacement hot-swap (write temp + fsync + rename). POC
+//! grade per the 2026-09-19 owner call: example + tests prove the concept,
+//! the perf envelope and the fail-closed security posture; NOT promoted, no
+//! production consumer — the format+engine lift stays parked until a
+//! NeuronShard-Merkle consumer wants single-file mmap hot-swap.
 
 use core::fmt;
 

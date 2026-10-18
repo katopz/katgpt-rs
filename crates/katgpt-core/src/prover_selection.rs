@@ -29,6 +29,24 @@
 //! katgpt-core dep.
 //!
 //! Pure modelless arithmetic, no deps, no allocs, zero-cost-unless-invoked.
+//!
+//! prover_selection — prover-selection statistics kernels (Issue 692,
+//! from Research 509 — arXiv:2410.08146): T1 ships the D/Al complementarity
+//! selector (distinguishability + alignment + Theorem 3.1's γ·(D+Al)
+//! predicted-gain bound + its sigmoid-gated exposure), T2 the first_pit
+//! changepoint kernel (first index where Q̂ < ε) consumed by riir-clippy's
+//! PAV data curation (riir-train Plan 356 A1) via a same-signature twin.
+//! T3 ships the K* interior-optimum law — k_star (the closed-form rollout
+//! count maximizing the gap) + bok_advantage (the BoK gap
+//! A(K) = (1−V)^K − (1−Q)^K), gate-pinned against the empirical argmax on
+//! an exhaustive (Q,V) grid. Pure modelless arithmetic, no deps, no
+//! allocs, zero-cost-unless-invoked.
+//!
+//! DEFAULT-ON since 2026-08-27 (Bench 684 GOAT G1–G5 PASS — the T5
+//! head-to-head: D+Al-ranked prover selection beats strength-ranked on a
+//! controlled PAV harness, 16 seeds; the `rating` precedent — pure math,
+//! no dep surface, zero-cost-unless-invoked). The Cargo feature remains as
+//! an inert alias.
 
 /// Distinguishability D(μ) = E_s Var_{a~π}[A^μ(s,a)] — how much the prover's
 /// **advantage** varies across the base policy's actions, averaged over

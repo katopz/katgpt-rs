@@ -27,6 +27,9 @@
 //! Offline analysis lane — allocating (returns `Vec<f32>`), pure, no deps.
 //! The GOAT arm for the T2.2/T3 lane is the planted-anchor fixture:
 //! a uniquely-determining token (point-mass q, always-first π) must rank #1.
+//!
+//! Plan 602 T2.1: the offline anchor scorer (decode-log ranking toward the
+//! paper's sparse anchor set A — same feature, root-level per the plan target).
 
 use crate::dllm::UNMASKED_NEVER;
 

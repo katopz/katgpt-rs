@@ -61,6 +61,19 @@
 //! gated on the Phase-3 defend-wrong PoC (`tests/saddle_escape_poc.rs`:
 //! gate vs halt-only vs always-on-noise on a saddle-trap toy + a decode-
 //! keyed flip-ring toy); promotion to default is owner-gated.
+//!
+//! Plan 593 / Research 546 (arXiv:2609.04963 "Fractal basins trap latent
+//! reasoning") — Saddle-Trap Escape Gate: three-way Continue /
+//! Halt{Converged} / Halt{Trapped} / Kick loop controller wrapping (never
+//! forking) the GainCostLoopHalter above. Trap = oscillation patience +
+//! decode-flip-rate EMA (+ optional renoise-CE probe confirm); escape =
+//! deterministic BLAKE3-seeded, budget-bounded kick. Opt-in — quality
+//! claims gated on the Phase-3 defend-wrong PoC (tests/saddle_escape_poc.rs);
+//! promotion owner-gated (525/Bench-834 precedent).
+//!
+//! NOTE: `GateDecision` is deliberately NOT re-exported at the crate root —
+//! `types::GateDecision` (feature `data_gate`) already owns that name there;
+//! use `katgpt_core::saddle_escape::GateDecision`.
 
 use crate::gain_cost_halt::{GainCostLoopHalter, HaltDecision, HaltReason};
 

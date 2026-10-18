@@ -27,6 +27,16 @@
 //!   only for the final output attention over fetched real-token K/V (standard SDPA,
 //!   which is retrieval, not gating — consistent with the hippocampal_cache
 //!   precedent in Plan 395).
+//!
+//! Hierarchical Global Attention (HGA) — chunk→group→token routing with
+//! RoPE-aware mixed-frequency summaries (Plan 397, Research 379, arxiv 2606.30709).
+//! Three refinements of the sparse-attention routing slot: group middle tier,
+//! mixed-RoPE summarizer, tiered route-and-fetch consumer. Opt-in until the
+//! Phase 2 GOAT gate (G2 head-to-head vs DashAttention) passes.
+//!
+//! NOTE: the HGA forward path (which needs dash_attn::entmax_1p5) lives in
+//! katgpt-attn/src/hga_forward.rs, not here — katgpt-core cannot import
+//! katgpt-attn without a circular dependency.
 
 pub mod group_summary;
 pub mod summary;

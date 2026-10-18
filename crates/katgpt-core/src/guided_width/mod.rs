@@ -54,6 +54,13 @@
 //! Opt-in `guided_width_rollouts` (+ `guided_width_hodge` for arm (b)).
 //! Research 058 §8.3's "do NOT make guided noise the default" governs unless
 //! Bench 898 records a both-families win (the pre-stated demote condition).
+//!
+//! Issue 895 / Research 590 (GRAM re-distill, arXiv:2605.19376) — guided
+//! width rollouts on the belief host: N×K stochastic hypotheses over a
+//! deterministic refinement step (transversal / mass-conserving ε,
+//! stagnation-gated σ, success-SVD μ≠0 table, decode-free selection,
+//! trap-kill-reallocate). Consumes diversity::temp, saddle_escape, qmc,
+//! thin_svd_into, best_belief — forks none. Opt-in (Bench 898 verdict).
 
 pub mod init;
 pub mod perturb;

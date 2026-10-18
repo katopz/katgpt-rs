@@ -35,6 +35,10 @@
 //! Individual types are gated by their respective feature flags, forwarded
 //! from the consumer via `katgpt-core/<feature>` (e.g. `katgpt-core/elf_sde`
 //! gates `EarlyStopGate`).
+//!
+//! Plan 370 — QMC noise-fill convenience entry point (constructs the right
+//! QmcSource from a QmcMethod tag + seed, zero-alloc). Used by
+//! MultiHypothesisBoMMinimaxPlanner when NoiseQueryConfig::qmc_method is Some.
 
 pub mod sampling;
 pub mod types;

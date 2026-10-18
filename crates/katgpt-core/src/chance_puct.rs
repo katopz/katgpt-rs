@@ -57,6 +57,13 @@
 //! calls: after the first search at a given budget the search loop itself
 //! allocates nothing (pinned by the G4 arm of `bench_892_chance_puct_goat`
 //! on a heap-free game). A game whose `actions`/`apply` allocate still does.
+//!
+//! Chance-node PUCT for single-player stochastic games (Issue 892 T3) —
+//! the moka trick (Bench 205) transplanted: sigmoid prior (never softmax)
+//! pruned to `top_k`, sigmoid-squashed value leaf with NO sign flip,
+//! chance nodes sampled ∝ p from a caller-seeded `fastrand::Rng`,
+//! most-visited root. `katgpt-core::mcts` (UCB1 + rollouts) is untouched.
+//! Opt-in (`chance_puct`).
 
 use crate::exact_sigmoid;
 

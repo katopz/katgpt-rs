@@ -61,6 +61,15 @@
 //!
 //! Opt-in `logit_regime` (beside `ssmax`, same statistics family). No default
 //! consumer yet — promotion only after a consumer GOAT gate.
+//!
+//! Kamath range-law regime detector + normalized-entropy dispersion diagnostic
+//! (Issue 762 T4.2, Research 549 — the ASEntmax duality's measurement half,
+//! beside ssmax: same statistics family). `ρ = Δ̂/(2σ̂√(2 ln n))` classifies a
+//! routing logit row as Gaussian-band (the Eq-10 damping regime) vs spiked
+//! (needle present — over-sparsification desired); `H(p)/ln n` measures
+//! Prop-1 dispersion. Pure one/two-pass modelless statistics over the shared
+//! ungated `simd::logsumexp_parts` kernel; opt-in `logit_regime` until a
+//! consumer promotes.
 
 /// One row's regime reading: the Kamath ρ, the normalized entropy, and the
 /// sigmoid spike score derived from ρ.

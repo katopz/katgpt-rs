@@ -5,6 +5,8 @@
 //! space uses this.
 //!
 //! Zero allocation, fixed-size. Uses `sigmoid(dot())` — never softmax.
+//!
+//! ActionBridge — generic latent→raw action bridge (Plan 262).
 
 // Sigmoid delegates to shared crate::simd::fast_sigmoid (bounded (0,1), libm-exp).
 

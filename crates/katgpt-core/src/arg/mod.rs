@@ -29,6 +29,19 @@
 //! protocol permits LLM escalation (ARG OW-3.2 bounded proposer) — this crate
 //! rejects it; the plasma → hot → warm → cold tier cascade in riir-ai is the
 //! substitute.
+//!
+//! ARG Protocol Primitives — open half of the ARG × Latent Substrate Super-GOAT
+//! fusion (Plan 327 Phases 1-3, Research 309, Guide 160 private). Five generic
+//! protocol primitives distilled from the ARG Standard
+//! (https://protocol.airistech.ai/arg-core.html, Iris Technologies 2026):
+//! `PolicyEnvelope` (Step 1 hard gate), `TaxonomyValidator` (Step 3 deterministic
+//! label-set validator), `LifecycleState` + `RedirectTable` (Step E ontology
+//! lifecycle continuity), `TypedOfflineCandidate` + `CandidateIntent` (Step C
+//! typed offline candidate), `OfflineCandidateScorer` (Step C scoring with the
+//! G5 silence-bias penalty), `InfoRegistry` (Step 9 + Step C two-phase dedup
+//! with grey-zone review). Private runtime composition with HLA / Entity
+//! Cognition Stack / VMG / Sub-Goal Compaction lives in riir-ai Plan 337.
+//! No game/chain/shard semantics. DEFAULT-ON (Plan 327 Phase 4, 2026-06-25):
 
 pub mod candidate;
 pub mod lifecycle;

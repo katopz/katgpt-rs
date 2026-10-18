@@ -62,6 +62,16 @@
 //! `(obs_a, obs_b, out_buf)`. The output buffer's length is the latent
 //! dimension, fixed across calls. Real HLA / functor / MAG encoders wrap
 //! their inner computation in a one-line closure that writes into `out_buf`.
+//!
+//! Latent Confounder Audit — three modelless forward-pass diagnostics
+//! (R₀ zero-transition response + R_shift shift-invariance response + L
+//! shortcut leakage) auditing a conditioning latent for action-irrelevant
+//! confounders. Distilled from CD-LAM §III-B + Appendix A (Wei et al.,
+//! arXiv:2607.09185; Research 460, Issue 194). The diagnostic half of CD-LAM
+//! (the L_emb/L_ctr/L_cal training recipe → riir-train). Pure numeric over a
+//! caller-supplied encoder closure; zero deps. Opt-in — diagnostic primitive,
+//! not a runtime capability. Stays opt-in until a consumer (MAG/TILR/Steering)
+//! benchmarks a quality gain from running the audit before deployment.
 
 // (Module gating is handled by `#[cfg(feature = "latent_confounder_audit")]`
 // on the `mod` declaration in `lib.rs`; this file must NOT duplicate it.)

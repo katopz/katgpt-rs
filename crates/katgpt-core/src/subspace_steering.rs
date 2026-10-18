@@ -37,6 +37,19 @@
 //! - Source paper: [arXiv:2606.25234](https://arxiv.org/abs/2606.25234) —
 //!   Goodfire, Block-Sparse Featurizers
 //! - 1D sibling: Plan 309 (`latent_steering.rs`, DEFAULT-ON)
+//!
+//! Subspace Steering Field — k-dim manifold steering (Plan 412, Research 393,
+//! arxiv 2606.25234 Goodfire BSF). The k-dim generalization of Plan 309: an
+//! orthonormal block `{u_1..u_k}` + per-axis strengths `{α_1..α_k}`, math
+//! `s' = s + Σ_j α_j · u_j`. At K=1 bit-identical to Plan 309; at K≥2 enables
+//! manifold walking (sweep alphas over a grid → concept variations). Pure
+//! modelless consumer of pre-discovered blocks (Plan 301 Jacobian SVD,
+//! SpectralQuant eigenbasis, or hand-constructed sets). Phase 3 finding:
+//! Newton-Schulz DIVERGES on non-square K<D matrices → Gram-Schmidt is the
+//! orthonormalize constructor. DEFAULT-ON (Plan 412 Phase 5, 2026-07-08):
+//! G1+G3+G4+G5 ALL PASS — G1 K=1 parity 0 mismatches/800 comparisons, G3 0
+//! allocs/1000 calls × K={1,2,4}, G4 sizes 68/104/176 bytes exact, G5
+//! commitment + walk_manifold deterministic.
 
 use blake3::Hasher;
 

@@ -63,6 +63,16 @@
 //! the audited hot paths). `estimate_profile` is the amortized once-per-model
 //! constructor; its grid vectors are returned outputs. API is `f32` in/out
 //! with `f64` internal accumulators.
+//!
+//! UGC — Unmasking Growth Complexity certified schedules for masked diffusion
+//! (arXiv:2608.13520, Research 485 / Issue 664). Always-on: pure math + a
+//! denoiser trait, zero deps beyond crate::types::Rng — the same no-gate
+//! rationale as set_diffusion_schedule. Feature-flag plan (`ugc_schedule`)
+//! opens ONLY if the Issue 664 G1b promotion gate passes.
+//!
+//! Plan 602 T2.2: the certified-spine anchor view over UGC reveal
+//! trajectories (same feature; defined in ugc_schedule.rs per the plan
+//! target — ugc_schedule itself stays always-on, only this view is gated).
 
 use crate::types::Rng;
 

@@ -56,6 +56,16 @@
 //! Higher = more similar (DreamSim convention). [`cross_ooo`] skips
 //! diagonal self-pairs so shared MEIs between two units degrade the score
 //! (as they should) instead of inflating it via `sim(i, i) = 1`.
+//!
+//! ooo_audit — direction-bank audit & curation gate (Issue 759 / Research
+//! 552, Issa/Liu/Ballé/Klindt bioRxiv 2026.09.05.748439): asymmetric
+//! Odd-One-Out interpretability + Cross-OOO diversity + greedy bank
+//! curation — the AUDIT stage of the direction-vector ecosystem (MAG R397
+//! acquires; LFS/PWC/CFB inject; freeze/thaw commits; nothing verified
+//! self-consistency or non-redundancy until this). Pure f32 reductions over
+//! an activation matrix + pluggable exemplar-similarity matrix; zero deps,
+//! deterministic, zero-alloc *_into (caller-owned scratch). Opt-in pending
+//! the Bench 758 GOAT (no-default-consumer rule).
 
 use std::cmp::Ordering as CmpOrdering;
 

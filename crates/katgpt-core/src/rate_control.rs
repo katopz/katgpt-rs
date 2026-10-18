@@ -66,6 +66,21 @@
 //!
 //! No sync surfaces (pure local state). NaN/`se < 0` inputs are dropped
 //! fail-closed (the `kv_eviction::observe` guard convention).
+//!
+//! Dual-EWLS effect-size rate controller (Issue 873 primitive B, Research
+//! 581 — mini-AGI `plasticity.py:63-358`, MIT). Closed-form multiplicative
+//! nudge exp(gain·tanh((v−T_MID)/width)) with v = min(t_slow, EFFECT·e_slow,
+//! EFFECT·e_fast) from two exponentially-weighted least-squares fits kept
+//! as 7 running quantities — no window, so no edge-jump artifacts. The
+//! deciding quantity is the EFFECT SIZE e = slope/σ_resid (a t-statistic
+//! measures watch-time, not progress); asymmetric gains AND widths (up
+//! 0.005/0.75 = slow probe, down 0.025/6.0 = magnitude-proportional
+//! response); confirmed regime-jump step (×2 + fit reset, single spikes
+//! discarded). Constants PINNED (Issue-033 never-adaptive law); report-
+//! first (R135/Bench 047 — gates nothing until evidence volume exists).
+//! observe: 42ns dual-fit + tanh/exp nudge + jump detect, zero alloc,
+//! bit-deterministic. First consumer A/B: riir-train Plan 416 Phase 2.
+//! OPT-IN pending first consumer GOAT.
 
 /// Pinned constants — see the module doc for provenance and the never-
 /// adaptive law.

@@ -25,6 +25,15 @@
 //! sampling.
 //!
 //! Zero-alloc: borrows the caller's histogram slice; no collections.
+//!
+//! state_probe — the FlyBy decision-layer probe kernel (Plan 621 Phase 1,
+//! Research 609, arXiv:2609.34327): V̂ pass-fraction + Miller–Madow answer
+//! entropy + the Wilson interval CONSUMED from hint_regret::gate (no third
+//! CI copy). Plain ensemble counts in, plain floats out — reflex-free by
+//! construction; NOT calibrated UQ (Report-the-Floor binds at a consumer's
+//! re-gate). Phase-2 bottleneck classifier + Phase-3 escalation gate build
+//! on this; consumers: riir-refine Issue 156 (rescue mining), riir-instinct
+//! EscalateSpec.
 
 use crate::hint_regret::wilson_score_ci;
 

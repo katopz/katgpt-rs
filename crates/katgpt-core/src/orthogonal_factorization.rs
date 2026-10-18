@@ -75,6 +75,19 @@
 //!
 //! Sigmoid, not softmax (per AGENTS.md) — aggregates are means and hinges;
 //! no normalization competition anywhere.
+//!
+//! orthogonal_factorization — Issue 687 (Research 504, arXiv:2608.20065
+//! "Orthogonal JEPA" Path 0): orthonormalize (twice-reorthogonalized
+//! modified Gram–Schmidt + input L_orth defect — the one-shot redundancy
+//! audit production direction sets never had), per-(factor,coordinate)
+//! activity variance hinges (Welford, γ ≥ max(γ_min, c/√n) estimator-noise
+//! schedule), Parseval runtime invariants + exact truncation certificates
+//! (Hadamard integer-core bases, dyadic-exact at d=64), and construction-
+//! time head conditioning certificates via spectral_pencil (κ(B)=1 by
+//! construction — the paper's caveat converts to a certificate). Pure
+//! modelless closed-form linear algebra; scalar f64 reductions (bit-identical
+//! cross-platform); zero steady-state alloc. Opt-in until a consumer promotes
+//! (GOAT .benchmarks/676).
 
 use crate::spectral_pencil::{DenseScratch, jacobi_eigen};
 

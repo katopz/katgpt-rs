@@ -73,6 +73,18 @@
 //! Callers supply any signed sparse graph. NO connectome dataset ships here
 //! (FlyWire/MaleCNS licensing; fixtures are synthetic). Any training loop is
 //! out of scope (ridge is closed-form; gradient-free by construction).
+//!
+//! lif_graph — signed-graph LIF reservoir: event-driven sparse propagation
+//! (Issue 763 / riir-ai Research 379, the fly-connectome class). Current-based
+//! LIF (Shiu et al. Nature 2024 canonical constants) on a fixed signed CSR
+//! adjacency, exact exponential integration (3 muls per active neuron per
+//! tick), timing-wheel spike delays, and an EXACT-parity event-driven active
+//! set (quiescence = bitwise fixed point of the leak map — the dense update
+//! of a skipped node IS the identity). Closed-form ridge readout consumes
+//! `linalg::ridge_solve_direct_f64` (the KARC precedent). Data-agnostic:
+//! callers supply any signed sparse graph; no connectome datasets ship here.
+//! Opt-in — POC landed with GOAT G1–G4 PASS (Bench 760); promotion needs a
+//! consumer (the riir-ai per-archetype circuit shard path, Research 379 §7).
 
 use crate::linalg::ridge_solve_direct_f64;
 

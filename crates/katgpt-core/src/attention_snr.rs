@@ -55,6 +55,14 @@
 //!
 //! Every function here is allocation-free: `Copy` state, slice inputs,
 //! caller-owned outputs.
+//!
+//! Streaming attention-SNR accumulators (Issue 882 P1 / Research 586) —
+//! exact softmax entropy + participation ratio from two extra online-softmax
+//! registers (`T = Σe^{x−m}(x−m)`, `R₂ = Σe^{2(x−m)}`, closed-form rescale on
+//! max moves), the fused tiled-kernel arm
+//! ([`attention::tiled_attention_forward_snr`]), and per-head measured
+//! sharpening `τ_h` by bisection onto the SSMax `Fixed` socket. Entropy is
+//! concentration, not relevance (trap 2). Opt-in (`attention_snr`).
 
 use crate::ssmax::SsmaxMode;
 

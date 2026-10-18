@@ -105,6 +105,21 @@
 //! evaluations, one final dot product, one FMA. The structural minimum —
 //! the joint lift's value is the **unified API + correctness guarantee**,
 //! not a speedup over calling the parts separately.
+//!
+//! GRAPE Joint Lift — GL(d+2) block-diagonal composition of rotary + additive
+//! (GRAPE Appendix E, arXiv:2512.07805). Single-pass fused score that composes
+//! GRAPE-M (Issue 159's Rank2Plane, the rotary SO(d) part) with GRAPE-A
+//! (paper §4.1, the additive logit bias via softplus gates) into one group
+//! action. Closes the composition story: today Wall *replaces* RoPE; this
+//! primitive proves they *compose* into a single one-parameter subgroup of
+//! GL(d+2) while preserving the exact relative law. The plane (a, b) and gate
+//! vectors (u, v) are user-supplied (modelless); learning is → riir-train.
+//! Implies grapem_rodrigues (wraps Rank2Plane). Decoupled omega_rot/omega_add
+//! is a strict generalization of the paper's shared ω.
+//! STAYS OPT-IN — G1–G4 GOAT gate ALL PASS (Bench 460, 2026-07-17); promotion
+//! deferred per Issue 163 T6: thin composition layer — value is unified API +
+//! correctness guarantee (Appendix E's block-diagonal GL(d+2) proof), not a
+//! perf gain over calling the parts separately. No hot-path consumer today.
 
 use crate::grapem::Rank2Plane;
 use crate::simd::simd_dot_f32;

@@ -58,6 +58,18 @@
 //! - Fusion cousins: Plan 236 (BAKE), Plan 284/316 (CLR), progressive_mcgs/,
 //!   Plan 299 (Engram), Plan 327 (ARG), Plan 290 (closure-instrument),
 //!   Plan 303 (Salience)
+//!
+//! Non-Interference Memory Branches — Super-GOAT fusion (Plan 329, Research 310,
+//! arXiv:2606.20638 Goel et al. Oxford Jun 2026). Five generic open primitives:
+//! BranchBank (bounded persistent CognitiveBranch bank with spawn/merge/prune
+//! lifecycle), BranchRouter (dot-product snap + Jaccard fallback), VerifierGate
+//! (reward + curiosity + centroid-quarantine write gate, composes with CLR),
+//! NonInterferenceProjection (orthogonal latent subspace per branch),
+//! BudgetCompiler (priority-cascade context compiler under fixed budget). Fuses
+//! BAKE × CLR × MCGS × Engram × ARG × closure-instrument × Salience into a new
+//! capability class: per-NPC continual adaptation without catastrophic
+//! forgetting. Composes with arg_protocol LifecycleState when both features on.
+//! DEFAULT-ON (Plan 329 Phase 3, 2026-06-26): G1–G5 ALL PASS.
 
 pub mod bank;
 pub mod compiler;

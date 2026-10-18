@@ -15,6 +15,11 @@
 //! well-defined during cold-start (one forecaster has no forecast yet, one
 //! ensemble sample produced no score).
 //!
+//!
+//! Welford online variance accumulator — the crate's ONE definition
+//! (moved out of karc::regime_gate's feature-gated `imp`, Plan: reflex 008 /
+//! Issue 055 substrate pass, 2026-09-30, so `perturbation_ensemble` and any
+//! other moments consumer reaches it without the karc feature chain).
 /// Welford online variance accumulator — closed-form, single-pass, zero-alloc.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WelfordVariance {

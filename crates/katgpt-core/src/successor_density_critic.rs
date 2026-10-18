@@ -67,6 +67,19 @@
 //! never synced), riir-train Plan 413 Phase 1 tabular arm (`map_walk`
 //! gridworld). Opt-in feature `successor_density_critic`; promotion to
 //! default requires the GOAT gate (Bench 818) AND a live consumer.
+//!
+//! Successor-density goal critic (Issue 860 / riir-ai Research 386,
+//! arXiv:2206.07568 CRL): the tabular, modelless CRL extraction — a
+//! count-based closed-form estimator of the paper's log-density-ratio goal
+//! critic f*(s,a,g) = log p(s_t+ = g | s,a)/p(g) over dense [S][A][S]
+//! weighted-count tables, with deterministic zero-variance successor
+//! samplers, argmax_a / argmax_g (goal salience), a sigmoid link (Bench 048;
+//! sigmoid never softmax), and BLAKE3-committed freeze/thaw (the
+//! contrastive_scope pattern). Lemma 4.1's ranking preservation is an
+//! executable property here (goal-prior perturbation leaves argmax_a
+//! bit-identical), not a paper claim. Consumers (riir-ai Issue 991 per-NPC
+//! goal salience — think-brain only, never synced; riir-train Plan 413
+//! tabular arm) file consumer-side at adoption. Opt-in POC.
 
 use std::sync::Arc;
 

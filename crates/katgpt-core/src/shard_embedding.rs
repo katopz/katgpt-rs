@@ -18,6 +18,8 @@
 //!
 //! The projection matrix W is generated once (at consolidation time or init)
 //! and stored alongside the shard. No training needed.
+//!
+//! Re-export key types at crate root for convenience
 
 #![allow(deprecated)]
 

@@ -48,6 +48,14 @@
 //! (dynamically sized, same artifact format for read-side project and write-
 //! side steer). Game-side hot path can wrap in a typed `HLAField([f32; 8])`
 //! alias in riir-ai once G1–G5 pass.
+//!
+//! Latent Field Steering — top-down direction-vector injection into mutable
+//! latent state (Plan 309, Research 290, CAA + functional emotions). The missing
+//! fourth quadrant: CNA mutates neurons, EmotionDirections is read-only, FPCG
+//! refuses mutation — this injects directly into the latent state on the hot
+//! path. Zero-alloc SIMD SAXPY + sigmoid-falloff localized support.
+//! DEFAULT-ON (Plan 309 Phase 4, 2026-06-23): G1-G5 ALL PASS (G2 mean cos 0.9958,
+//! G4 19.2us<1ms, G5 0 allocs).
 
 use blake3::Hasher;
 

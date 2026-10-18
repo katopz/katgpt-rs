@@ -54,6 +54,9 @@
 //! not free: if the refit cannot beat those floors on the evidence window,
 //! the honest answer is the identity transform, which the occupancy floor
 //! makes the default until evidence says otherwise.
+//!
+//! Calibrated sigmoid gate (Issue 810) — Platt-style temperature/bias refit
+//! for decision/confidence scalars. Opt-in (`sigmoid_calibration`).
 
 /// Canonical sigmoid (per the project rule: sigmoid, never softmax).
 use crate::sigmoid;

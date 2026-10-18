@@ -1,6 +1,11 @@
 //! Pruner modules relocated from the katgpt-rs root crate so downstream
 //! crates (riir-engine via katgpt-core) can consume them without depending
 //! on the root crate.
+//!
+//! Pruners module (Plan 054 review_metrics + Plan 320 indicator_probe_bank, etc.).
+//! Parent module is always compiled; individual submodules gate their own features.
+//! (Previously the whole `pruners` module was gated behind `review_metrics`; that
+//! coupling was broken in Plan 320 so indicator_probe_bank can gate independently.)
 
 /// Active-state trace contract (Plan 310 T2.6/T2.7, Issue 002).
 ///

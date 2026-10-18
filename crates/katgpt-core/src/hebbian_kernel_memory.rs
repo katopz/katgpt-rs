@@ -112,6 +112,19 @@
 //!   √N retrieval; complements this primitive (PKM retrieves; Hebbian constructs).
 //! - **Atomic swap precedent:** [`crate::induced_cwm::InducedCwmSlot`].
 //! - **Ridge solve precedent:** [`crate::linalg::ridge_solve::ridge_solve_direct_f32`].
+//!
+//! Hebbian Kernel Memory — Closed-Form Fact-Storing MLP Construction + MLP Swap
+//! (Plan 559, Research 455, arXiv:2607.10034 Garcia et al., Stanford/UB 2026-07-10).
+//! Bilinear sketched-K₂ feature map + ridge-whitened readout achieves the
+//! information-theoretic optimal fact-storage capacity W=Θ(F·log F). Closed-form,
+//! no GD. HOPE × this primitive = Super-GOAT dual (HOPE measures capacity;
+//! this constructs it). DEFAULT-ON (Plan 559 Phase 3, 2026-07-25): G1+G2+G3+G4
+//! ALL PASS in Phase 1 (bench_559_hebbian_kernel_memory_goat); G5 Super-GOAT
+//! quality axis PASS (Bench 462 riir-neuron-db — Constructed=GD=1.000 edit_score
+//! at 2/5/10% edits vs Frozen 0.000; easy-regime caveat noted). Layer split
+//! (feature-gate-audit Defense 3): the IP-bearing private bridge
+//! `hebbian_fact_store` in riir-neuron-db STAYS opt-in (shard-specific value
+//! table source + BLAKE3-committed audit sidecar).
 
 use std::sync::{Arc, RwLock};
 

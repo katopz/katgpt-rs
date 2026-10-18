@@ -46,6 +46,14 @@
 //! finiteness, id alignment, kind agreement). They pin the CONTRACT, not
 //! model quality — a confidently-wrong answer validates fine (that is what
 //! calibration + abstention are for).
+//!
+//! Jev/laya-compatible decision wire contract (Plan 603 T1.2, Proposal 014
+//! — Research 562/574/576): typed questions (`choice`/`score`/`noul`, the
+//! answer space defined at request time) answered with probabilities +
+//! confidence, abstention as a first-class answer (`outcome: None` — Jev
+//! cannot abstain, the engine can), and the routing/calibration metadata
+//! the arena's Report-the-Floor tables read. WIRE ONLY — no engine logic;
+//! the engine lives in riir-reflex (T1.3). Opt-in (`decision_wire`).
 
 use serde::{Deserialize, Serialize};
 

@@ -56,6 +56,18 @@
 //! The from-scratch vs incremental equivalence (the drift-gate property both
 //! consumers pin) is exact — bit-identical limbs — because both paths are
 //! the same modular sums evaluated in different orders.
+//!
+//! lthash — incremental homomorphic multiset hash (Issue 807): LtHash
+//! [u16; N] (default 1024 lanes, wrapping add mod 2^16) with insert=add,
+//! remove=subtract, merge=sum, checksum=BLAKE3(state). Order-independent
+//! aggregate by construction (commutative monoid) → deterministic under any
+//! thread schedule. Element = domain-separated BLAKE3 XOF over a
+//! length-prefixed part list (no concatenation-ambiguity collisions). Mined
+//! from the Agave validator snapshot (eprint 2019/227 instantiation) for
+//! riir-chain Proposal 010 D1 (commitment_root → O(1)) + riir-dapps
+//! Proposal 005 D1 (kat:statehash trail). Pure integer arithmetic, zero
+//! deps, zero allocs, wasm32-clean. OPT-IN pending the Bench 771 GOAT +
+//! first consumer wiring.
 
 use blake3::Hasher;
 

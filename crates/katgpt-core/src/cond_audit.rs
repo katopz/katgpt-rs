@@ -60,6 +60,18 @@
 //! numeric-compression surface is already gated stronger at bit-identity;
 //! the semantic surfaces (Gemma-4 sliding ring, TokenBudgetPacker, H2O) are
 //! trigger-gated in Issue 719 T2–T4. No default promotion, no GOAT claim.
+//!
+//! Conditioning-consistency audit (Issue 719 / Research 528, arXiv:2609.00865
+//! "MemoryWalker"): per-junction forward-KL between a compressed-conditioned
+//! (student) forward and a full-context (teacher) forward over the same decode
+//! positions + the unconditional Pinsker TV verdict `TV <= sqrt(eps_KL/2)` +
+//! the greedy-stream flip counter + the calibrated-zero (compression-off)
+//! control arm. Modelless pure-f32 arithmetic; the per-junction KL DELEGATES
+//! to `stale_residual::kl_logits` (substrate composition, no duplicate
+//! numeric core). Opt-in — NO live consumer (every shipped numeric-compression
+//! surface is gated stronger at bit-identity); T2 Gemma-4 ring / T3 packer /
+//! T4 H2O stay trigger-gated. No default promotion, no GOAT claim until a
+//! consumer exists.
 
 use crate::stale_residual::kl_logits;
 

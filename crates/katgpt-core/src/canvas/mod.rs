@@ -103,6 +103,19 @@
 //!
 //! See: `katgpt-rs/.research/398_Canvas_Engineering_Declared_Causal_Topology_Compiler.md`
 //! See: `katgpt-rs/.plans/419_canvas_schema_compiler.md`
+//!
+//! Canvas Schema Compiler — declared causal topology for attention masks
+//! (Plan 419, Research 398, Valdez *Canvas Engineering* July 2026). The
+//! modelless half: a typed CanvasSchema compiler that lowers a declared region
+//! layout + directed topology into an AttentionMaskSpec (consumable by
+//! AC-Prefix / VortexFlow), a LossWeightMask, and a can_reach / reachability
+//! primitive proving exact marginal independence for binary masks (absent
+//! edge ⟹ no influence, by construction). Plus a transfer_distance semantic-
+//! type compatibility scalar. Pure structure compilation, zero gradient
+//! descent. STAYS OPT-IN — G1–G6 GOAT gates ALL PASS (Bench 419, 2026-07-09);
+//! not promoted to default because the fusion PoC resolved inconclusively
+//! (Issue 043, removed) and the primitive's constituents are already default-on
+//! with runtime consumers.
 
 pub mod mask;
 pub mod reachability;

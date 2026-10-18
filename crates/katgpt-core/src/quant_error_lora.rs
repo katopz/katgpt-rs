@@ -43,6 +43,12 @@
 //! (LLM weights, future game networks) where the error manifold is genuinely
 //! low-rank. The PoC ([`Issue 565`](../../../.issues/565_quant_error_lora_poc.md))
 //! tests whether it helps on the 105K-param Moka network (predicted: FAIL).
+//!
+//! Issue 565 / Research 463: Quantization-Error Compensating Reader-LoRA —
+//! deterministically-constructed low-rank (weight-space SVD, output-space
+//! data-aware SVD) or sparse (top-K COO bypass) correction for quantized
+//! weight matrices. Pure modelless (closed-form SVD / partial-sort). Gated on
+//! subspace_phase_gate for the thin SVD machinery (Plan 301).
 
 use crate::subspace_phase_gate::{SvdResultScratch, SvdScratch, thin_svd_into};
 

@@ -31,6 +31,17 @@
 //! - Plan 312 — open-primitive spec
 //! - Research 294 — math + prior-art table
 //! - Plan 301 — substrate (`jacobian_svd_at`, [`JacobianSvdScratch`])
+//!
+//! Viable Manifold Graph — discrete safe-manifold navigation primitive.
+//! Distillation of arXiv:2206.00106 (González-Duque et al., *Mario Plays on a
+//! Manifold*, 2022). Generic over any smooth map `f: R^n → R^m` (closure) and
+//! a viability predicate `V(z)`. Computes the pullback volume field
+//! `log det(J_f^T J_f)` (via Plan 301's `jacobian_svd_at`), filters a latent
+//! sample to a discrete safe-manifold subgraph, and runs A* / random-walk
+//! navigation that stays inside the viable set by construction. Game / shard /
+//! chain wiring lives in riir-ai (R154). DEFAULT-ON (Plan 312 Phase 5,
+//! 2026-06-24): G1-G7 PASS + perf bench PASS (CSR adjacency, manifold_random_walk
+//! 7.10 ns/step).
 
 use crate::subspace_phase_gate::{JacobianSvdScratch, jacobian_svd_at};
 use std::collections::BinaryHeap;

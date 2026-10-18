@@ -44,6 +44,12 @@
 //! not the axes. See the repo `AGENTS.md` sync-boundary rule.
 //!
 //! Feature-gated behind `#[cfg(feature = "zone_affective_manifold")]`.
+//!
+//! Zone Affective Manifold — crowd-scale PCA via power iteration + deflation
+//! on the (N, D) crowd-activation covariance (Issue 001). Top-k principal
+//! directions ("zone mood axes") + per-NPC projections. Rayon-parallel for
+//! N > parallel_threshold, cold-start identity fallback for small crowds,
+//! sign-fixed for temporal continuity. Pure modelless. Opt-in until G1-G6 pass.
 
 use crate::simd;
 use rayon::prelude::*;

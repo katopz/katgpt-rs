@@ -41,6 +41,12 @@
 //! (capacity reused across calls — the G4 zero-alloc contract once warm).
 //! Non-finite inputs propagate as NaN rather than being silently clamped: a
 //! diverged loop must read as diverged.
+//!
+//! Issue 898 — KL effective depth probe (arXiv:2609.19107, Research 592):
+//! offline logit-lens KL profile, effective depth, write-fraction spectrum,
+//! loop flatness, executed-depth histogram and the holdout threshold
+//! calibration for the looped runtime's hand-tuned depth knobs. Pure
+//! functions over caller slices; fed by `LoopDeepRun::capture_logits`.
 
 /// `ln Σ exp(x_i)` in f64 with max-shift. NaN if any input is non-finite.
 #[inline]

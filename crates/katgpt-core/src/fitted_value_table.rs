@@ -46,6 +46,14 @@
 //! - P3 [`VReadPath::FullCache`] copies the stored V bit-identically.
 //!
 //! All hot-path functions are zero-allocation over caller buffers (G4).
+//!
+//! Fitted token-value tables (Issue 883 P1–P3 / Research 587) — the frozen
+//! per-(layer, token) table product of the P0 calibration substrate and its
+//! three consumers: P1 token-mean-removed V quant over ANY
+//! `QuantizedKVCache` (`MeanRemovedValueCache`), P2 fitted K=V+ retrofit
+//! (`v_from_k_plus`, λ=0 bit-identical to V:=K), P3 V-cache halving by
+//! reconstruction from the cached post-RoPE K (`fitted_v_reconstruct`).
+//! Opt-in (`fitted_value_tables`).
 
 use crate::fitted_anchor_table::LayeredVkCalibration;
 use crate::types::QuantizedKVCache;

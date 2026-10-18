@@ -39,6 +39,11 @@
 //!
 //! Zero-allocation by construction: every function operates on
 //! caller-owned buffers; nothing in this module allocates.
+//!
+//! Issue 837 / riir-ai Research 359 — consumption-weight evidence tripwire
+//! (D-SCAN transliteration): σ-gate metrics + Kendall τ + split-conformal
+//! benign-quantile threshold. Measured verdict (riir-ai Bench 832): the rank-
+//! inversion channel discriminates, entropy is composition-coupled telemetry.
 
 /// Default Kendall tie tolerance. Filler σ-gates pin at exactly `σ(0) = 0.5`
 /// (and numerically-tied gates differ by ~1e-7), so ties must be excluded
