@@ -6,7 +6,7 @@
 
 **Concurrent-landing reconciliation (Issue-825 class, resolved by union):** while this run was in flight, the 4090-idle session landed `61fc36f` (bounded HybridCache KV — a measured >100 GiB OOM on the unbounded ctor — plus their own B929_CHAT framing variant, bare scaffold, think-then-answer at ~384-tok budgets) and this session's `d633fbb` (clean-state continuation + no-think chat posture + B929_SKIP) stranded on a diverged local develop. Reconciled as **`69f520e`** (the union, pushed fast-forward from a detached `61fc36f` worktree): bounded KV + clean-state continuation + the no-think posture as `B929_CHAT=1`. **The in-flight run's instrument == the union's chat posture byte-for-byte in behavior** (same template string; the KV bound is allocation-only, zero numerical effect) — its numbers record for the union instrument. The bare-scaffold/think-budget variant stays recorded in the issue as the alternative elicitation (~420 s/q), not this run's posture.
 
-**Date:** 2026-10-11 · **Issue:** [929](../.issues/929_loop_alignment_probe_decode_reinject_poc.md) · **Research:** 614 (DiscoLoop, arXiv:2607.00341)
+**Date:** 2026-10-11 · **Issue:** `929` · **Research:** 614 (DiscoLoop, arXiv:2607.00341)
 **Runner:** `riir-infer` bin `issue929_bonsai2_loop_probe` (`--features issue929_bonsai2_probe`), detached worktree at riir-infer `32fd838` + two instrument repairs recorded below (sibling WIP in the main checkout excluded by construction — the measurement tree is HEAD + the bin edit only)
 **Box:** M3 Max, AC power, 16 cores; concurrent sibling cargo sessions present (load 4–8 of 16) — decode-QUALITY measurement (argmax identities + cosine readouts + AUROC), latency-free by construction; wall time disclosed anyway.
 

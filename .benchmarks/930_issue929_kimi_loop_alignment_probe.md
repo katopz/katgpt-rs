@@ -1,6 +1,6 @@
 # Bench 930 — Issue 929 T1.2 second independent checkpoint run (n=180 fixture, two α arms) — CONCURS with Bench 927: UNDECIDABLE
 
-**Date:** 2026-10-10 · **Issue:** [929](../.issues/929_loop_alignment_probe_decode_reinject_poc.md) · **Research:** 614 (DiscoLoop, arXiv:2607.00341)
+**Date:** 2026-10-10 · **Issue:** `929` · **Research:** 614 (DiscoLoop, arXiv:2607.00341)
 **Runner:** `examples/issue929_kimi_loop_alignment_probe.rs` (`--features kimi_k3_loader,loop_alignment_probe`)
 **Companion record:** [`.benchmarks/927_issue929_loop_probe_checkpoint_run.md`](927_issue929_loop_probe_checkpoint_run.md) — an INDEPENDENT session's runner on the same checkpoint, same day, same UNDECIDABLE verdict. Two instruments, one answer: the label axis is dead on kimi-k3-0.40B.
 **Box:** M3 Max, AC power, census load present (Issue 920 T1 capture, nice-19) — decode-QUALITY measurement (argmax identities + cosine readouts), latency-free by construction; wall time disclosed anyway.

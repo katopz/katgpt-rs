@@ -1,6 +1,6 @@
 # Bench 927 — Issue 929 T1.2 checkpoint run: the loop-alignment probe on the real Kimi-K3-0.40B (verdict: UNDECIDABLE — 0% task accuracy at every elicitation posture)
 
-**Status:** COMPLETE — instrument landed, checkpoint leg executed, verdict UNDECIDABLE (not a T1.4 kill: AUROC is undefined, never computed). T1.3/T1.4 stay armed on a capable checkpoint. [Issue 929](../.issues/929_loop_alignment_probe_decode_reinject_poc.md) · Research 614 · arXiv:2607.00341.
+**Status:** COMPLETE — instrument landed, checkpoint leg executed, verdict UNDECIDABLE (not a T1.4 kill: AUROC is undefined, never computed). T1.3/T1.4 stay armed on a capable checkpoint. `Issue 929` · Research 614 · arXiv:2607.00341.
 **Date:** 2026-10-10 · **Box:** shikuwa 4090/13700K, CPU-only single-thread run (safe beside the plan437 GPU trainer — no GPU exclusivity consumed) · **Commit:** this one.
 
 ## What landed
