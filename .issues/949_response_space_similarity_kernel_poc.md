@@ -10,7 +10,8 @@ Extracted from [Research 625](../.research/625_Path_Kernel_Exemplar_Superpositio
 
 Unclaimed — open for any session; no `Claimed:` lease is held (2026-10-19, distill session).
 
-**Claimed:** zed-m3-idle/M3 idle loop, 1792437452, expires 2026-10-22T02:17+07 — implementing T1–T9 (T10 stays deferred) this session; push is the arbiter.
+**Claimed:** zed-m3-idle/M3 idle loop, 1792437452, expires 2026-10-22T02:17+07
+Implementing T1–T9 (T10 stays deferred) this session; push is the arbiter.
 
 ## Tasks
 
