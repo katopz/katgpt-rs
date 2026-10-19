@@ -4,7 +4,7 @@
 
 > **Source:** "Looped Reasoning Finishes Earlier Than You Think" — Sumin Park, T. Konstantin Rusch (ELLIS Tübingen / MPI / Liquid AI), [arXiv:2610.18174](https://arxiv.org/abs/2610.18174), 2026-10-13. Code: github.com/camail-official/Quotient_Recurrent_Reasoner_QRR — MIT, pinned `3e3c9ebecad534296482316e1c39f1063f0a6a32` (`.raw/qrr` clone, full-tree grep done, removed post-distill).
 > **Date:** 2026, distilled 2026-10-16.
-> **Related Research:** 620 (Mamba-3 oscillatory dynamics — the dominant cousin on the oscillation axis), 529 (HRM dissection — convergence cadence; "refinement is rotational, not radial"), 035 (Attractor Models / the FPRM line + Issue 717 damping knob), 079 (EqR), 049 (PTRM), 169/371 (oscillation architecture cousins), 051 (Deep Manifold fixed points).
+> **Related Research:** **626 (InfiLoop — loop-native attention residuals; the NEXT paper in this exact lineage: carry-last overwriting → content-gated N/D summary; supplies the content gate this note's magnitude-only commit law lacked)**, 620 (Mamba-3 oscillatory dynamics — the dominant cousin on the oscillation axis), 529 (HRM dissection — convergence cadence; "refinement is rotational, not radial"), 035 (Attractor Models / the FPRM line + Issue 717 damping knob), 079 (EqR), 049 (PTRM), 169/371 (oscillation architecture cousins), 051 (Deep Manifold fixed points).
 > **Related Issues/Plans:** katgpt-rs Issue 939 (`phase_belief` — landed 2026-10-16, the fusion target), Issue 717 (damping/tangential knobs for `forward_looped` deep runs), riir-train Plan 459 (oscillatory GDN damping probe), Plan 373 (late-state looped solver / the Anderson-divergence negative).
 > **Classification:** Public.
 
