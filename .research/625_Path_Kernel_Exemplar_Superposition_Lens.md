@@ -115,3 +115,27 @@ G1: PSD on randomized fixtures (Gram eigenvalues ≥ −ε·‖G‖); the linear
 **MOAT gate (katgpt-rs):** in scope — fundamental-principle lens + open-primitive candidate (`path_kernel_sim` is generic math, no game/chain/shard IP); public-safe. The game-side consumer (attribution receipts) and the healer consumer (function-space rule dedup) are recorded as consumers of the open primitive, not separate moats.
 
 **Files:** this note; `katgpt-rs/.issues/949_response_space_similarity_kernel_poc.md`; cross-ref lines added to 624, 455 (this repo) and riir-ai 009 (committed file-scoped). riir-train issue 638: deferred file, content in §4.
+
+## 7. T9 verdict addendum (2026-10-20) — KEEP-OFF
+
+The issue-949 POC landed (feature `path_kernel_sim`, opt-in; Bench 947 is the
+record). The planted-class battery at release read a **THREE-WAY TIE**
+(fingerprint 1.000 · input-cosine 1.000 · output-vector 1.000) → T5d's own
+law fires: the tangent kernel adds nothing over gradient-free response
+probing at matched information → **promoted nowhere**.
+
+The structural reason generalizes the collapse caveat (§2): for any scorer,
+`Ŝ(x)` is a deterministic transform of `x`, so a full-rank probe battery
+(m ≥ p informative settings) is at-least-as-informative as the gradient
+direction — gradient information ⊆ local-response information. The two
+residual edge regimes (probe coverage m ≪ p; probe degradation via
+saturation) are consumption-side preconditions, priced out of POC scope.
+Re-open bar: a consumer whose probe budget is genuinely ≪ p (the heal-seat
+rule-dedup consumer would need its span-fingerprint dimension to
+substantially exceed its affordable probe count).
+
+The kernel itself is CORRECT (T5a proven the collapse identity, T1–T4 green,
+G2 79–132 ns/call, G4 zero-alloc) — it ships opt-in as a diagnostic
+instrument, never a default. This upgrades §6's GOAT-candidate tier to a
+measured **Pass-tier negative**: the lens produced a real primitive, the
+primitive's promotion hypothesis measured false.

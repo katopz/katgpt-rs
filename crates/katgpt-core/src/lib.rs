@@ -121,6 +121,9 @@ pub mod stats;
 #[cfg(any(feature = "probe_guidance", feature = "loop_guidance"))]
 pub mod contrast_combine;
 
+#[cfg(feature = "path_kernel_sim")]
+pub mod path_kernel_sim;
+
 #[cfg(feature = "rating")]
 pub mod rating;
 

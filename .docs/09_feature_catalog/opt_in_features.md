@@ -5906,3 +5906,39 @@ content-gated running mean `h_t = N_t/D_t` with the write gate
 - **OPT-IN, no promotion claim**: consumers unwired — riir-train Plan 465
   (the training track) consumes this kernel as substrate; game-side belief
   ticks are the downstream consumer posture.
+
+## 153. path_kernel_sim — Sensitivity-Fingerprint Response-Space Kernel (Issue 949 / Research 625, arXiv:2012.00152 path-kernel lens)
+
+The degenerate path kernel of an *authored, untrained* deterministic scorer:
+`K(x,x') = cos(∇_w f(x;w0), ∇_w f(x';w0))` over the scorer's `p ≤ 64` knobs —
+a training-free, positive-semidefinite response-space similarity. Closed-form
+gradient arm for sigmoid-gated scorers (`σ'` from the same `fast_sigmoid` the
+scorer evaluates with) + pinned-`h` central-difference arm for opaque ones
+(`dot_f32_ordered` sequential folds throughout, the Issue-940 law).
+Near-zero-norm fingerprints ABSTAIN (sentinel, never NaN). Diagnostics:
+Spearman ρ (input-distance vs fingerprint-similarity rank correlation) and
+PR / effective rank over the fingerprint Gram (eigendecomposed by the
+existing `linalg::symmetric_eig` substrate — no new solver).
+
+- **G1**: T5a linear-in-knobs oracle (kernel ≡ input-feature cosine — the
+  collapse caveat, proven), T5b amplitude-sine fixture, T1 zero-norm
+  abstain guard (stationary-point + NaN defense), T2 arms-agree,
+  T3 Spearman monotone/degenerate, T4 known-spectra PR/effective-rank.
+- **G2**: 79 ns/call `fingerprint_into` + 49 ns/pair `similarity` at p=64
+  (bars 5 µs / 1 µs — 63×/20× headroom), `black_box` args + receiver.
+- **G3**: purely additive feature — OFF posture compiles the module away;
+  default suite byte-identical by construction.
+- **G4**: zero-alloc hot path (`path_kernel_sim_g4_alloc`, counting
+  allocator, 100 warm pairs at p=64); the set-level
+  `gram_spectrum_into` diagnostic allocates a small order Vec by design.
+- **T9 VERDICT: KEEP-OFF (2026-10-20)** — the planted-class battery
+  (independent labels, pure-cross-term scorer, release posture) reads a
+  THREE-WAY TIE (fingerprint 1.000 · input-cosine 1.000 · output-vector
+  1.000). T5d's own law: a tie vs the output-vector baseline means the
+  tangent kernel adds nothing over gradient-free response probing at
+  matched information → promoted nowhere, ships opt-in as a diagnostic
+  instrument. Structural finding recorded: for any scorer, the fingerprint
+  is a deterministic transform of x, so a full-rank probe battery (m ≥ p
+  informative settings) is at-least-as-informative; the residual edge
+  regimes (probe coverage m ≪ p, probe degradation) are priced out of POC
+  scope. Re-open = a consumer whose probe budget is genuinely ≪ p.

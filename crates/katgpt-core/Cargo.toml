@@ -126,6 +126,21 @@ statrs = "0.17"
 
 [features]
 
+# path_kernel_sim (Issue 949, from Research 625 / arXiv:2012.00152 path-kernel
+# lens, 2026-10-20): the sensitivity-fingerprint response-space kernel —
+# K(x,x') = cos(∇_w f(x;w0), ∇_w f(x';w0)) over an authored scorer's p ≤ 64
+# knobs. Training-free, zero new deps; closed-form gradient arm for
+# sigmoid-gated scorers + pinned-h central-difference arm for opaque ones;
+# near-zero-norm fingerprints ABSTAIN (sentinel, never NaN). The collapse
+# caveat binds (issue header): for scorers linear in their knobs the
+# normalized kernel IS the input-feature cosine — signal claims live only in
+# the knob-nonlinear fixtures (T5c/T5d), and the GOAT verdict demotes to
+# keep-off unless the fingerprint beats BOTH the input-cosine and the
+# output-vector baselines there. All outputs LOCAL to the computing process
+# (POC scope — if ever routed into synced belief attribution, the Issue-940
+# determinism law binds).
+path_kernel_sim = []
+
 # probe_guidance (core half, Plan 617 T1.2): compiles the contrast_combine
 # module for the 865 probe-guidance consumer. Root `probe_guidance` forwards
 # here. No behavior of its own — the kernel is pure arithmetic.
@@ -1951,6 +1966,16 @@ required-features = ["factorized_action"]
 name = "bench_419_canvas_schema_goat"
 harness = false
 required-features = ["canvas_schema"]
+
+# Issue 949 — path_kernel_sim GOAT gate (T6 latency + T9 verdict).
+# G2: fingerprint ≤5 µs/call + similarity ≤1 µs/pair at the p=64 envelope
+# (black_box args + receiver). T9: the planted-class battery at release —
+# the verdict line is the record (a tie vs the output-vector baseline is a
+# KEEP-OFF per T5d's own law; the feature ships opt-in either way).
+[[bench]]
+name = "path_kernel_sim_goat"
+harness = false
+required-features = ["path_kernel_sim"]
 
 [[bench]]
 name = "flow_field_bench"
