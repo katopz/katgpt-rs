@@ -263,8 +263,8 @@ domain_latent = ["katgpt-core/domain_latent", "katgpt-pruners/domain_latent", "k
 bandit = ["katgpt-core/review_metrics", "katgpt-pruners/bandit", "katgpt-speculative/bandit"]  # Multi-armed bandit adaptive ScreeningPruner (Plan 030). Enables katgpt-core/review_metrics so the relocated ReviewMetrics (Plan 308 Phase 3 move from root) is re-exported at crate::pruners::review_metrics. Plan 387: flow_pruner moved to katgpt-speculative (local bandit switch — does NOT cycle because the leaf's bandit is a pure tracking flag, no katgpt-pruners dep). Not in `default` directly; transitively enabled via 30+ parents including `bandit_top_p`, `tes_loop`, `federation`, `dreamer`, `data_gate`, `curvature_alloc`, `nds_proxy`, `wealth_pruner`, `freq_bandit`, `sr2am_configurator`, `subterranean`, `collapse_aware_thinking` (Issue 181).
 delta_mem = ["bandit", "katgpt-pruners/delta_mem"]  # δ-Mem modelless distillation — associative bandit memory (Plan 053)
 g_zero = ["bandit", "katgpt-pruners/g_zero"]  # G-Zero self-play distillation — Hint-δ gated absorb + bandit (Plan 049)
-fdr_credit = ["katgpt-pruners/fdr_credit"]  # FDR family-calibrated partial credit (issue 948 T1, Terminal-RSI arXiv:2610.22192 extraction) — frozen per-family p90 divisors (nearest-rank index, tail-support freeze gate n−idx ≥ 10, BLAKE3-stamped table) + the calibrated absorb adapter on DeltaGatedAbsorbCompress (arm index = family key; unfrozen arms keep the raw hinge). Opt-in — landing only; the GOAT shape (G1 ordering + bootstrap stability, G4 alloc-free scoring) is per the issue, not yet run.
-spr_order = ["katgpt-pruners/spr_order"]  # SPR success-offset lexicographic ordering (issue 948 T2, Terminal-RSI extraction) — the strict class dominates: SprKey pair ordering canonical (total_cmp inside a class), mm_squash = P/(P+D′) in the overflow-free reciprocal form, fails soft (no panic/NaN on the ranking path), spr_reward single-float transport with the documented f32 rounding corner, mass_on_failures eval-board diagnostic. Opt-in — landing only.
+fdr_credit = ["katgpt-pruners/fdr_credit"]  # FDR family-calibrated partial credit (issue 948 T1, Terminal-RSI arXiv:2610.22192 extraction) — frozen per-family p90 divisors (nearest-rank index, tail-support freeze gate n−idx ≥ 10, BLAKE3-stamped table) + the calibrated absorb adapter on DeltaGatedAbsorbCompress (arm index = family key; unfrozen arms keep the raw hinge). GOAT RUN (bench_945, .benchmarks/945_issue948_fdr_spr_goat.md): G1a ordering dominance (Spearman 0.632 vs raw 0.364, 15/16 seeds), G1b premise, G2 bootstrap stability (CV 0.043/τ 0.878), G3 top-3 never-worse 16/16, G4 zero-alloc — PASS. Opt-in: dominance validated modellessly (synthetic adjudicated harness); no default promotion (consumers unwired; real-template corpus pending).
+spr_order = ["katgpt-pruners/spr_order"]  # SPR success-offset lexicographic ordering (issue 948 T2, Terminal-RSI extraction) — the strict class dominates: SprKey pair ordering canonical (total_cmp inside a class), mm_squash = P/(P+D′) in the overflow-free reciprocal form, fails soft (no panic/NaN on the ranking path), spr_reward single-float transport with the documented f32 rounding corner, mass_on_failures eval-board diagnostic. Paired read (bench_945): 0 selection flips on the harness corpus (byte-identical to incumbent), law violations 0 — the invariant ships as a drift guard. Opt-in — consumers unwired.
 dreamer = ["bandit", "katgpt-pruners/dreamer"]  # Auto-Dreamer offline memory consolidation scheduler (Plan 107, Research 69)
 sr2am_configurator = ["bandit", "g_zero", "katgpt-core/sr2am_configurator", "katgpt-speculative/sr2am_configurator", "katgpt-pruners/sr2am_configurator", "katgpt-forward/sr2am_configurator"]  # SR²AM Configurator Bandit — learned per-turn planning regulation (Plan 112, Research 076). Also forwards to katgpt-speculative so `build_inference_result` (now living there per Issue 013) populates InferenceResult.planning_decision / plan_horizon_used. Plan 394: also forwards to katgpt-forward so the moved step.rs's ConfiguratorBandit usage compiles.
 sia_feedback = ["sr2am_configurator", "katgpt-core/sia_feedback", "katgpt-pruners/sia_feedback"]  # FeedbackBandit — harness + weight co-evolution (Plan 163, Research 033)
@@ -3835,3 +3835,20 @@ required-features = ["state_option_scoring", "template_decode"]
 [[example]]
 name = "tetris_10_wire_ceiling"
 required-features = ["template_decode"]
+
+# Issue 948 T1 GOAT + T2 paired read (Terminal-RSI modelless extractions,
+# riir-train Research 477 / arXiv:2610.22192). Bench number 945 (the registry
+# number; the issue rides the stem). Synthetic controlled harness, bench_684
+# shape: family check-count scales span 20× while per-family true quality θ
+# is drawn independent of scale (stratified + shuffled) — raw-P arm ordering
+# is corrupted by scale, the FDR-calibrated arm recovers θ. G1a ordering gate
+# (Spearman vs θ, 16 seeds + win-rate), G1b bootstrap stability (divisor CV +
+# ordering Kendall tau, pinned bounds), G1c held-out discipline (freeze slice
+# ≠ scoring slice), G3 top-3 selection quality, G4 zero-alloc scoring
+# (CountingAllocator; bench_013 pattern) + T2's float-vs-pair paired read
+# (flips only within exact spr_reward tie groups — the drift guard).
+[[bench]]
+name = "bench_945_fdr_spr_goat"
+path = "benches/bench_945_fdr_spr_goat.rs"
+required-features = ["fdr_credit", "spr_order"]
+harness = false
