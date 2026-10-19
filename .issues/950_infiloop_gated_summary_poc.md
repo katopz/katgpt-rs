@@ -2,7 +2,7 @@
 
 **Status:** P1–P7 LANDED 2026-10-19 (GOAT ALL PASS, bench_946) — opt-in `gated_summary` in katgpt-pruners, no promotion claim (consumers unwired; riir-train Plan 465 consumes the kernel). P8 deferred until a consumer pull. Research 626 (arXiv:2610.11570, InfiLoop). Modelless track; training track is riir-train Plan 465.
 
-**Claimed:** ~~seal-fx-e2e-continuation (m3), 2026-10-20T10:30Z, expires 2026-10-22T10:30Z~~ — P1–P7 landed 2026-10-19, lease discharged
+**Claimed:** ~~seal-fx-e2e-continuation (m3), 2026-10-20T10:30Z, expires 2026-10-22T10:30Z~~ — P1–P7 landed 2026-10-19, lease discharged (line reworded 2026-10-20: the strikethrough form is unparseable by `claim_lease_check.py`, which wants the literal `**Claimed:** session, <epoch>, expires <ISO>` shape — history kept on a non-claim label)
 
 ## The primitive
 

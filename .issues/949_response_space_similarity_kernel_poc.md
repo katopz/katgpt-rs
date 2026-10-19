@@ -10,6 +10,8 @@ Extracted from [Research 625](../.research/625_Path_Kernel_Exemplar_Superpositio
 
 Unclaimed — open for any session; no `Claimed:` lease is held (2026-10-19, distill session).
 
+**Claimed:** zed-m3-idle/M3 idle loop, 1792437452, expires 2026-10-22T02:17+07 — implementing T1–T9 (T10 stays deferred) this session; push is the arbiter.
+
 ## Tasks
 
 - [ ] T1 `types.rs` — `SensitivityFingerprint` (p-dim, scratch-buffer API), `FingerprintKernel` config (knob set, `h`, normalization, fold rule); **zero-norm guard**: a near-zero-norm fingerprint (e.g. a frequency-knob scorer at its stationary points, where `∇_w sin(wx) = x·cos(wx) = 0`) abstains with a sentinel, NEVER NaN
