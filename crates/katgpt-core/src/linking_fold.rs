@@ -60,6 +60,7 @@
 //!   - linking_fold_fold     (hot-path |x−c| fold correction) — DEFAULT-ON
 //!   - linking_fold_detector (cold-path Algorithm-1 linking detector) — opt-in
 //!   - linking_fold          (umbrella = fold + detector) — opt-in
+//!
 //! The fold passes every GOAT gate modellessly and ships default-on; the
 //! detector's G2 budget is the audit-cadence-appropriate 500 ms @ n=2×200
 //! (Issue 050 Option A, resolved 2026-07-07) and it stays opt-in. The

@@ -72,8 +72,8 @@
 //! Plan 305 cognitive gating (Plan 305 gates learning compute; this gates
 //! movement compute) — they compose orthogonally, NOT overlap. Population is
 //! raw/synced; mobility/tier/cache_key are latent/local. DEFAULT-ON (Plan 351 Phase 3, 2026-06-29): GOAT PASS —
-//! G5a (Shannon entropy ≥+15% vs mean-agg) + G5b (≥50% compute saved on dense-dominated)
-//! + G5c (zero stale reads during stampede) all pass. No UQ claim — mobility is
+//! G5a (Shannon entropy ≥+15% vs mean-agg) + G5b (≥50% compute saved on dense-dominated) +
+//! G5c (zero stale reads during stampede) all pass. No UQ claim — mobility is
 //! a deterministic [0,1] weight, not a probability/interval/coverage.
 
 use crate::simd;

@@ -51,8 +51,8 @@
 //!
 //! Contrastive scope gate (Issue 674 / Research 493, arXiv:2608.13545
 //! LittleLearner): two-corpus log-odds table + Naive-Bayes log-LLR document
-//! scope score D(x) + epistemic haircut ĉ = c·sigmoid(−κ·D) + decline wiring
-//! + the paired OOS probe battery (Report-the-Floor extension). "A relevance
+//! scope score D(x) + epistemic haircut ĉ = c·sigmoid(−κ·D) + decline wiring +
+//! the paired OOS probe battery (Report-the-Floor extension). "A relevance
 //! check is not a scope check." DEFAULT-ON (2026-08-19) under the issue's own
 //! one-consumer T5 rule, satisfied by the riir-clippy ScopeModel adoption
 //! (Bench 669 / Bench 040: installed via with_scope_model, bit-identical

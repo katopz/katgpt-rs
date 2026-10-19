@@ -23,6 +23,7 @@
 //! Two features:
 //! - `triggered_injection` (default-ON after GOAT G3): sigmoid-thresholded inject/skip hot-path gate.
 //! - `faithfulness_probe` (opt-in, audit cadence): full intervention suite + perturbation + attribution.
+//!
 //! The module is compiled when EITHER feature is on; submodules are individually gated in `mod.rs`.
 
 // `types` and `gate` are always available when the module is compiled

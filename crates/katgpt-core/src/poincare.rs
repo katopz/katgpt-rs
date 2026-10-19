@@ -72,8 +72,8 @@
 //! Distillation of arXiv:2607.14228 (Chen et al., *SeeSE3: Emergence of 3D
 //! Space in Vision Features*, DeepMind, 15 Jul 2026). Research 449 ran the
 //! novelty gate (4/4 Super-GOAT). The open primitive ships a frozen
-//! `PoincareAdapter` Pod + the closed-form navigator `poincare_navigate_into`
-//! + the multi-step variant + an offline closed-form ridge fit. Private game-
+//! `PoincareAdapter` Pod + the closed-form navigator `poincare_navigate_into` +
+//! the multi-step variant + an offline closed-form ridge fit. Private game-
 //! runtime selling point (NPC imagination) lives in riir-ai/.research/319.
 //!
 //! Pure modelless (closed-form PCA + ridge + SVD pseudoinverse; no gradient
