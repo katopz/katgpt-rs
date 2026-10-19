@@ -78,6 +78,14 @@ fdr_credit = ["g_zero"]
 # the strict class dominates; pair ordering canonical, float form transport.
 spr_order = []
 
+# InfiLoop gated N/D running summary (issue 950, arXiv:2610.11570 modelless
+# extraction): β-decayed gated running mean, step-view sigmoid gate
+# (never softmax), t=1 edge pinned, β∈(0,1) refused loud; β=1 + fixed-w is
+# bit-for-bit oracle-compatible with posterior::PrecisionVector (P4).
+# GOAT bench_946 (.benchmarks/946_issue950_gated_summary_goat.md).
+# OPT-IN — consumers unwired (riir-train Plan 465 / game belief ticks).
+gated_summary = ["posterior_evolution"]
+
 dreamer = ["bandit"]
 ropd_rubric = ["bandit"]
 subterranean = ["bandit"]

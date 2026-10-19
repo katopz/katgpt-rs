@@ -5860,3 +5860,49 @@ issue's GOAT shapes are named, not yet run).
   both need corpus/bench windows; T3 (decay-free bounded-credit reshape vs
   the shipped 0.7 decay) is a pinned-posture bench campaign, deferred with
   the issue.
+
+## 152. gated_summary — InfiLoop Gated N/D Running Summary (Issue 950 / riir-train Plan 465 track, Research 626, arXiv:2610.11570)
+
+The loop-native residual of InfiLoop, stripped of training: a β-decayed,
+content-gated running mean `h_t = N_t/D_t` with the write gate
+`e_t = exp(clip(s_t, ±8))` and the step view `γ_t = σ(s_t − ln(β·D))`
+(sigmoid, never softmax). `GatedSummary<const D>` in
+`crates/katgpt-pruners/src/posterior/gated_summary.rs`; implies
+`posterior_evolution` (it lives in that leaf, beside its oracle).
+
+- **P4 oracle — the compatibility law**: β=1 + fixed `w=1` reproduces
+  `posterior::PrecisionVector`'s mean AND precision trajectory
+  **bit-for-bit** over a seeded 512-step stream (same nudged-mean storage,
+  same in-order ops — a tolerance oracle would hide the ordering
+  divergence it exists to catch). `PrecisionVector` itself is untouched.
+- **Pinned numerics**: β ∈ (0,1) refused loud at construction (β=1 is the
+  named `new_oracle()` posture only — the paper's ablation marks β=1 and
+  β>1 as broken-decay regimes); score clip ±8 is load-bearing (unclipped
+  `exp` overflows and poisons the mass — must-fail-when-broken test);
+  t=1 edge pinned (mass 0 ⇒ γ = 1 exactly — the first solid write is
+  accepted fully, never left to log-domain luck); zero-alloc, f32,
+  byte-deterministic.
+- **Properties by construction (tested)**: convex hull `‖h_t‖ ≤ max‖z_i‖`
+  (adversarial single-dominant candidates included); never decays to zero
+  on a rejected-write stream (leaky-EMA differential); sigmoid/ratio gate
+  identity within f32.
+- **GOAT — bench_946, four-control battery + leaky-EMA/carry-last
+  externals, two-axis protocol** (`.benchmarks/946_issue950_gated_summary_goat.md`):
+  the full posture is the only retention×adaptation Pareto arm — mid-burst
+  retention 0.060 vs PV 0.084 / leaky 0.894 / carry-last 2.568 (content-class,
+  3.2× tax vs content-only's 0.019, inside the pinned 4× bound), while its
+  post-jump adaptation error 0.0355 beats content-only (1.073) and PV
+  (0.739) by 21–30×. Per-delta: the content gate owns retention, the decay
+  axis owns adaptation. G2 ns/write 31/72/457 at D=8/64/512 (--release,
+  black_box chain defense); G4 zero-alloc (counting allocator, 10k writes);
+  G3 = the P4 oracle + an additive-only landing.
+- **Scope findings recorded**: (1) the decay arm's forget horizon — a
+  fully-rejected stretch decays the mass to the rejection floor
+  `e_adv/(1−β)` in ~10 writes at β=0.55, softening the gate (the first
+  measured run's 32-write starvation bursts dragged it; the protocol was
+  resized to the paper's per-write shape and the limit recorded);
+  (2) decay-only (no gate) is no defense at all — fixed-w decayed mass
+  equilibrates at `w/(1−β)`, so every write lands at gain ~0.31 mid-burst.
+- **OPT-IN, no promotion claim**: consumers unwired — riir-train Plan 465
+  (the training track) consumes this kernel as substrate; game-side belief
+  ticks are the downstream consumer posture.

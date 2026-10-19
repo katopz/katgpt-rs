@@ -13,6 +13,13 @@ pub mod surprise;
 pub mod types;
 pub mod wrapper;
 
+#[cfg(feature = "gated_summary")]
+pub mod gated_summary;
+
+#[cfg(feature = "gated_summary")]
+pub use gated_summary::{
+    DEFAULT_BETA, GatedSummary, SCORE_CLIP, gamma_ratio, gamma_step_view, score_weight,
+};
 pub use policy::{LifecycleAction, PrecisionPolicy, PrecisionPolicyConfig};
 pub use precision::PrecisionVector;
 pub use surprise::SurpriseComputer;

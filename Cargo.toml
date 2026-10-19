@@ -265,6 +265,7 @@ delta_mem = ["bandit", "katgpt-pruners/delta_mem"]  # δ-Mem modelless distillat
 g_zero = ["bandit", "katgpt-pruners/g_zero"]  # G-Zero self-play distillation — Hint-δ gated absorb + bandit (Plan 049)
 fdr_credit = ["katgpt-pruners/fdr_credit"]  # FDR family-calibrated partial credit (issue 948 T1, Terminal-RSI arXiv:2610.22192 extraction) — frozen per-family p90 divisors (nearest-rank index, tail-support freeze gate n−idx ≥ 10, BLAKE3-stamped table) + the calibrated absorb adapter on DeltaGatedAbsorbCompress (arm index = family key; unfrozen arms keep the raw hinge). GOAT RUN (bench_945, .benchmarks/945_issue948_fdr_spr_goat.md): G1a ordering dominance (Spearman 0.632 vs raw 0.364, 15/16 seeds), G1b premise, G2 bootstrap stability (CV 0.043/τ 0.878), G3 top-3 never-worse 16/16, G4 zero-alloc — PASS. Opt-in: dominance validated modellessly (synthetic adjudicated harness); no default promotion (consumers unwired; real-template corpus pending).
 spr_order = ["katgpt-pruners/spr_order"]  # SPR success-offset lexicographic ordering (issue 948 T2, Terminal-RSI extraction) — the strict class dominates: SprKey pair ordering canonical (total_cmp inside a class), mm_squash = P/(P+D′) in the overflow-free reciprocal form, fails soft (no panic/NaN on the ranking path), spr_reward single-float transport with the documented f32 rounding corner, mass_on_failures eval-board diagnostic. Paired read (bench_945): 0 selection flips on the harness corpus (byte-identical to incumbent), law violations 0 — the invariant ships as a drift guard. Opt-in — consumers unwired.
+gated_summary = ["katgpt-pruners/gated_summary"]  # InfiLoop gated N/D running summary (issue 950, arXiv:2610.11570 modelless extraction, Research 626) — β-decayed gated running mean `h_t = N_t/D_t` with the content gate `e_t = exp(clip(s_t,±8))`, the step view `γ_t = σ(s_t − ln(β·D))` (sigmoid, never softmax), the t=1 edge pinned (D=0 ⇒ γ=1 exact), β∈(0,1) refused loud at construction, zero-alloc O(D)/write, and the P4 oracle: β=1 + fixed-w reproduces posterior::PrecisionVector's mean+precision BIT-FOR-BIT (same nudged-mean storage, same op order). GOAT bench_946: four-control battery (PrecisionVector posture / decay-only / content-only / full) + leaky-EMA and carry-last externals — full posture wins every gate. Opt-in — consumers unwired (riir-train Plan 465 consumes the kernel; game belief ticks are the downstream posture).
 dreamer = ["bandit", "katgpt-pruners/dreamer"]  # Auto-Dreamer offline memory consolidation scheduler (Plan 107, Research 69)
 sr2am_configurator = ["bandit", "g_zero", "katgpt-core/sr2am_configurator", "katgpt-speculative/sr2am_configurator", "katgpt-pruners/sr2am_configurator", "katgpt-forward/sr2am_configurator"]  # SR²AM Configurator Bandit — learned per-turn planning regulation (Plan 112, Research 076). Also forwards to katgpt-speculative so `build_inference_result` (now living there per Issue 013) populates InferenceResult.planning_decision / plan_horizon_used. Plan 394: also forwards to katgpt-forward so the moved step.rs's ConfiguratorBandit usage compiles.
 sia_feedback = ["sr2am_configurator", "katgpt-core/sia_feedback", "katgpt-pruners/sia_feedback"]  # FeedbackBandit — harness + weight co-evolution (Plan 163, Research 033)
@@ -3851,4 +3852,17 @@ required-features = ["template_decode"]
 name = "bench_945_fdr_spr_goat"
 path = "benches/bench_945_fdr_spr_goat.rs"
 required-features = ["fdr_credit", "spr_order"]
+harness = false
+
+# Issue 950 T7 GOAT — InfiLoop gated N/D summary (arXiv:2610.11570 modelless
+# extraction). Four-control battery (PrecisionVector posture / decay-only /
+# content-only / full) + leaky-EMA and carry-last externals over an
+# overwrite-burst protocol: the full posture must hold the summary where
+# every control flips or drifts (paper Fig. 5 shape, modelless). G2 ns/write
+# at D=8/64/512 (--release) with black_box chain defense (timed_region law);
+# G4 zero-alloc write loop (CountingAllocator, bench_013 pattern).
+[[bench]]
+name = "bench_946_infiloop_gated_summary_goat"
+path = "benches/bench_946_infiloop_gated_summary_goat.rs"
+required-features = ["gated_summary"]
 harness = false
