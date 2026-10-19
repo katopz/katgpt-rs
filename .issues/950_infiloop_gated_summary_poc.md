@@ -2,7 +2,7 @@
 
 **Status:** Open — unclaimed. Research 626 (arXiv:2610.11570, InfiLoop). Modelless track; training track is riir-train Plan 465.
 
-**Claimed:** — (append `**Claimed:** <session>, <epoch>, expires <ISO-UTC>` under this line before implementing; 48 h expiry)
+**Claimed:** seal-fx-e2e-continuation (m3), 2026-10-20T10:30Z, expires 2026-10-22T10:30Z
 
 ## The primitive
 
