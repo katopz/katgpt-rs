@@ -507,6 +507,35 @@ impl SpanPointer {
         }
     }
 
+    /// The Bench-950 round-3 GOAT posture in one call: [`Self::best_span`]
+    /// LOCALIZES (the pointer's containment edge), then [`snap_longest`]
+    /// RESOLVES the boundaries against the query's own schema vocabulary
+    /// (`query.text` first, then `query.aliases` in order — the same inputs
+    /// the window was scored with). No qualifying surface inside the window
+    /// → the raw window stands (the measured fallback law: the hybrid stays
+    /// pointer-derived). The score rides along unchanged — the snap is a
+    /// boundary refinement, not a re-rank.
+    ///
+    /// `text` is the SAME string the pointer was constructed from (the
+    /// pointer keeps only the lowercased token buffer, so the original —
+    /// whose byte offsets the windows index — must come from the caller).
+    pub fn best_snapped_span<'a>(&self, text: &str, query: &SpanQuery<'a>) -> Option<SpanScore> {
+        let best = self.best_span(query)?;
+        let snapped = snap_longest(
+            text,
+            (best.start, best.end),
+            std::iter::once(query.text).chain(query.aliases.iter().copied()),
+        );
+        Some(match snapped {
+            Some((start, end)) => SpanScore {
+                start,
+                end,
+                score: best.score,
+            },
+            None => best,
+        })
+    }
+
     /// Collect the lowercased terms of `text` into `out` at `*filled`,
     /// deduping against already-collected slots (an alias duplicate flags
     /// the existing slot instead of adding one). Terms past the slot cap or
@@ -731,6 +760,50 @@ fn sanitize_f32(v: f32, fallback: f32) -> f32 {
 fn rank_before(a: &SpanScore, b: &SpanScore) -> bool {
     a.score > b.score
         || (a.score == b.score && (a.start < b.start || (a.start == b.start && a.end < b.end)))
+}
+
+/// The Bench-950 round-3 boundary resolver (the GOAT-winning hybrid's
+/// second half): among `surfaces`, the LONGEST occurrence fully inside
+/// `window` wins; ties break by list order (strictly-greater length
+/// replaces, so the earlier surface keeps a tie); per surface the leftmost
+/// occurrence. The standard gazetteer longest-match law, constrained to
+/// what the pointer fully saw (`ws <= os && oe <= we`). Returns `None` when
+/// no surface occurs inside — the caller falls back to the window itself
+/// (the hybrid stays pointer-derived; it is NOT a gazetteer ensemble).
+///
+/// Zero-allocation, deterministic, config-independent — a pure text
+/// function over byte offsets. `window` bounds must land on `text` char
+/// boundaries (asserted debug; pointer windows and word-trimmed spans are
+/// token-aligned by construction). Empty surfaces never win (length 0
+/// never beats the 0 seed).
+pub fn snap_longest<'s, I>(text: &str, window: (u32, u32), surfaces: I) -> Option<(u32, u32)>
+where
+    I: IntoIterator<Item = &'s str>,
+{
+    let (ws, we) = (window.0 as usize, window.1 as usize);
+    if ws >= we || we > text.len() {
+        return None;
+    }
+    debug_assert!(
+        text.is_char_boundary(ws) && text.is_char_boundary(we),
+        "snap_longest window bounds must land on char boundaries"
+    );
+    let hay = &text[ws..we];
+    let mut best: Option<(u32, u32)> = None;
+    let mut best_len = 0usize;
+    for surface in surfaces {
+        // Leftmost occurrence of this surface inside the window — a match
+        // within `hay` is fully inside by construction.
+        if let Some((off, part)) = hay.match_indices(surface).next() {
+            let len = part.len();
+            if len > best_len {
+                best_len = len;
+                let s = ws + off;
+                best = Some((s as u32, (s + len) as u32));
+            }
+        }
+    }
+    best
 }
 
 /// Fixed-size top-k insertion into a buffer kept sorted by [`rank_before`].
@@ -1216,6 +1289,155 @@ mod tests {
                 "best_span allocated on the hot path"
             );
             assert!(best.is_some());
+        }
+    }
+
+    // ---- Bench-950 round 3: the boundary resolver -------------------------
+
+    #[test]
+    fn snap_picks_the_longest_fully_inside_surface() {
+        let text = "the best movie ever made";
+        let window = (4u32, 19u32);
+        assert_eq!(&text[4..19], "best movie ever");
+        let got = snap_longest(text, window, ["best", "movie", "best movie"]);
+        assert_eq!(got, Some((4, 14)));
+        assert_eq!(&text[4..14], "best movie");
+    }
+
+    #[test]
+    fn snap_ties_break_by_list_order() {
+        let text = "alpha beta gamma";
+        let window = (0u32, 16u32);
+        // Longest-match first: a longer surface wins regardless of order.
+        assert_eq!(
+            snap_longest(text, window, ["beta", "alpha"]),
+            Some((0, 5)),
+            "alpha (5 B) beats beta (4 B) — length dominates list order"
+        );
+        // Genuinely equal-length surfaces (alpha/gamma, both 5 B): the
+        // earlier-listed one wins (strictly-greater replacement — the
+        // gazetteer law).
+        assert_eq!(
+            snap_longest(text, window, ["gamma", "alpha"]),
+            Some((11, 16))
+        );
+        assert_eq!(snap_longest(text, window, ["alpha", "gamma"]), Some((0, 5)));
+        // The same surface twice (canonical duplicated in the alias list):
+        // the leftmost occurrence wins.
+        assert_eq!(
+            snap_longest(text, window, ["gamma", "gamma"]),
+            Some((11, 16))
+        );
+    }
+
+    #[test]
+    fn snap_requires_the_occurrence_inside_the_window() {
+        let text = "watch the marx brothers film";
+        assert_eq!(&text[6..14], "the marx");
+        assert_eq!(
+            snap_longest(text, (6, 14), ["marx brothers"]),
+            None,
+            "an occurrence crossing the window edge must not qualify"
+        );
+        assert_eq!(snap_longest(text, (6, 14), ["marx"]), Some((10, 14)));
+    }
+
+    #[test]
+    fn snap_rejects_empty_out_of_range_and_unaligned_windows() {
+        let text = "alpha beta";
+        assert_eq!(snap_longest(text, (5, 5), ["alpha"]), None);
+        assert_eq!(snap_longest(text, (6, 4), ["alpha"]), None);
+        assert_eq!(snap_longest(text, (0, 99), ["alpha"]), None);
+    }
+
+    #[test]
+    fn snap_multibyte_window_slices_exactly() {
+        let text = "Le café et 中文字 ok";
+        // é is 2 bytes: "café" = bytes 3..8.
+        assert_eq!(&text[3..8], "café");
+        assert_eq!(snap_longest(text, (3, 8), ["café"]), Some((3, 8)));
+        // 中文字 = bytes 12..21 (3 chars × 3 B); 文字 = 15..18.
+        assert_eq!(&text[12..21], "中文字");
+        assert_eq!(
+            snap_longest(text, (12, 21), ["文字", "中文字"]),
+            Some((12, 21)),
+            "the longer surface wins even when a shorter one is listed first"
+        );
+    }
+
+    #[test]
+    fn snap_none_inside_is_none() {
+        let text = "the marx brothers film";
+        assert_eq!(snap_longest(text, (0, 6), ["marx"]), None);
+    }
+
+    #[test]
+    fn best_snapped_span_matches_the_snap_contract_end_to_end() {
+        let state = "i love science fiction movies a lot and own the fiction book too";
+        let sp = SpanPointer::new(state, SpanConfig::default());
+        let q = SpanQuery {
+            text: "fiction",
+            aliases: &["science fiction"],
+        };
+        let best = sp.best_span(&q).expect("verbatim mention scores");
+        let snapped = sp
+            .best_snapped_span(state, &q)
+            .expect("the composition keeps an answer whenever the pointer has one");
+        let expected = snap_longest(
+            state,
+            (best.start, best.end),
+            std::iter::once("fiction").chain(["science fiction"]),
+        )
+        .unwrap_or((best.start, best.end));
+        assert_eq!((snapped.start, snapped.end), expected);
+        assert_eq!(snapped.score, best.score, "the snap never re-ranks");
+        // A boundary refinement: the snapped span is never wider than the
+        // window it refined (snap returns a fully-inside occurrence or the
+        // window itself).
+        assert!(snapped.start >= best.start && snapped.end <= best.end);
+    }
+
+    #[test]
+    fn best_snapped_span_propagates_no_answer() {
+        let sp = SpanPointer::new("alpha beta gamma", SpanConfig::default());
+        assert!(
+            sp.best_snapped_span("alpha beta gamma", &SpanQuery::new("!!!"))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn snap_hot_path_is_zero_alloc() {
+        let state =
+            "Acme Corporation is based in Seattle. The vendor is Globex and ships worldwide.";
+        let sp = SpanPointer::new(state, SpanConfig::default());
+        let q = SpanQuery {
+            text: "globex vendor",
+            aliases: &["corp", "Globex"],
+        };
+
+        // Warmup outside the measured window.
+        let _ = sp.best_snapped_span(state, &q);
+
+        {
+            let _window = MeasuringWindow::enter();
+            ALLOC_COUNT.store(0, Ordering::Relaxed);
+            let snapped = sp.best_snapped_span(state, &q);
+            assert_eq!(
+                ALLOC_COUNT.load(Ordering::Relaxed),
+                0,
+                "best_snapped_span allocated on the hot path"
+            );
+            assert!(snapped.is_some());
+
+            ALLOC_COUNT.store(0, Ordering::Relaxed);
+            let hit = snap_longest(state, (0, state.len() as u32), ["Globex", "Corporation"]);
+            assert_eq!(
+                ALLOC_COUNT.load(Ordering::Relaxed),
+                0,
+                "snap_longest allocated on the hot path"
+            );
+            assert!(hit.is_some());
         }
     }
 }

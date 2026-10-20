@@ -69,11 +69,41 @@
 //! broken harness), determinism (the scoring pass runs twice; the aggregate
 //! checksums must be identical and nonzero), and the measured ratchets
 //! (downward-only, pinned from the measured record — a regression past them
-//! reds). The GOAT relation is ASSERTED as a standing gate: pointer(gate) >
-//! floor+alias(longest) on choices-class — that inequality is the promotion
-//! basis, so a scorer change that voids it reds here and forces
-//! re-adjudication (the full tables live in
+//! reds). The GOAT relation is ASSERTED as a standing gate for the ROUND-3
+//! hybrid (`pointer+snap` > floor+alias(longest) on choices-class — the
+//! promotion basis, so a scorer change that voids it reds here and forces
+//! re-adjudication); the RAW pointer's round-2 failure stays REPORTED, never
+//! asserted (the full tables live in
 //! `.benchmarks/950_f0_t07_span_baselines.md`).
+//!
+//! # Round 3 — the boundary-snap arm (`ptr_snap`, PRE-REGISTERED BEFORE
+//! SCORING — the round-2 lesson)
+//!
+//! The round-2 verdict's re-open candidate: the lane's problem is exact
+//! boundaries, not entity finding (containment 84.1% vs the gazetteer's
+//! 78.7%; exact 74.3% vs 77.8%). `ptr_snap` = the pointer LOCALIZES, the
+//! schema vocabulary RESOLVES the boundaries:
+//!
+//! 1. The pointer(gate) rank-0 window (the production posture) is the
+//!    candidate region.
+//! 2. Among the group's (canonical, aliases) — the SAME inputs every arm
+//!    gets — only surface occurrences FULLY INSIDE the window qualify
+//!    (`ws <= os && oe <= we`): what the pointer fully saw.
+//! 3. The longest qualifying occurrence wins; ties by list order (canonical
+//!    first, then aliases in list order — strictly-greater replacement); per
+//!    surface the leftmost occurrence. The gazetteer's exact longest-match
+//!    law, constrained to the window — the constraint is the only
+//!    difference from the `floor+alias (longest-match)` comparator.
+//! 4. No qualifying occurrence → the pointer window ITSELF (the hybrid
+//!    stays pointer-derived). Deliberately NOT the global gazetteer: a
+//!    pointer∨gazetteer ensemble would trivially floor the floor; the
+//!    scientific question is whether the pointer's localization + the
+//!    schema's boundary vocabulary beats the rule class alone.
+//!
+//! The GOAT bar is UNCHANGED (pointer-gate exact > floor+alias(longest)
+//! exact, choices-class); `ptr_snap` is reported against the same bar. A
+//! `ptr_snap` that clears it is the re-open basis the round-2 record
+//! pre-registered.
 //!
 //! The table prints to stdout (captured on green — use `--nocapture`).
 
@@ -165,6 +195,10 @@ const PTR_EXACT_RATCHET: u32 = 2200;
 const PTR_CONTAIN_RATCHET: u32 = 2488;
 const ND_PTR_EXACT_RATCHET: u32 = 537;
 const GENRE_PTR_EXACT_RATCHET: u32 = 277;
+/// Round-3 measured record (the boundary-snap arm; debug profile,
+/// 2026-10-20 — see the round-3 section of the bench record). Downward-only.
+const PTR_SNAP_EXACT_RATCHET: u32 = 2311;
+const ND_SNAP_EXACT_RATCHET: u32 = 575;
 
 /// One fixture row: the text plus `(type, start, end)` entities (byte
 /// offsets, end exclusive).
@@ -469,6 +503,11 @@ fn g5_span_baselines() {
     let mut oov_skipped = 0u32;
     let mut misses: Vec<String> = Vec::new();
     let mut nd_total = 0u32;
+    // Round-3 mechanism attribution: of the snap arm's exact hits, how many
+    // came from a qualifying in-window surface (the snap mechanism) vs a
+    // window fallback (no surface inside — the window itself was exact).
+    let mut snap_from_hit = 0u32;
+    let mut snap_from_fallback = 0u32;
 
     for row in &rows {
         let sp = SpanPointer::new(&row.text, SpanConfig::default());
@@ -519,6 +558,12 @@ fn g5_span_baselines() {
                 None
             };
             let ptr_gate = gate_answer(&out[..n]);
+            // Round 3: the boundary-snap arm — the pointer localizes, the
+            // schema vocabulary resolves the boundaries (pre-registered in
+            // the module docs above: longest fully-in-window occurrence,
+            // gazetteer tie law, pointer-window fallback).
+            let ptr_snap = ptr_gate
+                .map(|w| snap_longest_in_window(&row.text, w, canonical, &alias_refs).unwrap_or(w));
             // The no-alias disclosure arm (empty alias table).
             let mut out_na = [SpanScore {
                 start: 0,
@@ -544,11 +589,25 @@ fn g5_span_baselines() {
             if in_nd {
                 nd_total += 1;
             }
+            if is_choices && ptr_snap == Some(expected) {
+                // ptr_snap == Some(expected) implies ptr_gate is Some (the
+                // snap composes over it), so the fallback question is well
+                // posed: did a qualifying surface produce the exact span?
+                let via_surface = ptr_gate
+                    .and_then(|w| snap_longest_in_window(&row.text, w, canonical, &alias_refs))
+                    .is_some();
+                if via_surface {
+                    snap_from_hit += 1;
+                } else {
+                    snap_from_fallback += 1;
+                }
+            }
             let answers = |expected: (u32, u32)| ArmAnswers {
                 floor: floor_answer,
                 gaz,
                 ptr_raw,
                 ptr_gate,
+                ptr_snap,
                 ptr_noalias,
                 expected,
             };
@@ -565,9 +624,9 @@ fn g5_span_baselines() {
             }
 
             // Collect a few misses for the record (mixed arms).
-            if misses.len() < 8 && (floor_answer != Some(expected) || ptr_gate != Some(expected)) {
+            if misses.len() < 8 && (floor_answer != Some(expected) || ptr_snap != Some(expected)) {
                 misses.push(format!(
-                    "  {} [{ty}] expected {:?} ({}..{}) canon={canonical:?} aliases={:?}\n    floor={:?} ptr_gate={:?} ptr_raw={:?} text={:?}",
+                    "  {} [{ty}] expected {:?} ({}..{}) canon={canonical:?} aliases={:?}\n    floor={:?} ptr_gate={:?} ptr_snap={:?} text={:?}",
                     row.id,
                     &row.text[a as usize..b as usize],
                     a,
@@ -575,7 +634,7 @@ fn g5_span_baselines() {
                     group.aliases,
                     floor_answer.map(|(s, e)| &row.text[s as usize..e as usize]),
                     ptr_gate.map(|(s, e)| &row.text[s as usize..e as usize]),
-                    ptr_raw.map(|(s, e)| &row.text[s as usize..e as usize]),
+                    ptr_snap.map(|(s, e)| &row.text[s as usize..e as usize]),
                     row.text,
                 ));
             }
@@ -623,6 +682,27 @@ fn g5_span_baselines() {
         per_type["Genre"].ptr_gate.exact >= GENRE_PTR_EXACT_RATCHET,
         "G5 span ratchet: Genre pointer exact {} < {GENRE_PTR_EXACT_RATCHET} — the alias-channel mechanism regressed",
         per_type["Genre"].ptr_gate.exact
+    );
+    assert!(
+        choices.ptr_snap.exact >= PTR_SNAP_EXACT_RATCHET,
+        "G5 span ratchet: pointer+snap exact {} < {PTR_SNAP_EXACT_RATCHET} — the round-3 hybrid regressed past its record",
+        choices.ptr_snap.exact
+    );
+    assert!(
+        nd.ptr_snap.exact >= ND_SNAP_EXACT_RATCHET,
+        "G5 span ratchet: non-degenerate pointer+snap exact {} < {ND_SNAP_EXACT_RATCHET}",
+        nd.ptr_snap.exact
+    );
+    // The round-3 GOAT relation, ASSERTED (the promotion basis — a scorer
+    // or fixture change that voids it reds here and forces
+    // re-adjudication): the boundary-snap hybrid clears the strongest rule
+    // arm on choices-class exact. The raw pointer alone still does NOT —
+    // that verdict stays reported, never asserted.
+    assert!(
+        choices.ptr_snap.exact > choices.floor_alias_longest.exact,
+        "G5 span GOAT (round 3): pointer+snap exact {} no longer clears floor+alias(longest) {} — the promotion basis is void; re-adjudicate",
+        choices.ptr_snap.exact,
+        choices.floor_alias_longest.exact
     );
     assert!(
         oov_skipped == 740,
@@ -788,6 +868,10 @@ fn g5_span_baselines() {
         oov_skipped,
         cs1,
         &misses,
+        SnapMechanism {
+            from_hit: snap_from_hit,
+            from_fallback: snap_from_fallback,
+        },
     );
 }
 
@@ -806,6 +890,7 @@ struct ArmAnswers {
     gaz: GazetteerAnswers,
     ptr_raw: Answer,
     ptr_gate: Answer,
+    ptr_snap: Answer,
     ptr_noalias: Answer,
     expected: (u32, u32),
 }
@@ -816,6 +901,7 @@ fn record(p: &mut PopStats, a: ArmAnswers) {
     p.floor_alias_longest.record(a.gaz.longest, a.expected);
     p.ptr_raw.record(a.ptr_raw, a.expected);
     p.ptr_gate.record(a.ptr_gate, a.expected);
+    p.ptr_snap.record(a.ptr_snap, a.expected);
     p.ptr_noalias.record(a.ptr_noalias, a.expected);
 }
 
@@ -860,6 +946,44 @@ fn floor_find(text: &str, needle: &str) -> Option<(u32, u32)> {
         .map(|(s, part)| (s as u32, (s + part.len()) as u32))
 }
 
+/// `floor_find` constrained to `[ws, we)` — leftmost occurrence fully
+/// inside the window. Both bounds are token-aligned (pointer windows and
+/// word-trimmed spans land on word bytes), so the slice is at char
+/// boundaries.
+fn floor_find_in(text: &str, needle: &str, ws: u32, we: u32) -> Option<(u32, u32)> {
+    if needle.is_empty() || ws >= we {
+        return None;
+    }
+    let hay = &text[ws as usize..we as usize];
+    hay.match_indices(needle)
+        .next()
+        .map(|(s, part)| (ws + s as u32, ws + (s + part.len()) as u32))
+}
+
+/// The round-3 snap: among (canonical, aliases), the LONGEST occurrence
+/// fully inside `window` wins; ties by list order (strictly-greater
+/// replacement, `GazetteerAnswers::of`'s law); per surface the leftmost
+/// occurrence. None when no surface occurs inside the window — the caller
+/// falls back to the pointer window itself.
+fn snap_longest_in_window(
+    text: &str,
+    window: (u32, u32),
+    canonical: &str,
+    aliases: &[&str],
+) -> Option<(u32, u32)> {
+    let mut best: Option<(u32, u32)> = None;
+    let mut best_len = 0usize;
+    for surface in std::iter::once(canonical).chain(aliases.iter().copied()) {
+        if let Some((s, e)) = floor_find_in(text, surface, window.0, window.1)
+            && e as usize - s as usize > best_len
+        {
+            best_len = e as usize - s as usize;
+            best = Some((s, e));
+        }
+    }
+    best
+}
+
 /// Per-arm counters over one population.
 #[derive(Default)]
 struct ArmStats {
@@ -899,6 +1023,7 @@ struct PopStats {
     floor_alias_longest: ArmStats,
     ptr_raw: ArmStats,
     ptr_gate: ArmStats,
+    ptr_snap: ArmStats,
     ptr_noalias: ArmStats,
 }
 
@@ -938,10 +1063,15 @@ fn choices_checksum(rows: &[Row], vocab: &Vocabulary) -> u64 {
                 },
                 &mut out,
             );
+            let ptr_gate = gate_answer(&out[..n]);
+            let ptr_snap = ptr_gate.map(|w| {
+                snap_longest_in_window(&row.text, w, &group.canonical, &alias_refs).unwrap_or(w)
+            });
             c.floor.record(floor_answer, expected);
             c.floor_alias_first.record(gaz.first, expected);
             c.floor_alias_longest.record(gaz.longest, expected);
-            c.ptr_gate.record(gate_answer(&out[..n]), expected);
+            c.ptr_gate.record(ptr_gate, expected);
+            c.ptr_snap.record(ptr_snap, expected);
         }
     }
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
@@ -950,6 +1080,7 @@ fn choices_checksum(rows: &[Row], vocab: &Vocabulary) -> u64 {
         &c.floor_alias_first,
         &c.floor_alias_longest,
         &c.ptr_gate,
+        &c.ptr_snap,
     ] {
         for v in [a.entities, a.exact, a.contain, a.abstain] {
             for byte in v.to_le_bytes() {
@@ -986,6 +1117,7 @@ fn print_pop(name: &str, p: &PopStats) {
     print_arm("  floor+alias (first-in-order)", &p.floor_alias_first);
     print_arm("  floor+alias (longest-match)", &p.floor_alias_longest);
     print_arm("  pointer(gate)", &p.ptr_gate);
+    print_arm("  pointer+snap (round 3)", &p.ptr_snap);
     print_arm("  pointer(raw)", &p.ptr_raw);
     print_arm("  pointer(no-alias gate)", &p.ptr_noalias);
 }
@@ -998,6 +1130,13 @@ struct PopReports<'a> {
     nd: &'a PopStats,
 }
 
+/// The snap arm's exact-hit mechanism split (disclosure: where the hybrid's
+/// score comes from — resolved surfaces vs pointer-window fallbacks).
+struct SnapMechanism {
+    from_hit: u32,
+    from_fallback: u32,
+}
+
 fn report(
     pops: PopReports<'_>,
     per_type: &std::collections::HashMap<String, PopStats>,
@@ -1005,6 +1144,7 @@ fn report(
     oov_skipped: u32,
     checksum: u64,
     misses: &[String],
+    snap_mech: SnapMechanism,
 ) {
     let PopReports { choices, all, nd } = pops;
     println!("G5 span baselines — span_pointer vs the rule class (Plan 628 T0.7, re-run)");
@@ -1058,6 +1198,15 @@ fn report(
     );
     println!("  pointer(raw)  = rank-0 window above the default 0.5 gate, no strict clearance");
     println!(
+        "  pointer+snap  = round 3: the pointer localizes, the schema vocabulary resolves the"
+    );
+    println!(
+        "                  boundaries — longest fully-in-window (canonical|alias) occurrence,"
+    );
+    println!(
+        "                  gazetteer tie law, pointer-window fallback (pre-registered round 3)"
+    );
+    println!(
         "  no-alias      = the pointer with an empty alias table (isolates the alias channel)"
     );
     println!(
@@ -1081,6 +1230,23 @@ fn report(
             pct(f.exact, f.entities),
             g.exact,
             pct(g.exact, g.entities),
+        );
+        let s = &choices.ptr_snap;
+        let verdict = if s.exact > f.exact {
+            "PASS — the snap hybrid CLEARS the strongest floor arm: the pre-registered re-open basis"
+        } else {
+            "FAIL — the snap hybrid does not clear the floor+alias arm (the negative stands)"
+        };
+        println!(
+            "  floor+alias(longest) exact {} ({}) vs pointer+snap exact {} ({}) -> {verdict}",
+            f.exact,
+            pct(f.exact, f.entities),
+            s.exact,
+            pct(s.exact, s.entities),
+        );
+        println!(
+            "    snap mechanism: {} exact via in-window surface, {} via window fallback (no surface inside)",
+            snap_mech.from_hit, snap_mech.from_fallback,
         );
     }
     println!("  determinism checksum: {checksum:#018x}");

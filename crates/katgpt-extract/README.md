@@ -7,12 +7,14 @@ output tokens, µs–ms latency, and first-class abstention.
 | module | feature | one-liner |
 |---|---|---|
 | `estimate`, `forecast` | `extraction_estimate` (**default-on** — G1 floor comparison beats the conformal-naive floor at --release, Plan 628 T0.6) | conformal estimate + forecast heads over the Plan-340 substrate (Report-the-Floor gated) |
-| `span_pointer` | `span_pointer` | candidate-window span scoring (BM25 + hashed-feature embedding + aliases, sigmoid, byte-exact spans, zero-alloc) |
+| `span_pointer` | `span_pointer` (**default-on** — the round-3 boundary-snap hybrid beats the strongest gazetteer floor, Bench 950) | candidate-window span scoring (BM25 + hashed-feature embedding + aliases, sigmoid, byte-exact spans, zero-alloc) + `snap_longest`/`best_snapped_span` boundary resolution |
 | `parsers` | `typed_parsers` | deterministic typed parsers (number/date/time/datetime/duration/list; Duckling/Recognizers-Text grammar lineage; constraints by construction) |
 | `temper` | `temper` | calibration/abstention gate (sigmoid confidence, fused abstain, null-with-guess) |
 
-`extraction_estimate` is default-on (the GOAT floor gate passed); the rest
-are opt-in (`--no-default-features` compiles to the empty crate). One dep:
+`extraction_estimate` and `span_pointer` are default-on (both cleared their
+GOAT floors — the estimate's conformal floor at T0.6, the span lane's
+rule-class floor at Bench 950 round 3); the rest are opt-in
+(`--no-default-features` compiles to the empty crate). One dep:
 `katgpt-core` (feature-gated, `default-features = false`). Pure std —
 wasm-safe by construction.
 

@@ -25,14 +25,17 @@ katgpt-core = { path = "../katgpt-core", optional = true, default-features = fal
 # the scored test rows (the mention's own surface usually rode its alias
 # list) and the floor was denied it. The verdict-round REVISE forced the
 # fair re-run: TRAIN-split schema vocabulary (never the scored rows) + two
-# gazetteer arms given the SAME (canonical, aliases) inputs. Result: the
-# longest-match gazetteer BEATS the pointer on the primary exact metric
-# (77.8% vs 74.3%; the pointer keeps a containment edge, 84.1% vs 78.7%,
-# disclosed). Per the plan's own rule — span_pointer earns GOAT only by
-# beating the rule floor — the promotion is VOID and the feature returns to
-# opt-in. Re-open: a scorer that clears floor+alias(longest) on choices-
-# class exact, measured on this same pinned protocol.
-default = ["extraction_estimate"]
+# gazetteer arms given the SAME (canonical, aliases) inputs. Round 2: the
+# longest-match gazetteer BEAT the bare pointer on the primary exact metric
+# (77.8% vs 74.3%) — demoted back to opt-in. Round 3 (the pre-registered
+# re-open): the boundary-snap hybrid — the pointer LOCALIZES (84.1%
+# containment), the schema vocabulary RESOLVES the boundaries
+# (`snap_longest` / `SpanPointer::best_snapped_span`, longest fully-in-window
+# occurrence, gazetteer tie law, pointer-window fallback) — measured 78.1%
+# vs the floor's 77.8% (2311 vs 2304 exact, choices-class): the GOAT bar
+# CLEARS and the feature is promoted back to default. The relation is an
+# assert in the harness (a regression reds and forces re-adjudication).
+default = ["extraction_estimate", "span_pointer"]
 
 # span_pointer (Plan 628 T0.2): candidate-window span scoring — BM25/ngram
 # lexical + hashed-feature embedding similarity + optional alias tables;
