@@ -28,14 +28,17 @@ katgpt-core = { path = "../katgpt-core", optional = true, default-features = fal
 # gazetteer arms given the SAME (canonical, aliases) inputs. Round 2: the
 # longest-match gazetteer BEAT the bare pointer on the primary exact metric
 # (77.8% vs 74.3%) — demoted back to opt-in. Round 3 (the pre-registered
-# re-open): the boundary-snap hybrid — the pointer LOCALIZES (84.1%
-# containment), the schema vocabulary RESOLVES the boundaries
-# (`snap_longest` / `SpanPointer::best_snapped_span`, longest fully-in-window
-# occurrence, gazetteer tie law, pointer-window fallback) — measured 78.1%
-# vs the floor's 77.8% (2311 vs 2304 exact, choices-class): the GOAT bar
-# CLEARS and the feature is promoted back to default. The relation is an
-# assert in the harness (a regression reds and forces re-adjudication).
-default = ["extraction_estimate", "span_pointer"]
+# re-open): the boundary-snap hybrid (`snap_longest` /
+# `SpanPointer::best_snapped_span`) measured 78.1% vs the floor's 77.8%
+# (+7) — but the verdict round REVISED the promotion: the margin rides the
+# 17 fallback exacts (the pointer covering gazetteer abstentions), not the
+# snap mechanism (the window constraint nets ≈ −10 vs unconstrained
+# longest-match); the floor+pointer-fallback control was unmeasured; no
+# McNemar; no held-out confirmation; and the promotion skipped the
+# --release G2 gate (quiet-box line still owed). The feature STAYS opt-in
+# pending the verdict's fix list (Bench 950 round 4): control arm + McNemar
+# + a held-out fixture + release G2, then re-adjudicate.
+default = ["extraction_estimate"]
 
 # span_pointer (Plan 628 T0.2): candidate-window span scoring — BM25/ngram
 # lexical + hashed-feature embedding similarity + optional alias tables;

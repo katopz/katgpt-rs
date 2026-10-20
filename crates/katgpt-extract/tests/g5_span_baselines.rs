@@ -105,72 +105,219 @@
 //! `ptr_snap` that clears it is the re-open basis the round-2 record
 //! pre-registered.
 //!
+//! # Round 4 — the verdict's fix list (REVISE, session ea31bb50): the
+//! control arm + McNemar, PRE-REGISTERED BEFORE SCORING
+//!
+//! Round 3's promotion was REVISED. The verdict's arithmetic: of the snap
+//! hybrid's 2311 exact hits, 2294 came via an in-window surface while the
+//! floor scored 2304 overall — the window CONSTRAINT nets ≈ −10 vs
+//! unconstrained longest-match, and the 17 fallback exacts (the pointer
+//! covering gazetteer abstentions) are the entire +7 win. The hybrid's
+//! honest description is therefore "gazetteer, minus window-constraint
+//! losses, plus the pointer covering gazetteer misses" — NOT
+//! "pointer-derived". Three additions, all pre-registered here:
+//!
+//! 1. **`floor+ptr_fallback` (the missing control, report-only):** the
+//!    floor+alias(longest-match) answer; when it would ABSTAIN, the
+//!    pointer(gate) window. The pointer is used ONLY where the floor has no
+//!    answer — the exact arm the verdict named (and NOT the forbidden
+//!    ensemble: no floor override of the pointer, ever). If this arm beats
+//!    the snap hybrid, the promotion basis moves to IT.
+//! 2. **McNemar (snap vs floor, choices-class):** the discordant counts
+//!    (b = snap-hit/floor-miss, c = snap-miss/floor-hit) + the two-sided
+//!    exact binomial p — the verdict's minimum for a +7 claim.
+//! 3. **Held-out confirmation** (a fixture that played no part in designing
+//!    the arm) — a separate lane, same TRAIN-derived vocabulary protocol;
+//!    recorded in the bench when it lands.
+//!
+//! Re-promotion rule (pre-registered from the verdict): only after (a) the
+//! control arm is measured and does NOT beat the snap, (b) the McNemar
+//! stands, (c) a held-out fixture confirms snap ≥ floor, and (d) release-
+//! profile G2 with a quiet-box preflight line — then re-land the promotion
+//! (or promote the control instead if IT wins, recorded why).
+//!
 //! The table prints to stdout (captured on green — use `--nocapture`).
 
 use katgpt_extract::span_pointer::{SpanConfig, SpanPointer, SpanQuery, SpanScore};
 use serde_json::Value;
 
-/// The pinned corpus, relative to the crate root (manifest-anchored, so the
-/// test runs from any working directory).
-const FIXTURE_REL: &str = "tests/fixtures/external/mit_movie_trivia_test.jsonl";
+/// One pinned fixture: the corpus + its TRAIN-derived schema vocabulary +
+/// every census/ratchet pin measured from the record. A drifted byte reds at
+/// the pin gate; a regressed arm reds at its ratchet. Same pipeline, two
+/// domains (Plan 628 T0.7; the held-out-confirmation law from Bench 950
+/// round 4: a fixture that played no part in designing the arms).
+struct Fixture {
+    label: &'static str,
+    fixture_rel: &'static str,
+    blake3_pin: &'static str,
+    rows_expected: usize,
+    entities_expected: usize,
+    /// Per-type entity counts over kept rows (`type` = the upstream tag).
+    type_expected: &'static [(&'static str, usize)],
+    /// Types whose fixture-wide surface unique% < 95 (an enumerable
+    /// vocabulary exists) — the pre-registered scoring population.
+    choices_class: &'static [&'static str],
+    vocab_rel: &'static str,
+    vocab_blake3_pin: &'static str,
+    /// Census pins for the TRAIN-derived vocabulary (surfaces per type).
+    vocab_type_expected: &'static [(&'static str, usize)],
+    /// The OOV skip census pinned EXACT when measured (the round-2
+    /// hardening: catches schema drift in size, not just source). None =
+    /// not yet pinned — disclosed, never asserted.
+    oov_expected: Option<u32>,
+    /// Measured ratchets (downward-only); 0 = unmeasured — the arm is
+    /// report-only until its record pins it.
+    ratchets: Ratchets,
+    /// Whether the round-3 GOAT relation (pointer+snap > floor+alias(longest)
+    /// on choices-class exact) is ASSERTED for this fixture. True only where
+    /// measured true; a fixture where the relation fails records the
+    /// negative and keeps the assert off pending re-adjudication.
+    assert_goat: bool,
+    /// Per-type exact ratchets — measured pins (type, min exact).
+    per_type_ratchets: &'static [(&'static str, u32)],
+    /// Whether the env-armed GLiNER predictions hook scores this fixture
+    /// (the shipped predictions file is movie-domain).
+    gliner_lane: bool,
+}
 
-/// The SCHEMA vocabulary — derived from the trivia10k13 TRAIN split, never
-/// from the scored rows (verdict round 1 REVISE: test-derived aliases made
-/// the alias channel an answer key; the deployment analogue is a schema
-/// compiled from historical data, which is exactly what the train split is).
-const VOCAB_REL: &str = "tests/fixtures/external/mit_movie_trivia_train_vocab.jsonl";
+/// Measured ratchets for one fixture (downward-only; 0 = unmeasured).
+#[derive(Clone, Copy)]
+struct Ratchets {
+    floor_alias_longest_exact: u32,
+    ptr_exact: u32,
+    ptr_contain: u32,
+    nd_ptr_exact: u32,
+    snap_exact: u32,
+    nd_snap_exact: u32,
+    floor_ptr_fallback_exact: u32,
+    nd_floor_ptr_fallback_exact: u32,
+}
 
-/// BLAKE3 pin over the fixture bytes (see PROVENANCE_MIT_MOVIE.md).
-const BLAKE3_PIN: &str = "77a36d097177560e49378e9a3b7ea4496d43a06ae2ca43667f680bf0cf65c56d";
+/// MIT-Movie trivia10k13 test split (Plan 628 T0.7; provenance:
+/// `tests/fixtures/external/PROVENANCE_MIT_MOVIE.md`, Liu et al. ASRU 2013).
+/// Ratchets: rounds 2-4 of the Bench-950 record (debug profile, 2026-10-20).
+const MOVIE: Fixture = Fixture {
+    label: "MIT-Movie trivia10k13 test",
+    fixture_rel: "tests/fixtures/external/mit_movie_trivia_test.jsonl",
+    blake3_pin: "77a36d097177560e49378e9a3b7ea4496d43a06ae2ca43667f680bf0cf65c56d",
+    rows_expected: 1562,
+    entities_expected: 5093,
+    type_expected: &[
+        ("Plot", 1218),
+        ("Actor", 1218),
+        ("Genre", 755),
+        ("Year", 643),
+        ("Director", 411),
+        ("Character_Name", 260),
+        ("Opinion", 183),
+        ("Relationship", 157),
+        ("Origin", 138),
+        ("Award", 65),
+        ("Quote", 37),
+        ("Soundtrack", 8),
+    ],
+    choices_class: &[
+        "Actor",
+        "Award",
+        "Character_Name",
+        "Director",
+        "Genre",
+        "Opinion",
+        "Relationship",
+        "Soundtrack",
+        "Year",
+    ],
+    vocab_rel: "tests/fixtures/external/mit_movie_trivia_train_vocab.jsonl",
+    vocab_blake3_pin: "3a7ba3868950deafa6f8f7eb4a578f72a954f661b009e85800169f6d3d1b9b4a",
+    vocab_type_expected: &[
+        ("Actor", 1436),
+        ("Award", 163),
+        ("Character_Name", 664),
+        ("Director", 532),
+        ("Genre", 908),
+        ("Opinion", 292),
+        ("Relationship", 346),
+        ("Soundtrack", 47),
+        ("Year", 143),
+    ],
+    oov_expected: Some(740),
+    ratchets: Ratchets {
+        floor_alias_longest_exact: 2304,
+        ptr_exact: 2200,
+        ptr_contain: 2488,
+        nd_ptr_exact: 537,
+        snap_exact: 2311,
+        nd_snap_exact: 575,
+        floor_ptr_fallback_exact: 2321,
+        nd_floor_ptr_fallback_exact: 581,
+    },
+    assert_goat: true,
+    per_type_ratchets: &[("Genre", 277)],
+    gliner_lane: true,
+};
 
-/// BLAKE3 pin over the train-split vocabulary table.
-const VOCAB_BLAKE3_PIN: &str = "3a7ba3868950deafa6f8f7eb4a578f72a954f661b009e85800169f6d3d1b9b4a";
-
-/// Census pins (the converter's build record — a drifted fixture reds here).
-const ROWS_EXPECTED: usize = 1562;
-const ENTITIES_EXPECTED: usize = 5093;
-/// Per-type entity counts over kept rows (`type` = the upstream tag name).
-const TYPE_EXPECTED: [(&str, usize); 12] = [
-    ("Plot", 1218),
-    ("Actor", 1218),
-    ("Genre", 755),
-    ("Year", 643),
-    ("Director", 411),
-    ("Character_Name", 260),
-    ("Opinion", 183),
-    ("Relationship", 157),
-    ("Origin", 138),
-    ("Award", 65),
-    ("Quote", 37),
-    ("Soundtrack", 8),
-];
-/// Choices-class = types whose fixture-wide surface unique% < 95 (an
-/// enumerable vocabulary exists); the pre-registered scoring population.
-const CHOICES_CLASS: [&str; 9] = [
-    "Actor",
-    "Award",
-    "Character_Name",
-    "Director",
-    "Genre",
-    "Opinion",
-    "Relationship",
-    "Soundtrack",
-    "Year",
-];
-
-/// Census pins for the TRAIN-derived vocabulary (surfaces per type) — a
-/// drifted schema table reds here.
-const VOCAB_TYPE_EXPECTED: [(&str, usize); 9] = [
-    ("Actor", 1436),
-    ("Award", 163),
-    ("Character_Name", 664),
-    ("Director", 532),
-    ("Genre", 908),
-    ("Opinion", 292),
-    ("Relationship", 346),
-    ("Soundtrack", 47),
-    ("Year", 143),
-];
+/// MIT-Restaurant test split — the ROUND-4 HELD-OUT confirmation fixture (a
+/// domain that played no part in designing the arms; same SLS downloads
+/// tree, provenance: `tests/fixtures/external/PROVENANCE_MIT_RESTAURANT.md`).
+/// All 8 types are choices-class (train unique% <= 54.1%). First-run record
+/// (2026-10-20, debug): the round-4 picture CONFIRMS cross-domain — snap
+/// clears the floor with real significance (McNemar b=58 c=29, p=0.002), and
+/// the control (floor+ptr_fallback) still wins (1493 vs 1464): the pointer's
+/// value concentrates where the gazetteer abstains. Ratchets pinned from
+/// that record; the GOAT relation asserted (measured true).
+const RESTAURANT: Fixture = Fixture {
+    label: "MIT-Restaurant test",
+    fixture_rel: "tests/fixtures/external/mit_restaurant_test.jsonl",
+    blake3_pin: "427c3a51d464ee6dc8788d0c24a3de695835284ebd2dad4ff9d51a5ad7746763",
+    rows_expected: 1517,
+    entities_expected: 3151,
+    type_expected: &[
+        ("Amenity", 533),
+        ("Cuisine", 532),
+        ("Dish", 288),
+        ("Hours", 212),
+        ("Location", 812),
+        ("Price", 171),
+        ("Rating", 201),
+        ("Restaurant_Name", 402),
+    ],
+    choices_class: &[
+        "Amenity",
+        "Cuisine",
+        "Dish",
+        "Hours",
+        "Location",
+        "Price",
+        "Rating",
+        "Restaurant_Name",
+    ],
+    vocab_rel: "tests/fixtures/external/mit_restaurant_train_vocab.jsonl",
+    vocab_blake3_pin: "517554fb436ef2e12a71e60a6855e0ced8543ca16d30a050840f5cc793c5411e",
+    vocab_type_expected: &[
+        ("Amenity", 1126),
+        ("Cuisine", 475),
+        ("Dish", 662),
+        ("Hours", 361),
+        ("Location", 1126),
+        ("Price", 182),
+        ("Rating", 228),
+        ("Restaurant_Name", 1028),
+    ],
+    oov_expected: Some(813),
+    ratchets: Ratchets {
+        floor_alias_longest_exact: 1435,
+        ptr_exact: 1195,
+        ptr_contain: 1613,
+        nd_ptr_exact: 580,
+        snap_exact: 1464,
+        nd_snap_exact: 747,
+        floor_ptr_fallback_exact: 1493,
+        nd_floor_ptr_fallback_exact: 752,
+    },
+    assert_goat: true,
+    per_type_ratchets: &[],
+    gliner_lane: false,
+};
 
 /// Pointer top-k buffer (the any-containment disclosure depth).
 const TOP_K: usize = 5;
@@ -181,24 +328,6 @@ const ALIAS_CAP: usize = 8;
 const GATE_EPS: f32 = 1e-3;
 /// The nothing-fired score (the documented span_pointer boundary).
 const NOTHING_FIRED: f32 = 0.5;
-
-/// Measured ratchets (downward-only) — pinned from the T0.7 re-run record
-/// (verdict round 1 REVISE addressed: TRAIN-derived schema vocabulary + the
-/// gazetteer arms; 2026-10-20, debug profile; full tables in
-/// `.benchmarks/950_f0_t07_span_baselines.md`). A ratchet never reds an
-/// improvement; a scorer or harness regression past it fails here. The GOAT
-/// bar's comparator is `FLOOR_ALIAS_LONGEST` — the strongest floor variant
-/// (same alias inputs as the pointer, matched literally, longest-match
-/// gazetteer rule).
-const FLOOR_ALIAS_LONGEST_EXACT_RATCHET: u32 = 2304;
-const PTR_EXACT_RATCHET: u32 = 2200;
-const PTR_CONTAIN_RATCHET: u32 = 2488;
-const ND_PTR_EXACT_RATCHET: u32 = 537;
-const GENRE_PTR_EXACT_RATCHET: u32 = 277;
-/// Round-3 measured record (the boundary-snap arm; debug profile,
-/// 2026-10-20 — see the round-3 section of the bench record). Downward-only.
-const PTR_SNAP_EXACT_RATCHET: u32 = 2311;
-const ND_SNAP_EXACT_RATCHET: u32 = 575;
 
 /// One fixture row: the text plus `(type, start, end)` entities (byte
 /// offsets, end exclusive).
@@ -254,16 +383,16 @@ struct Vocabulary {
 
 /// Parse + pin-check the TRAIN-split vocabulary table (one JSON line per
 /// type: `{"type", "surfaces": [[surface, count], …]}`).
-fn load_vocabulary(path: &std::path::Path) -> Vocabulary {
+fn load_vocabulary(path: &std::path::Path, fx: &Fixture) -> Vocabulary {
     let bytes = std::fs::read(path)
         .unwrap_or_else(|e| panic!("G5 span: cannot read vocab {}: {e}", path.display()));
     let got = blake3::hash(&bytes).to_hex();
     assert_eq!(
         got.as_str(),
-        VOCAB_BLAKE3_PIN,
-        "G5 span vocab drifted: BLAKE3 {} != pinned {} — re-pin via PROVENANCE_MIT_MOVIE.md first",
+        fx.vocab_blake3_pin,
+        "G5 span vocab drifted: BLAKE3 {} != pinned {} — re-pin via the provenance doc first",
         got.as_str(),
-        VOCAB_BLAKE3_PIN
+        fx.vocab_blake3_pin
     );
     let text = std::str::from_utf8(&bytes).expect("G5 span vocab is UTF-8");
     let mut freq: std::collections::HashMap<(String, String), u32> =
@@ -292,7 +421,8 @@ fn load_vocabulary(path: &std::path::Path) -> Vocabulary {
         for (ty, _) in freq.keys() {
             *per_type.entry(ty.as_str()).or_default() += 1;
         }
-        for (ty, n) in VOCAB_TYPE_EXPECTED {
+        for (ty, n) in fx.vocab_type_expected {
+            let n = *n;
             assert_eq!(
                 per_type.get(ty).copied().unwrap_or(0),
                 n,
@@ -392,20 +522,30 @@ fn build_vocabulary(freq: std::collections::HashMap<(String, String), u32>) -> V
     Vocabulary { of_surface }
 }
 
+/// The two #[test] drivers (one per fixture; the SAME pipeline, pre-registered
+/// arms, and population rules — only the pins differ).
 #[test]
-fn g5_span_baselines() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(FIXTURE_REL);
+fn g5_span_baselines_movie() {
+    run_suite(&MOVIE);
+}
+
+#[test]
+fn g5_span_baselines_restaurant() {
+    run_suite(&RESTAURANT);
+}
+
+fn run_suite(fx: &Fixture) {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(fx.fixture_rel);
     let bytes = std::fs::read(&path)
         .unwrap_or_else(|e| panic!("G5 span: cannot read fixture {}: {e}", path.display()));
 
-    // 1. Pin gate — a drifted fixture must never silently score.
     let got = blake3::hash(&bytes).to_hex();
     assert_eq!(
         got.as_str(),
-        BLAKE3_PIN,
-        "G5 span fixture drifted: BLAKE3 {} != pinned {} — re-pin via PROVENANCE_MIT_MOVIE.md first",
+        fx.blake3_pin,
+        "G5 span fixture drifted: BLAKE3 {} != pinned {} — re-pin via the provenance doc first",
         got.as_str(),
-        BLAKE3_PIN
+        fx.blake3_pin
     );
 
     // 2. Parse + census (row / entity / per-type counts are build pins).
@@ -458,14 +598,16 @@ fn g5_span_baselines() {
         .collect();
     assert_eq!(
         rows.len(),
-        ROWS_EXPECTED,
-        "G5 span fixture holds {} rows, expected {ROWS_EXPECTED}",
-        rows.len()
+        fx.rows_expected,
+        "G5 span fixture holds {} rows, expected {}",
+        rows.len(),
+        fx.rows_expected
     );
     let entity_total: usize = rows.iter().map(|r| r.entities.len()).sum();
     assert_eq!(
-        entity_total, ENTITIES_EXPECTED,
-        "G5 span fixture holds {entity_total} entities, expected {ENTITIES_EXPECTED}"
+        entity_total, fx.entities_expected,
+        "G5 span fixture holds {entity_total} entities, expected {}",
+        fx.entities_expected
     );
     {
         let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
@@ -474,7 +616,8 @@ fn g5_span_baselines() {
                 *counts.entry(ty.as_str()).or_default() += 1;
             }
         }
-        for (ty, n) in TYPE_EXPECTED {
+        for (ty, n) in fx.type_expected {
+            let n = *n;
             assert_eq!(
                 counts.get(ty).copied().unwrap_or(0),
                 n,
@@ -485,8 +628,8 @@ fn g5_span_baselines() {
     }
 
     // 3. The schema vocabulary (TRAIN-derived — never the scored rows).
-    let vocab_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(VOCAB_REL);
-    let vocab = load_vocabulary(&vocab_path);
+    let vocab_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(fx.vocab_rel);
+    let vocab = load_vocabulary(&vocab_path, fx);
 
     // 4. Score every choices-class entity whose (type, surface) the schema
     //    carries. A mention outside the vocabulary is OUT of the population
@@ -508,12 +651,14 @@ fn g5_span_baselines() {
     // window fallback (no surface inside — the window itself was exact).
     let mut snap_from_hit = 0u32;
     let mut snap_from_fallback = 0u32;
+    // Round-4 McNemar discordants (choices-class): snap vs floor-longest.
+    let mut snap_vs_floor = Discordants { b: 0, c: 0 };
 
     for row in &rows {
         let sp = SpanPointer::new(&row.text, SpanConfig::default());
         let row_bytes = row.text.as_bytes();
         for (ty, s, e) in &row.entities {
-            let is_choices = CHOICES_CLASS.contains(&ty.as_str());
+            let is_choices = fx.choices_class.contains(&ty.as_str());
             let (a, b) = trim_word_bounds(row_bytes, *s, *e);
             if a >= b {
                 continue; // nothing left after word-boundary trim (none expected)
@@ -564,6 +709,10 @@ fn g5_span_baselines() {
             // gazetteer tie law, pointer-window fallback).
             let ptr_snap = ptr_gate
                 .map(|w| snap_longest_in_window(&row.text, w, canonical, &alias_refs).unwrap_or(w));
+            // Round 4 control: the floor's answer; when it would ABSTAIN,
+            // the pointer(gate) window. The pointer ONLY where the floor
+            // has no answer (pre-registered round 4).
+            let floor_ptr_fallback = gaz.longest.or(ptr_gate);
             // The no-alias disclosure arm (empty alias table).
             let mut out_na = [SpanScore {
                 start: 0,
@@ -602,12 +751,22 @@ fn g5_span_baselines() {
                     snap_from_fallback += 1;
                 }
             }
+            if is_choices {
+                let snap_hit = ptr_snap == Some(expected);
+                let floor_hit = gaz.longest == Some(expected);
+                if snap_hit && !floor_hit {
+                    snap_vs_floor.b += 1;
+                } else if !snap_hit && floor_hit {
+                    snap_vs_floor.c += 1;
+                }
+            }
             let answers = |expected: (u32, u32)| ArmAnswers {
                 floor: floor_answer,
                 gaz,
                 ptr_raw,
                 ptr_gate,
                 ptr_snap,
+                floor_ptr_fallback,
                 ptr_noalias,
                 expected,
             };
@@ -655,60 +814,79 @@ fn g5_span_baselines() {
         "G5 span: empty non-degenerate slice — group derivation broken"
     );
 
-    // 5b. Measured ratchets + the GOAT gate (see the constant docs). Both
-    //     fire DOWNWARD only; a better scorer re-pins upward from its own
-    //     record. The GOAT comparator is the strongest floor variant.
-    assert!(
-        choices.floor_alias_longest.exact >= FLOOR_ALIAS_LONGEST_EXACT_RATCHET,
-        "G5 span ratchet: floor+alias(longest) exact {} < {FLOOR_ALIAS_LONGEST_EXACT_RATCHET} — the gazetteer floor or the grouping regressed",
-        choices.floor_alias_longest.exact
+    // 5b. Measured ratchets + the GOAT gate (see the Fixture docs). Ratchets
+    //     fire DOWNWARD only (0 = unmeasured — report-only until pinned); a
+    //     better scorer re-pins upward from its own record. The GOAT bar's
+    //     comparator is the strongest floor variant.
+    let rat = fx.ratchets;
+    let ratchet = |actual: u32, floor: u32, what: &str| {
+        if floor > 0 {
+            assert!(
+                actual >= floor,
+                "G5 span ratchet ({}): {what} {actual} < {floor} — a scorer or harness regression past the record",
+                fx.label
+            );
+        }
+    };
+    ratchet(
+        choices.floor_alias_longest.exact,
+        rat.floor_alias_longest_exact,
+        "floor+alias(longest) exact",
     );
-    assert!(
-        choices.ptr_gate.exact >= PTR_EXACT_RATCHET,
-        "G5 span ratchet: pointer(gate) exact {} < {PTR_EXACT_RATCHET} — a span_pointer regression past the G5 record",
-        choices.ptr_gate.exact
+    ratchet(choices.ptr_gate.exact, rat.ptr_exact, "pointer(gate) exact");
+    ratchet(
+        choices.ptr_gate.contain,
+        rat.ptr_contain,
+        "pointer(gate) containment",
     );
-    assert!(
-        choices.ptr_gate.contain >= PTR_CONTAIN_RATCHET,
-        "G5 span ratchet: pointer(gate) containment {} < {PTR_CONTAIN_RATCHET}",
-        choices.ptr_gate.contain
+    ratchet(
+        nd.ptr_gate.exact,
+        rat.nd_ptr_exact,
+        "non-degenerate pointer exact",
     );
-    assert!(
-        nd.ptr_gate.exact >= ND_PTR_EXACT_RATCHET,
-        "G5 span ratchet: non-degenerate pointer exact {} < {ND_PTR_EXACT_RATCHET} — the alias-channel mechanism regressed",
-        nd.ptr_gate.exact
+    ratchet(choices.ptr_snap.exact, rat.snap_exact, "pointer+snap exact");
+    ratchet(
+        nd.ptr_snap.exact,
+        rat.nd_snap_exact,
+        "non-degenerate pointer+snap exact",
     );
-    assert!(
-        per_type["Genre"].ptr_gate.exact >= GENRE_PTR_EXACT_RATCHET,
-        "G5 span ratchet: Genre pointer exact {} < {GENRE_PTR_EXACT_RATCHET} — the alias-channel mechanism regressed",
-        per_type["Genre"].ptr_gate.exact
+    ratchet(
+        choices.floor_ptr_fallback.exact,
+        rat.floor_ptr_fallback_exact,
+        "floor+ptr_fallback exact",
     );
-    assert!(
-        choices.ptr_snap.exact >= PTR_SNAP_EXACT_RATCHET,
-        "G5 span ratchet: pointer+snap exact {} < {PTR_SNAP_EXACT_RATCHET} — the round-3 hybrid regressed past its record",
-        choices.ptr_snap.exact
+    ratchet(
+        nd.floor_ptr_fallback.exact,
+        rat.nd_floor_ptr_fallback_exact,
+        "non-degenerate floor+ptr_fallback exact",
     );
-    assert!(
-        nd.ptr_snap.exact >= ND_SNAP_EXACT_RATCHET,
-        "G5 span ratchet: non-degenerate pointer+snap exact {} < {ND_SNAP_EXACT_RATCHET}",
-        nd.ptr_snap.exact
-    );
-    // The round-3 GOAT relation, ASSERTED (the promotion basis — a scorer
-    // or fixture change that voids it reds here and forces
-    // re-adjudication): the boundary-snap hybrid clears the strongest rule
-    // arm on choices-class exact. The raw pointer alone still does NOT —
-    // that verdict stays reported, never asserted.
-    assert!(
-        choices.ptr_snap.exact > choices.floor_alias_longest.exact,
-        "G5 span GOAT (round 3): pointer+snap exact {} no longer clears floor+alias(longest) {} — the promotion basis is void; re-adjudicate",
-        choices.ptr_snap.exact,
-        choices.floor_alias_longest.exact
-    );
-    assert!(
-        oov_skipped == 740,
-        "G5 span: OOV skip count {} != pinned 740 — the schema vocabulary drifted (size or source); re-pin from the re-measured record",
-        oov_skipped
-    );
+    for (ty, floor) in fx.per_type_ratchets {
+        ratchet(
+            per_type[*ty].ptr_gate.exact,
+            *floor,
+            &format!("{ty} pointer exact"),
+        );
+    }
+    // The round-3 GOAT relation, ASSERTED where the fixture's record measured
+    // it true (the promotion basis — a scorer or fixture change that voids it
+    // reds here and forces re-adjudication). The raw pointer alone still does
+    // NOT clear the floor — that verdict stays reported, never asserted.
+    if fx.assert_goat {
+        assert!(
+            choices.ptr_snap.exact > choices.floor_alias_longest.exact,
+            "G5 span GOAT ({}): pointer+snap exact {} no longer clears floor+alias(longest) {} — the promotion basis is void; re-adjudicate",
+            fx.label,
+            choices.ptr_snap.exact,
+            choices.floor_alias_longest.exact
+        );
+    }
+    if let Some(oov_pin) = fx.oov_expected {
+        assert_eq!(
+            oov_skipped, oov_pin,
+            "G5 span ({}): OOV skip count {} != pinned {oov_pin} — the schema vocabulary drifted (size or source); re-pin from the re-measured record",
+            fx.label, oov_skipped
+        );
+    }
     // The GOAT verdict is REPORTED, never asserted: verdict round 1 measured
     // the pointer above a floor that was denied the schema (an answer-key
     // alias asymmetry); the fair re-run (TRAIN-derived schema, gazetteer
@@ -722,11 +900,14 @@ fn g5_span_baselines() {
     //    script (tools/gliner_span_lane.py) runs GLiNER over the same
     //    fixture texts and writes open-NER predictions:
     //    {"id", "spans": [[type, start, end], ...]} — one line per row id.
+    //    Movie-domain only: the shipped predictions file is movie's; the
+    //    restaurant fixture is always SKIPPED-loud here.
     match std::env::var("GLINER_SPAN_PRED") {
         Err(_) => println!(
-            "\nGLiNER lane: SKIPPED (env GLINER_SPAN_PRED unset — run tools/gliner_span_lane.py to arm the trained-lane reference)"
+            "\nGLiNER lane ({}): SKIPPED (env GLINER_SPAN_PRED unset — run tools/gliner_span_lane.py to arm the trained-lane reference)",
+            fx.label
         ),
-        Ok(pred_path) => {
+        Ok(pred_path) if fx.gliner_lane => {
             let pred_bytes = std::fs::read(&pred_path).unwrap_or_else(|e| {
                 panic!("G5 span: GLINER_SPAN_PRED={pred_path} unreadable: {e}")
             });
@@ -845,12 +1026,16 @@ fn g5_span_baselines() {
                 f1(pred_exact, exp_exact),
             );
         }
+        Ok(pred_path) => println!(
+            "\nGLiNER lane ({}): SKIPPED — GLINER_SPAN_PRED={pred_path} is set, but this fixture's lane is not enabled (the shipped predictions are movie-domain)",
+            fx.label
+        ),
     }
 
     // 7. Determinism: the scoring pass again (fresh SpanPointers, fresh
     //    accumulators); the choices-class checksum must repeat exactly.
-    let cs1 = choices_checksum(&rows, &vocab);
-    let cs2 = choices_checksum(&rows, &vocab);
+    let cs1 = choices_checksum(&rows, fx, &vocab);
+    let cs2 = choices_checksum(&rows, fx, &vocab);
     assert_eq!(
         cs1, cs2,
         "G5 span: nondeterministic scoring — same input, different aggregates"
@@ -859,6 +1044,7 @@ fn g5_span_baselines() {
 
     report(
         PopReports {
+            fx,
             choices: &choices,
             all: &all,
             nd: &nd,
@@ -868,9 +1054,13 @@ fn g5_span_baselines() {
         oov_skipped,
         cs1,
         &misses,
-        SnapMechanism {
-            from_hit: snap_from_hit,
-            from_fallback: snap_from_fallback,
+        RoundFourReports {
+            snap_from_hit,
+            snap_from_fallback,
+            snap_vs_floor: Discordants {
+                b: snap_vs_floor.b,
+                c: snap_vs_floor.c,
+            },
         },
     );
 }
@@ -891,6 +1081,7 @@ struct ArmAnswers {
     ptr_raw: Answer,
     ptr_gate: Answer,
     ptr_snap: Answer,
+    floor_ptr_fallback: Answer,
     ptr_noalias: Answer,
     expected: (u32, u32),
 }
@@ -902,6 +1093,8 @@ fn record(p: &mut PopStats, a: ArmAnswers) {
     p.ptr_raw.record(a.ptr_raw, a.expected);
     p.ptr_gate.record(a.ptr_gate, a.expected);
     p.ptr_snap.record(a.ptr_snap, a.expected);
+    p.floor_ptr_fallback
+        .record(a.floor_ptr_fallback, a.expected);
     p.ptr_noalias.record(a.ptr_noalias, a.expected);
 }
 
@@ -1024,18 +1217,19 @@ struct PopStats {
     ptr_raw: ArmStats,
     ptr_gate: ArmStats,
     ptr_snap: ArmStats,
+    floor_ptr_fallback: ArmStats,
     ptr_noalias: ArmStats,
 }
 
 /// FNV-1a checksum over the choices-class floor + gazetteer + gated-pointer
 /// counters (the determinism gate compares two full passes).
-fn choices_checksum(rows: &[Row], vocab: &Vocabulary) -> u64 {
+fn choices_checksum(rows: &[Row], fx: &Fixture, vocab: &Vocabulary) -> u64 {
     let mut c = PopStats::default();
     for row in rows {
         let sp = SpanPointer::new(&row.text, SpanConfig::default());
         let row_bytes = row.text.as_bytes();
         for (ty, s, e) in &row.entities {
-            if !CHOICES_CLASS.contains(&ty.as_str()) {
+            if !fx.choices_class.contains(&ty.as_str()) {
                 continue;
             }
             let (a, b) = trim_word_bounds(row_bytes, *s, *e);
@@ -1067,11 +1261,17 @@ fn choices_checksum(rows: &[Row], vocab: &Vocabulary) -> u64 {
             let ptr_snap = ptr_gate.map(|w| {
                 snap_longest_in_window(&row.text, w, &group.canonical, &alias_refs).unwrap_or(w)
             });
+            // Round 4 control: the floor's answer; when it would ABSTAIN,
+            // the pointer(gate) window. The pointer ONLY where the floor
+            // has no answer (pre-registered round 4).
+            // has no answer (pre-registered round 4).
+            let floor_ptr_fallback = gaz.longest.or(ptr_gate);
             c.floor.record(floor_answer, expected);
             c.floor_alias_first.record(gaz.first, expected);
             c.floor_alias_longest.record(gaz.longest, expected);
             c.ptr_gate.record(ptr_gate, expected);
             c.ptr_snap.record(ptr_snap, expected);
+            c.floor_ptr_fallback.record(floor_ptr_fallback, expected);
         }
     }
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
@@ -1081,6 +1281,7 @@ fn choices_checksum(rows: &[Row], vocab: &Vocabulary) -> u64 {
         &c.floor_alias_longest,
         &c.ptr_gate,
         &c.ptr_snap,
+        &c.floor_ptr_fallback,
     ] {
         for v in [a.entities, a.exact, a.contain, a.abstain] {
             for byte in v.to_le_bytes() {
@@ -1118,23 +1319,54 @@ fn print_pop(name: &str, p: &PopStats) {
     print_arm("  floor+alias (longest-match)", &p.floor_alias_longest);
     print_arm("  pointer(gate)", &p.ptr_gate);
     print_arm("  pointer+snap (round 3)", &p.ptr_snap);
+    print_arm("  floor+ptr_fallback (r4)", &p.floor_ptr_fallback);
     print_arm("  pointer(raw)", &p.ptr_raw);
     print_arm("  pointer(no-alias gate)", &p.ptr_noalias);
 }
 
-/// One population's report row bundle (the report's 8th-argument smell is
-/// the point: one struct, not eight positionals).
+/// One population's report row bundle + the fixture context (the report's
+/// positional-argument smell is the point: structs, not positionals).
 struct PopReports<'a> {
+    fx: &'a Fixture,
     choices: &'a PopStats,
     all: &'a PopStats,
     nd: &'a PopStats,
 }
 
 /// The snap arm's exact-hit mechanism split (disclosure: where the hybrid's
-/// score comes from — resolved surfaces vs pointer-window fallbacks).
-struct SnapMechanism {
-    from_hit: u32,
-    from_fallback: u32,
+/// score comes from — resolved surfaces vs pointer-window fallbacks), the
+/// McNemar discordants (snap vs floor), and the round-4 control-arm reads.
+/// One bundle — the report takes structs, never eight positionals.
+struct RoundFourReports {
+    snap_from_hit: u32,
+    snap_from_fallback: u32,
+    snap_vs_floor: Discordants,
+}
+
+/// McNemar discordant pairs (one comparison), + the two-sided exact
+/// binomial p over b+c at 0.5.
+struct Discordants {
+    b: u32,
+    c: u32,
+}
+
+impl Discordants {
+    fn p(&self) -> f64 {
+        let n = self.b + self.c;
+        if n == 0 {
+            return 1.0;
+        }
+        let m = self.b.min(self.c);
+        // Two-sided exact: 2 * P(X <= m), X ~ Bin(n, 0.5). Iterative pmf —
+        // f64 is exact enough at n ~ 10^3 (report to 3 decimals).
+        let mut pmf = (0.5f64).powi(n as i32);
+        let mut cum = pmf;
+        for k in 1..=m {
+            pmf *= (n - k + 1) as f64 / k as f64;
+            cum += pmf;
+        }
+        (2.0 * cum).min(1.0)
+    }
 }
 
 fn report(
@@ -1144,16 +1376,22 @@ fn report(
     oov_skipped: u32,
     checksum: u64,
     misses: &[String],
-    snap_mech: SnapMechanism,
+    round_four: RoundFourReports,
 ) {
-    let PopReports { choices, all, nd } = pops;
-    println!("G5 span baselines — span_pointer vs the rule class (Plan 628 T0.7, re-run)");
+    let PopReports {
+        fx,
+        choices,
+        all,
+        nd,
+    } = pops;
+    println!("G5 span baselines — {} ({})", fx.fixture_rel, fx.label);
     println!(
-        "  fixture: {FIXTURE_REL} (BLAKE3-pinned, {} rows / {entity_total} entities)",
-        ROWS_EXPECTED
+        "  fixture: BLAKE3-pinned, {} rows / {entity_total} entities",
+        fx.rows_expected
     );
     println!(
-        "  schema vocabulary: {VOCAB_REL} (TRAIN split — never the scored rows; OOV mentions skipped: {oov_skipped})"
+        "  schema vocabulary: {} (TRAIN split — never the scored rows; OOV mentions skipped: {oov_skipped})",
+        fx.vocab_rel
     );
     println!();
     println!(
@@ -1246,7 +1484,22 @@ fn report(
         );
         println!(
             "    snap mechanism: {} exact via in-window surface, {} via window fallback (no surface inside)",
-            snap_mech.from_hit, snap_mech.from_fallback,
+            round_four.snap_from_hit, round_four.snap_from_fallback,
+        );
+        println!(
+            "    McNemar snap vs floor: b={}(snap-hit/floor-miss) c={}(snap-miss/floor-hit) — exact two-sided p={:.3}",
+            round_four.snap_vs_floor.b,
+            round_four.snap_vs_floor.c,
+            round_four.snap_vs_floor.p(),
+        );
+        let fb = &choices.floor_ptr_fallback;
+        println!(
+            "  floor+ptr_fallback (round 4 control) exact {} ({}) contain {} ({}) abstain {} — the pointer ONLY where the floor abstains",
+            fb.exact,
+            pct(fb.exact, fb.entities),
+            fb.contain,
+            pct(fb.contain, fb.entities),
+            fb.abstain,
         );
     }
     println!("  determinism checksum: {checksum:#018x}");

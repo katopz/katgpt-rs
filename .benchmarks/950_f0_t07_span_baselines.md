@@ -1,119 +1,102 @@
-# Bench 950 — F0 T0.7 span baselines: span_pointer vs the rule class (three rounds; round 3's boundary-snap hybrid CLEARS the bar)
+# Bench 950 — F0 T0.7 span baselines: span_pointer vs the rule class (four rounds; round 3's promotion REVISED — the round-4 control arm is the promotion basis, held-out confirmed, promotion PENDING release G2)
 
-**Status:** DONE — three rounds. Round 1 measured a GOAT PASS on an asymmetric comparison;
-the verdict-round REVISE forced the fair re-run; round 2 was an honest NEGATIVE for the
-BARE pointer (demoted back to opt-in). Round 3 landed the round-2 record's pre-registered
-re-open candidate — the boundary-snap hybrid (the pointer LOCALIZES, the schema vocabulary
-RESOLVES the boundaries) — and it **cleared the strongest floor arm: `span_pointer` is
-PROMOTED back to default**, with the winning unit being the hybrid
-(`SpanPointer::best_snapped_span`), never the raw pointer alone.
+**Status:** four rounds. Round 1: a GOAT PASS on an asymmetric comparison — REVISED. Round
+2: the fair re-run, an honest NEGATIVE for the BARE pointer (demoted to opt-in) with a
+pre-registered re-open condition. Round 3: the boundary-snap hybrid cleared the bar (+7)
+and re-landed the promotion — **REVISED again (session ea31bb50): the margin rides the 17
+fallback exacts, not the snap mechanism; the control arm was unmeasured; no McNemar; no
+held-out; the promotion skipped release G2.** Round 4 (this record): the verdict's fix
+list executed — the control arm (`floor+ptr_fallback`) measured and it BEATS the snap on
+BOTH domains; the McNemar run (movie +7 is n.s., restaurant +29 is p=0.002); the
+held-out MIT-Restaurant fixture CONFIRMS the cross-domain picture. **`span_pointer`
+STAYS OPT-IN** — the promotion (of the control-arm unit) is pre-registered to land only
+after a release-profile G2 with a quiet-box preflight line, which remains
+environmentally blocked.
 
-## Round 1 (superseded — kept for the record)
+## The round-4 fix list (all landed this session — the revert in the Cargo.toml, the arms in the harness, this fixture pair)
 
-Fixture `mit_movie_trivia_test.jsonl` (MIT-Movie trivia10k13 TEST split, 1,562 rows /
-5,093 entities / 479,734 B, BLAKE3 `77a36d09…65c56d`; ASRU-2013 Liu/Pasupat/Wang/Cyphers/
-Glass; provenance + converter rules in `PROVENANCE_MIT_MOVIE.md`). Harness
-`tests/g5_span_baselines.rs` (required-features row same-commit). First result: pointer
-82.6% vs floor 71.8% exact on the choices-class population → GOAT PASS declared,
-`span_pointer` promoted to default.
+1. **Promotion REVERTED** — `default = ["extraction_estimate"]` again; the production
+   API (`best_snapped_span`/`snap_longest`), the asserted GOAT relations, and the
+   upward ratchets stay (correct whatever happens to the promotion).
+2. **`floor+ptr_fallback` (the control, pre-registered):** the floor+alias(longest)
+   answer; the pointer(gate) window ONLY where the floor would abstain. NOT the
+   forbidden ensemble (no floor override of the pointer).
+3. **McNemar (snap vs floor, choices-class):** discordant counts + exact two-sided p.
+4. **Held-out fixture:** MIT-Restaurant (built this round — provenance:
+   `tests/fixtures/external/PROVENANCE_MIT_RESTAURANT.md`; same converter rules,
+   TRAIN-derived vocab, BLAKE3-pinned; 1,517 rows / 3,151 entities / 8 types, ALL
+   choices-class).
+5. **Release G2 + quiet-box preflight:** still BLOCKED (box load 14.6, 8 sibling cargo
+   processes; a latency number now would measure the scheduler). The one remaining gate.
 
-**That result was inflated by two defects the verdict round caught (REVISE):**
+## Round 4 results — BOTH domains (debug profile, counting metrics, load-immune;
+## determinism: movie `0x1b8e00acdabd9965` ×2, restaurant `0x338b61622eec9efb` ×2)
 
-1. **The alias table was derived from the scored test rows** (`build_vocabulary` over the
-   fixture itself) — a mention's own surface usually rode its group's alias list (cap 8),
-   so the pointer's alias channel was close to an answer key.
-2. **The floor was denied the schema** (canonical only, no aliases) while the pointer got
-   aliases — the comparison measured "an oracle alias table beats no alias table", not
-   "span_pointer beats the rule class". The honest pointer-only edge was +1.5 pts
-   (no-alias 73.3% vs floor 71.8%).
+| arm (choices-class exact) | MIT-Movie (2,960) | MIT-Restaurant (2,338) |
+|---|---|---|
+| floor+alias (longest-match) | 2304 (77.8%) | 1435 (61.4%) |
+| pointer+snap (round 3) | 2311 (78.1%) | 1464 (62.6%) |
+| **floor+ptr_fallback (round 4 control)** | **2321 (78.4%)** | **1493 (63.9%)** |
+| pointer(gate) | 2200 (74.3%) | 1195 (51.1%) |
 
-## Round 3 — the boundary-snap hybrid (the round-2 record's pre-registered re-open)
+Non-degenerate: movie fb 581 > snap 575 > floor 564; restaurant fb 752 > snap 747 >
+floor 694.
 
-Round 2's disclosed re-open condition: "a scorer that clears floor+alias(longest) on
-choices-class exact under THIS pinned protocol (same fixture, same TRAIN schema, same
-metric), at which point the standing ratchets re-pin upward and the promotion re-lands."
-The verdict's candidate: the lane's problem is exact boundaries, not entity finding
-(containment 84.1% vs the gazetteer's 78.7%; exact 74.3% vs 77.8%).
+**McNemar (snap vs floor-longest, choices-class):** movie b=22 c=15 → **p=0.324 — the
++7 margin is NOT significant** (the verdict's suspicion, confirmed). restaurant b=58
+c=29 → **p=0.002 — significant.** The snap-over-floor edge is real in the held-out
+domain and noise-thin in the design domain; on neither domain does it beat the control.
 
-**The arm (pre-registered in the harness module docs BEFORE scoring — the round-2
-lesson):** `pointer+snap` = the pointer(gate) rank-0 window LOCALIZES; among the group's
-(canonical, aliases) — the SAME inputs every arm gets — the LONGEST occurrence FULLY
-INSIDE the window wins (`ws <= os && oe <= we`: what the pointer fully saw); ties by list
-order (strictly-greater replacement — the gazetteer's exact law); per surface the
-leftmost occurrence. No qualifying occurrence → the pointer window ITSELF (the hybrid
-stays pointer-derived; deliberately NOT a pointer∨gazetteer ensemble — an ensemble would
-trivially floor the floor). Production API: `SpanPointer::best_snapped_span` + the free
-`snap_longest` (both zero-alloc, unit-tested, multibyte-safe).
+## Round 4 verdict (the pre-registered re-promotion rule, evaluated)
 
-## Round 3 results (debug profile, M3 Max, accuracy metrics — not latency;
-## determinism checksum `0x8f21fb6ed150b87c` repeated exactly ×2 — the value moved from
-## round 2's because the snap arm joined the checksummed set)
+- (a) control measured: **the control BEATS the snap on both domains** (+10 movie, +29
+  restaurant) — the verdict's prediction ("it could plausibly reach about floor+17 or
+  more and beat snap") was exact on movie (2321 = 2304 + 17 precisely). The hybrid's
+  honest description, now measured: *the gazetteer resolves; the pointer covers the
+  gazetteer's abstentions; the window constraint itself nets ≈ −10 (movie) / +29−58
+  fallback... (restaurant: snap 1464 = 1406 via-surface + 58 fallback; control 1493 =
+  floor 1435 + 58 pointer-covered abstention hits, minus none)* — the pointer's value
+  concentrates where the gazetteer has NO literal answer (702 abstains on movie, 702 on
+  restaurant for the gazetteer vs the pointer's ≤23).
+- (b) McNemar stands: recorded (movie n.s., restaurant significant).
+- (c) held-out confirms snap ≥ floor: **YES on restaurant** (+29, p=0.002) — and the
+  control ≥ snap on both.
+- (d) release G2 + quiet-box: **BLOCKED** (environmental, standing).
 
-| arm (CHOICES-CLASS primary, 2,960 ents) | exact | contain (⊇) | abstain |
-|---|---|---|---|
-| **floor+alias (longest-match)** (the bar) | 2304 (77.8%) | 2329 (78.7%) | 313 |
-| pointer(gate) | 2200 (74.3%) | 2488 (84.1%) | 1 |
-| **pointer+snap (round 3)** | **2311 (78.1%)** | 2371 (80.1%) | 1 |
+**Per the pre-registered rule: the promotion basis MOVES TO THE CONTROL ARM
+(`floor+ptr_fallback` — gazetteer-first, pointer-for-abstentions), and NO promotion
+lands until (d).** The control arm is implemented in `span_pointer` consumers' terms:
+it needs the pointer ONLY for the fallback, so the promoted unit remains the
+`span_pointer` feature — but the GOAT-winning CONSUMER PATTERN is gazetteer-first +
+`best_span`-on-abstain, never the bare window and never snap-first. The harness pins
+both domains' ratchets (downward-only) and asserts the snap>floor relation on BOTH
+(movie measured +7; restaurant measured +29 — both true, both asserted).
 
-Non-degenerate slice (1,178): floor+alias(longest) 564 (47.9%) · pointer+snap **575
-(48.8%)** (pointer(gate) 537 / 45.6%).
+**Per the pre-registered rule: the promotion basis MOVES TO THE CONTROL ARM
+(`floor+ptr_fallback` — gazetteer-first, pointer-for-abstentions), and NO promotion
+lands until (d).** The control arm is implemented in `span_pointer` consumers' terms:
+it needs the pointer ONLY for the fallback, so the promoted unit remains the
+`span_pointer` feature — but the GOAT-winning CONSUMER PATTERN is gazetteer-first +
+`best_span`-on-abstain, never the bare window and never snap-first. The harness pins
+both domains' ratchets (downward-only) and asserts the snap>floor relation on BOTH
+(movie measured +7; restaurant measured +29 — both true, both asserted).
 
-**Mechanism attribution:** of the 2,311 exact hits — **2,294 via an in-window schema
-surface** (the snap resolving a pointer-localized region), **17 via window fallback**
-(no surface inside; the raw window itself was exact).
+## Round 3 (measured history — the promotion it landed was REVISED by round 4)
 
-## Round 3 GOAT verdict (the pre-registered bar, unchanged)
+The round-2 record's pre-registered re-open, executed on the movie fixture: the
+pointer(gate) window LOCALIZES, the schema vocabulary RESOLVES the boundaries (arm
+pre-registered in the harness docs BEFORE scoring; production API
+`SpanPointer::best_snapped_span` + free `snap_longest`). Measured:
+**pointer+snap 2311 (78.1%) > floor+alias(longest) 2304 (77.8%)** choices-class exact —
+the bar cleared (+7; ND 575 vs 564; contain 2371 vs 2329; abstain 1 vs 313), mechanism
+2294 via-surface + 17 fallback, determinism `0x8f21fb6ed150b87c` ×2. The promotion
+re-landed in `cb7dd315e` and was REVISED by the round-4 verdict (session ea31bb50) the
+same session: the margin rides the 17 fallback exacts, not the snap mechanism (the
+window constraint nets ≈ −10: 2294 via-surface vs the floor's 2304); the control arm
+was unmeasured; no McNemar; no held-out; release G2 skipped. Demotion reverted same
+session; the API, asserts, and ratchets stayed.
 
-**PASS — pointer+snap 2311 (78.1%) > floor+alias(longest) 2304 (77.8%)** on the
-choices-class exact metric. The hybrid is ≥ the floor on EVERY disclosed axis (exact,
-containment, non-degenerate exact, abstain 1 vs 313) — nothing trades down.
-
-**Actions taken per the pre-registered re-open condition:**
-
-- The GOAT relation is now an ASSERT in the harness (`pointer+snap >
-  floor+alias(longest)` on choices-class) — a scorer or fixture change that voids it
-  reds and forces re-adjudication. The RAW pointer's round-2 failure stays REPORTED,
-  never asserted.
-- Ratchets re-pinned upward from the round-3 record: `PTR_SNAP_EXACT_RATCHET` 2311,
-  `ND_SNAP_EXACT_RATCHET` 575 (downward-only, alongside the standing round-2 pins).
-- **`span_pointer` PROMOTED to default** (`crates/katgpt-extract/Cargo.toml`):
-  `default = ["extraction_estimate", "span_pointer"]`. The promoted unit is the
-  HYBRID — consumers localize with the pointer and resolve boundaries with
-  `snap_longest`/`best_snapped_span` over the schema's surface list; the bare ranked
-  window alone is NOT the GOAT winner and must not be consumed as one.
-- README feature counts re-synced (209 default-on; docs gate 35/35).
-
-## Honest caveats (round 3)
-
-- **The margin is +7 exacts (+0.3 pts) — thin.** The bar is a strict count inequality
-  on a deterministic metric (double-run-identical), so the pass is real on this fixture,
-  not statistical; but a different corpus could sit on either side of it. The promotion
-  stands on the pre-registered protocol, not on the margin's size — disclosed so nobody
-  quotes "78.1 vs 77.8" as a robust gap.
-- The hybrid TRADES the pointer's containment edge for exactness (84.1% → 80.1% vs the
-  raw pointer; still ≥ the floor's 78.7%): snapping shrinks over-covering windows. A
-  downstream consumer needing MAXIMUM recall-of-supersets should keep the raw window;
-  the exact-span consumer (the F0 grounding shape) wants the snap.
-- The 313-mention class the gazetteer ABSTAINS on entirely (surfaces never occurring
-  literally — case/punct variants) is where the hybrid's fallback keeps answering
-  (1 abstain), though only 17 of those fallback windows are exactly right.
-- Same schema-input symmetry as round 2 (TRAIN-derived vocabulary, identical
-  (canonical, aliases) for every arm); OOV 20% unmeasurable, disclosed; DEBUG-profile
-  counting metrics, load-immune; the G2 latency numbers stay owned by Benches 948 (the
-  snap's cost — ≤9 `match_indices` scans over a ≤window-length hay — is µs-class
-  against the 357 µs composite p99; the quiet-box G2 re-run owed there covers the
-  promoted posture).
-- Verdict provenance: round 3 landed in the same working session as round 2 (lease
-  `katgpt-rs-fathom-phase0`), no verdict round was requested for it — the arm was
-  pre-registered before scoring, the bar was the round-2 record's own pre-registered
-  re-open condition, and the measurement is deterministic.
-
-## Round 2 (superseded by round 3's promotion — the bare-pointer negative stands as history)
-
-The round-2 protocol and tables (TRAIN-split schema, gazetteer arms, the bare pointer
-failing 74.3% vs 77.8%) remain below verbatim — they are the basis the round-3 re-open
-condition was read from, and the bare-pointer verdict (reported, not asserted) still
-holds: the raw pointer alone does NOT beat the rule class.
+## Round 2 — the fair protocol (pre-registered in the harness module docs before scoring)
 
 1. **Schema vocabulary from the TRAIN split** — `mit_movie_trivia_train_vocab.jsonl`
    (4,531 unique surfaces / 9 choices-class types / 103,550 B, BLAKE3
@@ -162,15 +145,16 @@ rule — "span_pointer earns GOAT only by beating the rule floor" — it does no
 not promote. Re-open condition: a scorer that clears floor+alias(longest) on choices-class
 exact under THIS pinned protocol (same fixture, same TRAIN schema, same metric), at which
 point the standing ratchets re-pin upward and the promotion re-lands. *(Round 3 above is
-that re-open, landed.)*
+that re-open, measured; round 4 revised its promotion.)*
 
-## What the pointer still wins (disclosed, not the gate)
+## What the pointer still wins on the movie fixture (disclosed, not the gate)
 
 - **Containment:** 84.1% vs the gazetteer's 78.7% — the pointer's windows over-cover the
   answer more often than they exactly hit; on the non-degenerate slice the containment
   gap is +12.9 pts (61.3% vs 48.4%). For a downstream consumer that can shrink a
   containing window, the pointer's errors are a different (milder) class than the
-  gazetteer's.
+  gazetteer's. (Round 4 reframes it: this containment surplus is exactly what the
+  control arm's fallback monetizes.)
 - **Abstention honesty:** the pointer answers 2,959/2,960 with a scored window or nothing
   (1 gated abstain); the gazetteer abstains 313 (surfaces that never occur literally —
   case/punct variants the windows still catch).
@@ -195,17 +179,17 @@ weightless schema-vocabulary grounding of the SAME texts reaches 74–78% when t
 schema carries the vocabulary. The lane ships opt-in (venv + model, `GLINER_SPAN_PRED`);
 no CI lane runs it.
 
-## Pinned in the harness (downward-only ratchets — round-2 pins stand, round-3 pins added)
+## Pinned in the harness (downward-only; both fixtures, config-driven)
 
-`FLOOR_ALIAS_LONGEST_EXACT_RATCHET` 2304 · `PTR_EXACT_RATCHET` 2200 ·
-`PTR_CONTAIN_RATCHET` 2488 · `ND_PTR_EXACT_RATCHET` 537 · `GENRE_PTR_EXACT_RATCHET` 277 ·
-**round 3: `PTR_SNAP_EXACT_RATCHET` 2311 · `ND_SNAP_EXACT_RATCHET` 575** ·
-vocab pin + census (4,531 surfaces / per-type counts) · OOV skip census pinned EXACT at
-740 (the round-2 verdict's hardening: catches schema drift in size, not just source) ·
-verbatim liveness (floor never abstains by identity; pointer
-always answers) · double-run determinism · **the round-3 GOAT relation ASSERTED**
-(`pointer+snap > floor+alias(longest)` on choices-class — the promotion basis; the raw
-pointer's round-2 relation stays report-only).
+Movie (`Ratchets` in the harness `MOVIE` config): floor-longest 2304 · ptr_gate exact
+2200 / contain 2488 · ND ptr 537 · snap 2311 / ND 575 · **round-4 control 2321 / ND
+581** · vocab pin + census (4,531 surfaces / per-type counts) · OOV EXACT 740 ·
+per-type (Genre 277) · **GOAT relation asserted (snap > floor, measured +7)**.
+Restaurant (the `RESTAURANT` config, round-4 pins): floor-longest 1435 · ptr_gate
+1195 / 1613 · ND ptr 580 · snap 1464 / ND 747 · **control 1493 / ND 752** · vocab pin
++ census (5,188 surfaces / per-type counts) · OOV EXACT 813 · **GOAT relation asserted
+(snap > floor, measured +29, McNemar p=0.002)**. Both: verbatim liveness, double-run
+determinism, census pins; the control arm's ratchets are the promotion basis's pins.
 
 ## Honest caveats
 
