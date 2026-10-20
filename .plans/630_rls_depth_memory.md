@@ -1,7 +1,7 @@
 # Plan 630: rls_depth_mem — Exact Recursive Least Squares Associative Memory
 
-**Status:** CLOSED 2026-10-21 — Phases 1–3 landed (GOAT G1–G4 ALL PASS), Phase 4 closed per the pre-registered rule: no consumer with a measured gap → `rls_depth_mem` stays opt-in with the full GOAT record as the re-open asset. Commits: Phase 1 `c573d51f3`, Phase 2 `c4d7524f0`, Phase 3 `4586a3348`.
-**Claimed:** 4090-idle-r630, epoch=1792517412, expires 2026-10-22T17:30:12+00:00
+**Status:** CLOSED 2026-10-21 — Phases 1–3 landed (GOAT G1–G4 ALL PASS), Phase 4 closed per the pre-registered rule: no consumer with a measured gap → `rls_depth_mem` stays opt-in with the full GOAT record as the re-open asset. Commits: Phase 1 `c573d51f3`, Phase 2 `c4d7524f0`, Phase 3 `4586a3348`, close `0dce3e326`.
+**Claim (retired at close):** 4090-idle-r630, epoch=1792517412 (claimed 2026-10-21, expired 2026-10-22T17:30:12+00:00; line form canonicalized out — the `epoch=` prefix is MALFORMED to claim_lease_check, the bare-digits convention applies)
 **Date:** 2026-10-20
 **Research:** [katgpt-rs/.research/629_Depth_Memory_RLS_Depth_Mixing.md](../.research/629_Depth_Memory_RLS_Depth_Mixing.md)
 **Source paper:** [arXiv:2610.18809](https://arxiv.org/abs/2610.18809) — "Depth Memory" (LDM: exact RLS across depth; Sherman–Morrison write, unwinding, windowed writes)
