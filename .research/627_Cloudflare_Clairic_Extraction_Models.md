@@ -1,0 +1,131 @@
+# Research 627: Cloudflare Clairic — System One Extraction Models
+
+> **Source:** "Introducing Clairic, a new System One class of extraction models" — Cloudflare blog, Alex Reneau, Michelle Chen, Kevin Flansburg, 2026-10-19 — <https://blog.cloudflare.com/clairic-extraction-model/> · model docs <https://developers.cloudflare.com/workers-ai/models/clairic/> · concepts <https://developers.cloudflare.com/workers-ai/concepts/extraction-models/>
+> **Date:** 2026-10-20
+> **Status:** Done — family synthesis **GOAT (provisional)** after Claude verdict round 1 (downgraded from Super-GOAT; re-score conditions in §8) → Proposal 016 "Fathom" + Plan 628 substrate filed this session; per-track tiers below
+> **Related Research:** 562 (TypeSafe System One / Jev — the DECISION class distill; this note is the EXTRACTION class sibling), 573 (CUA-S1 open Jev recipe), 579 (Jev harness decision-point map), 322 (Report-the-Floor UQ rule)
+> **Related Plans:** Plan 340 (ConformalIntervalCalibrator, default-on — the estimate/forecast floor), Plan 628 (Fathom extraction substrate — filed this session)
+> **Cross-ref (workspace):** riir-neuron-db `chunk_claim.rs` + `vibe.rs` (bitemporal provenance landing), riir-refine `self_evolve.rs` + `elo.rs` (delayed-label strategy selection), riir-reflex `src/lanes/` (comparison-lane machinery, incl. the GLiNER subprocess oracle — an extraction-model lane precedent), riir-instinct `EscalateSpec` (the one-definition escalation grammar), seal-std `seal-formula` (typed formula DAG precedent for the compute class)
+> **Classification:** Public
+
+---
+
+## TL;DR
+
+Clairic (`@cf/cloudflare/clairic`, preview 2026-10-19, open weights promised but NOT shipped) is the second System One class after TypeSafe's Jev/Clef decision models: an **extraction model** that answers with **typed values** — spans, numbers, dates, durations, lists, estimate distributions, forecasts — in ONE forward pass with zero output tokens. Every answer carries `p_null` + `confidence`; estimates carry median + 80% interval on a caller-declared grid. Four capability classes: **Extract** (value present in input), **Compute** (derived from input facts), **Estimate** (predicted beyond input from evidence), **Forecast** (per-step future values of a series).
+
+**Distilled for katgpt-rs (modelless, inference-time):** every one of the four classes has a modelless translation already seated in our substrate — spans via lexical/embedding pointer scoring + deterministic typed parsers; compute as a typed arithmetic DAG executed in CODE (Clairic's own stated weakness is our home turf); estimates/forecasts via `ConformalIntervalCalibrator` over seasonal/KARC forecaster families, Report-the-Floor gated. What Clairic structurally CANNOT do per-deployment — self-improvement from realized outcomes (the invoice gets paid, tomorrow's count arrives) — our `self_evolve` + freeze/thaw substrate does natively. The synthesis is a new product family, named **Fathom** (Proposal 016): the modelless extraction stack, built like Instinct was built.
+
+---
+
+## 1. Product Core Findings
+
+From the blog + docs (all measured/quoted at the 2026-10-19 preview):
+
+1. **Class definition:** System One = Extract (Clairic) / System One = Decide (Jev, Clef) / System Two = generate (LLMs). One parallel forward pass, no output tokens, charge for input only. Sub-second vs multi-second LLM pipelines (their cascade demo: 19.3 s vs 61.7 s end-to-end, 49% cheaper per million claims vs all-GLM-5.3).
+2. **Request shape:** `state` (text + up to 4 images) + a map of typed `fields` (name, type, plain-language `instructions`, constraints). Field types: `text` (span + char offsets), `number` (integer/decimals/unit), `date`/`time`/`datetime` (ISO), `duration` (unit), `list` (typed items, input order, spans), `estimate` (distribution inside `[min,max]` on `step` grid, linear or log), `forecast` (one estimate per future step). 65,536-token context; fields that don't fit one 8,192-token pass are split into parallel passes over the whole input and merged.
+3. **Uncertainty surface:** every scalar answer carries `p_null` (probability the value isn't in the input) and `confidence`; every estimate carries median + p10/p90 (all 99 percentiles on request) + p_below/p_above. Missing fields return `null` **with a `guess`** — the model shows what it would otherwise have picked. Typed output is guaranteed well-formed, NOT guaranteed correct.
+4. **Their own stated limitations (the honest part of the blog):** multi-step arithmetic and cross-row aggregation are weak — "have Clairic predict the value and let code do the math"; estimates need evidence in the input; "calibration is measured, not guaranteed" — intervals can run narrow on unfamiliar data; forecasting is basic ("not designed to replace time-series models"); use confidence/p_null to decide what to automate.
+5. **Naming (their P.S.):** Clair = clear + clerical + clairvoyance (prediction) + Cloudflare AI Regression. Sonically paired with Clef. This naming care is the template our family answer mirrors.
+
+---
+
+## 2. Pinned Novelty Claim (before any §4 search — TTPO rule)
+
+> A **modelless typed-field extraction engine** — spans via pointer scoring over hashed-feature embeddings + BM25 with deterministic typed parsers; compute as a typed arithmetic DAG executed in code; estimate/forecast via conformal calibrators over seasonal/KARC forecaster families that MUST beat the conformal-naive floor — that **self-evolves its per-field strategy routing from delayed realized labels** (estimates resolve later; the flywheel is free), serving behind an Instinct-style escalation ladder with every answer landing as a **bitemporal provenance-anchored claim** in riir-neuron-db. Distinguished from Clairic (hosted-only, weights-owned, no per-deployment self-evolution, calibration "measured not guaranteed"), from UIE/GLiNER (trained span models, no UQ intervals, no forecast class), from Singer et al. arXiv:2601.16999 (conformal sets over TRAINED NER labelers — not a weightless engine), and from classical OpenIE/rule IE (no typed field grammar, no calibration, no estimate/forecast, no self-evolution) by the **zero-weights assembly + delayed-label self-evolution loop + provenance landing**.
+
+## 3. Prior-Art Landscape (§4 searches, 2026-10-20)
+
+| Class | Examples | Has / Lacks |
+|---|---|---|
+| Hosted extraction model | **Clairic** (CF preview, weights pending) | typed values + p_null/confidence + intervals; lacks: open weights (yet), per-deployment self-evolution, guaranteed calibration, code-side determinism |
+| Trained universal extraction | UIE (Lu et al. 2022), GLiNER (2023), GLEAN, NuNER | strong zero-shot spans; lacks: conformal estimates, forecast class, weightless serving |
+| Conformal NER | Singer et al. [arXiv:2601.16999], CP-for-NLP survey (Campos et al.) | UQ over trained labelers; lacks: weightless engine, estimation/forecast classes, self-evolution |
+| LLM + JSON schema / function calling | GPT/Claude/Gemini structured outputs | incumbent; generation-based (parse failures, output-token cost, latency, drift between runs — their GLM repair-cost estimate changed every run) |
+| Classical/rule IE | Stanford OpenIE, rule NER | **the modelless precedent** — but no typed field grammar, no UQ, no estimate/forecast, no self-evolution |
+| Typed rule parsers | **Meta Duckling** (Apache-2.0; typed dimensions: time/amount/duration/ordinal/…), **Microsoft Recognizers-Text** (MIT; number/date/dimension grammars, multi-locale) | the DIRECT prior art for T0.3's parser class — deterministic typed parsing of numbers/dates/durations; lacks: span-pointer scoring, UQ intervals, estimate/forecast classes, self-evolution, field-schema wire. T0.3 consumes/translates their grammar design, never reinvents it |
+| **Ours (Fathom, proposed)** | Proposal 016 | modelless floor + floor-gated conformal estimates + compute-as-code DAG + delayed-label self-evolve + provenance landing + escalation ladder |
+
+No published or open system does the assembly. The DECISION sibling class is well-covered in-house (Research 562/573/579; Jeva teacher lane riir-train Issue 632) — this note is the extraction sibling's intake. In-repo lane citation correction (verdict round 1): the reflex GLiNER lane (`src/bin/harness.rs` → `fastino/GLiNER2.5-Decide`) is a **DECISION variant of GLiNER, not an extraction lane**; the extraction-shaped in-repo precedent is `riir-reflex/examples/cua_s1_forms_arena.rs` (the form-filling arena, mapped onto choice questions).
+
+## 4. Distillation — per capability class (the Path-0-style inventory)
+
+| Clairic class | Modelless translation | Substrate status |
+|---|---|---|
+| **Extract** (`text` spans w/ offsets) | Lexical (BM25/ngram) + hashed-feature embedding (reflex `embed.rs` class) span-pointer scoring over the input; alias/dictionary tables per field schema; exact-offset provenance for free (the span IS a slice of the input, not generated text). **Disclosed limit: instruction semantics.** Clairic's central feature is plain-language `instructions` steering each field ("the vendor's billing address, not the shipping one") — a weightless scorer cannot READ instructions; it matches schema/dictionary/positional signals. Instruction-conditioned extraction lands at F1 (dictionaries/prompt-tables) and F2 (hosted lane) — scored LOSS in §6 | NEW primitive (`span_pointer`, Plan 628) — scoring substrate exists in reflex/riir-rag patterns, wire-native span answer does not |
+| **Compute** (totals, date math, durations) | Typed arithmetic DAG over extracted fields, executed in CODE — deterministic, replayable, zero-model. seal-std `seal-formula` is the in-house formula-language precedent (consume/translate, never rebuild). Parser GRAMMAR design consumes Meta Duckling + Microsoft Recognizers-Text (§3 — the published typed-rule-parser class), never reinvented | Ships in adjacent form (seal-formula + the Duckling/Recognizers grammar class); extraction-wire field-DAG binding is new |
+| **Estimate** (median + 80% on declared grid) | **CROSS-SECTIONAL conditioning, not time-series:** Clairic's estimate reads evidence IN the state (a repair cost from a damage description; a price from a comps table pasted into the state). Modelless translation: comparables conditioning (kNN over structured/tabular content parsed from the state + the accumulating per-deployment outcomes ledger) → point predictor → `ConformalIntervalCalibrator` overlay → median/p10/p90 on the caller's grid. **G1: must beat `ConformalIntervalCalibrator<SeasonalNaiveForecaster>` (m=1) on CRPS/coverage/Winkler or the floor IS the answer** (Report the Floor, Research 322). Substrate share: the conformal overlay + grid quantization + floor harness SHIP (Plan 340); the cross-sectional conditioner is NEW — this is the honest ~50%, not ~80% | ~50% SHIPPED (overlay yes; conditioner no) |
+| **Forecast** (per-step + interval) | Same calibrator in h-step residual mode over the TIME-SERIES forecaster family (`SeasonalPoolForecaster`, KARC adapters — these fit FORECAST, not Estimate) | ~80% SHIPPED (Plan 340 max_h machinery) |
+| **p_null / abstention** | Fused abstain (confidence + corpus-distance gate — reflex's exact pattern), sigmoid everywhere, never softmax; abstention first-class in the wire | Pattern SHIPS in reflex; extraction-typed binding new |
+| **Images** | NOT in v1 — text-first doctrine (the honest LOSS row, below) | — |
+| **Confidence readout** | Inherited dispatch precedent (katgpt-rs Bench 817 — narrow/wide readout split), the same inheritance reflex used | Shipped precedent |
+
+## 5. The Self-Evolve Flywheel — the delta vs the vendor product
+
+A one-pass hosted model is frozen between its vendor's checkpoints, and its calibration is a vendor average ("measured, not guaranteed" — their words). The flywheel itself is NOT structurally exclusive to a weightless engine — a per-deployment outcomes ledger plus conformal re-fitting can wrap ANY lane's outputs, Clairic's included — and that is exactly the design: **Temper calibrates every rung, F2 hosted included.** The delta vs Clairic-the-product is who runs the loop: the vendor does not expose per-deployment refit to its customers, while Fathom runs it natively at every rung.
+
+Label provenance is honest, per class: **Estimate/Forecast labels arrive free** (the invoice is paid on day 34; tomorrow's count publishes) — every realized outcome is a labeled example for that (field-type, domain) cell. **Extract/Compute answers never resolve on their own** — their labels need human confirmation or downstream verification, so the flywheel's extract-side routing learns from confirmed/corrected spans only (a slower, honest channel).
+
+Fathom's loop (all modelless, per the modelless-first mandate):
+
+1. **Outcomes ledger** — realized values append to a per-deployment ledger (refine's trajectory-store shape).
+2. **Strategy routing** — per (field-type, domain): Elo + Beta-posterior selection over extraction STRATEGIES (parser grammar variants, span scorers, estimator families) — `riir-refine/src/self_evolve.rs` + `elo.rs` pattern, zero gradient descent.
+3. **Freeze/thaw** — routing tables + direction vectors snapshot under a BLAKE3 `MerkleFrozenEnvelope` (riir-neuron-db), atomic hot-swap, monotonic epoch tag (the instinct A2/A6 laws).
+4. **Calibration re-fit** — Temper's per-field residual pools re-fit from realized outcomes: the intervals TIGHTEN on this deployment's distribution instead of a vendor average. This is the direct answer to "calibration is measured, not guaranteed."
+
+Track-c note (honest): a trained span/estimate head on top of the same wire remains possible later (riir-train), but the modelless floor must be exhausted first, and nothing in the flywheel needs it.
+
+## 6. Scoreboard — Clairic claims vs shipped/proposed substrate
+
+Status column: **SHIPPED** = substrate exists in-repo today; **PROJECTED** = proposed engine vs their shipped one — the number lands only when Plan 628's benches (T0.6) report. Rows are not counted as wins until measured.
+
+| # | Their claim/feature | Ours | Verdict | Status |
+|---|---|---|---|---|
+| 1 | Typed values, no generation | parsers + spans, zero output tokens, zero WEIGHTS | **WIN** (strictly stronger guarantee) | BY-DESIGN (unbuilt) — deterministic by construction; engines land at T0.1–T0.3 |
+| 2 | Grounded spans with offsets | pointer-scored spans = literal input slices, provenance-anchored | **SPLIT** (their trained head wins on messy OCR text; ours is deterministic, auditable, free provenance) | PROJECTED (T0.2 + G5) |
+| 3 | Compute (totals, date math, multi-step arithmetic) | typed DAG in code — replayable, exact ("let code do the math" — their own limitation; merges their rows #3+#12, the same win) | **WIN** | BY-DESIGN (unbuilt) — code math is exact by construction; the DAG lands at T0.1/T0.4 |
+| 4 | Estimates w/ 80% interval | cross-sectional conditioner + conformal, floor-gated | **SPLIT → GOAT lane** (we must beat the floor to promote; their calibration is a vendor average) | PROJECTED (T0.4) |
+| 5 | Forecast per step | seasonal + conformal (Plan 340) | **SPLIT** (their learned rhythm pickup vs our guaranteed coverage) | ~SHIPPED (Plan 340 machinery; extraction binding PROJECTED) |
+| 6 | p_null / null-with-guess | fused abstain + first-class null | **WIN** (abstention doctrine is ours end-to-end) | PROJECTED (T0.5) |
+| 7 | Parallel fields, one pass | zero-alloc batch | **WIN** (order-of-latency: µs–ms class vs their 0.46 s extraction leg) | PROJECTED until the T0.6 bench pins the number |
+| 8 | Images | not in v1 | **LOSS** (disclosed, text-first doctrine) | — |
+| 9 | Per-deployment self-improvement | flywheel at every rung, incl. over hosted-lane outputs | **WIN** (the vendor product does not expose per-deployment refit; free labels = Estimate/Forecast only) | PROJECTED (Phase 2) |
+| 10 | Provenance/bitemporal landing | neuron-db `chunk_claim` + KG triples + valid_time | **WIN** | SHIPPED substrate (landing code PROJECTED, Phase 3) |
+| 11 | Open weights / sovereignty | pure code, nothing to leak | **WIN** | BY-DESIGN (unbuilt) — a pure-code floor has nothing to leak by construction |
+| 12 | Instruction-conditioned extraction (plain-language `instructions` per field — "the vendor's billing address, not the shipping one") | F0 weightless scoring CANNOT read instructions; schema/dictionary/positional signals only; instruction semantics land at F1 dictionaries and F2 hosted | **LOSS** (their central feature; our floor is blind to it — the ladder, not denial, is the answer) | — |
+
+**7 WIN · 3 SPLIT · 2 LOSS**, with the status column splitting the 7 wins honestly: 1 SHIPPED substrate (#10's landing zone), 3 PROJECTED (#6, #7, #9 — measured at T0.5/T0.6/Phase 2), 3 BY-DESIGN unbuilt (#1, #3, #11 — deterministic/sovereign by construction, engines unbuilt until Plan 628 lands them); #5 (Forecast, a SPLIT) is ~SHIPPED but is a SPLIT, never a win. Rows are not counted as wins until measured where measurement is possible; the BY-DESIGN rows are the ones whose claim is construction, not performance. The losses/splits share one root cause: a trained head beats a weightless scorer on semantics (instructions) and perceptual mess (OCR, images); our wins are structural (determinism, sovereignty, calibration discipline, self-evolution).
+
+## 7. Naming — the decision (owner ask, answered)
+
+The owner's analysis (Intuition / Fathom / Temper) is adopted with one correction: **the three names are not competitors for one seat — each has a correct seat, and only one names the SYSTEM.**
+
+- **Fathom = the extraction stack/family** (this proposal). To fathom = to sound the depth of water with a weighted line; figuratively, to come to understand something deep. The four classes map literally: Extract = sound the input; Estimate = the sounding line tells you depth AS AN INTERVAL (you learn the range of the bottom, not the exact point — an 80% interval in one word); Forecast = sound ahead. Etymology paragraph mirrors CF's Clair P.S. Sonics: 2 syllables, sharp consonants, family-consistent (Reflex / Refine / Instinct / Rethink / **Fathom**). Disclosed collisions: Fathom Analytics (privacy analytics), fathom.video (meeting notetaker) — different product spaces; the family already tolerates common-word collisions (Rethink Robotics, multiple "Reflex" products). Runner-up if the owner vetoes: **Plumb** (same depth semantics, lower collision profile).
+- **Temper = the calibration/abstention gate INSIDE Fathom** — the component that tempers raw scores into calibrated confidence + p_null and decides abstain/escalate. Exactly the owner's own mapping ("the piece that tempers raw model probabilities so that a 90% confidence score is mathematically true to reality"). Industrial dual meaning (tempering steel = hardened under load; temperament = level-headed) fits a gate.
+- **Intuition = reserved** for the future R2 middle rung of the DECISION ladder (between Instinct's local specialists and Rethink's hosted encoder — the owner's own mapping). Using it for the extraction stack would (a) blur the decision ladder's naming, (b) spend the natural Instinct-pairing on the wrong sibling, (c) add a 4-syllable name to a 2-syllable family.
+
+Repo/product topology follows the reflex precedent: substrate upstream-first in katgpt-rs (Plan 628), product repo `gist-rs/riir-fathom` (public, like riir-reflex/riir-instinct) at owner GO; wire one-definition `extraction_wire` in katgpt-core (the `decision_wire` R7-freeze shape: additive-only, contract_version, refused-unknown).
+
+## 8. Verdict
+
+**Per-track tiers (never pooled):**
+
+- **Track A — extraction-family product synthesis:** **GOAT (provisional)** — downgraded from Super-GOAT at verdict round 1: five of the eight WINs are PROJECTED (no bench yet), and the scoreboard missed the instruction-conditioning LOSS row. Re-score conditions (all required): (a) T0.4 reports the estimate head vs conformal-naive floor; (b) T0.6 pins the G2 latency number; (c) G5 runs against an external BLAKE3-pinned fixture with BOTH a Duckling/regex-class rule baseline and a GLiNER-class trained lane, and the span primitive beats the rule floor. If all three land favorably, re-score Super-GOAT vs GOAT on measured rows only. The family charter (Proposal 016) proceeds on the GOAT tier — GOAT still files plan + flags + benches; nothing in the phase order depends on the higher tier.
+- **Track B — per-primitive:**
+  - Estimate/forecast head wiring over Plan 340 → **GOAT** (feature-flagged, floor-gated; the G1 comparison IS the benchmark).
+  - `span_pointer` span-answer primitive → **GOAT** (new open primitive; lexicon/BM25/embedding pointer scorer; feature `span_pointer`; zero-alloc).
+  - Compute DAG binding → **Gain** (consume/translate seal-formula's pattern; do not rebuild a formula engine).
+  - Hosted Clairic comparison lane → **Gain**, owner-gated spend (F2 lane; measure-only until weights ship; **grammar-not-answers doctrine governs ANY corpus synthesis from Clairic outputs — never ingest their answers as training rows**).
+  - Images → **PASS for v1** (out of scope, disclosed; revisit only at owner ask).
+
+**MOAT gate per domain:** katgpt-rs = open primitives (extraction_wire, span_pointer, estimate head — generic math, no product semantics) ✓; product family = new public repo (owner-gated birth, reflex precedent) ✓; neuron-db = provenance landing consumer ✓; refine = self-evolve consumer ✓; instinct = ESC one-definition consumed, never forked ✓; rethink = untouched (extraction is NOT a rethink charter; a trained extraction head would open its own seam decision later, owner-gated) ✓.
+
+**Routing:** this note (627) + Proposal 016 + Plan 628, all katgpt-rs, all Public. No riir-train deferral triggered (no training-loop dependency in the modelless assembly; the §3.5 paths are the flywheel's own substrate).
+
+## 9. PASS-Redirects (synthesis)
+
+> **PASS-Redirects (typed rule parsers — the T0.3 source class):** Meta **Duckling** (facebook/duckling, Apache-2.0 — Haskell, typed dimensions: time/duration/amount/ordinal/distance/…, grammar+rule based) and Microsoft **Recognizers-Text** (microsoft/Recognizers-Text, MIT — number/date/dimension/sequence recognizers, multi-locale). This is the published class T0.3 consumes/translates; cited as prior art AND as G5's rule-baseline family, not a kill — the wire, UQ, estimate/forecast classes, and self-evolution are the delta.
+> **PASS-Redirects (conformal-extraction class):** Singer et al. [arXiv:2601.16999 "Uncertainty Quantification for Named Entity Recognition via Conformal Prediction"] — conformal sets over TRAINED NER labelers; the UQ-over-spans idea is published, the weightless-engine assembly is not; cited as the floor's external company, not a kill.
+> **PASS-Redirects (trained extraction class):** UIE (Lu et al. 2022), GLiNER (2023), GLEAN — trained universal extraction; the in-repo GLiNER lane is `fastino/GLiNER2.5-Decide`, a DECISION variant (citation corrected at verdict round 1); the extraction-shaped in-repo precedent is `riir-reflex/examples/cua_s1_forms_arena.rs`. No weightless analog published.
+> **PASS-Redirects (classical IE):** Stanford OpenIE / rule-based IE — the modelless precedent; lacks typed field grammar, calibration, estimate/forecast, self-evolution; the wire + floor discipline is the delta.
+> **PASS-Redirects (incumbent):** LLM + JSON-schema structured outputs — the generation-based incumbent; Clairic's own cascade table (and GLM's run-to-run estimate drift) is the published evidence for the extraction class's reason to exist.
