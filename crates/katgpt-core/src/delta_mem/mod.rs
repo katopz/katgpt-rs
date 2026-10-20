@@ -27,8 +27,17 @@ pub mod hash;
 pub mod multi;
 pub mod state;
 
+// rls_depth_mem (Plan 630, arXiv:2610.18809): the EXACT-online rung of the
+// associative-memory ladder — fixed-rank RLS whose online state after N
+// writes equals the batch decayed-ridge solution. Opt-in; the axis law +
+// both honest limits live in the module doc.
+#[cfg(feature = "rls_depth_mem")]
+pub mod rls;
+
 pub use hash::{ContextFeatures, FeatureHasher, OutcomeFeatures};
 pub use multi::{AggregationStrategy, MultiDomainMemory};
+#[cfg(feature = "rls_depth_mem")]
+pub use rls::{RlsCtx, RlsMemoryState};
 pub use state::{DeltaMemoryConfig, DeltaMemorySnapshot, DeltaMemoryState};
 
 // Re-export the surprise-gate threshold when temporal_deriv is enabled, so

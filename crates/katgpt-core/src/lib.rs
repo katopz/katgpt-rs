@@ -1367,7 +1367,11 @@ pub use katgpt_types::depth_invariance::{
     // Plan 607 T3: `state_option_scoring::head` consumes
     // `ridge_solve_direct_f64` for the corpus-fitted linear head (the KARC
     // Plan-308 fit math) — joined at birth per the same rule.
-    feature = "state_option_scoring"
+    feature = "state_option_scoring",
+    // Plan 630: `delta_mem::rls`'s G1 batch-equivalence test consumes
+    // `ridge_solve_direct_f64` (the decayed-ridge oracle) + `try_cholesky_f32`
+    // (the per-step SPD assertion) — joined at birth per the same rule.
+    feature = "rls_depth_mem"
 ))]
 pub mod linalg;
 

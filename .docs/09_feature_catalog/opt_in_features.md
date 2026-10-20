@@ -6000,3 +6000,35 @@ moments, ridge-regularized, shipped `symmetric_eig`). All dots through
 
 Docs: [`.docs/03_memory/kron_memory.md`](../03_memory/kron_memory.md) ·
 Bench: [`.benchmarks/951_issue954_kron_memory_goat.md`](../../.benchmarks/951_issue954_kron_memory_goat.md).
+
+## 155. rls_depth_mem — Exact-RLS Associative Memory (Plan 630 / Research 629, arXiv:2610.18809)
+
+The EXACT-online rung of the associative-memory ladder beside the
+approximation rung (`delta_mem` δ-rule) and the batch rung
+(`hebbian_kernel_memory`): a fixed-rank `RlsMemoryState<RANK>` (default 8)
+whose write is the paper's exact RLS update — `κ = Pk̃/(λ + k̃ᵀPk̃)`,
+`u = v − Mk̃`, `M += uκᵀ`, and the **symmetric-by-construction** P downdate
+`(P − κκᵀ·denom)/λ` (bit-symmetric in f32 where the textbook form loses
+symmetry and, with forgetting, positive-definiteness). The (u, κ, pre-P
+triangle) journal (`RlsCtx`, 36 f32 at rank 8) supports LIFO `unwind_step`
+(M-only, read-rollback-only) + `p_restore` (bit-exact P re-install — the
+paper's own save-don't-invert law; inverse Sherman–Morrison is
+deliberately not attempted). Fixed schedules α = 1.0, λ = 0.99 (Research
+629 §E6 — no learned scalars). Axis law: sequences need scans →
+approximations; depth/loops/pipeline-stages are naturally sequential →
+exact is free. Determinism: local-only state, sequential f32 folds in
+fixed order (Issue-940 classification).
+
+- **G1 batch equivalence (Phase 1, 2026-10-21)**: after N online writes the
+  state equals the batch DECAYED-ridge solution (`ridge_solve_direct_f64`
+  over the same λ-weighted window; the ridge term decays as λ^N/α, NOT a
+  fixed 1/α) — measured max|M_online − M_batch| **9.39e-7** at α=1/λ=0.99/
+  N=1000 (pin 1e-3, ~10³× margin) across 4 (α, λ) regimes; P SPD
+  (Cholesky) after EVERY step; unwind round-trip (W=64 journal writes →
+  reverse unwind → p_restore) dev **1.04e-7** with P bit-exact.
+- Phases 2–4 (WindowedReader, GOAT-vs-delta-rule microbench, consumer
+  decision) are OPEN — promotion to default requires the Phase-3 GOAT AND
+  a real consumer (Feature Flag Discipline); until then **OPT-IN**.
+
+Plan: [`.plans/630_rls_depth_memory.md`](../../.plans/630_rls_depth_memory.md) ·
+Research: [`.research/629_Depth_Memory_RLS_Depth_Mixing.md`](../../.research/629_Depth_Memory_RLS_Depth_Mixing.md).
