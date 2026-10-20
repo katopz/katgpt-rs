@@ -1375,6 +1375,21 @@ escalation_probe_gate = ["state_probe"]
 # Proposal 014 Phase-1 engine; promotion rides the GOAT gate.
 decision_wire = []
 
+# extraction_wire (Plan 628 T0.1 / Proposal 016): the Fathom extraction
+# wire contract — ExtractionRequest/ExtractionResponse over the nine-kind
+# field vocabulary (text/number/date/time/datetime/duration/list/estimate/
+# forecast), with abstention first-class (null + p_null), Clairic's honest
+# null-with-guess adopted, byte-offset spans as the provenance primitive,
+# constraints enforced by construction, and contract_version + additive-
+# only evolution (unknown versions refuse loud). WIRE ONLY — no engine
+# logic; the F0 floor lives in the katgpt-extract member crate. The
+# `decision_wire` sibling, extraction-flavored. Serde (json + postcard)
+# round-trips + a golden JSON byte-pin + fail-closed structural validation
+# ride in the module. Zero new deps. OPT-IN per the no-default-consumer
+# rule — the consumer is the Proposal 016 Phase-1 assembly; promotion
+# rides the GOAT gate.
+extraction_wire = []
+
 # runetrace (seal-remake Proposal 005 Phase 2 T2.1 / katgpt-rs Plan 624):
 # the scene-as-text format — RunetraceDoc { version, tick, scene, entities }
 # with per-entity glyph-led condition rows + parent-indexed DAG rows, a

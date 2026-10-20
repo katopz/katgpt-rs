@@ -1849,6 +1849,9 @@ pub mod legal_token_set;
 #[cfg(feature = "decision_wire")]
 pub mod decision_wire;
 
+#[cfg(feature = "extraction_wire")]
+pub mod extraction_wire;
+
 #[cfg(feature = "runetrace")]
 pub mod runetrace;
 
