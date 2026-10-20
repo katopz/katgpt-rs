@@ -1,6 +1,6 @@
 # Plan 630: rls_depth_mem — Exact Recursive Least Squares Associative Memory
 
-**Status:** Active — Phases 1–3 landed 2026-10-21, GOAT G1–G4 PASS; Phase 4 (consumer decision) open — promotion owner-gated on a real consumer
+**Status:** CLOSED 2026-10-21 — Phases 1–3 landed (GOAT G1–G4 ALL PASS), Phase 4 closed per the pre-registered rule: no consumer with a measured gap → `rls_depth_mem` stays opt-in with the full GOAT record as the re-open asset. Commits: Phase 1 `c573d51f3`, Phase 2 `c4d7524f0`, Phase 3 `4586a3348`.
 **Claimed:** 4090-idle-r630, epoch=1792517412, expires 2026-10-22T17:30:12+00:00
 **Date:** 2026-10-20
 **Research:** [katgpt-rs/.research/629_Depth_Memory_RLS_Depth_Mixing.md](../.research/629_Depth_Memory_RLS_Depth_Mixing.md)
@@ -47,8 +47,8 @@ Ship the exact-online rung of the associative-memory ladder the workspace alread
 
 ### Tasks
 
-- [ ] **T4.1** Name a real consumer or close the plan: candidates from Research 629 §2.5/§2.6 (pipeline-stage memory — needs a measured retrieval gap; healer selection signal — overlaps shipped surfaces; GDN delta-roll journal lives in riir-infer `.issues/049`, separate surface). **No consumer with a measured gap → the primitive stays opt-in and the plan closes with the verdict recorded.** Solving a problem nobody has is not promotion.
-- [ ] **T4.2** If GOAT passes AND a consumer lands: promotion decision + demote-the-loser check on the same slot (does `RlsMemoryState` replace `DeltaMemoryState` anywhere real, or do they serve different accuracy/latency points?).
+- [x] **T4.1** Consumer decision EXECUTED per the pre-registered rule: **no real consumer with a measured gap exists today — the plan CLOSES with the verdict recorded; the primitive stays opt-in.** The three candidates from Research 629 were each examined at research time and none carries a measured gap: (a) pipeline-stage memory — §2.5 "design-law level, no measured consumer problem; revisit only if a real pipeline-stage retrieval gap surfaces"; (b) healer selection signal — §2.6 "overlaps shipped selection surfaces... no documented retrieval gap maps to it (retrieval floors pinned and healthy)"; (c) the GDN delta-roll journal — separate surface, landed as riir-infer `.issues/049` (its own gating lane). Solving a problem nobody has is not promotion. **Re-open path:** a consumer materializes with a measured retrieval gap → the opt-in primitive + full GOAT record are waiting; promotion then rides T4.2 + Feature Flag Discipline.
+- [-] **T4.2** N/A — conditional on T4.1 naming a consumer (none did). The demote-the-loser check (does RLS replace `DeltaMemoryState` anywhere real?) is likewise deferred: at 1.17× write+read cost with strictly stronger recall (E4), they serve different accuracy/latency points — coexistence is the measured posture, replacement would need a consumer first.
 
 ## Non-goals (auditable discards — Research 629 §2.2)
 

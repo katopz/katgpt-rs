@@ -6044,8 +6044,11 @@ fixed order (Issue-940 classification).
   E5 surprise scalar pinned to its closed forms (virgin-state repeat
   contraction λ/(λ+α) = 0.4975 exact; trained-state persistence = the
   conditioned-gain law, documented as signal).
-- Phase 4 (consumer decision) OPEN — the primitive stays opt-in until a
-  real consumer lands with a measured gap.
+- **Phase 4 CLOSED per the pre-registered rule (2026-10-21)**: no real
+  consumer with a measured gap exists (§2.5 pipeline-stage memory
+  gapless; §2.6 healer signal gapless; the GDN journal is riir-infer's
+  separate landed surface) — **stays opt-in**; the flag + the full GOAT
+  record are the re-open asset when a consumer materializes.
 
-Plan: [`.plans/630_rls_depth_memory.md`](../../.plans/630_rls_depth_memory.md) ·
+Plan: [`.plans/630_rls_depth_memory.md`](../../.plans/630_rls_depth_memory.md) (CLOSED) ·
 Research: [`.research/629_Depth_Memory_RLS_Depth_Mixing.md`](../../.research/629_Depth_Memory_RLS_Depth_Mixing.md).
