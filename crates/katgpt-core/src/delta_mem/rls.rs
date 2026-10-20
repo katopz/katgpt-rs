@@ -316,6 +316,78 @@ impl<const RANK: usize> Default for RlsMemoryState<RANK> {
     }
 }
 
+/// Bounded correction window over a frozen base state (Phase 2, T2.1):
+/// reads `M_j·x = M_b·x + Σᵢ uᵢ(κᵢᵀx)` for the ≤ E journaled writes — the
+/// windowed-traffic form of the last E states WITHOUT materializing E
+/// intermediate `RlsMemoryState`s (the paper's read-side amortization).
+///
+/// Corrections are summed in **write order** (append order — pinned; the
+/// Phase-2 G1 test replays that order against the materialized state).
+/// Construction allocates once (`with_capacity(max)`); `read_into` itself is
+/// zero-alloc. `RlsMemoryState` stays the only writer — the window is a
+/// READ-ONLY view; never `push` a record that the base has already absorbed
+/// (the G1 contract is base + window == the state AFTER exactly those
+/// writes), and never mix records from two states (stale-gain class).
+pub struct WindowedReader<'a, const RANK: usize = 8, const TRI: usize = 36> {
+    /// The frozen base the corrections apply on top of.
+    base: &'a RlsMemoryState<RANK>,
+    /// Journaled corrections, write order (append order) preserved.
+    corrections: Vec<RlsCtx<RANK, TRI>>,
+    /// The ≤ E bound (capacity was pre-reserved; `push` refuses past it).
+    max: usize,
+}
+
+impl<'a, const RANK: usize, const TRI: usize> WindowedReader<'a, RANK, TRI> {
+    /// Window over `base` holding at most `max` corrections (pre-reserved).
+    pub fn new(base: &'a RlsMemoryState<RANK>, max: usize) -> Self {
+        Self {
+            base,
+            corrections: Vec::with_capacity(max),
+            max,
+        }
+    }
+
+    /// Append one journaled correction (write order). Panics loud past the
+    /// ≤ E bound — roll the window instead (drop the oldest, re-base, or
+    /// narrow the query set; the caller owns the policy).
+    pub fn push(&mut self, ctx: RlsCtx<RANK, TRI>) {
+        assert!(
+            self.corrections.len() < self.max,
+            "WindowedReader bound E={} exceeded — roll the window before pushing more",
+            self.max
+        );
+        self.corrections.push(ctx);
+    }
+
+    /// Drop all corrections (back to the bare base read).
+    pub fn clear(&mut self) {
+        self.corrections.clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.corrections.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.corrections.is_empty()
+    }
+
+    /// `out = M_j·x` where `M_j = M_b + Σᵢ uᵢκᵢᵀ` over the window, summed
+    /// in write order. Zero-alloc; sequential folds (Issue-940 local-only).
+    pub fn read_into(&self, x: &[f32], out: &mut [f32]) {
+        self.base.read_into(x, out);
+        for ctx in &self.corrections {
+            let mut s = 0.0f32; // κᵢᵀx
+            for (&k_i, &x_i) in ctx.kappa.iter().zip(x.iter()) {
+                s += k_i * x_i;
+            }
+            for (out_j, &u_j) in out.iter_mut().zip(ctx.u.iter()) {
+                *out_j += u_j * s;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -619,5 +691,94 @@ mod tests {
         let k = [0.1f32; 4];
         let v = [0.1f32; 8];
         st.write(&k, &v);
+    }
+
+    /// Phase-2 G1 (T2.2): windowed read == materialized-intermediate read.
+    /// Base = the state after B writes (frozen clone); W more journaled
+    /// writes on the live state; the windowed reader over (base, journal)
+    /// must equal the LIVE state's read (its M absorbed exactly those W
+    /// rank-1 terms) across randomized queries. Summation orders differ
+    /// (base-first vs absorbed-in-place) — f32 drift is the tolerance.
+    #[test]
+    fn windowed_read_equals_materialized() {
+        const B: usize = 200;
+        const W: usize = 64;
+        const Q: usize = 32;
+        let (keys, vals) = gen_stream(4242, B + W);
+        let mut st = RlsMemoryState::<R>::new();
+        for i in 0..B {
+            st.write(&keys[i], &vals[i]);
+        }
+        let base = st.clone();
+        let mut journal: Vec<RlsCtx<R>> = Vec::with_capacity(W);
+        for i in B..B + W {
+            let mut ctx = RlsCtx::<R>::default();
+            st.write_ctx(&keys[i], &vals[i], &mut ctx);
+            journal.push(ctx);
+        }
+        let mut reader = WindowedReader::<R>::new(&base, W);
+        for ctx in journal.drain(..) {
+            reader.push(ctx);
+        }
+        assert_eq!(reader.len(), W);
+        // Randomized unit queries (separate generator — independent of the
+        // stream generator's state).
+        let mut worst = 0.0f32;
+        let mut g = Gauss::new(777);
+        for _ in 0..Q {
+            let mut q = [0.0f32; R];
+            for x in q.iter_mut() {
+                *x = g.next();
+            }
+            l2_normalize(&mut q);
+            let mut out_w = [0.0f32; R];
+            let mut out_m = [0.0f32; R];
+            reader.read_into(&q, &mut out_w);
+            st.read_into(&q, &mut out_m);
+            for (a, b) in out_w.iter().zip(out_m.iter()) {
+                worst = worst.max((a - b).abs());
+            }
+        }
+        eprintln!("phase2 g1: max|windowed − materialized| over {Q} queries, W={W} = {worst:.3e}");
+        // Different association order over W=64 O(1) terms: ~1e-6 expected.
+        assert!(
+            worst < 1e-4,
+            "windowed != materialized: max dev {worst:.3e} ≥ 1e-4"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "bound E=")]
+    fn window_reader_refuses_past_bound() {
+        let (keys, vals) = gen_stream(31337, 4);
+        let mut st = RlsMemoryState::<R>::new();
+        // Journal all four writes FIRST (no reader alive yet), then the
+        // reader's third push must fire the bound.
+        let mut journal: Vec<RlsCtx<R>> = Vec::with_capacity(4);
+        for i in 0..4 {
+            let mut ctx = RlsCtx::<R>::default();
+            st.write_ctx(&keys[i], &vals[i], &mut ctx);
+            journal.push(ctx);
+        }
+        let mut reader = WindowedReader::<R>::new(&st, 2);
+        for ctx in journal {
+            reader.push(ctx);
+        }
+    }
+
+    #[test]
+    fn window_reader_empty_equals_base() {
+        let (keys, vals) = gen_stream(2468, 8);
+        let mut st = RlsMemoryState::<R>::new();
+        for i in 0..8 {
+            st.write(&keys[i], &vals[i]);
+        }
+        let reader = WindowedReader::<R>::new(&st, 4);
+        assert!(reader.is_empty());
+        let mut a = [0.0f32; R];
+        let mut b = [0.0f32; R];
+        reader.read_into(&keys[0], &mut a);
+        st.read_into(&keys[0], &mut b);
+        assert_eq!(a, b, "empty window must be bit-identical to the base read");
     }
 }

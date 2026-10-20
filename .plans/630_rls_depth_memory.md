@@ -1,6 +1,6 @@
 # Plan 630: rls_depth_mem — Exact Recursive Least Squares Associative Memory
 
-**Status:** Active — Phase 1 landed 2026-10-21 (Phase 2–4 open)
+**Status:** Active — Phases 1+2 landed 2026-10-21 (Phase 3–4 open)
 **Claimed:** 4090-idle-r630, epoch=1792517412, expires 2026-10-22T17:30:12+00:00
 **Date:** 2026-10-20
 **Research:** [katgpt-rs/.research/629_Depth_Memory_RLS_Depth_Mixing.md](../.research/629_Depth_Memory_RLS_Depth_Mixing.md)
@@ -29,9 +29,9 @@ Ship the exact-online rung of the associative-memory ladder the workspace alread
 
 ### Tasks
 
-- [ ] **T2.1** `WindowedReader { base: &RlsMemoryState, corrections: Vec<(ctx, )> ≤ E }` with `read_into(&self, x, out)` = `base·x + Σ u_i(κ_iᵀx)`, corrections summed in **write order** (pinned).
-- [ ] **T2.2** G1: windowed read == materialized-intermediate read (f32 tolerance pinned, order pinned) across randomized writes.
-- [ ] **T2.3** G2 microbench (`benches/bench_rls_depth_mem.rs`): windowed-traffic vs materializing E intermediate states, E=4, `--release`.
+- [x] **T2.1** `WindowedReader { base: &RlsMemoryState, corrections: Vec<(ctx, )> ≤ E }` with `read_into(&self, x, out)` = `base·x + Σ u_i(κ_iᵀx)`, corrections summed in **write order** (pinned). Landed in `rls.rs` — `WindowedReader<'a, RANK, TRI>::new(base, max)` (pre-reserved capacity), `push` (refuses loud past the ≤ E bound — the caller owns window-roll policy), `clear`/`len`/`is_empty`, `read_into` zero-alloc, sequential folds, write order = append order.
+- [x] **T2.2** G1: windowed read == materialized-intermediate read — LANDED (`windowed_read_equals_materialized`): B=200 base writes, W=64 journaled writes, 32 randomized unit queries; **measured max|windowed − materialized| = 1.192e-7** (pin 1e-4); the ≤ E bound refusal is test-pinned (`window_reader_refuses_past_bound`) and the empty-window bit-identity to the base read (`window_reader_empty_equals_base`).
+- [x] **T2.3** G2 microbench (`benches/bench_rls_depth_mem.rs`, `[[bench]]` row + `required-features = ["rls_depth_mem"]`, harness=false, xorshift-seeded — no global draw): windowed-traffic vs materializing E intermediate states, E=4, release. **Measured (4090 box, idle, CPU 5% / RAM 17.2/31.8 GiB, 2026-10-21): windowed 100.0 ns vs materialized 200.0 ns per E-stage sweep (median of 20k) — windowed 2.00×.** The per-stage materialization cost (1 write + clone RANK² + read RANK²) is the traffic the window avoids; per-single-stage-read the materialized read can win — the sweep is the window's use case. REPORT-ONLY — the Phase-3 T3.1 GOAT is the decision gate.
 
 ## Phase 3 — GOAT gate vs the shipped rung
 

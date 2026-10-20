@@ -2231,6 +2231,15 @@ required-features = ["successor_density_critic"]
 name = "bench_844_exact_sigmoid_ordered_dot"
 harness = false
 
+# Plan 630 Phase 2 T2.3 — rls_depth_mem windowed-vs-materialized G2
+# microbench (E=4 stage sweep; report-only — the Phase-3 T3.1 GOAT is the
+# decision gate). required-features + the file-level #![cfg] are the two
+# green-zero defenses (the bench_697 convention).
+[[bench]]
+name = "bench_rls_depth_mem"
+harness = false
+required-features = ["rls_depth_mem"]
+
 # Plan 585 Phase 3 — Usage-rate (mass/age) KV eviction GOAT gate: T3.1 planted
 # age-bias fixture (raw-H2O evicts the hot row, mass/age retains it), T3.2
 # micro-GPT recall at matched KV budget across 6 policies (ring, raw-H2O,
