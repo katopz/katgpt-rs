@@ -12,19 +12,29 @@
 //! - Decimals: `3.25` (integer part required; `.5` alone is not a number;
 //!   up to 15 fraction digits).
 //! - Negatives: `-5` (attached) and `minus 5` (word + whitespace).
-//! - Currency: prefix symbols `$5`, `€3.25`; suffix words
-//!   `5 dollars`, `5 euros`, `5 usd`, `5 eur`. Value is numeric; the
-//!   canonical unit (`usd`/`eur`) is used only for constraint matching —
-//!   [`FieldValue::Number`] carries no unit.
-//! - Percent: `12%`, `12 %`, `12 percent`. The value is the LITERAL 12
-//!   (not 0.12); the canonical unit is `percent`.
+//! - Currency: prefix symbols `$5`, `€3.25` (attached or one space away —
+//!   `$ 14 million`, issue 953); suffix words `5 dollars`, `5 euros`,
+//!   `5 usd`, `5 eur`, `5 yen`, `5 francs`, `5 cents`, `5 pence`. Value is
+//!   numeric; the canonical unit (`usd`/`eur`/…) is used only for
+//!   constraint matching — [`FieldValue::Number`] carries no unit.
+//! - Percent: `12%`, `12 %`, `12 percent`, `12 percentage`, `12 percents`,
+//!   and the prefix forms `percent of 10`, `per cent of twenty-two`. The
+//!   value is the LITERAL (not a fraction); the canonical unit is
+//!   `percent`.
 //! - Unit suffixes: `5 km`, `12kg` (attached or spaced) over a documented
-//!   length/mass set (see [`NUMBER_UNITS`]). The preposition unit `in`
-//!   is deliberately excluded (unbounded collision with English "in").
+//!   length/mass/volume set (see [`NUMBER_UNITS`]). The preposition unit
+//!   `in` is deliberately excluded (unbounded collision with English
+//!   "in").
 //! - Multipliers: attached `5k`, `1.5M`, `2B`; words `2 thousand`,
-//!   `2 million`, `2 billion`. Lowercase attached `m`/`b` are NOT
-//!   multipliers (`5m` = 5 meters). Multiplier + suffix combos compose
-//!   (`2 million dollars`).
+//!   `2 million`, `2 billion`, `a hundred`, `3 dozens` (×12), `25 lakh`
+//!   (×100000), `a trillionth` (×1e-12) — chained (`a hundred trillionths`
+//!   = 1e-10). Lowercase attached `m`/`b` are NOT multipliers (`5m` = 5
+//!   meters). Multiplier + suffix combos compose (`2 million dollars`).
+//! - Word numbers: the magnitude grammar of [`super::words`] — `sixteen`,
+//!   `twenty percent`, `one hundred and sixteen`, `one mile`, `one penny`,
+//!   `a dozen`.
+//! - Fractions: `1/4`, `-4/5` (attached `/den`) and the mixed form
+//!   `10 1/2` = 10.5, `- 1 4/5` = -1.8 (spaced sign allowed).
 //!
 //! ## Constraint enforcement (by construction — a violation yields NO
 //! candidate, never a clamped one)
@@ -40,6 +50,7 @@
 //! - Magnitude: |value| ≥ 1e15 is rejected (f64 exactness floor at 2^53).
 
 use super::{
+    words::{article_one_at, word_number_at},
     ParsedValue, RawCandidate, RawValue, ascii_word_at, finish, is_word_byte, next_boundary,
     prev_char_index, skip_ascii_ws,
 };
@@ -64,22 +75,42 @@ const VALUE_CAP: f64 = 1e15;
 const NUMBER_UNITS: &[(&str, &str)] = &[
     ("centimeters", "cm"),
     ("millimeters", "mm"),
+    ("milliliters", "ml"),
+    ("millilitres", "ml"),
     ("kilometers", "km"),
     ("centimeter", "cm"),
     ("millimeter", "mm"),
-    ("kilometer", "km"),
+    ("milliliter", "ml"),
+    ("millilitre", "ml"),
+    ("kilometers", "km"),
     ("kilograms", "kg"),
     ("kilogram", "kg"),
     ("meters", "m"),
     ("miles", "mi"),
     ("pounds", "lb"),
+    ("gallons", "gal"),
+    ("liters", "l"),
+    ("litres", "l"),
+    ("ounces", "oz"),
+    ("quarts", "qt"),
+    ("tonnes", "t"),
+    ("pints", "pt"),
     ("meter", "m"),
     ("mile", "mi"),
+    ("gram", "g"),
     ("grams", "g"),
+    ("gallon", "gal"),
     ("pound", "lb"),
-    ("grams", "g"),
     ("feet", "ft"),
     ("foot", "ft"),
+    ("liter", "l"),
+    ("litre", "l"),
+    ("ounce", "oz"),
+    ("quart", "qt"),
+    ("tonne", "t"),
+    ("ton", "t"),
+    ("tons", "t"),
+    ("pint", "pt"),
     ("kilo", "kg"),
     ("kilos", "kg"),
     ("km", "km"),
@@ -90,6 +121,8 @@ const NUMBER_UNITS: &[(&str, &str)] = &[
     ("kg", "kg"),
     ("lbs", "lb"),
     ("lb", "lb"),
+    ("ml", "ml"),
+    ("mls", "ml"),
     ("m", "m"),
     ("g", "g"),
 ];
@@ -97,13 +130,50 @@ const NUMBER_UNITS: &[(&str, &str)] = &[
 const CURRENCY_WORDS: &[(&str, &str)] = &[
     ("dollars", "usd"),
     ("euros", "eur"),
+    ("francs", "franc"),
+    ("pennies", "penny"),
     ("dollar", "usd"),
     ("euro", "eur"),
+    ("pence", "pence"),
+    ("penny", "penny"),
+    ("cents", "cents"),
+    ("franc", "franc"),
     ("usd", "usd"),
     ("eur", "eur"),
+    ("yen", "yen"),
+    ("cent", "cents"),
 ];
 
-const MULTIPLIER_WORDS: [(&str, f64); 3] = [("thousand", 1e3), ("million", 1e6), ("billion", 1e9)];
+/// Spelled-out percent suffixes (the wire's canonical `percent`).
+const PERCENT_WORDS: &[(&str, &str)] = &[
+    ("percentage", "percent"),
+    ("percents", "percent"),
+    ("percent", "percent"),
+];
+
+/// Word multipliers, chained (`a hundred trillionths` = 1e-10); the
+/// fraction words divide (`two thirds` = 2/3).
+const MULTIPLIER_WORDS: &[(&str, f64)] = &[
+    ("trillionths", 1e-12),
+    ("trillionth", 1e-12),
+    ("thirds", 1.0 / 3.0),
+    ("third", 1.0 / 3.0),
+    ("thousand", 1e3),
+    ("hundred", 1e2),
+    ("million", 1e6),
+    ("billion", 1e9),
+    ("dozens", 12.0),
+    ("dozen", 12.0),
+    ("lakh", 1e5),
+];
+
+/// Prefix-percent surface forms (`per cent of twenty-two` = 22 percent).
+const PERCENT_PREFIXES: &[&[&str]] = &[
+    &["percentage", "of"],
+    &["percents", "of"],
+    &["percent", "of"],
+    &["per", "cent", "of"],
+];
 
 /// Parse every Number candidate in `state` and append them best-first.
 pub fn parse_number(state: &str, constraints: &FieldConstraints, out: &mut Vec<ParsedValue>) {
@@ -282,6 +352,90 @@ pub(crate) fn core_at(b: &[u8], we: usize, i: usize) -> Option<CoreOut> {
     })
 }
 
+/// The word-number core: the magnitude grammar, or `a`/`an` (=1) directly
+/// before a magnitude/dozen word (`a dozen`).
+fn word_core_at(b: &[u8], we: usize, i: usize) -> Option<(usize, f64)> {
+    if let Some(hit) = word_number_at(b, we, i) {
+        return Some(hit);
+    }
+    article_one_at(b, we, i).map(|e| (e, 1.0))
+}
+
+/// Does a word-number core start at `i`? (the sign paths' lookahead)
+fn word_core_starts(b: &[u8], we: usize, i: usize) -> bool {
+    word_core_at(b, we, i).is_some()
+}
+
+/// 1-2 digit run (the fraction numerator/denominator).
+fn one_two_digits_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u32)> {
+    if i >= we || !b[i].is_ascii_digit() {
+        return None;
+    }
+    let mut v = u32::from(b[i] - b'0');
+    let mut e = i + 1;
+    if e < we && b[e].is_ascii_digit() {
+        v = v * 10 + u32::from(b[e] - b'0');
+        e += 1;
+    }
+    Some((e, v))
+}
+
+/// `/den` at `i` — 1-2 digit non-zero denominator, hard boundary after
+/// (a trailing `/` belongs to a date-like shape, not this fraction).
+fn slash_den_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u32)> {
+    if i >= we || b[i] != b'/' {
+        return None;
+    }
+    let (de, den) = one_two_digits_at(b, we, i + 1)?;
+    if den == 0 {
+        return None;
+    }
+    if de < we && (is_word_byte(b[de]) || b[de] == b'/') {
+        return None;
+    }
+    Some((de, den))
+}
+
+/// Fraction tail after a digit core: a whitespace-separated `num/den`
+/// (the `10 1/2` shape — an ADDEND). The attached `/den` form is handled
+/// at the call site (there the core is the NUMERATOR: `1/4` = 1/4).
+fn fraction_tail_at(b: &[u8], we: usize, after: usize) -> Option<(usize, f64, usize)> {
+    let j = skip_ascii_ws(b, after, we);
+    if j == after {
+        return None;
+    }
+    let (ne, num) = one_two_digits_at(b, we, j)?;
+    let (de, den) = slash_den_at(b, we, ne)?;
+    Some((de, f64::from(num) / f64::from(den), after))
+}
+
+/// A prefix-percent form at `i` (`per cent of 210`). Returns the offset
+/// just past the prefix.
+fn percent_prefix_at(b: &[u8], we: usize, i: usize) -> Option<usize> {
+    for words in PERCENT_PREFIXES {
+        let mut j = i;
+        let mut ok = true;
+        for (n, w) in words.iter().enumerate() {
+            let k = if n == 0 { j } else { skip_ascii_ws(b, j, we) };
+            if n > 0 && k == j {
+                ok = false;
+                break;
+            }
+            match ascii_word_at(b, we, k, w) {
+                Some(e) => j = e,
+                None => {
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        if ok {
+            return Some(j);
+        }
+    }
+    None
+}
+
 fn try_number_at(
     b: &[u8],
     we: usize,
@@ -290,76 +444,146 @@ fn try_number_at(
     sink: &mut Vec<RawCandidate>,
 ) {
     let mut i = s;
-    // Sign: attached '-' or the word "minus" + whitespace.
+    // Prefix-percent forms: "per cent of twenty-two" -> 22 percent.
+    let mut percent_ctx = false;
+    if let Some(pe) = percent_prefix_at(b, we, i) {
+        percent_ctx = true;
+        i = skip_ascii_ws(b, pe, we);
+        if i >= we {
+            return;
+        }
+    }
+    // Sign: attached '-' (whitespace optional) or the word "minus" + ws.
     let mut neg = false;
-    if b[i] == b'-' && i + 1 < we && b[i + 1].is_ascii_digit() {
-        neg = true;
-        i += 1;
+    if b[i] == b'-' {
+        let j = skip_ascii_ws(b, i + 1, we);
+        if j < we && (b[j].is_ascii_digit() || word_core_starts(b, we, j)) {
+            neg = true;
+            i = j;
+        } else {
+            return;
+        }
     } else if let Some(e) = ascii_word_at(b, we, i, "minus") {
         let j = skip_ascii_ws(b, e, we);
-        if j > e && j < we && b[j].is_ascii_digit() {
+        if j > e && j < we && (b[j].is_ascii_digit() || word_core_starts(b, we, j)) {
             neg = true;
             i = j;
         } else {
             return;
         }
     }
-    // Currency prefix symbols (attached to the digits).
+    // Currency prefix symbols, attached to the core or ONE space away
+    // ("$ 14 million" — issue 953 lever 2).
     let mut currency: Option<&'static str> = None;
-    if b[i] == b'$' && i + 1 < we && b[i + 1].is_ascii_digit() {
-        currency = Some("usd");
-        i += 1;
+    if b[i] == b'$' {
+        let j = skip_ascii_ws(b, i + 1, we);
+        if j < we && b[j].is_ascii_digit() {
+            currency = Some("usd");
+            i = j;
+        }
     } else if b[i] == 0xE2
         && i + 3 < we
         && b[i + 1] == 0x82
         && b[i + 2] == 0xAC
-        && b[i + 3].is_ascii_digit()
     {
-        currency = Some("eur");
-        i += 3;
-    }
-    let core_start = i;
-    let Some(core) = core_at(b, we, i) else {
-        return;
-    };
-    let mut e = core.end;
-    // Attached letter multiplier (boundary-guarded so "5 km" is not 5k).
-    let mut mult: Option<(f64, usize)> = None;
-    if e < we {
-        let factor = match b[e] {
-            b'k' | b'K' => Some(1e3),
-            b'M' => Some(1e6),
-            b'B' => Some(1e9),
-            _ => None,
-        };
-        if let Some(factor) = factor {
-            let ne = e + 1;
-            if ne >= we || !is_word_byte(b[ne]) {
-                mult = Some((factor, ne));
-                e = ne;
-            }
+        let j = skip_ascii_ws(b, i + 3, we);
+        if j < we && b[j].is_ascii_digit() {
+            currency = Some("eur");
+            i = j;
         }
     }
-    // Word multiplier ("2 million").
-    if mult.is_none() {
-        let j = skip_ascii_ws(b, e, we);
-        if j > e {
-            for (word, factor) in MULTIPLIER_WORDS {
-                if let Some(we2) = ascii_word_at(b, we, j, word) {
-                    mult = Some((factor, we2));
-                    e = we2;
-                    break;
+    // The core: digits (fraction tail + fallback stops) or words.
+    let core_start = i;
+    let mut is_word_core = false;
+    let mut core_end;
+    let mut value;
+    let mut frac_digits: u32 = 0;
+    let mut stops = [(0usize, 0.0f64); 3];
+    let mut stops_frac = [0u32; 3];
+    if let Some(core) = core_at(b, we, i) {
+        core_end = core.end;
+        value = core.value;
+        frac_digits = core.frac_digits;
+        stops = core.stops;
+        stops_frac[0] = frac_digits;
+        // Attached `/den`: the core IS the numerator — `1/4` = 0.25.
+        if let Some((de, den)) = slash_den_at(b, we, core_end) {
+            value = core.value / f64::from(den);
+            stops[0] = (de, value);
+            stops_frac[0] = 0;
+            if stops[1].0 == 0 {
+                stops[1] = (core.end, core.value);
+            }
+            core_end = de;
+            frac_digits = 0;
+        } else if let Some((fe, addend, prefrac)) = fraction_tail_at(b, we, core_end) {
+            // Spaced `num/den` is an ADDEND — `10 1/2` = 10.5.
+            value += addend;
+            stops[0] = (fe, value);
+            stops_frac[0] = 0;
+            if stops[1].0 == 0 {
+                stops[1] = (prefrac, core.stops[0].1);
+            }
+            core_end = fe;
+            frac_digits = 0;
+        }
+    } else if let Some((w_end, w_val)) = word_core_at(b, we, i) {
+        is_word_core = true;
+        core_end = w_end;
+        value = w_val;
+    } else {
+        return;
+    }
+    let mut e = core_end;
+    // Multipliers, chained: attached letters (digit cores only), then
+    // word multipliers ("2 million", "a hundred trillionths").
+    let mut mult: Option<(f64, usize)> = None;
+    let mut mult_value: f64 = 1.0;
+    loop {
+        let mut consumed = false;
+        if !is_word_core && e < we {
+            let factor = match b[e] {
+                b'k' | b'K' => Some(1e3),
+                b'M' => Some(1e6),
+                b'B' => Some(1e9),
+                _ => None,
+            };
+            if let Some(factor) = factor {
+                let ne = e + 1;
+                if ne >= we || !is_word_byte(b[ne]) {
+                    mult = Some((factor, ne));
+                    mult_value *= factor;
+                    e = ne;
+                    consumed = true;
                 }
             }
         }
+        if !consumed {
+            let j = skip_ascii_ws(b, e, we);
+            if j > e {
+                for (word, factor) in MULTIPLIER_WORDS {
+                    if let Some(we2) = ascii_word_at(b, we, j, word) {
+                        mult = Some((*factor, we2));
+                        mult_value *= *factor;
+                        e = we2;
+                        consumed = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if !consumed {
+            break;
+        }
     }
-    // Suffixes: attached percent, attached unit, then spaced percent/unit/
-    // currency word.
+    // Suffixes: attached percent, attached unit (digit cores, no
+    // multiplier), then spaced percent/unit/currency word.
     let mut unit: Option<&'static str> = None;
     if e < we && b[e] == b'%' {
         unit = Some("percent");
         e += 1;
-    } else if mult.is_none()
+    } else if !is_word_core
+        && mult.is_none()
         && let Some(hit) = table_word_at(b, we, e, NUMBER_UNITS)
     {
         unit = Some(hit.0);
@@ -377,15 +601,22 @@ fn try_number_at(
             }
         }
     }
+    if percent_ctx {
+        unit = Some("percent");
+    }
     // The whole match must end at a token boundary.
     if e < we && (is_word_byte(b[e]) || b[e] == b'%' || b[e] == b'$') {
         return;
     }
     let qualified = currency.is_some() || unit.is_some();
-    let scaled = core.value * mult.map_or(1.0, |(f, _)| f);
+    let scaled = value * mult_value;
     let full_value = if neg { -scaled } else { scaled };
-    // The full match (sign/currency/core/multiplier/suffix).
-    if accepts(cons, full_value, core.frac_digits, currency.or(unit)) {
+    // Composition depth — the qualified tie-break (see RawCandidate).
+    let depth = currency.is_some() as u8
+        + mult.is_some() as u8
+        + (unit.is_some() || percent_ctx) as u8;
+    // The full match (sign/currency/core/multipliers/suffix).
+    if accepts(cons, full_value, frac_digits, currency.or(unit)) {
         let rank = if qualified {
             RANK_QUALIFIED
         } else if mult.is_some() {
@@ -397,19 +628,21 @@ fn try_number_at(
             start: s as u32,
             end: e as u32,
             rank,
+            depth,
             raw: RawValue::Number(full_value),
         });
     }
     // Under a qualified match, the multiplied core without the suffix is a
     // mid fallback ("2 million dollars" -> "2 million").
-    if qualified && let Some((factor, mult_end)) = mult {
-        let v = core.value * factor;
+    if qualified && let Some((_, mult_end)) = mult {
+        let v = value * mult_value;
         let v = if neg { -v } else { v };
-        if accepts(cons, v, core.frac_digits, None) {
+        if accepts(cons, v, frac_digits, None) {
             sink.push(RawCandidate {
                 start: core_start as u32,
                 end: mult_end as u32,
                 rank: RANK_MULTIPLIED,
+                depth: 1,
                 raw: RawValue::Number(v),
             });
         }
@@ -417,17 +650,17 @@ fn try_number_at(
     // Plain-core fallback stops (the plain number inside "$1,234.50").
     let ladder = [RANK_PLAIN, RANK_PREFRAC, RANK_FIRST_GROUP];
     for (slot, rank) in ladder.into_iter().enumerate() {
-        let (stop_end, stop_value) = core.stops[slot];
-        if stop_end == 0 {
+        let (stop_end, stop_value) = stops[slot];
+        if stop_end == 0 || stop_end == core_start {
             continue;
         }
         let v = if neg { -stop_value } else { stop_value };
-        let stop_frac = if slot == 0 { core.frac_digits } else { 0 };
-        if accepts(cons, v, stop_frac, None) {
+        if accepts(cons, v, stops_frac[slot], None) {
             sink.push(RawCandidate {
                 start: core_start as u32,
                 end: stop_end as u32,
                 rank,
+                depth: 0,
                 raw: RawValue::Number(v),
             });
         }
@@ -484,7 +717,10 @@ fn suffix_word_at(b: &[u8], we: usize, i: usize) -> Option<(&'static str, usize)
     if let Some(hit) = table_word_at(b, we, i, NUMBER_UNITS) {
         return Some(hit);
     }
-    table_word_at(b, we, i, CURRENCY_WORDS)
+    if let Some(hit) = table_word_at(b, we, i, CURRENCY_WORDS) {
+        return Some(hit);
+    }
+    table_word_at(b, we, i, PERCENT_WORDS)
 }
 
 #[cfg(test)]
@@ -745,10 +981,10 @@ mod tests {
     #[test]
     fn unsupported_surface_forms_yield_nothing() {
         let c = cons(false, None, None, None, None);
-        none("five", &c); // number words are out of scope
         none(".5", &c); // leading-dot decimals out of scope
         none("5$", &c); // trailing currency symbol out of scope
         none("+5", &c); // explicit plus out of scope
+        none("eleventy", &c); // the number-word table is finite (issue 953)
     }
 
     // ---- G4: allocation gate (crate::alloc_gate; see its module doc) ------

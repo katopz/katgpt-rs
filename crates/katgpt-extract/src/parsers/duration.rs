@@ -11,10 +11,19 @@
 //! - Units: `s|sec|secs|second|seconds`, `m|min|mins|minute|minutes`,
 //!   `h|hr|hrs|hour|hours`, `d|day|days`, `w|week|weeks`,
 //!   `mo|month|months`, `y|yr|yrs|year|years` — the wire's canonical
-//!   [`DURATION_UNITS`] spellings.
+//!   [`DURATION_UNITS`] spellings — plus the scaled words `decade(s)`
+//!   (×10 years) and `fortnight(s)` (×2 weeks).
 //! - Single terms: `90 minutes`, `3 days`, `45s`, `2 weeks`, `1.5 hours`.
 //!   A bare number (`90`) is NOT a duration; a bare unit (`hours`) is not
 //!   either. Terms are unsigned (no negative durations).
+//! - Word-number terms (issue 953 lever 5): `two weeks`, `twenty min`,
+//!   `twenty and four hours` (24), `two and a half hours` (2.5),
+//!   `two decades` (20 y).
+//! - Quantifier terms: `(all|full|whole) [.-] unit` = 1 (`all day`,
+//!   `full-week`), `(a|an|another) unit` = 1 (`an hour`, `another week`),
+//!   `(a) couple of unit` = 2 (`a couple of days`), `a fortnight` = 2 w,
+//!   `half (an) unit` = 0.5 (`half an year`) — and the chain tail
+//!   `<term> and [a] half` (`an hour and a half` = 1.5 h).
 //!
 //! ## Unit-choice and exactness laws (documented)
 //!
@@ -37,6 +46,7 @@
 //!   durations either).
 
 use super::{
+    words::word_number_at,
     ParsedValue, RawCandidate, RawValue, ascii_word_at, finish, is_word_byte, next_boundary,
     prev_char_index, skip_ascii_ws,
 };
@@ -68,6 +78,7 @@ const UNITS: &[(&str, u8)] = &[
     ("year", 6),
     ("yrs", 6),
     ("mins", 1),
+    ("hrs", 2),
     ("secs", 0),
     ("sec", 0),
     ("min", 1),
@@ -120,6 +131,7 @@ pub(crate) fn scan_durations(
                         start: i as u32,
                         end: end as u32,
                         rank: RANK_CHAIN,
+                        depth: 0,
                         raw,
                     });
                     i = end;
@@ -129,6 +141,24 @@ pub(crate) fn scan_durations(
                 // sub-term fallbacks inside it: "1 month 3 days" yields NO
                 // candidate, not its tail "3 days" (documented subset
                 // behavior).
+                ChainOutcome::Failed(end) => {
+                    i = end;
+                    continue;
+                }
+                ChainOutcome::None => {}
+            }
+            match quantifier_chain_at(b, we, i, cons) {
+                ChainOutcome::Ok(end, raw) => {
+                    sink.push(RawCandidate {
+                        start: i as u32,
+                        end: end as u32,
+                        rank: RANK_CHAIN,
+                        depth: 0,
+                        raw,
+                    });
+                    i = end;
+                    continue;
+                }
                 ChainOutcome::Failed(end) => {
                     i = end;
                     continue;
@@ -152,24 +182,105 @@ fn duration_start_ok(b: &[u8], ws: usize, i: usize) -> bool {
     }
 }
 
-/// One chain term: numeric core + unit (attached or spaced).
+/// One chain term: numeric core + unit (attached/hyphen/spaced), or a
+/// word-number term (`two weeks`, `two and a half hours`, `two decades`).
 fn term_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u8, i128, i64)> {
-    let core = core_at(b, we, i)?;
-    if core.frac_digits > MAX_FRAC_DIGITS || core.value >= MAX_TERM_VALUE {
+    if let Some(core) = core_at(b, we, i) {
+        if core.frac_digits > MAX_FRAC_DIGITS || core.value >= MAX_TERM_VALUE {
+            return None;
+        }
+        let (end, unit, factor) = unit_flexible_at(b, we, core.end)?;
+        // Scaled words carry their factor in the numerator (`2 decades` =
+        // 20/1 y).
+        return Some((end, unit, core.num * i128::from(factor), core.den));
+    }
+    word_term_at(b, we, i)
+}
+
+/// Scaled unit words: (spelling, canonical unit, factor) — checked before
+/// [`UNITS`] everywhere (boundary-guarded, so order within is free).
+const SCALED_UNITS: &[(&str, u8, i64)] = &[
+    ("decades", 6, 10),
+    ("decade", 6, 10),
+    ("fortnights", 4, 2),
+    ("fortnight", 4, 2),
+];
+
+/// Unit table at ONE exact position: scaled words first, then [`UNITS`].
+fn unit_tbl_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u8, i64)> {
+    for (w, u, f) in SCALED_UNITS {
+        if let Some(e) = ascii_word_at(b, we, i, w) {
+            return Some((e, *u, *f));
+        }
+    }
+    unit_at(b, we, i).map(|(e, u)| (e, u, 1))
+}
+
+/// Unit after a value: attached (`3h`), hyphen-joined (`3-min`), or
+/// whitespace-separated (`3 min`); returns the canonical unit and the
+/// spelling's value factor.
+fn unit_flexible_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u8, i64)> {
+    if let Some(hit) = unit_tbl_at(b, we, i) {
+        return Some(hit);
+    }
+    let mut j = i;
+    if j < we && b[j] == b'-' {
+        j += 1;
+    }
+    let k = skip_ascii_ws(b, j, we);
+    if k == i {
+        return None; // no hyphen and no whitespace: nothing to join with
+    }
+    unit_tbl_at(b, we, k)
+}
+
+/// Unit spellings with their value factor (decade = 10 years, fortnight =
+/// 2 weeks), attached/hyphen/spaced.
+fn unit_word_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u8, i64)> {
+    unit_flexible_at(b, we, i)
+}
+
+/// `and half` / `and a half` at `i` — the chain tail. Returns the end.
+fn and_half_at(b: &[u8], we: usize, i: usize) -> Option<usize> {
+    let j = skip_ascii_ws(b, i, we);
+    if j == i {
         return None;
     }
-    let (end, unit) = match unit_at(b, we, core.end) {
-        Some(hit) => hit,
-        None => {
-            let j = skip_ascii_ws(b, core.end, we);
-            if j > core.end {
-                unit_at(b, we, j)?
-            } else {
-                return None;
-            }
+    let ae = ascii_word_at(b, we, j, "and")?;
+    let mut k = skip_ascii_ws(b, ae, we);
+    if k == ae {
+        return None;
+    }
+    if let Some(art) = ascii_word_at(b, we, k, "a") {
+        let k2 = skip_ascii_ws(b, art, we);
+        if k2 > art {
+            k = k2;
         }
+    }
+    ascii_word_at(b, we, k, "half")
+}
+
+/// A word-number term: `two weeks`, `twenty and four hours` (24),
+/// `two and a half hours` (2.5), `two decades` (20 y).
+fn word_term_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u8, i128, i64)> {
+    let (mut end, v) = word_number_at(b, we, i)?;
+    if !(0.0..MAX_TERM_VALUE).contains(&v) || v.fract() != 0.0 {
+        return None;
+    }
+    // Optional "and (a )?half" modifier (two and a half hours).
+    let mut extra_half = false;
+    if let Some(he) = and_half_at(b, we, end) {
+        extra_half = true;
+        end = he;
+    }
+    let (ue, unit, factor) = unit_word_at(b, we, end)?;
+    let base = v as i128;
+    let (n, d) = if extra_half {
+        ((2 * base + 1) * i128::from(factor), 2)
+    } else {
+        (base * i128::from(factor), 1)
     };
-    Some((end, unit, core.num, core.den))
+    Some((ue, unit, n, d))
 }
 
 fn unit_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u8)> {
@@ -227,13 +338,112 @@ fn chain_at(b: &[u8], we: usize, i: usize, cons: &FieldConstraints) -> ChainOutc
                     return ChainOutcome::Failed(end);
                 }
             }
-            None => break,
+            None => {
+                // The "and [a] half" tail ("an hour and a half"): a
+                // half-term of the LAST term's unit.
+                if let Some(he) = and_half_at(b, we, end) {
+                    terms[terms_len] = (terms[terms_len - 1].0, 1, 2);
+                    terms_len += 1;
+                    end = he;
+                    if terms_len > MAX_TERMS {
+                        return ChainOutcome::Failed(end);
+                    }
+                    continue;
+                }
+                break;
+            }
         }
     }
     match resolve(cons, &terms[..terms_len]) {
         Some(raw) => ChainOutcome::Ok(end, raw),
         None => ChainOutcome::Failed(end),
     }
+}
+
+/// A quantifier-led chain: `(all|full|whole) [- ]unit`, `(a|an|another)
+/// unit`, `(a) couple of unit`, `a fortnight`, `half (an) unit` — value 1,
+/// 2, or 1/2 (issue 953 lever 5). Single-term chains.
+fn quantifier_chain_at(b: &[u8], we: usize, i: usize, cons: &FieldConstraints) -> ChainOutcome {
+    let Some((mut end, unit, n, d)) = quantifier_term_at(b, we, i) else {
+        return ChainOutcome::None;
+    };
+    let mut terms = [(unit, n, d), (unit, 0, 1)];
+    let mut terms_len = 1usize;
+    // Optional "and [a] half" tail in the same unit.
+    if let Some(he) = and_half_at(b, we, end) {
+        terms[1] = (unit, 1, 2);
+        terms_len = 2;
+        end = he;
+    }
+    match resolve(cons, &terms[..terms_len]) {
+        Some(raw) => ChainOutcome::Ok(end, raw),
+        None => ChainOutcome::Failed(end),
+    }
+}
+
+/// The quantifier term grammar. Returns `(end, unit, num, den)`.
+fn quantifier_term_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u8, i128, i64)> {
+    // half (an) unit -> 1/2 (the unit factor rides the numerator)
+    if let Some(he) = ascii_word_at(b, we, i, "half") {
+        let j = skip_ascii_ws(b, he, we);
+        let mut k = j;
+        if k > he && let Some(ae) = ascii_word_at(b, we, k, "an") {
+            let j2 = skip_ascii_ws(b, ae, we);
+            if j2 > ae {
+                k = j2;
+            }
+        }
+        if k > he && let Some((ue, unit, f)) = unit_word_at(b, we, k) {
+            return Some((ue, unit, i128::from(f), 2));
+        }
+    }
+    // (all|full|whole) [- ]unit -> 1 (a hyphen needs no space after it)
+    for w in ["all", "full", "whole"] {
+        if let Some(e) = ascii_word_at(b, we, i, w) {
+            let mut j = e;
+            if j < we && b[j] == b'-' {
+                j += 1;
+            }
+            let k = skip_ascii_ws(b, j, we);
+            if k > e && let Some((ue, unit, f)) = unit_word_at(b, we, k) {
+                return Some((ue, unit, i128::from(f), 1));
+            }
+        }
+    }
+    // another unit -> 1
+    if let Some(e) = ascii_word_at(b, we, i, "another") {
+        let j = skip_ascii_ws(b, e, we);
+        if j > e && let Some((ue, unit, f)) = unit_word_at(b, we, j) {
+            return Some((ue, unit, i128::from(f), 1));
+        }
+    }
+    // (a) couple of unit -> 2
+    {
+        let mut j = i;
+        if let Some(ae) = ascii_word_at(b, we, j, "a") {
+            let k = skip_ascii_ws(b, ae, we);
+            if k > ae {
+                j = k;
+            }
+        }
+        if let Some(ce) = ascii_word_at(b, we, j, "couple") {
+            let k = skip_ascii_ws(b, ce, we);
+            if k > ce && let Some(oe) = ascii_word_at(b, we, k, "of") {
+                let k2 = skip_ascii_ws(b, oe, we);
+                if k2 > oe && let Some((ue, unit, f)) = unit_word_at(b, we, k2) {
+                    return Some((ue, unit, 2 * i128::from(f), 1));
+                }
+            }
+        }
+    }
+    // (a|an) unit -> 1 (the most generic form, last)
+    if let Some(e) = ascii_word_at(b, we, i, "an").or_else(|| ascii_word_at(b, we, i, "a")) {
+        let j = skip_ascii_ws(b, e, we);
+        if j > e && let Some((ue, unit, f)) = unit_word_at(b, we, j) {
+            return Some((ue, unit, i128::from(f), 1));
+        }
+    }
+    None
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

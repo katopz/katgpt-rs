@@ -30,11 +30,12 @@
 //!
 //! ## What is asserted
 //!
-//! ONLY liveness — per-dim rows-with->=1-candidate floors ([`LIVENESS_FLOORS`])
-//! — a broken-harness / broken-parser tripwire, NOT an accuracy bar.
-//! Accuracy is measured and reported; the plan's coordinator records the
-//! first numbers and pins any ratchet AFTER them. This test deliberately
-//! asserts no accuracy number.
+//! Liveness AND the accuracy ratchet (issue 953 ask 2 — measured-then-
+//! pinned): per-dim floors on rows-with->=1-candidate ([`LIVENESS_FLOORS`])
+//! and per-dim FLOORS on rank-0 value accuracy ([`VALUE_RATCHETS`]). Both
+//! are ratchets — they fire DOWNWARD only; raising accuracy never reds.
+//! The ratchet's floor is the exact measured record of the issue-953
+//! coverage landing (2026-10-20); a parser regression past it reds.
 //!
 //! The table prints to stdout (captured on a green run — use
 //! `--nocapture` to read it).
@@ -54,15 +55,27 @@ const BLAKE3_PIN: &str = "f3e1dfc3dae9d417b7e93e7005857a12ba3963be9085cac93adc35
 const ROWS_EXPECTED: usize = 351;
 
 /// Per-dim liveness floors: rows with >= 1 candidate (order = [`DIMS`]).
-/// A tripwire for a broken harness or a wiped-out parser — NOT an accuracy
-/// bar. Pinned just under the first measured record (2026-10-20: number
-/// 73.3%, date 10.0%, time 31.3%, datetime 2.3%, duration 21.4%): the
-/// corpus is Microsoft's verbatim spec data and the parsers' documented
-/// no-word-forms / no-2-digit-year scope puts hard liveness CEILINGS below
-/// the initially-specced 80% on every dim (76/71/58/72/30%), so the floor
-/// VALUES are calibration against the measured baseline. Accuracy ratchets
-/// are the plan's business, pinned after the first measured record.
-const LIVENESS_FLOORS: [f64; 5] = [0.65, 0.05, 0.25, 0.01, 0.15];
+/// Re-pinned just under the issue-953 coverage-landing record (2026-10-20:
+/// number 103/105, date 39/80, time 50/67, datetime 7/43, duration 53/56) —
+/// a tripwire for a broken harness or a wiped-out parser. The original
+/// T0.6 pins ([0.65, 0.05, 0.25, 0.01, 0.15]) were calibration against the
+/// pre-coverage baseline; the coverage levers raised every dim's ceiling.
+const LIVENESS_FLOORS: [f64; 5] = [0.98, 0.48, 0.74, 0.16, 0.94];
+
+/// The accuracy ratchet (issue 953 ask 2): per-dim rank-0 value-accuracy
+/// FLOORS, pinned at the exact measured record of the coverage landing
+/// (2026-10-20: number 74/85, date 39/65, time 8/50, datetime 3/23,
+/// duration 52/52 — order = [`DIMS`]). A ratchet, never a ceiling: the
+/// next coverage lever re-pins upward from its own measured record. The
+/// known disclosed misses (compound units, day-part idioms, `to/past`
+/// forms, anchored-only shapes) sit BELOW these floors by construction.
+const VALUE_RATCHETS: [f64; 5] = [
+    74.0 / 85.0,
+    39.0 / 65.0,
+    8.0 / 50.0,
+    3.0 / 23.0,
+    1.0,
+];
 
 /// Fixture dims, in emission order (the report's row order).
 const DIMS: [&str; 5] = ["number", "date", "time", "datetime", "duration"];
@@ -384,9 +397,10 @@ fn g5_external_fixture() {
         "  live    = rows with >= 1 candidate — the ONLY asserted floors ({floors}% number/date/time/datetime/duration)"
     );
 
-    // 5. Liveness floors — the whole assertion surface. Accuracy is
-    // measured above and ratcheted later by the plan, never here.
-    let failed: Vec<String> = DIMS
+    // 5. Liveness floors + the accuracy ratchet (issue 953 ask 2). Both
+    // fire DOWNWARD only — a coverage lever re-pins them from its own
+    // measured record, a regression reds here.
+    let mut failed: Vec<String> = DIMS
         .iter()
         .zip(&stats)
         .zip(LIVENESS_FLOORS)
@@ -401,9 +415,21 @@ fn g5_external_fixture() {
             )
         })
         .collect();
+    for ((dim, s), ratchet) in DIMS.iter().zip(&stats).zip(VALUE_RATCHETS) {
+        let acc = f64::from(s.value_exact) / f64::from(s.wire_rows);
+        if s.wire_rows > 0 && acc < ratchet {
+            failed.push(format!(
+                "  {dim}: value accuracy {}/{} = {:.1}% < ratchet {:.1}% (issue 953 pin)",
+                s.value_exact,
+                s.wire_rows,
+                100.0 * acc,
+                100.0 * ratchet
+            ));
+        }
+    }
     assert!(
         failed.is_empty(),
-        "G5 liveness floor failed (a broken harness or broken parsers):\n{}",
+        "G5 liveness/accuracy floor failed (a broken harness, broken parsers, or a regression past the issue-953 ratchet):\n{}",
         failed.join("\n")
     );
 }

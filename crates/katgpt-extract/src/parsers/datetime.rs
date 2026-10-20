@@ -21,10 +21,29 @@
 //!   — absolute, no anchor needed.
 //! - Numeric: `10/20/2026` and `10/20` (anchored). Ambiguity rule
 //!   (documented): the FIRST component > 12 makes it D/M/Y, otherwise the
-//!   US M/D/Y reading wins the ambiguous forms.
+//!   US M/D/Y reading wins the ambiguous forms. Separators `/ - .`
+//!   (`21-04-2016`, `13.5.2015`), the year gap also `,` (`08/12,2015`),
+//!   year-first (`2015/08/12`, `2019-sep-1`, `2019/sep/01`), and TWO-DIGIT
+//!   years windowed < 50 -> 2000+, else 1900+ (`21/04/16`, `05/05/89`).
+//! - Dotted/dashed month names: `16. Nov. 2016`, `05-Aug-2016`,
+//!   `Dec. 31 , 1994`, attached `Dec31 , 1994`.
+//! - Ordinal day suffixes: `January 12th`, `04th Jan 2019` (any of
+//!   st/nd/rd/th, as Recognizers accepts `02nd`).
+//! - Weekday-prefixed absolutes: `monday january 12th, 2016`,
+//!   `friday 2018-7-6`.
+//! - Word dates: `jan twenty two, 2018`, `jan twenty one two thousand and
+//!   eighteen`, `September the twenty-first nineteen seventy eight`,
+//!   `September 10, nineteen zero one`, `the tenth of September, two
+//!   thousand`, `twenty second of June 2017` (word days + written years,
+//!   issue 953 lever 10).
 //! - Times: `5pm`, `5:30pm`, `5:30:15pm`, `9 am` (space optional),
-//!   `17:30`, `17:30:45`, `05:30`, bare `H:MM` (24h), `noon`, `midnight`.
-//!   `12am` = `00:00`, `12pm` = `12:00`. An hour alone (`5`) is not a time.
+//!   `17:30`, `17:30:45`, `05:30`, bare `H:MM` (24h), `noon`, `midnight`,
+//!   and the WRITTEN clock `<hour words> [<minute words>] [meridiem]` —
+//!   `eight forty` = 08:40, `ten forty five`, `fifteen fifteen p m`,
+//!   `seven thirty pm`; the meridiem takes mixed dots/space (`p. m.`,
+//!   `p . m .`). A bare written hour with neither minutes nor meridiem is
+//!   not a time. `12am` = `00:00`, `12pm` = `12:00`. An hour alone (`5`)
+//!   is not a time.
 //! - Composed datetime (DateTime kind): date + (`T` | `"at"` | single
 //!   space) + time, e.g. `tomorrow at 5pm`, `October 20 at 14:00`,
 //!   `2026-10-21T17:00`. A bare date is NOT a DateTime candidate.
@@ -38,9 +57,12 @@
 //! - Month-day-year with an internal comma is ambiguous inside LIST items
 //!   (the list comma); use `20 October 2026` or ISO inside lists.
 
+use super::words::{
+    word_group_at, word_number_at, word_ordinal_day_at, word_tens_ordinal_at, word_year_at,
+};
 use super::{
-    ParsedValue, RawCandidate, RawValue, ascii_word_at, finish, is_word_byte, next_boundary,
-    prev_char_index, skip_ascii_ws,
+    ParsedValue, RawCandidate, RawValue, ascii_word_at, finish, is_ws_byte, is_word_byte,
+    next_boundary, prev_char_index, skip_ascii_ws,
 };
 use katgpt_core::extraction_wire::FieldKind;
 
@@ -227,13 +249,41 @@ fn scan_date_at(
     reference: Option<Ref>,
     sink: &mut Vec<RawCandidate>,
 ) {
+    date_forms_at(b, we, i, i, reference, sink);
+    // Weekday-prefixed absolute dates ("monday january 12th, 2016",
+    // "friday 2018-7-6"): the weekday names the day; the date follows.
+    // The pushed span starts at the WEEKDAY (the full phrase).
+    if let Some((dwe, _)) = weekday_at(b, we, i) {
+        let mut j = skip_ascii_ws(b, dwe, we);
+        if j < we && b[j] == b',' {
+            let k = skip_ascii_ws(b, j + 1, we);
+            if k > j + 1 {
+                j = k;
+            }
+        }
+        if j > dwe {
+            date_forms_at(b, we, j, i, reference, sink);
+        }
+    }
+}
+
+/// Every absolute/anchored date form at `i`; candidates push with span
+/// start `start` (usually `i`, the weekday start under a prefix).
+fn date_forms_at(
+    b: &[u8],
+    we: usize,
+    i: usize,
+    start: usize,
+    reference: Option<Ref>,
+    sink: &mut Vec<RawCandidate>,
+) {
     if let Some((e, y, m, d)) = iso_date_at(b, we, i) {
-        push_date(sink, i, e, y, m, d, RANK_ABSOLUTE);
+        push_date(sink, start, e, y, m, d, RANK_ABSOLUTE);
     }
     if let Some(h) = numeric_date_at(b, we, i, reference) {
         push_date(
             sink,
-            i,
+            start,
             h.end,
             h.y,
             h.m,
@@ -245,18 +295,38 @@ fn scan_date_at(
             },
         );
     }
+    if let Some((e, y, m, d)) = year_month_name_day_at(b, we, i) {
+        push_date(sink, start, e, y, m, d, RANK_ABSOLUTE);
+    }
+    if let Some((e, y, m, d)) = day_month_name_year_at(b, we, i) {
+        push_date(sink, start, e, y, m, d, RANK_ABSOLUTE);
+    }
     if let Some((abs, anch)) = month_day_at(b, we, i) {
         if let Some(a) = abs {
-            push_date(sink, i, a.end, a.y, a.m, a.d, RANK_ABSOLUTE);
+            push_date(sink, start, a.end, a.y, a.m, a.d, RANK_ABSOLUTE);
         }
-        if let Some((ae, m, d)) = anch
+        if start == i
+            && let Some((ae, m, d)) = anch
             && let Some(r) = reference
             && let Some(y) = anchored_year(r.y, m, d)
         {
             push_date(sink, i, ae, y, m, d, RANK_ANCHORED);
         }
     }
-    if let Some((e, y, m, d)) = relative_at(b, we, i, reference) {
+    // `[the] <word-day> of <month>[, year]` — the span starts at the day
+    // word ("the" stays outside, matching the upstream span).
+    if let Some((ds, e, y, m, d, absolute)) = word_day_of_month_at(b, we, i) {
+        let rank = if absolute { RANK_ABSOLUTE } else { RANK_ANCHORED };
+        if absolute {
+            push_date(sink, ds, e, y, m, d, rank);
+        } else if start == i
+            && let Some(r) = reference
+            && let Some(y) = anchored_year(r.y, m, d)
+        {
+            push_date(sink, ds, e, y, m, d, rank);
+        }
+    }
+    if start == i && let Some((e, y, m, d)) = relative_at(b, we, i, reference) {
         push_date(sink, i, e, y, m, d, RANK_RELATIVE);
     }
 }
@@ -275,6 +345,7 @@ fn push_date(
             start: start as u32,
             end: end as u32,
             rank,
+            depth: 0,
             raw: RawValue::Date { y, m, d },
         });
     }
@@ -285,6 +356,7 @@ fn push_time(sink: &mut Vec<RawCandidate>, start: usize, t: TimeHit) {
         start: start as u32,
         end: t.end as u32,
         rank: RANK_ABSOLUTE,
+        depth: 0,
         raw: RawValue::Time {
             h: t.h,
             mi: t.mi,
@@ -308,6 +380,24 @@ fn compose_date_at(b: &[u8], we: usize, i: usize, reference: Option<Ref>) -> Opt
     if let Some(h) = numeric_date_at(b, we, i, reference) {
         return Some(h);
     }
+    if let Some((e, y, m, d)) = year_month_name_day_at(b, we, i) {
+        return Some(DateHit {
+            end: e,
+            y,
+            m,
+            d,
+            absolute: true,
+        });
+    }
+    if let Some((e, y, m, d)) = day_month_name_year_at(b, we, i) {
+        return Some(DateHit {
+            end: e,
+            y,
+            m,
+            d,
+            absolute: true,
+        });
+    }
     if let Some((abs, anch)) = month_day_at(b, we, i) {
         if let Some(a) = abs {
             return Some(a);
@@ -318,6 +408,30 @@ fn compose_date_at(b: &[u8], we: usize, i: usize, reference: Option<Ref>) -> Opt
         {
             return Some(DateHit {
                 end: ae,
+                y,
+                m,
+                d,
+                absolute: false,
+            });
+        }
+        return None;
+    }
+    if let Some((ds, e, y, m, d, absolute)) = word_day_of_month_at(b, we, i) {
+        let _ = ds;
+        if absolute {
+            return Some(DateHit {
+                end: e,
+                y,
+                m,
+                d,
+                absolute: true,
+            });
+        }
+        if let Some(r) = reference
+            && let Some(y) = anchored_year(r.y, m, d)
+        {
+            return Some(DateHit {
+                end: e,
                 y,
                 m,
                 d,
@@ -343,27 +457,61 @@ fn scan_composed_at(
     reference: Option<Ref>,
     sink: &mut Vec<RawCandidate>,
 ) {
+    composed_date_first_at(b, we, i, reference, sink);
+    composed_time_first_at(b, we, i, reference, sink);
+}
+
+fn composed_date_first_at(
+    b: &[u8],
+    we: usize,
+    i: usize,
+    reference: Option<Ref>,
+    sink: &mut Vec<RawCandidate>,
+) {
     let Some(hit) = compose_date_at(b, we, i, reference) else {
         return;
     };
     let time = if hit.end < we && b[hit.end] == b'T' {
         time_at(b, we, hit.end + 1)
     } else {
-        let j = skip_ascii_ws(b, hit.end, we);
-        if j == hit.end {
-            None
-        } else if let Some(ae) = ascii_word_at(b, we, j, "at") {
-            let k = skip_ascii_ws(b, ae, we);
-            if k > ae { time_at(b, we, k) } else { None }
+        // Separator: a directly-attached `,`/`-`/`@` ("04/21/2016,
+        // 8:00pm", "5/3/18 @ 17:49"), whitespace, or whitespace +
+        // (`,`|`-`|`@`|`at`). The attached check comes FIRST — a comma may
+        // sit against the date with no space before it.
+        let mut j = hit.end;
+        if j < we && matches!(b[j], b',' | b'-' | b'@') {
+            let k = skip_ascii_ws(b, j + 1, we);
+            if k == j + 1 {
+                return;
+            }
+            j = k;
         } else {
-            time_at(b, we, j)
+            j = skip_ascii_ws(b, j, we);
+            if j == hit.end {
+                return;
+            }
+            if j < we && matches!(b[j], b',' | b'-' | b'@') {
+                let k = skip_ascii_ws(b, j + 1, we);
+                if k == j + 1 {
+                    return;
+                }
+                j = k;
+            } else if let Some(ae) = ascii_word_at(b, we, j, "at") {
+                let k = skip_ascii_ws(b, ae, we);
+                if k == ae {
+                    return;
+                }
+                j = k;
+            }
         }
+        time_at(b, we, j)
     };
     if let Some(t) = time {
         sink.push(RawCandidate {
             start: i as u32,
             end: t.end as u32,
             rank: RANK_ABSOLUTE,
+            depth: 0,
             raw: RawValue::DateTime {
                 y: hit.y,
                 mo: hit.m,
@@ -374,6 +522,60 @@ fn scan_composed_at(
             },
         });
     }
+}
+
+/// Time-first composition: `19:00, 2016-12-22` (issue 953 lever 7).
+fn composed_time_first_at(
+    b: &[u8],
+    we: usize,
+    i: usize,
+    reference: Option<Ref>,
+    sink: &mut Vec<RawCandidate>,
+) {
+    let Some(t) = time_at(b, we, i) else {
+        return;
+    };
+    // A separator is required: a directly-attached `,`/`-`/`@`
+    // ("19:00, 2016-12-22"), whitespace, or whitespace + separator.
+    let mut k = t.end;
+    let mut had_sep = false;
+    if k < we && matches!(b[k], b',' | b'-' | b'@') {
+        let k2 = skip_ascii_ws(b, k + 1, we);
+        if k2 > k + 1 {
+            k = k2;
+            had_sep = true;
+        }
+    }
+    if !had_sep {
+        k = skip_ascii_ws(b, t.end, we);
+        if k > t.end && k < we && matches!(b[k], b',' | b'-' | b'@') {
+            let k2 = skip_ascii_ws(b, k + 1, we);
+            if k2 > k + 1 {
+                k = k2;
+            }
+        }
+        had_sep = k > t.end;
+    }
+    if !had_sep || k >= we {
+        return;
+    }
+    let Some(hit) = compose_date_at(b, we, k, reference) else {
+        return;
+    };
+    sink.push(RawCandidate {
+        start: i as u32,
+        end: hit.end as u32,
+        rank: RANK_ABSOLUTE,
+        depth: 0,
+        raw: RawValue::DateTime {
+            y: hit.y,
+            mo: hit.m,
+            d: hit.d,
+            h: t.h,
+            mi: t.mi,
+            s: t.s,
+        },
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -548,30 +750,102 @@ fn year4_at(b: &[u8], we: usize, i: usize) -> Option<(usize, i64)> {
 }
 
 fn day_digits_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u32)> {
-    let (e, v) = one_two_digits(b, we, i)?;
-    if (1..=31).contains(&v) {
-        Some((e, v))
+    let (mut e, v) = one_two_digits(b, we, i)?;
+    if !(1..=31).contains(&v) {
+        return None;
+    }
+    // Optional ordinal suffix — any of st/nd/rd/th (Recognizers accepts
+    // "02nd"), and only when it ends the token ("20thx" is a word).
+    if e + 2 <= we {
+        for suf in [b"st", b"nd", b"rd", b"th"] {
+            if b[e..e + 2].eq_ignore_ascii_case(suf) {
+                let ne = e + 2;
+                if ne >= we || !is_word_byte(b[ne]) {
+                    e = ne;
+                }
+                break;
+            }
+        }
+    }
+    Some((e, v))
+}
+
+/// A month spelling immediately followed by day digits ("Dec31 , 1994").
+fn month_prefix_digits_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u32)> {
+    for (spelling, month) in MONTHS {
+        let w = spelling.as_bytes();
+        if i + w.len() > we || !b[i..i + w.len()].eq_ignore_ascii_case(w) {
+            continue;
+        }
+        let e = i + w.len();
+        if e < we && b[e].is_ascii_digit() {
+            return Some((e, *month));
+        }
+    }
+    None
+}
+
+/// A day of month as words: an ordinal word (`tenth`, `twenty-first`), a
+/// compound tens + ordinal one (`twenty second` = 22), or a 1-31 cardinal
+/// group (`twenty two`).
+fn word_day_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u32)> {
+    if let Some(hit) = word_ordinal_day_at(b, we, i) {
+        return Some(hit);
+    }
+    if let Some(hit) = word_tens_ordinal_at(b, we, i) {
+        return Some(hit);
+    }
+    let (e, g) = word_group_at(b, we, i)?;
+    if (1..=31).contains(&g) {
+        Some((e, g as u32))
     } else {
         None
     }
 }
 
-/// Numeric `a/b[year]`. Disposition: `a > 12` -> D/M, else M/D (the US
-/// reading wins the ambiguous forms — the documented rule).
+/// Two-digit year window (Recognizers rule): < 50 -> 2000+, else 1900+.
+fn window_year(y2: u32) -> i64 {
+    if y2 < 50 {
+        2000 + i64::from(y2)
+    } else {
+        1900 + i64::from(y2)
+    }
+}
+
+/// Exactly two ASCII digits (the 2-digit-year tail).
+fn year2_at(b: &[u8], we: usize, i: usize) -> Option<(usize, i64)> {
+    if i + 2 > we || !b[i..i + 2].iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    Some((
+        i + 2,
+        i64::from(b[i] - b'0') * 10 + i64::from(b[i + 1] - b'0'),
+    ))
+}
+
+/// Numeric `a SEP b [SEP year]`. Separators between components: `/ - .`;
+/// before the year also `,` (`08/12,2015`). The year is 4 digits or a
+/// TWO-digit window (< 50 -> 2000+, else 1900+). Ambiguity rule:
+/// first component > 12 makes it D/M/Y, else M/D/Y (documented).
 fn numeric_date_at(b: &[u8], we: usize, i: usize, reference: Option<Ref>) -> Option<DateHit> {
+    if let Some(hit) = year_first_numeric_at(b, we, i) {
+        return Some(hit);
+    }
     let (ae, a) = one_two_digits(b, we, i)?;
-    if ae >= we || b[ae] != b'/' {
+    if ae >= we || !matches!(b[ae], b'/' | b'-' | b'.') {
         return None;
     }
     let (ce, c) = one_two_digits(b, we, ae + 1)?;
     let mut e = ce;
     let mut year: Option<i64> = None;
-    if e < we
-        && b[e] == b'/'
-        && let Some((ye, y)) = year4_at(b, we, e + 1)
-    {
-        year = Some(y);
-        e = ye;
+    if e < we && matches!(b[e], b'/' | b'-' | b'.' | b',') {
+        if let Some((ye, y)) = year4_at(b, we, e + 1) {
+            year = Some(y);
+            e = ye;
+        } else if let Some((ye, y)) = year2_at(b, we, e + 1) {
+            year = Some(window_year(y as u32));
+            e = ye;
+        }
     }
     if e < we && (is_word_byte(b[e]) || b[e] == b'/') {
         return None;
@@ -599,6 +873,99 @@ fn numeric_date_at(b: &[u8], we: usize, i: usize, reference: Option<Ref>) -> Opt
     })
 }
 
+/// Numeric year-first `y4 SEP a SEP b` (`2015/08/12`, `2019-7-6`,
+/// `2015.5.13`). The y/m/d reading is unambiguous.
+fn year_first_numeric_at(b: &[u8], we: usize, i: usize) -> Option<DateHit> {
+    let (ye, y) = year4_at(b, we, i)?;
+    if ye >= we || !matches!(b[ye], b'/' | b'-' | b'.') {
+        return None;
+    }
+    let (ae, a) = one_two_digits(b, we, ye + 1)?;
+    if ae >= we || !matches!(b[ae], b'/' | b'-' | b'.') {
+        return None;
+    }
+    let (ce, c) = one_two_digits(b, we, ae + 1)?;
+    let e = ce;
+    if e < we && (is_word_byte(b[e]) || matches!(b[e], b'/' | b'-' | b'.')) {
+        return None;
+    }
+    if a == 0 || a > 12 || c == 0 {
+        return None;
+    }
+    if !(1..=9999).contains(&y) || c > days_in_month(y, a) {
+        return None;
+    }
+    Some(DateHit {
+        end: e,
+        y,
+        m: a,
+        d: c,
+        absolute: true,
+    })
+}
+
+/// Year-first with a month NAME: `2019-sep-1`, `2019/sep/01`.
+fn year_month_name_day_at(b: &[u8], we: usize, i: usize) -> Option<(usize, i64, u32, u32)> {
+    let (ye, y) = year4_at(b, we, i)?;
+    if ye >= we || !matches!(b[ye], b'/' | b'-' | b'.') {
+        return None;
+    }
+    let (me, m) = month_at(b, we, ye + 1)?;
+    if me >= we || !matches!(b[me], b'/' | b'-' | b'.') {
+        return None;
+    }
+    let (de, d) = one_two_digits(b, we, me + 1)?;
+    let e = de;
+    if e < we && is_word_byte(b[e]) {
+        return None;
+    }
+    if !valid_ymd(y, m, d) {
+        return None;
+    }
+    Some((e, y, m, d))
+}
+
+/// `d SEP Month[.] SEP? year4` — `05-Aug-2016`, `16. Nov. 2016` (the
+/// European dotted form; the month may carry a trailing dot).
+fn day_month_name_year_at(b: &[u8], we: usize, i: usize) -> Option<(usize, i64, u32, u32)> {
+    let (de, d) = day_digits_at(b, we, i)?;
+    let mut j = de;
+    let mut had_sep = false;
+    if j < we && matches!(b[j], b'-' | b'/' | b'.') {
+        had_sep = true;
+        j += 1;
+    }
+    let k = skip_ascii_ws(b, j, we);
+    if !had_sep {
+        return None; // the ws-separated day-month form is month_day_at's
+    }
+    let (me, m) = month_at(b, we, k)?;
+    let mut e2 = me;
+    if e2 < we && b[e2] == b'.' {
+        e2 += 1;
+    }
+    // Year: ws-separated or `-`-joined.
+    let mut j2 = e2;
+    let mut had_sep2 = false;
+    if j2 < we && b[j2] == b'-' {
+        had_sep2 = true;
+        j2 += 1;
+    }
+    let k2 = skip_ascii_ws(b, j2, we);
+    if !had_sep2 && k2 == j2 {
+        return None;
+    }
+    let (ye, y) = year4_at(b, we, k2)?;
+    let e = ye;
+    if e < we && is_word_byte(b[e]) {
+        return None;
+    }
+    if !valid_ymd(y, m, d) {
+        return None;
+    }
+    Some((e, y, m, d))
+}
+
 fn month_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u32)> {
     for (spelling, month) in MONTHS {
         if let Some(e) = ascii_word_at(b, we, i, spelling) {
@@ -622,29 +989,51 @@ fn weekday_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u32)> {
 type MonthDayHits = (Option<DateHit>, Option<(usize, u32, u32)>);
 
 /// `October 20[, 2026]` / `20 October[, 2026]` (and abbreviated months).
+/// The month may carry a dot (`Dec. 31`), the day may be attached
+/// (`Dec31`) or a word (`jan twenty two`), and an optional `the` may sit
+/// between month and day (`September the twenty-first`).
 fn month_day_at(b: &[u8], we: usize, i: usize) -> Option<MonthDayHits> {
-    if let Some((me, month)) = month_at(b, we, i) {
-        let j = skip_ascii_ws(b, me, we);
-        if j > me
-            && let Some((de, day)) = day_digits_at(b, we, j)
-        {
+    let month_hit = month_at(b, we, i).or_else(|| month_prefix_digits_at(b, we, i));
+    if let Some((me, month)) = month_hit {
+        // Optional dot after the month abbreviation.
+        let mut e2 = me;
+        if e2 < we && b[e2] == b'.' {
+            e2 += 1;
+        }
+        let mut j = skip_ascii_ws(b, e2, we);
+        if j > e2 {
+            // Optional "the" between month and day.
+            if let Some(te) = ascii_word_at(b, we, j, "the") {
+                let jt = skip_ascii_ws(b, te, we);
+                if jt > te {
+                    j = jt;
+                }
+            }
+            if let Some((de, day)) = day_digits_at(b, we, j).or_else(|| word_day_at(b, we, j)) {
+                return finish_month_day(b, we, de, month, day);
+            }
+            // Attached day digits ("Dec31") sit directly after the month.
+            if let Some((de, day)) = day_digits_at(b, we, e2) {
+                return finish_month_day(b, we, de, month, day);
+            }
+        } else if let Some((de, day)) = day_digits_at(b, we, e2) {
+            // Attached day with no separator at all ("Dec31").
             return finish_month_day(b, we, de, month, day);
         }
         return None;
     }
     if let Some((de, day)) = day_digits_at(b, we, i) {
         let j = skip_ascii_ws(b, de, we);
-        if j > de
-            && let Some((me, month)) = month_at(b, we, j)
-        {
+        if j > de && let Some((me, month)) = month_at(b, we, j) {
             return finish_month_day(b, we, me, month, day);
         }
     }
     None
 }
 
-/// Shared tail of both month-day forms: an optional year, then boundary
-/// checks and calendar validation. `after` is the offset just past the
+/// Shared tail of both month-day forms: an optional year (digits or
+/// written — `two thousand`, `nineteen zero one`), then boundary checks
+/// and calendar validation. `after` is the offset just past the
 /// day/month token.
 fn finish_month_day(
     b: &[u8],
@@ -658,12 +1047,12 @@ fn finish_month_day(
     let mut j = skip_ascii_ws(b, after, we);
     if j < we && b[j] == b',' {
         j = skip_ascii_ws(b, j + 1, we);
-        if let Some((ye, y)) = year4_at(b, we, j) {
+        if let Some((ye, y)) = year_or_word_year(b, we, j) {
             year = Some(y);
             e = ye;
         }
     } else if j > after
-        && let Some((ye, y)) = year4_at(b, we, j)
+        && let Some((ye, y)) = year_or_word_year(b, we, j)
     {
         year = Some(y);
         e = ye;
@@ -685,6 +1074,49 @@ fn finish_month_day(
         }
     });
     Some((abs, Some((after, month, day))))
+}
+
+/// A 4-digit year or a written year (`two thousand and eighteen`).
+fn year_or_word_year(b: &[u8], we: usize, i: usize) -> Option<(usize, i64)> {
+    if let Some(hit) = year4_at(b, we, i) {
+        return Some(hit);
+    }
+    word_year_at(b, we, i)
+}
+
+/// `[the] <word-day> of <month>[, year]` — `the tenth of September, two
+/// thousand`, `twenty second of June 2017`. The span starts at the day
+/// word (a leading "the" stays outside it, matching the upstream span).
+#[allow(clippy::type_complexity)]
+fn word_day_of_month_at(
+    b: &[u8],
+    we: usize,
+    i: usize,
+) -> Option<(usize, usize, i64, u32, u32, bool)> {
+    let mut j = i;
+    if let Some(te) = ascii_word_at(b, we, j, "the") {
+        let jt = skip_ascii_ws(b, te, we);
+        if jt > te {
+            j = jt;
+        }
+    }
+    let (de, day) = word_day_at(b, we, j)?;
+    let k = skip_ascii_ws(b, de, we);
+    if k == de {
+        return None;
+    }
+    let oe = ascii_word_at(b, we, k, "of")?;
+    let k2 = skip_ascii_ws(b, oe, we);
+    if k2 == oe {
+        return None;
+    }
+    let (me, month) = month_at(b, we, k2)?;
+    let (abs, anch) = finish_month_day(b, we, me, month, day)?;
+    if let Some(a) = abs {
+        return Some((de, a.end, a.y, month, day, true));
+    }
+    let (ae, _, _) = anch?;
+    Some((de, ae, 0, month, day, false))
 }
 
 /// Relatives: `today|tomorrow|yesterday`, `next|last <weekday>`,
@@ -760,25 +1192,32 @@ fn rel_unit_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u32)> {
     None
 }
 
-/// 1-4 digit unsigned integer (relative offsets), value <= 9999.
+/// 1-4 digit unsigned integer (relative offsets), value <= 9999; word
+/// numbers compose too (`in two months`, issue 953 lever 10).
 fn short_number_at(b: &[u8], we: usize, i: usize) -> Option<(usize, i64)> {
-    if i >= we || !b[i].is_ascii_digit() {
-        return None;
+    if i < we && b[i].is_ascii_digit() {
+        let mut v: i64 = 0;
+        let mut e = i;
+        while e < we && b[e].is_ascii_digit() && e - i < 4 {
+            v = v * 10 + i64::from(b[e] - b'0');
+            e += 1;
+        }
+        return Some((e, v));
     }
-    let mut v: i64 = 0;
-    let mut e = i;
-    while e < we && b[e].is_ascii_digit() && e - i < 4 {
-        v = v * 10 + i64::from(b[e] - b'0');
-        e += 1;
+    let (e, v) = word_number_at(b, we, i)?;
+    if (0.0..=9999.0).contains(&v) && v.fract() == 0.0 {
+        Some((e, v as i64))
+    } else {
+        None
     }
-    Some((e, v))
 }
 
 // ---------------------------------------------------------------------------
 // Time matchers
 // ---------------------------------------------------------------------------
 
-/// `noon` | `midnight` | `<h>[:mm[:ss]]( )?[am|pm]` | `H:MM[:SS]` (24h).
+/// `noon` | `midnight` | `<h>[:mm[:ss]]( )?[am|pm]` | `H:MM[:SS]` (24h) |
+/// the written clock (`eight forty`, `seven thirty pm`).
 fn time_at(b: &[u8], we: usize, i: usize) -> Option<TimeHit> {
     if let Some(e) = ascii_word_at(b, we, i, "noon") {
         return Some(TimeHit {
@@ -799,7 +1238,213 @@ fn time_at(b: &[u8], we: usize, i: usize) -> Option<TimeHit> {
     if let Some(t) = meridiem_time_at(b, we, i) {
         return Some(t);
     }
-    clock24_at(b, we, i)
+    if let Some(t) = clock24_at(b, we, i) {
+        return Some(t);
+    }
+    if let Some(t) = daypart_time_at(b, we, i) {
+        return Some(t);
+    }
+    written_time_at(b, we, i)
+}
+
+/// Day-part modifiers — the meridiem's prose forms (issue 953 lever K).
+/// Longest first; `ascii_word_at`'s boundary keeps `afternoon` exact.
+const DAYPARTS: &[(&str, bool)] = &[
+    ("in the afternoon", true),
+    ("in the evening", true),
+    ("in the morning", false),
+    ("in the night", true),
+    ("afternoon", true),
+    ("at night", true),
+];
+
+fn daypart_at(b: &[u8], we: usize, i: usize) -> Option<(usize, bool)> {
+    for (w, pm) in DAYPARTS {
+        if let Some(e) = ascii_word_at(b, we, i, w) {
+            return Some((e, *pm));
+        }
+    }
+    None
+}
+
+/// The meridiem transform shared by both spellings (`7 in the night` ->
+/// 19, `12 in the morning` -> 0).
+fn apply_daypart(h: u32, pm: bool) -> u32 {
+    if pm {
+        if h < 12 {
+            h + 12
+        } else {
+            h
+        }
+    } else if h == 12 {
+        0
+    } else {
+        h
+    }
+}
+
+/// Day-part times, both orders: `five thirty in the night` (suffix) and
+/// `afternoon 7:00` / `in the morning at 7` (prefix — a bare hour is the
+/// daypart's meridiem substitute).
+fn daypart_time_at(b: &[u8], we: usize, i: usize) -> Option<TimeHit> {
+    // Suffix: <any time shape> + daypart.
+    if let Some((te, h, mi, s)) = hourish_at(b, we, i) {
+        let j = skip_ascii_ws(b, te, we);
+        if j > te && let Some((de, pm)) = daypart_at(b, we, j) {
+            return Some(TimeHit {
+                end: de,
+                h: apply_daypart(h, pm),
+                mi,
+                s,
+            });
+        }
+    }
+    // Prefix: daypart [+ at] + time (a bare hour is legal here).
+    let (de, pm) = daypart_at(b, we, i)?;
+    let mut j = skip_ascii_ws(b, de, we);
+    if j == de {
+        return None;
+    }
+    if let Some(ae) = ascii_word_at(b, we, j, "at") {
+        let k = skip_ascii_ws(b, ae, we);
+        if k > ae {
+            j = k;
+        }
+    }
+    let (te, h, mi, s) = hourish_at(b, we, j)?;
+    Some(TimeHit {
+        end: te,
+        h: apply_daypart(h, pm),
+        mi,
+        s,
+    })
+}
+
+/// The hour-ish shapes a daypart can attach to: digit `h[:mm[:ss]]` or a
+/// written hour [+ written minutes]. The meridiem is NOT consumed here.
+/// A bare hour is legal — the caller guarantees a daypart follows.
+fn hourish_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u32, u32, Option<u32>)> {
+    if i < we && b[i].is_ascii_digit() {
+        let (mut e, h) = one_two_digits(b, we, i)?;
+        if h <= 23 {
+            let mut mi = 0u32;
+            let mut s = None;
+            if e + 1 < we && b[e] == b':' && let Some((me, v)) = two_digits(b, we, e + 1) {
+                if v > 59 {
+                    return None;
+                }
+                mi = v;
+                e = me;
+                if e + 1 < we && b[e] == b':' && let Some((se, v)) = two_digits(b, we, e + 1) {
+                    if v > 59 {
+                        return None;
+                    }
+                    s = Some(v);
+                    e = se;
+                }
+            }
+            return Some((e, h, mi, s));
+        }
+        return None;
+    }
+    let (he, h) = word_group_at(b, we, i)?;
+    if !(0..=23).contains(&h) {
+        return None;
+    }
+    let j = skip_ascii_ws(b, he, we);
+    if j > he
+        && let Some((me, m)) = word_group_at(b, we, j)
+        && m <= 59
+    {
+        return Some((me, h as u32, m as u32, None));
+    }
+    Some((he, h as u32, 0, None))
+}
+
+/// Written clock: `<hour words> [<minute words>] [loose meridiem]` —
+/// `eight forty` = 08:40, `ten forty five` = 10:45, `fifteen fifteen p m`
+/// = 15:15, `seven thirty pm` = 19:30. A bare written hour with neither
+/// minutes nor a meridiem is not a time (the digit rule's written twin).
+fn written_time_at(b: &[u8], we: usize, i: usize) -> Option<TimeHit> {
+    let (he, h) = word_group_at(b, we, i)?;
+    if !(0..=23).contains(&h) {
+        return None;
+    }
+    let mut h = h as u32;
+    let mut e = he;
+    let mut mi = 0u32;
+    let mut has_meridiem = false;
+    let j = skip_ascii_ws(b, he, we);
+    if j > he {
+        if let Some((me, is_pm)) = meridiem_loose_at(b, we, j) {
+            has_meridiem = true;
+            e = me;
+            h = if is_pm {
+                if h < 12 {
+                    h + 12
+                } else {
+                    h
+                }
+            } else if h == 12 {
+                0
+            } else {
+                h
+            };
+        } else if let Some((me2, m)) = word_group_at(b, we, j)
+            && m <= 59
+        {
+            mi = m as u32;
+            e = me2;
+            // A meridiem may still follow the minutes.
+            let k = skip_ascii_ws(b, me2, we);
+            if k > me2 && let Some((me, is_pm)) = meridiem_loose_at(b, we, k) {
+                has_meridiem = true;
+                e = me;
+                h = if is_pm {
+                    if h < 12 {
+                        h + 12
+                    } else {
+                        h
+                    }
+                } else if h == 12 {
+                    0
+                } else {
+                    h
+                };
+            }
+        }
+    }
+    if mi == 0 && !has_meridiem {
+        return None;
+    }
+    Some(TimeHit { end: e, h, mi, s: None })
+}
+
+/// Loose meridiem: `am|pm` with any mix of dots and whitespace between the
+/// letter and the `m` (`p. m.`, `p . m .`), optional trailing dot.
+fn meridiem_loose_at(b: &[u8], we: usize, i: usize) -> Option<(usize, bool)> {
+    if i >= we {
+        return None;
+    }
+    let c = b[i] | 0x20;
+    if c != b'a' && c != b'p' {
+        return None;
+    }
+    let mut j = i + 1;
+    while j < we && (is_ws_byte(b[j]) || b[j] == b'.') {
+        j += 1;
+    }
+    if j >= we || (b[j] | 0x20) != b'm' {
+        return None;
+    }
+    j += 1;
+    if j < we && b[j] == b'.' {
+        j += 1;
+    }
+    if j < we && is_word_byte(b[j]) {
+        return None;
+    }
+    Some((j, c == b'p'))
 }
 
 fn two_digits(b: &[u8], we: usize, i: usize) -> Option<(usize, u32)> {
@@ -812,16 +1457,34 @@ fn two_digits(b: &[u8], we: usize, i: usize) -> Option<(usize, u32)> {
     ))
 }
 
-/// 1..=12 hour with an optional `:mm[:ss]` tail, optional space, then
-/// `am`/`pm`. `12am` -> 00, `12pm` -> 12.
+/// 1..=12 hour with an optional `:mm[:ss]` tail, attached minutes before
+/// a meridiem (`340pm` = 3:40pm, `1140 a.m.` = 11:40), optional space,
+/// then the meridiem (loose: dots/spaces allowed). `12am` -> 00, `12pm` ->
+/// 12. A daypart may substitute for the meridiem (`5 in the morning`).
 fn meridiem_time_at(b: &[u8], we: usize, i: usize) -> Option<TimeHit> {
     let (mut e, mut h) = one_two_digits(b, we, i)?;
+    let mut attached_mi = false;
     if !(1..=12).contains(&h) {
-        return None;
+        // "340pm": the greedy 2-digit hour is 34 — retry as a 1-digit hour
+        // plus attached minutes (which the shared block below consumes).
+        h = u32::from(b[i] - b'0');
+        if !(1..=12).contains(&h) || e != i + 2 {
+            return None;
+        }
+        e = i + 1;
+        // The two attached digits must be there and small enough.
+        let (me, mi2) = two_digits(b, we, e)?;
+        if mi2 > 59 {
+            return None;
+        }
+        attached_mi = true;
+        e = me;
     }
-    let mut mi = 0;
+    let mut mi = 0u32;
     let mut s: Option<u32> = None;
-    if e + 1 < we
+    if attached_mi {
+        mi = u32::from(b[e - 2] - b'0') * 10 + u32::from(b[e - 1] - b'0');
+    } else if e + 1 < we
         && b[e] == b':'
         && let Some((me, v)) = two_digits(b, we, e + 1)
     {
@@ -840,27 +1503,37 @@ fn meridiem_time_at(b: &[u8], we: usize, i: usize) -> Option<TimeHit> {
             s = Some(v);
             e = se;
         }
+    } else if e + 2 <= we
+        && b[e].is_ascii_digit()
+        && b[e + 1].is_ascii_digit()
+    {
+        // Attached minutes before a meridiem: "1140 a.m." (11:40). The
+        // trailing meridiem requirement below gates false positives.
+        let v = u32::from(b[e] - b'0') * 10 + u32::from(b[e + 1] - b'0');
+        if v <= 59 {
+            mi = v;
+            e += 2;
+        }
     }
     let j = skip_ascii_ws(b, e, we);
-    if j + 2 > we {
+    if j >= we {
         return None;
     }
-    let is_am = (b[j] | 0x20) == b'a' && (b[j + 1] | 0x20) == b'm';
-    let is_pm = (b[j] | 0x20) == b'p' && (b[j + 1] | 0x20) == b'm';
-    if !is_am && !is_pm {
+    let c = b[j] | 0x20;
+    if c != b'a' && c != b'p' {
+        // Day-part meridiem substitute ("5 in the morning").
+        if let Some((de, pm)) = daypart_at(b, we, j) {
+            return Some(TimeHit {
+                end: de,
+                h: apply_daypart(h, pm),
+                mi,
+                s,
+            });
+        }
         return None;
     }
-    let m_end = j + 2;
-    if m_end < we && is_word_byte(b[m_end]) {
-        return None;
-    }
-    h = if is_am {
-        if h == 12 { 0 } else { h }
-    } else if h == 12 {
-        12
-    } else {
-        h + 12
-    };
+    let (m_end, is_pm) = meridiem_loose_at(b, we, j)?;
+    let h = apply_daypart(h, is_pm);
     Some(TimeHit {
         end: m_end,
         h,

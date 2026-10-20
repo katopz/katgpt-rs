@@ -49,6 +49,8 @@
 //! `&state[span.start..span.end]` is the matched text, byte for byte
 //! (assert-friendly by construction). Spans land on char boundaries.
 
+pub(crate) mod words;
+
 pub mod datetime;
 pub mod duration;
 pub mod list;
@@ -64,6 +66,8 @@ pub use number::parse_number;
 /// One located, typed candidate. `rank 0` is best (lower wins); ties break
 /// by earlier [`Span::start`], then shorter span (smaller
 /// [`Span::end`]). Candidates arrive best-first in the caller's buffer.
+/// The best candidate ALWAYS carries rank 0 (the rank-0 law, issue 953);
+/// higher ranks only mark fallbacks underneath a better overlap.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParsedValue {
     pub span: Span,
@@ -156,21 +160,38 @@ pub(crate) struct RawCandidate {
     pub start: u32,
     pub end: u32,
     pub rank: u8,
+    /// Composition depth — the qualified-form tie-break (issue 953 ask 3):
+    /// among equal-rank candidates the more-composed match wins rank 0
+    /// (`$ 254 million` — currency + multiplier — over an earlier `27 %`).
+    /// Sort key AFTER rank, BEFORE position.
+    pub depth: u8,
     pub raw: RawValue,
 }
 
 /// Sort the scanned candidates best-first (rank, then start, then end),
 /// drop exact duplicates, materialize, and APPEND to the caller's buffer.
+///
+/// The rank-0 law (issue 953): the BEST candidate always carries rank 0 —
+/// a lone plain candidate is promoted (a bare `192` must answer a rank-0
+/// read, exactly like a `$12` does), while overlapping qualified matches
+/// keep their precedence. The promotion never reorders (the promoted
+/// candidate is already first).
 pub(crate) fn finish(mut raws: Vec<RawCandidate>, state: &str, out: &mut Vec<ParsedValue>) {
     raws.sort_by(|a, b| {
         a.rank
             .cmp(&b.rank)
+            .then(b.depth.cmp(&a.depth))
             .then(a.start.cmp(&b.start))
             .then(a.end.cmp(&b.end))
     });
     raws.dedup_by(|a, b| {
         a.start == b.start && a.end == b.end && a.rank == b.rank && a.raw == b.raw
     });
+    // After dedup: the best candidate carries rank 0 (the promotion must
+    // not split a rank-equal duplicate pair the dedup just merged).
+    if let Some(first) = raws.first_mut() {
+        first.rank = 0;
+    }
     for r in raws {
         debug_assert!(
             state.is_char_boundary(r.start as usize) && state.is_char_boundary(r.end as usize)

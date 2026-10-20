@@ -318,7 +318,7 @@ impl SpanPointer {
 
         // Window-level document frequencies (a term counts once per window
         // even when repeated inside it) for BM25 idf.
-        let mut df: HashMap<Box<str>, u32> = HashMap::new();
+        let mut df: HashMap<Box<str>, u32> = HashMap::with_capacity(windows.len());
         let mut total_len = 0u64;
         for w in &windows {
             let lo = w.tok_lo as usize;
@@ -336,9 +336,7 @@ impl SpanPointer {
                 // lower_buf holds ASCII-lowercased token bytes; ASCII
                 // lowering preserves UTF-8, so this cannot fail.
                 let term_str = std::str::from_utf8(term).expect("ascii lowering preserves utf-8");
-                if !df.contains_key(term_str) {
-                    df.insert(term_str.to_string().into_boxed_str(), 0);
-                }
+                df.entry(term_str.into()).or_insert(0);
                 if let Some(count) = df.get_mut(term_str) {
                     *count += 1;
                 }

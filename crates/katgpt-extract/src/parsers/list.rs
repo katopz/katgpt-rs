@@ -162,6 +162,7 @@ pub(crate) fn scan_lists(
         start: items[0].0,
         end: last.1,
         rank: RANK_LIST,
+        depth: 0,
         raw: RawValue::List(values),
     });
 }
@@ -311,7 +312,9 @@ mod tests {
     #[test]
     fn element_kind_mismatch_aborts_the_set() {
         let c = cons(false, None, None, None, None);
-        no_list("1, two, 3", FieldKind::Number, &c);
+        // "two" now parses as a word number (issue 953) — use a genuinely
+        // unparseable element for the mismatch abort.
+        no_list("1, x, 3", FieldKind::Number, &c);
         no_list(
             "1, 2.5, 3",
             FieldKind::Number,
