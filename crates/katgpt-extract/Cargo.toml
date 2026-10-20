@@ -60,3 +60,19 @@ temper = ["dep:katgpt-core", "katgpt-core/extraction_wire"]
 # alloc-tracking test module compile in --release so the G4 zero-alloc
 # gate can run against optimised code. Off in every shipped build.
 alloc_tracking = []
+
+# Plan 628 T0.6 G5: the external BLAKE3-pinned Recognizers-Text harness
+# (tests/g5_external_fixture.rs). The required-features row is the
+# repo-birth gate discipline — without `typed_parsers` the target compiles
+# to nothing (and its katgpt_core import would not resolve).
+[[test]]
+name = "g5_external_fixture"
+path = "tests/g5_external_fixture.rs"
+required-features = ["typed_parsers"]
+
+[dev-dependencies]
+# The G5 harness's pin gate + JSONL reader. Mirrored at the workspace
+# lock's existing versions (blake3 1.8.5, serde_json 1.0.150) — no new
+# versions beyond the lock.
+blake3 = "1"
+serde_json = "1"

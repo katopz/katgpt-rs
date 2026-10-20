@@ -1969,7 +1969,9 @@ dependencies = [
 name = "katgpt-extract"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "katgpt-core",
+ "serde_json",
 ]
 
 [[package]]
