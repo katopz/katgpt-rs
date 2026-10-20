@@ -27,7 +27,11 @@ katgpt-core = { path = "../katgpt-core", optional = true, default-features = fal
 # comparison. Synthetic-corpus verdict; the real-corpus re-gate rides the
 # Phase-2 outcomes ledger. `--no-default-features` stays the tested
 # flag-OFF posture (compiles to the empty crate).
-default = ["extraction_estimate"]
+# + span_pointer joined 2026-10-20 (Plan 628 T0.7, Bench 950): its G5 —
+# beating a rule floor on an external text-bearing fixture — LANDED (exact
+# 82.6% vs 71.8% on the choices-class population; alias channel carries the
+# win: no-alias 73.3%). Same promotion rule, measured not projected.
+default = ["extraction_estimate", "span_pointer"]
 
 # span_pointer (Plan 628 T0.2): candidate-window span scoring — BM25/ngram
 # lexical + hashed-feature embedding similarity + optional alias tables;
@@ -75,6 +79,14 @@ alloc_tracking = []
 name = "g5_external_fixture"
 path = "tests/g5_external_fixture.rs"
 required-features = ["typed_parsers"]
+
+# Plan 628 T0.7 G5: the span-baseline arms (tests/g5_span_baselines.rs) —
+# span_pointer vs the rule floor on the MIT-Movie fixture. Without
+# `span_pointer` the target compiles to nothing.
+[[test]]
+name = "g5_span_baselines"
+path = "tests/g5_span_baselines.rs"
+required-features = ["span_pointer"]
 
 [dev-dependencies]
 # The G5 harness's pin gate + JSONL reader. Mirrored at the workspace
