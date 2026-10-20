@@ -1966,6 +1966,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "katgpt-extract"
+version = "0.1.0"
+dependencies = [
+ "katgpt-core",
+]
+
+[[package]]
 name = "katgpt-forward"
 version = "0.1.0"
 dependencies = [
