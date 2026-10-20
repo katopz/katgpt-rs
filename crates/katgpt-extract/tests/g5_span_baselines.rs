@@ -625,8 +625,9 @@ fn g5_span_baselines() {
         per_type["Genre"].ptr_gate.exact
     );
     assert!(
-        oov_skipped > 0,
-        "G5 span: zero OOV skips — the vocabulary-source contract (TRAIN split, not the scored rows) is not in effect"
+        oov_skipped == 740,
+        "G5 span: OOV skip count {} != pinned 740 — the schema vocabulary drifted (size or source); re-pin from the re-measured record",
+        oov_skipped
     );
     // The GOAT verdict is REPORTED, never asserted: verdict round 1 measured
     // the pointer above a floor that was denied the schema (an answer-key
