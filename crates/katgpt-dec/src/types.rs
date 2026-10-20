@@ -143,7 +143,16 @@ impl CellComplex {
     /// - Edges: horizontal (w-1)*h + vertical w*(h-1)
     /// - Faces: (w-1)*(h-1)
     /// - Volumes: 0
+    ///
+    /// Panics on `w == 0` or `h == 0`: the edge/face counts and loop bounds
+    /// compute `w-1`/`h-1`, and a zero dimension would wrap in a release
+    /// build (silent infinite push → OOM; issue 955). There is no meaningful
+    /// empty grid complex — no cells of any rank, no operators apply.
     pub fn grid_2d(w: usize, h: usize) -> Self {
+        assert!(
+            w > 0 && h > 0,
+            "grid_2d needs a non-empty grid, got {w}x{h}"
+        );
         let n_vertices = w * h;
         let n_h_edges = (w - 1) * h;
         let n_v_edges = w * (h - 1);
@@ -838,6 +847,36 @@ mod tests {
         let b2 = cx.boundary_entries(1);
         // n_faces = (3-1)*(2-1) = 2
         assert_eq!(b2.len(), 8); // 2 faces × 4 entries each
+    }
+
+    #[test]
+    fn grid_2d_minimal_grid_still_works() {
+        // 1x1: both subtractions give 0 — no edges, no faces, 1 vertex.
+        // Must keep working (issue 955: only the ZERO dims are the trap).
+        let cx = CellComplex::grid_2d(1, 1);
+        assert_eq!(cx.n_vertices(), 1);
+        assert_eq!(cx.n_edges(), 0);
+        assert_eq!(cx.n_faces(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "grid_2d needs a non-empty grid")]
+    fn grid_2d_zero_width_panics() {
+        // Was: (w-1) wraps to usize::MAX in release, the B₂ outer loop pushes
+        // forever → OOM kill (issue 955).
+        let _ = CellComplex::grid_2d(0, 5);
+    }
+
+    #[test]
+    #[should_panic(expected = "grid_2d needs a non-empty grid")]
+    fn grid_2d_zero_height_panics() {
+        let _ = CellComplex::grid_2d(5, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "grid_2d needs a non-empty grid")]
+    fn grid_2d_both_zero_panics() {
+        let _ = CellComplex::grid_2d(0, 0);
     }
 
     #[test]
