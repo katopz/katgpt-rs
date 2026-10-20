@@ -108,6 +108,10 @@ Repo/product topology follows the reflex precedent: substrate upstream-first in 
 
 ## 8. Verdict
 
+> **Re-score status (2026-10-20, post T0.6 + T0.6b):** (a) DONE — T0.4/T0.6 G1 at `--release` **BEATS the conformal-naive floor ×3** (forecast stationary-seasonal 0.7195, forecast white-noise 0.7550, estimate cross-sectional 0.4730 — Bench 948). (b) DONE (measured, provisional quote) — composite F0 request p99 402–409 µs vs the pinned 10 ms bar, load-disclosed (quiet-box preflight PASS line owed, Benches 948+949). (c) OPEN — the rule-floor + GLiNER-class arms are T0.7 (deferred; needs a text-bearing external fixture); `span_pointer` has NOT beaten a rule floor yet, so it stays opt-in and the span lane stays GOAT-ungated. **Family verdict: GOAT (provisional) stands** — (c) is the sole remaining re-score condition; re-judge Super-GOAT vs GOAT when T0.7 lands.
+
+## 8. Verdict (original)
+
 **Per-track tiers (never pooled):**
 
 - **Track A — extraction-family product synthesis:** **GOAT (provisional)** — downgraded from Super-GOAT at verdict round 1: five of the eight WINs are PROJECTED (no bench yet), and the scoreboard missed the instruction-conditioning LOSS row. Re-score conditions (all required): (a) T0.4 reports the estimate head vs conformal-naive floor; (b) T0.6 pins the G2 latency number; (c) G5 runs against an external BLAKE3-pinned fixture with BOTH a Duckling/regex-class rule baseline and a GLiNER-class trained lane, and the span primitive beats the rule floor. If all three land favorably, re-score Super-GOAT vs GOAT on measured rows only. The family charter (Proposal 016) proceeds on the GOAT tier — GOAT still files plan + flags + benches; nothing in the phase order depends on the higher tier.
