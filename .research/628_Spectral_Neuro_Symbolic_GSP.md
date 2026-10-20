@@ -1,6 +1,6 @@
 # Research 628 — Fully Spectral Neuro-Symbolic Reasoning (GSP backbone) + Enterprise-KG neuro-symbolic reasoning
 
-**Status:** GAIN — GOAT-tier fusion filed (katgpt-rs Plan 629 + riir-ai Issue 1100 + riir-ai Issue 1073 T6 row). Super-GOAT **denied** at Q1: the mechanism (Chebyshev polynomial filters on a graph Laplacian) is heavily published prior art (ChebNet, Defferrard et al. 2016). Verdict ping-pong §5: see verdict record at the bottom.
+**Status:** GAIN (paper A) — filed as Plan 629 + riir-ai Issue 1100 + riir-ai Issue 1073 T6 row. **AMENDED 2026-10-20: the Issue-1100 T0 replay measured the band-read consumer gate NEGATIVE (the flip driver is field-content change, not band ambiguity; zero σ crossings in 37 massed refreshes) — Plan 629 is HELD at T0 per its own consumer-gate law and the band rows below stand as recorded-but-unconsumed; the negative's instrument + record live in riir-games-mmorpg `src/quest_combat/route_avoid_bands_tests.rs` and riir-ai issue 1100. Operator note for row 49: `heat_kernel_trajectory_krylov`'s operator is `A = Δ − I + diag(motor)` (PhysiFormer prediction semantics — decay with inverted mode ordering), NOT the pure heat kernel that row's prose names; the constructible-today DoG composes `krylov_expmv` over `−L` directly (the trace does exactly this).** Super-GOAT **denied** at Q1: the mechanism (Chebyshev polynomial filters on a graph Laplacian) is heavily published prior art (ChebNet, Defferrard et al. 2016). Verdict ping-pong §5: see verdict record at the bottom.
 
 **Date:** 2026-10-20
 **Sources:**

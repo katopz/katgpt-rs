@@ -1,6 +1,6 @@
 # Plan 629 — Band-selective cochain filters (the open primitive behind Research 628)
 
-**Status:** Active — open primitive, modelless (fixed/authored coefficients; trained coefficients are riir-ai Issue 1073 T6's trigger-gated lane, never here). Super-GOAT denied (ChebNet published prior art); GOAT-tier fusion.
+**Status:** HELD at T0 — the consumer gate measured NEGATIVE (riir-ai Issue 1100 T0, 2026-10-20: in the issue's own pack-between-hero-and-goal posture the band separator σ never crossed sign in 37 massed refreshes and field-driven flips' |σ| (0.9219) is indistinguishable from stable refreshes' (0.9137) — the flip driver is field-content change, the lane 1097 already designs for; the trace lives at riir-games-mmorpg `src/quest_combat/route_avoid_bands_tests.rs`). Per this plan's own consumer-gate law the Chebyshev module is NEVER built without a confirmed consumer; a re-open needs a new lane that names a band read no shipped read answers. Modelless (fixed/authored coefficients; trained coefficients are riir-ai Issue 1073 T6's trigger-gated lane, never here). Super-GOAT denied (ChebNet published prior art); GOAT-tier fusion.
 **Research:** [katgpt-rs/.research/628_Spectral_Neuro_Symbolic_GSP.md](../.research/628_Spectral_Neuro_Symbolic_GSP.md) (paper: arXiv:2508.14923)
 **Consumer:** riir-ai Issue 1100 (band reads over the route-avoid danger field; Issue 1097 enrichment) — the consumer's T0 replay gates any wiring, NOT this plan's T1–T3.
 **Date:** 2026-10-20
