@@ -6,7 +6,7 @@
 **Source:** Cloudflare Clairic preview (2026-10-19, hosted-only, open weights pending) — the extraction-model class
 **Target:** `katgpt-rs/crates/katgpt-core/src/extraction_wire/` (contract only) + NEW member crate `katgpt-rs/crates/katgpt-extract/` (everything that grows: parsers, span scorer, estimate/forecast heads, Temper substrate) + features `extraction_wire`, `span_pointer`, `extraction_estimate`
 **Status:** Active — Phase 0 (substrate; NOT owner-gated; the reflex precedent: `Lz4FlexDrafter::score_into` landed before riir-reflex existed). Claude verdict round 1: REVISE addressed 2026-10-20 — member-crate placement, Duckling/Recognizers-Text grammar source, estimate/forecast conditioner split, external G5 fixture.
-**Claimed:** katgpt-rs-fathom-phase0, epoch=1792461810, expires 2026-10-22T02:03:30Z
+**Claimed:** katgpt-rs-fathom-phase0, 1792461810, expires 2026-10-22T02:03:30Z
 
 ---
 
