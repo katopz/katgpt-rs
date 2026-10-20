@@ -109,8 +109,9 @@ no CI lane runs it.
 
 `FLOOR_ALIAS_LONGEST_EXACT_RATCHET` 2304 · `PTR_EXACT_RATCHET` 2200 ·
 `PTR_CONTAIN_RATCHET` 2488 · `ND_PTR_EXACT_RATCHET` 537 · `GENRE_PTR_EXACT_RATCHET` 277 ·
-vocab pin + census (4,531 surfaces / per-type counts) · OOV-skip > 0 (the vocabulary-
-source contract is live) · verbatim liveness (floor never abstains by identity; pointer
+vocab pin + census (4,531 surfaces / per-type counts) · OOV skip census pinned EXACT at
+740 (the round-2 verdict's hardening: catches schema drift in size, not just source) ·
+verbatim liveness (floor never abstains by identity; pointer
 always answers) · double-run determinism.
 
 ## Honest caveats
