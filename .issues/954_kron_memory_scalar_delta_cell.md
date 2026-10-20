@@ -1,0 +1,43 @@
+# Issue 954: `kron_memory` — scalar-target delta-rule cell (Kronecker Delta Rule, modelless)
+
+**Status:** OPEN — unclaimed. Primitive spec from [Research 630](../.research/630_Kronecker_Delta_Rule_KronLSTM.md) (arXiv:2610.26834, KronLSTM). Modelless track, GOAT-tier. No code this session. Spec revised once after the §5 verdict round (baseline arms, pair registry, alloc-free audit, fp-tolerance fixes, independence/rank caveats, conformal floor).
+
+A new associative-memory cell type beside the shipped vector-target rungs (`delta_mem`, LatticeMemory cells, the RLS rung in `.plans/630`): a **pair-addressed scalar table** — `d_k·d_v` scalar slots per cell, protected where the address factors are near-orthogonal (designed addresses, not unconditional), update `S ← S − β(vᵀSk − c)·vkᵀ`, closed-form Newton step `β* = 1/(‖k‖²‖v‖²)`, erase via `c = 0` with a pre-write collateral audit, analytic health gauges, undo-last, LS-snap consolidation. Feature flag `kron_memory = []` (opt-in → GOAT → promotion ladder; new cell-type slot, no incumbent demoted).
+
+## Motivation — and its honest scope
+
+Interference on another stored pair `(kᵢ, vᵢ)` is `−β·residual·(vᵢᵀv)(kᵀkᵢ)` — the PRODUCT of value overlap and key overlap; either factor ≈ 0 ⇒ protected, and the damage is computable BEFORE the write. **Scope law (verdict-round fix):** erase-with-audit alone is NOT Kron-exclusive — a vector-target delta erase (write `v = 0` at the Newton step, `M ← M − (Mk)kᵀ/‖k‖²`) also admits closed-form pre-write collateral, and with one-hot/orthogonal address codes a Kron cell degenerates to a plain table where unlearning is trivial. What ONLY the scalar-target member adds is the **double gating** (collateral requires overlap in BOTH factors) and the analytic envelopes. G0 exists precisely to make the headline claim falsifiable instead of asserted: if Kron does not beat the baselines on distributed keys, it does not promote.
+
+## Deliverables
+
+- [ ] `crates/katgpt-core/src/kron_memory/mod.rs` + `types.rs` — `KronCell<const DK: usize, const DV: usize>` holding the fixed-size `[[f32; DV]; DK]` Pod **plus a fixed-capacity `PairRegistry<N>`** (bounded ring of written `(kᵢ, vᵢ)` pairs — the audit's enumeration source; eviction policy: oldest-first, documented; audit cost `O(N·(d_k+d_v))`; registry rides the committed state so the envelope shape stays honest — sizing doc states Pod + registry bytes, never "16 KB" alone)
+- [ ] `write_newton(k, v, c)` — β* write (one dot + one rank-1 axpy); `write(k, v, c, β)` with contraction governor `0 < β·‖k‖²‖v‖² < 2` (refuses outside the interval); **write elision on `residual == 0.0` (exact-zero fast path) and all dots through one `dot_f32_ordered` path** so identical inputs produce identical residuals (the identity-fixed-point property depends on reduction order)
+- [ ] `collateral_audit(k, v, β, c, scratch: &mut [(u16, f32)]) -> &[…]` — pre-write interference kernel `Δᵢ = −β·residual·(vᵢᵀv)(kᵀkᵢ)` over the registry, **written into a caller-supplied scratch buffer (no allocation)**; cell-local enumeration only
+- [ ] `unlearn_audited(k, v, tau, scratch) -> CollateralReport` — c=0 Newton write; collateral ≤ τ else refuse-or-repair (write back each collided pair's old readout, closed-form targets, one extra delta write each)
+- [ ] `undo_last()` — **tolerance-pinned by default** (fp round-trip `S + β·r·vkᵀ` after `S − β·r·vkᵀ` is NOT bit-exact — pinned ε documented); `undo_last_snap()` restores the touched rows/columns from a saved snapshot when bit-exactness is required (touched-rows snapshot, not the whole cell)
+- [ ] `read(k, v)` — value; the analytic CI variant is **gated on G5's conformal floor** (ship only if it beats the floor, else value-only)
+- [ ] `health() -> CellHealth` — norm-budget alarm `‖S‖²_F ≤ θ·4·Ê[c²]/λ̂_min` and retention half-life `H = ln2/(β·λ̂_min(Ā))`, both **documented as lower-bound heuristics**: `λ̂_min` is tolerance-thresholded on the OBSERVED subspace of the streaming EMA Gram (rank-deficient game streams otherwise send H → ∞), and the `Ā = K̄⊗V̄` factorization holds only under key/value independence — associative streams are correlated by construction, so the gauge carries a measured-violation arm; alarms feed callers as a SIGNAL, never a forced action
+- [ ] `consolidate_ls(b)` — `S := K̄⁻¹BV̄⁻ᵀ` via the Kronecker form **only under the explicit independence assumption** (designed addresses); the general correlated case falls back to the shipped replay/ridge path (`linalg::ridge_solve`) with ridge regularization for rank-deficient streams; the independence-error is measured, not assumed
+- [ ] `kron_chunk_wy` (separate feature `kron_chunk_wy`) — chunked form `N = diag(β)(G_kk ⊙ G_vv)`, unit-LT solve, features never formed; sequential stays canonical for anything synced/replayed (rounding differs)
+- [ ] Docs: `.docs/03_memory/kron_memory.md` + one line in the memory-stack README; cross-links from `lattice_memory.md` and the RLS plan
+
+## GOAT gates (pre-registered — promotion requires ALL of:)
+
+- **G0 (baseline arms — the headline claim's falsifier):** at matched state bytes on DISTRIBUTED (non-orthogonal) keys, compare collateral-per-erase and post-erase recall across three arms — **Kron-erase, vector-delta-erase-with-audit** (`delta_mem` erase at the Newton step + the same audit pattern), **one-hot table** (plain `[[f32; DV]; DK]` addressing). **Pre-registered win statistic (verdict-round fix): paired over seeded erase trials — Kron's collateral-per-erase lower 95% bound > 0 against EACH baseline, with post-erase recall no worse than the stated tolerance; failure on either statistic against either baseline keeps the flag opt-in forever** (with orthogonal codes the table wins by construction — that outcome is a valid, publishable result).
+- **G1 (correctness — property tests from the theorem statements):** Newton write hits the target to fp tolerance in ONE step; contraction sweep (every β in range contracts, β beyond 2/‖a‖² diverges — negative arm); interference-kernel equality; orthogonal-v AND orthogonal-k → zero interference; identity-fixed-point **via the single ordered-dot path + exact-zero write elision** (hash pin over N inert writes); superposition identity; undo-last within the pinned ε (and `undo_last_snap` bit-exact); LS-snap steady-state band on a seeded i.i.d. stream **plus the independence-violation arm and a rank-deficient-stream arm** (gauges stay finite, ridge-regularized solve converges); chunk == sequential within pinned-order tolerance (kron_chunk_wy)
+- **G2 (perf, `--release`, bench_preflight provenance):** `write_newton` + `read` ≤ 2 µs at 64×64; `collateral_audit` ≤ 10 µs over a 64-pair registry; chunked consolidation-replay throughput ≥ 2× sequential at L=64
+- **G3 (no regression):** inert-boot byte-identity — flag off ⇒ zero behavior change; `delta_mem`/LatticeMemory paths untouched
+- **G4 (alloc):** zero allocations in write/read/audit/undo hot paths — the audit writes into caller scratch, reports are fixed-size (counting allocator)
+- **G5 (falsifiable fusion claim + Report the Floor):** (a) E8 reconciliation bench — analytic d²-capacity + λ_min(Ā) retention vs a Bench-938-style measured erosion run on OUR streams; match within a calibrated band promotes the analytic sizer for NEW configs; divergence is a published finding. (b) **every uncertainty claim** (`read`'s analytic CI, the half-life gauge) must beat the `ConformalIntervalCalibrator<SeasonalNaiveForecaster>` conformal-naive floor on coverage / Winkler / CRPS — if it cannot, the CI is dropped from `read` and the gauge ships as a signal-only heuristic (Report-the-Floor rule)
+
+## Non-goals
+
+- No learned gates (fixed schedules only — tuned values belong to the training track, riir-train Plan 468)
+- No matrix sync: cells are latent-local; only scalar readouts cross boundaries
+- No i.i.d.-bound guarantees quoted on correlated streams — alarms, not promises; gauges are lower-bound heuristics with the independence caveat on their face
+- No global (whole-memory) audits — registry-local enumeration only
+- No erase-with-audit exclusivity claim — G0's baselines exist because the claim survives only as the double-gated advantage
+
+## References
+
+Research 630 (this extraction) · arXiv:2610.26834 · Research 629/Plan 630 (RLS sibling rung) · Research 070/Plan 105 (GDN-2 serving arm) · Plan 619 + Benches 919/938 (lattice + erosion laws) · Bench 308 + Issue/Bench 839 (Kronecker-solve precedents) · Issue 940 (determinism law — `dot_f32_ordered`, pooled/committed reductions) · conformal-naive floor (`ConformalIntervalCalibrator<SeasonalNaiveForecaster>`, Plan 340)
