@@ -1,0 +1,62 @@
+[package]
+name = "katgpt-extract"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+license = "MIT"
+description = "Modelless extraction substrate — the Fathom F0 floor (Plan 628 / Proposal 016): span_pointer span scoring, deterministic typed parsers, conformal estimate/forecast heads, and the Temper calibration/abstention gate."
+readme = "README.md"
+repository = "https://github.com/katopz/katgpt-rs"
+keywords = ["extraction", "information-extraction", "nlp", "conformal-prediction", "modelless"]
+categories = ["algorithms", "text-processing"]
+# Publish-ready leaf on the katgpt-core release train (the katgpt-assign
+# convention); the crates.io push is an owner act.
+
+[dependencies]
+# The ONE dep — the wire contract (extraction_wire) + the Plan-340 conformal
+# substrate (conformal_predictive_intervals, karc_forecaster), each pulled
+# only by the feature that needs it. default-features = false: this crate
+# must never drag core's default feature tree into a leaf build.
+katgpt-core = { path = "../katgpt-core", optional = true, default-features = false }
+
+[features]
+# default = [] — the flag-OFF build compiles to an empty crate (the
+# no-default-consumer rule; every module is opt-in).
+default = []
+
+# span_pointer (Plan 628 T0.2): candidate-window span scoring — BM25/ngram
+# lexical + hashed-feature embedding similarity + optional alias tables;
+# sigmoid normalization (never softmax); exact byte-offset spans;
+# zero-alloc hot path (`score_into`). Consumes the wire's FieldSpec/
+# FieldConstraints vocabulary (choices = the F0-readable alias table).
+span_pointer = ["dep:katgpt-core", "katgpt-core/extraction_wire"]
+
+# typed_parsers (Plan 628 T0.3): deterministic typed parsers — number/
+# date/time/datetime/duration/list. Grammar design translated from Meta
+# Duckling (Apache-2.0) + Microsoft Recognizers-Text (MIT), credited in
+# module docs; constraints enforced by construction; relative dates
+# anchored to the request's reference_date (deterministic — no clock).
+typed_parsers = ["dep:katgpt-core", "katgpt-core/extraction_wire"]
+
+# extraction_estimate (Plan 628 T0.4): the cross-sectional estimate
+# conditioner (kNN over comparables → conformal overlay → median/p10/p90)
+# and the time-series forecast head, over katgpt-core's Plan-340
+# substrate. The G1 floor comparison (run_floor_comparison) is the
+# promotion gate: beat ConformalIntervalCalibrator<SeasonalNaiveForecaster>
+# or the floor serves.
+extraction_estimate = [
+    "dep:katgpt-core",
+    "katgpt-core/extraction_wire",
+    "katgpt-core/conformal_predictive_intervals",
+    "katgpt-core/karc_forecaster",
+]
+
+# temper (Plan 628 T0.5, gate half): the calibration/abstention gate —
+# per-field residual pools, sigmoid confidence readout, fused abstain
+# (confidence ∧ distance), null-with-guess emission onto the wire.
+temper = ["dep:katgpt-core", "katgpt-core/extraction_wire"]
+
+# Opt-in measurement axis (the katgpt-assign pattern): makes the
+# alloc-tracking test module compile in --release so the G4 zero-alloc
+# gate can run against optimised code. Off in every shipped build.
+alloc_tracking = []
