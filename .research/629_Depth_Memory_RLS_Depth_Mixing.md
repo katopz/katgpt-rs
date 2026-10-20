@@ -1,6 +1,6 @@
 # Research 629: Depth Memory — Exact RLS Across Depth (Linear Depth Memory)
 
-**Status:** GAIN — note + katgpt-rs `.plans/630` (modelless `rls_depth_mem` primitive) + riir-train `.plans/467` (training track) + riir-infer `.issues/049` (delta-roll journal). No code this session.
+**Status:** GAIN — note + katgpt-rs `.plans/630` (modelless `rls_depth_mem` primitive) + riir-train `.plans/467` (training track) + riir-infer `.issues/049` (delta-roll journal). No code this session. **Delta 2026-10-20 (4090 idle lane): the E2 riir-infer half LANDED** — `gdn_delta_roll` opt-in in riir-infer `9fc4b05` (rank-1 unwind + per-head decay-product conditioning gate, G1 drift 6.3e-6 worst admitted cell, G4 zero-alloc, ~6× cheaper recovery than re-forward; Bench 885; the recorded-u form needs NO `(1 − β‖k‖²)` inversion; issue file closed+removed, seams named for a consumer). E2's katgpt-rs RLS half (`.plans/630` Phase 1) stays open.
 
 > **Source:** "Depth Memory" — David González-Martínez*, Philipp Nazari*, T. Konstantin Rusch, Shiwei Liu (ELLIS Institute Tübingen / MPI Tübingen / Tübingen AI Center / ETH Zürich / Liquid AI), [arXiv:2610.18809](https://arxiv.org/abs/2610.18809), v1 2026-10-13. Code + checkpoints released; full PDF fetched and algebra re-derived (every formula below quoted from paper text).
 > **Date:** distilled 2026-10-20.
