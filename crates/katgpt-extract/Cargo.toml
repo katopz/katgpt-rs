@@ -20,18 +20,19 @@ categories = ["algorithms", "text-processing"]
 katgpt-core = { path = "../katgpt-core", optional = true, default-features = false }
 
 [features]
-# DEFAULT-ON (Plan 628 T0.6 GOAT, 2026-10-20): the G1 floor comparison ran
-# at --release and BEAT the conformal-naive floor on all three cells
-# (forecast stationary-seasonal CRPS 0.7195, forecast white-noise 0.7550,
-# estimate cross-sectional 0.4730) — the plan's promotion rule IS the floor
-# comparison. Synthetic-corpus verdict; the real-corpus re-gate rides the
-# Phase-2 outcomes ledger. `--no-default-features` stays the tested
-# flag-OFF posture (compiles to the empty crate).
-# + span_pointer joined 2026-10-20 (Plan 628 T0.7, Bench 950): its G5 —
-# beating a rule floor on an external text-bearing fixture — LANDED (exact
-# 82.6% vs 71.8% on the choices-class population; alias channel carries the
-# win: no-alias 73.3%). Same promotion rule, measured not projected.
-default = ["extraction_estimate", "span_pointer"]
+# OPT-IN (demoted 2026-10-20, Bench 950 re-run): the first landing measured
+# a GOAT PASS on an asymmetric comparison — the alias table was derived from
+# the scored test rows (the mention's own surface usually rode its alias
+# list) and the floor was denied it. The verdict-round REVISE forced the
+# fair re-run: TRAIN-split schema vocabulary (never the scored rows) + two
+# gazetteer arms given the SAME (canonical, aliases) inputs. Result: the
+# longest-match gazetteer BEATS the pointer on the primary exact metric
+# (77.8% vs 74.3%; the pointer keeps a containment edge, 84.1% vs 78.7%,
+# disclosed). Per the plan's own rule — span_pointer earns GOAT only by
+# beating the rule floor — the promotion is VOID and the feature returns to
+# opt-in. Re-open: a scorer that clears floor+alias(longest) on choices-
+# class exact, measured on this same pinned protocol.
+default = ["extraction_estimate"]
 
 # span_pointer (Plan 628 T0.2): candidate-window span scoring — BM25/ngram
 # lexical + hashed-feature embedding similarity + optional alias tables;

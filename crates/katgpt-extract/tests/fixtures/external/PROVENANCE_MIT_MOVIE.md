@@ -34,6 +34,34 @@ repo (in /tmp) by design, full rules below.
 - **SHA-256 (secondary pin, shasum -a 256):**
   `990474be902b04fdfb82ca8b30ca036e58be3f3d1db8eb0bdda1b9478f1df749`
 
+## Companion fixture — the TRAIN-split schema vocabulary
+
+`mit_movie_trivia_train_vocab.jsonl` (Bench 950 round 2, verdict-round REVISE: the
+round-1 alias table was derived from the scored test rows — the mention's own surface
+usually rode its alias list, an answer key; the schema now comes from the split that is
+never scored, the deployment analogue of a schema compiled from historical data).
+
+- **Source:** `trivia10k13train.bio` — <https://groups.csail.mit.edu/sls/downloads/movie/trivia10k13train.bio>
+- **SHA-256 (upstream file pin):**
+  `3208087913814190b5ac6bf7a7c926d23b7cf0ab4a1734311badec4d8eaa5a82`
+- **Format:** one JSON line per choices-class type:
+  `{"type":"Actor","surfaces":[["johnny depp",16],...]}` — surface + TRAIN occurrence
+  count, sorted by (count desc, surface asc).
+- **Rows:** 9 types / 4,531 unique surfaces; **size:** 103,550 bytes.
+- **BLAKE3 pin:** `3a7ba3868950deafa6f8f7eb4a578f72a954f661b009e85800169f6d3d1b9b4a`
+- **SHA-256:** `def8ceed0cee1f0dda7d623dfe1aa9be9e344e7d7ccf66fd18f9279f686a0ecc`
+- **Extraction:** the same IOB2 entity walk as the test fixture (same word-boundary trim,
+  same B-/I- same-type continuation), counts per trimmed surface, choices-class types only
+  (Plot/Quote/Origin excluded — no enumerable vocabulary; the same pre-registered rule as
+  the fixture's population).
+- **Harness census pins (surfaces per type):** Actor 1436 · Award 163 · Character_Name
+  664 · Director 532 · Genre 908 · Opinion 292 · Relationship 346 · Soundtrack 47 ·
+  Year 143.
+- **Population rule (round 2):** a scored mention whose (type, surface) is absent from
+  this table is OUT of the scoring population — 740 of 3,700 choices-class test mentions
+  (80.0% coverage, 2,960 scored), counted and disclosed by the harness (an OOV-skip > 0
+  assert keeps the vocabulary-source contract live).
+
 ## Upstream format
 
 `TAG<TAB>token` lines; a blank line ends one sentence. Tags are IOB2 (`B-Type`, `I-Type`, `O`).
