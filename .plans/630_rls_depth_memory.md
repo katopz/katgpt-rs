@@ -1,6 +1,7 @@
 # Plan 630: rls_depth_mem — Exact Recursive Least Squares Associative Memory
 
-**Status:** Active — Phase 1 not started
+**Status:** Active — Phase 1 in progress
+**Claimed:** 4090-idle-r630, epoch=1792517412, expires 2026-10-22T17:30:12+00:00
 **Date:** 2026-10-20
 **Research:** [katgpt-rs/.research/629_Depth_Memory_RLS_Depth_Mixing.md](../.research/629_Depth_Memory_RLS_Depth_Mixing.md)
 **Source paper:** [arXiv:2610.18809](https://arxiv.org/abs/2610.18809) — "Depth Memory" (LDM: exact RLS across depth; Sherman–Morrison write, unwinding, windowed writes)
