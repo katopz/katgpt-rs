@@ -34,17 +34,18 @@ graph LR
     B --> B1[span_pointer<br/>text spans]
     B --> B2[typed parsers<br/>number/date/duration/list]
     B --> B3[compute DAG<br/>code-side arithmetic]
-    B --> B4[estimate/forecast head<br/>conformal + comparables]
-    B1 --> T[Temper gate<br/>confidence + p_null + abstain]
+    B --> C[calculation brain<br/>MCTS-budgeted variant bets<br/>backtest-on-comps prior]
+    C --> B4[estimate/forecast head<br/>conformal overlay]
+    B4 --> T[Temper gate<br/>confidence + p_null + abstain]
+    B1 --> T
     B2 --> T
-    B4 --> T
+    C -->|bet scores| S[outcomes ledger<br/>sigmoid-gated intake]
     T -->|answer| W[wire answer<br/>value + span + p_null + interval]
     T -->|abstain| E[F1 local specialists]
     E -->|abstain| F2[F2 hosted Clairic lane<br/>owner-gated]
-    F2 -->|abstain| F3[F3 LLM last resort]
+    F2 -->|abstain| F3[F3 LLM last resort<br/>calc outputs ride as<br/>context + candidate samples]
     W --> P[provenance landing<br/>neuron-db chunk_claim / KG]
-    W --> S[outcomes ledger<br/>realized labels]
-    S --> SE[self-evolve<br/>Elo/Beta strategy routing]
+    S --> SE[self-evolve<br/>Elo/Beta strategy routing<br/>rethink moat beyond this repo]
     SE -->|freeze/thaw snapshot| B
 ```
 
@@ -77,6 +78,12 @@ F0 floor → F1 local specialists (domain grammars/dictionaries/plugins) → F2 
 ### 3.6 Provenance landing (neuron-db)
 
 Every answer is a CLAIM: span/offsets + value + valid_time + provenance (BLAKE3 of state-slice + engine epoch). Landing zone: riir-neuron-db `chunk_claim` (bitemporal, Issue 607 substrate) and `vibe.rs` KG triples for entity/relation extractions. Raw values cross any sync boundary; latent ops stay local (the latent-vs-raw law, unchanged).
+
+### 3.7 The calculation brain — MCTS-budgeted variant bets (Issue 952; owner directive 2026-10-20)
+
+The estimate/forecast classes get a bounded modelless search head BEFORE any heavier path: a **"bet"** is a candidate estimator composition over the comparables corpus (median-of-comps, kNN-k, ratio scaling, recency-weighted, closed-form ratio regressions — each a small deterministic authored function); a **PUCT/MCTS search under a fixed budget** expands and evaluates bet compositions, scoring each leaf by backtest on a **selection split** of the in-state comparables (LOO/CV — the conformal overlay reads its residuals from a SEPARATE calibration split; selecting the estimator on the calibration rows breaks exchangeability, and a coverage number produced on merged comps is not a measurement; n ≤ ~8 → jackknife+/cross-conformal or the floor serves, threshold derived from the bench's comps-size axis, never a hand-typed edge). The search signal is backtest CRPS — the G1 discipline made into a tree prior. PUCT must beat an equal-budget exhaustive control or the exhaustive version ships (tens of candidates fit in b=64 — a tree that ties a sweep is latency spent on nothing). The picked bet → point + spread → conformal overlay → the answer. Finishes µs–ms by construction — before any *NN path or a freeze/thaw swap could. Every evaluated bet's score gates through a **sigmoid into the outcomes ledger** as the floor-relative skill `sigmoid(β·(CRPS_floor − CRPS_bet)/CRPS_floor)` — raw CRPS is scale-dependent and incomparable across states; the normalized skill is not (Issue-940 sequential-fold + first-index tie rule applies to anything committed/replayed; else local-only) — consolidation later, never at answer time. The brain's outputs (typed values, scored candidate bets, intervals) ride escalations as instruction context or extra candidate samples for higher lanes.
+
+Lineage is in-repo and proven: `katgpt-moka-wasm` (wasm32+SIMD net + PUCT, wasmi/V8 bit-parity, bench 205 — PUCT beat alpha-beta 74%→98%) and `katgpt-percepta` (O(log N) 2D attention + the gate→WASM scheduling ladder). **Vehicle honesty:** wasm32 strategy packs are the ATTESTATION/distribution form (verifiable artifacts, arsenal-A2 hot-swap compatible), never the speed claim — native serves (the workspace measured wasmi ~46× slower than V8 on the same moves; the refine wasm-validator verdict measured 285× native win). The kernel (PUCT over bet variants + sigmoid score intake) is generic modelless math — public, moka-tier; the product composition is rethink moat (§9). Full tasks + gates: Issue 952.
 
 ## 4. GOAT gates
 
@@ -112,7 +119,9 @@ Every answer is a CLAIM: span/offsets + value + valid_time + provenance (BLAKE3 
 2. **Repo birth** `gist-rs/riir-fathom` (Phase 1).
 3. **F2 hosted Clairic lane spend** (preview endpoint $0.10/M input tokens — metered, small; open-weights lane is free but gated on release).
 4. **Any corpus synthesis from Clairic outputs** — grammar-not-answers doctrine + owner sign-off, always.
-5. Private-tier evolution (trained extraction head) — a separate charter when the modelless floor is measured, never assumed.
+5. Private-tier evolution (trained extraction head) + the **calculation-brain-as-sample-farm posture** (Issue 952 T6) — rethink-side charters, opened when the owner says go.
+
+> **Plan 628 is under a live claim lease** (`katgpt-rs-fathom-phase0`, expires 2026-10-22T02:03:30Z; T0.1 + the katgpt-extract scaffold landed 2026-10-20). Phase-0 tasks coordinate with the lease holder; the calculation brain is filed as Issue 952 precisely so it does NOT collide with the leased task list.
 
 ## 8. Caveats (honest)
 
@@ -121,7 +130,14 @@ Every answer is a CLAIM: span/offsets + value + valid_time + provenance (BLAKE3 
 - Forecast ambition is deliberately floored: we claim guaranteed-coverage basics, not Clairic's learned rhythm pickup, until the self-evolve loop proves otherwise on real series.
 - Naming collisions (Fathom Analytics / fathom.video) are disclosed, not hidden — owner's call.
 
-## 9. What is deliberately NOT here
+## 9. What is deliberately NOT here — and the moat boundary (owner-flagged 2026-10-20)
 
-- No rethink-class content: no trained serving arm, no hosted-only vessels, no ESC enforcement productization. The extraction trained-head question opens its OWN charter if/when the floor's G1 data says a head is worth training (riir-train), with its own public/private seam decision.
+**The moat split (owner directive: "all this is new moat for rethink — mind boundary and mention"):**
+
+- **PUBLIC (this repo + riir-fathom):** the open primitives — `extraction_wire`, `span_pointer`, typed parsers, the conformal estimate/forecast head, and the calculation-brain KERNEL (PUCT over bet variants, sigmoid-gated score intake — generic modelless math, the same public tier as `katgpt-moka-wasm`/`katgpt-percepta`).
+- **RETHINK MOAT (private-forever, charter opens THERE, never here):** the extraction product composition — the self-evolve economy over bet/extraction outcomes, the calculation-brain-as-sample-farm posture (calculation outputs as instruction context + candidate samples feeding TRAINED lanes), any hosted-only escalation posture, and any trained extraction head. This is the rethink-class surface the research skill's public/private tier check exists for: no rethink-class product detail lands in public files beyond this pointer; when the composition work starts, its charter/proposals/plans live in `../riir-rethink`.
+
+Also deliberately NOT here:
+
+- No trained serving arm in the public tier, no ESC enforcement productization. The extraction trained-head question opens its OWN charter if/when the floor's G1 data says a head is worth training (riir-train), with its own public/private seam decision.
 - No decision-ladder duplication: Fathom composes WITH Clef/Jev-class decision models (extract → decide → generate is their published cascade; our floor feeds decision_wire natively) — it never re-serves decisions.
