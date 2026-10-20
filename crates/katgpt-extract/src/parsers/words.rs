@@ -337,11 +337,7 @@ pub(crate) fn word_year_at(b: &[u8], we: usize, i: usize) -> Option<(usize, i64)
 
 /// Decimal digit count of 0..=99.
 fn decimal_digits(v: i64) -> u32 {
-    if v >= 10 {
-        2
-    } else {
-        1
-    }
+    if v >= 10 { 2 } else { 1 }
 }
 
 /// Ordinal day word (1..=31) — `first`..`thirty-first`.
@@ -436,10 +432,7 @@ mod tests {
     fn ordinal_days() {
         let b = b"the tenth of September";
         assert_eq!(word_ordinal_day_at(b, b.len(), 4), Some((9, 10)));
-        assert_eq!(
-            word_ordinal_day_at(b"twenty-second", 13, 0),
-            Some((13, 22))
-        );
+        assert_eq!(word_ordinal_day_at(b"twenty-second", 13, 0), Some((13, 22)));
         assert_eq!(word_ordinal_day_at(b"thirtieth", 9, 0), Some((9, 30)));
     }
 }

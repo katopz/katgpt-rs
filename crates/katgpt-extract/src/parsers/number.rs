@@ -50,9 +50,9 @@
 //! - Magnitude: |value| ≥ 1e15 is rejected (f64 exactness floor at 2^53).
 
 use super::{
-    words::{article_one_at, word_number_at},
     ParsedValue, RawCandidate, RawValue, ascii_word_at, finish, is_word_byte, next_boundary,
     prev_char_index, skip_ascii_ws,
+    words::{article_one_at, word_number_at},
 };
 use katgpt_core::extraction_wire::FieldConstraints;
 
@@ -481,11 +481,7 @@ fn try_number_at(
             currency = Some("usd");
             i = j;
         }
-    } else if b[i] == 0xE2
-        && i + 3 < we
-        && b[i + 1] == 0x82
-        && b[i + 2] == 0xAC
-    {
+    } else if b[i] == 0xE2 && i + 3 < we && b[i + 1] == 0x82 && b[i + 2] == 0xAC {
         let j = skip_ascii_ws(b, i + 3, we);
         if j < we && b[j].is_ascii_digit() {
             currency = Some("eur");
@@ -612,9 +608,8 @@ fn try_number_at(
     let scaled = value * mult_value;
     let full_value = if neg { -scaled } else { scaled };
     // Composition depth — the qualified tie-break (see RawCandidate).
-    let depth = currency.is_some() as u8
-        + mult.is_some() as u8
-        + (unit.is_some() || percent_ctx) as u8;
+    let depth =
+        currency.is_some() as u8 + mult.is_some() as u8 + (unit.is_some() || percent_ctx) as u8;
     // The full match (sign/currency/core/multipliers/suffix).
     if accepts(cons, full_value, frac_digits, currency.or(unit)) {
         let rank = if qualified {

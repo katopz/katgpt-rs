@@ -61,7 +61,7 @@ use super::words::{
     word_group_at, word_number_at, word_ordinal_day_at, word_tens_ordinal_at, word_year_at,
 };
 use super::{
-    ParsedValue, RawCandidate, RawValue, ascii_word_at, finish, is_ws_byte, is_word_byte,
+    ParsedValue, RawCandidate, RawValue, ascii_word_at, finish, is_word_byte, is_ws_byte,
     next_boundary, prev_char_index, skip_ascii_ws,
 };
 use katgpt_core::extraction_wire::FieldKind;
@@ -316,7 +316,11 @@ fn date_forms_at(
     // `[the] <word-day> of <month>[, year]` — the span starts at the day
     // word ("the" stays outside, matching the upstream span).
     if let Some((ds, e, y, m, d, absolute)) = word_day_of_month_at(b, we, i) {
-        let rank = if absolute { RANK_ABSOLUTE } else { RANK_ANCHORED };
+        let rank = if absolute {
+            RANK_ABSOLUTE
+        } else {
+            RANK_ANCHORED
+        };
         if absolute {
             push_date(sink, ds, e, y, m, d, rank);
         } else if start == i
@@ -326,7 +330,9 @@ fn date_forms_at(
             push_date(sink, ds, e, y, m, d, rank);
         }
     }
-    if start == i && let Some((e, y, m, d)) = relative_at(b, we, i, reference) {
+    if start == i
+        && let Some((e, y, m, d)) = relative_at(b, we, i, reference)
+    {
         push_date(sink, i, e, y, m, d, RANK_RELATIVE);
     }
 }
@@ -1024,7 +1030,9 @@ fn month_day_at(b: &[u8], we: usize, i: usize) -> Option<MonthDayHits> {
     }
     if let Some((de, day)) = day_digits_at(b, we, i) {
         let j = skip_ascii_ws(b, de, we);
-        if j > de && let Some((me, month)) = month_at(b, we, j) {
+        if j > de
+            && let Some((me, month)) = month_at(b, we, j)
+        {
             return finish_month_day(b, we, me, month, day);
         }
     }
@@ -1271,11 +1279,7 @@ fn daypart_at(b: &[u8], we: usize, i: usize) -> Option<(usize, bool)> {
 /// 19, `12 in the morning` -> 0).
 fn apply_daypart(h: u32, pm: bool) -> u32 {
     if pm {
-        if h < 12 {
-            h + 12
-        } else {
-            h
-        }
+        if h < 12 { h + 12 } else { h }
     } else if h == 12 {
         0
     } else {
@@ -1290,7 +1294,9 @@ fn daypart_time_at(b: &[u8], we: usize, i: usize) -> Option<TimeHit> {
     // Suffix: <any time shape> + daypart.
     if let Some((te, h, mi, s)) = hourish_at(b, we, i) {
         let j = skip_ascii_ws(b, te, we);
-        if j > te && let Some((de, pm)) = daypart_at(b, we, j) {
+        if j > te
+            && let Some((de, pm)) = daypart_at(b, we, j)
+        {
             return Some(TimeHit {
                 end: de,
                 h: apply_daypart(h, pm),
@@ -1329,13 +1335,19 @@ fn hourish_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u32, u32, Option<
         if h <= 23 {
             let mut mi = 0u32;
             let mut s = None;
-            if e + 1 < we && b[e] == b':' && let Some((me, v)) = two_digits(b, we, e + 1) {
+            if e + 1 < we
+                && b[e] == b':'
+                && let Some((me, v)) = two_digits(b, we, e + 1)
+            {
                 if v > 59 {
                     return None;
                 }
                 mi = v;
                 e = me;
-                if e + 1 < we && b[e] == b':' && let Some((se, v)) = two_digits(b, we, e + 1) {
+                if e + 1 < we
+                    && b[e] == b':'
+                    && let Some((se, v)) = two_digits(b, we, e + 1)
+                {
                     if v > 59 {
                         return None;
                     }
@@ -1380,11 +1392,7 @@ fn written_time_at(b: &[u8], we: usize, i: usize) -> Option<TimeHit> {
             has_meridiem = true;
             e = me;
             h = if is_pm {
-                if h < 12 {
-                    h + 12
-                } else {
-                    h
-                }
+                if h < 12 { h + 12 } else { h }
             } else if h == 12 {
                 0
             } else {
@@ -1397,15 +1405,13 @@ fn written_time_at(b: &[u8], we: usize, i: usize) -> Option<TimeHit> {
             e = me2;
             // A meridiem may still follow the minutes.
             let k = skip_ascii_ws(b, me2, we);
-            if k > me2 && let Some((me, is_pm)) = meridiem_loose_at(b, we, k) {
+            if k > me2
+                && let Some((me, is_pm)) = meridiem_loose_at(b, we, k)
+            {
                 has_meridiem = true;
                 e = me;
                 h = if is_pm {
-                    if h < 12 {
-                        h + 12
-                    } else {
-                        h
-                    }
+                    if h < 12 { h + 12 } else { h }
                 } else if h == 12 {
                     0
                 } else {
@@ -1417,7 +1423,12 @@ fn written_time_at(b: &[u8], we: usize, i: usize) -> Option<TimeHit> {
     if mi == 0 && !has_meridiem {
         return None;
     }
-    Some(TimeHit { end: e, h, mi, s: None })
+    Some(TimeHit {
+        end: e,
+        h,
+        mi,
+        s: None,
+    })
 }
 
 /// Loose meridiem: `am|pm` with any mix of dots and whitespace between the
@@ -1503,10 +1514,7 @@ fn meridiem_time_at(b: &[u8], we: usize, i: usize) -> Option<TimeHit> {
             s = Some(v);
             e = se;
         }
-    } else if e + 2 <= we
-        && b[e].is_ascii_digit()
-        && b[e + 1].is_ascii_digit()
-    {
+    } else if e + 2 <= we && b[e].is_ascii_digit() && b[e + 1].is_ascii_digit() {
         // Attached minutes before a meridiem: "1140 a.m." (11:40). The
         // trailing meridiem requirement below gates false positives.
         let v = u32::from(b[e] - b'0') * 10 + u32::from(b[e + 1] - b'0');

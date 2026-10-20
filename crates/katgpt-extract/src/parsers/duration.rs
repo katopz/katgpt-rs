@@ -46,9 +46,8 @@
 //!   durations either).
 
 use super::{
-    words::word_number_at,
     ParsedValue, RawCandidate, RawValue, ascii_word_at, finish, is_word_byte, next_boundary,
-    prev_char_index, skip_ascii_ws,
+    prev_char_index, skip_ascii_ws, words::word_number_at,
 };
 use crate::parsers::number::core_at;
 use katgpt_core::extraction_wire::{DURATION_UNITS, FieldConstraints};
@@ -387,13 +386,17 @@ fn quantifier_term_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u8, i128,
     if let Some(he) = ascii_word_at(b, we, i, "half") {
         let j = skip_ascii_ws(b, he, we);
         let mut k = j;
-        if k > he && let Some(ae) = ascii_word_at(b, we, k, "an") {
+        if k > he
+            && let Some(ae) = ascii_word_at(b, we, k, "an")
+        {
             let j2 = skip_ascii_ws(b, ae, we);
             if j2 > ae {
                 k = j2;
             }
         }
-        if k > he && let Some((ue, unit, f)) = unit_word_at(b, we, k) {
+        if k > he
+            && let Some((ue, unit, f)) = unit_word_at(b, we, k)
+        {
             return Some((ue, unit, i128::from(f), 2));
         }
     }
@@ -405,7 +408,9 @@ fn quantifier_term_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u8, i128,
                 j += 1;
             }
             let k = skip_ascii_ws(b, j, we);
-            if k > e && let Some((ue, unit, f)) = unit_word_at(b, we, k) {
+            if k > e
+                && let Some((ue, unit, f)) = unit_word_at(b, we, k)
+            {
                 return Some((ue, unit, i128::from(f), 1));
             }
         }
@@ -413,7 +418,9 @@ fn quantifier_term_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u8, i128,
     // another unit -> 1
     if let Some(e) = ascii_word_at(b, we, i, "another") {
         let j = skip_ascii_ws(b, e, we);
-        if j > e && let Some((ue, unit, f)) = unit_word_at(b, we, j) {
+        if j > e
+            && let Some((ue, unit, f)) = unit_word_at(b, we, j)
+        {
             return Some((ue, unit, i128::from(f), 1));
         }
     }
@@ -428,9 +435,13 @@ fn quantifier_term_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u8, i128,
         }
         if let Some(ce) = ascii_word_at(b, we, j, "couple") {
             let k = skip_ascii_ws(b, ce, we);
-            if k > ce && let Some(oe) = ascii_word_at(b, we, k, "of") {
+            if k > ce
+                && let Some(oe) = ascii_word_at(b, we, k, "of")
+            {
                 let k2 = skip_ascii_ws(b, oe, we);
-                if k2 > oe && let Some((ue, unit, f)) = unit_word_at(b, we, k2) {
+                if k2 > oe
+                    && let Some((ue, unit, f)) = unit_word_at(b, we, k2)
+                {
                     return Some((ue, unit, 2 * i128::from(f), 1));
                 }
             }
@@ -439,7 +450,9 @@ fn quantifier_term_at(b: &[u8], we: usize, i: usize) -> Option<(usize, u8, i128,
     // (a|an) unit -> 1 (the most generic form, last)
     if let Some(e) = ascii_word_at(b, we, i, "an").or_else(|| ascii_word_at(b, we, i, "a")) {
         let j = skip_ascii_ws(b, e, we);
-        if j > e && let Some((ue, unit, f)) = unit_word_at(b, we, j) {
+        if j > e
+            && let Some((ue, unit, f)) = unit_word_at(b, we, j)
+        {
             return Some((ue, unit, i128::from(f), 1));
         }
     }

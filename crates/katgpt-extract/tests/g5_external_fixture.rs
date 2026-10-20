@@ -69,13 +69,7 @@ const LIVENESS_FLOORS: [f64; 5] = [0.98, 0.48, 0.74, 0.16, 0.94];
 /// next coverage lever re-pins upward from its own measured record. The
 /// known disclosed misses (compound units, day-part idioms, `to/past`
 /// forms, anchored-only shapes) sit BELOW these floors by construction.
-const VALUE_RATCHETS: [f64; 5] = [
-    74.0 / 85.0,
-    39.0 / 65.0,
-    8.0 / 50.0,
-    3.0 / 23.0,
-    1.0,
-];
+const VALUE_RATCHETS: [f64; 5] = [74.0 / 85.0, 39.0 / 65.0, 8.0 / 50.0, 3.0 / 23.0, 1.0];
 
 /// Fixture dims, in emission order (the report's row order).
 const DIMS: [&str; 5] = ["number", "date", "time", "datetime", "duration"];
@@ -141,11 +135,7 @@ fn value_match(dim: &str, cand: &FieldValue, wire: &Value) -> ValueVerdict {
         ("duration", FieldValue::Duration(d)) => {
             let unit_ok = wire_str(wire, "unit") == Some(d.unit.as_str());
             let val_ok = wire_f64(wire, "value").is_some_and(|e| rel_close(d.value, e));
-            if unit_ok && val_ok {
-                exact()
-            } else {
-                miss
-            }
+            if unit_ok && val_ok { exact() } else { miss }
         }
         ("date", FieldValue::Date(s)) => {
             if wire_str(wire, "iso_date") == Some(s.as_str()) {
@@ -216,8 +206,7 @@ fn pct(num: u32, den: u32) -> String {
 }
 
 fn dim_index(dim: &str, id: &str) -> usize {
-    DIMS
-        .iter()
+    DIMS.iter()
         .position(|d| *d == dim)
         .unwrap_or_else(|| panic!("G5 row {id}: unknown dim {dim:?}"))
 }
@@ -244,7 +233,8 @@ fn g5_external_fixture() {
         .lines()
         .enumerate()
         .map(|(i, line)| {
-            serde_json::from_str(line).unwrap_or_else(|e| panic!("G5 line {}: not JSON: {e}", i + 1))
+            serde_json::from_str(line)
+                .unwrap_or_else(|e| panic!("G5 line {}: not JSON: {e}", i + 1))
         })
         .collect();
     assert_eq!(
@@ -335,7 +325,17 @@ fn g5_external_fixture() {
     println!();
     println!(
         "{:<9}{:>5}{:>6}{:>9}{:>10}  {:>11}{:>11}{:>11}{:>11}{:>10}{:>8}",
-        "dim", "rows", "wire", "value", "lenient", "exact any", "exact r0", "cont any", "cont r0", "cand/row", "live"
+        "dim",
+        "rows",
+        "wire",
+        "value",
+        "lenient",
+        "exact any",
+        "exact r0",
+        "cont any",
+        "cont r0",
+        "cand/row",
+        "live"
     );
     for (dim, s) in DIMS.iter().zip(&stats) {
         let span_cell = |n: u32| format!("{n:>4} {}", pct(n, s.entities));
@@ -389,10 +389,18 @@ fn g5_external_fixture() {
         pct(total.alive, total.rows),
     );
     println!();
-    println!("  value   = rank-0 exact matches / wire rows (the primary accuracy number — reported, NOT asserted)");
-    println!("  lenient = secondary bucket only: seconds-less HH:MM padded :00; datetime space<->T (never folded into value)");
-    println!("  exact   = candidate span == expected entity span;  cont = candidate span is a superset of expected");
-    let floors = LIVENESS_FLOORS.map(|f| format!("{:.0}", 100.0 * f)).join("/");
+    println!(
+        "  value   = rank-0 exact matches / wire rows (the primary accuracy number — reported, NOT asserted)"
+    );
+    println!(
+        "  lenient = secondary bucket only: seconds-less HH:MM padded :00; datetime space<->T (never folded into value)"
+    );
+    println!(
+        "  exact   = candidate span == expected entity span;  cont = candidate span is a superset of expected"
+    );
+    let floors = LIVENESS_FLOORS
+        .map(|f| format!("{:.0}", 100.0 * f))
+        .join("/");
     println!(
         "  live    = rows with >= 1 candidate — the ONLY asserted floors ({floors}% number/date/time/datetime/duration)"
     );
