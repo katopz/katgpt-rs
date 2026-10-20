@@ -14,7 +14,7 @@
 | G2 composite F0 request | `cargo bench -p katgpt-extract --bench bench_628_f0_g2` (6 fields, 417-char state, 10k iters) | bench profile (release-class) | **p99 357,166 ns ≤ 10,000,000 ns bar** (28× headroom) — first run |
 | G2 composite, load-stamp re-run | same bench under sibling load | bench profile | **p99 2,109,334 ns ≤ bar** (4.7× headroom under load) — PASS both |
 | G4 alloc | module gates (TLS-gated counting allocator, `src/alloc_gate.rs`) | debug + `--release --features …,alloc_tracking` | zero-alloc pinned: span `score_into`/`best_span`, `scan_numbers`/`scan_durations`/`scan_datetimes`, temper `calibration_spread`/`confidence`/`gate_located`, `estimate_into` call-2, `forecast_into` sized-out. `parse_number` FULL parse NOT zero-alloc (fn-internal scratch + std sort scratch) — gated scan-only, disclosed |
-| G5 external fixture | `tests/g5_external_fixture.rs` vs Recognizers-Text @ `da7edcff59f6` (351 rows, BLAKE3 `f3e1dfc3…988163`) | debug | value accuracy 12.7% rank-0 (scope classes dominate — see [issue 953](../.issues/953_parser_word_form_coverage.md)); span containment 18.3% any / 11.3% rank-0 |
+| G5 external fixture | `tests/g5_external_fixture.rs` vs Recognizers-Text @ `da7edcff59f6` (351 rows, BLAKE3 `f3e1dfc3…988163`) | debug | value accuracy 12.7% rank-0 (scope classes dominate — see [Bench 949](../.benchmarks/949_f0_issue953_coverage_levers.md), the issue-953 coverage levers); span containment 18.3% any / 11.3% rank-0 |
 
 ## G2 detail (ns)
 
@@ -40,7 +40,7 @@ Work checksum `14156999` identical across both runs — deterministic sink.
 
 - **`extraction_estimate` → DEFAULT-ON** (this close): G1 BEATS ×3 at release + G2 measured (estimate_into 250 ns p50, forecast_into 1.8 µs p50) + G4 zero-alloc hot paths pinned + G3 new-leaf (123 crate tests green). Synthetic-corpus verdict; **real-corpus re-gate owed when the Phase-2 outcomes ledger accumulates**.
 - **`span_pointer` stays opt-in**: its GOAT requires the G5 rule-floor win; the span baseline arm is deferred pending a text-bearing external fixture (T0.7).
-- **`typed_parsers` stays opt-in**: no pinned accuracy bar; the measured 12.7% + mismatch classes are the input to the bar ([issue 953](../.issues/953_parser_word_form_coverage.md)); ratchet pinned after the first coverage landing.
+- **`typed_parsers` stays opt-in**: no pinned accuracy bar; the measured 12.7% + mismatch classes were the input to the bar ([Bench 949](../.benchmarks/949_f0_issue953_coverage_levers.md) landed the levers: 64.0% + the ratchet pin); ratchet pinned after the first coverage landing.
 - **`temper` stays opt-in**: gate substrate, no independent floor yet.
 
 ## G5 table (E's run, verbatim)
