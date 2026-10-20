@@ -1,6 +1,7 @@
 # Issue 954: `kron_memory` — scalar-target delta-rule cell (Kronecker Delta Rule, modelless)
 
 **Status:** OPEN — unclaimed. Primitive spec from [Research 630](../.research/630_Kronecker_Delta_Rule_KronLSTM.md) (arXiv:2610.26834, KronLSTM). Modelless track, GOAT-tier. No code this session. Spec revised once after the §5 verdict round (baseline arms, pair registry, alloc-free audit, fp-tolerance fixes, independence/rank caveats, conformal floor).
+**Claimed:** katgpt-rs-kron-m3, 1792510026, expires 2026-10-22T15:27:06Z
 
 A new associative-memory cell type beside the shipped vector-target rungs (`delta_mem`, LatticeMemory cells, the RLS rung in `.plans/630`): a **pair-addressed scalar table** — `d_k·d_v` scalar slots per cell, protected where the address factors are near-orthogonal (designed addresses, not unconditional), update `S ← S − β(vᵀSk − c)·vkᵀ`, closed-form Newton step `β* = 1/(‖k‖²‖v‖²)`, erase via `c = 0` with a pre-write collateral audit, analytic health gauges, undo-last, LS-snap consolidation. Feature flag `kron_memory = []` (opt-in → GOAT → promotion ladder; new cell-type slot, no incumbent demoted).
 
