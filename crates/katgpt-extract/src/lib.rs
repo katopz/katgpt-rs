@@ -23,13 +23,13 @@
 //! (estimate/forecast), G2 perf bar, G4 zero-alloc, G5 external
 //! BLAKE3-pinned fixture vs a rule floor (spans).
 
-#[cfg(feature = "span_pointer")]
-pub mod span_pointer;
-#[cfg(feature = "typed_parsers")]
-pub mod parsers;
 #[cfg(feature = "extraction_estimate")]
 pub mod estimate;
 #[cfg(feature = "extraction_estimate")]
 pub mod forecast;
+#[cfg(feature = "typed_parsers")]
+pub mod parsers;
+#[cfg(feature = "span_pointer")]
+pub mod span_pointer;
 #[cfg(feature = "temper")]
 pub mod temper;
