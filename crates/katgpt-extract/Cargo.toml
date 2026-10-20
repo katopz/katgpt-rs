@@ -20,9 +20,14 @@ categories = ["algorithms", "text-processing"]
 katgpt-core = { path = "../katgpt-core", optional = true, default-features = false }
 
 [features]
-# default = [] — the flag-OFF build compiles to an empty crate (the
-# no-default-consumer rule; every module is opt-in).
-default = []
+# DEFAULT-ON (Plan 628 T0.6 GOAT, 2026-10-20): the G1 floor comparison ran
+# at --release and BEAT the conformal-naive floor on all three cells
+# (forecast stationary-seasonal CRPS 0.7195, forecast white-noise 0.7550,
+# estimate cross-sectional 0.4730) — the plan's promotion rule IS the floor
+# comparison. Synthetic-corpus verdict; the real-corpus re-gate rides the
+# Phase-2 outcomes ledger. `--no-default-features` stays the tested
+# flag-OFF posture (compiles to the empty crate).
+default = ["extraction_estimate"]
 
 # span_pointer (Plan 628 T0.2): candidate-window span scoring — BM25/ngram
 # lexical + hashed-feature embedding similarity + optional alias tables;
@@ -54,6 +59,7 @@ extraction_estimate = [
 # temper (Plan 628 T0.5, gate half): the calibration/abstention gate —
 # per-field residual pools, sigmoid confidence readout, fused abstain
 # (confidence ∧ distance), null-with-guess emission onto the wire.
+# Opt-in: gate substrate, no independent floor of its own yet.
 temper = ["dep:katgpt-core", "katgpt-core/extraction_wire"]
 
 # Opt-in measurement axis (the katgpt-assign pattern): makes the

@@ -13,11 +13,14 @@
 //! | [`estimate`], [`forecast`] | `extraction_estimate` | conformal estimate (cross-sectional kNN conditioner) + forecast (time-series) heads over the Plan-340 substrate; Report-the-Floor harness plumbing |
 //! | [`temper`] | `temper` | the calibration/abstention gate: per-field residual pools, sigmoid confidence, fused abstain, null-with-guess emission |
 //!
-//! Everything is opt-in (`default = []`); the flag-OFF build compiles to
-//! an empty crate. One dep: `katgpt-core` (feature-gated,
-//! `default-features = false` — this crate never drags core's default
-//! feature tree into a leaf build). Pure std + katgpt-core: wasm-safe by
-//! construction, zero cross-repo edges (the BOUNDARY.md Owns row).
+//! Default-on: `extraction_estimate` (G1 floor comparison BEATS the
+//! conformal-naive floor at --release, Plan 628 T0.6); `span_pointer`,
+//! `typed_parsers` and `temper` are opt-in. `--no-default-features` is the
+//! tested flag-OFF posture — it compiles to an empty crate. One dep:
+//! `katgpt-core` (feature-gated, `default-features = false` — this crate
+//! never drags core's default feature tree into a leaf build). Pure std +
+//! katgpt-core: wasm-safe by construction, zero cross-repo edges (the
+//! BOUNDARY.md Owns row).
 //!
 //! GOAT gates (Plan 628 T0.6) bind every promotion: G1 floor comparison
 //! (estimate/forecast), G2 perf bar, G4 zero-alloc, G5 external
