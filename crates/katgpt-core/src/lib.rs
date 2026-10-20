@@ -235,6 +235,16 @@ pub mod dec_freeze;
 #[cfg(feature = "dec_operators")]
 pub use dec_freeze::CochainFreezeEnvelope;
 pub mod delta_mem;
+// kron_memory — the pair-addressed scalar-target delta-rule cell (Issue 954,
+// Research 630, arXiv:2610.26834): Newton-step writes with a contraction
+// governor, exact-zero write elision, the pre-write interference audit into
+// caller scratch, audited surgical unlearning with closed-form repair, a
+// tolerance-pinned undo + bit-exact touched-rows snapshot, analytic health
+// gauges (lower-bound heuristics), and LS-snap consolidation. Opt-in pending
+// the Bench 951 GOAT (G0 falsifier included); `kron_chunk_wy` is its chunked
+// consolidation-replay arm.
+#[cfg(feature = "kron_memory")]
+pub mod kron_memory;
 // hla — Higher-order Linear Attention substrate (cache types + streaming kernels), spun out to the
 // `katgpt-hla` crate (Issue 007 Phase E Tier 2 #4); re-exported as `katgpt_core::hla` for backwards compatibility.
 pub use katgpt_hla as hla;
@@ -1351,6 +1361,9 @@ pub use katgpt_types::depth_invariance::{
     // Issue 839: `linalg::kron_tile` IS a linalg submodule, so it gates this
     // `pub mod` too — joined at birth per the same rule.
     feature = "kron_tile",
+    // Issue 954: `kron_memory::health`/`consolidate_ls` consume
+    // `symmetric_eig` — joined at birth per the same rule.
+    feature = "kron_memory",
     // Plan 607 T3: `state_option_scoring::head` consumes
     // `ridge_solve_direct_f64` for the corpus-fitted linear head (the KARC
     // Plan-308 fit math) — joined at birth per the same rule.

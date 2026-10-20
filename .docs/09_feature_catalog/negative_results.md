@@ -1089,3 +1089,39 @@ noise-reduction rule — this section + the research note carry it.
   the sole open lane; a TRAINED delta table re-arms a modelless routing
   comparison only as measurement (the trained-vs-static ablation IS the
   paper's own ladder).
+
+## 47. kron_memory surgical-unlearning promotion — G0 falsifier FIRED: the slot table wins at low load (Issue 954, Bench 951)
+
+**Feature flag:** `kron_memory` (opt-in, STAYS opt-in forever per
+pre-registration). The full mechanism/verdict record is
+[`opt_in_features.md` §154](opt_in_features.md) and
+[`../03_memory/kron_memory.md`](../03_memory/kron_memory.md); this section
+records the negative.
+
+**The claim G0 was built to falsify:** the double-gated interference kernel
+(`Δᵢ = −β·r̃·(vᵢᵀv)(kᵀkᵢ)` — collateral requires overlap in BOTH factors)
+makes the scalar-target cell's audited erase the most surgical unlearning
+on the memory stack for distributed (non-orthogonal) addresses.
+
+**What measured:** at matched 16 KB state, 48 stored pairs, 400 seeded
+paired trials — Kron 0.00482 mean collateral / 0.780 recall vs the one-hot
+slot table 0.00016 / 0.994 (paired LB95 −0.00494 < 0). The table wins BOTH
+pre-registered statistics. The double gate IS real against the vector
+contract (delta-mem Newton erase: 0.08715 collateral, 0.008 recall — kron
+is 17× more surgical at paired LB95 +0.081 > 0), but at 1.2% slot load a
+lossy-addressing table is nearly lossless and its erase is a slot zeroing.
+
+**Mechanism reading (the durable finding):** the arms sit at their
+contracts' natural loads — Kron stores 48 SCALARS in 4096 slots, the vector
+contract 48 vectors = 3072 scalars (75% load, crushed), the table 48 slots
+(1.2%, nearly collision-free). The G0 regime as pre-registered is the
+table's best regime; Kron's protective regime (dense superposition at high
+load) was never probed. **Re-open bar: a G0′ at matched load ≥ 50% with its
+own pre-registration** — a different claim, owner-gated, never a re-read of
+this one.
+
+**What survived:** the machinery (19/19 G1 property tests), G4 alloc-free,
+G2 latency bars (write/read/audit), the interference-envelope sizer (G5a
+PROMOTED, sub-saturation regime), and the signal-only uncertainty posture
+(G5b: the CI dropped, the floor took CRPS). The cell ships as a
+diagnostic-grade opt-in with its falsifier on record.

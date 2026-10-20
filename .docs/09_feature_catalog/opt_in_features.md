@@ -5942,3 +5942,61 @@ existing `linalg::symmetric_eig` substrate — no new solver).
   informative settings) is at-least-as-informative; the residual edge
   regimes (probe coverage m ≪ p, probe degradation) are priced out of POC
   scope. Re-open = a consumer whose probe budget is genuinely ≪ p.
+
+## 154. kron_memory — Pair-Addressed Scalar-Target Delta-Rule Cell (Issue 954 / Research 630, arXiv:2610.26834)
+
+A new TARGET CONTRACT on the associative-memory ladder beside the
+vector-target rungs (`delta_mem`, LatticeMemory): a fixed-size
+`[[f32; DV]; DK]` Pod regressing a SCALAR on the rank-1 feature `k ⊗ v` —
+`read(k,v) = Σ S[i][j]·k[i]·v[j]`, Newton-step writes
+(`β* = 1/(‖k‖²‖v‖²)`) under a contraction governor (`0 < β‖a‖² < 2`),
+exact-zero write elision (a bit-level no-op — the frozen-state identity
+fixed point is hash-pinned over 64 replayed writes), the pre-write
+interference audit `Δᵢ = −β·r̃·(vᵢᵀv)(kᵀkᵢ)` into caller scratch (zero
+alloc, loud truncation), audited surgical unlearning with closed-form
+repair, single-level tolerance-pinned undo (`EPS_UNDO = 1e-5`) + bit-exact
+touched-rows snapshot undo, analytic health gauges (λ̂_min over the EMA
+marginal Grams, half-life, norm-budget envelope, measured
+independence-violation — all documented lower-bound heuristics, never
+guarantees), and LS-snap consolidation (`S := K̄⁻¹BV̄⁻¹` over the tracked
+moments, ridge-regularized, shipped `symmetric_eig`). All dots through
+`dot_f32_ordered` (`KRON_READ_ORDER v1`, the Issue-940 law).
+`kron_chunk_wy` (implies this) is the chunked form — Gram Hadamard product
++ unit-LT solve.
+
+- **G1**: 19 property tests from the theorem statements — one-step Newton
+  hit, the contraction sweep + the ≥2 divergence refusal, audit-kernel ==
+  measured collateral, orthogonal-either-axis zero interference, the elision
+  hash pin, superposition linearity, undo ε pin + bit-exact snap + the loud
+  capacity refusal, LS-snap steady state, correlated/rank-deficient health
+  arms (gauges stay finite; measured violation 0.73 on v=k), the
+  norm-budget envelope fired at P > 4/λ̂ deterministically, the registry
+  ring mapping, zero-address refusals, residual-signal convergence.
+- **G2** (Bench 951, release): write 1017 ns + read 1010 ns @64×64 (bars
+  2 µs), audit 2867 ns @64 pairs (bar 10 µs) — PASS; the chunk lane read
+  **0.56× (FAIL, unpromoted)** — its Grams + fused apply are ~1.5× the MACs
+  and sequential row axpys already vectorize; re-open bar = blocked-GEMM
+  Grams via the `kron_tile`/`simd_matmul` family (priced, not attempted).
+- **G4**: zero allocations across read/write/audit/undo/write_snap
+  (counting allocator + the Issue-714 canary).
+- **G0 VERDICT: FAIL — the falsifier fired (Bench 951, 2026-10-20).** At
+  matched 16 KB state and 48 pairs (1.2% slot load), the plain one-hot slot
+  table wins BOTH statistics (collateral 0.00016 vs 0.00482, paired LB95
+  −0.00494 < 0; recall 0.994 vs 0.780) — the pre-registered keep-opt-in
+  outcome. The double gate IS real against the vector contract (17× more
+  surgical, paired LB95 +0.081 > 0, at 18× the recall — the vector arm sits
+  at 75% load at matched bytes) but loses to the table at low load.
+  Re-open = a G0′ at matched load ≥ 50%, own pre-registration, owner-gated.
+- **G5a PROMOTED (the deliverable that validated)**: the self-consistent
+  interference-envelope sizer `MSE(P) ≈ σ²_c/(1 − P·β²/(d_k·d_v))` held the
+  [0.5, 2] band at x = 0.0625/0.25 (0.83/0.67) — promoted for NEW-config
+  sizing in the sub-saturation regime; the measured mechanism (erosion
+  SATURATES at ≈ σ²_c — an interference floor, not a retention cliff) is
+  the durable finding.
+- **G5b**: the analytic CI around `read` is DROPPED (Report the Floor — it
+  beat the conformal-naive floor on coverage 0.896 vs 0.203 and Winkler
+  2.62 vs 11.64 but lost CRPS 2.156 vs 2.036; all three required); the cell
+  ships signal-only (`residual_signal()`).
+
+Docs: [`.docs/03_memory/kron_memory.md`](../03_memory/kron_memory.md) ·
+Bench: [`.benchmarks/951_issue954_kron_memory_goat.md`](../../.benchmarks/951_issue954_kron_memory_goat.md).

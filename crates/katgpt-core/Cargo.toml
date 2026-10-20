@@ -227,6 +227,31 @@ lattice_memory = []
 # vs Engram, G6 memory) — promotion is the bench's verdict, never the alias.
 lattice_memory_3d = ["lattice_memory"]
 
+# kron_memory (Issue 954, 2026-10-20): the pair-addressed SCALAR-target
+# delta-rule cell (Kronecker Delta Rule, Research 630, arXiv:2610.26834) —
+# a new cell type beside the vector-target rungs (delta_mem, LatticeMemory),
+# not a replacement. Newton-step writes (β* = 1/(‖k‖²‖v‖²)) with a
+# contraction governor and exact-zero write elision, the pre-write
+# interference audit (Δᵢ = −β·r·(vᵢᵀv)(kᵀkᵢ), into caller scratch,
+# alloc-free), audited surgical unlearning with closed-form repair, a
+# tolerance-pinned undo + bit-exact touched-rows snapshot, analytic health
+# gauges (documented lower-bound heuristics with the measured
+# independence-violation gauge), and LS-snap consolidation over the streaming
+# marginal moments. All dots through `dot_f32_ordered` (Issue 940 law);
+# fixed-size Pod state (16 KB @ 64×64) + disclosed registry/undo/tracker
+# bytes. OPT-IN pending the Bench 951 GOAT — G0 (the falsifier: paired
+# collateral-per-erase LB95 > 0 vs the vector-delta-erase-with-audit and
+# one-hot-table baselines on DISTRIBUTED keys) gates any promotion; with
+# orthogonal codes the table wins by construction and the flag stays opt-in.
+kron_memory = []
+
+# kron_chunk_wy (Issue 954 E10): the chunked form of the kron write — Gram
+# Hadamard product + unit-LT solve, rank-1 features never formed. Equality
+# vs sequential is a pinned TOLERANCE (rounding differs by construction);
+# sequential stays canonical for anything synced/replayed. Implies
+# kron_memory; the ≥2× G2 throughput bar is the bench's verdict.
+kron_chunk_wy = ["kron_memory"]
+
 # bf16_simd (Issue 800 Arm A, 2026-09-16): SIMD bf16⇄f32 batch conversion
 # kernels — the widening direction (u16→u32<<16→f32) is lossless; the
 # narrowing ships RNE (bit-exact vs the `half` crate) with truncation as the
@@ -4652,6 +4677,19 @@ required-features = ["lattice_memory", "engram"]
 name = "bench_938_lattice_3d_goat"
 harness = false
 required-features = ["lattice_memory_3d", "engram"]
+
+# Issue 954 — the kron_memory GOAT: G0 the falsifier (paired collateral-per-
+# erase LB95 > 0 vs the vector-delta-erase-with-audit and one-hot-table
+# baselines on DISTRIBUTED keys, matched state bytes), G2 latency bars
+# (write/read ≤ 2 µs @ 64×64, audit ≤ 10 µs @ 64 pairs, chunk ≥ 2× @ L=64),
+# G4 alloc-free hot paths (counting allocator), G5a the analytic interference
+# envelope vs the measured recall-erosion curve, G5b Report-the-Floor (the
+# residual-signal CI candidate vs the conformal-naive floor — the floor is
+# expected to win; the CI ships only if it does not). --release mandatory.
+[[bench]]
+name = "bench_951_kron_memory_goat"
+harness = false
+required-features = ["kron_memory", "kron_chunk_wy", "conformal_predictive_intervals"]
 
 # Rider (Plan 619 posture sweep, 2026-10-07): the example imports
 # karc_forecaster-gated names (FourierBasis/KarcBasis/KarcForecaster) and
