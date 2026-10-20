@@ -4691,6 +4691,14 @@ required-features = ["scale_invariant_attn"]
 name = "issue945_qrr_gates"
 required-features = ["gain_cost_halt", "qrr_convergence"]
 
+# Issue 949 T8 — the path_kernel_sim G4 zero-alloc canary (crate-binary-
+# unique counting allocator). Same green-zero rule as the rows above:
+# without the row a plain `cargo test` prints `ok. 0 passed` over the
+# cfg'd-empty binary (the SILENT-NOW wall, Issue 742).
+[[test]]
+name = "path_kernel_sim_g4_alloc"
+required-features = ["path_kernel_sim"]
+
 # Issue 945 P6 — the Sylvester attribution gates: the Kronecker solve
 # (P S − AP = B_c, refused exactly on the σ(A)∩σ(S) overlap — the uniqueness
 # precondition surfacing as a verdict), the complement energy split (rate
