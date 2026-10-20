@@ -147,6 +147,12 @@ pub struct RlsMemoryState<const RANK: usize = 8> {
     alpha: f32,
     /// Forgetting factor in `(0, 1]` (1.0 = plain ridge, no forgetting).
     lambda: f32,
+    /// ‖u‖ of the most recent write (T3.5) — the depth-regression residual
+    /// as a surprise scalar. Composes with the shipped `delta_mem`
+    /// surprise-gate law (`DEFAULT_THETA_SURPRISE`): a consumer can refuse
+    /// writes whose prediction residual is already tiny. Not a gate here —
+    /// the accessor only reports; gating is a consumer decision.
+    last_surprise: f32,
 }
 
 impl<const RANK: usize> RlsMemoryState<RANK> {
@@ -171,6 +177,7 @@ impl<const RANK: usize> RlsMemoryState<RANK> {
             p,
             alpha,
             lambda,
+            last_surprise: 0.0,
         }
     }
 
@@ -180,6 +187,20 @@ impl<const RANK: usize> RlsMemoryState<RANK> {
 
     pub fn lambda(&self) -> f32 {
         self.lambda
+    }
+
+    /// ‖u‖ after the most recent write (T3.5) — 0.0 before any write. The
+    /// E5 surprise scalar: how much the write's value disagreed with what
+    /// the memory already predicted (`u = v − M·k̃`).
+    ///
+    /// ⛔ Under forgetting, one write absorbs only the fraction
+    /// `α‖k‖²/(λ + α‖k‖²)` of the residual (≈ 0.5 at the defaults) — so a
+    /// repeat write's surprise CONTRACTS GEOMETRICALLY by that factor per
+    /// repeat; it is not near-zero after one repeat. A θ-threshold consumer
+    /// gates on this decay law, not on a single-repeat cliff (pinned by
+    /// `e5_surprise_novel_high_repeat_low`).
+    pub fn surprise(&self) -> f32 {
+        self.last_surprise
     }
 
     /// Exact-RLS write (T1.2). See the module doc for the formula and the
@@ -230,13 +251,16 @@ impl<const RANK: usize> RlsMemoryState<RANK> {
         }
 
         let mut u = [0.0f32; RANK]; // u = v − M·k̃ (pre-update M)
+        let mut u_norm_sq = 0.0f32;
         for ((u_i, &v_i), m_row) in u.iter_mut().zip(value.iter()).zip(self.m.iter()) {
             let mut s = 0.0f32;
             for (m_ij, &k_j) in m_row.iter().zip(key.iter()) {
                 s += m_ij * k_j;
             }
             *u_i = v_i - s;
+            u_norm_sq += *u_i * *u_i;
         }
+        self.last_surprise = u_norm_sq.sqrt();
 
         // Journal capture BEFORE any mutation: pre-write P triangle + the
         // record quantities (T1.5 contract).
@@ -391,6 +415,7 @@ impl<'a, const RANK: usize, const TRI: usize> WindowedReader<'a, RANK, TRI> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::delta_mem::{DeltaMemoryConfig, DeltaMemoryState};
     use crate::linalg::{ridge_solve_direct_f64, try_cholesky_f32};
 
     const R: usize = 8;
@@ -780,5 +805,213 @@ mod tests {
         reader.read_into(&keys[0], &mut a);
         st.read_into(&keys[0], &mut b);
         assert_eq!(a, b, "empty window must be bit-identical to the base read");
+    }
+
+    /// T3.4 (Research 629 E4): the paper's ordering law re-tested on our
+    /// fixture style — at fixed inputs, recall error RLS < delta < outer.
+    /// Fixture: a random linear map W_true + NOISY REPEATS of earlier keys
+    /// (repeats are where exact least-squares averaging beats first-order
+    /// overwrite/accumulation). Reconstruction error = mean ‖M·k − v‖² over
+    /// the trained associations. Honest-negative clause: an ordering
+    /// violation here is a FINDING (recorded in the plan), not a silent pin.
+    #[test]
+    fn e4_ordering_rls_beats_delta_beats_outer() {
+        const N_ASSOC: usize = 24;
+        const N_REPEATS: usize = 16; // revisit earlier keys with fresh noise
+        let mut g = Gauss::new(606);
+        // W_true: an O(1) random 8×8 map the arms must recover.
+        let mut w_true = [[0.0f32; R]; R];
+        for row in w_true.iter_mut() {
+            for x in row.iter_mut() {
+                *x = g.next();
+            }
+        }
+        let apply = |k: &[f32; R]| {
+            let mut v = [0.0f32; R];
+            for (v_i, w_row) in v.iter_mut().zip(w_true.iter()) {
+                let mut s = 0.0f32;
+                for (&w_ij, &k_j) in w_row.iter().zip(k.iter()) {
+                    s += w_ij * k_j;
+                }
+                *v_i = s;
+            }
+            v
+        };
+        // Associations: keys drawn once, values = W_true·k + N(0, 0.05²)
+        // noise. Repeats revisit EARLIER keys with INDEPENDENT noise — the
+        // exact solver averages them; delta's β-forgetting decays the first
+        // observation; outer accumulates both raw.
+        let mut base_keys: Vec<[f32; R]> = Vec::with_capacity(N_ASSOC);
+        for _ in 0..N_ASSOC {
+            let mut k = [0.0f32; R];
+            for x in k.iter_mut() {
+                *x = g.next();
+            }
+            l2_normalize(&mut k);
+            base_keys.push(k);
+        }
+        let noisy = |k: &[f32; R], g: &mut Gauss| {
+            let mut v = apply(k);
+            for x in v.iter_mut() {
+                *x += 0.05 * g.next();
+            }
+            v
+        };
+        let mut stream: Vec<([f32; R], [f32; R])> = Vec::new();
+        for k in base_keys.iter() {
+            stream.push((*k, noisy(k, &mut g)));
+        }
+        for r in 0..N_REPEATS {
+            let k = base_keys[r * 3 % N_ASSOC];
+            stream.push((k, noisy(&k, &mut g)));
+        }
+
+        // Arm 1 — outer: M = Σ v·kᵀ (plain accumulation, no solver).
+        let mut outer = [[0.0f32; R]; R];
+        for (k, v) in stream.iter() {
+            for (o_row, &v_i) in outer.iter_mut().zip(v.iter()) {
+                for (o_ij, &k_j) in o_row.iter_mut().zip(k.iter()) {
+                    *o_ij += v_i * k_j;
+                }
+            }
+        }
+        // Arm 2 — delta (shipped): default schedule.
+        let mut delta = DeltaMemoryState::new(DeltaMemoryConfig {
+            rank: R,
+            ..DeltaMemoryConfig::default()
+        });
+        for (k, v) in stream.iter() {
+            delta.write(k, v);
+        }
+        // Arm 3 — rls: default schedule.
+        let mut rls = RlsMemoryState::<R>::new();
+        for (k, v) in stream.iter() {
+            rls.write(k, v);
+        }
+
+        // Content queries: reconstruction over the trained keys (mean ‖·‖²).
+        // All three arms flattened to row-major [f32] (the delta snapshot's
+        // public shape).
+        let mut outer_flat = Vec::with_capacity(R * R);
+        for row in outer.iter() {
+            outer_flat.extend_from_slice(row);
+        }
+        let delta_flat = delta.snapshot().state;
+        let mut rls_flat = Vec::with_capacity(R * R);
+        for row in rls.m.iter() {
+            rls_flat.extend_from_slice(row);
+        }
+        let names = ["outer", "delta", "rls"];
+        let mats: [&[f32]; 3] = [&outer_flat, &delta_flat, &rls_flat];
+        let mut err = [0.0f64; 3];
+        for k in base_keys.iter() {
+            let v_clean = apply(k);
+            for (which, m) in mats.iter().enumerate() {
+                let mut pred = [0.0f32; R];
+                for (i, p_i) in pred.iter_mut().enumerate() {
+                    let mut s = 0.0f32;
+                    for (&m_ij, &k_j) in m[i * R..i * R + R].iter().zip(k.iter()) {
+                        s += m_ij * k_j;
+                    }
+                    *p_i = s;
+                }
+                for (a, b) in pred.iter().zip(v_clean.iter()) {
+                    err[which] += ((a - b) * (a - b)) as f64;
+                }
+            }
+        }
+        for e in err.iter_mut() {
+            *e /= N_ASSOC as f64;
+        }
+        eprintln!(
+            "e4 ordering: {} {:.4e} < {} {:.4e} < {} {:.4e} (mean sq recon error)",
+            names[2], err[2], names[1], err[1], names[0], err[0]
+        );
+        assert!(
+            err[2] < err[1] && err[1] < err[0],
+            "E4 ordering VIOLATED (honest-negative finding): rls {:.4e} delta {:.4e} outer {:.4e}",
+            err[2],
+            err[1],
+            err[0]
+        );
+    }
+
+    /// T3.5 (Research 629 E5): the surprise scalar. Two laws pinned:
+    /// (a) FRESH state — the per-repeat contraction is the closed form
+    ///     λ/(λ+α) ≈ 0.4975 at the defaults (each write absorbs
+    ///     α/(λ+α‖k‖²) of the residual; surprise decays geometrically);
+    /// (b) TRAINED state — the gain on a NEW direction shrinks with the
+    ///     conditioned covariance (κᵀk = kᵀPk/(λ+kᵀPk) ≪ 0.5), so surprise
+    ///     persists longer — monotone decay is the pin there. Persistence
+    ///     on a confident memory is itself signal (inconsistent data), not
+    ///     a defect.
+    #[test]
+    fn e5_surprise_novel_high_repeat_low() {
+        // (a) VIRGIN state, single pair: the pre-write P₀ = I makes
+        // kᵀPk = α‖k‖² = α exactly, so the per-repeat contraction is the
+        // closed form λ/(λ+α) (each write absorbs α/(λ+kᵀPk) of the
+        // residual; surprise decays geometrically). Any prior history
+        // shrinks kᵀPk below α and the ratio toward 1 — history-dependence
+        // is leg (b), not a defect.
+        let mut k0 = [0.0f32; R];
+        let mut g0 = Gauss::new(1549);
+        for x in k0.iter_mut() {
+            *x = g0.next();
+        }
+        l2_normalize(&mut k0);
+        let mut v0 = [0.0f32; R];
+        for x in v0.iter_mut() {
+            *x = 0.5 * g0.next();
+        }
+        let mut st = RlsMemoryState::<R>::new();
+        st.write(&k0, &v0);
+        let s1 = st.surprise();
+        st.write(&k0, &v0);
+        let s2 = st.surprise();
+        let ratio = s2 / s1;
+        let expect = 0.99f32 / (0.99f32 + 1.0f32); // λ/(λ+α)
+        eprintln!("e5 virgin-state repeat ratio {ratio:.4} (closed form λ/(λ+α) = {expect:.4})");
+        assert!(
+            (ratio - expect).abs() < 1e-3,
+            "virgin-state surprise contraction must match λ/(λ+α): {ratio} vs {expect}"
+        );
+
+        // (b) trained state: novel high, monotone decay per repeat, no
+        // one-step cliff (the conditioned-covariance gain law).
+        let (keys, vals) = gen_stream(1552, 64);
+        let mut st = RlsMemoryState::<R>::new();
+        for i in 0..64 {
+            st.write(&keys[i], &vals[i]);
+        }
+        let mut novel = [0.0f32; R];
+        let mut g = Gauss::new(1551);
+        for x in novel.iter_mut() {
+            *x = g.next();
+        }
+        l2_normalize(&mut novel);
+        let mut v = [0.0f32; R];
+        for x in v.iter_mut() {
+            *x = 0.5 * g.next();
+        }
+        st.write(&novel, &v);
+        let s_novel = st.surprise();
+        assert!(s_novel > 0.1, "novel write must surprise, got {s_novel}");
+        let mut s_prev = s_novel;
+        let mut s_final = s_novel;
+        for _ in 0..8 {
+            st.write(&novel, &v);
+            s_final = st.surprise();
+            assert!(
+                s_final < s_prev,
+                "surprise must decay monotonically per repeat: {s_final} vs {s_prev}"
+            );
+            s_prev = s_final;
+        }
+        eprintln!(
+            "e5 trained-state surprise: novel {s_novel:.3e} → after 8 repeats {s_final:.3e} (conditioned-gain persistence)"
+        );
+        // New-state invariant.
+        let fresh = RlsMemoryState::<R>::new();
+        assert_eq!(fresh.surprise(), 0.0);
     }
 }

@@ -6026,9 +6026,26 @@ fixed order (Issue-940 classification).
   N=1000 (pin 1e-3, ~10³× margin) across 4 (α, λ) regimes; P SPD
   (Cholesky) after EVERY step; unwind round-trip (W=64 journal writes →
   reverse unwind → p_restore) dev **1.04e-7** with P bit-exact.
-- Phases 2–4 (WindowedReader, GOAT-vs-delta-rule microbench, consumer
-  decision) are OPEN — promotion to default requires the Phase-3 GOAT AND
-  a real consumer (Feature Flag Discipline); until then **OPT-IN**.
+- **Phase 2 (windowed reads)**: `WindowedReader` (≤ E corrections over a
+  frozen base, write order pinned) — windowed == materialized max dev
+  **1.19e-7** over 32 randomized queries at W=64; G2 microbench (E=4 stage
+  sweep, interleaved 20k samples/arm): **windowed ~97 ns vs materialized
+  ~206 ns — 2.1×** (the sweep is the window's use case; per-single-stage
+  read the materialized read can win).
+- **Phase 3 GOAT G1–G4 (2026-10-21) — ALL PASS, STAYS OPT-IN** (no real
+  consumer yet — Feature Flag Discipline: gates alone do not promote):
+  G2 T3.1 delta-rule write+read p50 37.5/p99 50.0 ns vs RLS 43.8/56.2 ns
+  (interleaved, batched timing — ratio **1.17×/1.12×**, the small-factor
+  bar; ~6 ns buys the P downdate); G3 default build compiles the module to
+  nothing, 2157 default lib tests green; G4 **0 allocs** (1000 write+read,
+  1000 write_ctx+unwind+restore, 1000 windowed reads); E4 ordering law
+  REPLICATES (RLS 3.07e-1 < delta 8.10e0 < outer 3.43e+2 — the noisy-
+  repeats fixture is where exact averaging beats first-order overwrite);
+  E5 surprise scalar pinned to its closed forms (virgin-state repeat
+  contraction λ/(λ+α) = 0.4975 exact; trained-state persistence = the
+  conditioned-gain law, documented as signal).
+- Phase 4 (consumer decision) OPEN — the primitive stays opt-in until a
+  real consumer lands with a measured gap.
 
 Plan: [`.plans/630_rls_depth_memory.md`](../../.plans/630_rls_depth_memory.md) ·
 Research: [`.research/629_Depth_Memory_RLS_Depth_Mixing.md`](../../.research/629_Depth_Memory_RLS_Depth_Mixing.md).

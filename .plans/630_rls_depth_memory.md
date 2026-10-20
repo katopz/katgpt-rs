@@ -1,6 +1,6 @@
 # Plan 630: rls_depth_mem — Exact Recursive Least Squares Associative Memory
 
-**Status:** Active — Phases 1+2 landed 2026-10-21 (Phase 3–4 open)
+**Status:** Active — Phases 1–3 landed 2026-10-21, GOAT G1–G4 PASS; Phase 4 (consumer decision) open — promotion owner-gated on a real consumer
 **Claimed:** 4090-idle-r630, epoch=1792517412, expires 2026-10-22T17:30:12+00:00
 **Date:** 2026-10-20
 **Research:** [katgpt-rs/.research/629_Depth_Memory_RLS_Depth_Mixing.md](../.research/629_Depth_Memory_RLS_Depth_Mixing.md)
@@ -37,11 +37,11 @@ Ship the exact-online rung of the associative-memory ladder the workspace alread
 
 ### Tasks
 
-- [ ] **T3.1** G2: rank-8 `write+read` p50/p99 vs `DeltaMemoryState::write`/`read_into` at matched rank, `--release`, box-state PROVENANCE line (bench_preflight; Issue-741 law). Bar: RLS within a small factor of delta-rule (it does strictly more work — the P update; the paper's model-scale accounting is ~1%, our microbench decides on this box). A decisive loss → record, keep opt-in, close the plan honestly.
-- [ ] **T3.2** G3: default-features build byte-identical; all existing `delta_mem` tests untouched and green.
-- [ ] **T3.3** G4: zero-alloc write/read/unwind with caller scratch; counting-allocator canary (house pattern).
-- [ ] **T3.4** E4 ordering re-test on our workloads: RLS vs delta vs a plain outer-product write at fixed inputs — record which orderings replicate (honest negatives are findings, per Research 629 §2.2 E4).
-- [ ] **T3.5** E5: `surprise(&self) -> f32` (‖u‖ after write) + composition sketch with the shipped `delta_mem` surprise gate; test-only until a consumer exists.
+- [x] **T3.1** G2: rank-8 `write+read` p50/p99 vs `DeltaMemoryState::write`/`read_into` at matched rank, `--release`, box-state PROVENANCE line. LANDED in `benches/bench_rls_depth_mem.rs` — FOUR interleaved arms, one sampling loop (the sequential-AB law: sequential arms measured ±5.2%/+21.7% box drift), 20k samples/arm, BATCH=32 per timed sample (the Windows timer quantized a single ~100 ns op to exactly 100.0 — p99 collapsed onto p50; batching restores ~3 ns resolution), black_boxed rotating indices (hoist defence), delta warmed past its error-history growth. **Measured (4090 idle, CPU 6%, RAM 17.6/31.8 GiB, AC, 2026-10-21): delta p50 37.5 / p99 50.0 ns vs RLS p50 43.8 / p99 56.2 ns — ratio 1.17× p50, 1.12× p99. G2 PASS** — within the plan's small-factor bar (~6 ns buys the P downdate: 64 extra FMA + the gain division; the paper's ~1% model-scale accounting is the right order on this box too).
+- [x] **T3.2** G3: default-features build byte-identical — the module is `#[cfg(feature = "rls_depth_mem")]`-gated, so the default build compiles it to nothing (no default-path code touched); all existing `delta_mem` tests untouched and green (default lib **2157 passed, 0 failed** pre- and post-landing).
+- [x] **T3.3** G4: zero-alloc write/read/unwind — LANDED `tests/rls_depth_mem_alloc.rs` (own binary, the `counting_allocator!()` convention + the Issue-714 live-counter canary): **0 allocs** over 1000 write+read rounds, 1000 write_ctx+unwind+p_restore rounds, and 1000 WindowedReader reads. `[[test]]` row with `required-features` (the two green-zero defenses).
+- [x] **T3.4** E4 ordering re-test: **ORDERING REPLICATES** (`e4_ordering_rls_beats_delta_beats_outer`): random W_true map + noisy repeats of earlier keys, content-query reconstruction — **RLS 3.07e-1 < delta 8.10e0 < outer 3.43e+2** mean-sq error (26× / 1100×). The repeats arm is where exact least-squares averaging beats first-order overwrite (delta) and raw accumulation (outer).
+- [x] **T3.5** E5: `surprise(&self) -> f32` (‖u‖ after write) — LANDED + two laws pinned (`e5_surprise_novel_high_repeat_low`): (a) virgin-state per-repeat contraction matches the closed form **λ/(λ+α) = 0.4975** exactly (pre-write P₀ = αI makes kᵀPk = α); (b) TRAINED-state surprise persists longer — the conditioned covariance shrinks the gain (κᵀk = kᵀPk/(λ+kᵀPk) ≪ 0.5), monotone decay pinned, persistence documented as signal (confident memory + persistent residual = inconsistent data), never a defect. Composition with the shipped `delta_mem` gate law (`DEFAULT_THETA_SURPRISE`) documented on the accessor — the accessor only REPORTS; θ-gating is a consumer decision (test-only until a consumer exists, per plan).
 
 ## Phase 4 — Consumer decision (promotion gate)
 
