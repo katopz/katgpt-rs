@@ -23,6 +23,11 @@
 //! (estimate/forecast), G2 perf bar, G4 zero-alloc, G5 external
 //! BLAKE3-pinned fixture vs a rule floor (spans).
 
+// The G4 alloc-gate machinery (the ONE `#[global_allocator]` of the lib
+// test binary; test-only). Plan 628 T0.6 consolidation — see the module doc.
+#[cfg(test)]
+pub(crate) mod alloc_gate;
+
 #[cfg(feature = "extraction_estimate")]
 pub mod estimate;
 #[cfg(feature = "extraction_estimate")]

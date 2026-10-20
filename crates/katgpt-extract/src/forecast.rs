@@ -432,4 +432,39 @@ mod tests {
         assert!(report.n_scored > 0);
         assert!(!report.is_not_applicable());
     }
+
+    // ---- G4: allocation gate (crate::alloc_gate; see its module doc) -------
+
+    #[test]
+    #[cfg(any(debug_assertions, feature = "alloc_tracking"))]
+    fn forecast_into_sized_out_is_zero_alloc() {
+        use crate::alloc_gate::{ALLOC_COUNT, MeasuringWindow};
+        use std::sync::atomic::Ordering;
+
+        let mut head = ForecastHead::new(12, 8, 0.05);
+        for &y in &deterministic_sine(36, 12) {
+            head.observe(y, &[]);
+        }
+        let mut out = ForecastDistribution {
+            steps: Vec::new(),
+            level: 0.0,
+        };
+        // First call sizes `out.steps` to the horizon (the documented cold
+        // path — steps are reallocated only on a length change).
+        head.forecast_into(0.0, 8, 0.8, &mut out);
+        assert_eq!(out.steps.len(), 8);
+
+        // Second call at the SAME horizon: the pinned zero-alloc claim
+        // (module doc — the per-step loop writes `out.steps` in place).
+        let _window = MeasuringWindow::enter();
+        ALLOC_COUNT.store(0, Ordering::Relaxed);
+        head.forecast_into(0.0, 8, 0.8, &mut out);
+        assert_eq!(
+            ALLOC_COUNT.load(Ordering::Relaxed),
+            0,
+            "forecast_into allocated with out.steps already at horizon length"
+        );
+        drop(_window);
+        assert_eq!(out.steps.len(), 8);
+    }
 }

@@ -688,4 +688,42 @@ mod tests {
         assert_eq!(gate.pool_len(FieldKind::Number), 0);
         assert_eq!(gate.calibration_spread(FieldKind::Number), NEUTRAL_SPREAD);
     }
+
+    // ---- G4: allocation gate (crate::alloc_gate; see its module doc) -------
+
+    #[test]
+    #[cfg(any(debug_assertions, feature = "alloc_tracking"))]
+    fn gate_hot_paths_are_zero_alloc() {
+        use crate::alloc_gate::{ALLOC_COUNT, MeasuringWindow};
+        use std::sync::atomic::Ordering;
+
+        // Pre-fill every read pool past the ring wrap so the measured reads
+        // run at steady state (the sorted window is the full pool_cap).
+        let mut gate = TemperGate::new(TemperConfig::default());
+        for i in 0..(RING_CAPACITY * 2) {
+            let residual = (i % 16) as f32 * 0.05;
+            gate.update(FieldKind::Number, residual + 0.1, residual);
+        }
+        assert_eq!(gate.pool_len(FieldKind::Number), RING_CAPACITY);
+
+        // `assemble_answer` is EXCLUDED by design: its `id: String` is the
+        // documented wire-boundary allocation (module doc), not gate work.
+        let _window = MeasuringWindow::enter();
+        ALLOC_COUNT.store(0, Ordering::Relaxed);
+        let spread = gate.calibration_spread(FieldKind::Number);
+        let confidence = gate.confidence(FieldKind::Number, 0.4);
+        let verdict = gate.gate_located(FieldKind::Number, 0.7, 0.4);
+        assert_eq!(
+            ALLOC_COUNT.load(Ordering::Relaxed),
+            0,
+            "the temper gate path allocated (spread/confidence/gate_located)"
+        );
+        drop(_window);
+        assert!(spread.is_finite() && spread > 0.0);
+        assert!(confidence.is_finite());
+        assert!(matches!(
+            verdict,
+            GateVerdict::Answer | GateVerdict::Abstain { guessable: _ }
+        ));
+    }
 }

@@ -1158,4 +1158,50 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert_eq!(span_text(state, &out[0]), "Oct 20");
     }
+
+    // ---- G4: allocation gate (crate::alloc_gate; see its module doc) -------
+
+    #[test]
+    #[cfg(any(debug_assertions, feature = "alloc_tracking"))]
+    fn scan_datetimes_is_zero_alloc() {
+        use crate::alloc_gate::{ALLOC_COUNT, MeasuringWindow};
+        use std::sync::atomic::Ordering;
+
+        // SCAN phase only: materialization (the wire's `Date`/`Time`/
+        // `DateTime` strings) is the documented cold edge of
+        // `parsers::finish` — the scanner itself is push-only.
+        let state = "issued 2026-10-20, due 2026-11-19, revised 10/25/2026 at 5pm";
+        let reference = parse_reference(Some(REF));
+        assert!(reference.is_some());
+        // Dry run sizes the scratch; the measured run reuses it (clear keeps
+        // capacity, so the same candidate count cannot grow the buffer).
+        let mut scratch = Vec::new();
+        scan_datetimes(
+            state,
+            0..state.len(),
+            FieldKind::Date,
+            reference,
+            &mut scratch,
+        );
+        let expected = scratch.len();
+        assert!(expected > 0, "dry run must produce candidates");
+        scratch.clear();
+
+        let _window = MeasuringWindow::enter();
+        ALLOC_COUNT.store(0, Ordering::Relaxed);
+        scan_datetimes(
+            state,
+            0..state.len(),
+            FieldKind::Date,
+            reference,
+            &mut scratch,
+        );
+        assert_eq!(
+            ALLOC_COUNT.load(Ordering::Relaxed),
+            0,
+            "scan_datetimes allocated inside the measured window"
+        );
+        drop(_window);
+        assert_eq!(scratch.len(), expected);
+    }
 }

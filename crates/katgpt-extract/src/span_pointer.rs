@@ -764,9 +764,8 @@ fn insert_sorted(out: &mut [SpanScore], filled: &mut usize, cand: SpanScore) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::alloc::{GlobalAlloc, Layout, System};
-    use std::cell::Cell;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use crate::alloc_gate::{ALLOC_COUNT, MeasuringWindow};
+    use std::sync::atomic::Ordering;
 
     const ZERO_SPAN: SpanScore = SpanScore {
         start: 0,
@@ -1180,73 +1179,10 @@ mod tests {
 
     // ---- G4: counting allocator -------------------------------------------
 
-    // Counts allocations made by the MEASURING THREAD only: the TLS flag
-    // (const-init — accessing it never allocates) is set around the
-    // measured window, and the allocator increments only when the CURRENT
-    // thread is inside a window. Sibling test threads allocating in
-    // parallel are invisible to the counter, so the gate is deterministic
-    // at any --test-threads value (the retry-arm band-aid this replaced
-    // false-armed under --all-features: shared-process noise failed all
-    // four attempts). A REAL hot-path allocation still fails — it happens
-    // on the measured thread, inside the window.
-    static ALLOC_COUNT: AtomicUsize = AtomicUsize::new(0);
-
-    thread_local! {
-        static MEASURING: Cell<bool> = const { Cell::new(false) };
-    }
-
-    struct MeasuringWindow;
-
-    impl MeasuringWindow {
-        fn enter() -> Self {
-            MEASURING.with(|m| m.set(true));
-            Self
-        }
-    }
-
-    impl Drop for MeasuringWindow {
-        fn drop(&mut self) {
-            MEASURING.with(|m| m.set(false));
-        }
-    }
-
-    struct CountingAlloc;
-
-    unsafe impl GlobalAlloc for CountingAlloc {
-        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-            if MeasuringWindow::is_measuring() {
-                ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
-            }
-            unsafe { System.alloc(layout) }
-        }
-
-        unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-            if MeasuringWindow::is_measuring() {
-                ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
-            }
-            unsafe { System.alloc_zeroed(layout) }
-        }
-
-        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-            unsafe { System.dealloc(ptr, layout) }
-        }
-
-        unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-            if MeasuringWindow::is_measuring() {
-                ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
-            }
-            unsafe { System.realloc(ptr, layout, new_size) }
-        }
-    }
-
-    impl MeasuringWindow {
-        fn is_measuring() -> bool {
-            MEASURING.with(Cell::get)
-        }
-    }
-
-    #[global_allocator]
-    static COUNTING: CountingAlloc = CountingAlloc;
+    // The T0.2 machinery (TLS-gated counting allocator) lives in
+    // `crate::alloc_gate` since the T0.6 consolidation — ONE
+    // `#[global_allocator]` per test binary is a rustc rule, and the other
+    // modules' gates drive the same allocator through `crate::alloc_gate`.
 
     #[test]
     fn hot_path_is_zero_alloc() {

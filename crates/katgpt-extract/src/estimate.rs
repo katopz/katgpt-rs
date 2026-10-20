@@ -1688,4 +1688,57 @@ mod tests {
         assert_eq!(a.features, b.features);
         assert!((a.values[0] - 3.0).abs() < 3.0, "values near the level 3.0");
     }
+
+    // ---- G4: allocation gate (crate::alloc_gate; see its module doc) -------
+
+    #[test]
+    #[cfg(any(debug_assertions, feature = "alloc_tracking"))]
+    fn estimate_into_second_call_is_zero_alloc() {
+        use crate::alloc_gate::{ALLOC_COUNT, MeasuringWindow};
+        use std::sync::atomic::Ordering;
+
+        // 12 comparables (>= small_comps_max 8 -> the split-conformal
+        // posture), 2-feature schema.
+        let mut source = InMemorySource::new();
+        for i in 0..12 {
+            let x = i as f32 * 0.5;
+            source.push(
+                "price",
+                Comparable {
+                    features: vec![x, x * 2.0],
+                    value: 10.0 + 3.0 * x,
+                },
+            );
+        }
+        let mut head = EstimateHead::new(3, 0.05, None);
+        let mut out = EstimateDistribution {
+            point: 0.0,
+            p10: 0.0,
+            median: 0.0,
+            p90: 0.0,
+            p_below: 0.0,
+            p_above: 0.0,
+            level: 0.0,
+        };
+        let query = [1.0, 2.0];
+        // Call #1: the documented lazy-calibrate cold path (MAY allocate —
+        // it clones the corpus and fits scales/calibration).
+        head.estimate_into(&query, &source, "price", &mut out);
+        assert!(head.is_calibrated());
+        assert!(out.point.is_finite());
+
+        // Call #2 on the same (source, field_id): the pinned zero-alloc
+        // claim (module doc — scratch is owned by the head after
+        // calibration).
+        let _window = MeasuringWindow::enter();
+        ALLOC_COUNT.store(0, Ordering::Relaxed);
+        head.estimate_into(&query, &source, "price", &mut out);
+        assert_eq!(
+            ALLOC_COUNT.load(Ordering::Relaxed),
+            0,
+            "estimate_into allocated after calibration"
+        );
+        drop(_window);
+        assert!(out.point.is_finite());
+    }
 }

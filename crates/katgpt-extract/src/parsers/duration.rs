@@ -197,7 +197,13 @@ fn chain_at(b: &[u8], we: usize, i: usize, cons: &FieldConstraints) -> ChainOutc
     let Some((mut end, u, n, d)) = term_at(b, we, i) else {
         return ChainOutcome::None;
     };
-    let mut terms = vec![(u, n, d)];
+    // Fixed stack slots, not a Vec (the G4 scan gate caught the per-chain
+    // allocation this replaced): MAX_TERMS + 1 — the cap check runs AFTER
+    // the push, so the bail case holds MAX_TERMS + 1 entries. Scanning
+    // stays allocation-free (the parsers module law).
+    let mut terms = [(0u8, 0i128, 0i64); MAX_TERMS + 1];
+    let mut terms_len = 1usize;
+    terms[0] = (u, n, d);
     loop {
         let j = skip_ascii_ws(b, end, we);
         if j == end {
@@ -214,16 +220,17 @@ fn chain_at(b: &[u8], we: usize, i: usize, cons: &FieldConstraints) -> ChainOutc
         }
         match term_at(b, we, k) {
             Some((te, u, n, d)) => {
-                terms.push((u, n, d));
+                terms[terms_len] = (u, n, d);
+                terms_len += 1;
                 end = te;
-                if terms.len() > MAX_TERMS {
+                if terms_len > MAX_TERMS {
                     return ChainOutcome::Failed(end);
                 }
             }
             None => break,
         }
     }
-    match resolve(cons, &terms) {
+    match resolve(cons, &terms[..terms_len]) {
         Some(raw) => ChainOutcome::Ok(end, raw),
         None => ChainOutcome::Failed(end),
     }
@@ -512,5 +519,38 @@ mod tests {
         let a = durations("3 hours 20 minutes and 5s", &c);
         let b = durations("3 hours 20 minutes and 5s", &c);
         assert_eq!(a, b);
+    }
+
+    // ---- G4: allocation gate (crate::alloc_gate; see its module doc) -------
+
+    #[test]
+    #[cfg(any(debug_assertions, feature = "alloc_tracking"))]
+    fn scan_durations_is_zero_alloc() {
+        use crate::alloc_gate::{ALLOC_COUNT, MeasuringWindow};
+        use std::sync::atomic::Ordering;
+
+        // SCAN phase only: materialization (`DurationValue`'s unit String,
+        // the owned constraint spelling) is the documented cold edge of
+        // `parsers::finish` — the scanners themselves are push-only.
+        let state = "terms net 30 days; late fees accrue after 2 weeks and 3 hours";
+        let c = cons(false, None, None, None, None);
+        // Dry run sizes the scratch; the measured run reuses it (clear keeps
+        // capacity, so the same candidate count cannot grow the buffer).
+        let mut scratch = Vec::new();
+        scan_durations(state, 0..state.len(), &c, &mut scratch);
+        let expected = scratch.len();
+        assert!(expected > 0, "dry run must produce candidates");
+        scratch.clear();
+
+        let _window = MeasuringWindow::enter();
+        ALLOC_COUNT.store(0, Ordering::Relaxed);
+        scan_durations(state, 0..state.len(), &c, &mut scratch);
+        assert_eq!(
+            ALLOC_COUNT.load(Ordering::Relaxed),
+            0,
+            "scan_durations allocated inside the measured window"
+        );
+        drop(_window);
+        assert_eq!(scratch.len(), expected);
     }
 }

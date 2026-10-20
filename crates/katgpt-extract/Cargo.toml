@@ -76,3 +76,13 @@ required-features = ["typed_parsers"]
 # versions beyond the lock.
 blake3 = "1"
 serde_json = "1"
+
+# Plan 628 T0.6 G2: the F0-floor perf bench (harness = false — the repo's
+# no-criterion convention; plain main() + Instant). The required-features
+# row is the repo-birth gate discipline — without the four features the
+# bench's module imports would not resolve, and --all-targets must not
+# build it to an empty shell.
+[[bench]]
+name = "bench_628_f0_g2"
+harness = false
+required-features = ["span_pointer", "typed_parsers", "temper", "extraction_estimate"]

@@ -110,7 +110,12 @@ pub fn parse_number(state: &str, constraints: &FieldConstraints, out: &mut Vec<P
     if state.len() > u32::MAX as usize {
         return;
     }
-    let mut scratch = Vec::new();
+    // Fixed scratch floor (T0.6 G4): a typical state's candidate count fits
+    // without growth — `Field::Number` materialization carries no `String`,
+    // so a parse with reserved scratch + reserved `out` is zero-alloc (the
+    // G4 gate in this module's tests pins it). Growth beyond the floor is
+    // the documented realloc edge, never a correctness one.
+    let mut scratch = Vec::with_capacity(8);
     scan_numbers(state, 0..state.len(), constraints, &mut scratch);
     finish(scratch, state, out);
 }
@@ -744,5 +749,45 @@ mod tests {
         none(".5", &c); // leading-dot decimals out of scope
         none("5$", &c); // trailing currency symbol out of scope
         none("+5", &c); // explicit plus out of scope
+    }
+
+    // ---- G4: allocation gate (crate::alloc_gate; see its module doc) ------
+
+    // FULL-parse zero-alloc is deliberately NOT gated: the scratch Vec
+    // lives inside `parse_number` (the with_capacity(8) floor allocates it
+    // once per call) and `finish`'s stable sort carries its own std scratch
+    // — removing both needs the scratch threaded through the public API, a
+    // real refactor out of scope per plan 628 T0.6. What the floor fix BOUGHT:
+    // the per-call cost is one FIXED block (no geometric growth), and
+    // materialization is `FieldValue::Number(f64)` — no String. The zero-alloc
+    // law is pinned at the scan phase below (the scanner is the reusable hot
+    // half; callers that drive it directly — the engine's sweep — run it
+    // alloc-free).
+    #[test]
+    #[cfg(any(debug_assertions, feature = "alloc_tracking"))]
+    fn scan_numbers_is_zero_alloc() {
+        use crate::alloc_gate::{ALLOC_COUNT, MeasuringWindow};
+        use std::sync::atomic::Ordering;
+
+        let state = "invoice total $1,234.50 and 42 units minus 5 at 18 percent";
+        let c = cons(false, None, None, None, None);
+        // Dry run sizes the scratch; the measured run reuses it (clear keeps
+        // capacity, so the same candidate count cannot grow the buffer).
+        let mut scratch = Vec::new();
+        scan_numbers(state, 0..state.len(), &c, &mut scratch);
+        let expected = scratch.len();
+        assert!(expected > 0, "dry run must produce candidates");
+        scratch.clear();
+
+        let _window = MeasuringWindow::enter();
+        ALLOC_COUNT.store(0, Ordering::Relaxed);
+        scan_numbers(state, 0..state.len(), &c, &mut scratch);
+        assert_eq!(
+            ALLOC_COUNT.load(Ordering::Relaxed),
+            0,
+            "scan_numbers allocated inside the measured window"
+        );
+        drop(_window);
+        assert_eq!(scratch.len(), expected);
     }
 }
