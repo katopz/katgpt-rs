@@ -536,6 +536,37 @@ impl SpanPointer {
         })
     }
 
+    /// The Bench-950 round-4 GOAT-winning consumer pattern in one call
+    /// (the control arm): the literal gazetteer — longest match over
+    /// `query.text` + `query.aliases`, [`longest_match`] — answers FIRST;
+    /// where the vocabulary has no literal occurrence, the pointer's best
+    /// window ([`Self::best_span`]) answers. `None` only when BOTH abstain.
+    ///
+    /// Measured on two domains (Bench 950 round 4): this pattern beats the
+    /// snap hybrid and the bare pointer on choices-class exact (movie 2321,
+    /// restaurant 1493) — the pointer's value concentrates exactly where
+    /// the vocabulary has no literal occurrence, and this composite is the
+    /// only shipped shape that captures it. The source that answered is
+    /// disclosed ([`SpanAnswerSource`]) — the floor is a literal match, the
+    /// fallback a ranked window; downstream confidence handling differs
+    /// (the fallback rides the pointer's gate + Temper's fused abstain; the
+    /// floor needs no gate — a literal hit IS the answer).
+    ///
+    /// Zero-allocation. `text` is the SAME string the pointer was
+    /// constructed from (as in [`Self::best_snapped_span`]).
+    pub fn floor_first_span(&self, text: &str, query: &SpanQuery<'_>) -> Option<GroundedSpan> {
+        let (start, end, source) = longest_match(
+            text,
+            std::iter::once(query.text).chain(query.aliases.iter().copied()),
+        )
+        .map(|(s, e)| (s, e, SpanAnswerSource::Floor))
+        .or_else(|| {
+            self.best_span(query)
+                .map(|b| (b.start, b.end, SpanAnswerSource::PointerFallback))
+        })?;
+        Some(GroundedSpan { start, end, source })
+    }
+
     /// Collect the lowercased terms of `text` into `out` at `*filled`,
     /// deduping against already-collected slots (an alias duplicate flags
     /// the existing slot instead of adding one). Terms past the slot cap or
@@ -762,7 +793,7 @@ fn rank_before(a: &SpanScore, b: &SpanScore) -> bool {
         || (a.score == b.score && (a.start < b.start || (a.start == b.start && a.end < b.end)))
 }
 
-/// The Bench-950 round-3 boundary resolver (the GOAT-winning hybrid's
+/// The Bench-950 round-4 boundary resolver (the GOAT-winning hybrid's
 /// second half): among `surfaces`, the LONGEST occurrence fully inside
 /// `window` wins; ties break by list order (strictly-greater length
 /// replaces, so the earlier surface keeps a tie); per surface the leftmost
@@ -799,6 +830,50 @@ where
             if len > best_len {
                 best_len = len;
                 let s = ws + off;
+                best = Some((s as u32, (s + len) as u32));
+            }
+        }
+    }
+    best
+}
+
+/// Who answered a [`SpanPointer::floor_first_span`] query — the Bench-950
+/// round-4 disclosure the consumer needs (the two sources behave
+/// differently: the floor is a literal match, the fallback a ranked
+/// window).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpanAnswerSource {
+    /// The literal longest-match gazetteer resolved it (the rule floor).
+    Floor,
+    /// The floor abstained — the pointer's best window answered.
+    PointerFallback,
+}
+
+/// A grounded span answer: byte offsets + who resolved them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GroundedSpan {
+    pub start: u32,
+    pub end: u32,
+    pub source: SpanAnswerSource,
+}
+
+/// The unconstrained gazetteer half of the round-4 control pattern: among
+/// `surfaces`, the LONGEST literal occurrence anywhere in `text` wins
+/// (leftmost per surface; ties by list order — strictly-greater length
+/// replaces). `None` when no surface occurs at all — the abstention the
+/// [`SpanPointer::floor_first_span`] fallback covers. Zero-allocation,
+/// deterministic.
+pub fn longest_match<'s, I>(text: &str, surfaces: I) -> Option<(u32, u32)>
+where
+    I: IntoIterator<Item = &'s str>,
+{
+    let mut best: Option<(u32, u32)> = None;
+    let mut best_len = 0usize;
+    for surface in surfaces {
+        if let Some((s, part)) = text.match_indices(surface).next() {
+            let len = part.len();
+            if len > best_len {
+                best_len = len;
                 best = Some((s as u32, (s + len) as u32));
             }
         }
@@ -1438,6 +1513,90 @@ mod tests {
                 "snap_longest allocated on the hot path"
             );
             assert!(hit.is_some());
+        }
+    }
+
+    // ---- Bench-950 round 4: the control composite -------------------------
+
+    #[test]
+    fn longest_match_prefers_longest_then_list_order() {
+        let text = "stars humphrey bogart and lauren bacall";
+        // Longest wins regardless of order.
+        assert_eq!(
+            longest_match(text, ["bacall", "lauren bacall"]),
+            Some((26, 39)),
+        );
+        assert_eq!(&text[26..39], "lauren bacall");
+        // Genuine tie: the earlier-listed surface's leftmost occurrence.
+        assert_eq!(longest_match(text, ["bogart", "bacall"]), Some((15, 21)));
+        // No occurrence anywhere: the abstention the fallback covers.
+        assert_eq!(longest_match(text, ["jack nicholson"]), None);
+    }
+
+    #[test]
+    fn floor_first_span_prefers_the_floor() {
+        let state = "stars humphrey bogart and lauren bacall on screen";
+        let sp = SpanPointer::new(state, SpanConfig::default());
+        let q = SpanQuery {
+            text: "bacall",
+            aliases: &["lauren bacall"],
+        };
+        let got = sp.floor_first_span(state, &q).expect("the floor hits");
+        assert_eq!(got.source, SpanAnswerSource::Floor);
+        assert_eq!((got.start, got.end), (26, 39));
+    }
+
+    #[test]
+    fn floor_first_span_falls_back_on_floor_abstain() {
+        // "g l o b e x" spaced: no surface occurs literally anywhere (the
+        // floor abstains), but the pointer's tokens still score a window.
+        let state = "the vendor is g l o b e x here";
+        let sp = SpanPointer::new(state, SpanConfig::default());
+        let q = SpanQuery {
+            text: "globex",
+            aliases: &[],
+        };
+        match sp.floor_first_span(state, &q) {
+            Some(g) => {
+                assert_eq!(g.source, SpanAnswerSource::PointerFallback);
+                assert!(g.end > g.start);
+                let _ = state[g.start as usize..g.end as usize].len();
+            }
+            None => { /* both abstained on this text — also legal */ }
+        }
+    }
+
+    #[test]
+    fn floor_first_span_none_when_both_abstain() {
+        let sp = SpanPointer::new("alpha beta gamma", SpanConfig::default());
+        let q = SpanQuery {
+            text: "!!!",
+            aliases: &["???"],
+        };
+        assert!(sp.floor_first_span("alpha beta gamma", &q).is_none());
+    }
+
+    #[test]
+    fn floor_first_hot_path_is_zero_alloc() {
+        let state =
+            "Acme Corporation is based in Seattle. The vendor is Globex and ships worldwide.";
+        let sp = SpanPointer::new(state, SpanConfig::default());
+        let q = SpanQuery {
+            text: "globex vendor",
+            aliases: &["corp", "Globex"],
+        };
+        // Warmup outside the measured window.
+        let _ = sp.floor_first_span(state, &q);
+        {
+            let _window = MeasuringWindow::enter();
+            ALLOC_COUNT.store(0, Ordering::Relaxed);
+            let got = sp.floor_first_span(state, &q);
+            assert_eq!(
+                ALLOC_COUNT.load(Ordering::Relaxed),
+                0,
+                "floor_first_span allocated on the hot path"
+            );
+            assert!(got.is_some());
         }
     }
 }

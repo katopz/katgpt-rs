@@ -1,4 +1,4 @@
-# Bench 950 — F0 T0.7 span baselines: span_pointer vs the rule class (four rounds; round 3's promotion REVISED — the round-4 control arm is the promotion basis, held-out confirmed, promotion PENDING release G2)
+# Bench 950 — F0 T0.7 span baselines: span_pointer vs the rule class (rounds 1-4 + the round-5 AGREE conditions; the control arm is the promotion basis, pending release G2)
 
 **Status:** four rounds. Round 1: a GOAT PASS on an asymmetric comparison — REVISED. Round
 2: the fair re-run, an honest NEGATIVE for the BARE pointer (demoted to opt-in) with a
@@ -14,6 +14,27 @@ after a release-profile G2 with a quiet-box preflight line, which remains
 environmentally blocked.
 
 ## The round-4 fix list (all landed this session — the revert in the Cargo.toml, the arms in the harness, this fixture pair)
+
+**Round 5 (verdict round 2, session 37660519): AGREE** — the fix list discharged. Four
+pre-promotion conditions named, all landed the same session:
+
+1. **Production composite API** — `SpanPointer::floor_first_span` (the control pattern
+   shipped: longest-match gazetteer first, `best_span` on abstain, the answer's source
+   disclosed via `GroundedSpan`/`SpanAnswerSource`) + the public `longest_match`;
+   zero-alloc (G4-gated test), 5 new unit tests. Promoting `span_pointer` now ships
+   the WINNING pattern, not a part consumers rebuild by hand.
+2. **The control's relations ASSERTED** — control ≥ floor as a construction identity
+   (per-entity assert); control ≥ snap wherever both ratchets are pinned (a flip reds
+   and forces re-adjudication).
+3. **McNemar on the control** — control vs snap: movie b=29 c=5 → **p<0.001**;
+   restaurant b=15 c=5 → **p=0.041** — the control is SIGNIFICANTLY better than the
+   snap on both domains (the prior "+10 movie likely n.s." guess was wrong in the
+   control's favor). Control vs floor: counted, labeled one-sided-by-construction,
+   never quoted as a test.
+4. **Stale prose fixed** — crate README row + Cargo.toml comment name the ONE real
+   remaining gate (release-profile G2 + quiet-box preflight).
+
+## The round-4 fix list (round-4 items, landed this session — the revert in the Cargo.toml, the arms in the harness, this fixture pair)
 
 1. **Promotion REVERTED** — `default = ["extraction_estimate"]` again; the production
    API (`best_snapped_span`/`snap_longest`), the asserted GOAT relations, and the

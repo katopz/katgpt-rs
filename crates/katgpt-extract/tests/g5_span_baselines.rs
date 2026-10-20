@@ -136,6 +136,26 @@
 //! profile G2 with a quiet-box preflight line — then re-land the promotion
 //! (or promote the control instead if IT wins, recorded why).
 //!
+//! # Round 5 — the verdict's AGREE conditions (pre-promotion gates)
+//!
+//! The round-4 execution was AGREED (session 37660519) with four conditions
+//! before any promotion lands (alongside release G2):
+//!
+//! 1. **Production composite API** — DONE: `SpanPointer::floor_first_span`
+//!    with `longest_match` and `GroundedSpan`/`SpanAnswerSource` (the
+//!    control pattern shipped, zero-alloc G4-gated, unit-tested — no
+//!    consumer rebuilds it by hand).
+//! 2. **Assert the control's relations** — DONE: control >= floor is a
+//!    construction identity (asserted per entity); control >= snap is
+//!    asserted wherever both ratchets are pinned (a flip reds and forces
+//!    the promotion-basis re-adjudication).
+//! 3. **McNemar on the control** — DONE: control vs snap printed (the
+//!    informative comparison); control vs floor counted and labeled
+//!    one-sided-by-construction, never quoted as a test.
+//! 4. **Stale prose** — DONE: the crate README + Cargo.toml comment name
+//!    the one real remaining gate (release G2 + quiet-box preflight) and
+//!    the composite API.
+//!
 //! The table prints to stdout (captured on green — use `--nocapture`).
 
 use katgpt_extract::span_pointer::{SpanConfig, SpanPointer, SpanQuery, SpanScore};
@@ -653,6 +673,11 @@ fn run_suite(fx: &Fixture) {
     let mut snap_from_fallback = 0u32;
     // Round-4 McNemar discordants (choices-class): snap vs floor-longest.
     let mut snap_vs_floor = Discordants { b: 0, c: 0 };
+    // Round-5 (verdict AGREE conditions): the control arm's own McNemar —
+    // control vs snap is the informative comparison; control vs floor is
+    // one-sided BY CONSTRUCTION (the control's answer IS the floor's answer
+    // wherever the floor answers) — counted, printed, never read as a test.
+    let mut control_vs_snap = Discordants { b: 0, c: 0 };
 
     for row in &rows {
         let sp = SpanPointer::new(&row.text, SpanConfig::default());
@@ -754,11 +779,24 @@ fn run_suite(fx: &Fixture) {
             if is_choices {
                 let snap_hit = ptr_snap == Some(expected);
                 let floor_hit = gaz.longest == Some(expected);
+                let control_hit = floor_ptr_fallback == Some(expected);
                 if snap_hit && !floor_hit {
                     snap_vs_floor.b += 1;
                 } else if !snap_hit && floor_hit {
                     snap_vs_floor.c += 1;
                 }
+                if control_hit && !snap_hit {
+                    control_vs_snap.b += 1;
+                } else if !control_hit && snap_hit {
+                    control_vs_snap.c += 1;
+                }
+                // Construction invariant: the control never loses to the
+                // floor (it IS the floor where the floor answers).
+                assert!(
+                    control_hit || !floor_hit,
+                    "G5 span ({}): control missed where the floor hit — the control composition is broken",
+                    fx.label
+                );
             }
             let answers = |expected: (u32, u32)| ArmAnswers {
                 floor: floor_answer,
@@ -865,6 +903,20 @@ fn run_suite(fx: &Fixture) {
             per_type[*ty].ptr_gate.exact,
             *floor,
             &format!("{ty} pointer exact"),
+        );
+    }
+    // The control arm's GOAT relations (the verdict's AGREE condition 2):
+    // control >= floor is a CONSTRUCTION identity (asserted per-entity in
+    // the loop above); control >= snap is a MEASURED relation — asserted
+    // wherever both records are pinned, so a scorer change that flips it
+    // reds and forces the promotion-basis re-adjudication.
+    if rat.floor_ptr_fallback_exact > 0 && rat.snap_exact > 0 {
+        assert!(
+            choices.floor_ptr_fallback.exact >= choices.ptr_snap.exact,
+            "G5 span ({}): control exact {} < snap exact {} — the promotion basis (the control arm) is void; re-adjudicate",
+            fx.label,
+            choices.floor_ptr_fallback.exact,
+            choices.ptr_snap.exact
         );
     }
     // The round-3 GOAT relation, ASSERTED where the fixture's record measured
@@ -1060,6 +1112,10 @@ fn run_suite(fx: &Fixture) {
             snap_vs_floor: Discordants {
                 b: snap_vs_floor.b,
                 c: snap_vs_floor.c,
+            },
+            control_vs_snap: Discordants {
+                b: control_vs_snap.b,
+                c: control_vs_snap.c,
             },
         },
     );
@@ -1341,6 +1397,7 @@ struct RoundFourReports {
     snap_from_hit: u32,
     snap_from_fallback: u32,
     snap_vs_floor: Discordants,
+    control_vs_snap: Discordants,
 }
 
 /// McNemar discordant pairs (one comparison), + the two-sided exact
@@ -1491,6 +1548,15 @@ fn report(
             round_four.snap_vs_floor.b,
             round_four.snap_vs_floor.c,
             round_four.snap_vs_floor.p(),
+        );
+        println!(
+            "    McNemar control vs snap: b={}(control-hit/snap-miss) c={}(control-miss/snap-hit) — exact two-sided p={:.3} (the informative comparison)",
+            round_four.control_vs_snap.b,
+            round_four.control_vs_snap.c,
+            round_four.control_vs_snap.p(),
+        );
+        println!(
+            "    control vs floor: one-sided BY CONSTRUCTION (the control IS the floor where the floor answers) — not an informative test, never quoted as one"
         );
         let fb = &choices.floor_ptr_fallback;
         println!(

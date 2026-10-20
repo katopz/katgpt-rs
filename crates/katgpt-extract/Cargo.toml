@@ -26,18 +26,20 @@ katgpt-core = { path = "../katgpt-core", optional = true, default-features = fal
 # list) and the floor was denied it. The verdict-round REVISE forced the
 # fair re-run: TRAIN-split schema vocabulary (never the scored rows) + two
 # gazetteer arms given the SAME (canonical, aliases) inputs. Round 2: the
-# longest-match gazetteer BEAT the bare pointer on the primary exact metric
-# (77.8% vs 74.3%) — demoted back to opt-in. Round 3 (the pre-registered
-# re-open): the boundary-snap hybrid (`snap_longest` /
-# `SpanPointer::best_snapped_span`) measured 78.1% vs the floor's 77.8%
-# (+7) — but the verdict round REVISED the promotion: the margin rides the
-# 17 fallback exacts (the pointer covering gazetteer abstentions), not the
-# snap mechanism (the window constraint nets ≈ −10 vs unconstrained
-# longest-match); the floor+pointer-fallback control was unmeasured; no
-# McNemar; no held-out confirmation; and the promotion skipped the
-# --release G2 gate (quiet-box line still owed). The feature STAYS opt-in
-# pending the verdict's fix list (Bench 950 round 4): control arm + McNemar
-# + a held-out fixture + release G2, then re-adjudicate.
+# longest-match gazetteer BEAT the bare pointer (77.8% vs 74.3%) — demoted.
+# Round 3: the boundary-snap hybrid cleared the bar (+7) and re-landed the
+# promotion — REVISED (the margin rode the 17 fallback exacts; no control
+# arm, no McNemar, no held-out). Round 4 (verdict executed): the
+# `floor+ptr_fallback` control arm — the floor's answer, the pointer(gate)
+# window ONLY where the floor abstains — BEATS the snap on BOTH domains
+# (movie 2321 vs 2311, McNemar control-vs-snap p<0.001; held-out
+# MIT-Restaurant 1493 vs 1464, p=0.041), and the snap-over-floor edge is
+# significant only on the held-out domain (p=0.002; movie n.s. p=0.324).
+# The promotion basis is the CONTROL pattern, shipped as
+# `SpanPointer::floor_first_span` + `longest_match` (round 5, zero-alloc,
+# G4-gated). `span_pointer` STAYS opt-in pending ONE pre-registered gate:
+# a release-profile G2 run with a quiet-box preflight line (environmentally
+# blocked — box load 14.6 with 8 sibling cargo processes at round-4 time).
 default = ["extraction_estimate"]
 
 # span_pointer (Plan 628 T0.2): candidate-window span scoring — BM25/ngram
