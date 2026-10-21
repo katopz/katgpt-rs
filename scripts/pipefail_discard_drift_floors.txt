@@ -71,7 +71,7 @@ riir-auth                   1      6         0         0
 riir-chain                 19    115         4         0
 riir-refine                 6     46         0         0
 riir-dao                    1      7         0         0
-riir-dapps                  3    111         0         0
+riir-dapps                  3    111         1         0  # 2026-10-22: 0->1 = the proof_gate.sh grep -c tripwire, pinned DELIBERATE in pipefail_discard_expected.txt (the same row the four other proof_gate repos carry); the live kill-shapes were repaired at source (riir-dapps 7714115)
 riir-deployer               2     41         0         0
 riir-esp32                  1      0         0         0
 riir-game-sdk               3     12         0         0
