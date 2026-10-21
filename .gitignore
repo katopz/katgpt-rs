@@ -51,3 +51,5 @@ scripts/repo_alias.local.txt
 
 # session run scratch (gate out/err logs)
 .runs/
+# local env (template: .env.example)
+.env
