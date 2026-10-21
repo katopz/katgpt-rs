@@ -61,7 +61,9 @@ fn gen_pair(xs: &mut Xs) -> ([f32; RANK], [f32; RANK]) {
 fn g4_write_read_unwind_zero_alloc() {
     assert_counter_is_live();
 
-    let mut xs = Xs { s: 0xDEAD_BEEF_CAFE_0001 };
+    let mut xs = Xs {
+        s: 0xDEAD_BEEF_CAFE_0001,
+    };
     let mut st = RlsMemoryState::<RANK>::new();
     // Warmup: seed some state + prime any lazy paths, then drain the counter
     // delta over the measured window only.
@@ -84,7 +86,10 @@ fn g4_write_read_unwind_zero_alloc() {
             st.read_into(&query, &mut out);
         }
     });
-    assert_eq!(writes_allocs, 0, "write/read allocated {writes_allocs} times over 1000 rounds");
+    assert_eq!(
+        writes_allocs, 0,
+        "write/read allocated {writes_allocs} times over 1000 rounds"
+    );
 
     // Measured section B: 1000 journal write + unwind + restore rounds.
     let ((), unwind_allocs) = alloc_delta(|| {
@@ -96,7 +101,10 @@ fn g4_write_read_unwind_zero_alloc() {
             st.p_restore(&ctx);
         }
     });
-    assert_eq!(unwind_allocs, 0, "write_ctx/unwind/restore allocated {unwind_allocs} times");
+    assert_eq!(
+        unwind_allocs, 0,
+        "write_ctx/unwind/restore allocated {unwind_allocs} times"
+    );
 
     // Measured section C: WindowedReader reads (reader built OUTSIDE — its
     // one-time with_capacity is construction, not the read hot path).
@@ -113,7 +121,10 @@ fn g4_write_read_unwind_zero_alloc() {
             reader.read_into(&query, &mut out);
         }
     });
-    assert_eq!(read_allocs, 0, "WindowedReader::read_into allocated {read_allocs} times");
+    assert_eq!(
+        read_allocs, 0,
+        "WindowedReader::read_into allocated {read_allocs} times"
+    );
 
     // The reads computed real numbers (anti-DCE): a zero output after 3000
     // writes would mean the compiler deleted the work.
