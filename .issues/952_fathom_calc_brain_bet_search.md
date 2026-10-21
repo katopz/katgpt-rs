@@ -1,6 +1,7 @@
 # Issue 952 — Fathom calculation brain: MCTS-budgeted variant-bet search for the estimate class (modelless, wasm-pack attestation form)
 
 **Status:** Open — amendment verdict AGREE (Claude, round 2, 2026-10-20); T1–T4 wait for the Plan 628 lease (`katgpt-rs-fathom-phase0`) to expire 2026-10-22T02:03:30Z or an explicit handoff; T5 owner-gated
+**Claimed:** katgpt-rs-87, 1792618479, expires 2026-10-23T21:34:39Z — T1–T4 (new modules only; Plan 628 tasks/files untouched — its lease holder is not a live session, last commit 2026-10-21 03:20 +0700)
 **Origin:** owner directive 2026-10-20 ("wasm calculation brain (modelless)... we beat percepta and moka+PUCT bc of that... MCTS budget on variant bet formula... signal through sigmoid gate for consolidate later or even use calculation before send to model-based later")
 **Proposal:** [Proposal 016 §3.7](../.proposals/016_fathom_extraction_stack.md) (amended this session — the calculation-brain rung)
 **Plan:** [Plan 628](../.plans/628_fathom_extraction_substrate.md) T0.4 territory — ⛔ **coordination law: Plan 628 is under a LIVE claim lease** (`katgpt-rs-fathom-phase0`, claimed 2026-10-20, expires 2026-10-22T02:03:30Z; T0.1 + crate scaffold landed `37d09d972`/`8abc26dad`). This issue does NOT edit Plan 628's tasks; implementation under it coordinates with the lease holder or waits for expiry.
