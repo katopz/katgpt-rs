@@ -167,6 +167,17 @@ def selftest() -> list[str]:
                 fails.append(
                     f"pin drift: {PINS.name} says {field}={mine.get(field)} for "
                     f"{REPO_ROOT.name}, the gate owns {owned} — change both")
+        # The CEILING is the gate's too: its pin file holds one measured row
+        # per READ-tier region, so this repo's max_unguarded IS that row
+        # count. Unasserted, it drifted for 11 days (49fa7aa17 pinned
+        # sync_bank_goat's g2b_readout in the gate; this file stayed at 27).
+        if mine and trg.PINS.is_file():
+            n_rows = sum(1 for k in trg.read_pins(trg.PINS) if not k.startswith("__"))
+            if mine.get("max_unguarded") != n_rows:
+                fails.append(
+                    f"pin drift: {PINS.name} says max_unguarded="
+                    f"{mine.get('max_unguarded')} for {REPO_ROOT.name}, the "
+                    f"gate pins {n_rows} row(s) in {trg.PINS.name} — change both")
 
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "p.txt"

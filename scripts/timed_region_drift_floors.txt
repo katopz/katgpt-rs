@@ -45,12 +45,12 @@
 # by the sweep's self-test — change both or it reds.
 #
 # repo                     min_files  min_regions  max_unguarded
-katgpt-rs                        400          300             27
+katgpt-rs                        400          300             28  # 27->28 2026-10-22: the gate pinned sync_bank_goat::g2b_readout_latency_d8_cheap (49fa7aa17, measured 59.8 ns/pair); now asserted equal to the gate row count
 katgpt-web                         0            0              0
 mmorpg-editor                     15            0              0
 mmorpg-remake                     25            0              0
 mmorpg-remaster                   12            0              0
-riir-ai                          600          400             16
+riir-ai                          600          400             15  # 16->15 2026-10-22: riir-ai d2f534eb8 defended bench_618 bench_admit + bench_lookup
 riir-auth                          0            0              0
 riir-chain                       120           30              6
 riir-refine                       70           15              2
