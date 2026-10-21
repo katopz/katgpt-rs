@@ -85,6 +85,10 @@ def tracked_files(root, pattern: str = "*.rs", exclude=vendored_p) -> tuple:
     root = Path(root)
     rels: list = []
     repo = (root / ".git").exists()
+    # `answered` is the CAUSE the fallback keys on: git ran and listed this
+    # tree. A `.git` git cannot read (a synthetic self-test fixture's bare
+    # `mkdir .git`) is a tree git cannot answer for, so it walks.
+    answered = False
     try:
         if not repo:
             raise OSError("not a repository root")
@@ -94,6 +98,7 @@ def tracked_files(root, pattern: str = "*.rs", exclude=vendored_p) -> tuple:
         # An index entry whose blob is no longer on disk is not a population
         # member -- it is an open() failure in the caller, counted as a walk.
         rels = [r for r in rels if (root / r).is_file()]
+        answered = True
     except (OSError, subprocess.CalledProcessError):
         rels = []
     # The fallback walk is ONLY for trees with no `.git` at all (its
@@ -103,7 +108,10 @@ def tracked_files(root, pattern: str = "*.rs", exclude=vendored_p) -> tuple:
     # tracks zero `*.py` and the rglob pulled six files out of the
     # gitignored `.deploy/` staging tree into locale_io's population, three
     # of them flagged LOCALE-IO over a state no commit contains.
-    if not rels and not repo:
+    # ⛔ Keying on `not repo` instead (the first Issue 928 repair) silently
+    # emptied every self-test fixture built on `mkdir .git` — the percentile
+    # sweep's SELFTEST red for 13 days, measured 2026-10-22.
+    if not answered:
         for p in root.rglob(pattern):
             parts = p.relative_to(root).parts
             if any(part in SKIP_DIRS for part in parts):
@@ -271,6 +279,18 @@ def selftest() -> list:
               "I': the fixture does not reproduce the hazard — the artifact "
               "must exist on disk for the fallback to have seen it")
 
+        # J — a `.git` git CANNOT read is not an answer: the fallback runs.
+        # Every sweep self-test plants its fixture repo with a bare `mkdir
+        # .git`; keying the fallback on the probe rather than on git having
+        # answered returned an empty population there (percentile sweep
+        # SELFTEST red 2026-10-09 → 2026-10-22). Two-sided with arm I.
+        r = tmp / "j"
+        (r / ".git").mkdir(parents=True)
+        _write(r / "a.rs")
+        got, _ = tracked_files(r)
+        check(_names(r, got) == {"a.rs"},
+              f"J: unreadable `.git` did not fall back — {_names(r, got)}")
+
     return fails
 
 
@@ -281,11 +301,11 @@ def main() -> int:
         for f in fails:
             print("  ✗ " + f)
         return 1
-    print("✓ tracked_walk selftest — 9 arm(s), 13 assertion(s): tracked-vs-untracked "
+    print("✓ tracked_walk selftest — 10 arm(s), 14 assertion(s): tracked-vs-untracked "
           "(both directions), gitignored nested repo, alternate target dir + the "
           "skip-set companion, vendor exclusion + count, no-.git fallback, the "
           "`git -C` walk-up probe, deleted-but-indexed, pattern on both branches, "
-          "empty-tracked-is-not-a-fallback-trigger")
+          "empty-tracked-is-not-a-fallback-trigger, unreadable-.git-falls-back")
     return 0
 
 

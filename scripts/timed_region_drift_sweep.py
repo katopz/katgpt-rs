@@ -245,7 +245,12 @@ def main(argv: list[str]) -> int:
         row = pins.get(name)
         if row is None:
             if not pin_row_exempt(name):
-                print(f"  ✗ {name}: UNPINNED — add a row to {PINS.name}")
+                # The measured numbers ride the refusal (the sibling sweeps'
+                # shape) — a pin needs them, and a bare UNPINNED forced a
+                # second instrument to read them.
+                print(f"  ✗ {name}: UNPINNED — add a row to {PINS.name} "
+                      f"(measured files={sc.files} regions={sc.regions} "
+                      f"READ-unguarded={head_n})")
                 rc = 1
             continue
 

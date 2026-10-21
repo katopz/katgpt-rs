@@ -418,6 +418,13 @@ fn bench_952_g2_latency() {
             lat.push(t0.elapsed().as_secs_f64() * 1e9);
         }
         assert!(iv.point.is_finite(), "{name}: served a non-finite point");
+        // Loud zero (Issue 855): a timed region the optimiser deleted reads
+        // 0 here rather than a flattering latency.
+        assert!(best > 0.0, "{name}: calibrate timed 0 — region elided");
+        assert!(
+            lat.iter().sum::<f64>() > 0.0,
+            "{name}: 10k estimates timed 0 — region elided"
+        );
         lat.sort_unstable_by(f64::total_cmp);
         let p50 = lat[lat.len() / 2];
         // p99 index 9900 of 10 000: tail support 100 samples.
