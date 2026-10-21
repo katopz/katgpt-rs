@@ -984,6 +984,11 @@ separate classes — **DECODE** (`text=True` with no `encoding=`) and
   detector there. First run also found a site outside `scripts/` entirely
   (`.agents/skills/doc-sync/tools/linkcheck_sweep.py`) — the population is
   tracked `*.py`, not `scripts/*.py`.
+- Repair half (DECODE only): `scripts/subprocess_encoding_fix.py [--list]
+  <files>` appends `encoding="utf-8", errors="replace"` (strict would
+  reproduce the reader-thread `None`); it IMPORTS the gate's site predicate
+  and `locale_io_fix.insert_kwarg`. CHILD-ENCODER stays a per-site read
+  (merging into an `env=`). First use 2026-10-22: 36 DECODE over 6 repos.
 
 ## A sweep reads the WORKTREE, so a finding may exist in NO commit — `scripts/worktree_state.py`
 

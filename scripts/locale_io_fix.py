@@ -190,7 +190,16 @@ def _line_starts(raw: bytes) -> list[int]:
 
 def repair(src: str) -> tuple[str, int]:
     """(rewritten source, sites repaired). Idempotent."""
-    calls = sites(src)
+    return insert_kwarg(src, sites(src), b'encoding="utf-8"')
+
+
+def insert_kwarg(src: str, calls, kwarg: bytes) -> tuple[str, int]:
+    """Append `kwarg` (e.g. `b'encoding="utf-8"'`) to each call in `calls`.
+
+    The ONE comma/paren-aware insertion point, shared with
+    `subprocess_encoding_fix.py` — a second copy of this byte arithmetic is
+    a second place for the trailing-comma and own-line-paren cases to go
+    wrong. Returns (rewritten source, calls rewritten)."""
     if not calls:
         return src, 0
     raw = src.encode("utf-8")
@@ -217,7 +226,7 @@ def repair(src: str) -> tuple[str, int]:
         # there is no whitespace, so the common case is unchanged.
         prev = out[j:j + 1]
         lead = b"" if prev == b"(" else (b" " if prev == b"," else b", ")
-        out = out[:j + 1] + lead + b'encoding="utf-8"' + out[j + 1:]
+        out = out[:j + 1] + lead + kwarg + out[j + 1:]
     return out.decode("utf-8"), len(points)
 
 
