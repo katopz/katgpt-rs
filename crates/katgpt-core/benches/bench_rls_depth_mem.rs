@@ -88,12 +88,15 @@ fn sample_interleaved(arms: &mut [&mut dyn FnMut() -> f64], iters_per_arm: usize
     samples
 }
 
-/// Percentile of a sample vector, ns. Index clamped; with 20k samples p50
-/// support = 10k and p99 support = 200 (percentile-index law).
+/// Percentile of a sample vector, ns — nearest rank `ceil(p·n) − 1`; with
+/// 20k samples p50 support = 10k and p99 support = 200 (percentile-index
+/// law: the truncating form lands on the MAX at small n).
 fn percentile_ns(mut samples: Vec<f64>, p: f64) -> f64 {
     samples.sort_by(|a, b| a.total_cmp(b));
     let n = samples.len();
-    let idx = ((n as f64 * p) as usize).min(n - 1);
+    let idx = ((n as f64 * p).ceil() as usize)
+        .saturating_sub(1)
+        .min(n - 1);
     samples[idx]
 }
 
