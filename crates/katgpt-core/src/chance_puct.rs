@@ -67,6 +67,12 @@
 
 use crate::exact_sigmoid;
 
+/// The RNG crate [`ChancePuct::search`] names in its signature, re-exported so
+/// a consumer can construct the `fastrand::Rng` it must pass without taking a
+/// direct `fastrand` dependency of its own (Issue 952: `katgpt-extract`'s
+/// one-dep contract).
+pub use fastrand;
+
 /// A single-player stochastic game, as the chance-node PUCT sees it.
 pub trait ChanceGame: Clone {
     /// A decision edge. Copy so the arena can hold it inline.

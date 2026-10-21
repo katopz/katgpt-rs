@@ -54,6 +54,12 @@ crates/katgpt-core/tests/velocity_field_ensemble_uq_floor.rs
 tests/bench_block_diagonal_goat.rs
 tests/bench_octopus_goat.rs
 
+# "GOAT bench — run in --release with --nocapture (see the module doc)" —
+# Issue 952 T4: a deterministic quality sweep (bet-search arms vs the
+# conformal-naive floor) plus a G2 wall-clock print. The promotion evidence is
+# the recorded Bench 952 run, not the target's exit code.
+crates/katgpt-extract/tests/bench_952_bet_search_goat.rs
+
 # "arena proof over 1000 Bomber games per test — minutes, not seconds; run
 # with --release --ignored" — three asserting arena proofs, correctly kept off
 # the default path by wall-clock cost. This is the row whose green zero started

@@ -40,7 +40,7 @@ katgpt-core = { path = "../katgpt-core", optional = true, default-features = fal
 # G4-gated). `span_pointer` STAYS opt-in pending ONE pre-registered gate:
 # a release-profile G2 run with a quiet-box preflight line (environmentally
 # blocked — box load 14.6 with 8 sibling cargo processes at round-4 time).
-default = ["extraction_estimate"]
+default = ["extraction_estimate", "bet_search"]
 
 # span_pointer (Plan 628 T0.2): candidate-window span scoring — BM25/ngram
 # lexical + hashed-feature embedding similarity + optional alias tables;
@@ -69,6 +69,23 @@ extraction_estimate = [
     "katgpt-core/karc_forecaster",
 ]
 
+# bet_search (Issue 952 T1–T4, DEFAULT-ON 2026-10-22): the calculation
+# brain — authored bet vocabulary (median / kNN{3,5,10} / ratio scaling /
+# recency / two-feature ratio), exhaustive search over bet compositions
+# scored by leave-one-out CRPS on the SELECTION split, a split-conformal
+# interval from the CALIBRATION split, and the floor-relative sigmoid skill
+# gate that demotes to the conformal-naive floor. Promoted on the T4 GOAT
+# bench (Bench 952): the served posture is at or above the floor at every
+# comps size and beats the incumbent EstimateHead on Winkler at every n.
+bet_search = ["extraction_estimate"]
+
+# bet_search_puct (Issue 952 T2): PUCT (katgpt-core chance_puct) over the
+# composition tree. OPT-IN — the demoted loser: at equal distinct-
+# composition budget it found lower selection CRPS but scored WORSE on
+# held-out queries than exhaustive (-1.2% / -0.3% / -0.4% at b=16/64/256,
+# Bench 952); it waits for bet families too large to enumerate.
+bet_search_puct = ["bet_search", "katgpt-core/chance_puct"]
+
 # temper (Plan 628 T0.5, gate half): the calibration/abstention gate —
 # per-field residual pools, sigmoid confidence readout, fused abstain
 # (confidence ∧ distance), null-with-guess emission onto the wire.
@@ -96,6 +113,15 @@ required-features = ["typed_parsers"]
 name = "g5_span_baselines"
 path = "tests/g5_span_baselines.rs"
 required-features = ["span_pointer"]
+
+# Issue 952 T4: the bet-search GOAT bench (both arms #[ignore]'d — run in
+# --release with --nocapture). Without `bet_search` the target compiles to
+# nothing, so the row keeps it out of the default build.
+# Its PUCT arms need `bet_search_puct`.
+[[test]]
+name = "bench_952_bet_search_goat"
+path = "tests/bench_952_bet_search_goat.rs"
+required-features = ["bet_search_puct"]
 
 [dev-dependencies]
 # The G5 harness's pin gate + JSONL reader. Mirrored at the workspace

@@ -11,11 +11,13 @@
 //! | [`span_pointer`] | `span_pointer` | candidate-window span scoring: BM25/ngram lexical + hashed-feature embedding similarity + alias tables; sigmoid normalization; exact byte offsets; zero-alloc `score_into` |
 //! | [`parsers`] | `typed_parsers` | deterministic typed parsers (number/date/time/datetime/duration/list); grammar design translated from Meta Duckling (Apache-2.0) + Microsoft Recognizers-Text (MIT); constraints by construction; `reference_date`-anchored |
 //! | [`estimate`], [`forecast`] | `extraction_estimate` | conformal estimate (cross-sectional kNN conditioner) + forecast (time-series) heads over the Plan-340 substrate; Report-the-Floor harness plumbing |
+//! | [`bet_search`] | `bet_search` (+ `bet_search_puct`) | the calculation brain (Issue 952): authored bet vocabulary + exhaustive (PUCT opt-in) search over bet compositions on the selection split, split-conformal interval from the calibration split, floor-relative sigmoid skill gate (demotes to the conformal-naive floor) |
 //! | [`temper`] | `temper` | the calibration/abstention gate: per-field residual pools, sigmoid confidence, fused abstain, null-with-guess emission |
 //!
 //! Default-on: `extraction_estimate` (G1 floor comparison BEATS the
-//! conformal-naive floor at --release, Plan 628 T0.6); `span_pointer`,
-//! `typed_parsers` and `temper` are opt-in. `--no-default-features` is the
+//! conformal-naive floor at --release, Plan 628 T0.6) and `bet_search`
+//! (Issue 952 T4, Bench 952); `span_pointer`,
+//! `typed_parsers`, `temper` and `bet_search_puct` are opt-in. `--no-default-features` is the
 //! tested flag-OFF posture — it compiles to an empty crate. One dep:
 //! `katgpt-core` (feature-gated, `default-features = false` — this crate
 //! never drags core's default feature tree into a leaf build). Pure std +
@@ -31,6 +33,8 @@
 #[cfg(test)]
 pub(crate) mod alloc_gate;
 
+#[cfg(feature = "bet_search")]
+pub mod bet_search;
 #[cfg(feature = "extraction_estimate")]
 pub mod estimate;
 #[cfg(feature = "extraction_estimate")]

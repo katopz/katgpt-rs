@@ -384,7 +384,7 @@ pub(crate) fn order_guarded(lo: f64, point: f64, hi: f64) -> (f64, f64) {
 /// feature is IGNORED (normalized to 0 on both the stored rows and the
 /// query, so the distance contribution cancels exactly).
 #[inline]
-fn normalize_feature(v: f32, scale: f32) -> f32 {
+pub(crate) fn normalize_feature(v: f32, scale: f32) -> f32 {
     if scale.is_finite() && scale > 0.0 {
         v / scale
     } else {
@@ -394,7 +394,7 @@ fn normalize_feature(v: f32, scale: f32) -> f32 {
 
 /// Pad / sanitize caller-supplied scales to the corpus dimension (missing
 /// dims are ignored features; invalid entries are ignored features).
-fn scales_padded_to_dim(scales: &[f32], dim: usize) -> Vec<f32> {
+pub(crate) fn scales_padded_to_dim(scales: &[f32], dim: usize) -> Vec<f32> {
     let mut out = vec![f32::INFINITY; dim];
     for (i, &s) in scales.iter().take(dim).enumerate() {
         out[i] = if s.is_finite() && s > 0.0 {
@@ -418,7 +418,7 @@ fn scales_padded_to_dim(scales: &[f32], dim: usize) -> Vec<f32> {
 ///   non-empty for `n ≥ 2` (fraction 0 keeps 1 calibration row, fraction 1
 ///   keeps 1 selection row). For `n ≤ 1` everything is calibration (the
 ///   jackknife+ posture serves there; the split is unused).
-fn split_partition(n: usize, calibration_fraction: f32) -> (Vec<usize>, Vec<usize>) {
+pub(crate) fn split_partition(n: usize, calibration_fraction: f32) -> (Vec<usize>, Vec<usize>) {
     if n == 0 {
         return (Vec::new(), Vec::new());
     }
@@ -445,7 +445,7 @@ fn split_partition(n: usize, calibration_fraction: f32) -> (Vec<usize>, Vec<usiz
 
 /// The ⌈(n+1)(1−α)⌉ order-statistic index (1-based), clamped to `[1, n]` —
 /// the conformal quantile convention the jackknife+ interval reads at.
-fn conformal_index(n: usize, alpha: f32) -> usize {
+pub(crate) fn conformal_index(n: usize, alpha: f32) -> usize {
     let raw = ((n as f32 + 1.0) * (1.0 - alpha)).ceil();
     if raw < 1.0 {
         return 1;
@@ -472,7 +472,7 @@ fn conformal_index(n: usize, alpha: f32) -> usize {
 /// first-index tie rule as the selection). The order is pinned so any
 /// wire-visible or quorum-compared answer is bit-identical across replays.
 #[allow(clippy::too_many_arguments)] // one argument per owned scratch/knob — the substrate's own Calibrator::new convention
-fn knn_weighted_mean(
+pub(crate) fn knn_weighted_mean(
     raw_query: &[f32],
     scales: &[f32],
     scratch: &mut [f32],
