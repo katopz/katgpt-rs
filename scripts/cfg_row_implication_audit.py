@@ -74,6 +74,14 @@ implication INVERTS — enabling the feature is what would empty the target. Rea
 the UNRESOLVED count; an audit's unresolved bucket is where findings hide, and
 this family has already paid for treating one as empty.
 
+ONE `any` is decidable and is ruled on: a conjunct `any(..., feature = "x",
+...)` whose plain top-level feature disjunct the ROW already enables holds in
+every profile and on every platform, so it drops out (`any_satisfied_by`).
+`any(debug_assertions, feature = "alloc_tracking")` on a row that names
+`alloc_tracking` is the measured case (2026-10-22: 16 -> 11 UNRESOLVED
+workspace-wide). The same `any` on a row WITHOUT the feature stays UNRESOLVED
+— it is profile-dependent, and that is the Issue-741 class.
+
 A **report, not a gate** (always exit 0) for the reason its siblings are: the
 population spans repos whose owners have not taken this issue. The gateable
 half is the katgpt-rs slice, and it is gateable precisely because it needs no
@@ -240,8 +248,30 @@ def leading_inner_cfgs(path: str) -> list[str] | None:
     return [body]
 
 
-def required_features(pred: str) -> set[str] | None:
+def any_satisfied_by(atom: str, enabled: set[str] | None) -> bool:
+    """Is `atom` an `any(...)` with a plain `feature = "x"` disjunct the ROW
+    already enables? Then the conjunct holds at the row in EVERY profile and
+    on every platform — `any(debug_assertions, feature = "alloc_tracking")`
+    on a row naming `alloc_tracking` is satisfied, not undecidable. Measured
+    2026-10-22: two riir-neuron-db G4 rows of exactly that shape read
+    UNRESOLVED and red the sweep. Only a TOP-LEVEL plain feature disjunct
+    counts — one under a nested `not`/`all` is not reduced."""
+    a = atom.strip()
+    if enabled is None or not (a.startswith("any(") and a.endswith(")")):
+        return False
+    for d in split_conjuncts("all(" + a[4:-1] + ")"):
+        m = FEATURE.fullmatch(d.strip())
+        if m and m.group(1) in enabled:
+            return True
+    return False
+
+
+def required_features(pred: str, enabled: set[str] | None = None) -> set[str] | None:
     """The feature names a predicate REQUIRES, or None if undecidable here.
+
+    `enabled` (the row's resolved feature closure) lets an `any(...)` conjunct
+    that the row already satisfies drop out (see `any_satisfied_by`); without
+    it every `any` stays undecidable, the original behaviour.
 
     An empty set means "decidable, and requires no feature" — a platform- or
     profile-only cfg, which is real and is not the row's fault. That is why the
@@ -250,6 +280,8 @@ def required_features(pred: str) -> set[str] | None:
     """
     needs: set[str] = set()
     for atom in split_conjuncts(pred):
+        if any_satisfied_by(atom, enabled):
+            continue
         names = FEATURE.findall(atom)
         if not names:
             # A platform / profile / test atom. Independent of the feature
@@ -325,8 +357,10 @@ def audit_repo(repo: Path) -> list[Finding]:
             out.append(Finding(row, NO_CFG))
             continue
         needs: set[str] = set()
+        fmap = fmaps[d]
+        enabled = closure(fmap, row.features + default_features(fmap))
         for p in preds:
-            got = required_features(p)
+            got = required_features(p, enabled)
             if got is None:
                 out.append(Finding(row, UNRESOLVED, why=f"#![cfg({p})]"))
                 break
@@ -389,6 +423,24 @@ def selftest() -> None:
         got = rf(pred)
         if got != want:
             fails.append(f"required_features({pred!r}) = {got}, want {want}  [{name}]")
+
+    # ── row-aware any() reduction (2026-10-22, the riir-neuron-db G4 rows) ──
+    row_cases: list[tuple[str, set[str], set[str] | None, str]] = [
+        ('all(feature = "a", any(debug_assertions, feature = "t"))', {"a", "t"}, {"a"},
+         "any() satisfied by an enabled feature drops out"),
+        ('all(feature = "a", any(debug_assertions, feature = "t"))', {"a"}, None,
+         "any() NOT satisfied by the row stays undecidable (profile-dependent)"),
+        ('any(feature = "x", feature = "y")', {"y"}, set(),
+         "a bare any() satisfied by the row requires nothing"),
+        ('all(feature = "a", any(not(feature = "t"), target_os = "macos"))', {"a", "t"}, None,
+         "a feature under not() inside any() is never a satisfying disjunct"),
+        ('all(feature = "a", any(all(feature = "t", test), feature = "u"))', {"a", "t"}, None,
+         "a feature nested in all() inside any() is not reduced"),
+    ]
+    for pred, enabled, want, name in row_cases:
+        got = required_features(pred, enabled)
+        if got != want:
+            fails.append(f"required_features({pred!r}, {enabled}) = {got}, want {want}  [{name}]")
 
     # ── conjunct splitting ──
     if split_conjuncts('all(a, not(b, c), d)') != ["a", "not(b, c)", "d"]:

@@ -187,7 +187,7 @@
 # repo                  min_rows  min_with_cfg  max_empty  max_unresolved
 katgpt-rs                      620           400          0               3
 katgpt-web                       0             0          0               0
-riir-ai                        540           360          0               3
+riir-ai                        540           360          0               1  # 2026-10-22: max_unresolved 3->1 measured - the reducer now drops an any(...) conjunct the row already satisfies by a plain enabled feature (any(debug_assertions, feature = "alloc_tracking") on a row naming alloc_tracking); ceiling lowered in the same change
 riir-auth                        0             0          0               0
 riir-chain                     125            100          0               1
 riir-refine                     39            20          0               0
@@ -200,10 +200,10 @@ riir-kat                         0             0          0               0  # o
 riir-llm                         0             0          0               0  # observed 2026-09-18: joined the workspace 2026-09-18; no required-features rows
 seal-render 0 0 0 0  # observed 2026-10-22: joined the workspace 2026-10-21 (seal-render birth, the editor canvas core carved out of seal-game-editor plan 412); pinned at MEASURED at birth (the riir-reflex 2026-09-21 precedent), re-pin at the first re-measure
 seal-std                         0             0          0               0  # observed 2026-10-09: joined the workspace 2026-10-07; no required-features rows
-riir-mmorpg-examples            22            20          0               1
-riir-neuron-db                  52            42          0               3
+riir-mmorpg-examples            22            20          0               0  # 2026-10-22: max_unresolved 1->0 measured - the reducer now drops an any(...) conjunct the row already satisfies by a plain enabled feature (any(debug_assertions, feature = "alloc_tracking") on a row naming alloc_tracking); ceiling lowered in the same change
+riir-neuron-db                  52            42          0               2  # 2026-10-22: max_unresolved 3->2 measured - the reducer now drops an any(...) conjunct the row already satisfies by a plain enabled feature (any(debug_assertions, feature = "alloc_tracking") on a row naming alloc_tracking); ceiling lowered in the same change
 riir-shader                      0             0          0               0  # observed 2026-09-12: no rows
-riir-train                     400           260          0               4
+riir-train                     400           260          0               3  # 2026-10-22: max_unresolved 4->3 measured - the reducer now drops an any(...) conjunct the row already satisfies by a plain enabled feature (any(debug_assertions, feature = "alloc_tracking") on a row naming alloc_tracking); ceiling lowered in the same change
 riir-viewbridge                  0             0          0               0
 mmorpg-editor                 0             0          0               0
 mmorpg-remaster              1             0          0               0  # 2026-09-16: 3 -> 2 rows. `crates/mmorpg-edge-worker/` was DELETED (d1c2fb7, migrated to mmorpg-remake by owner directive) and took its required-features row with it — a committed, upstream-visible shrink, not a walk going blind. Floored at 1 rather than 2: this repo is now the deprecated one that pulls from the canonical one, so more crates will leave, and a floor that reds on every migration is a floor nobody trusts.
@@ -212,7 +212,7 @@ riir-reflex                       2             2               0               
 riir-reflexer 0 0 0 0  # observed 2026-09-25: born public today (Research 457 P1 registration); md-only, no code yet; no required-features rows
 reflex-site 0 0 0 0  # observed 2026-09-26: joined the contract set today (BOUNDARY.md at reflex-site 89fa39c; findings repaired at 5eb0ae9/466e331/afdacd6 before pinning); no required-features rows
 riir-instinct 0 0 0 0  # observed 2026-09-26: born private today (riir-ai Proposal 047 P1 registration); md-only, no code yet; no required-features rows
-riir-infer                        2             2               0               0 # observed 2026-09-22: joined the workspace 2026-09-22 (riir-ai Issue 998 / reflex Issue 008 carve — Proposal 041 T-B fired)
+riir-infer                        2             2               0               1 # observed 2026-09-22: joined the workspace 2026-09-22 (riir-ai Issue 998 / reflex Issue 008 carve — Proposal 041 T-B fired)  • 2026-10-22: max_unresolved 0->1 = bench_663_t5_single_gemm_isolation (0643575). Hand read, no measurement needed: its all(...) carries any(not(feature = "cuda_backend"), target_os = "macos") AND a top-level target_os = "macos"; on macOS the any() holds by its platform disjunct and the row names the three features, so the target is non-empty there; off macOS it is empty BY DESIGN (Metal). A platform atom inside any() is outside the reducer's model, not a defect
 riir-rethink 4 1 0 0  # observed 2026-10-03: born private today (the moat split, riir-ai Proposal 052 / riir-instinct Plan 008 B3); measured rows=5 with_cfg=2 empty=0 unresolved=0; min_rows 4 = ~80% per the header rule, min_with_cfg 1 = half of measured at n=2 (the reflex row's small-n reasoning)
 riir-refab 0 0 0 0  # observed 2026-10-11: joined the workspace 2026-10-11 (gist-rs/riir-refab birth, the katgpt-rs registration act, owner-delegated); pinned at MEASURED at birth (the riir-reflex 2026-09-21 precedent), re-pin at the first re-measure
 jup-tool 0 0 0 0  # observed 2026-10-16: joined the workspace 2026-10-14 (jup-tool birth, the JUP rescue tooling — Rust bin + CF Worker); pinned at MEASURED at birth (the riir-reflex 2026-09-21 precedent), re-pin at the first re-measure

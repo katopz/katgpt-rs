@@ -56,3 +56,5 @@ katgpt-rs                11       49            0             0
 riir-ai                   4       13            0             0
 riir-chain               15       55            0             0
 riir-neuron-db            9       34            0             0
+riir-dapps                5       28            0             0   # 2026-10-22: joined the population (.proofs since 882fb4e, 2026-10-05); measured 8 .lean / 47 theorems (STRUCTURAL 1, HYPOTHETICAL 46, 0 RESTATEMENT), floors ~60% per the header rule
+riir-refine               0        0            0             0   # 2026-10-22: joined the population by predicate only - .proofs holds a Kani POC (kani_sec_poc, 26a65a48), 0 .lean; zero floors are the truthful measurement, the ceilings still red the day a restatement lands
