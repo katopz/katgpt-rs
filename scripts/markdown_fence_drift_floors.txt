@@ -64,6 +64,7 @@ riir-esp32                   3                 0
 riir-game-sdk               50                 0
 riir-kat                     1                 0
 riir-llm                     3                 0  # observed 2026-09-18: joined the workspace 2026-09-18; 3 .md, 0 unterminated
+seal-render 3 0  # observed 2026-10-22: joined the workspace 2026-10-21 (seal-render birth, the editor canvas core carved out of seal-game-editor plan 412); pinned at MEASURED at birth (the riir-reflex 2026-09-21 precedent), re-pin at the first re-measure
 seal-std                     3                 0  # observed 2026-10-09: joined the workspace 2026-10-07; 3 .md, 0 unterminated
 riir-mmorpg-examples        40                 0
 riir-neuron-db             115                 0

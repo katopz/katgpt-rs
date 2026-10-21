@@ -1312,7 +1312,7 @@ distillation, novelty + GOAT gates, modelless-unblock protocol §3.5):
 > **Repo count:** the **product/distillation set is 7** — `katgpt-rs` (public) +
 > `riir-ai`, `riir-chain`, `riir-neuron-db`, `riir-train`, `riir-game-sdk`,
 > `riir-dapps` (private). That is NOT the repo total: the
-> workspace is **30 repos**, all of which carry a root `BOUNDARY.md`
+> workspace is **31 repos**, all of which carry a root `BOUNDARY.md`
 > (add `riir-mmorpg-examples`, `riir-refine`, `riir-viewbridge`,
 > `riir-auth`, `katgpt-web`, `riir-dao`, `riir-deployer`,
 > `riir-esp32`, `riir-llm`, `mmorpg-editor`, `mmorpg-remake`,
@@ -1326,7 +1326,9 @@ distillation, novelty + GOAT gates, modelless-unblock protocol §3.5):
 > prompt→motion (the kimodo.cpp idea) + retargeting over sge GLBs,
 > zero workspace deps by contract; `jup-tool` — born 2026-10-14, the JUP
 > rescue tooling for the two compromised wallets (Rust binary + CF
-> Worker, hand-rolled Solana wire primitives)).
+> Worker, hand-rolled Solana wire primitives); `seal-render` — born
+> 2026-10-21, the Seal editor's canvas core carved out of seal-game-editor
+> (plan 412 step 1c), no egui dep by its manifest test)).
 >
 > Read a count in prose as a claim, not a fact — and read a count that
 > MATCHES as a claim too: a count is not a checksum over a set. Drift

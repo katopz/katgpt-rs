@@ -35,4 +35,5 @@ riir-rethink
 riir-shader
 riir-train
 riir-viewbridge
+seal-render
 seal-std
