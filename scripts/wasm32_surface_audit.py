@@ -74,6 +74,12 @@ CFG_RE = re.compile(r'target_arch\s*=\s*"wasm32"')
 CFG_ERE = r'target_arch *= *"wasm32"' 
 NEG_RE = re.compile(r'not\s*\(\s*target_arch\s*=\s*"wasm32"')
 COMMENT_RE = re.compile(r"^\s*(//|/\*|\*)")
+# Every wasm32 triple sets `target_arch = "wasm32"`, so a lane building ANY of
+# them compiles the positive arms. The first cut matched only
+# `wasm32-unknown-unknown` and read riir-reflexer's `wasm32-wasip1` worker
+# build (run by its deploy workflow) as no lane at all — reflexer-wasm
+# UNCOVERED, 2026-10-22.
+WASM_TRIPLE_RE = re.compile(r"\bwasm32-[a-z0-9]+(?:-[a-z0-9]+)*\b")
 # `cfg!(` — the RUNTIME branch, matched on the MASKED text (the token survives
 # masking; the value string does not, so the original is read back for it).
 CFG_MACRO_RE = re.compile(r"\bcfg!\s*\(")
@@ -154,8 +160,9 @@ def package_of(repo: Path, rel: str) -> str | None:
         d = d.parent
 
 
-def positive_packages(repo: Path) -> tuple[dict[str, int], list[str], int]:
-    """(package -> gated site count, positive files, files walked, cfg! branches).
+def positive_packages(repo: Path) -> tuple[dict[str, int], list[str], int, int, int]:
+    """(package -> gated site count, positive files, files walked, cfg!
+    branches, SHARED sites).
 
     The walk size is ALL tracked wasm32-mentioning .rs (minus vendored), not
     just the positive ones: the floor's job is to catch a BLIND grep, and a
@@ -170,6 +177,7 @@ def positive_packages(repo: Path) -> tuple[dict[str, int], list[str], int]:
     hits: dict[str, int] = {}
     positive_files: list[str] = []
     runtime = 0
+    shared = 0
     for rel in files:
         try:
             text = (repo / rel).read_text(encoding="utf-8", errors="replace")
@@ -177,17 +185,62 @@ def positive_packages(repo: Path) -> tuple[dict[str, int], list[str], int]:
             continue
         if "wasm32" not in text:
             continue
-        n, rt = positive_sites(text)
+        n, rt, sh = positive_sites(text)
         runtime += rt
+        shared += sh
         if n:
             pkg = package_of(repo, rel) or "(unattributed)"
             hits[pkg] = hits.get(pkg, 0) + n
             positive_files.append(rel)
-    return hits, positive_files, len(files), runtime
+    return hits, positive_files, len(files), runtime, shared
 
 
-def positive_sites(text: str) -> tuple[int, int]:
-    """-> (gated attribute sites, `cfg!` RUNTIME branches). Never pooled.
+def top_level_any_disjuncts(raw: str) -> list[str] | None:
+    """The top-level disjuncts of `cfg(any(...))`, or None when the predicate
+    is not a top-level `any`. Paren-depth split on commas; string literals in
+    a cfg are feature/target names and carry no parens or commas."""
+    m = re.search(r"cfg\s*\(\s*any\s*\(", raw)
+    if not m:
+        return None
+    depth, cur, out = 1, [], []
+    for ch in raw[m.end():]:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                break
+        if ch == "," and depth == 1:
+            out.append("".join(cur))
+            cur = []
+            continue
+        cur.append(ch)
+    out.append("".join(cur))
+    return [d for d in (x.strip() for x in out) if d]
+
+
+def wasm_exclusive(raw: str) -> bool:
+    """Is this positive-wasm32 attribute wasm32-ONLY surface?
+
+    `cfg(any(not(feature = "slice_leak"), target_arch = "wasm32"))` holds on
+    every native default build — the arm is compiled by every native lane, so
+    calling it UNCOVERED is the instrument mistaking a disjunct for the
+    predicate (riir-reflex `harness/runner.rs`, 2026-10-22). A top-level `any`
+    is wasm32-exclusive only when EVERY disjunct carries a positive wasm32
+    term; a disjunct without one is natively satisfiable. Nested `any` inside
+    an `all` stays exclusive when the `all` names wasm32 — only the top level
+    is split, which can under-count SHARED and never invents one."""
+    ds = top_level_any_disjuncts(raw)
+    if ds is None:
+        return True
+    return all(CFG_RE.search(d) and not NEG_RE.search(d) for d in ds)
+
+
+def positive_sites(text: str) -> tuple[int, int, int]:
+    """-> (gated attribute sites, `cfg!` RUNTIME branches, SHARED sites).
+    Never pooled. SHARED is a positive wasm32 term inside a top-level `any`
+    with a natively satisfiable disjunct (see `wasm_exclusive`) — compiled
+    by native lanes, so not surface; reported, never folded.
 
     ⛔ Reads ATTRIBUTES, not lines. A line scan cannot tell a real
     `#[cfg(target_arch = "wasm32")]` from one inside a raw string, and
@@ -221,9 +274,11 @@ def positive_sites(text: str) -> tuple[int, int]:
         # line scan, which over-reports on fixtures and never under-reports.
         lines = text.splitlines()
         return sum(1 for ln in lines if CFG_RE.search(ln)
-                   and not COMMENT_RE.match(ln) and not NEG_RE.search(ln)), 0
-    gated = sum(1 for a in attrs
-                if CFG_RE.search(a.raw) and not NEG_RE.search(a.raw))
+                   and not COMMENT_RE.match(ln) and not NEG_RE.search(ln)), 0, 0
+    pos = [a.raw for a in attrs
+           if CFG_RE.search(a.raw) and not NEG_RE.search(a.raw)]
+    gated = sum(1 for r in pos if wasm_exclusive(r))
+    shared = len(pos) - gated
     # `cfg!` survives masking as the token; only its VALUE string is blanked,
     # so the original text is read back at that offset. A `cfg!` inside a
     # string literal is blanked WHOLE and cannot match here.
@@ -232,7 +287,7 @@ def positive_sites(text: str) -> tuple[int, int]:
         window = text[m.start():m.start() + 120]
         if CFG_RE.search(window) and not NEG_RE.search(window):
             rt += 1
-    return gated, rt
+    return gated, rt, shared
 
 
 def positive_sites_arms() -> list[str]:
@@ -250,43 +305,61 @@ def positive_sites_arms() -> list[str]:
             fails.append(f"    {label}: got {got!r}, want {want!r}")
 
     real = '#[cfg(target_arch = "wasm32")]\nfn f() {}\n'
-    eq("a real attribute is a gated site", positive_sites(real), (1, 0))
+    eq("a real attribute is a gated site", positive_sites(real), (1, 0, 0))
     # The measured false positive. A raw string carrying Rust source is test
     # INPUT for another classifier, not a wasm32 arm.
     fixture = ('fn t() {\n    let src = r#"\n'
                '#[cfg(target_arch = "wasm32")]\nfn inner() {}\n"#;\n}\n')
     eq("⛔ an attribute inside a raw string is NOT a site",
-       positive_sites(fixture), (0, 0))
+       positive_sites(fixture), (0, 0, 0))
     eq("...and an ordinary string literal is not either",
        positive_sites('const S: &str = "#[cfg(target_arch = \\"wasm32\\")]";\n'),
-       (0, 0))
+       (0, 0, 0))
     eq("a real attribute in a file that also has a fixture still counts",
-       positive_sites(real + fixture), (1, 0))
+       positive_sites(real + fixture), (1, 0, 0))
     # `cfg!` is a RUNTIME branch: split out, never pooled into the gated count.
     eq("a cfg! branch is counted apart, not as surface",
        positive_sites('fn f() { if cfg!(target_arch = "wasm32") { g(); } }\n'),
-       (0, 1))
+       (0, 1, 0))
     eq("a cfg! branch inside a raw string is neither",
        positive_sites('fn t() { let s = r#"if cfg!(target_arch = "wasm32") {}"#; }\n'),
-       (0, 0))
+       (0, 0, 0))
     # The NEGATIVE cfg is an ordinary native-only guard; counting it inflates
     # everything (riir-ai .issues/892 T4).
     eq("a not(wasm32) guard is not a positive site",
-       positive_sites('#[cfg(not(target_arch = "wasm32"))]\nfn f() {}\n'), (0, 0))
+       positive_sites('#[cfg(not(target_arch = "wasm32"))]\nfn f() {}\n'), (0, 0, 0))
     eq("a compound positive cfg still counts once",
        positive_sites('#[cfg(all(target_arch = "wasm32", '
-                      'target_feature = "simd128"))]\nfn f() {}\n'), (1, 0))
+                      'target_feature = "simd128"))]\nfn f() {}\n'), (1, 0, 0))
     # A multi-LINE attribute is one site, not one per line — the line scan
     # counted them per line and this is where the two disagree most.
     eq("a multi-line attribute is ONE site",
        positive_sites('#[cfg(all(\n    target_arch = "wasm32",\n'
-                      '    target_feature = "simd128"\n))]\nfn f() {}\n'), (1, 0))
+                      '    target_feature = "simd128"\n))]\nfn f() {}\n'), (1, 0, 0))
     # A comment is not a cfg — the prose recording why a file has NO wasm32
     # arm otherwise makes that file read as browser code.
     eq("a commented attribute is not a site",
-       positive_sites('// #[cfg(target_arch = "wasm32")]\nfn f() {}\n'), (0, 0))
+       positive_sites('// #[cfg(target_arch = "wasm32")]\nfn f() {}\n'), (0, 0, 0))
     eq("an inner attribute counts",
-       positive_sites('#![cfg(target_arch = "wasm32")]\nfn f() {}\n'), (1, 0))
+       positive_sites('#![cfg(target_arch = "wasm32")]\nfn f() {}\n'), (1, 0, 0))
+
+    # SHARED (2026-10-22, riir-reflex): a natively satisfiable disjunct makes
+    # the arm compiled by every native lane — not wasm32 surface.
+    eq("⛔ any(not(feature), wasm32) is SHARED, not surface",
+       positive_sites('#[cfg(any(not(feature = "x"), target_arch = "wasm32"))]\n'
+                      'fn f() {}\n'), (0, 0, 1))
+    eq("any(wasm32-only disjuncts) stays surface",
+       positive_sites('#[cfg(any(all(target_arch = "wasm32", feature = "a"), '
+                      'target_arch = "wasm32"))]\nfn f() {}\n'), (1, 0, 0))
+    eq("all(wasm32, any(a, b)) stays surface — only the top level splits",
+       positive_sites('#[cfg(all(target_arch = "wasm32", any(feature = "a", '
+                      'feature = "b")))]\nfn f() {}\n'), (1, 0, 0))
+    # Lane triple: every wasm32-* triple compiles the positive arm.
+    for ln, want in (("cargo build -p x --target wasm32-wasip1", True),
+                     ("cargo build -p x --target wasm32-unknown-unknown", True),
+                     ("cargo build -p x --target wasm32-unknown-emscripten", True),
+                     ("cargo build -p x --target x86_64-unknown-linux-gnu", False)):
+        eq(f"lane triple {ln.split()[-1]}", bool(WASM_TRIPLE_RE.search(ln)), want)
 
     return fails
 
@@ -334,7 +407,7 @@ def lane_coverage(repo: Path) -> tuple[set[str], int, int, int, int, list[str]]:
                 continue
             file_has_row = False
             for ln in logical_lines(text):
-                if "wasm32-unknown-unknown" not in ln or not CARGO_ROW_RE.search(ln):
+                if not WASM_TRIPLE_RE.search(ln) or not CARGO_ROW_RE.search(ln):
                     continue
                 # A quoted usage string / echo is documentation, not a lane.
                 if re.match(r"\s*(#|//|echo\b|printf\b)", ln):
@@ -634,6 +707,9 @@ class RepoSurface(NamedTuple):
     # reach it and it is not the question this audit asks. Defaulted, so
     # the early-return construction below needs no change.
     runtime: int = 0
+    # SHARED positive sites (a natively satisfiable `any` disjunct — see
+    # `wasm_exclusive`), EXCLUDED from `hits` on the same terms as `runtime`.
+    shared: int = 0
 
     @property
     def reachable(self) -> bool:
@@ -655,10 +731,10 @@ class RepoSurface(NamedTuple):
 
 def classify_repo(repo: Path) -> RepoSurface:
     """Walk + classify one repo. No printing — the caller decides the shape."""
-    hits, positive_files, files_walked, runtime = positive_packages(repo)
+    hits, positive_files, files_walked, runtime, shared = positive_packages(repo)
     if not hits:
         return RepoSurface(files_walked, {}, 0, 0, 0, 0,
-                           set(), set(), set(), [], [])
+                           set(), set(), set(), [], [], runtime, shared)
     named, rows, wildcards, derived, root_only, row_files = lane_coverage(repo)
     row_texts = []
     for rel in row_files:
@@ -684,7 +760,8 @@ def classify_repo(repo: Path) -> RepoSurface:
     graph = dep_graph(repo, manifest_pkg_names(repo))
     bydep, dep_notes = by_dep_cover(graph, seeds, hits)
     return RepoSurface(files_walked, hits, rows, wildcards, derived, root_only,
-                       named, resolved, bydep, res_notes, dep_notes, runtime)
+                       named, resolved, bydep, res_notes, dep_notes, runtime,
+                       shared)
 
 
 def self_test() -> int:
@@ -739,7 +816,7 @@ def self_test() -> int:
              "commit", "-qm", "canary"),
         ):
             subprocess.run(["git", "-C", str(tmp), *args], capture_output=True, encoding="utf-8", errors="replace")
-        hits, positive_files, _, _ = positive_packages(tmp)
+        hits, positive_files, _, _, _ = positive_packages(tmp)
         named, _, wildcards, derived, root_only, row_files = lane_coverage(tmp)
         row_texts = []
         for rel in row_files:
@@ -820,7 +897,9 @@ def main() -> int:
                       f"0 with POSITIVE cfgs (all native-only guards) — nothing "
                       f"to compile"
                       + (f"; {s.runtime} `cfg!` runtime branch(es) EXCLUDED"
-                         if s.runtime else ""))
+                         if s.runtime else "")
+                      + (f"; {s.shared} SHARED any() site(s) EXCLUDED"
+                         if s.shared else ""))
             continue
         tot_pos_pkgs += len(s.hits)
         print(f"  {repo.name}: {s.files_walked} file(s) walked · "
@@ -830,7 +909,9 @@ def main() -> int:
               # Reported, never folded: a `cfg!` branch compiles on EVERY
               # target, so no lane can fail to reach it and it is not surface.
               + (f" · {s.runtime} `cfg!` runtime branch(es) EXCLUDED"
-                 if s.runtime else ""))
+                 if s.runtime else "")
+              + (f" · {s.shared} SHARED any() site(s) EXCLUDED"
+                 if s.shared else ""))
         for pkg, mark in sorted(s.verdicts().items()):
             if mark == "? UNRESOLVED":
                 tot_unres += 1

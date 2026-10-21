@@ -701,7 +701,12 @@ scripts/wasm32_surface_audit.py ../riir-ai # or one, by path
   raw-string fixtures were once a repo's ENTIRE count (the masker is IMPORTED
   from `platform_dead_code_audit`, not re-written).
 - `cfg!(target_arch = "wasm32")` is a RUNTIME branch — split out, never
-  counted as surface, printed as EXCLUDED.
+  counted as surface, printed as EXCLUDED. So is **SHARED**: a positive
+  wasm32 term inside a top-level `any(...)` with a natively satisfiable
+  disjunct (`any(not(feature = "x"), target_arch = "wasm32")` compiles on
+  every native default build). A lane is ANY `wasm32-*` triple — every one
+  sets `target_arch = "wasm32"` (a `wasm32-wasip1` deploy build was once
+  read as no lane at all).
 - Standing: 26 NAMED · 2 BY-DEP · 0 UNRESOLVED · 1 UNCOVERED over 29 packages
   (`mmorpg-poc-submodule` the deliberate negative control). Verdict half:
   `scripts/wasm32_surface_drift_sweep.py` (sharing `classify_repo()`;
