@@ -1369,3 +1369,170 @@ mod multi_layer_tap_tests {
         assert_eq!(unguided.steps_used, guided.steps_used);
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Issue 956 T3 — the κ confidence-budgeted commit arm
+// ═══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_kappa_disarmed_is_byte_identical_to_the_plain_config() {
+    // G3: the disarm fields at their defaults must not perturb the decode —
+    // a config EXPLICITLY carrying κ_eta = 0 decodes bit-identically to the
+    // default config (which carries the same zeros). Both postures share the
+    // RNG draw order by construction; this pins it.
+    let config = Config::micro_dllm();
+    let weights = TransformerWeights::new(&config, &mut Rng::new(42));
+    let plain = D2fDecodeConfig::with_block_size(4);
+    let explicit_off = D2fDecodeConfig {
+        kappa_eta: 0.0,
+        kappa_gamma: 0.0,
+        ..D2fDecodeConfig::with_block_size(4)
+    };
+    let a = d2f_decode_block(
+        &weights,
+        &config,
+        &plain,
+        &NoPruner,
+        &NoScreeningPruner,
+        &mut Rng::new(7),
+    );
+    let b = d2f_decode_block(
+        &weights,
+        &config,
+        &explicit_off,
+        &NoPruner,
+        &NoScreeningPruner,
+        &mut Rng::new(7),
+    );
+    assert_eq!(a.tokens, b.tokens, "disarmed κ must be byte-identical");
+    assert_eq!(a.steps_used, b.steps_used);
+    assert_eq!(a.confidence_history, b.confidence_history);
+}
+
+#[test]
+fn test_kappa_full_remask_commits_nothing() {
+    // κ_eta = 1.0: the commit budget is zero — every pass holds its
+    // proposals and commits none, so the block never unmasks.
+    let config = Config::micro_dllm();
+    let weights = TransformerWeights::new(&config, &mut Rng::new(42));
+    let decode_config = D2fDecodeConfig {
+        kappa_eta: 1.0,
+        kappa_gamma: 4.0,
+        ..D2fDecodeConfig::with_block_size(4)
+    };
+    let r = d2f_decode_block(
+        &weights,
+        &config,
+        &decode_config,
+        &NoPruner,
+        &NoScreeningPruner,
+        &mut Rng::new(11),
+    );
+    assert!(
+        r.tokens.iter().all(|&t| t == config.mask_token),
+        "full-remask budget must commit nothing: {:?}",
+        r.tokens
+    );
+    assert!(
+        r.confidence_history.iter().all(|&c| c == 0.0),
+        "no commits ⟹ zero confidence every pass"
+    );
+}
+
+#[test]
+fn test_kappa_budget_orders_the_commit_count() {
+    // The budget is monotone: a single-pass decode commits more with a
+    // generous commit budget (small κ_eta) than a stingy one — same seed,
+    // same weights, so the only difference is the cut.
+    let config = Config::micro_dllm();
+    let weights = TransformerWeights::new(&config, &mut Rng::new(42));
+    let commits_at = |kappa_eta: f32| {
+        let decode_config = D2fDecodeConfig {
+            denoise_steps: 1,
+            kappa_eta,
+            kappa_gamma: 4.0,
+            ..D2fDecodeConfig::with_block_size(4)
+        };
+        let r = d2f_decode_block(
+            &weights,
+            &config,
+            &decode_config,
+            &NoPruner,
+            &NoScreeningPruner,
+            &mut Rng::new(13),
+        );
+        r.tokens.iter().filter(|&&t| t != config.mask_token).count()
+    };
+    let generous = commits_at(0.25); // commit ~75% of the pool
+    let stingy = commits_at(0.75); // commit ~25%
+    assert!(
+        generous > stingy,
+        "the commit budget must order the counts: generous {generous} vs stingy {stingy}"
+    );
+    // And the counts sit inside the budget's envelope (± the σ tail — one
+    // gap wide at γ = 4).
+    assert!(
+        stingy >= 1,
+        "a 25% commit budget on a 4-position pool admits ≥ 1"
+    );
+}
+
+#[test]
+fn test_kappa_armed_is_deterministic() {
+    let config = Config::micro_dllm();
+    let weights = TransformerWeights::new(&config, &mut Rng::new(42));
+    let decode_config = D2fDecodeConfig {
+        kappa_eta: 0.5,
+        kappa_gamma: 4.0,
+        ..D2fDecodeConfig::with_block_size(4)
+    };
+    let a = d2f_decode_block(
+        &weights,
+        &config,
+        &decode_config,
+        &NoPruner,
+        &NoScreeningPruner,
+        &mut Rng::new(17),
+    );
+    let b = d2f_decode_block(
+        &weights,
+        &config,
+        &decode_config,
+        &NoPruner,
+        &NoScreeningPruner,
+        &mut Rng::new(17),
+    );
+    assert_eq!(a.tokens, b.tokens, "the κ read is the deterministic count");
+    assert_eq!(a.steps_used, b.steps_used);
+}
+
+#[test]
+fn test_kappa_armed_still_unmasks_the_block() {
+    // A moderate budget must decode the block end to end (tokens land,
+    // history length matches) — the arm changes WHO commits per pass, not
+    // whether the loop converges.
+    let config = Config::micro_dllm();
+    let weights = TransformerWeights::new(&config, &mut Rng::new(42));
+    let decode_config = D2fDecodeConfig {
+        denoise_steps: 8,
+        kappa_eta: 0.4,
+        kappa_gamma: 4.0,
+        ..D2fDecodeConfig::with_block_size(4)
+    };
+    let r = d2f_decode_block(
+        &weights,
+        &config,
+        &decode_config,
+        &NoPruner,
+        &NoScreeningPruner,
+        &mut Rng::new(19),
+    );
+    assert_eq!(r.tokens.len(), 4);
+    assert_eq!(r.confidence_history.len(), r.steps_used);
+    assert!(
+        r.tokens.iter().any(|&t| t != config.mask_token),
+        "a 60%-commit budget must land tokens over 8 passes: {:?}",
+        r.tokens
+    );
+    assert!(r.tokens.iter().all(|&t| t < config.vocab_size));
+}

@@ -148,6 +148,26 @@ pub struct D2fDecodeConfig {
     /// feature is on and `eb_gamma ≥ 0`.
     #[cfg(feature = "entropy_bounded_commit")]
     pub eb_max_commit: usize,
+    /// Issue 956 T3(a) — the κ confidence-budgeted commit arm: per pass, the
+    /// visited (still-masked) positions' proposal confidences are cut by a
+    /// σ-soft budget so the COMMIT count hits `(1−κ_eta)·n_pool`, replacing
+    /// the fixed `confidence_threshold` (the paper's re-corruption knob —
+    /// restore-capable candidate evolution). The cut is solved by
+    /// `katgpt_core::sigmoid_budget` (the T2b capped-mean bisection lifted
+    /// to the leaf) with `κ_eta`-preserving mean; the deterministic read is
+    /// the count above the cut — no RNG (the determinism law). **`≤ 0` or
+    /// NaN DISARMS**: the incumbent τ branch runs byte-identical (G3).
+    /// γ=0/NaN (`kappa_gamma`) likewise disarms. The EB pass policy takes
+    /// precedence when both are armed (both are commit-budget mechanisms;
+    /// the EB set is fixed at pass start and the κ budget would double-cut).
+    pub kappa_eta: f32,
+    /// Issue 956 T3(a) — σ steepness for the κ arm in POOL-SPACING units
+    /// (the T2b law: the effective slope is `κ_gamma·n/spread` over the
+    /// pass's confidence pool, so the transition width is one mean
+    /// order-statistic gap at 1.0 — a fixed absolute slope is
+    /// distribution-blind and was measured strangling the drive to zero
+    /// admits). Read only when the κ arm is armed.
+    pub kappa_gamma: f32,
 }
 
 impl Default for D2fDecodeConfig {
@@ -169,6 +189,10 @@ impl Default for D2fDecodeConfig {
             eb_gamma: -1.0,
             #[cfg(feature = "entropy_bounded_commit")]
             eb_max_commit: usize::MAX,
+            // Issue 956 T3(a): κ_eta ≤ 0 = DISARMED — the τ branch runs
+            // byte-identical until a caller arms the budget.
+            kappa_eta: 0.0,
+            kappa_gamma: 0.0,
         }
     }
 }
@@ -710,6 +734,36 @@ fn d2f_decode_block_prompt_q_core(
     let eb_armed = decode_config.eb_gamma >= 0.0;
     #[cfg(feature = "entropy_bounded_commit")]
     let mut eb_scratch = D2fEbScratch::new(block_size);
+    // Issue 956 T3(a): the κ budget arm — armed when κ_eta > 0 (finite,
+    // with a positive κ_gamma) and the EB pass policy is not (EB owns the
+    // commit budget then; the EB set is fixed at pass start and the κ
+    // budget would double-cut). Disarmed, the incumbent τ branch runs
+    // verbatim (G3). The scratch holds one (conf, abs_pos, token) row per
+    // proposal — allocated ONCE per decode, cleared per pass (zero per-pass
+    // allocation).
+    #[cfg(feature = "entropy_bounded_commit")]
+    let kappa_armed = decode_config.kappa_eta > 0.0
+        && decode_config.kappa_eta.is_finite()
+        && decode_config.kappa_gamma > 0.0
+        && decode_config.kappa_gamma.is_finite()
+        && !eb_armed;
+    #[cfg(not(feature = "entropy_bounded_commit"))]
+    let kappa_armed = decode_config.kappa_eta > 0.0
+        && decode_config.kappa_eta.is_finite()
+        && decode_config.kappa_gamma > 0.0
+        && decode_config.kappa_gamma.is_finite();
+    let mut kappa_rows: Vec<(f32, usize, usize)> = if kappa_armed {
+        Vec::with_capacity(denoising_positions)
+    } else {
+        Vec::new()
+    };
+    // The cut-solver reads a plain score slice — reused scratch (zero
+    // per-pass allocation), armed posture only.
+    let mut kappa_confs: Vec<f32> = if kappa_armed {
+        Vec::with_capacity(denoising_positions)
+    } else {
+        Vec::new()
+    };
 
     // Pre-compute schedule-aware multistep ratios from log-SNR (Plan 079 T16).
     // For uniform schedules, all r_i = 1.0 (identical to Plan 078 behavior).
@@ -922,41 +976,117 @@ fn d2f_decode_block_prompt_q_core(
             // Confidence remasking: only keep if confident enough. Issue
             // 917 T2: armed, membership in the pass's EB set IS the decision
             // (fixed at pass start from the same logits); the sampled token
-            // must still not be the mask.
-            #[cfg(feature = "entropy_bounded_commit")]
-            let accept = eb_armed || chosen_prob >= tau_conf;
-            #[cfg(not(feature = "entropy_bounded_commit"))]
-            let accept = chosen_prob >= tau_conf;
-            if accept && chosen_token != mask {
-                tokens[p] = chosen_token;
-                n_confident += 1;
-                // Plan 602 T1.3: record the denoise step at which this
-                // position committed (π). Same timing contract as the q
-                // capture below — commit time is the last moment this
-                // position is visited.
-                if let Some(pi) = pi_out.as_deref_mut() {
-                    let idx = p - block_start;
-                    if idx < pi.len() {
-                        pi[idx] = step as u32;
+            // must still not be the mask. Issue 956 T3(a): κ-armed, the
+            // proposal is HELD (the budget cut needs the whole pass's
+            // confidence pool) and phase C commits the budget's worth.
+            if kappa_armed {
+                kappa_rows.push((chosen_prob, p, chosen_token));
+            } else {
+                #[cfg(feature = "entropy_bounded_commit")]
+                let accept = eb_armed || chosen_prob >= tau_conf;
+                #[cfg(not(feature = "entropy_bounded_commit"))]
+                let accept = chosen_prob >= tau_conf;
+                if accept && chosen_token != mask {
+                    tokens[p] = chosen_token;
+                    n_confident += 1;
+                    // Plan 602 T1.3: record the denoise step at which this
+                    // position committed (π). Same timing contract as the q
+                    // capture below — commit time is the last moment this
+                    // position is visited.
+                    if let Some(pi) = pi_out.as_deref_mut() {
+                        let idx = p - block_start;
+                        if idx < pi.len() {
+                            pi[idx] = step as u32;
+                        }
+                    }
+                    // Capture the draft-time proposal law q for this position
+                    // (Issue 587, ExactQ policy). Must happen at commit time:
+                    // once committed the position is never revisited, so this
+                    // is the last moment the generating distribution is at hand.
+                    if let Some(q) = q_out.as_deref_mut() {
+                        capture_q_row(
+                            q,
+                            p - block_start,
+                            vocab,
+                            mask,
+                            &sample_exp_buf,
+                            chosen_token,
+                            chosen_prob,
+                            decode_config.greedy_draft,
+                        );
                     }
                 }
-                // Capture the draft-time proposal law q for this position
-                // (Issue 587, ExactQ policy). Must happen at commit time:
-                // once committed the position is never revisited, so this
-                // is the last moment the generating distribution is at hand.
-                if let Some(q) = q_out.as_deref_mut() {
-                    capture_q_row(
-                        q,
-                        p - block_start,
-                        vocab,
-                        mask,
-                        &sample_exp_buf,
-                        chosen_token,
-                        chosen_prob,
-                        decode_config.greedy_draft,
-                    );
+            }
+        }
+
+        // Issue 956 T3(a) phase C — the κ budget commit. The pass's
+        // proposals are held in `kappa_rows`; the cut is solved so the
+        // COMMIT count hits `(1−κ_eta)·n_pool` (the expected REMASK fraction
+        // is κ_eta — the paper's re-corruption budget), with the T2b
+        // pool-spacing law for the σ slope. Deterministic read: the count
+        // above the cut — no RNG. The pass's logits are still live in
+        // `dctx.logits_flat` (the next forward has not run), so deferred q
+        // capture recomputes the same exp row the proposal saw.
+        if kappa_armed && !kappa_rows.is_empty() {
+            kappa_rows.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+            let n_pool = kappa_rows.len() as f32;
+            let target = ((1.0 - decode_config.kappa_eta) * n_pool)
+                .floor()
+                .clamp(0.0, n_pool);
+            if target > 0.0 {
+                let (s_max, s_min) = kappa_rows
+                    .iter()
+                    .fold((f32::NEG_INFINITY, f32::INFINITY), |(hi, lo), r| {
+                        (hi.max(r.0), lo.min(r.0))
+                    });
+                let gamma_eff = katgpt_core::sigmoid_budget::pool_spaced_gamma(
+                    decode_config.kappa_gamma,
+                    kappa_rows.len(),
+                    s_max - s_min,
+                );
+                // Confidences copied to the reusable scratch (sorted
+                // descending → the cut is the σ-solved rank position; the
+                // deterministic read takes the prefix).
+                kappa_confs.clear();
+                kappa_confs.extend(kappa_rows.iter().map(|r| r.0));
+                let cut = katgpt_core::sigmoid_budget::sigmoid_cut_for_target(
+                    &kappa_confs,
+                    gamma_eff,
+                    target,
+                );
+                for &(conf, p, tok) in kappa_rows.iter() {
+                    if conf < cut || tok == mask {
+                        continue;
+                    }
+                    tokens[p] = tok;
+                    n_confident += 1;
+                    if let Some(pi) = pi_out.as_deref_mut() {
+                        let idx = p - block_start;
+                        if idx < pi.len() {
+                            pi[idx] = step as u32;
+                        }
+                    }
+                    if let Some(q) = q_out.as_deref_mut() {
+                        // Same logits, same row — the recomputed exp buffer
+                        // is bit-identical to the proposal-time one.
+                        let logits_p = &dctx.logits_flat[p * vocab..(p + 1) * vocab];
+                        let max_logit = simd_max_f32(logits_p);
+                        bulk_exp_shift_into(logits_p, max_logit, &mut sample_exp_buf[..]);
+                        capture_q_row(
+                            q,
+                            p - block_start,
+                            vocab,
+                            mask,
+                            &sample_exp_buf,
+                            tok,
+                            conf,
+                            decode_config.greedy_draft,
+                        );
+                    }
                 }
             }
+            kappa_rows.clear();
+            kappa_confs.clear();
         }
 
         let confidence = n_confident as f32 / block_size as f32;

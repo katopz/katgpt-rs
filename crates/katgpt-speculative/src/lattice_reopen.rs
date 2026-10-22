@@ -212,29 +212,21 @@ fn chain_prefix_of(tree: &[TreeNode], out: &mut Vec<usize>) {
     }
 }
 
-/// T2b capped-mean bisection: the cut `τ` where the pool's expected reopen
-/// count `Σ σ(γ·(sᵢ − τ))` equals `target`. `E` is monotone decreasing in
-/// `τ` with `E(τ_min) ≈ n ≥ target` and `E(τ_max) ≈ 0 ≤ target` (the target
-/// is capped to the pool at the call site), so the root exists; 48 bisection
-/// steps pin `τ` well past f32 resolution. `gamma` must arrive PRE-SCALED
-/// to the pool (`γ·n/spread` — see `ReopenConfig::gamma`): a fixed absolute
-/// slope is distribution-blind and was measured strangling the drive to
-/// zero reopens. Reads the reused `rank` buffer directly (`.0` is the rank
-/// score) — no per-round allocation (G4). Pure arithmetic — deterministic
-/// (no RNG; the propensity read is the count above the cut).
+/// T2b capped-mean bisection — LIFTED to [`katgpt_core::sigmoid_budget`]
+/// (Issue 956 T3's shared leaf; the closure form keeps the call zero-alloc
+/// over the reused rank buffer). `gamma` must arrive PRE-SCALED to the pool
+/// (`γ·n/spread` — see [`ReopenConfig::gamma`]): a fixed absolute slope is
+/// distribution-blind and was measured strangling the drive to zero reopens.
 fn bisect_reopen_cut(rank: &[(f32, usize, usize)], gamma: f32, target: f32) -> f32 {
-    let mut lo = rank.iter().map(|r| r.0).fold(f32::INFINITY, f32::min) - 16.0 / gamma;
-    let mut hi = rank.iter().map(|r| r.0).fold(f32::NEG_INFINITY, f32::max) + 16.0 / gamma;
-    for _ in 0..48 {
-        let mid = 0.5 * (lo + hi);
-        let expected: f32 = rank.iter().map(|r| fast_sigmoid(gamma * (r.0 - mid))).sum();
-        if expected > target {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
-    }
-    0.5 * (lo + hi)
+    let s_max = rank.iter().map(|r| r.0).fold(f32::NEG_INFINITY, f32::max);
+    let s_min = rank.iter().map(|r| r.0).fold(f32::INFINITY, f32::min);
+    katgpt_core::sigmoid_budget::bisect_sigmoid_cut(
+        |tau| rank.iter().map(|r| fast_sigmoid(gamma * (r.0 - tau))).sum(),
+        s_min,
+        s_max,
+        gamma,
+        target,
+    )
 }
 
 /// Elimination-time memory at chain context: for every (depth, token) with

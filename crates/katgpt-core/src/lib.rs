@@ -1784,6 +1784,13 @@ pub mod graph_stable_pool;
 #[cfg(feature = "pool_admission")]
 pub mod pool_admission;
 
+// Sigmoid-cut mean budget (Issue 956 T2b's capped-mean bisection lifted to
+// the leaf): the deterministic σ-cut count read over a scored pool, with the
+// measured pool-spacing normalization. Consumers: katgpt-speculative
+// lattice reopen drive, katgpt-forward d2f κ remask arm. Pure arithmetic —
+// zero deps beyond fast_sigmoid, no feature gate.
+pub mod sigmoid_budget;
+
 #[cfg(feature = "rate_control")]
 pub mod rate_control;
 
