@@ -258,9 +258,13 @@ def counter_fixture(base: Path) -> Path:
     sp.run(["git", "clone", "-q", str(shared), str(a)], check=True,
            capture_output=True)
     (a / ".issues").mkdir()
-    (a / ".issues" / ".highwater").write_text("949\n", encoding="utf-8",
-                                              newline="")
-    (a / "HISTORY.md").write_text("# history\n", encoding="utf-8", newline="")
+    # `write_text(newline=...)` is 3.10+; this gate must run on 3.9 (measured
+    # 2026-10-23: the kwarg crashed the whole gate on the seal1 box) — the
+    # open()-form is behavior-identical (LF preserved, no translation).
+    with open(a / ".issues" / ".highwater", "w", encoding="utf-8", newline="") as f:
+        f.write("949\n")
+    with open(a / "HISTORY.md", "w", encoding="utf-8", newline="") as f:
+        f.write("# history\n")
     run(a, "config", "user.email", "f@f")
     run(a, "config", "user.name", "fixture")
     run(a, "add", "-A")
@@ -273,20 +277,20 @@ def counter_fixture(base: Path) -> Path:
     run(b, "config", "user.email", "f@f")
     run(b, "config", "user.name", "fixture")
     # B: allocate 950 and CLOSE it in the same commit — no file, ever.
-    (b / ".issues" / ".highwater").write_text("950\n", encoding="utf-8",
-                                              newline="")
-    (b / "HISTORY.md").write_text("# history\n\n## Issue 950 — closed\n",
-                                  encoding="utf-8", newline="")
+    with open(b / ".issues" / ".highwater", "w", encoding="utf-8", newline="") as f:
+        f.write("950\n")
+    with open(b / "HISTORY.md", "w", encoding="utf-8", newline="") as f:
+        f.write("# history\n\n## Issue 950 — closed\n")
     run(b, "add", "-A")
     run(b, "commit", "-qm", "B allocates and closes 950")
     sp.run(["git", "-C", str(b), "push", "-q", "origin", "main"], check=True,
            capture_output=True)
 
     # A: allocate the same number, WITH a document.
-    (a / ".issues" / "950_a_side.md").write_text("a\n", encoding="utf-8",
-                                                 newline="")
-    (a / ".issues" / ".highwater").write_text("950\n", encoding="utf-8",
-                                              newline="")
+    with open(a / ".issues" / "950_a_side.md", "w", encoding="utf-8", newline="") as f:
+        f.write("a\n")
+    with open(a / ".issues" / ".highwater", "w", encoding="utf-8", newline="") as f:
+        f.write("950\n")
     run(a, "add", "-A")
     run(a, "commit", "-qm", "A allocates 950 independently")
     sp.run(["git", "-C", str(a), "fetch", "-q", "origin"], check=True,
