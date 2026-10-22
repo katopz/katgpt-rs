@@ -37,7 +37,7 @@ pub use katgpt_core::traits::{
 // Always-available speculative substrate types (no feature gate in katgpt-core).
 pub use katgpt_core::speculative::types::{
     BlockScores, BudgetAdaptation, DecodeStrategy, DraftEvent, DraftResult, FlashPrefillConfig,
-    PrefillMode, RejectionReason, ScoreReduction, SdeConfig, TreeNode,
+    PrefillMode, RejectionReason, ScoreReduction, SdeConfig, TreeNode, TreePath,
 };
 
 // Feature-gated re-exports — MUST mirror katgpt-core's gates.

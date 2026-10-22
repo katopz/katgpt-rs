@@ -20,6 +20,9 @@
 //! is structurally blind to the effect Issue 956 T2 (conflict-triggered
 //! candidate reopening) is buying. Test-only; no production code changes.
 
+#[cfg(feature = "lattice_deduction")]
+use katgpt_rs::speculative::{ScreeningPruner, build_dd_tree_screened};
+
 /// Shared minimal config for DDTree benchmarks (hoisted from the Plan 088
 /// proof so both tests construct it once — the ~90-field literal is
 /// maintenance-hazard enough at one copy).
@@ -771,6 +774,177 @@ fn bench_ldt_phase2_goat_proof() {
     println!("═══════════════════════════════════════════════════════════");
 }
 
+// ── Shared bench fixtures (Issue 956 T1/T2) ─────────────────────────
+
+#[cfg(feature = "lattice_deduction")]
+const N_DEPTHS: usize = 8;
+#[cfg(feature = "lattice_deduction")]
+const VOCAB: usize = 9;
+#[cfg(feature = "lattice_deduction")]
+const N_VALIDATE: u64 = 240;
+#[cfg(feature = "lattice_deduction")]
+const N_EVAL: u64 = 240;
+#[cfg(feature = "lattice_deduction")]
+const BUDGETS: [usize; 2] = [150, 500];
+
+/// Screening relevance = the token's own marginal mass — the LDT
+/// elimination story made LIVE. `screening_threshold` then hard-trims
+/// every candidate whose mass falls below θ (`R ≤ threshold` in the
+/// builder's contract), so baseline θ=0.5 is the aggressive eliminator
+/// and LDT θ=0.111 the conservative one. (The prior draft used
+/// NoScreeningPruner, whose constant R=1.0 never binds any threshold —
+/// both arms were structurally identical; Plan 088 T1's mechanism had
+/// been asserted as a constant, never run binding.)
+#[cfg(feature = "lattice_deduction")]
+struct MassScreener {
+    marginals: Vec<Vec<f32>>,
+}
+
+#[cfg(feature = "lattice_deduction")]
+impl ScreeningPruner for MassScreener {
+    fn relevance(&self, depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> f32 {
+        self.marginals[depth][token_idx]
+    }
+}
+
+#[cfg(feature = "lattice_deduction")]
+struct Instance {
+    solution: Vec<usize>,
+    marginals: Vec<Vec<f32>>,
+    gap_min: f32,
+}
+
+#[cfg(feature = "lattice_deduction")]
+fn gen_instance(seed: u64) -> Instance {
+    let mut rng = fastrand::Rng::with_seed(seed);
+    let mut solution = Vec::with_capacity(N_DEPTHS);
+    let mut marginals = Vec::with_capacity(N_DEPTHS);
+    let mut gaps = Vec::with_capacity(N_DEPTHS);
+    for _ in 0..N_DEPTHS {
+        let sol = rng.usize(..VOCAB);
+        // Difficulty spectrum spans BOTH elimination thresholds: solution
+        // mass ∈ [0.05, 0.60] — below θ_elim (0.111) the LDT arm itself
+        // must eliminate (real hard-instance deaths, T2's headroom),
+        // above θ_base (0.5) even the aggressive arm survives.
+        let s = 0.05 + 0.55 * rng.f32();
+        let v = 0.2 + 0.7 * rng.f32(); // distractors' share ∈ [0.2, 0.9]
+        let mut probs = vec![0.0_f32; VOCAB];
+        probs[sol] = s;
+        // Top distractor takes the lion's share of the residual.
+        let top_d = (sol + 1 + rng.usize(..(VOCAB - 1))) % VOCAB;
+        let residual = 1.0 - s;
+        let top_mass = residual * v;
+        probs[top_d] = top_mass;
+        let rest = residual - top_mass;
+        let n_rest = VOCAB - 2;
+        for (t, p) in probs.iter_mut().enumerate() {
+            if t != sol && t != top_d {
+                *p = rest / n_rest as f32;
+            }
+        }
+        let top_other = probs
+            .iter()
+            .enumerate()
+            .filter(|&(t, _)| t != sol)
+            .map(|(_, &p)| p)
+            .fold(0.0_f32, f32::max);
+        gaps.push(probs[sol] - top_other);
+        solution.push(sol);
+        marginals.push(probs);
+    }
+    Instance {
+        solution,
+        marginals,
+        gap_min: gaps.iter().cloned().fold(f32::INFINITY, f32::min),
+    }
+}
+
+/// Fix the strata edges on the validation split (percentile indexing must
+/// not land on the last element — the A-max class: q < 1 keeps idx ≤ len−2
+/// by construction here).
+#[cfg(feature = "lattice_deduction")]
+fn fix_strata_edges(validate: &[Instance]) -> (f32, f32) {
+    let mut gaps: Vec<f32> = validate.iter().map(|i| i.gap_min).collect();
+    gaps.sort_by(f32::total_cmp);
+    let p = |q: f32| -> f32 {
+        let idx = ((q * (gaps.len() - 1) as f32).round()) as usize;
+        gaps[idx]
+    };
+    let (edge_hard, edge_easy) = (p(1.0 / 3.0), p(2.0 / 3.0));
+    assert!(
+        edge_hard < edge_easy,
+        "validation bin edges must split the spectrum ({edge_hard} !< {edge_easy})"
+    );
+    (edge_hard, edge_easy)
+}
+
+#[cfg(feature = "lattice_deduction")]
+fn stratum_of(inst: &Instance, edge_hard: f32, edge_easy: f32) -> usize {
+    if inst.gap_min < edge_hard {
+        0 // hard
+    } else if inst.gap_min <= edge_easy {
+        1 // mid
+    } else {
+        2 // easy
+    }
+}
+
+/// Presence solve = every planted solution token survives screening at its
+/// depth (the T4 convention; reads existence, not connectivity).
+#[cfg(feature = "lattice_deduction")]
+fn presence_solved(tree: &[katgpt_rs::speculative::types::TreeNode], solution: &[usize]) -> bool {
+    solution
+        .iter()
+        .enumerate()
+        .all(|(d, tok)| tree.iter().any(|n| n.depth == d && n.token_idx == *tok))
+}
+
+/// Connected-chain solve = the planted solution path exists as ONE chain:
+/// depth-0 root through the solution tokens, each node's parent_path the
+/// previous node's. The T2 read (Issue 956 T1's note): reopening restores
+/// candidates under the CHAIN, so presence without connectivity would
+/// overstate the fusion.
+#[cfg(feature = "lattice_deduction")]
+fn connected_chain_solved(
+    tree: &[katgpt_rs::speculative::types::TreeNode],
+    solution: &[usize],
+) -> bool {
+    let mut prefix: Option<katgpt_rs::speculative::types::TreePath> = None;
+    for (d, &tok) in solution.iter().enumerate() {
+        let want = match prefix {
+            None => katgpt_rs::speculative::types::TreePath::root(tok as u32),
+            Some(p) => p.push(tok as u32, d),
+        };
+        match tree
+            .iter()
+            .find(|n| n.depth == d && n.token_idx == tok && n.parent_path == want)
+        {
+            Some(n) => prefix = Some(n.parent_path),
+            None => return false,
+        }
+    }
+    true
+}
+
+/// Solve = the FULL planted solution path survives screening.
+#[cfg(feature = "lattice_deduction")]
+fn solve_rate(inst: &Instance, theta: f32, budget: usize) -> (bool, usize) {
+    let slices: Vec<&[f32]> = inst.marginals.iter().map(|m| m.as_slice()).collect();
+    let mut config = make_config(VOCAB, N_DEPTHS, budget);
+    config.screening_threshold = theta;
+    let screener = MassScreener {
+        marginals: inst.marginals.clone(),
+    };
+    let tree = build_dd_tree_screened(&slices, &config, &screener, true);
+    let hits = inst
+        .solution
+        .iter()
+        .enumerate()
+        .filter(|&(d, tok)| tree.iter().any(|n| n.depth == d && n.token_idx == *tok))
+        .count();
+    (hits == N_DEPTHS, tree.len())
+}
+
 /// Issue 956 T1 — hardness-stratified bench reporting (the T2 precondition).
 ///
 /// The paper's central law (arXiv:2610.28543: restore-capable candidate
@@ -797,100 +971,8 @@ fn bench_ldt_phase2_goat_proof() {
 #[cfg(feature = "lattice_deduction")]
 #[test]
 fn bench_ldt_hardness_stratified_reporting() {
-    use katgpt_rs::speculative::{LDT_THETA_ELIM, ScreeningPruner, build_dd_tree_screened};
+    use katgpt_rs::speculative::LDT_THETA_ELIM;
     use std::time::Instant;
-
-    const N_DEPTHS: usize = 8;
-    const VOCAB: usize = 9;
-    const N_VALIDATE: u64 = 240;
-    const N_EVAL: u64 = 240;
-    const BUDGETS: [usize; 2] = [150, 500];
-
-    /// Screening relevance = the token's own marginal mass — the LDT
-    /// elimination story made LIVE. `screening_threshold` then hard-trims
-    /// every candidate whose mass falls below θ (`R ≤ threshold` in the
-    /// builder's contract), so baseline θ=0.5 is the aggressive eliminator
-    /// and LDT θ=0.111 the conservative one. (The prior draft used
-    /// NoScreeningPruner, whose constant R=1.0 never binds any threshold —
-    /// both arms were structurally identical; Plan 088 T1's mechanism had
-    /// been asserted as a constant, never run binding.)
-    struct MassScreener {
-        marginals: Vec<Vec<f32>>,
-    }
-
-    impl ScreeningPruner for MassScreener {
-        fn relevance(&self, depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> f32 {
-            self.marginals[depth][token_idx]
-        }
-    }
-
-    struct Instance {
-        solution: Vec<usize>,
-        marginals: Vec<Vec<f32>>,
-        gap_min: f32,
-    }
-
-    fn gen_instance(seed: u64) -> Instance {
-        let mut rng = fastrand::Rng::with_seed(seed);
-        let mut solution = Vec::with_capacity(N_DEPTHS);
-        let mut marginals = Vec::with_capacity(N_DEPTHS);
-        let mut gaps = Vec::with_capacity(N_DEPTHS);
-        for _ in 0..N_DEPTHS {
-            let sol = rng.usize(..VOCAB);
-            // Difficulty spectrum spans BOTH elimination thresholds: solution
-            // mass ∈ [0.05, 0.60] — below θ_elim (0.111) the LDT arm itself
-            // must eliminate (real hard-instance deaths, T2's headroom),
-            // above θ_base (0.5) even the aggressive arm survives.
-            let s = 0.05 + 0.55 * rng.f32();
-            let v = 0.2 + 0.7 * rng.f32(); // distractors' share ∈ [0.2, 0.9]
-            let mut probs = vec![0.0_f32; VOCAB];
-            probs[sol] = s;
-            // Top distractor takes the lion's share of the residual.
-            let top_d = (sol + 1 + rng.usize(..(VOCAB - 1))) % VOCAB;
-            let residual = 1.0 - s;
-            let top_mass = residual * v;
-            probs[top_d] = top_mass;
-            let rest = residual - top_mass;
-            let n_rest = VOCAB - 2;
-            for (t, p) in probs.iter_mut().enumerate() {
-                if t != sol && t != top_d {
-                    *p = rest / n_rest as f32;
-                }
-            }
-            let top_other = probs
-                .iter()
-                .enumerate()
-                .filter(|&(t, _)| t != sol)
-                .map(|(_, &p)| p)
-                .fold(0.0_f32, f32::max);
-            gaps.push(probs[sol] - top_other);
-            solution.push(sol);
-            marginals.push(probs);
-        }
-        Instance {
-            solution,
-            marginals,
-            gap_min: gaps.iter().cloned().fold(f32::INFINITY, f32::min),
-        }
-    }
-
-    /// Solve = the FULL planted solution path survives screening.
-    fn solve_rate(inst: &Instance, theta: f32, budget: usize) -> (bool, usize) {
-        let slices: Vec<&[f32]> = inst.marginals.iter().map(|m| m.as_slice()).collect();
-        let mut config = make_config(VOCAB, N_DEPTHS, budget);
-        config.screening_threshold = theta;
-        let screener = MassScreener {
-            marginals: inst.marginals.clone(),
-        };
-        let tree = build_dd_tree_screened(&slices, &config, &screener, true);
-        let hits = inst
-            .solution
-            .iter()
-            .enumerate()
-            .filter(|&(d, tok)| tree.iter().any(|n| n.depth == d && n.token_idx == *tok))
-            .count();
-        (hits == N_DEPTHS, tree.len())
-    }
 
     println!("═══════════════════════════════════════════════════════════");
     println!("  LDT Hardness-Stratified Bench (Issue 956 T1)");
@@ -899,19 +981,7 @@ fn bench_ldt_hardness_stratified_reporting() {
 
     // ── Step 1: validation split fixes the strata edges ──
     let validate: Vec<Instance> = (0..N_VALIDATE).map(gen_instance).collect();
-    let mut gaps: Vec<f32> = validate.iter().map(|i| i.gap_min).collect();
-    gaps.sort_by(f32::total_cmp);
-    let p = |q: f32| -> f32 {
-        let idx = ((q * (gaps.len() - 1) as f32).round()) as usize;
-        gaps[idx]
-    };
-    // Percentile indexing must not land on the last element (the A-max
-    // class): q < 1 keeps idx ≤ len−2 by construction here.
-    let (edge_hard, edge_easy) = (p(1.0 / 3.0), p(2.0 / 3.0));
-    assert!(
-        edge_hard < edge_easy,
-        "validation bin edges must split the spectrum ({edge_hard} !< {edge_easy})"
-    );
+    let (edge_hard, edge_easy) = fix_strata_edges(&validate);
     println!(
         "  validation: {N_VALIDATE} instances, gap_min edges hard<{edge_hard:.4} ≤ mid<={edge_easy:.4}<easy"
     );
@@ -920,14 +990,7 @@ fn bench_ldt_hardness_stratified_reporting() {
     let eval: Vec<Instance> = (1_000_000..1_000_000 + N_EVAL).map(gen_instance).collect();
     let mut strata: [Vec<&Instance>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     for inst in &eval {
-        let s = if inst.gap_min < edge_hard {
-            0 // hard
-        } else if inst.gap_min <= edge_easy {
-            1 // mid
-        } else {
-            2 // easy
-        };
-        strata[s].push(inst);
+        strata[stratum_of(inst, edge_hard, edge_easy)].push(inst);
     }
     const NAMES: [&str; 3] = ["hard", "mid", "easy"];
     for (si, name) in NAMES.iter().enumerate() {
@@ -945,13 +1008,7 @@ fn bench_ldt_hardness_stratified_reporting() {
     // [theta][budget] → per-stratum solve counts (3 strata + pooled)
     let mut solve_counts = vec![vec![[0_usize; 4]; BUDGETS.len()]; thetas.len()];
     for inst in &strata.iter().flatten().collect::<Vec<_>>() {
-        let si = if inst.gap_min < edge_hard {
-            0
-        } else if inst.gap_min <= edge_easy {
-            1
-        } else {
-            2
-        };
+        let si = stratum_of(inst, edge_hard, edge_easy);
         for (ti, (_, theta)) in thetas.iter().enumerate() {
             for (bi, &budget) in BUDGETS.iter().enumerate() {
                 let (solved, _) = solve_rate(inst, *theta, budget);
@@ -967,8 +1024,8 @@ fn bench_ldt_hardness_stratified_reporting() {
     let n_total = eval.len();
     println!();
     println!(
-        "  {:<12} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
-        "arm", "bud", "hard", "mid", "easy", "pooled", "nodes"
+        "  {:<12} {:>9} {:>9} {:>9} {:>9} {:>9}",
+        "arm", "bud", "hard", "mid", "easy", "pooled"
     );
     for (ti, (tname, _)) in thetas.iter().enumerate() {
         for (bi, &budget) in BUDGETS.iter().enumerate() {
@@ -981,14 +1038,13 @@ fn bench_ldt_hardness_stratified_reporting() {
                 }
             };
             println!(
-                "  {:<12} {:>9} {:>8.1}% {:>8.1}% {:>8.1}% {:>8.1}% {:>9}",
+                "  {:<12} {:>9} {:>8.1}% {:>8.1}% {:>8.1}% {:>8.1}%",
                 tname,
                 budget,
                 pct(c[0], strata[0].len()),
                 pct(c[1], strata[1].len()),
                 pct(c[2], strata[2].len()),
                 pct(c[3], n_total),
-                "",
             );
         }
     }
@@ -1054,4 +1110,297 @@ fn bench_ldt_feature_gate_absent() {
     // The types ConflictDetector, EntropyConflictDetector, LdtPruneConfig,
     // AlphaTarget, alpha_intersect should NOT be accessible.
     println!("lattice_deduction feature gate: correctly absent from default build ✓");
+}
+
+/// Issue 956 T2: conflict-triggered targeted candidate reopening — the
+/// fusion bench. Same 480 instances + strata as T1 (shared fixtures), the
+/// LDT θ arm paired against LDT θ + reopen, presence AND connected-chain
+/// reads, plus the T2 gate set:
+/// - G1: stratified solve rates (hard stratum is the deciding read);
+/// - G3: zero-budget byte-identity vs the plain build (spot check);
+/// - loud-zero: the mechanism must demonstrably fire on this distribution;
+/// - termination: rounds ≤ cap, reopens ≤ b × rounds (no oscillation);
+///   determinism replay; every fired round makes tree-visible progress.
+///
+/// G2 (wall ≤ +10%) is MEASURED and printed, never asserted here — the
+/// repo's box-state law: a wall ratio under an unknown load is a
+/// disclosure, not a verdict. Re-pin on a quiet box when promoting.
+#[cfg(feature = "lattice_deduction")]
+#[test]
+fn bench_ldt_conflict_reopen_reporting() {
+    use katgpt_rs::speculative::{
+        ConflictClauseDB, LDT_THETA_ELIM, ReopenConfig, ReopenStats, build_dd_tree_screened,
+        build_dd_tree_screened_reopen,
+    };
+    use std::time::Instant;
+
+    /// b = 4, β = 1 (plain score order), two rounds — the fixed-b T2
+    /// posture; T2b's capped-mean bisection replaces the constant later.
+    fn reopen_cfg() -> ReopenConfig {
+        ReopenConfig {
+            budget_b: 4,
+            beta: 1.0,
+            max_rounds: 2,
+            ..ReopenConfig::default()
+        }
+    }
+
+    /// One reopen-arm solve: presence + connected-chain + stats.
+    fn solve_reopen(
+        inst: &Instance,
+        theta: f32,
+        budget: usize,
+    ) -> (bool, bool, usize, ReopenStats) {
+        let slices: Vec<&[f32]> = inst.marginals.iter().map(|m| m.as_slice()).collect();
+        let mut config = make_config(VOCAB, N_DEPTHS, budget);
+        config.screening_threshold = theta;
+        let screener = MassScreener {
+            marginals: inst.marginals.clone(),
+        };
+        let mut db = ConflictClauseDB::default();
+        let mut stats = ReopenStats::default();
+        let tree = build_dd_tree_screened_reopen(
+            &slices,
+            &config,
+            &screener,
+            true,
+            &reopen_cfg(),
+            &mut db,
+            &mut stats,
+        );
+        (
+            presence_solved(&tree, &inst.solution),
+            connected_chain_solved(&tree, &inst.solution),
+            tree.len(),
+            stats,
+        )
+    }
+
+    println!("═══════════════════════════════════════════════════════════");
+    println!("  LDT Conflict-Reopen Bench (Issue 956 T2)");
+    println!("═══════════════════════════════════════════════════════════");
+    let t0 = Instant::now();
+
+    // ── Same strata as T1 (validation-split edges, disjoint eval) ──
+    let validate: Vec<Instance> = (0..N_VALIDATE).map(gen_instance).collect();
+    let (edge_hard, edge_easy) = fix_strata_edges(&validate);
+    let eval: Vec<Instance> = (1_000_000..1_000_000 + N_EVAL).map(gen_instance).collect();
+    let mut strata: [Vec<&Instance>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+    for inst in &eval {
+        strata[stratum_of(inst, edge_hard, edge_easy)].push(inst);
+    }
+    let n_total = eval.len();
+
+    // [arm][budget] → (presence, chain) solve counts per stratum (3 + pooled)
+    // arm 0 = plain LDT θ, arm 1 = LDT θ + reopen
+    let mut presence = vec![vec![[0_usize; 4]; BUDGETS.len()]; 2];
+    let mut chain = vec![vec![[0_usize; 4]; BUDGETS.len()]; 2];
+    let mut total_stats = ReopenStats::default();
+    let mut fired_instances = 0_usize;
+
+    let plain_wall = Instant::now();
+    for inst in &strata.iter().flatten().collect::<Vec<_>>() {
+        let si = stratum_of(inst, edge_hard, edge_easy);
+        for (bi, &budget) in BUDGETS.iter().enumerate() {
+            let (p_plain, _) = solve_rate(inst, LDT_THETA_ELIM, budget);
+            if p_plain {
+                presence[0][bi][si] += 1;
+                presence[0][bi][3] += 1;
+            }
+            let (p_re, c_re, _, stats) = solve_reopen(inst, LDT_THETA_ELIM, budget);
+            if p_re {
+                presence[1][bi][si] += 1;
+                presence[1][bi][3] += 1;
+            }
+            if c_re {
+                chain[1][bi][si] += 1;
+                chain[1][bi][3] += 1;
+            }
+            if stats.rounds > 0 {
+                fired_instances += 1;
+            }
+            total_stats.conflicts_fired += stats.conflicts_fired;
+            total_stats.reopens_applied += stats.reopens_applied;
+            total_stats.no_cycle_blocked += stats.no_cycle_blocked;
+            total_stats.rounds += stats.rounds;
+        }
+    }
+    let paired_wall = plain_wall.elapsed();
+
+    // ── Report: presence AND chain, stratified (the T1 law) ──
+    let pct = |n: usize| n as f64 / n_total as f64 * 100.0;
+    let pct_stratum = |n: usize, si: usize| n as f64 / strata[si].len() as f64 * 100.0;
+    let arms = [("LDT θ=0.111", 0), ("LDT+reopen b=4", 1)];
+    println!();
+    println!(
+        "  {:<15} {:>5} | {:>7} {:>7} {:>7} {:>7} | {:>7} {:>7} {:>7} {:>7}",
+        "arm", "bud", "p-hard", "p-mid", "p-easy", "p-pool", "c-hard", "c-mid", "c-easy", "c-pool"
+    );
+    for (name, ai) in arms {
+        for (bi, &budget) in BUDGETS.iter().enumerate() {
+            let (p, c) = (&presence[ai][bi], &chain[ai][bi]);
+            println!(
+                "  {:<15} {:>5} | {:>6.1}% {:>6.1}% {:>6.1}% {:>6.1}% | {:>6.1}% {:>6.1}% {:>6.1}% {:>6.1}%",
+                name,
+                budget,
+                pct_stratum(p[0], 0),
+                pct_stratum(p[1], 1),
+                pct_stratum(p[2], 2),
+                pct(p[3]),
+                pct_stratum(c[0], 0),
+                pct_stratum(c[1], 1),
+                pct_stratum(c[2], 2),
+                pct(c[3]),
+            );
+        }
+    }
+    println!();
+    println!(
+        "  reopen stats ({} solves): conflicts {} ({:.2}/solve) · reopens {} ({:.2}/solve) · no-cycle blocked {} · rounds {} ({:.2}/solve, cap {}) · fired {}/{} solves",
+        n_total * BUDGETS.len(),
+        total_stats.conflicts_fired,
+        total_stats.conflicts_fired as f64 / (n_total * BUDGETS.len()) as f64,
+        total_stats.reopens_applied,
+        total_stats.reopens_applied as f64 / (n_total * BUDGETS.len()) as f64,
+        total_stats.no_cycle_blocked,
+        total_stats.rounds,
+        total_stats.rounds as f64 / (n_total * BUDGETS.len()) as f64,
+        reopen_cfg().max_rounds,
+        fired_instances,
+        n_total * BUDGETS.len(),
+    );
+
+    // ── G2 disclosure (measured, never asserted under unknown load) ──
+    // The reopen arm pays: the elimination replay (V×D relevance calls at
+    // chain context) + a full re-propagation per applied round.
+    let t_reopen_only = {
+        let t = Instant::now();
+        for inst in &strata.iter().flatten().collect::<Vec<_>>() {
+            for &budget in BUDGETS.iter() {
+                let _ = solve_reopen(inst, LDT_THETA_ELIM, budget);
+            }
+        }
+        t.elapsed()
+    };
+    let t_plain_only = {
+        let t = Instant::now();
+        for inst in &strata.iter().flatten().collect::<Vec<_>>() {
+            for &budget in BUDGETS.iter() {
+                let _ = solve_rate(inst, LDT_THETA_ELIM, budget);
+            }
+        }
+        t.elapsed()
+    };
+    let ratio = t_reopen_only.as_secs_f64() / t_plain_only.as_secs_f64().max(1e-9);
+    println!(
+        "  G2 wall ratio (reopen/plain): {:.2}× [reopen {:.1?} vs plain {:.1?}] — disclosure; re-pin on a quiet box",
+        ratio, t_reopen_only, t_plain_only
+    );
+    let _ = paired_wall; // (the paired loop's wall is subsumed by the ratio read)
+
+    // ── Structural gates ──
+    // (a) G3: zero-budget byte-identity, 40-instance spot check.
+    for seed in (1_000_000..1_000_040).step_by(1) {
+        let inst = gen_instance(seed);
+        let slices: Vec<&[f32]> = inst.marginals.iter().map(|m| m.as_slice()).collect();
+        let mut config = make_config(VOCAB, N_DEPTHS, BUDGETS[1]);
+        config.screening_threshold = LDT_THETA_ELIM;
+        let screener = MassScreener {
+            marginals: inst.marginals.clone(),
+        };
+        let plain = build_dd_tree_screened(&slices, &config, &screener, true);
+        let mut db = ConflictClauseDB::default();
+        let mut stats = ReopenStats::default();
+        let reopened = build_dd_tree_screened_reopen(
+            &slices,
+            &config,
+            &screener,
+            true,
+            &ReopenConfig::default(),
+            &mut db,
+            &mut stats,
+        );
+        assert_eq!(plain.len(), reopened.len(), "G3 seed {seed}: node count");
+        for (a, b) in plain.iter().zip(reopened.iter()) {
+            assert!(
+                a.depth == b.depth
+                    && a.token_idx == b.token_idx
+                    && a.score.to_bits() == b.score.to_bits()
+                    && a.parent_path == b.parent_path,
+                "G3 seed {seed}: node identity diverged"
+            );
+        }
+        assert_eq!(
+            stats,
+            ReopenStats::default(),
+            "G3 seed {seed}: machinery ran"
+        );
+    }
+
+    // (b) Loud-zero: the mechanism demonstrably fires on THIS distribution.
+    //     A green zero here means the trigger is dead, not that reopening
+    //     is safe — the repo's loud-zero law.
+    assert!(
+        total_stats.conflicts_fired > 0,
+        "conflict trigger never fired — the arm is a green zero"
+    );
+    assert!(
+        total_stats.reopens_applied > 0,
+        "no reopen ever applied — the arm is a green zero"
+    );
+    let hard_reopened = {
+        let mut n = 0_usize;
+        for inst in &strata[0] {
+            let (_, _, _, stats) = solve_reopen(inst, LDT_THETA_ELIM, BUDGETS[1]);
+            n += stats.reopens_applied;
+        }
+        n
+    };
+    assert!(
+        hard_reopened > 0,
+        "the hard stratum (T2's deciding read) saw zero reopens"
+    );
+
+    // (c) Termination + per-node caps, per instance (the FSM law).
+    for seed in 1_000_000..1_000_020 {
+        let inst = gen_instance(seed);
+        let (_, _, _, stats) = solve_reopen(&inst, LDT_THETA_ELIM, BUDGETS[1]);
+        assert!(
+            stats.rounds <= reopen_cfg().max_rounds,
+            "seed {seed}: round cap violated ({} > {})",
+            stats.rounds,
+            reopen_cfg().max_rounds
+        );
+        assert!(
+            stats.reopens_applied <= reopen_cfg().budget_b * stats.rounds.max(1),
+            "seed {seed}: per-round reopen cap violated"
+        );
+        assert!(
+            stats.rounds == 0 || stats.reopens_applied > 0,
+            "seed {seed}: an applied round restored nothing (progress law)"
+        );
+    }
+
+    // (d) Determinism: full replay reproduces tree + stats exactly.
+    for seed in 1_000_000..1_000_010 {
+        let inst = gen_instance(seed);
+        let (p1, c1, n1, s1) = solve_reopen(&inst, LDT_THETA_ELIM, BUDGETS[1]);
+        let (p2, c2, n2, s2) = solve_reopen(&inst, LDT_THETA_ELIM, BUDGETS[1]);
+        assert_eq!((p1, c1, n1), (p2, c2, n2), "seed {seed}: replay diverged");
+        assert_eq!(s1, s2, "seed {seed}: stats diverged");
+    }
+
+    // (e) Progress on the deciding read (print, never assert — the G1
+    //     direction is an empirical outcome, recorded in the issue).
+    let re_hard = pct_stratum(presence[1][1][0], 0);
+    let pl_hard = pct_stratum(presence[0][1][0], 0);
+    let re_chain_hard = pct_stratum(chain[1][1][0], 0);
+    println!();
+    println!(
+        "  G1 hard-stratum read (budget {}): presence {pl_hard:.1}% → {re_hard:.1}% (Δ {:+.1} pts) · chain {:.1}%",
+        BUDGETS[1],
+        re_hard - pl_hard,
+        re_chain_hard,
+    );
+    println!("  wall: {:.1}s", t0.elapsed().as_secs_f32());
 }

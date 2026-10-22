@@ -379,6 +379,15 @@ impl ConflictClauseDB {
     pub fn clear(&mut self) {
         self.clauses.clear();
     }
+
+    /// Depths named by any live clause (Issue 956 T2: clause-implicated
+    /// positions). May repeat when several clauses name one depth — dedup
+    /// at the use site.
+    pub fn implicated_positions(&self) -> impl Iterator<Item = usize> + '_ {
+        self.clauses
+            .iter()
+            .flat_map(|c| c.commitments.iter().map(|&(depth, _)| depth))
+    }
 }
 
 #[cfg(test)]

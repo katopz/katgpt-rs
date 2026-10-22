@@ -178,6 +178,13 @@ pub mod fold;
 #[cfg(feature = "lattice_deduction")]
 pub mod alpha;
 
+// LDT conflict-triggered targeted candidate reopening (Issue 956 T2).
+// Composes the leaf's own `alpha::ConflictClauseDB` + katgpt-core's
+// `EntropyConflictDetector` over the shared screened builder. Default-off
+// (`ReopenConfig::default()` is the byte-identical plain build).
+#[cfg(feature = "lattice_deduction")]
+pub mod lattice_reopen;
+
 // Compression-adaptive decode budget (Plan 167). Always-on in root; mirrors
 // that here. Uses katgpt_core::speculative::types::BudgetAdaptation.
 pub mod budget;

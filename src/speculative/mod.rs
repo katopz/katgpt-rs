@@ -200,6 +200,10 @@ pub use alpha::{
     AlphaScreeningPruner, AlphaTarget, ConflictClauseDB, alpha_intersect, is_consistent,
 };
 #[cfg(feature = "lattice_deduction")]
+pub use katgpt_speculative::lattice_reopen::{
+    EliminationRecord, ReopenConfig, ReopenStats, build_dd_tree_screened_reopen,
+};
+#[cfg(feature = "lattice_deduction")]
 pub use types::{ConflictDetector, EntropyConflictDetector, LDT_THETA_ELIM, LdtPruneConfig};
 
 // ── SimpleTES re-exports (Plan 086, feature: tes_loop) ────────
