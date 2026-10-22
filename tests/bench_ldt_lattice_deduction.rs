@@ -19,6 +19,12 @@
 //! — the paper's central law is stratum-conditional, and a pooled-mean bench
 //! is structurally blind to the effect Issue 956 T2 (conflict-triggered
 //! candidate reopening) is buying. Test-only; no production code changes.
+//!
+//! Issue 956 T4 adds `bench_ldt_flip_vs_resample_probe`: the paper's
+//! move-class question priced on THIS fixture — single-bit flip moves
+//! (closed-form kernel-ratio rates from μ, O(L·V), zero extra forwards)
+//! vs ancestral resample moves, from symmetric-kernel-corrupted candidate
+//! sets, paired and stratified. Probe-only: reads print, nothing promotes.
 
 #[cfg(feature = "lattice_deduction")]
 use katgpt_rs::speculative::{ScreeningPruner, build_dd_tree_screened};
@@ -1213,7 +1219,7 @@ fn bench_ldt_conflict_reopen_reporting() {
     let mut chain = vec![vec![[0_usize; 4]; BUDGETS.len()]; 3];
     // Per-arm/per-budget reopen totals (the T2b anti-thrash read splits by
     // budget — the drive's contract is about the TIGHT cell).
-    let mut reopen_totals = vec![[0_usize; BUDGETS.len()]; 2];
+    let mut reopen_totals = [[0_usize; BUDGETS.len()]; 2];
     let mut total_stats = [ReopenStats::default(); 2];
     let mut fired_instances = [0_usize; 2];
 
@@ -1480,5 +1486,604 @@ fn bench_ldt_conflict_reopen_reporting() {
             re_hard_tight - pl_hard_tight,
         );
     }
+    println!("  wall: {:.1}s", t0.elapsed().as_secs_f32());
+}
+
+// ── Issue 956 T4: flip-move vs resample-move pricing probe ─────────
+//
+// The paper's (arXiv:2610.28543) sampler mechanics priced on the SAME
+// fixture spectrum as T1/T2. The binary-symmetric candidate-set kernel
+// q_{t|0}(z|c) = (1−t/2)^{V−d_H}·(t/2)^{d_H} makes every reverse jump a
+// SINGLE-BIT flip, and all L·V flip rates price in one closed-form sweep
+// from the already-computed per-position marginal μ (the denoiser proxy)
+// via the kernel ratios — zero extra forwards:
+//
+//   flipping bit u changes the Hamming distance to the clean one-hot by
+//   ±1, so the likelihood ratio is A = (1−t/2)/(t/2) when the flip moves
+//   TOWARD clean and B = 1/A when away; Bayes over the clean token gives
+//
+//     r_add(u ∉ z) ∝ π_u·A + (1−π_u)·B        (restore a candidate)
+//     r_rem(u ∈ z) ∝ π_u·B + (1−π_u)·A        (retire a candidate)
+//
+//   q(z) is constant within one state's flip ranking, so the within-state
+//   jump law is exact; across states the chain carries a time rescaling
+//   (immaterial — the probe counts moves, not wall time).
+//
+// The probe question: at equal PASS count (one pass = one flip for the
+// flip arms; one full redraw for the resample arm — both cost one
+// O(L·V) sweep), which move class more often ends with the planted
+// solution retained in EVERY position's candidate set? The resample arm
+// is the paper's ancestral move (c̃ ~ μ per depth, bridge bits at t) —
+// MEMORYLESS: it discards the accumulated state every pass. The flip
+// arms are parsimonious: one targeted bit each, evidence-preserving.
+//
+// ⚠ The factorized-μ caveat, named up front: the fixture's μ is a fixed
+// per-depth product — the state carries no information beyond μ, so both
+// arms target the same posterior and MUST agree in the K→∞ limit. The
+// discriminating read is the finite-K path: whether flip-parsimony
+// preserves the corrupted state's solution bits that instant
+// re-randomization discards — the finite-budget posture the lattice's
+// downstream verification actually runs at.
+//
+// Measured consequence of the proxy (2026-10-23, in the table below): the
+// fixed μ starves the flip chain's ADD side — every present bit's removal
+// rate carries the (1−π)·A term (A = 5.67 at t=0.3), so greedy runs to
+// near-EMPTY sets by K=16 (mean|S| 0.45) and the win dies with them. A
+// production flip lane therefore needs BOTH (a) set-conditioned scoring
+// (the lattice's screener replay at chain context — T2's machinery — in
+// place of fixed μ) and (b) a set-size floor / reopen-budget law (T2b's
+// η·headroom drive is exactly that shape). Neither exists in this probe —
+// deliberately: T4 prices the MOVE CLASS, not the production lane.
+
+/// Kernel noise levels (t = 2·p, so p = t/2 is the per-bit flip
+/// probability of the symmetric channel).
+#[cfg(feature = "lattice_deduction")]
+const PROBE_T_LEVELS: [f32; 2] = [0.3, 0.6];
+
+/// Pass checkpoints the win rate reads at.
+#[cfg(feature = "lattice_deduction")]
+const PROBE_PASS_MARKS: [usize; 3] = [1, 4, 16];
+
+#[cfg(feature = "lattice_deduction")]
+const PROBE_ARMS: usize = 4;
+
+#[cfg(feature = "lattice_deduction")]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ProbeFlipMode {
+    /// Paper-faithful jump law: one flip drawn ∝ its rate (seeded —
+    /// deterministic replay).
+    Sampled,
+    /// Deterministic read: apply the max-rate flip (ties → first in the
+    /// fixed (depth, token, add-before-rem) scan order). The
+    /// production-cheap posture — no RNG on the hot path.
+    Greedy,
+}
+
+#[cfg(feature = "lattice_deduction")]
+struct ProbeRun {
+    state: Vec<Vec<bool>>,
+    flips_applied: usize,
+    /// Solution present at every depth, read at each [`PROBE_PASS_MARKS`]
+    /// checkpoint of the ONE cumulative run.
+    wins_at: [bool; PROBE_PASS_MARKS.len()],
+}
+
+/// The paired corrupted state: clean singleton per depth, symmetric-kernel
+/// corrupted at t (solution bit present w.p. 1−t/2, every other bit
+/// w.p. t/2). Same (seed, t) → the SAME init for every arm.
+#[cfg(feature = "lattice_deduction")]
+fn probe_corrupt_state(inst: &Instance, t: f32, rng: &mut fastrand::Rng) -> Vec<Vec<bool>> {
+    let p = t * 0.5;
+    inst.marginals
+        .iter()
+        .enumerate()
+        .map(|(d, _)| {
+            (0..VOCAB)
+                .map(|u| {
+                    if u == inst.solution[d] {
+                        rng.f32() >= p
+                    } else {
+                        rng.f32() < p
+                    }
+                })
+                .collect::<Vec<bool>>()
+        })
+        .collect()
+}
+
+/// The T4 headline: every single-bit flip's reverse rate in one O(L·V)
+/// closed-form sweep from the already-computed μ — zero extra forwards.
+/// Writes the live side of each table, zeroes the dead side (an absent
+/// bit has no remove rate; a present bit has no add rate).
+#[cfg(feature = "lattice_deduction")]
+fn probe_price_flips(
+    state: &[Vec<bool>],
+    mu: &[Vec<f32>],
+    t: f32,
+    add: &mut [Vec<f32>],
+    rem: &mut [Vec<f32>],
+) {
+    assert!(
+        (0.0..1.0).contains(&t),
+        "kernel noise t must be in (0,1), got {t}"
+    );
+    let half = t * 0.5;
+    let toward = (1.0 - half) / half; // A: flip moves d_H down
+    let away = 1.0 / toward; // B: flip moves d_H up
+    for (d, row) in state.iter().enumerate() {
+        for (u, &present) in row.iter().enumerate() {
+            let pi = mu[d][u];
+            if present {
+                add[d][u] = 0.0;
+                rem[d][u] = pi * away + (1.0 - pi) * toward;
+            } else {
+                rem[d][u] = 0.0;
+                add[d][u] = pi * toward + (1.0 - pi) * away;
+            }
+        }
+    }
+}
+
+/// Max-rate flip over the priced tables (the Greedy pick and the
+/// sampled arm's 1-ULP fallback). Live rates are strictly positive on
+/// this fixture (every μ mass > 0), so the scan always finds one.
+#[cfg(feature = "lattice_deduction")]
+fn probe_greedy_pick(add: &[Vec<f32>], rem: &[Vec<f32>]) -> (usize, usize, bool) {
+    let mut best = (0_usize, 0_usize, true);
+    let mut best_rate = 0.0_f32;
+    for dd in 0..N_DEPTHS {
+        for uu in 0..VOCAB {
+            if add[dd][uu] > best_rate {
+                best_rate = add[dd][uu];
+                best = (dd, uu, true);
+            }
+            if rem[dd][uu] > best_rate {
+                best_rate = rem[dd][uu];
+                best = (dd, uu, false);
+            }
+        }
+    }
+    best
+}
+
+#[cfg(feature = "lattice_deduction")]
+fn probe_win(state: &[Vec<bool>], solution: &[usize]) -> bool {
+    solution.iter().enumerate().all(|(d, &tok)| state[d][tok])
+}
+
+#[cfg(feature = "lattice_deduction")]
+fn probe_set_size(state: &[Vec<bool>]) -> usize {
+    state
+        .iter()
+        .map(|row| row.iter().filter(|&&b| b).count())
+        .sum()
+}
+
+/// Deterministic per-(instance, t, arm) rng seed. Arm 0xFF is the SHARED
+/// init stream — the paired design's premise.
+#[cfg(feature = "lattice_deduction")]
+fn probe_seed(base: u64, ti: usize, arm: u64) -> u64 {
+    base ^ 0x9E37_79B9_7F4A_7C15u64.rotate_left(((ti as u64 * 8 + arm) & 63) as u32)
+}
+
+/// One flip-arm run: `passes` single-bit flips under the paper's jump
+/// law, each priced by [`probe_price_flips`]; win snapshots at the pass
+/// marks of the same cumulative run.
+#[cfg(feature = "lattice_deduction")]
+fn probe_run_flip(
+    init: Vec<Vec<bool>>,
+    mu: &[Vec<f32>],
+    solution: &[usize],
+    t: f32,
+    passes: usize,
+    mode: ProbeFlipMode,
+    rng: &mut fastrand::Rng,
+) -> ProbeRun {
+    let mut state = init;
+    let mut add = vec![vec![0.0_f32; VOCAB]; N_DEPTHS];
+    let mut rem = vec![vec![0.0_f32; VOCAB]; N_DEPTHS];
+    let mut wins_at = [false; PROBE_PASS_MARKS.len()];
+    for pass in 0..passes {
+        probe_price_flips(&state, mu, t, &mut add, &mut rem);
+        let (d, u, to_add) = match mode {
+            ProbeFlipMode::Greedy => probe_greedy_pick(&add, &rem),
+            ProbeFlipMode::Sampled => {
+                let total: f32 = add
+                    .iter()
+                    .chain(rem.iter())
+                    .map(|row| row.iter().sum::<f32>())
+                    .sum();
+                let mut pick = rng.f32() * total;
+                let mut chosen: Option<(usize, usize, bool)> = None;
+                'scan: for (to_add, table) in [(true, &add), (false, &rem)] {
+                    for (dd, row) in table.iter().enumerate() {
+                        for (uu, &rate) in row.iter().enumerate() {
+                            pick -= rate;
+                            if pick <= 0.0 {
+                                chosen = Some((dd, uu, to_add));
+                                break 'scan;
+                            }
+                        }
+                    }
+                }
+                // 1-ULP cumulative-sum edge (pick grazes `total`): the
+                // max-rate flip is the deterministic fallback.
+                chosen.unwrap_or_else(|| probe_greedy_pick(&add, &rem))
+            }
+        };
+        state[d][u] = to_add;
+        for (mi, &m) in PROBE_PASS_MARKS.iter().enumerate() {
+            if pass + 1 == m {
+                wins_at[mi] = probe_win(&state, solution);
+            }
+        }
+    }
+    ProbeRun {
+        state,
+        flips_applied: passes,
+        wins_at,
+    }
+}
+
+/// One resample-arm run: `passes` ancestral moves — per depth draw the
+/// clean proposal c̃ ~ μ, then bridge every membership bit at t. The init
+/// is deliberately NOT consumed: memorylessness is the mechanism being
+/// priced against.
+#[cfg(feature = "lattice_deduction")]
+fn probe_run_resample(
+    mu: &[Vec<f32>],
+    solution: &[usize],
+    t: f32,
+    passes: usize,
+    rng: &mut fastrand::Rng,
+) -> ProbeRun {
+    let p = t * 0.5;
+    let mut state = vec![vec![false; VOCAB]; N_DEPTHS];
+    let mut wins_at = [false; PROBE_PASS_MARKS.len()];
+    for pass in 0..passes {
+        for (d, dist) in mu.iter().enumerate() {
+            let mut pick = rng.f32();
+            let mut c = VOCAB - 1;
+            for (u, &pi) in dist.iter().enumerate() {
+                pick -= pi;
+                if pick <= 0.0 {
+                    c = u;
+                    break;
+                }
+            }
+            for (u, slot) in state[d].iter_mut().enumerate() {
+                *slot = if u == c {
+                    rng.f32() >= p
+                } else {
+                    rng.f32() < p
+                };
+            }
+        }
+        for (mi, &m) in PROBE_PASS_MARKS.iter().enumerate() {
+            if pass + 1 == m {
+                wins_at[mi] = probe_win(&state, solution);
+            }
+        }
+    }
+    ProbeRun {
+        state,
+        flips_applied: 0,
+        wins_at,
+    }
+}
+
+/// Issue 956 T4 — flip-move vs resample-move pricing probe (probe-first,
+/// no GOAT without it). Same strata fixtures as T1/T2; paired corrupted
+/// inits; win = the planted solution present at every depth; structural
+/// assertions only (determinism, zero-pass identity, loud-zero, the
+/// bridge sampler's kernel expectation, paired-init replay). The
+/// flip-vs-resample verdict is PRINTED, never asserted — it is an
+/// empirical read that gates whether a flip-move lane is worth building,
+/// not a regression surface.
+#[cfg(feature = "lattice_deduction")]
+#[test]
+fn bench_ldt_flip_vs_resample_probe() {
+    use std::time::Instant;
+
+    println!("═══════════════════════════════════════════════════════════");
+    println!("  Flip-vs-Resample Move Probe (Issue 956 T4)");
+    println!("═══════════════════════════════════════════════════════════");
+    let t0 = Instant::now();
+
+    // ── Same strata fixtures as T1/T2 (validation edges, disjoint eval) ──
+    let validate: Vec<Instance> = (0..N_VALIDATE).map(gen_instance).collect();
+    let (edge_hard, edge_easy) = fix_strata_edges(&validate);
+    let eval: Vec<(u64, Instance)> = (1_000_000..1_000_000 + N_EVAL)
+        .map(|s| (s, gen_instance(s)))
+        .collect();
+    let mut strata: [Vec<(u64, &Instance)>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+    for (seed, inst) in &eval {
+        strata[stratum_of(inst, edge_hard, edge_easy)].push((*seed, inst));
+    }
+    let strata_n = [strata[0].len(), strata[1].len(), strata[2].len()];
+    for (si, name) in ["hard", "mid", "easy"].iter().enumerate() {
+        assert!(
+            strata_n[si] >= 15,
+            "stratum {name} population floor: {} < 15",
+            strata_n[si]
+        );
+    }
+    let n_total = eval.len();
+    let max_passes = PROBE_PASS_MARKS[PROBE_PASS_MARKS.len() - 1];
+
+    // arms: 0 hold · 1 flip-greedy · 2 flip-sampled · 3 resample.
+    // counts[arm][t][mark][stratum]; the hold arm uses the mark-0 slot.
+    let mut counts = [[[[0_usize; 4]; PROBE_PASS_MARKS.len()]; PROBE_T_LEVELS.len()]; PROBE_ARMS];
+    let mut size_sums = [[0_u64; PROBE_T_LEVELS.len()]; PROBE_ARMS];
+    let mut init_size_sum = [0_u64; PROBE_T_LEVELS.len()];
+    let mut flip_totals = [0_usize; PROBE_ARMS];
+
+    for &(seed, inst) in strata.iter().flatten() {
+        let si = stratum_of(inst, edge_hard, edge_easy);
+        for (ti, &t) in PROBE_T_LEVELS.iter().enumerate() {
+            let mut init_rng = fastrand::Rng::with_seed(probe_seed(seed, ti, 0xFF));
+            let init = probe_corrupt_state(inst, t, &mut init_rng);
+            init_size_sum[ti] += probe_set_size(&init) as u64;
+            if probe_win(&init, &inst.solution) {
+                counts[0][ti][0][si] += 1;
+                counts[0][ti][0][3] += 1;
+            }
+            for (arm, mode) in [
+                (1_usize, ProbeFlipMode::Greedy),
+                (2, ProbeFlipMode::Sampled),
+            ] {
+                let mut rng = fastrand::Rng::with_seed(probe_seed(seed, ti, arm as u64));
+                let run = probe_run_flip(
+                    init.clone(),
+                    &inst.marginals,
+                    &inst.solution,
+                    t,
+                    max_passes,
+                    mode,
+                    &mut rng,
+                );
+                for (mi, &w) in run.wins_at.iter().enumerate() {
+                    if w {
+                        counts[arm][ti][mi][si] += 1;
+                        counts[arm][ti][mi][3] += 1;
+                    }
+                }
+                size_sums[arm][ti] += probe_set_size(&run.state) as u64;
+                flip_totals[arm] += run.flips_applied;
+            }
+            let mut rng = fastrand::Rng::with_seed(probe_seed(seed, ti, 3));
+            let run = probe_run_resample(&inst.marginals, &inst.solution, t, max_passes, &mut rng);
+            for (mi, &w) in run.wins_at.iter().enumerate() {
+                if w {
+                    counts[3][ti][mi][si] += 1;
+                    counts[3][ti][mi][3] += 1;
+                }
+            }
+            size_sums[3][ti] += probe_set_size(&run.state) as u64;
+        }
+    }
+
+    // ── Report ──
+    let pct = |n: usize, d: usize| {
+        if d == 0 {
+            0.0
+        } else {
+            n as f64 / d as f64 * 100.0
+        }
+    };
+    let arm_names = ["hold (K=0)", "flip-greedy", "flip-sampled", "resample"];
+    println!();
+    println!(
+        "  {:<13} {:>4} {:>4} | {:>6} {:>6} {:>6} {:>6} | {:>7}",
+        "arm", "t", "K", "hard", "mid", "easy", "pooled", "mean|S|"
+    );
+    for (ti, &t) in PROBE_T_LEVELS.iter().enumerate() {
+        for (arm, name) in arm_names.iter().enumerate() {
+            // Slot indices, never pass values — the counts' mark dimension
+            // is the 3-slot [K=1, K=4, K=16] table (hold uses slot 0 only).
+            let slots: Vec<usize> = if arm == 0 {
+                vec![0]
+            } else {
+                (0..PROBE_PASS_MARKS.len()).collect()
+            };
+            for &mi in &slots {
+                let c = &counts[arm][ti][mi];
+                let mean_s = if arm == 0 {
+                    init_size_sum[ti]
+                } else {
+                    size_sums[arm][ti]
+                } as f64
+                    / (n_total * N_DEPTHS) as f64;
+                println!(
+                    "  {:<13} {:>4.2} {:>4} | {:>5.1}% {:>5.1}% {:>5.1}% {:>5.1}% | {:>7.2}",
+                    name,
+                    t,
+                    if arm == 0 { 0 } else { PROBE_PASS_MARKS[mi] },
+                    pct(c[0], strata_n[0]),
+                    pct(c[1], strata_n[1]),
+                    pct(c[2], strata_n[2]),
+                    pct(c[3], n_total),
+                    mean_s,
+                );
+            }
+        }
+    }
+
+    // ── The T4 headline cost: one O(L·V) pricing sweep ──
+    let sweep_state = vec![vec![true; VOCAB]; N_DEPTHS];
+    let mut add = vec![vec![0.0_f32; VOCAB]; N_DEPTHS];
+    let mut rem = vec![vec![0.0_f32; VOCAB]; N_DEPTHS];
+    let mu_ref: Vec<Vec<f32>> = eval[0].1.marginals.clone();
+    const SWEEPS: usize = 50_000;
+    let sweep_ns = {
+        let ts = Instant::now();
+        for _ in 0..SWEEPS {
+            probe_price_flips(&sweep_state, &mu_ref, 0.3, &mut add, &mut rem);
+            std::hint::black_box(&add);
+            std::hint::black_box(&rem);
+        }
+        ts.elapsed().as_nanos()
+    };
+    println!();
+    println!(
+        "  pricing sweep: {} ns for L·V = {} flip rates (all V alternatives × L depths) — closed-form from μ, ZERO extra forwards — {:.2} flips/ns",
+        sweep_ns / SWEEPS as u128,
+        N_DEPTHS * VOCAB,
+        (SWEEPS * N_DEPTHS * VOCAB) as f64 / sweep_ns as f64,
+    );
+
+    // ── Structural gates ──
+    // (a) Determinism: greedy is rng-free (pure); sampled + resample
+    //     replay bit-exact under their seeds.
+    let (seed0, inst0) = (&eval[0].0, &eval[0].1);
+    let init0 = probe_corrupt_state(
+        inst0,
+        PROBE_T_LEVELS[0],
+        &mut fastrand::Rng::with_seed(probe_seed(*seed0, 0, 0xFF)),
+    );
+    let run_g1 = probe_run_flip(
+        init0.clone(),
+        &inst0.marginals,
+        &inst0.solution,
+        PROBE_T_LEVELS[0],
+        max_passes,
+        ProbeFlipMode::Greedy,
+        &mut fastrand::Rng::with_seed(0),
+    );
+    let run_g2 = probe_run_flip(
+        init0.clone(),
+        &inst0.marginals,
+        &inst0.solution,
+        PROBE_T_LEVELS[0],
+        max_passes,
+        ProbeFlipMode::Greedy,
+        &mut fastrand::Rng::with_seed(99),
+    );
+    assert_eq!(
+        run_g1.state, run_g2.state,
+        "greedy replay diverged (must be rng-free)"
+    );
+    assert_eq!(
+        run_g1.wins_at, run_g2.wins_at,
+        "greedy replay diverged (wins)"
+    );
+    let run_s1 = probe_run_flip(
+        init0.clone(),
+        &inst0.marginals,
+        &inst0.solution,
+        PROBE_T_LEVELS[0],
+        max_passes,
+        ProbeFlipMode::Sampled,
+        &mut fastrand::Rng::with_seed(probe_seed(*seed0, 0, 2)),
+    );
+    let run_s2 = probe_run_flip(
+        init0.clone(),
+        &inst0.marginals,
+        &inst0.solution,
+        PROBE_T_LEVELS[0],
+        max_passes,
+        ProbeFlipMode::Sampled,
+        &mut fastrand::Rng::with_seed(probe_seed(*seed0, 0, 2)),
+    );
+    assert_eq!(run_s1.state, run_s2.state, "sampled replay diverged");
+    assert_eq!(
+        run_s1.wins_at, run_s2.wins_at,
+        "sampled replay diverged (wins)"
+    );
+    let run_r1 = probe_run_resample(
+        &inst0.marginals,
+        &inst0.solution,
+        PROBE_T_LEVELS[0],
+        max_passes,
+        &mut fastrand::Rng::with_seed(probe_seed(*seed0, 0, 3)),
+    );
+    let run_r2 = probe_run_resample(
+        &inst0.marginals,
+        &inst0.solution,
+        PROBE_T_LEVELS[0],
+        max_passes,
+        &mut fastrand::Rng::with_seed(probe_seed(*seed0, 0, 3)),
+    );
+    assert_eq!(run_r1.state, run_r2.state, "resample replay diverged");
+
+    // (b) Zero-pass identity: the flip arms with passes=0 return the init.
+    let run_z = probe_run_flip(
+        init0.clone(),
+        &inst0.marginals,
+        &inst0.solution,
+        PROBE_T_LEVELS[0],
+        0,
+        ProbeFlipMode::Sampled,
+        &mut fastrand::Rng::with_seed(1),
+    );
+    assert_eq!(run_z.state, init0, "zero-pass flip run mutated the state");
+    assert_eq!(run_z.flips_applied, 0);
+
+    // (c) Loud-zero: both flip arms demonstrably fire on this distribution
+    //     (a pricing machinery that never applies a flip is dead, not safe).
+    assert!(
+        flip_totals[1] > 0,
+        "flip-greedy applied zero flips — green zero"
+    );
+    assert!(
+        flip_totals[2] > 0,
+        "flip-sampled applied zero flips — green zero"
+    );
+    assert_eq!(
+        run_g1.flips_applied, max_passes,
+        "per-run spend must equal passes"
+    );
+    assert_eq!(run_s1.flips_applied, max_passes);
+
+    // (d) Bridge-sampler validation: the resample arm's mean per-depth set
+    //     size must match the kernel expectation (1−p) + (V−1)·p.
+    for (ti, &t) in PROBE_T_LEVELS.iter().enumerate() {
+        let p = (t * 0.5) as f64;
+        let expect = (1.0 - p) + (VOCAB - 1) as f64 * p;
+        let got = size_sums[3][ti] as f64 / (n_total * N_DEPTHS) as f64;
+        assert!(
+            (got - expect).abs() < 0.05,
+            "resample bridge set size {got:.3} off the kernel expectation {expect:.3} (t={t})"
+        );
+    }
+
+    // (e) The paired premise: the init stream replays bit-exact.
+    let init_replay = probe_corrupt_state(
+        inst0,
+        PROBE_T_LEVELS[0],
+        &mut fastrand::Rng::with_seed(probe_seed(*seed0, 0, 0xFF)),
+    );
+    assert_eq!(init0, init_replay, "paired init not reproducible");
+
+    // ── The probe's verdict reads (printed, never asserted) ──
+    println!();
+    for (ti, &t) in PROBE_T_LEVELS.iter().enumerate() {
+        println!(
+            "  HARD K=1 @ t={t:.2}: hold {:.1}% · flip-greedy {:.1}% · flip-sampled {:.1}% · resample {:.1}%",
+            pct(counts[0][ti][0][0], strata_n[0]),
+            pct(counts[1][ti][0][0], strata_n[0]),
+            pct(counts[2][ti][0][0], strata_n[0]),
+            pct(counts[3][ti][0][0], strata_n[0]),
+        );
+    }
+    let pooled_pct = |arm: usize, mi: usize| {
+        (counts[arm][0][mi][3] + counts[arm][1][mi][3]) as f64 / (2 * n_total) as f64 * 100.0
+    };
+    let flip_k1_best = pooled_pct(1, 0).max(pooled_pct(2, 0));
+    let resample_k1 = pooled_pct(3, 0);
+    let flip_k16_best = pooled_pct(1, 2).max(pooled_pct(2, 2));
+    println!();
+    if flip_k1_best - resample_k1 >= 5.0 {
+        println!(
+            "  READ: flip-parsimony preserves hard-instance evidence at finite budgets (pooled K=1 {flip_k1_best:.1}% vs resample {resample_k1:.1}%, ≥ +5 pts) — a flip-move lane has a priced mechanism HERE; the GOAT gate must read it at the lattice's real verification budget"
+        );
+    } else {
+        println!(
+            "  READ: no flip-parsimony advantage on the factorized shape (pooled K=1 {flip_k1_best:.1}% vs resample {resample_k1:.1}%) — the move class only matters where state carries beyond-μ information (context-conditioned decode); probe says NO-GO for this fixture"
+        );
+    }
+    println!(
+        "  convergence read: flip K=16 pooled-best {flip_k16_best:.1}% vs resample (stationary) {resample_k1:.1}% — the fixed-μ caveat made measurable: the gap must close in the limit"
+    );
     println!("  wall: {:.1}s", t0.elapsed().as_secs_f32());
 }
