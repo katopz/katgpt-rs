@@ -180,6 +180,7 @@ There is no failing GOAT gate to defer. The paper's value is overwhelmingly trai
 - [-] **No Super-GOAT guide in riir-ai / riir-chain / riir-neuron-db.** Latent-space reframing (§2.3) finds no novel latent-op angle; the HLA FP angle is null-resulted (Plan 276 AttractorKernel).
 - [-] **→ riir-train** (if pursued): CDEQ fixed-point distillation, two-time-denoiser semigroup flow-map distillation, online vs offline FMLM★ recipe, self-conditioning guidance weight schedule. Out of scope for this workflow; noted for completeness.
 - [-] **Track as context, not action:** the cold-start equivalence (Fig. 3) is empirical validation that warm-start is optional under sufficient iterations — consistent with the contractivity analysis (Props 3.3–3.5) and with our shipped `LoopMode::WeightShared` + `ResidualRelevanceScorer.is_converged`. No code change.
+- [-] **Successor paper tracked:** Deschenaux et al. [arXiv:2610.30068 "Loopholing All the Way: Language Modeling with pure Self-Conditioning"] (2026-10-21) — the LDDM/SC line's pure-SC endpoint (expected-embedding carry as the entire generative state, decode-once, fine-tune-converts a Duo checkpoint). Modelless surface stays covered by this note's saturation table; the training recipe (two-sided temperature regularization, state-space law, FLOP-neutral conversion) is distilled in the private tier (riir-train Research 479 + Plan 437 §4c). No katgpt-rs action.
 
 ---
 
