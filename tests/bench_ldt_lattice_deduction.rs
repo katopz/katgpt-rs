@@ -13,6 +13,128 @@
 //! - F4: Depth-escalating conflict threshold tightens with search depth
 //!
 //! Run: cargo test --features lattice_deduction --test bench_ldt_lattice_deduction -- --nocapture
+//!
+//! Issue 956 T1 adds `bench_ldt_hardness_stratified_reporting`: solve-rate
+//! reads over a difficulty SPECTRUM with strata fixed on a validation split
+//! — the paper's central law is stratum-conditional, and a pooled-mean bench
+//! is structurally blind to the effect Issue 956 T2 (conflict-triggered
+//! candidate reopening) is buying. Test-only; no production code changes.
+
+/// Shared minimal config for DDTree benchmarks (hoisted from the Plan 088
+/// proof so both tests construct it once — the ~90-field literal is
+/// maintenance-hazard enough at one copy).
+#[cfg(feature = "lattice_deduction")]
+fn make_config(
+    vocab_size: usize,
+    draft_lookahead: usize,
+    tree_budget: usize,
+) -> katgpt_rs::types::Config {
+    katgpt_rs::types::Config {
+        vocab_size,
+        block_size: 256,
+        n_embd: 64,
+        n_head: 4,
+        head_dim: 16,
+        mlp_hidden: 128,
+        n_layer: 2,
+        n_kv_head: 4,
+        bos_token: 0,
+        temperature: 1.0,
+        draft_lookahead,
+        tree_budget,
+        parallel_threshold: 256,
+        lora_rank: 4,
+        lora_alpha: 1.0,
+        lora_dropout: 0.0,
+        lora_targets: vec![],
+        screening_threshold: 0.5, // default baseline
+        sparse_threshold: 0.0,
+        early_exit_patience: 0,
+        early_exit_gap: 0.0,
+        mtp_activation_threshold: 0,
+        mtp_cluster_vocab_threshold: 0,
+        mtp_shared_kv_prompt_threshold: 0,
+        mtp_cluster_size: 1,
+        hla_mode: katgpt_rs::types::HlaMode::Standard,
+        hla_normalize: false,
+        hla_decay: 0.0,
+        mask_token: 0,
+        attention_mode: katgpt_rs::types::AttentionMode::Causal,
+        sp_kv_window: 0,
+        sp_kv_threshold: 0.0,
+        sp_kv_predictor_hidden: 0,
+        sp_kv_predictor_lr_mult: 0.0,
+        width_rollouts: 1,
+        early_stop_threshold: 0.0,
+        convergence_selector: katgpt_rs::types::ConvergenceSelector::default(),
+        model_arch: katgpt_rs::types::ModelArchitecture::Generic,
+        rms_norm_eps: 1e-5,
+        rms_norm_offset: false,
+        tied_embeddings: false,
+        use_rope: false,
+        rope_theta: 10000.0,
+        post_norm: false,
+        attn_logit_softcapping: 0.0,
+        final_logit_softcapping: 0.0,
+        weight_dtype: katgpt_rs::types::WeightDtype::F32,
+        d2f_block_size: 8,
+        mtp_min_output_tokens: usize::MAX,
+        mtp_cluster_topk: 1,
+        mls_layers: 0,
+        loop_mode: katgpt_rs::types::LoopMode::None,
+        hybrid_pattern: katgpt_rs::types::HybridPattern::Uniform,
+        loop_min: 0,
+        loop_max: 0,
+        gated_attn: false,
+        parallax_gate_scale: 0.0,
+        parallax_zero_init: true,
+        emotion_desperation_threshold: 0.5,
+        #[cfg(feature = "rim_slots")]
+        rim_block_count: 0,
+        #[cfg(feature = "rim_slots")]
+        rim_tokens_per_block: 2,
+        #[cfg(feature = "rim_slots")]
+        rim_buffer_token: 0,
+        #[cfg(feature = "hydra_budget")]
+        hydra_profiles: vec![],
+        #[cfg(feature = "deltanet_inference")]
+        layer_types: vec![],
+        #[cfg(feature = "deltanet_inference")]
+        deltanet_conv_kernel_size: 0,
+        #[cfg(feature = "deltanet_inference")]
+        deltanet_state_dim: 0,
+        #[cfg(feature = "deltanet_inference")]
+        deltanet_linear_head_dim: 0,
+        #[cfg(feature = "deltanet_inference")]
+        deltanet_linear_n_heads: 0,
+        #[cfg(feature = "deltanet_inference")]
+        deltanet_linear_n_value_heads: 0,
+        #[cfg(feature = "deltanet_inference")]
+        rope_dimension_count: 0,
+        #[cfg(feature = "wall_attention")]
+        wall_config: None,
+        #[cfg(feature = "collapse_aware_thinking")]
+        collapse_budget: katgpt_rs::types::ThinkingBudget::default(),
+        #[cfg(feature = "belief_drafter")]
+        belief_drafter_path: None,
+        #[cfg(feature = "belief_drafter")]
+        belief_drafter_entropy_threshold: 2.0,
+        #[cfg(feature = "loop_stability_fix")]
+        loop_stability_mode: katgpt_rs::types::LoopStabilityMode::None,
+        #[cfg(feature = "gemma4_inference")]
+        gemma4_layer_types: vec![],
+        #[cfg(feature = "gemma4_inference")]
+        sliding_window: 0,
+        #[cfg(feature = "gemma4_inference")]
+        global_head_dim: 0,
+        #[cfg(feature = "gemma4_inference")]
+        n_global_kv_head: 0,
+        #[cfg(feature = "gemma4_inference")]
+        partial_rotary_factor: 1.0,
+        #[cfg(feature = "gemma4_inference")]
+        rope_theta_full: 0.0,
+    }
+}
 
 #[cfg(feature = "lattice_deduction")]
 #[test]
@@ -21,121 +143,9 @@ fn bench_ldt_lattice_deduction_goat_proof() {
         AlphaTarget, ConflictDetector, EntropyConflictDetector, LDT_THETA_ELIM, LdtPruneConfig,
         NoScreeningPruner, alpha_intersect, build_dd_tree_screened, is_consistent,
     };
-    use katgpt_rs::types::Config;
     use std::collections::HashSet;
     use std::hint::black_box;
     use std::time::Instant;
-
-    // ── Helpers ──────────────────────────────────────────────────
-
-    /// Build a minimal config for DDTree benchmarks.
-    fn make_config(vocab_size: usize, draft_lookahead: usize, tree_budget: usize) -> Config {
-        Config {
-            vocab_size,
-            block_size: 256,
-            n_embd: 64,
-            n_head: 4,
-            head_dim: 16,
-            mlp_hidden: 128,
-            n_layer: 2,
-            n_kv_head: 4,
-            bos_token: 0,
-            temperature: 1.0,
-            draft_lookahead,
-            tree_budget,
-            parallel_threshold: 256,
-            lora_rank: 4,
-            lora_alpha: 1.0,
-            lora_dropout: 0.0,
-            lora_targets: vec![],
-            screening_threshold: 0.5, // default baseline
-            sparse_threshold: 0.0,
-            early_exit_patience: 0,
-            early_exit_gap: 0.0,
-            mtp_activation_threshold: 0,
-            mtp_cluster_vocab_threshold: 0,
-            mtp_shared_kv_prompt_threshold: 0,
-            mtp_cluster_size: 1,
-            hla_mode: katgpt_rs::types::HlaMode::Standard,
-            hla_normalize: false,
-            hla_decay: 0.0,
-            mask_token: 0,
-            attention_mode: katgpt_rs::types::AttentionMode::Causal,
-            sp_kv_window: 0,
-            sp_kv_threshold: 0.0,
-            sp_kv_predictor_hidden: 0,
-            sp_kv_predictor_lr_mult: 0.0,
-            width_rollouts: 1,
-            early_stop_threshold: 0.0,
-            convergence_selector: katgpt_rs::types::ConvergenceSelector::default(),
-            model_arch: katgpt_rs::types::ModelArchitecture::Generic,
-            rms_norm_eps: 1e-5,
-            rms_norm_offset: false,
-            tied_embeddings: false,
-            use_rope: false,
-            rope_theta: 10000.0,
-            post_norm: false,
-            attn_logit_softcapping: 0.0,
-            final_logit_softcapping: 0.0,
-            weight_dtype: katgpt_rs::types::WeightDtype::F32,
-            d2f_block_size: 8,
-            mtp_min_output_tokens: usize::MAX,
-            mtp_cluster_topk: 1,
-            mls_layers: 0,
-            loop_mode: katgpt_rs::types::LoopMode::None,
-            hybrid_pattern: katgpt_rs::types::HybridPattern::Uniform,
-            loop_min: 0,
-            loop_max: 0,
-            gated_attn: false,
-            parallax_gate_scale: 0.0,
-            parallax_zero_init: true,
-            emotion_desperation_threshold: 0.5,
-            #[cfg(feature = "rim_slots")]
-            rim_block_count: 0,
-            #[cfg(feature = "rim_slots")]
-            rim_tokens_per_block: 2,
-            #[cfg(feature = "rim_slots")]
-            rim_buffer_token: 0,
-            #[cfg(feature = "hydra_budget")]
-            hydra_profiles: vec![],
-            #[cfg(feature = "deltanet_inference")]
-            layer_types: vec![],
-            #[cfg(feature = "deltanet_inference")]
-            deltanet_conv_kernel_size: 0,
-            #[cfg(feature = "deltanet_inference")]
-            deltanet_state_dim: 0,
-            #[cfg(feature = "deltanet_inference")]
-            deltanet_linear_head_dim: 0,
-            #[cfg(feature = "deltanet_inference")]
-            deltanet_linear_n_heads: 0,
-            #[cfg(feature = "deltanet_inference")]
-            deltanet_linear_n_value_heads: 0,
-            #[cfg(feature = "deltanet_inference")]
-            rope_dimension_count: 0,
-            #[cfg(feature = "wall_attention")]
-            wall_config: None,
-            #[cfg(feature = "collapse_aware_thinking")]
-            collapse_budget: katgpt_rs::types::ThinkingBudget::default(),
-            #[cfg(feature = "belief_drafter")]
-            belief_drafter_path: None,
-            #[cfg(feature = "belief_drafter")]
-            belief_drafter_entropy_threshold: 2.0,
-            #[cfg(feature = "loop_stability_fix")]
-            loop_stability_mode: katgpt_rs::types::LoopStabilityMode::None,
-            #[cfg(feature = "gemma4_inference")]
-            gemma4_layer_types: vec![],
-            #[cfg(feature = "gemma4_inference")]
-            sliding_window: 0,
-            #[cfg(feature = "gemma4_inference")]
-            global_head_dim: 0,
-            #[cfg(feature = "gemma4_inference")]
-            n_global_kv_head: 0,
-            #[cfg(feature = "gemma4_inference")]
-            partial_rotary_factor: 1.0,
-            #[cfg(feature = "gemma4_inference")]
-            rope_theta_full: 0.0,
-        }
-    }
 
     // Check if the lattice_deduction feature is present
     println!("═══════════════════════════════════════════════════════════");
@@ -759,6 +769,280 @@ fn bench_ldt_phase2_goat_proof() {
     println!("═══════════════════════════════════════════════════════════");
     println!("  GOAT PROOF COMPLETE — All 4 fusions verified");
     println!("═══════════════════════════════════════════════════════════");
+}
+
+/// Issue 956 T1 — hardness-stratified bench reporting (the T2 precondition).
+///
+/// The paper's central law (arXiv:2610.28543: restore-capable candidate
+/// evolution beats prune-only MOST ON HARD INSTANCES) is stratum-conditional;
+/// a pooled-mean bench is structurally blind to it. This bench:
+///
+/// 1. Generates a difficulty SPECTRUM of planted-solution instances
+///    (deterministic per seed): solution mass s ~ U[0.25, 0.60] and the
+///    distractors' share v ~ U[0.2, 0.9] of the residual — the difficulty
+///    statistic is `gap_min` = min over depths of (p_solution − p_top
+///    distractor), computable from the INSTANCE BEFORE solving (never from
+///    the outcome — no post-measurement binning).
+/// 2. Fixes the strata edges on a VALIDATION split (percentiles of gap_min
+///    over validation seeds 0..240) — a pre-registered procedure, and the
+///    validation seeds are DISJOINT from the eval seeds.
+/// 3. Evaluates solve rate (the full planted solution path retained by
+///    `build_dd_tree_screened`) on the eval split, stratified + pooled,
+///    for {baseline θ=0.5, LDT θ=0.111} × {tight 150, roomy 500} budgets —
+///    every cell paired over the SAME instances and the SAME budget.
+///
+/// Structural assertions only (population floors, disjoint splits,
+/// determinism, the Plan-088 LDT ≥ baseline law re-read stratified) — no
+/// data-gated thresholds that would break when the spectrum shifts.
+#[cfg(feature = "lattice_deduction")]
+#[test]
+fn bench_ldt_hardness_stratified_reporting() {
+    use katgpt_rs::speculative::{LDT_THETA_ELIM, ScreeningPruner, build_dd_tree_screened};
+    use std::time::Instant;
+
+    const N_DEPTHS: usize = 8;
+    const VOCAB: usize = 9;
+    const N_VALIDATE: u64 = 240;
+    const N_EVAL: u64 = 240;
+    const BUDGETS: [usize; 2] = [150, 500];
+
+    /// Screening relevance = the token's own marginal mass — the LDT
+    /// elimination story made LIVE. `screening_threshold` then hard-trims
+    /// every candidate whose mass falls below θ (`R ≤ threshold` in the
+    /// builder's contract), so baseline θ=0.5 is the aggressive eliminator
+    /// and LDT θ=0.111 the conservative one. (The prior draft used
+    /// NoScreeningPruner, whose constant R=1.0 never binds any threshold —
+    /// both arms were structurally identical; Plan 088 T1's mechanism had
+    /// been asserted as a constant, never run binding.)
+    struct MassScreener {
+        marginals: Vec<Vec<f32>>,
+    }
+
+    impl ScreeningPruner for MassScreener {
+        fn relevance(&self, depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> f32 {
+            self.marginals[depth][token_idx]
+        }
+    }
+
+    struct Instance {
+        solution: Vec<usize>,
+        marginals: Vec<Vec<f32>>,
+        gap_min: f32,
+    }
+
+    fn gen_instance(seed: u64) -> Instance {
+        let mut rng = fastrand::Rng::with_seed(seed);
+        let mut solution = Vec::with_capacity(N_DEPTHS);
+        let mut marginals = Vec::with_capacity(N_DEPTHS);
+        let mut gaps = Vec::with_capacity(N_DEPTHS);
+        for _ in 0..N_DEPTHS {
+            let sol = rng.usize(..VOCAB);
+            // Difficulty spectrum spans BOTH elimination thresholds: solution
+            // mass ∈ [0.05, 0.60] — below θ_elim (0.111) the LDT arm itself
+            // must eliminate (real hard-instance deaths, T2's headroom),
+            // above θ_base (0.5) even the aggressive arm survives.
+            let s = 0.05 + 0.55 * rng.f32();
+            let v = 0.2 + 0.7 * rng.f32(); // distractors' share ∈ [0.2, 0.9]
+            let mut probs = vec![0.0_f32; VOCAB];
+            probs[sol] = s;
+            // Top distractor takes the lion's share of the residual.
+            let top_d = (sol + 1 + rng.usize(..(VOCAB - 1))) % VOCAB;
+            let residual = 1.0 - s;
+            let top_mass = residual * v;
+            probs[top_d] = top_mass;
+            let rest = residual - top_mass;
+            let n_rest = VOCAB - 2;
+            for (t, p) in probs.iter_mut().enumerate() {
+                if t != sol && t != top_d {
+                    *p = rest / n_rest as f32;
+                }
+            }
+            let top_other = probs
+                .iter()
+                .enumerate()
+                .filter(|&(t, _)| t != sol)
+                .map(|(_, &p)| p)
+                .fold(0.0_f32, f32::max);
+            gaps.push(probs[sol] - top_other);
+            solution.push(sol);
+            marginals.push(probs);
+        }
+        Instance {
+            solution,
+            marginals,
+            gap_min: gaps.iter().cloned().fold(f32::INFINITY, f32::min),
+        }
+    }
+
+    /// Solve = the FULL planted solution path survives screening.
+    fn solve_rate(inst: &Instance, theta: f32, budget: usize) -> (bool, usize) {
+        let slices: Vec<&[f32]> = inst.marginals.iter().map(|m| m.as_slice()).collect();
+        let mut config = make_config(VOCAB, N_DEPTHS, budget);
+        config.screening_threshold = theta;
+        let screener = MassScreener {
+            marginals: inst.marginals.clone(),
+        };
+        let tree = build_dd_tree_screened(&slices, &config, &screener, true);
+        let hits = inst
+            .solution
+            .iter()
+            .enumerate()
+            .filter(|&(d, tok)| tree.iter().any(|n| n.depth == d && n.token_idx == *tok))
+            .count();
+        (hits == N_DEPTHS, tree.len())
+    }
+
+    println!("═══════════════════════════════════════════════════════════");
+    println!("  LDT Hardness-Stratified Bench (Issue 956 T1)");
+    println!("═══════════════════════════════════════════════════════════");
+    let t0 = Instant::now();
+
+    // ── Step 1: validation split fixes the strata edges ──
+    let validate: Vec<Instance> = (0..N_VALIDATE).map(gen_instance).collect();
+    let mut gaps: Vec<f32> = validate.iter().map(|i| i.gap_min).collect();
+    gaps.sort_by(f32::total_cmp);
+    let p = |q: f32| -> f32 {
+        let idx = ((q * (gaps.len() - 1) as f32).round()) as usize;
+        gaps[idx]
+    };
+    // Percentile indexing must not land on the last element (the A-max
+    // class): q < 1 keeps idx ≤ len−2 by construction here.
+    let (edge_hard, edge_easy) = (p(1.0 / 3.0), p(2.0 / 3.0));
+    assert!(
+        edge_hard < edge_easy,
+        "validation bin edges must split the spectrum ({edge_hard} !< {edge_easy})"
+    );
+    println!(
+        "  validation: {N_VALIDATE} instances, gap_min edges hard<{edge_hard:.4} ≤ mid<={edge_easy:.4}<easy"
+    );
+
+    // ── Step 2: eval split (disjoint seeds), stratified reads ──
+    let eval: Vec<Instance> = (1_000_000..1_000_000 + N_EVAL).map(gen_instance).collect();
+    let mut strata: [Vec<&Instance>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+    for inst in &eval {
+        let s = if inst.gap_min < edge_hard {
+            0 // hard
+        } else if inst.gap_min <= edge_easy {
+            1 // mid
+        } else {
+            2 // easy
+        };
+        strata[s].push(inst);
+    }
+    const NAMES: [&str; 3] = ["hard", "mid", "easy"];
+    for (si, name) in NAMES.iter().enumerate() {
+        assert!(
+            strata[si].len() >= 15,
+            "stratum {name} population floor: {} < 15",
+            strata[si].len()
+        );
+    }
+
+    // theta arms: baseline vs LDT (the Plan-088 comparison axis, now
+    // stratified; T2's reopen arm slots in here next to them).
+    let thetas: [(&str, f32); 2] = [("base θ=0.5", 0.5), ("LDT θ=0.111", LDT_THETA_ELIM)];
+
+    // [theta][budget] → per-stratum solve counts (3 strata + pooled)
+    let mut solve_counts = vec![vec![[0_usize; 4]; BUDGETS.len()]; thetas.len()];
+    for inst in &strata.iter().flatten().collect::<Vec<_>>() {
+        let si = if inst.gap_min < edge_hard {
+            0
+        } else if inst.gap_min <= edge_easy {
+            1
+        } else {
+            2
+        };
+        for (ti, (_, theta)) in thetas.iter().enumerate() {
+            for (bi, &budget) in BUDGETS.iter().enumerate() {
+                let (solved, _) = solve_rate(inst, *theta, budget);
+                if solved {
+                    solve_counts[ti][bi][si] += 1;
+                    solve_counts[ti][bi][3] += 1;
+                }
+            }
+        }
+    }
+
+    // ── Step 3: report — mean AND stratum (the T1 deliverable) ──
+    let n_total = eval.len();
+    println!();
+    println!(
+        "  {:<12} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
+        "arm", "bud", "hard", "mid", "easy", "pooled", "nodes"
+    );
+    for (ti, (tname, _)) in thetas.iter().enumerate() {
+        for (bi, &budget) in BUDGETS.iter().enumerate() {
+            let c = &solve_counts[ti][bi];
+            let pct = |n: usize, d: usize| {
+                if d == 0 {
+                    0.0
+                } else {
+                    n as f64 / d as f64 * 100.0
+                }
+            };
+            println!(
+                "  {:<12} {:>9} {:>8.1}% {:>8.1}% {:>8.1}% {:>8.1}% {:>9}",
+                tname,
+                budget,
+                pct(c[0], strata[0].len()),
+                pct(c[1], strata[1].len()),
+                pct(c[2], strata[2].len()),
+                pct(c[3], n_total),
+                "",
+            );
+        }
+    }
+
+    // ── Structural assertions (no data-gated thresholds) ──
+    // (a) The Plan-088 law re-read stratified: LDT solves ≥ baseline at
+    //     every budget, pooled (solution-token retention is monotone in the
+    //     threshold, so full-path survival cannot decrease).
+    for bi in 0..BUDGETS.len() {
+        assert!(
+            solve_counts[1][bi][3] >= solve_counts[0][bi][3],
+            "LDT pooled solve must be ≥ baseline (budget {}) — {} vs {}",
+            BUDGETS[bi],
+            solve_counts[1][bi][3],
+            solve_counts[0][bi][3]
+        );
+    }
+    // (b) Determinism: a 10-instance replay reproduces the exact solve bits.
+    for seed in 1_000_000..1_000_010 {
+        let inst = gen_instance(seed);
+        let (a, _) = solve_rate(&inst, LDT_THETA_ELIM, BUDGETS[1]);
+        let (b, _) = solve_rate(&inst, LDT_THETA_ELIM, BUDGETS[1]);
+        assert!(a == b, "solve read must be deterministic (seed {seed})");
+    }
+    // (c) The rooms are real: a tight budget must never out-solve the roomy
+    //     one for the SAME arm (tree retention is monotone in budget headroom
+    //     at a fixed threshold).
+    for ti in 0..thetas.len() {
+        assert!(
+            solve_counts[ti][1][3] >= solve_counts[ti][0][3],
+            "roomy budget must solve ≥ tight (arm {}) — {} vs {}",
+            thetas[ti].0,
+            solve_counts[ti][1][3],
+            solve_counts[ti][0][3]
+        );
+    }
+
+    // ── The pooled-blindness disclosure (print, never assert) ──
+    let ldt_hard = solve_counts[1][1][0] as f64 / strata[0].len() as f64 * 100.0;
+    let ldt_pooled = solve_counts[1][1][3] as f64 / n_total as f64 * 100.0;
+    println!();
+    println!(
+        "  pooled-blindness read (LDT, roomy budget): hard {ldt_hard:.1}% vs pooled {ldt_pooled:.1}%"
+    );
+    if (ldt_hard - ldt_pooled).abs() >= 10.0 {
+        println!(
+            "  → the pooled mean materially misrepresents the hard stratum (Issue 956's point) — always read both"
+        );
+    } else {
+        println!(
+            "  → pooled and hard agree within 10 pts on THIS spectrum; the stratified read still guards the T2 fusion"
+        );
+    }
+    println!("  wall: {:.1}s", t0.elapsed().as_secs_f32());
 }
 
 /// Verify that without the `lattice_deduction` feature, the module is not available.
