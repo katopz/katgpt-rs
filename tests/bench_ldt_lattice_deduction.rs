@@ -1112,15 +1112,21 @@ fn bench_ldt_feature_gate_absent() {
     println!("lattice_deduction feature gate: correctly absent from default build ✓");
 }
 
-/// Issue 956 T2: conflict-triggered targeted candidate reopening — the
-/// fusion bench. Same 480 instances + strata as T1 (shared fixtures), the
-/// LDT θ arm paired against LDT θ + reopen, presence AND connected-chain
-/// reads, plus the T2 gate set:
+/// Issue 956 T2 + T2b: conflict-triggered targeted candidate reopening —
+/// the fusion bench. Same 480 instances + strata as T1 (shared fixtures);
+/// THREE arms paired per instance/budget: plain LDT θ, LDT θ + reopen
+/// (T2 fixed-b), LDT θ + reopen (T2b η-bounded). Presence AND
+/// connected-chain reads, plus the gate set:
 /// - G1: stratified solve rates (hard stratum is the deciding read);
 /// - G3: zero-budget byte-identity vs the plain build (spot check);
-/// - loud-zero: the mechanism must demonstrably fire on this distribution;
+/// - loud-zero: the mechanism must demonstrably fire on this distribution
+///   (both reopen postures, at the roomy budget);
+/// - T2b anti-thrash: at the TIGHT budget the η arm's total reopens must
+///   not exceed the fixed-b arm's (the headroom drive's contract — the
+///   measured T2 budget-150 regression is the reason);
 /// - termination: rounds ≤ cap, reopens ≤ b × rounds (no oscillation);
-///   determinism replay; every fired round makes tree-visible progress.
+///   determinism replay (both postures); every fired round makes
+///   tree-visible progress.
 ///
 /// G2 (wall ≤ +10%) is MEASURED and printed, never asserted here — the
 /// repo's box-state law: a wall ratio under an unknown load is a
@@ -1134,13 +1140,27 @@ fn bench_ldt_conflict_reopen_reporting() {
     };
     use std::time::Instant;
 
-    /// b = 4, β = 1 (plain score order), two rounds — the fixed-b T2
-    /// posture; T2b's capped-mean bisection replaces the constant later.
-    fn reopen_cfg() -> ReopenConfig {
+    /// T2 posture: fixed b = 4, β = 1 (plain score order), two rounds.
+    fn fixed_cfg() -> ReopenConfig {
         ReopenConfig {
             budget_b: 4,
             beta: 1.0,
             max_rounds: 2,
+            ..ReopenConfig::default()
+        }
+    }
+
+    /// T2b posture: η-bounded count (expected reopens = η·headroom),
+    /// `budget_b` demoted to the absolute cap, same rounds cap. The η and
+    /// headroom σ constants are the shipped defaults (the provisional
+    /// calibration: the T2 boots measured regression at ratio ≈ 2.08 and
+    /// gain at ≈ 6.94).
+    fn eta_cfg() -> ReopenConfig {
+        ReopenConfig {
+            budget_b: 4,
+            beta: 1.0,
+            max_rounds: 2,
+            eta: 4.0,
             ..ReopenConfig::default()
         }
     }
@@ -1150,6 +1170,7 @@ fn bench_ldt_conflict_reopen_reporting() {
         inst: &Instance,
         theta: f32,
         budget: usize,
+        reopen: &ReopenConfig,
     ) -> (bool, bool, usize, ReopenStats) {
         let slices: Vec<&[f32]> = inst.marginals.iter().map(|m| m.as_slice()).collect();
         let mut config = make_config(VOCAB, N_DEPTHS, budget);
@@ -1160,13 +1181,7 @@ fn bench_ldt_conflict_reopen_reporting() {
         let mut db = ConflictClauseDB::default();
         let mut stats = ReopenStats::default();
         let tree = build_dd_tree_screened_reopen(
-            &slices,
-            &config,
-            &screener,
-            true,
-            &reopen_cfg(),
-            &mut db,
-            &mut stats,
+            &slices, &config, &screener, true, reopen, &mut db, &mut stats,
         );
         (
             presence_solved(&tree, &inst.solution),
@@ -1176,9 +1191,9 @@ fn bench_ldt_conflict_reopen_reporting() {
         )
     }
 
-    println!("═══════════════════════════════════════════════════════════");
-    println!("  LDT Conflict-Reopen Bench (Issue 956 T2)");
-    println!("═══════════════════════════════════════════════════════════");
+    println!("═════════════════════════════════════════════════════════");
+    println!("  LDT Conflict-Reopen Bench (Issue 956 T2 + T2b)");
+    println!("═════════════════════════════════════════════════════════");
     let t0 = Instant::now();
 
     // ── Same strata as T1 (validation-split edges, disjoint eval) ──
@@ -1192,11 +1207,15 @@ fn bench_ldt_conflict_reopen_reporting() {
     let n_total = eval.len();
 
     // [arm][budget] → (presence, chain) solve counts per stratum (3 + pooled)
-    // arm 0 = plain LDT θ, arm 1 = LDT θ + reopen
-    let mut presence = vec![vec![[0_usize; 4]; BUDGETS.len()]; 2];
-    let mut chain = vec![vec![[0_usize; 4]; BUDGETS.len()]; 2];
-    let mut total_stats = ReopenStats::default();
-    let mut fired_instances = 0_usize;
+    // arm 0 = plain LDT θ, arm 1 = LDT θ + reopen (T2 fixed-b),
+    // arm 2 = LDT θ + reopen (T2b η-bounded)
+    let mut presence = vec![vec![[0_usize; 4]; BUDGETS.len()]; 3];
+    let mut chain = vec![vec![[0_usize; 4]; BUDGETS.len()]; 3];
+    // Per-arm/per-budget reopen totals (the T2b anti-thrash read splits by
+    // budget — the drive's contract is about the TIGHT cell).
+    let mut reopen_totals = vec![[0_usize; BUDGETS.len()]; 2];
+    let mut total_stats = [ReopenStats::default(); 2];
+    let mut fired_instances = [0_usize; 2];
 
     let plain_wall = Instant::now();
     for inst in &strata.iter().flatten().collect::<Vec<_>>() {
@@ -1207,22 +1226,26 @@ fn bench_ldt_conflict_reopen_reporting() {
                 presence[0][bi][si] += 1;
                 presence[0][bi][3] += 1;
             }
-            let (p_re, c_re, _, stats) = solve_reopen(inst, LDT_THETA_ELIM, budget);
-            if p_re {
-                presence[1][bi][si] += 1;
-                presence[1][bi][3] += 1;
+            for (ai, cfg) in [(1_usize, fixed_cfg()), (2_usize, eta_cfg())] {
+                let (p_re, c_re, _, stats) = solve_reopen(inst, LDT_THETA_ELIM, budget, &cfg);
+                if p_re {
+                    presence[ai][bi][si] += 1;
+                    presence[ai][bi][3] += 1;
+                }
+                if c_re {
+                    chain[ai][bi][si] += 1;
+                    chain[ai][bi][3] += 1;
+                }
+                reopen_totals[ai - 1][bi] += stats.reopens_applied;
+                if stats.rounds > 0 {
+                    fired_instances[ai - 1] += 1;
+                }
+                let acc = &mut total_stats[ai - 1];
+                acc.conflicts_fired += stats.conflicts_fired;
+                acc.reopens_applied += stats.reopens_applied;
+                acc.no_cycle_blocked += stats.no_cycle_blocked;
+                acc.rounds += stats.rounds;
             }
-            if c_re {
-                chain[1][bi][si] += 1;
-                chain[1][bi][3] += 1;
-            }
-            if stats.rounds > 0 {
-                fired_instances += 1;
-            }
-            total_stats.conflicts_fired += stats.conflicts_fired;
-            total_stats.reopens_applied += stats.reopens_applied;
-            total_stats.no_cycle_blocked += stats.no_cycle_blocked;
-            total_stats.rounds += stats.rounds;
         }
     }
     let paired_wall = plain_wall.elapsed();
@@ -1230,7 +1253,7 @@ fn bench_ldt_conflict_reopen_reporting() {
     // ── Report: presence AND chain, stratified (the T1 law) ──
     let pct = |n: usize| n as f64 / n_total as f64 * 100.0;
     let pct_stratum = |n: usize, si: usize| n as f64 / strata[si].len() as f64 * 100.0;
-    let arms = [("LDT θ=0.111", 0), ("LDT+reopen b=4", 1)];
+    let arms = [("LDT θ=0.111", 0), ("+reopen b=4", 1), ("+reopen η=4", 2)];
     println!();
     println!(
         "  {:<15} {:>5} | {:>7} {:>7} {:>7} {:>7} | {:>7} {:>7} {:>7} {:>7}",
@@ -1255,33 +1278,42 @@ fn bench_ldt_conflict_reopen_reporting() {
         }
     }
     println!();
+    let n_solves = n_total * BUDGETS.len();
+    let posture_names = ["fixed-b", "eta-bounded"];
+    for (pi, stats) in total_stats.iter().enumerate() {
+        println!(
+            "  reopen stats [{}] ({} solves): conflicts {} ({:.2}/solve) · reopens {} ({:.2}/solve) · no-cycle blocked {} · REOPEN-CYCLES {} ({:.3}/solve, cap {}) · fired {}/{}",
+            posture_names[pi],
+            n_solves,
+            stats.conflicts_fired,
+            stats.conflicts_fired as f64 / n_solves as f64,
+            stats.reopens_applied,
+            stats.reopens_applied as f64 / n_solves as f64,
+            stats.no_cycle_blocked,
+            stats.rounds,
+            stats.rounds as f64 / n_solves as f64,
+            if pi == 0 { fixed_cfg() } else { eta_cfg() }.max_rounds,
+            fired_instances[pi],
+            n_solves,
+        );
+    }
+    // T2b's per-budget anti-thrash read (drives the structural gate below).
     println!(
-        "  reopen stats ({} solves): conflicts {} ({:.2}/solve) · reopens {} ({:.2}/solve) · no-cycle blocked {} · rounds {} ({:.2}/solve, cap {}) · fired {}/{} solves",
-        n_total * BUDGETS.len(),
-        total_stats.conflicts_fired,
-        total_stats.conflicts_fired as f64 / (n_total * BUDGETS.len()) as f64,
-        total_stats.reopens_applied,
-        total_stats.reopens_applied as f64 / (n_total * BUDGETS.len()) as f64,
-        total_stats.no_cycle_blocked,
-        total_stats.rounds,
-        total_stats.rounds as f64 / (n_total * BUDGETS.len()) as f64,
-        reopen_cfg().max_rounds,
-        fired_instances,
-        n_total * BUDGETS.len(),
+        "  T2b reopens by budget [tight {}]: fixed-b {} vs η {} · [roomy {}]: fixed-b {} vs η {}",
+        BUDGETS[0],
+        reopen_totals[0][0],
+        reopen_totals[1][0],
+        BUDGETS[1],
+        reopen_totals[0][1],
+        reopen_totals[1][1],
     );
+    let _ = paired_wall; // (the paired loop's wall is subsumed by the ratio read)
 
     // ── G2 disclosure (measured, never asserted under unknown load) ──
-    // The reopen arm pays: the elimination replay (V×D relevance calls at
-    // chain context) + a full re-propagation per applied round.
-    let t_reopen_only = {
-        let t = Instant::now();
-        for inst in &strata.iter().flatten().collect::<Vec<_>>() {
-            for &budget in BUDGETS.iter() {
-                let _ = solve_reopen(inst, LDT_THETA_ELIM, budget);
-            }
-        }
-        t.elapsed()
-    };
+    // Each reopen arm pays: the elimination replay (V×D relevance calls at
+    // chain context) + a full re-propagation per applied round. The η arm's
+    // re-propagations shrink where the headroom drive binds — its ratio is
+    // the T2b lever, read beside the fixed-b baseline.
     let t_plain_only = {
         let t = Instant::now();
         for inst in &strata.iter().flatten().collect::<Vec<_>>() {
@@ -1291,12 +1323,21 @@ fn bench_ldt_conflict_reopen_reporting() {
         }
         t.elapsed()
     };
-    let ratio = t_reopen_only.as_secs_f64() / t_plain_only.as_secs_f64().max(1e-9);
-    println!(
-        "  G2 wall ratio (reopen/plain): {:.2}× [reopen {:.1?} vs plain {:.1?}] — disclosure; re-pin on a quiet box",
-        ratio, t_reopen_only, t_plain_only
-    );
-    let _ = paired_wall; // (the paired loop's wall is subsumed by the ratio read)
+    for (name, cfg) in [("fixed-b", fixed_cfg()), ("η-bounded", eta_cfg())] {
+        let t_arm = {
+            let t = Instant::now();
+            for inst in &strata.iter().flatten().collect::<Vec<_>>() {
+                for &budget in BUDGETS.iter() {
+                    let _ = solve_reopen(inst, LDT_THETA_ELIM, budget, &cfg);
+                }
+            }
+            t.elapsed()
+        };
+        let ratio = t_arm.as_secs_f64() / t_plain_only.as_secs_f64().max(1e-9);
+        println!(
+            "  G2 wall ratio ({name}/plain): {ratio:.2}× [{name} {t_arm:.1?} vs plain {t_plain_only:.1?}] — disclosure; re-pin on a quiet box"
+        );
+    }
 
     // ── Structural gates ──
     // (a) G3: zero-budget byte-identity, 40-instance spot check.
@@ -1337,21 +1378,36 @@ fn bench_ldt_conflict_reopen_reporting() {
         );
     }
 
-    // (b) Loud-zero: the mechanism demonstrably fires on THIS distribution.
-    //     A green zero here means the trigger is dead, not that reopening
-    //     is safe — the repo's loud-zero law.
+    // (b) Loud-zero: the mechanism demonstrably fires on THIS distribution,
+    //     BOTH postures, at the roomy budget. A green zero here means the
+    //     trigger (or the η headroom drive) is dead, not that reopening is
+    //     safe — the repo's loud-zero law.
     assert!(
-        total_stats.conflicts_fired > 0,
+        total_stats[0].conflicts_fired > 0,
         "conflict trigger never fired — the arm is a green zero"
     );
     assert!(
-        total_stats.reopens_applied > 0,
-        "no reopen ever applied — the arm is a green zero"
+        total_stats[0].reopens_applied > 0,
+        "no reopen ever applied (fixed-b) — the arm is a green zero"
+    );
+    assert!(
+        reopen_totals[1][1] > 0,
+        "η arm applied zero reopens at the roomy budget — the headroom drive strangled the mechanism (a green zero)"
+    );
+    // T2b's anti-thrash gate: at the TIGHT budget the η arm's total spend
+    // must not exceed the fixed-b arm's. This is the measured T2 regression
+    // (hard 14.1→8.5 at budget 150) made executable: the headroom drive
+    // must bound the spend where the budget cannot absorb it.
+    assert!(
+        reopen_totals[1][0] <= reopen_totals[0][0],
+        "T2b anti-thrash violated: η arm spent {} reopens at tight budget vs fixed-b {} — the headroom drive is not bounding the spend",
+        reopen_totals[1][0],
+        reopen_totals[0][0]
     );
     let hard_reopened = {
         let mut n = 0_usize;
         for inst in &strata[0] {
-            let (_, _, _, stats) = solve_reopen(inst, LDT_THETA_ELIM, BUDGETS[1]);
+            let (_, _, _, stats) = solve_reopen(inst, LDT_THETA_ELIM, BUDGETS[1], &fixed_cfg());
             n += stats.reopens_applied;
         }
         n
@@ -1361,46 +1417,68 @@ fn bench_ldt_conflict_reopen_reporting() {
         "the hard stratum (T2's deciding read) saw zero reopens"
     );
 
-    // (c) Termination + per-node caps, per instance (the FSM law).
+    // (c) Termination + per-node caps, per instance, BOTH postures (the FSM
+    //     law). The η posture adds its own: an applied round restores
+    //     something (a bisected-zero round breaks BEFORE re-propagating).
     for seed in 1_000_000..1_000_020 {
         let inst = gen_instance(seed);
-        let (_, _, _, stats) = solve_reopen(&inst, LDT_THETA_ELIM, BUDGETS[1]);
-        assert!(
-            stats.rounds <= reopen_cfg().max_rounds,
-            "seed {seed}: round cap violated ({} > {})",
-            stats.rounds,
-            reopen_cfg().max_rounds
-        );
-        assert!(
-            stats.reopens_applied <= reopen_cfg().budget_b * stats.rounds.max(1),
-            "seed {seed}: per-round reopen cap violated"
-        );
-        assert!(
-            stats.rounds == 0 || stats.reopens_applied > 0,
-            "seed {seed}: an applied round restored nothing (progress law)"
-        );
+        for (cfg, name) in [(fixed_cfg(), "fixed-b"), (eta_cfg(), "eta")] {
+            let (_, _, _, stats) = solve_reopen(&inst, LDT_THETA_ELIM, BUDGETS[1], &cfg);
+            assert!(
+                stats.rounds <= cfg.max_rounds,
+                "{name} seed {seed}: round cap violated ({} > {})",
+                stats.rounds,
+                cfg.max_rounds
+            );
+            assert!(
+                stats.reopens_applied <= cfg.budget_b * stats.rounds.max(1),
+                "{name} seed {seed}: per-round reopen cap violated"
+            );
+            assert!(
+                stats.rounds == 0 || stats.reopens_applied > 0,
+                "{name} seed {seed}: an applied round restored nothing (progress law)"
+            );
+        }
     }
 
-    // (d) Determinism: full replay reproduces tree + stats exactly.
+    // (d) Determinism: full replay reproduces tree + stats exactly, both
+    //     postures (the η bisection is pure arithmetic — no RNG).
     for seed in 1_000_000..1_000_010 {
         let inst = gen_instance(seed);
-        let (p1, c1, n1, s1) = solve_reopen(&inst, LDT_THETA_ELIM, BUDGETS[1]);
-        let (p2, c2, n2, s2) = solve_reopen(&inst, LDT_THETA_ELIM, BUDGETS[1]);
-        assert_eq!((p1, c1, n1), (p2, c2, n2), "seed {seed}: replay diverged");
-        assert_eq!(s1, s2, "seed {seed}: stats diverged");
+        for (cfg, name) in [(fixed_cfg(), "fixed-b"), (eta_cfg(), "eta")] {
+            let (p1, c1, n1, s1) = solve_reopen(&inst, LDT_THETA_ELIM, BUDGETS[1], &cfg);
+            let (p2, c2, n2, s2) = solve_reopen(&inst, LDT_THETA_ELIM, BUDGETS[1], &cfg);
+            assert_eq!(
+                (p1, c1, n1),
+                (p2, c2, n2),
+                "{name} seed {seed}: replay diverged"
+            );
+            assert_eq!(s1, s2, "{name} seed {seed}: stats diverged");
+        }
     }
 
-    // (e) Progress on the deciding read (print, never assert — the G1
-    //     direction is an empirical outcome, recorded in the issue).
-    let re_hard = pct_stratum(presence[1][1][0], 0);
-    let pl_hard = pct_stratum(presence[0][1][0], 0);
-    let re_chain_hard = pct_stratum(chain[1][1][0], 0);
-    println!();
-    println!(
-        "  G1 hard-stratum read (budget {}): presence {pl_hard:.1}% → {re_hard:.1}% (Δ {:+.1} pts) · chain {:.1}%",
-        BUDGETS[1],
-        re_hard - pl_hard,
-        re_chain_hard,
-    );
+    // (e) Progress on the deciding reads (print, never assert — the G1
+    //     direction is an empirical outcome, recorded in the issue):
+    //     fixed-b and η at the roomy budget, plus the T2b anti-regression
+    //     read at the TIGHT budget (the drive exists for it).
+    for (ai, name) in [(1_usize, "fixed-b"), (2_usize, "η")] {
+        let re_hard = pct_stratum(presence[ai][1][0], 0);
+        let pl_hard = pct_stratum(presence[0][1][0], 0);
+        let re_chain_hard = pct_stratum(chain[ai][1][0], 0);
+        println!();
+        println!(
+            "  G1 hard-stratum read [{name}] (budget {}): presence {pl_hard:.1}% → {re_hard:.1}% (Δ {:+.1} pts) · chain {:.1}%",
+            BUDGETS[1],
+            re_hard - pl_hard,
+            re_chain_hard,
+        );
+        let re_hard_tight = pct_stratum(presence[ai][0][0], 0);
+        let pl_hard_tight = pct_stratum(presence[0][0][0], 0);
+        println!(
+            "  T2b tight-budget read [{name}] (budget {}): presence {pl_hard_tight:.1}% → {re_hard_tight:.1}% (Δ {:+.1} pts)",
+            BUDGETS[0],
+            re_hard_tight - pl_hard_tight,
+        );
+    }
     println!("  wall: {:.1}s", t0.elapsed().as_secs_f32());
 }
