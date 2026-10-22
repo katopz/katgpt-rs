@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-15
 > **Status:** CLOSED-NEGATIVE 2026-10-16 — Phase 0 kill gate failed on B1 under-firing (Bench 941: the minimal arm fires on 1/12 problems in latent mode); entropy-exit remains the only exit law. Re-open: a thinking-format model re-runs the landed instruments unchanged.
-> **Claimed:** katgpt-rs-idle-626, 1792102437, expires 2026-10-18T22:14:00Z
+> **Lease closed:** katgpt-rs-idle-626, 1792102437 — the plan closed negative 2026-10-16 before the claim (expired 2026-10-18T22:14:00Z) exercised anything; reshaped 2026-10-22 per the lease-reshape rule.
 **Research:** [katgpt-rs/.research/622_HybridAgent_Hybrid_Latent_Text_Agents.md](../.research/622_HybridAgent_Hybrid_Latent_Text_Agents.md)
 **Source paper:** [arXiv:2610.18861](https://arxiv.org/abs/2610.18861) HybridAgent (anchor exit, trained form) + trained-form prior arXiv:2610.17189 (implicit-readout exit); modelless adaptation unclaimed
 **Target:** `crates/katgpt-transformer/src/swir/` (controller extension) + Cargo feature `swir_anchor_exit` (implies `swir_switch_thinking`)
