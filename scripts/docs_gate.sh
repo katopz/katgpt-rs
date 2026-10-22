@@ -148,8 +148,18 @@ resolve_py() {
     # checks need tomllib (3.11+), so a working-but-old interpreter silently
     # reds 7 checks as ImportError (measured on the 4090: py -0 lists 3.14 +
     # 3.10; the first-working probe order resolved 3.10).
+    # A uv-managed interpreter joins the candidates (the workspace's Python
+    # toolchain is uv): measured 2026-10-23 on seal1 — PATH carried only the
+    # system 3.9 while uv held 3.12, and 21 of 35 checks red on import/kwarg
+    # errors that a 3.12 run cleared to 4. An array, not a word list: a uv
+    # path can contain spaces on Windows.
     local c best_c="" best_v="" v=""
-    for c in python3 python py; do
+    local -a cands=(python3 python py)
+    if command -v uv >/dev/null 2>&1; then
+        c="$(uv python find '>=3.11' 2>/dev/null | tr -d '\r')" || c=""
+        [ -n "$c" ] && cands+=("$c")
+    fi
+    for c in "${cands[@]}"; do
         command -v "$c" >/dev/null 2>&1 || continue
         [ "$("$c" -c 'print("pyok")' 2>/dev/null | tr -d '\r')" = "pyok" ] || continue
         v=$("$c" -c 'import sys; print("%d" % (sys.version_info[0]*100 + sys.version_info[1]))' 2>/dev/null | tr -d '\r')
@@ -167,7 +177,7 @@ PY="$(resolve_py)" || { echo "✗ no WORKING python interpreter on PATH (python3
 # discovered as seven ImportErrors.
 PY_V="$("$PY" -c 'import sys; print(sys.version_info[0]*100 + sys.version_info[1])' 2>/dev/null | tr -d '\r')"
 if [ -n "$PY_V" ] && [ "$PY_V" -lt 311 ]; then
-    echo "⚠ resolved interpreter '$PY' is python $((PY_V / 100)).$((PY_V % 100)) < 3.11 — tomllib-dependent checks (count_features, bench_doc_audit, cargo_comment_audit, cfg_gated_floor, required_features_static, cfg_row_implication, population_sync) will fail on import; install 3.11+ or expose it via the py launcher"
+    echo "⚠ resolved interpreter '$PY' is python $((PY_V / 100)).$((PY_V % 100)) < 3.11 — every check importing tomllib (3.11+) or using 3.10+ syntax/kwargs fails on import or in its self-test (measured: 17 of 35 on 3.9); install 3.11+ (\`uv python install 3.12\` is probed automatically) or expose it via the py launcher"
 fi
 
 # Self-supply documented workstation prerequisite (2), header above: a

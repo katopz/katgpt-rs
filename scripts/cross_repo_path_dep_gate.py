@@ -80,6 +80,37 @@ MIN_DEPS = 60
 PATH_DEP = re.compile(r'path\s*=\s*"((?:\.\./)+[^"]*)"')
 
 
+def strip_toml_comments(text: str) -> str:
+    """`text` with every TOML comment removed — a `#` outside a basic
+    (`"…"`, backslash escapes) or literal (`'…'`) string ends its line.
+
+    A commented-out dependency is not a dependency: cargo never resolves it.
+    Measured 2026-10-23: riir-ai `crates/riir-games/Cargo.toml` carries
+    `# seal-client-data = { path = "../../../seal-online-remaster/…" }`
+    (TEMP-ISSUE-027, deliberately disabled) and this gate read it as an
+    ORPHAN on every workstation — a red no repair could clear but deleting
+    the record of why the line is off. Multi-line strings do not occur in
+    the manifests' dependency tables and are not modelled.
+    """
+    out = []
+    for line in text.split("\n"):
+        quote = None
+        i = 0
+        while i < len(line):
+            ch = line[i]
+            if quote == '"' and ch == "\\":
+                i += 2
+                continue
+            if quote is None and ch == "#":
+                line = line[:i]
+                break
+            if ch in ('"', "'"):
+                quote = None if quote == ch else (ch if quote is None else quote)
+            i += 1
+        out.append(line)
+    return "\n".join(out)
+
+
 def repo_set(root: Path) -> set:
     """The canonical registry. Empty set when unreadable — the caller decides."""
     f = root / "scripts" / "repo_set.txt"
@@ -204,7 +235,7 @@ def scan(root: str, ws=None, partial=None, repos_on_disk=None, registry=None,
                 text = m.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            for hit in PATH_DEP.finditer(text):
+            for hit in PATH_DEP.finditer(strip_toml_comments(text)):
                 raw = hit.group(1)
                 verdict, name = classify(ws, repo, m, raw, on_disk, registered,
                                          partial, exists)
@@ -290,6 +321,17 @@ def selftest() -> list:
                            'c = { path = "../../z" }')
     if got != ["../x", "../../z"]:
         fails.append(f"PATH_DEP matched {got}")
+
+    # 7b. Comments are not dependencies — but a `#` INSIDE a string is not a
+    #     comment, and a trailing comment after a real dep keeps the dep.
+    got = PATH_DEP.findall(strip_toml_comments(
+        '# a = { path = "../off" }\n'
+        'b = { path = "../on" }  # trailing note\n'
+        "c = { path = \"../x#y\", note = 'q#r' }\n"
+        '    #d = { path = "../indented_off" }\n'
+        'e = { path = "../e", note = "a\\"#b" } # f = { path = "../after" }'))
+    if got != ["../on", "../x#y", "../e"]:
+        fails.append(f"comment stripping read {got}")
 
     # 8. Floors, both directions, distinguishable causes, and non-trivial.
     if floor_verdict(MIN_MANIFESTS, MIN_DEPS)[0] != 0:
