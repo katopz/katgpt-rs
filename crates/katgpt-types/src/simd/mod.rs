@@ -222,6 +222,30 @@ pub(crate) fn par_matvec_chunk(rows: usize) -> usize {
         .clamp(1, PAR_MATVEC_CHUNK_ROWS)
 }
 
+/// Run `f` on this thread's reusable scratch in `key` WITHOUT holding the
+/// `RefCell` borrow across `f` (Issue 957).
+///
+/// The quantized matvecs keep per-thread activation scratch and run a rayon
+/// region inside `f`. A worker waiting in that region work-steals other jobs —
+/// including another forward that calls the same matvec — so a borrow held
+/// across `f` panics with `RefCell already borrowed` whenever two forwards
+/// share the pool. The scratch is moved OUT for the call and back after it: a
+/// re-entrant call finds the default (empty) value and allocates its own, so
+/// allocation happens only on actual re-entry and the steady state stays
+/// zero-allocation (moving a `Vec` out and back allocates nothing). A panic in
+/// `f` drops the scratch; the next call re-grows it.
+#[cfg(feature = "ternary_group_q8_act")]
+#[inline]
+pub(crate) fn with_thread_scratch<T: Default + 'static, R>(
+    key: &'static std::thread::LocalKey<std::cell::RefCell<T>>,
+    f: impl FnOnce(&mut T) -> R,
+) -> R {
+    let mut scratch = key.take();
+    let r = f(&mut scratch);
+    key.set(scratch);
+    r
+}
+
 /// Detect the best available SIMD level for the current CPU.
 ///
 /// On `aarch64`: always returns [`SimdLevel::Neon`] (mandatory on ARMv8+).

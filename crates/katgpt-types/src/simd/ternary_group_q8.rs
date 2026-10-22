@@ -278,7 +278,9 @@ fn q8_row_range(w: &TernaryGroupWeights, xq: &[i8], xs: &[f32], y: &mut [f32], r
 
 thread_local! {
     /// Per-calling-thread activation scratch, reused across calls (zero
-    /// steady-state allocation).
+    /// steady-state allocation); only ever reached through
+    /// [`super::with_thread_scratch`] — never borrowed across a parallel
+    /// region (Issue 957).
     static Q8_SCRATCH: RefCell<(Vec<i8>, Vec<f32>)> = const { RefCell::new((Vec::new(), Vec::new())) };
 }
 
@@ -302,7 +304,7 @@ pub fn simd_ternary_group_matvec_q8_parallel(w: &TernaryGroupWeights, x: &[f32],
         simd_ternary_group_matvec_parallel_chunked(w, x, y, chunk);
         return;
     }
-    Q8_SCRATCH.with_borrow_mut(|(xq, xs)| {
+    super::with_thread_scratch(&Q8_SCRATCH, |(xq, xs)| {
         xq.resize(w.cols, 0);
         xs.resize(w.cols / GROUP_SIZE, 0.0);
         quantize_activations_q8(x, xq, xs);
@@ -361,6 +363,34 @@ mod tests {
                 g => (((i * 37) % 101) as f32 * 0.01 - 0.5) * (1.0 + g as f32),
             })
             .collect()
+    }
+
+    /// Issue 957: the matvec called from INSIDE the rayon pool re-enters the
+    /// per-thread scratch through work-stealing (the borrow used to span the
+    /// parallel region); results must equal the serial calls bit-for-bit.
+    #[test]
+    fn nested_parallel_calls_are_reentrant_and_bit_identical() {
+        use rayon::prelude::*;
+        let (rows, cols) = (1024, 512);
+        let w = fixture(rows, cols, 957);
+        let xs: Vec<Vec<f32>> = (0..64)
+            .map(|k| {
+                activations(cols)
+                    .iter()
+                    .map(|v| v * (1.0 + k as f32 * 0.01))
+                    .collect()
+            })
+            .collect();
+        let run = |x: &Vec<f32>| {
+            let mut y = vec![0.0f32; rows];
+            simd_ternary_group_matvec_q8_parallel(&w, x, &mut y);
+            y
+        };
+        let serial: Vec<Vec<f32>> = xs.iter().map(run).collect();
+        for _ in 0..8 {
+            let nested: Vec<Vec<f32>> = xs.par_iter().map(run).collect();
+            assert_eq!(nested, serial);
+        }
     }
 
     /// Issue 936: the spin-pool arm is the rayon arm, bit-for-bit.

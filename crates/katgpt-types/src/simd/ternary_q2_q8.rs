@@ -396,7 +396,9 @@ type Q2Scratch = (Vec<i8>, Vec<i8>, Vec<f32>, Vec<i32>);
 
 thread_local! {
     /// Per-calling-thread activation scratch, reused across calls (zero
-    /// steady-state allocation).
+    /// steady-state allocation); only ever reached through
+    /// [`super::with_thread_scratch`] — never borrowed across a parallel
+    /// region (Issue 957).
     static Q2_SCRATCH: RefCell<Q2Scratch> = const { RefCell::new((Vec::new(), Vec::new(), Vec::new(), Vec::new())) };
 }
 
@@ -409,7 +411,7 @@ type Q2Acts<'a> = (&'a [i8], &'a [i8], &'a [i32], &'a [f32]);
 /// Quantize + permute `x` once into the per-thread scratch and hand the
 /// operands to `f` — shared by the single and the pair entry points.
 fn with_q2_activations<R>(x: &[f32], f: impl FnOnce(Q2Acts<'_>) -> R) -> R {
-    Q2_SCRATCH.with_borrow_mut(|(xq, xperm, xs, xsum)| {
+    super::with_thread_scratch(&Q2_SCRATCH, |(xq, xperm, xs, xsum)| {
         let groups = x.len() / GROUP_SIZE;
         xq.resize(x.len(), 0);
         xperm.resize(x.len(), 0);
@@ -585,6 +587,46 @@ mod tests {
         let mut xs = vec![0.0f32; x.len() / GROUP_SIZE];
         quantize_activations_q8(x, &mut xq, &mut xs);
         (xq, xs)
+    }
+
+    /// Issue 957: the matvec called from INSIDE the rayon pool. A worker that
+    /// waits in the inner `par_chunks_mut` steals another outer task and
+    /// re-enters the per-thread scratch — `RefCell already borrowed` while the
+    /// borrow spanned the parallel region. Every result must also equal the
+    /// serial call bit-for-bit (a re-entrant call must not clobber the outer
+    /// call's activations).
+    #[test]
+    fn nested_parallel_calls_are_reentrant_and_bit_identical() {
+        use rayon::prelude::*;
+        let (rows, cols) = (1024, 512);
+        let q = TernaryQ2Weights::from_group(&fixture(rows, cols, 957));
+        let xs: Vec<Vec<f32>> = (0..64)
+            .map(|k| {
+                activations(cols)
+                    .iter()
+                    .map(|v| v * (1.0 + k as f32 * 0.01))
+                    .collect()
+            })
+            .collect();
+        let serial: Vec<Vec<f32>> = xs
+            .iter()
+            .map(|x| {
+                let mut y = vec![0.0f32; rows];
+                simd_ternary_q2_matvec_q8_parallel(&q, x, &mut y);
+                y
+            })
+            .collect();
+        for _ in 0..8 {
+            let nested: Vec<Vec<f32>> = xs
+                .par_iter()
+                .map(|x| {
+                    let mut y = vec![0.0f32; rows];
+                    simd_ternary_q2_matvec_q8_parallel(&q, x, &mut y);
+                    y
+                })
+                .collect();
+            assert_eq!(nested, serial);
+        }
     }
 
     #[test]
