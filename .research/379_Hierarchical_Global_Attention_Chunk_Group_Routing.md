@@ -8,6 +8,7 @@
 > **Related Research:** 071 (DashAttention — closest shipped cousin, chunk+token), 086 (RTPurbo — pre-RoPE low-dim projection), 044 (PFlash — sink/window/content-routed middle), 225 (MSA — failed-GOAT prior, blockwise sparse), 233 (Attention Matching — exact-token over compacted set), 213 (StillKV — β-bias compaction), 109 (Shard Drop), 258 (Sink-Aware + FlashMemory), 362 (HydraHead — head-importance calibration), 378 (HOLA — bounded exact KV cache on GDN2), 022 (Lighthouse — training-only multi-resolution pyramid)
 > **Related Plans:** 106 (DashAttention, default-on), 044 (PFlash, default-on), 126 (RTPurbo, opt-in), 271 (AM KV Compaction, opt-in), 256 (MSA — GOAT FAILED precedent), 218 (BFCF LFU Sharding), 299 (Engram cache hierarchy), 335 (ZoneGeometryCache mmap-backed LRU)
 > **Feature Gate:** `hga` (opt-in, requires GOAT proof of gain over DashAttention + PFlash + RTPurbo stack)
+> **PASS-Redirects (synthesis):** Ichikawa et al. (Fujitsu/RIKEN) [arXiv:2512.20687 "PHOTON: Hierarchical Autoregressive Modeling for Lightspeed and Memory-Efficient Language Generation"] — distill record-only (ACL 2026). The pretrained-architecture route to the same multi-resolution goal HGA approaches inference-time: L-level chunk hierarchy + RecGen (top-level-only KV growth, decoder-side bottleneck summaries, exactness under bottleneck consistency). No public checkpoints; no consumer in the stack; decode-shape record in `riir-infer/.research/016_PHOTON_Hierarchical_Autoregressive_Decoding.md`.
 
 ---
 
