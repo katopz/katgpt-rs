@@ -457,3 +457,5 @@ The `spectral_rewire` primitive stays OPT-IN — its mechanism is correct
 (G1a-G6 pass), but the concentration phenomenon doesn't hold at any
 accessible scale. Fusions F and G both closed; no further SAR-fusion work
 planned unless a 7B+ opportunity arises.
+
+> **Post-406 redirect (2026-10-23, corrected per verdict round 1):** arXiv:2610.22293 "Towards Continual Learning: Mitigating Forgetting With Subspace Tuning" (Research 631) — applied-update complement projection + certification composition law + riir-train Plan 470. ⚠ CUT DISCIPLINE: this paper protects the TOP 99% of the spectrum and adapts in the ~1% tail — the OPPOSITE cut from SAR's top-~1% on-manifold fraction; its unconstrained-delta measurement (98% of update energy in the top-99% span) says nothing about, and does not revive, Fusion A (which keeps the top block and is already marked WEAKENED in §8.4). The two are complementary diagnostics (where capability concentrates vs where updates may write), nothing more. The 7B+ SAR-fusion trigger is NOT fired by it.

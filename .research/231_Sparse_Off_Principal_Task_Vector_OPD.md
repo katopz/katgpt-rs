@@ -413,3 +413,5 @@ The OPD paper proves that *on-policy dense supervision produces sparse, off-prin
 4. **Module-aware compute routing** (better CPU/SIMD/GPU/ANE utilization).
 
 All four are paper-grounded, all four are modelless, all four fit the engine/fuel split (storage/projection/routing = public engine; specific masks/SVDs/profiles = private fuel). **GOAT — implement Plan 264.**
+
+> **Post-231 redirect (2026-10-23, corrected per verdict round 1):** arXiv:2610.22293 "Towards Continual Learning: Mitigating Forgetting With Subspace Tuning" (Research 631) — the matrix-delta Update-confinement twin at a DIFFERENT cut of the same spectrum: SST protects the top 99% and confines updates into the ~1% tail, where this note's retrieval cut drops the top 10% (k_frac 0.1). Three cuts, one spectrum (SAR keeps top ~1%, SOPTV drops top 10%, SST protects top 99%); shared basis computation, different consumers, no confirmation relation. riir-train Plan 470 (training) + katgpt-rs Issue 958 (substrate) carry it.
