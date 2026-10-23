@@ -1,6 +1,8 @@
 # Issue 958: `sst_certified` — tail-subspace substrate for weight-delta anatomy and factored-tail shipping
 
-**Status:** Open — unclaimed
+**Status:** Open — claimed
+
+**Claimed:** zed-m3-sst958, epoch 1792784038, expires 2026-10-25T19:33:58+00:00
 
 > **Source:** [katgpt-rs/.research/631_Subspace_Tuning_SST_Composition_Law.md](../.research/631_Subspace_Tuning_SST_Composition_Law.md) · arXiv:2610.22293 (Subspace Tuning, Oct 2026)
 > **Kind:** poc + proof (modelless substrate; consumer sides live in riir-neuron-db Issue 629, riir-ai Issue 1116; the producer is riir-train Plan 470)
