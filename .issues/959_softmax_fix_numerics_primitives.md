@@ -1,6 +1,7 @@
 # Issue 959: Fixed-form softmax numerics primitives (arXiv:2610.31642 adoption, modelless)
 
 **Status:** Open — 2026-10-23 (unclaimed)
+**Claimed:** zed-m3-idle-loop, 1792774280, expires 2026-10-25T16:51:20Z — scope T1–T4 (T5/T6 follow-up if the session allows)
 
 **Research:** [katgpt-rs/.research/632_Softmax_Fix_Collapse_Cancellation.md](../.research/632_Softmax_Fix_Collapse_Cancellation.md) (allocated 631, renumbered 632 — dual allocation vs `a4433631d`, citation_weight awarded 631 to the SST note)
 **Source:** [arXiv:2610.31642](https://arxiv.org/abs/2610.31642) — Barron et al., "A Fix for Softmax and Cross-Entropy" (Google DeepMind, 2026-10-22)
