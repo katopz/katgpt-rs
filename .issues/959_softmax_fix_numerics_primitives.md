@@ -1,6 +1,7 @@
 # Issue 959: Fixed-form softmax numerics primitives (arXiv:2610.31642 adoption, modelless)
 
-**Status:** Open — 2026-10-23 (T1–T4 landed; T5 landed 2026-10-24; T6 open, unclaimed)
+**Status:** Open — 2026-10-23 (T1–T4 landed; T5 landed 2026-10-24; T6 claimed)
+**Claimed (T6):** zed-m3-idle-loop, 1792777800, expires 2026-10-26T18:16:40Z
 **Lease released:** zed-m3-idle-loop (epoch 1792776198) — T5 landed this session; T6 unclaimed, its own lane (riir-infer consumer)
 
 **T1–T4 LANDED (zed-m3-idle-loop, 2026-10-23):** `crates/katgpt-core/src/softmax_fix.rs` —
