@@ -6080,6 +6080,22 @@ consumers file for them).
   bound, no inf·0 NaN). The `noisy_or_stable` resolution law pointed at
   softmax differencing. Consumers: KL checks, drift/capture verification,
   quant deltas, comparison-lane agreement.
+- **`fixed_log_softmax` (T5, opt-in)**: the argmax-excluded-LSE + softplus
+  form (paper Eq. 5) — `log p_i = (z_i − z_a) − log1p(R)`, `R = Σ_{j≠a}
+  e^{z_j − z_a}`. The target slot's log-prob resolves from the cliff c_d out
+  to exponent underflow (~103 nats f32) instead of saturating at exactly 0.0
+  past c_d (G1: 207-rung margin ladder 0..103, both slots ≤ 2 ulp of the f64
+  oracle — the f32 libm composition's budget, disclosed — incl. the subnormal
+  tail; the incumbent's 0.0-saturation witnessed at the cliff). f32 + f64 arms + single-slot `_target` forms (the NLL-oracle
+  shape, bit-identical to the full form's slot). Overflow-free by construction
+  (every exp argument ≤ +0.0, R ∈ [0, n−1]); lone-`+inf` max prices exactly.
+  Determinism-law seam: first-index argmax + sequential ascending-j `+=` fold
+  pinned at the site (Issue 940 class); LOCAL instrument — sync crossings go
+  through the `closure/bridge_certified` precedent. G2 parity bench
+  `benches/softmax_fix_log_softmax_goat.rs` (interleaved A/B, box-state
+  line); G4 `tests/softmax_fix_g4_alloc.rs` (0 allocs/1000 mixed calls).
+  Consumer: the riir-infer f64 golden-NLL lossy-quant oracle (T6, its own
+  lane).
 - **Scoping (pre-conceded)**: forward absolute win ≤ machine-epsilon per
   value — instrument-grade, NEVER a serving-forward replacement (the clef
   expf-fidelity contract and attention's O(1) mixtures stay untouched).

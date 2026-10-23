@@ -1239,13 +1239,18 @@ The certified precedent is `katgpt-core/src/closure/bridge_certified.rs`
 arXiv:2610.31642 adoption (Research 632): `precision_cliff`/`PRECISION_CLIFF_NATS`
 (c_d = p·ln2 per ACCUMULATOR format — the Softmax Collapse cliff, ungated),
 `margin_equilibrium(eps, format)` (the m\* = ln(1/ε) Slingshot regime predictor,
-ungated), and feature-gated `logspace_diff(_f64)` (exact-0.0-at-equality log-space
-probability differencing, opt-in `logspace_diff`). Instrument-grade only — never a
+ungated), feature-gated `logspace_diff(_f64)` (exact-0.0-at-equality log-space
+probability differencing, opt-in `logspace_diff`), and feature-gated
+`fixed_log_softmax(_f64)(_target)` (T5, opt-in `fixed_log_softmax` — the
+argmax-excluded-LSE + softplus form: the target slot's log-prob resolves from
+the cliff c_d out to exponent underflow ~103 nats f32 instead of saturating at
+exactly 0.0; first-index argmax + sequential ascending-j fold order pinned at
+the site per the Issue-940 determinism law, LOCAL instrument — any sync crossing
+goes through the `closure/bridge_certified` precedent). Instrument-grade only — never a
 serving-forward replacement. The offline config-audit CLI is
 `scripts/margin_equilibrium_audit.py` (`--self-test` golden asserts; `--sweep`
-prints the paper's regime table). T5 (`fixed_log_softmax`) + T6 (the riir-infer
-f64 golden-NLL oracle) land in their own lanes, each GOAT-gated before the next
-consumes it.
+prints the paper's regime table). T6 (the riir-infer f64 golden-NLL oracle)
+lands in its own lane, GOAT-gated on T5's.
 
 ## Feature Flag Discipline
 

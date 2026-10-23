@@ -2000,6 +2000,19 @@ direction_bank_audit = []
 # until a consumer GOAT.
 logspace_diff = []
 
+# Fixed-form log-softmax (Issue 959 T5, same family): softmax_fix::
+# fixed_log_softmax(_f64) + fixed_log_softmax_target(_f64) — the
+# argmax-excluded-LSE + softplus form (arXiv:2610.31642 Eq. 5). The
+# target slot's log-prob resolves from the precision cliff c_d out to
+# exponent underflow (~103 nats f32) instead of saturating at exactly
+# 0.0 once the best competitor passes c_d. Determinism-law seam: the
+# first-index argmax + sequential ascending-j fold order is pinned at
+# the site; LOCAL instrument — any sync crossing goes through the
+# closure/bridge_certified precedent, opt-in until GOAT'd. Consumer:
+# the riir-infer f64 golden-NLL quant oracle (T6). Instrument-grade —
+# never a serving-forward replacement. Opt-in (T5).
+fixed_log_softmax = []
+
 # Plan 371 Phase 5 — Mean-Field Regime Classifier GOAT gate (G2/G4/G5).
 # G1 (defend-wrong PoC) ships separately in riir-poc/benches/.
 [[bench]]
@@ -4799,3 +4812,20 @@ required-features = ["qrr_convergence"]
 [[example]]
 name = "issue945_qrr_sylvester_report"
 required-features = ["qrr_convergence"]
+
+# Issue 959 T5 — the fixed_log_softmax G4 zero-alloc gate. Separate test
+# binary (the counting-allocator convention) so the counter does not pick
+# up allocations from parallel GOAT tests.
+[[test]]
+name = "softmax_fix_g4_alloc"
+required-features = ["fixed_log_softmax"]
+
+# Issue 959 T5 — the fixed_log_softmax G2 release parity bench:
+# ns/call vs the incumbent max-subtract form (log1p vs log same cost
+# class), interleaved A/B pairs (the Issue-723 treatment), box-state
+# line printed. harness = false + std::time::Instant (the DEC GOAT
+# convention); exits 1 on a parity-gate FAIL.
+[[bench]]
+name = "softmax_fix_log_softmax_goat"
+harness = false
+required-features = ["fixed_log_softmax"]

@@ -31,6 +31,10 @@ import argparse
 import math
 import sys
 
+import console_safe  # noqa: E402
+
+console_safe.apply()
+
 # Significand bits p (explicit + implicit leading 1) per accumulator
 # format. Mirrors katgpt_core::softmax_fix::significand_bits — the two
 # tables must not drift (the self-test pins the shared goldens).
