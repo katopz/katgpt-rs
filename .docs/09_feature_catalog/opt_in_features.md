@@ -6052,3 +6052,40 @@ fixed order (Issue-940 classification).
 
 Plan: [`.plans/630_rls_depth_memory.md`](../../.plans/630_rls_depth_memory.md) (CLOSED) ·
 Research: [`.research/629_Depth_Memory_RLS_Depth_Mixing.md`](../../.research/629_Depth_Memory_RLS_Depth_Mixing.md).
+
+## 156. softmax_fix — Fixed-Form Softmax Numerics Family (Issue 959 / Research 632, arXiv:2610.31642)
+
+Barron et al. (Google DeepMind, 2026-10-22) fix two FP bugs in every standard
+max-subtraction softmax/log-softmax/CE — **Softmax Collapse** (the denominator
+`1 + e^{-m}` absorbs `e^{-m}` once the margin passes the accumulator's
+precision cliff `c_d = p·ln2`; the target slot reads exactly `−0.0`) and
+**Softmax Cancellation** (probability-space subtraction of near-equal values
+loses the difference, error ~eps·p vs true ~δ·p). Module `softmax_fix` (the
+workspace's ~10 hand-rolled max-subtract variants stay untouched until their
+consumers file for them).
+
+- **Ungated (T1/T2/T3)**: `FloatFormat` + `PRECISION_CLIFF_NATS` +
+  `precision_cliff(_bits)` (the closed form is ours — the paper states
+  numbers, not the law; goldens 2.8/5.5/7.6/16.6/36.7 ±0.1 nat pinned);
+  `margin_equilibrium(eps, format)` — the m\* = ln(1/ε) Slingshot predictor
+  (default ε=1e-8 → m\* 18.42 > fp32 cliff 16.64 = HAZARD; ε=1e-7 clears);
+  the `−σ(−m)` fixed-CE-gradient doctrine citation beside the sigmoid law +
+  the cliff-band property test for `fast_sigmoid` (m ∈ [5.5, 40]); the
+  offline CLI audit `scripts/margin_equilibrium_audit.py`.
+- **`logspace_diff` (T4, opt-in)**: `e^a − e^b` via the anchored expm1 form —
+  EXACT +0.0 at equality, resolves δ·p where the incumbent reads a false
+  zero (measured: at δ=1e-8, b=−16 the incumbent returns 0.0 against a true
+  1.125e-15; the fixed form tracks the f64 oracle to 1e-6 rel). f32 + f64
+  arms, overflow-branch safe (returns the nearer exponential past the exp
+  bound, no inf·0 NaN). The `noisy_or_stable` resolution law pointed at
+  softmax differencing. Consumers: KL checks, drift/capture verification,
+  quant deltas, comparison-lane agreement.
+- **Scoping (pre-conceded)**: forward absolute win ≤ machine-epsilon per
+  value — instrument-grade, NEVER a serving-forward replacement (the clef
+  expf-fidelity contract and attention's O(1) mixtures stay untouched).
+  T5 (`fixed_log_softmax`, argmax-excluded LSE + softplus) and T6 (f64
+  golden-NLL lossy-quant oracle in riir-infer) follow in their own lanes,
+  each GOAT-gated before the next consumes it.
+
+Issue: [`.issues/959_softmax_fix_numerics_primitives.md`](../../.issues/959_softmax_fix_numerics_primitives.md) ·
+Research: [`.research/632_Softmax_Fix_Collapse_Cancellation.md`](../../.research/632_Softmax_Fix_Collapse_Cancellation.md).

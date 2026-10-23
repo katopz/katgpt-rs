@@ -31,6 +31,17 @@
 /// drag a math utility into the band crate. Per the project rule: sigmoid,
 /// never softmax.
 ///
+/// Doctrine citation (arXiv:2610.31642, Barron et al. 2026 — Issue 959):
+/// the numerically-correct CE target gradient IS `−σ(−m)` — a numerically-
+/// correct softmax converges to this sigmoid at the logit margin, which is
+/// the paper's own fix for Softmax Collapse. The margin band where that
+/// convergence binds is the precision cliff `c_d = p·ln2`
+/// ([`crate::softmax_fix::precision_cliff`]; fp32 accumulator: 16.64 nats),
+/// and [`crate::softmax_fix::margin_equilibrium`] predicts from a config's
+/// ε whether training saturates past it. Property test pinning
+/// [`simd::fast_sigmoid`] against the exact form in that band lives in
+/// [`crate::softmax_fix`] tests.
+///
 /// ⚠ This returns the APPROXIMATION. For committed-value paths that must not
 /// inherit it (consensus scoring, reward gates, replay-pinned values), use
 /// [`exact_sigmoid`] — the libm two-branch reference form.
@@ -117,6 +128,8 @@ pub mod newton_schulz;
 pub mod float_order;
 
 pub mod stats;
+
+pub mod softmax_fix;
 
 #[cfg(any(feature = "probe_guidance", feature = "loop_guidance"))]
 pub mod contrast_combine;

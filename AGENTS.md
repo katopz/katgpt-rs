@@ -1234,6 +1234,19 @@ queue: `.docs/10_audits/float_reduction_order_tie_band_determinism_audit.md`.
 The certified precedent is `katgpt-core/src/closure/bridge_certified.rs`
 (`dot_f32_ordered` + `fast_sigmoid` behind `freeze_version_hash`).
 
+## Fixed-form softmax numerics family — `katgpt-core/src/softmax_fix.rs` (Issue 959)
+
+arXiv:2610.31642 adoption (Research 632): `precision_cliff`/`PRECISION_CLIFF_NATS`
+(c_d = p·ln2 per ACCUMULATOR format — the Softmax Collapse cliff, ungated),
+`margin_equilibrium(eps, format)` (the m\* = ln(1/ε) Slingshot regime predictor,
+ungated), and feature-gated `logspace_diff(_f64)` (exact-0.0-at-equality log-space
+probability differencing, opt-in `logspace_diff`). Instrument-grade only — never a
+serving-forward replacement. The offline config-audit CLI is
+`scripts/margin_equilibrium_audit.py` (`--self-test` golden asserts; `--sweep`
+prints the paper's regime table). T5 (`fixed_log_softmax`) + T6 (the riir-infer
+f64 golden-NLL oracle) land in their own lanes, each GOAT-gated before the next
+consumes it.
+
 ## Feature Flag Discipline
 
 Every new primitive ships behind a feature flag (opt-in). Promotion to
