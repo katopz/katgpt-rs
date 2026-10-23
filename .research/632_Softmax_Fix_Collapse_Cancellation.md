@@ -1,10 +1,10 @@
-# Research 631: A Fix for Softmax and Cross-Entropy (Softmax Collapse + Cancellation)
+# Research 632: A Fix for Softmax and Cross-Entropy (Softmax Collapse + Cancellation)
 
 > **Source:** "A Fix for Softmax and Cross-Entropy" — Jonathan T. Barron, Dan Gnanapragasam, Michael Tschannen (Google DeepMind), [arXiv:2610.31642](https://arxiv.org/abs/2610.31642), 2026-10-22
 > **Date:** 2026-10-23
 > **Status:** Active
 > **Related Research:** — (closest in-house cousins are code, not notes: `katgpt-core/src/ssmax.rs`, `katgpt-attn/src/dash_attn/asentmax.rs`, `noisy_or_stable` in `katgpt-core/src/lib.rs`)
-> **Related Plans:** — (filed as issues: katgpt-rs Issue 958 — modelless numerics primitives; riir-train Issue 645 — training-loss fixes)
+> **Related Plans:** — (filed as issues: katgpt-rs Issue 959 — modelless numerics primitives; riir-train Issue 645 — training-loss fixes)
 > **Cross-ref (riir-train):** Issue 645
 > **Classification:** Public
 
@@ -50,14 +50,14 @@ Matches the paper's 5.5/16.6/36.7. ⚠ The cliff binds in the ACCUMULATOR format
 
 | Component | Analog ships? | Extraction → home |
 |---|---|---|
-| Fixed log-softmax (argmax-excluded LSE + softplus) | NO — every own-code site is standard max-subtract f32 (~10 hand-rolled variants; grep agent, 8 repos) | katgpt-core primitive, feature-gated (Issue 958 T5) |
+| Fixed log-softmax (argmax-excluded LSE + softplus) | NO — every own-code site is standard max-subtract f32 (~10 hand-rolled variants; grep agent, 8 repos) | katgpt-core primitive, feature-gated (Issue 959 T5) |
 | Fixed hard-target CE (softplus form + expm1 target grad) | NO — `grad = softmax − onehot` verified live at 8+ riir-train sites | riir_train_engine::math primitive + site fixes (Issue 645 T1) |
-| Soft-target log-space q−p (expm1/log1p) | NO — probability-space subtraction verified at `vq_codebook/backprop_arms.rs` L68-71; `loss_uopsd/kl.rs` gradient `q_j·S − p̃_j` same family | riir-train F2 (Issue 645 T2) + katgpt-core `logspace_diff` (Issue 958 T4) |
-| Cliff constants c_d = p·ln2 | NO | katgpt-core const table (Issue 958 T1) |
-| Margin equilibrium m* = ln(1/ε) | NO — all audited Adam configs at ε=1e-8 | offline config-audit instrument (Issue 958 T3); riir-train ε audit (Issue 645 T3, unbundled) |
-| `fast_sigmoid` audit band | partial (fast_sigmoid ships; no cliff-band property test) | property test (Issue 958 T2) |
+| Soft-target log-space q−p (expm1/log1p) | NO — probability-space subtraction verified at `vq_codebook/backprop_arms.rs` L68-71; `loss_uopsd/kl.rs` gradient `q_j·S − p̃_j` same family | riir-train F2 (Issue 645 T2) + katgpt-core `logspace_diff` (Issue 959 T4) |
+| Cliff constants c_d = p·ln2 | NO | katgpt-core const table (Issue 959 T1) |
+| Margin equilibrium m* = ln(1/ε) | NO — all audited Adam configs at ε=1e-8 | offline config-audit instrument (Issue 959 T3); riir-train ε audit (Issue 645 T3, unbundled) |
+| `fast_sigmoid` audit band | partial (fast_sigmoid ships; no cliff-band property test) | property test (Issue 959 T2) |
 
-**Strongest modelless consumer:** an f64 golden-NLL lossy-quant gate oracle built on the fixed log-softmax. The workspace's own lossy-surface promotion rule already distrusts flat aggregate perplexity (43–45% exact-match flips under BF16 with flat eval aggregates is the recorded shape); per-token NLL at confident positions is where quant damage hides BELOW the collapse floor — two quant variants can differ 1e-6..1e-3 nats on confident tokens and both read as exact zeros through an incumbent fp32 log-softmax. Offline, inference-only, upgrades an existing gate family (si_zero_shot_ppl golden arm, PQ2_0 / GDN_STATE_HALF lossy arms) rather than inventing a consumer (Issue 958 T6).
+**Strongest modelless consumer:** an f64 golden-NLL lossy-quant gate oracle built on the fixed log-softmax. The workspace's own lossy-surface promotion rule already distrusts flat aggregate perplexity (43–45% exact-match flips under BF16 with flat eval aggregates is the recorded shape); per-token NLL at confident positions is where quant damage hides BELOW the collapse floor — two quant variants can differ 1e-6..1e-3 nats on confident tokens and both read as exact zeros through an incumbent fp32 log-softmax. Offline, inference-only, upgrades an existing gate family (si_zero_shot_ppl golden arm, PQ2_0 / GDN_STATE_HALF lossy arms) rather than inventing a consumer (Issue 959 T6).
 
 ### 2.4 Honest scoping (pre-conceded)
 
@@ -77,7 +77,7 @@ paper 2610.31642 × in-house `noisy_or_stable` (expm1/log1p "keeps resolution", 
 - `riir-reflex`/`riir-instinct` — immune by construction (sigmoid-BCE decision lanes; verified structurally cannot hit either bug).
 - `riir-infer` — consumer only (f64 golden-NLL oracle arm); forward kernels untouched (§2.4).
 
-**Per-track:** (a) modelless inference — GAIN (Issue 958). (b) self-adaptive — PASS (sigmoid lanes immune; −σ(−m) identity is doctrine ammunition). (c) model-based training — GAIN, PRIMARY (Issue 645).
+**Per-track:** (a) modelless inference — GAIN (Issue 959). (b) self-adaptive — PASS (sigmoid lanes immune; −σ(−m) identity is doctrine ammunition). (c) model-based training — GAIN, PRIMARY (Issue 645).
 
 ## 4. Coverage + prior-art record
 
@@ -87,10 +87,10 @@ Grep agent (8 repos, read-only): every softmax/CE/KL site in own code uses stand
 
 | File | Content |
 |---|---|
-| `katgpt-rs/.issues/958_softmax_fix_numerics_primitives.md` | modelless primitives T1–T6, sequencing d→b→c-audit→e→a→c-gauge, determinism-law seam |
-| `riir-train/.issues/645_softmax_collapse_cancellation_loss_fixes.md` | F2/F1/F3 recipes, verified line numbers, probe step 0, margin-histogram gate, G3 waiver convention |
+| `katgpt-rs/.issues/959_softmax_fix_numerics_primitives.md` | modelless primitives T1–T6, sequencing d→b→c-audit→e→a→c-gauge, determinism-law seam |
+| `riir-train/.issues/645_softmax_collapse_cancellation_loss_fixes.md` | F2/F1/F3 recipes, verified line numbers, probe step 0, margin-histogram gate, G3 waiver convention (cross-refs updated to 632/959 in riir-train `e0541a2`-class follow-up commit) |
 
-Numbering: `.research/.highwater` 630 → 631; `.issues/.highwater` 957 → 958 (katgpt-rs), 644 → 645 (riir-train); dual_allocation_gate clean on both repos at allocation time.
+Numbering: `.research/.highwater` 630 → 631; `.issues/.highwater` 957 → 958 (katgpt-rs), 644 → 645 (riir-train); dual_allocation_gate clean on both repos at allocation time. ⛔ RENUMBERED at push time — a sibling commit (`a4433631d`, pushed upstream while this note was in flight) independently allocated research 631 + issue 958 for the SST composition-law arc; `citation_weight.py` AWARDED research 631 to the SST note (leads by 2 over 2 decided sites), issue 958 read UNRESOLVED-dominated (20 unresolved vs 6 decided, weak +1 — no award, cluster coherence broke the tie: the sibling's 631+958 are one SST family, so this softmax cluster moved +1 as a whole: **research 631 → 632, issue 958 → 959**, highwaters now 632/959).
 
 ## 6. Verifier negotiation record (§5)
 

@@ -1,8 +1,8 @@
-# Issue 958: Fixed-form softmax numerics primitives (arXiv:2610.31642 adoption, modelless)
+# Issue 959: Fixed-form softmax numerics primitives (arXiv:2610.31642 adoption, modelless)
 
 **Status:** Open — 2026-10-23 (unclaimed)
 
-**Research:** [katgpt-rs/.research/631_Softmax_Fix_Collapse_Cancellation.md](../.research/631_Softmax_Fix_Collapse_Cancellation.md)
+**Research:** [katgpt-rs/.research/632_Softmax_Fix_Collapse_Cancellation.md](../.research/632_Softmax_Fix_Collapse_Cancellation.md) (allocated 631, renumbered 632 — dual allocation vs `a4433631d`, citation_weight awarded 631 to the SST note)
 **Source:** [arXiv:2610.31642](https://arxiv.org/abs/2610.31642) — Barron et al., "A Fix for Softmax and Cross-Entropy" (Google DeepMind, 2026-10-22)
 **Target:** `crates/katgpt-core/src/` (numerics surface; new stable-form family) + consumers in riir-infer/reflex measurement lanes
 **Cross-ref:** riir-train Issue 645 (the training-loss half — same paper, different repo)
