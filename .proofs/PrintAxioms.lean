@@ -44,6 +44,8 @@ import KatgptProof.ScaleInvariant.Tendsto
 import KatgptProof.ScaleInvariant.Basic
 import KatgptProof.ScaleInvariant.Sigmoid
 import KatgptProof.ScaleInvariant.Dominates
+import KatgptProof.Sst.Basic
+import KatgptProof.Sst.SpecTests
 
 open KatgptProof.Bridge
 open KatgptProof.Hope
@@ -51,6 +53,7 @@ open KatgptProof.Ssmax
 open KatgptProof.Pencil
 open KatgptProof.HintRegret
 open KatgptProof.ScaleInvariant
+open KatgptProof.Sst
 
 -- Action-bridge ranking preservation (the sigmoid strict-monotonicity chain).
 #print axioms action_bridge_ranking_preserved
@@ -131,3 +134,10 @@ open KatgptProof.ScaleInvariant
 #print axioms decadeMassPow_le
 #print axioms decadeMassPow_tendsto_zero
 #print axioms scale_invariant_dominates_ssmax_on_decade_mass
+
+-- Sst (Issue 958): the diagonal no-leak arm, the level-set instance, and
+-- the 2×2 counterexample (the perturbation arm's negative) + the leak read.
+#print axioms noLeak_of_scalar
+#print axioms level_set_aligned_no_leak
+#print axioms two_by_two_diagonal_leaks
+#print axioms leak_complement_component

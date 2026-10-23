@@ -35,3 +35,5 @@ import KatgptProof.ScaleInvariant.Basic
 import KatgptProof.ScaleInvariant.Sigmoid
 import KatgptProof.ScaleInvariant.Dominates
 import KatgptProof.ScaleInvariant.SpecTests
+import KatgptProof.Sst.Basic
+import KatgptProof.Sst.SpecTests

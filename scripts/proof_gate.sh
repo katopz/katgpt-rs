@@ -69,7 +69,7 @@ ALLOWED_AXIOMS=("propext" "Classical.choice" "Quot.sound")
 #        comparator families (decadeMassExp/Pow le + tendsto_zero) and the
 #        Def-3.1 band legs (decadeMass_le_logDelta, decadeMassFloor_pos,
 #        decadeMass_ge_floor). 14 audit heads; axiom budget unchanged.
-EXPECTED_THEOREMS=53
+EXPECTED_THEOREMS=57
 
 # Bare `axiom` declarations that are allowed to exist, by name. Empty here:
 # KatgptProof declares none, and a new one must be justified in review rather
