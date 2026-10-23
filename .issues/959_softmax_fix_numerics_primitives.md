@@ -1,7 +1,7 @@
 # Issue 959: Fixed-form softmax numerics primitives (arXiv:2610.31642 adoption, modelless)
 
-**Status:** Open — 2026-10-23 (unclaimed)
-**Claimed:** zed-m3-idle-loop, 1792774280, expires 2026-10-25T16:51:20Z — T1–T4 LANDED (see the checkboxes); T5/T6 remain, each in its own GOAT-gated lane
+**Status:** Open — 2026-10-23 (unclaimed; T5/T6 available)
+**Lease released:** zed-m3-idle-loop (epoch 1792774280) — T1–T4 landed `14c356c03`; T5/T6 unclaimed, each in its own GOAT-gated lane
 
 **T1–T4 LANDED (zed-m3-idle-loop, 2026-10-23):** `crates/katgpt-core/src/softmax_fix.rs` —
 `FloatFormat` + `PRECISION_CLIFF_NATS` + `precision_cliff(_bits)` (ungated; goldens vs the paper
