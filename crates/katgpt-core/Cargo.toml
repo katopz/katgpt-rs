@@ -1026,6 +1026,22 @@ subspace_intervention = ["subspace_phase_gate"]
 # are transitively always-on.
 basis_split = ["subspace_phase_gate", "karc_forecaster"]
 
+# sst_certified (Issue 958 / Research 631, arXiv:2610.22293 Subspace Tuning):
+# tail-subspace substrate for weight-delta anatomy + factored-tail shipping —
+# fit_anchor (Gram eigendecomposition on the smaller side), the per-delta
+# protected/free energy split (dense + rank-r factored), the quantization-safe
+# ΔW = U_⊥ C V_⊥ᵀ shipping form with the relative-tolerance certifier, chain
+# composition, and the rotation-invariant anchor digest (re-anchor churn
+# gate). Self-contained; no new deps. OPT-IN per the no-default-consumer rule
+# — promotion needs the GOAT bench + a wired consumer (riir-neuron-db Issue
+# 629 envelope side, riir-ai Issue 1116 merge-admission side; the producer is
+# riir-train Plan 470). Implies subspace_phase_gate + karc_forecaster: the G1
+# battery's brute-force oracle delegates to the former's thin_svd_into and
+# fit_anchor calls the latter's jacobi_eigen — a consumer forwarding
+# sst_project WITHOUT katgpt-core defaults would otherwise hit E0433 on both
+# (the basis_split precedent).
+sst_project = ["subspace_phase_gate", "karc_forecaster"]
+
 # refinement_marginal (Plan 598 / Research 559, 2026-09-15): single-pass
 # token→byte distribution conversion with the closed-form terminal-mass
 # certificate — the refinement-tree coarse-graining law (boundary mass
@@ -2318,6 +2334,18 @@ name = "basis_split_goat"
 harness = false
 required-features = ["basis_split", "subspace_phase_gate"]
 
+# Issue 958 — the sst_certified GOAT gate: G1 asserts (oracle agreement,
+# planted-leak refusal, the isotropic negative, compose identity — a
+# regression FAILS the bench) + G2 timings (fit / anatomy / factor /
+# certify / apply per shape; ms-class at 1k-class shapes measured, the
+# 4k-class cells under SST_BENCH_HEAVY=1) + the honest cost model in the
+# output (Θ(mnk) per anatomy application, the fit Gram's O(m²n)).
+# Set SST_BENCH_HEAVY=1 for the 4096-class fit/apply cells (minutes-class).
+[[bench]]
+name = "sst_project_goat"
+harness = false
+required-features = ["sst_project"]
+
 # Plan 357 Phase 2 — Motor-Gated DEC Field GOAT gate (G1–G5):
 # G1 no-teleporting (centroid displacement ≤ stencil), G2 motor-gate locality
 # (isolation ratio > 100×), G3 conservation (mass drift < 5%), G4 zero-alloc
@@ -2421,6 +2449,21 @@ required-features = ["subspace_phase_gate"]
 [[test]]
 name = "basis_split_g4_alloc"
 required-features = ["basis_split"]
+
+# Issue 958 — the G1 correctness battery for sst_certified: the thin_svd
+# oracle agreement, the brute-force anatomy oracle, the rank-deficiency and
+# tail-capacity guards, the isotropic-rounding negative (dense-quantize
+# FAILS where the factored arm PASSES — the non-vacuity proof) and the
+# tolerance/shape hygiene.
+[[test]]
+name = "sst_certified_g1"
+required-features = ["sst_project"]
+
+# Issue 958 — the G4 zero-alloc canary over the armed sst paths (separate
+# binary: #[global_allocator] is crate-binary-unique).
+[[test]]
+name = "sst_certified_g4_alloc"
+required-features = ["sst_project"]
 
 # Plan 625 T0.3 — the TILR-first arm (the substrate comparison row for the
 # basis_split GOAT bench): planted-block recovery by principal angles + the

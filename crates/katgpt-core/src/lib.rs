@@ -1648,6 +1648,15 @@ pub use basis_split::{
     build_zca_whitener, check_rank_gate, held_out_leakage, project_invariant_into, split,
 };
 
+#[cfg(feature = "sst_project")]
+pub mod sst_certified;
+#[cfg(feature = "sst_project")]
+pub use sst_certified::{
+    SideBasis as SstSideBasis, SstAnatomy, SstAnchor, SstCertificate, SstError as SstCertError,
+    SstFactorReport, SstRefusal, SstScratch, TailFactor, compose_tail, compose_tail_into,
+    fit_anchor, fit_anchor_into,
+};
+
 #[cfg(all(feature = "manifold_erasure", feature = "subspace_phase_gate"))]
 pub mod manifold_erasure;
 
