@@ -6103,5 +6103,6 @@ consumers file for them).
   golden-NLL lossy-quant oracle in riir-infer) follow in their own lanes,
   each GOAT-gated before the next consumes it.
 
-Issue: [`.issues/959_softmax_fix_numerics_primitives.md`](../../.issues/959_softmax_fix_numerics_primitives.md) ·
+Issue: 959 (closed 2026-10-24, file removed per the noise rule — the record in
+[HISTORY.md](../../HISTORY.md)) ·
 Research: [`.research/632_Softmax_Fix_Collapse_Cancellation.md`](../../.research/632_Softmax_Fix_Collapse_Cancellation.md).
