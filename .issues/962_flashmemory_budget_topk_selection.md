@@ -1,6 +1,6 @@
 # Issue 962 — FlashMemory selector: budget (top-ρ) block selection (`flashmemory_budget_select`)
 
-**Status:** Open — T1 DONE (opt-in primitive + 5 tests, this commit); T2 (128K forward-level confirmation) running; T3 (riir-infer serving consumer) open.
+**Status:** Open — T1 DONE (`aa439587c`); **T2 DONE** (128K confirms, riir-train Bench 671); T3 (serving consumer + end-to-end gate) filed as riir-infer Issue 1117.
 **Claimed:** katgpt-rs-m5-452e1, 1792865680, expires 2026-10-27T12:00:00+00:00
 **Origin:** riir-train Issue 452 E1 — after the margin rule (Issue 961, closed) failed its forward-level G1, the D1 top-ρ harness (riir-train `cf8144e1`, `682d9eae`) compared selectors at EXACTLY matched retention on attention-output cos.
 
@@ -19,9 +19,9 @@ The centroid-dot score (the shipped one) beats Quest bounds and both recency bas
 
 ## Tasks
 
-- [x] **T1 — opt-in primitive.** `with_budget(rho)` on `GqaFlashMemorySelector` and `FlashMemorySelector` behind `flashmemory_budget_select`; the selectors' rule is now one private `RowRule` enum (Absolute / Margin / Budget) through the shared `select_scored_row`; top-k via `select_nth_unstable_by` on a reserved rank scratch (zero alloc in steady state, gated by a counting-allocator test); deterministic ties (lower index); output ascending. Tests: `crates/katgpt-attn/tests/flashmemory_budget_select.rs` (5).
-- [ ] **T2 — 128K confirmation** (the oracle's ~10% regime): same harness, 256 queries (riir-train `.raw/i961/e1_topk_128k.sh`, running).
-- [ ] **T3 — serving consumer.** riir-infer `forward_attention_layer_flashmemory` builds the selector from `FlashMemoryConfig`; wiring `with_budget` there (and an end-to-end quality gate — next-token agreement / NLL vs dense at ρ ≈ 0.1–0.15) is a riir-infer issue to file once T2 holds.
+- [x] **T1 — opt-in primitive.** DONE `aa439587c`. `with_budget(rho)` on `GqaFlashMemorySelector` and `FlashMemorySelector` behind `flashmemory_budget_select`; the selectors' rule is now one private `RowRule` enum (Absolute / Margin / Budget) through the shared `select_scored_row`; top-k via `select_nth_unstable_by` on a reserved rank scratch (zero alloc in steady state, gated by a counting-allocator test); deterministic ties (lower index); output ascending. Tests: `crates/katgpt-attn/tests/flashmemory_budget_select.rs` (5).
+- [x] **T2 — 128K confirmation** (the oracle's ~10% regime, 256 queries): HOLDS and strengthens — centroid top-ρ beats Quest, window and sink+window at every ρ and layer; ρ 0.10 keeps mean cos 0.980 / 0.990 / 0.991 (min 0.957 / 0.850 / 0.917). Open risk: layer 35's worst case stays ~0.85 for ρ ≤ 0.15 (riir-train Bench 671 reading 5).
+- [ ] **T3 — serving consumer + end-to-end gate:** riir-infer Issue 1117 (filed `5041fcb`) — `forward_attention_layer_flashmemory` has no caller outside its tests, so the decode-loop wiring and the NLL / next-token-agreement gate live there.
 
 ## Promotion note
 
