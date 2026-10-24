@@ -160,6 +160,16 @@ pub struct ProbeScratch {
     err_col: Vec<f32>,
     col_buf: Vec<f32>,
     vals: Vec<f32>,
+    // joint_key_read-only buffers (sized locally — `ensure` does not know
+    // the channel count):
+    /// All channels' quantization error columns, `[d × seq]`, filled
+    /// channel-ascending before the query loop.
+    err_matrix: Vec<f32>,
+    /// One query's score-space delta `Σ_c q[i][c]·err_c[j]`, accumulated
+    /// in f64 over ascending channels (Issue-940 fixed-order, LOCAL-ONLY).
+    delta_row: Vec<f64>,
+    /// The perturbed score row `ref + delta` for the query in flight.
+    pert_scores: Vec<f32>,
 }
 
 impl ProbeScratch {
@@ -284,29 +294,13 @@ pub fn probe_value_channels(t: ValueTensors, scratch: &mut ProbeScratch) -> Vec<
     value_damage(&t, scratch)
 }
 
-/// Shared K-side core. Mode per `KeyTensors::k_dequant`.
-fn key_damage(t: &KeyTensors, cfg: &ProbeConfig, scratch: &mut ProbeScratch) -> Vec<ChannelDamage> {
+/// Shared K-side reference pass: reference scores (sequential ascending f32
+/// dot folds), per-query deviation norms, argmax (first-index ties) and the
+/// (value-desc, index-asc) top-k selection — written into `scratch`. Both
+/// [`key_damage`] and [`joint_key_read`] consume exactly this state, so their
+/// damage verdicts share one reference computation.
+fn key_reference_pass(t: &KeyTensors, k: usize, scratch: &mut ProbeScratch) {
     let (n_q, seq, d) = (t.n_q, t.seq, t.d);
-    if seq == 0 || d == 0 {
-        return Vec::new();
-    }
-    let k = cfg.top_k.max(1).min(seq);
-    let bits = cfg.bits.clamp(1, 24);
-    scratch.ensure(n_q, seq, k);
-    if n_q == 0 {
-        // No queries — no evidence: every channel reads zero damage.
-        return (0..d)
-            .map(|c| ChannelDamage {
-                channel: c,
-                damage: 0.0,
-                mean_rel_distortion: 0.0,
-                pick_flip_rate: 0.0,
-            })
-            .collect();
-    }
-
-    // Reference pass: scores, per-query mean/deviation norm, argmax and
-    // top-k indices — all channel-independent, computed once.
     for i in 0..n_q {
         let base = i * seq;
         for j in 0..seq {
@@ -350,6 +344,207 @@ fn key_damage(t: &KeyTensors, cfg: &ProbeConfig, scratch: &mut ProbeScratch) -> 
         });
         scratch.ref_topk[i * k..i * k + k].copy_from_slice(&scratch.sort_idx[..k]);
     }
+}
+
+/// Aggregate K-side read of [`joint_key_read`] — the complement of the
+/// per-channel [`ChannelDamage`]: one damage verdict for the WHOLE
+/// degradation pattern, not one per channel.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct JointKeyRead {
+    /// `1 − mean top-k attention-target overlap` under the joint
+    /// degradation. `0.0` = the pattern is untouched.
+    pub damage: f32,
+    /// Mean over queries of `‖Δrow‖₂ / (‖row − mean(row)‖₂ + ε)` for the
+    /// joint delta — the scale-free distortion companion.
+    pub mean_rel_distortion: f32,
+    /// Fraction of queries whose argmax attention target flipped under the
+    /// joint degradation (always the k=1 read).
+    pub pick_flip_rate: f32,
+}
+
+/// The GOAT read for sensitivity-guided bit allocation (Issue 960 T2): the
+/// AGGREGATE behavioral damage when ALL key channels are degraded AT ONCE,
+/// each at its own allocated bit width — the quantity an allocation arm
+/// actually buys retention on. [`probe_key_channels`] measures per-channel
+/// MARGINAL damage (one channel degraded at a time); the joint read is its
+/// complement, not its sum (score-space deltas from different channels
+/// interfere — `s' − s = Σ_c q_i[c]·e_c[j]` with cross terms intact).
+///
+/// Inputs mirror [`probe_key_channels`]'s reduction posture: `t.k_dequant`
+/// must be `None` (pass the backend's own dequantized cache via attribution
+/// mode instead when a real backend is under test). `bits_per_channel[c]`
+/// is the min–max grid width for channel `c` — one entry per channel, each
+/// in `[1, 24]` (typically an [`crate::kv_sensitivity_alloc`] allocation
+/// table). `cfg.bits` is IGNORED here (the table overrides it); only
+/// `cfg.top_k` is read.
+///
+/// Determinism: the per-query delta accumulates in f64 over ASCENDING
+/// channels (fixed order, Issue-940 LOCAL-ONLY reclassification recorded at
+/// this site), the perturbed score row is `ref + delta` in f32, and the
+/// argmax / streaming top-k scans are the probe's own first-index-tie laws
+/// against the shared reference pass. Same inputs → byte-identical output.
+/// Calibration-class like the probe (one-shot per allocation decision), not
+/// a per-token serving path.
+///
+/// # Panics
+/// Panics when any tensor's length does not match its declared shape, when
+/// `bits_per_channel` length ≠ `d`, or when any entry of
+/// `bits_per_channel` is 0 (a zero-width grid is a caller bug — the
+/// allocator never emits one).
+pub fn joint_key_read(
+    t: KeyTensors,
+    bits_per_channel: &[u8],
+    cfg: &ProbeConfig,
+    scratch: &mut ProbeScratch,
+) -> JointKeyRead {
+    assert!(
+        t.k_dequant.is_none(),
+        "joint_key_read is the reduction posture: k_dequant must be None (use attribution mode for a real backend)"
+    );
+    assert_eq!(t.q.len(), t.n_q * t.d, "q must be [n_q × d] row-major");
+    assert_eq!(
+        t.k_ref.len(),
+        t.seq * t.d,
+        "k_ref must be [seq × d] row-major"
+    );
+    assert_eq!(
+        bits_per_channel.len(),
+        t.d,
+        "bits_per_channel must have one entry per channel"
+    );
+    let (n_q, seq, d) = (t.n_q, t.seq, t.d);
+    if seq == 0 || d == 0 || n_q == 0 {
+        return JointKeyRead {
+            damage: 0.0,
+            mean_rel_distortion: 0.0,
+            pick_flip_rate: 0.0,
+        };
+    }
+    assert!(
+        bits_per_channel.iter().all(|&b| (1..=24).contains(&b)),
+        "bits_per_channel entries must be in [1, 24]"
+    );
+    let k = cfg.top_k.max(1).min(seq);
+    scratch.ensure(n_q, seq, k);
+    scratch.err_matrix.resize(d * seq, 0.0);
+    scratch.delta_row.resize(seq, 0.0);
+    scratch.pert_scores.resize(seq, 0.0);
+
+    key_reference_pass(&t, k, scratch);
+
+    // Per-channel quantization errors, channels ascending (fixed order).
+    for (c, &b) in bits_per_channel.iter().enumerate() {
+        for j in 0..seq {
+            scratch.col_buf[j] = t.k_ref[j * d + c];
+        }
+        uniform_quant_error_into(&scratch.col_buf[..seq], b as u32, &mut scratch.err_col[..seq]);
+        scratch.err_matrix[c * seq..(c + 1) * seq].copy_from_slice(&scratch.err_col[..seq]);
+    }
+
+    let mut overlap_sum: f64 = 0.0;
+    let mut distort_sum: f64 = 0.0;
+    let mut flip_sum: f64 = 0.0;
+    for i in 0..n_q {
+        // Score-space delta for this query: Σ_c q[i][c]·e_c[j], f64 over
+        // ascending channels. Always accumulated (no zero-skip): skipping a
+        // +0.0 term can flip the sign bit of an all-zero accumulator and
+        // that is a tie-class difference under first-index ties.
+        for v in scratch.delta_row[..seq].iter_mut() {
+            *v = 0.0;
+        }
+        for c in 0..d {
+            let qc = t.q[i * d + c] as f64;
+            let err = &scratch.err_matrix[c * seq..(c + 1) * seq];
+            for (dv, &e) in scratch.delta_row[..seq].iter_mut().zip(err.iter()) {
+                *dv += qc * e as f64;
+            }
+        }
+        for j in 0..seq {
+            scratch.pert_scores[j] = scratch.ref_scores[i * seq + j] + scratch.delta_row[j] as f32;
+        }
+        // Relative distortion of the perturbed row vs the reference's
+        // deviation norm (the probe's scale-free companion, unchanged).
+        let mut num2: f64 = 0.0;
+        for &dl in scratch.delta_row[..seq].iter() {
+            let delta = dl as f32;
+            num2 += (delta * delta) as f64;
+        }
+        let dist = (num2 as f32).sqrt() / (scratch.ref_devnorm[i] + 1e-12);
+        distort_sum += dist as f64;
+        // k=1 pick flip: argmax of the perturbed row, first-index ties.
+        let mut bv = scratch.pert_scores[0];
+        let mut am = 0usize;
+        for j in 1..seq {
+            if scratch.pert_scores[j] > bv {
+                bv = scratch.pert_scores[j];
+                am = j;
+            }
+        }
+        if am != scratch.ref_argmax[i] {
+            flip_sum += 1.0;
+        }
+        // Streaming top-k — the probe's own tie law (strictly-greater
+        // replacement; among tied minima the LARGEST index is displaced).
+        for pos in 0..k {
+            scratch.kbuf_val[pos] = scratch.pert_scores[pos];
+            scratch.kbuf_idx[pos] = pos;
+        }
+        for j in k..seq {
+            let v = scratch.pert_scores[j];
+            let mut min_pos = 0usize;
+            let mut min_val = scratch.kbuf_val[0];
+            for pos in 1..k {
+                let tv = scratch.kbuf_val[pos];
+                if tv < min_val || (tv == min_val && scratch.kbuf_idx[pos] > scratch.kbuf_idx[min_pos])
+                {
+                    min_val = tv;
+                    min_pos = pos;
+                }
+            }
+            if v > min_val {
+                scratch.kbuf_val[min_pos] = v;
+                scratch.kbuf_idx[min_pos] = j;
+            }
+        }
+        for pos in 0..k {
+            let ridx = scratch.ref_topk[i * k + pos];
+            if scratch.kbuf_idx[..k].contains(&ridx) {
+                overlap_sum += 1.0;
+            }
+        }
+    }
+    let nqf = n_q as f64;
+    JointKeyRead {
+        damage: 1.0 - (overlap_sum / (nqf * k as f64)) as f32,
+        mean_rel_distortion: (distort_sum / nqf) as f32,
+        pick_flip_rate: (flip_sum / nqf) as f32,
+    }
+}
+
+/// Shared K-side core. Mode per `KeyTensors::k_dequant`.
+fn key_damage(t: &KeyTensors, cfg: &ProbeConfig, scratch: &mut ProbeScratch) -> Vec<ChannelDamage> {
+    let (n_q, seq, d) = (t.n_q, t.seq, t.d);
+    if seq == 0 || d == 0 {
+        return Vec::new();
+    }
+    let k = cfg.top_k.max(1).min(seq);
+    let bits = cfg.bits.clamp(1, 24);
+    scratch.ensure(n_q, seq, k);
+    if n_q == 0 {
+        // No queries — no evidence: every channel reads zero damage.
+        return (0..d)
+            .map(|c| ChannelDamage {
+                channel: c,
+                damage: 0.0,
+                mean_rel_distortion: 0.0,
+                pick_flip_rate: 0.0,
+            })
+            .collect();
+    }
+
+    // Reference pass: scores, per-query mean/deviation norm, argmax and
+    // top-k indices — all channel-independent, computed once.
+    key_reference_pass(t, k, scratch);
 
     let mut out: Vec<ChannelDamage> = Vec::with_capacity(d);
     for c in 0..d {
@@ -668,6 +863,163 @@ mod tests {
         let cfg = ProbeConfig { bits: 1, top_k: 1 };
         let res = probe_key_channels(key_probe(&q, &k, n_q, seq, d, None), &cfg, &mut sc);
         assert_eq!(res[0].damage, 0.5);
+    }
+
+    // ── joint_key_read (Issue 960 T2 GOAT read) ─────────────────────────
+
+    #[test]
+    fn joint_read_zero_when_every_channel_is_quantization_exact() {
+        // All-constant K is exact at ANY per-channel width → untouched
+        // pattern → exactly zero damage.
+        let (q, mut k, n_q, seq, d) = bimodal_fixture();
+        for v in k.iter_mut() {
+            *v = 0.5;
+        }
+        let cfg = ProbeConfig { bits: 1, top_k: 1 };
+        let mut sc = ProbeScratch::default();
+        let read = joint_key_read(
+            key_probe(&q, &k, n_q, seq, d, None),
+            &[1, 1, 1, 1],
+            &cfg,
+            &mut sc,
+        );
+        assert_eq!(read.damage, 0.0);
+        assert_eq!(read.mean_rel_distortion, 0.0);
+        assert_eq!(read.pick_flip_rate, 0.0);
+    }
+
+    #[test]
+    fn joint_read_bimodal_at_uniform_min_bits_matches_the_provable_flips() {
+        // On the bimodal fixture with EVERY channel at 1 bit, only channel
+        // 0 carries error (channels 1..4 are constant → exact), so the
+        // joint read equals the single-channel marginal read: q=+2 queries
+        // flip, q=−2 keep → damage exactly 0.5.
+        let (q, k, n_q, seq, d) = bimodal_fixture();
+        let cfg = ProbeConfig { bits: 1, top_k: 1 };
+        let mut sc = ProbeScratch::default();
+        let read = joint_key_read(
+            key_probe(&q, &k, n_q, seq, d, None),
+            &[1, 1, 1, 1],
+            &cfg,
+            &mut sc,
+        );
+        assert_eq!(read.damage, 0.5);
+        assert_eq!(read.pick_flip_rate, 0.5);
+    }
+
+    #[test]
+    fn joint_read_repeat_identical_and_shape_agnostic_to_bits_order() {
+        let (q, k, n_q, seq, d) = bimodal_fixture();
+        let cfg = ProbeConfig { bits: 1, top_k: 1 };
+        let mut sc = ProbeScratch::default();
+        let a = joint_key_read(
+            key_probe(&q, &k, n_q, seq, d, None),
+            &[2, 1, 3, 1],
+            &cfg,
+            &mut sc,
+        );
+        let b = joint_key_read(
+            key_probe(&q, &k, n_q, seq, d, None),
+            &[2, 1, 3, 1],
+            &cfg,
+            &mut sc,
+        );
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn joint_read_monotone_in_bits() {
+        let (q, k, n_q, seq, d) = bimodal_fixture();
+        let cfg = ProbeConfig { bits: 1, top_k: 1 };
+        let mut sc = ProbeScratch::default();
+        let mut prev = f32::INFINITY;
+        for bits in [1u8, 2, 4, 8] {
+            let read = joint_key_read(
+                key_probe(&q, &k, n_q, seq, d, None),
+                &[bits, bits, bits, bits],
+                &cfg,
+                &mut sc,
+            );
+            assert!(
+                read.damage <= prev + 1e-6,
+                "joint damage must be non-increasing in bits: {prev} -> {}",
+                read.damage
+            );
+            prev = read.damage;
+        }
+        assert_eq!(prev, 0.0, "fine grids on this fixture provably heal it");
+    }
+
+    #[test]
+    fn joint_read_top_k_two_counts_set_overlap() {
+        // k=2: the overlap denominator doubles; on the bimodal fixture the
+        // flipped q=+2 queries lose ONE of their two targets, so damage
+        // reads 0.25 (one lost slot of two, half the queries).
+        let (q, k, n_q, seq, d) = bimodal_fixture();
+        let cfg = ProbeConfig { bits: 1, top_k: 2 };
+        let mut sc = ProbeScratch::default();
+        let read = joint_key_read(
+            key_probe(&q, &k, n_q, seq, d, None),
+            &[1, 1, 1, 1],
+            &cfg,
+            &mut sc,
+        );
+        assert_eq!(read.damage, 0.25);
+    }
+
+    #[test]
+    fn joint_read_refuses_zero_bits_and_attribution_mode() {
+        let (q, k, n_q, seq, d) = bimodal_fixture();
+        let cfg = ProbeConfig { bits: 1, top_k: 1 };
+        let mut sc = ProbeScratch::default();
+        let zero = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = joint_key_read(
+                key_probe(&q, &k, n_q, seq, d, None),
+                &[1, 0, 1, 1],
+                &cfg,
+                &mut sc,
+            );
+        }));
+        assert!(zero.is_err(), "zero-width grid must refuse");
+        let dq = vec![0.0f32; seq * d];
+        let attr = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = joint_key_read(
+                key_probe(&q, &k, n_q, seq, d, Some(&dq)),
+                &[1, 1, 1, 1],
+                &cfg,
+                &mut sc,
+            );
+        }));
+        assert!(attr.is_err(), "attribution mode must refuse (reduction posture only)");
+    }
+
+    #[test]
+    fn joint_read_degenerate_shapes_read_zero() {
+        // seq = 0, d = 0, n_q = 0 all read the zero verdict, never panic.
+        let cfg = ProbeConfig { bits: 1, top_k: 1 };
+        let mut sc = ProbeScratch::default();
+        let zero = joint_key_read(
+            key_probe(&[], &[], 0, 0, 4, None),
+            &[1, 1, 1, 1],
+            &cfg,
+            &mut sc,
+        );
+        assert_eq!(zero.damage, 0.0);
+        let zero = joint_key_read(
+            key_probe(&[], &[], 2, 0, 0, None),
+            &[],
+            &cfg,
+            &mut sc,
+        );
+        assert_eq!(zero.damage, 0.0);
+        let k = vec![0.5f32; 6 * 4];
+        let zero = joint_key_read(
+            key_probe(&[], &k, 0, 6, 4, None),
+            &[1, 1, 1, 1],
+            &cfg,
+            &mut sc,
+        );
+        assert_eq!(zero.damage, 0.0);
     }
 
     #[test]

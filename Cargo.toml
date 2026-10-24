@@ -554,6 +554,7 @@ directional_credit = ["katgpt-pruners/directional_credit", "katgpt-speculative/d
 kv_share = ["katgpt-kv/kv_share"]  # Q-K=V projection sharing — 50% KV cache reduction (Plan 185, default on candidate)
 kv_capture = ["katgpt-forward/kv_capture"]  # Raw-QKV calibration capture sink (issue 960 T0b) — ForwardContext gains an optional KvCaptureBuf that forward_base / forward_quantized fill with the exact per-layer Q/K/V attention consumes. Calibration-only (the probe is a one-shot step, exempt from G4); recording is None = no-op, feature-off = field compiled out.
 kv_sensitivity = ["katgpt-spectral/kv_sensitivity"]  # KV-quant behavioral-subspace sensitivity probe (issue 960 T0a, Research 633 / arXiv:2606.09864) — per-channel reduction + attribution modes over pre-softmax damage (sigmoid law); consumes kv_capture rows for the real-forward run (T0b) and feeds the T2 behavioral-damage bit allocation.
+kv_sensitivity_alloc = ["katgpt-spectral/kv_sensitivity_alloc"]  # Behavioral-damage-weighted bit allocation (issue 960 T2, Research 633 / arXiv:2606.09864) — the T0a probe's damage ranking as the shipped water-fill's weight input (D_c = damage_c · 4^b0), the per-channel BitTable decode-path lookup (O(1), 0-alloc), GOAT'd vs uniform + structural-rank arms at equal average bits through the joint key read. Implies kv_sensitivity.
 rosetta_pruner = ["papaya", "katgpt-pruners/rosetta_pruner"]  # Rosetta Pruners — universal cross-domain meta-pruner (Plan 201 GOAT 39-55% node reduction, default-ON)
 domino_correction = ["katgpt-pruners/domino_correction", "katgpt-speculative/domino_correction", "katgpt-forward/domino_correction"]  # Domino Causal Correction — modelless decoupled pattern: PrefixCorrectionTable + domino_score + DominoPruner (Plan 197 GOAT 25/25 -22.8% build time, Research 177, default-ON). Forwards to katgpt-pruners so `impl DominoPruner for SudokuPruner` (sudoku_pruner.rs) compiles; the main machinery lives in katgpt-core / katgpt-speculative. Plan 386: domino module moved to katgpt-speculative. Plan 394: forwarded to katgpt-forward so the moved dflash.rs's domino_correct_marginals cfg block compiles.
 dynamic_rank = ["papaya", "katgpt-pruners/dynamic_rank"]  # Dynamic Rank Pruner — GATv2-inspired static ranking detection & correction (Plan 232, Research 206)
@@ -3879,3 +3880,16 @@ harness = false
 name = "kv960_t0b_capture"
 path = "tests/kv960_t0b_capture.rs"
 required-features = ["kv_capture", "kv_sensitivity", "domain_latent"]
+
+# Issue 960 T2 — behavioral-damage-weighted bit allocation GOAT (Research 633 /
+# arXiv:2606.09864): the T0a probe's damage ranking (calibrated on the first
+# prompt half) drives the shipped water-fill as its weight input; retention is
+# the joint key read (all channels degraded at once at the allocated widths)
+# over the held-out second half, against uniform + structural-rank arms at
+# EQUAL average bits across a low-bit ladder. kv_sensitivity is implied by
+# kv_sensitivity_alloc; kv_capture + domain_latent pinned for the same
+# --no-default-features posture reason as the T0b row above.
+[[test]]
+name = "kv960_t2_damage_alloc"
+path = "tests/kv960_t2_damage_alloc.rs"
+required-features = ["kv_capture", "kv_sensitivity_alloc", "domain_latent"]

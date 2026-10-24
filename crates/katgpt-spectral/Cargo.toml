@@ -68,6 +68,13 @@ maxsim = []
 # `kv_sensitivity_alloc` weighting (same issue) consumes this module's ranking.
 kv_sensitivity = []
 
+# Issue 960 T2 — behavioral-damage-weighted bit allocation: the T0a probe's
+# damage ranking as the water-fill weight input (`D_c = damage_c · 4^{b₀}`),
+# the per-channel `BitTable` decode-path lookup, evaluated through the joint
+# key read against uniform + structural-rank arms at equal average bits.
+# Implies `kv_sensitivity`.
+kv_sensitivity_alloc = ["kv_sensitivity"]
+
 # Dual-gram PCA eigenbasis calibration.
 dual_gram_pca = []
 
@@ -254,3 +261,11 @@ name = "bench_897_affinity_deflation_goat"
 path = "tests/bench_897_affinity_deflation_goat.rs"
 harness = false
 required-features = ["affinity_deflation", "river_valley"]
+
+# Issue 960 T2 G4 — the BitTable decode-path lookup is 0-alloc. SINGLE-TEST
+# binary: the counting allocator is per-process, so a sibling test would
+# allocate inside the counting window and false-red the pin.
+[[test]]
+name = "kv960_t2_bit_table_alloc"
+path = "tests/kv960_t2_bit_table_alloc.rs"
+required-features = ["kv_sensitivity_alloc"]

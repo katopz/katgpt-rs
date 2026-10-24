@@ -64,6 +64,14 @@ pub mod stiff_anomaly;
 #[cfg(feature = "kv_sensitivity")]
 pub mod kv_sensitivity;
 
+// Issue 960 T2 — behavioral-damage-weighted bit allocation: the T0a probe's
+// damage ranking as the weight input to the shipped water-fill allocator,
+// plus the per-channel `BitTable` decode-path lookup. Implies
+// `kv_sensitivity` (the probe it reads and the joint retention read it
+// evaluates through).
+#[cfg(feature = "kv_sensitivity_alloc")]
+pub mod kv_sensitivity_alloc;
+
 #[cfg(feature = "outlier_guard")]
 pub mod outlier_guard;
 
