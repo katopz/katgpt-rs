@@ -6106,3 +6106,35 @@ consumers file for them).
 Issue: 959 (closed 2026-10-24, file removed per the noise rule — the record in
 [HISTORY.md](../../HISTORY.md)) ·
 Research: [`.research/632_Softmax_Fix_Collapse_Cancellation.md`](../../.research/632_Softmax_Fix_Collapse_Cancellation.md).
+
+## 157. span_pointer — F0 Span Answering, Floor-First Control Pattern (Plan 628 T0.7 / Bench 950)
+
+Feature `span_pointer` (**DEFAULT-ON since 2026-10-24** — Plan 628 Phase 0's
+last pre-registered gate ran clean; promoted per the Feature Flag Discipline
+with a modelless gain) in `crates/katgpt-extract/src/span_pointer.rs`.
+Modelless F0 span answering over the extraction substrate: candidate-window
+scoring whose SHIPPED pattern is the round-5 control arm
+`SpanPointer::floor_first_span` + `longest_match` — **gazetteer-first** (the
+deterministic rule floor answers when it has a hit; the scorer runs only on
+abstain through `best_span`), with every answer carrying source disclosure
+(`GroundedSpan`/`SpanAnswerSource`) so a consumer can tell a gazetteer answer
+from a scored one.
+
+The promotion is measured-against-its-own-floor, not asserted: Bench 950
+rounds 1–5 — the BARE pointer (scorer over every question) measured NEGATIVE
+vs the gazetteer floor; the CONTROL arm (floor-first composition) beat the
+snap-first alternative on both MIT domains (McNemar movie p<0.001 / restaurant
+p=0.041), with the held-out restaurant fixture confirming the choice
+cross-domain. The last gate: release-profile G2 composite F0 p99 **349,667 ns
+≤ 10 ms bar** with the work checksum identical to the pinned record, and the
+quiet-box preflight PROVENANCE line quoted beside it (`load=3.94 AC
+powermode=2(high)`).
+
+Crate: `katgpt-extract` (feature in its default set; `span_pointer =
+["dep:katgpt-core", "katgpt-core/extraction_wire"]`); the bench target's
+green-zero caveat is commented in the manifest (without the feature the span
+target compiles to nothing).
+
+Plan: [`.plans/628_fathom_extraction_substrate.md`](../../.plans/628_fathom_extraction_substrate.md)
+(Phase 0 COMPLETE; Phases 1+ owner-gated at Proposal 016) ·
+Benchmark: [`.benchmarks/950_f0_t07_span_baselines.md`](../../.benchmarks/950_f0_t07_span_baselines.md).
