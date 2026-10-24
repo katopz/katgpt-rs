@@ -1,6 +1,6 @@
-# Bench 950 — F0 T0.7 span baselines: span_pointer vs the rule class (rounds 1-4 + the round-5 AGREE conditions; the control arm is the promotion basis, pending release G2)
+# Bench 950 — F0 T0.7 span baselines: span_pointer vs the rule class (rounds 1-4 + the round-5 AGREE conditions; the control arm is the promotion basis — PROMOTED 2026-10-24)
 
-**Status:** four rounds. Round 1: a GOAT PASS on an asymmetric comparison — REVISED. Round
+**Status:** five rounds + the gate discharge. Round 1: a GOAT PASS on an asymmetric comparison — REVISED. Round
 2: the fair re-run, an honest NEGATIVE for the BARE pointer (demoted to opt-in) with a
 pre-registered re-open condition. Round 3: the boundary-snap hybrid cleared the bar (+7)
 and re-landed the promotion — **REVISED again (session ea31bb50): the margin rides the 17
@@ -8,10 +8,10 @@ fallback exacts, not the snap mechanism; the control arm was unmeasured; no McNe
 held-out; the promotion skipped release G2.** Round 4 (this record): the verdict's fix
 list executed — the control arm (`floor+ptr_fallback`) measured and it BEATS the snap on
 BOTH domains; the McNemar run (movie +7 is n.s., restaurant +29 is p=0.002); the
-held-out MIT-Restaurant fixture CONFIRMS the cross-domain picture. **`span_pointer`
-STAYS OPT-IN** — the promotion (of the control-arm unit) is pre-registered to land only
-after a release-profile G2 with a quiet-box preflight line, which remains
-environmentally blocked.
+held-out MIT-Restaurant fixture CONFIRMS the cross-domain picture. Round 5 (verdict round
+2): AGREE with four pre-promotion conditions, all landed. **Round 6 (2026-10-24): the
+last pre-registered gate — release-profile G2 + quiet-box preflight — PASSED, and
+`span_pointer` (the control-arm unit) PROMOTED to default** (see the addendum at the end).
 
 ## The round-4 fix list (all landed this session — the revert in the Cargo.toml, the arms in the harness, this fixture pair)
 
@@ -228,3 +228,32 @@ determinism, census pins; the control arm's ratchets are the promotion basis's p
 - Verdict provenance: round 1 landed as GOAT PASS + default promotion (commit `41e6d3419`);
   the REVISE verdict round (claude-sub-agent-verdict, session 6c9ef478) named both
   defects; this re-run is the addressed verdict, landed in the SAME working session.
+
+## Round-6 addendum (2026-10-24): the last gate discharged — PROMOTED
+
+The pre-registered gate — a release-profile G2 run with a quiet-box preflight line —
+was environmentally blocked at round-4 time (load 14.6, 8 sibling cargo processes) and
+ran clean this session:
+
+- **Command:** `cargo bench -p katgpt-extract --bench bench_628_f0_g2 --features
+  span_pointer,typed_parsers,temper,extraction_estimate,bet_search` (bench profile =
+  optimized; the control-arm code in tree).
+- **Result:** composite F0-floor request (6 fields, 417-char state) p50 324,333 ns /
+  p90 332,083 ns / **p99 349,667 ns ≤ 10,000,000 ns bar** (~29× headroom) / max 472,500 ns.
+  Sections: span score_into full sweep (540 windows) p99 341,667 ns (the composite's
+  dominant term); parse_number p99 6,667 ns; temper calibration_spread p99 8,458 ns;
+  estimate_into p99 292 ns; forecast_into h=8 p99 2,250 ns.
+- **Determinism:** work checksum `14233999` — IDENTICAL to the T0.6b pinned record and
+  every run since (the richer candidate set's value; the control-arm landing moved
+  nothing the bench state extracts).
+- **Box state (the preflight line, quoted per the AGENTS latency law):**
+  `PROVENANCE: power=AC Power load=3.94 swap=0.00M canary=skipped powermode=2(high)` —
+  ✓ PASSED (load ceiling 6.0; 550 min on AC; the canary skip is the reflex lane's
+  example binary, not a gate arm here — this bench builds its own release target).
+- **Landing:** `default = ["extraction_estimate", "bet_search", "span_pointer"]` in
+  `crates/katgpt-extract/Cargo.toml`. The shipped unit is the round-5 CONTROL pattern
+  (`SpanPointer::floor_first_span` + `longest_match`, `GroundedSpan`/`SpanAnswerSource`
+  disclosure) — consumers get gazetteer-first + `best_span`-on-abstain by default;
+  the bare window and snap-first stay available but are NOT the promoted posture.
+  Phase 0 (Plan 628) is thereby COMPLETE; Phase 1 (riir-fathom repo birth) stays
+  owner-gated at Proposal 016 §7.

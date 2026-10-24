@@ -37,10 +37,12 @@ katgpt-core = { path = "../katgpt-core", optional = true, default-features = fal
 # significant only on the held-out domain (p=0.002; movie n.s. p=0.324).
 # The promotion basis is the CONTROL pattern, shipped as
 # `SpanPointer::floor_first_span` + `longest_match` (round 5, zero-alloc,
-# G4-gated). `span_pointer` STAYS opt-in pending ONE pre-registered gate:
-# a release-profile G2 run with a quiet-box preflight line (environmentally
-# blocked — box load 14.6 with 8 sibling cargo processes at round-4 time).
-default = ["extraction_estimate", "bet_search"]
+# G4-gated). The last pre-registered gate — a release-profile G2 with a
+# quiet-box preflight line — PASSED 2026-10-24: composite F0 p99 349,667 ns
+# vs the 10 ms bar (checksum `14233999` identical to the pinned record),
+# preflight `power=AC Power load=3.94 swap=0.00M powermode=2(high)`;
+# PROMOTED to default.
+default = ["extraction_estimate", "bet_search", "span_pointer"]
 
 # span_pointer (Plan 628 T0.2): candidate-window span scoring — BM25/ngram
 # lexical + hashed-feature embedding similarity + optional alias tables;
