@@ -1,6 +1,7 @@
 # Issue 960 — KV-quant behavioral-subspace diagnostic + sensitivity-guided bit allocation (modelless PoC)
 
 **Status:** OPEN — PoC proposed from Research 633 (arXiv:2606.09864, the KV-quant alignment-collapse law); serving-time + training-free. Surfaces (verified in-tree 2026-10-24): the six bit-width quantizer backends — `crates/katgpt-quant/src/{turboquant,planar_quant,iso_quant,hybrid_oct_pq,octopus}/kv_cache.rs` (the landed `katgpt-quant` crate, Proposal 001) + `crates/katgpt-kv/src/kvarn/kv_cache.rs` (KVarN) — plus `crates/katgpt-spectral/src/spectral_kv_cache.rs` (SpectralQuant, per-dim variable-bit packing) and `crates/katgpt-kv/src/shard_kv/kv_cache.rs` (ShardKV, asymmetric K/V compression); trait `crates/katgpt-types/src/kv_cache.rs`. Out of scope: `osc_kv` (IMEX oscillatory states — lossy but not a bit-width quantizer) and `fitted_value_table` (value table, Bench 895). The `kv_sensitivity_alloc` feature homes in `crates/katgpt-spectral` (beside the water-fill allocator it extends — T2); a weight input inside a crate `katgpt-kv` already deps changes no boundary edge — no per-crate BOUNDARY.md exists, the repo-root `BOUNDARY.md` is the contract.
+**Claimed:** zed-m3-idle-kv960, 1792809167, expires 2026-10-26T02:33:00+00:00
 
 ## Problem
 
