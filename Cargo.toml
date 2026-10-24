@@ -552,6 +552,8 @@ selectivity_router = ["katgpt-pruners/selectivity_router", "kurtosis_gate", "kat
 ruliology = ["bandit", "katgpt-pruners/ruliology", "katgpt-ruliology/ruliology"]  # Ruliology Bandit — simple program strategies as bandit arms (Plan 188, Research 168). Phase 11 (2026-07-04): module moved to katgpt-ruliology; root forwards (preserves the bandit + katgpt-pruners/ruliology chain). GOAT PASS 2026-08-05 (Bench 572) — 97/97 release tests; stays opt-in (niche tool, pulls `bandit` dep into default builds).
 directional_credit = ["katgpt-pruners/directional_credit", "katgpt-speculative/directional_credit"]  # Entropy-bifurcated screening — direction-adaptive credit (Plan 184, default on candidate). Plan 388: forwards to katgpt-speculative (thinking_controller moved there).
 kv_share = ["katgpt-kv/kv_share"]  # Q-K=V projection sharing — 50% KV cache reduction (Plan 185, default on candidate)
+kv_capture = ["katgpt-forward/kv_capture"]  # Raw-QKV calibration capture sink (issue 960 T0b) — ForwardContext gains an optional KvCaptureBuf that forward_base / forward_quantized fill with the exact per-layer Q/K/V attention consumes. Calibration-only (the probe is a one-shot step, exempt from G4); recording is None = no-op, feature-off = field compiled out.
+kv_sensitivity = ["katgpt-spectral/kv_sensitivity"]  # KV-quant behavioral-subspace sensitivity probe (issue 960 T0a, Research 633 / arXiv:2606.09864) — per-channel reduction + attribution modes over pre-softmax damage (sigmoid law); consumes kv_capture rows for the real-forward run (T0b) and feeds the T2 behavioral-damage bit allocation.
 rosetta_pruner = ["papaya", "katgpt-pruners/rosetta_pruner"]  # Rosetta Pruners — universal cross-domain meta-pruner (Plan 201 GOAT 39-55% node reduction, default-ON)
 domino_correction = ["katgpt-pruners/domino_correction", "katgpt-speculative/domino_correction", "katgpt-forward/domino_correction"]  # Domino Causal Correction — modelless decoupled pattern: PrefixCorrectionTable + domino_score + DominoPruner (Plan 197 GOAT 25/25 -22.8% build time, Research 177, default-ON). Forwards to katgpt-pruners so `impl DominoPruner for SudokuPruner` (sudoku_pruner.rs) compiles; the main machinery lives in katgpt-core / katgpt-speculative. Plan 386: domino module moved to katgpt-speculative. Plan 394: forwarded to katgpt-forward so the moved dflash.rs's domino_correct_marginals cfg block compiles.
 dynamic_rank = ["papaya", "katgpt-pruners/dynamic_rank"]  # Dynamic Rank Pruner — GATv2-inspired static ranking detection & correction (Plan 232, Research 206)
@@ -3866,3 +3868,14 @@ name = "bench_946_infiloop_gated_summary_goat"
 path = "benches/bench_946_infiloop_gated_summary_goat.rs"
 required-features = ["gated_summary"]
 harness = false
+
+# Issue 960 T0b — real-forward KV-sensitivity capture + ranking (Research 633 /
+# arXiv:2606.09864): ~20 seeded prompts through forward_base with the kv_capture
+# sink, the T0a probe per (layer, kv head), half-split rank stability (G1
+# analog) + the K-side structural-rank correlation (the T3 finding, reported
+# not gated). domain_latent is default-on but pinned so the row survives a
+# --no-default-features + kv_capture posture (the forward's cfg-gated param).
+[[test]]
+name = "kv960_t0b_capture"
+path = "tests/kv960_t0b_capture.rs"
+required-features = ["kv_capture", "kv_sensitivity", "domain_latent"]

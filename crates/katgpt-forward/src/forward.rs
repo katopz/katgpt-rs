@@ -512,6 +512,14 @@ pub fn forward_base<'a>(
             ctx.wall_prefix.rescale_key(layer_idx, &mut ctx.k);
         }
 
+        // Issue 960 T0b: raw-QKV calibration capture (`kv_capture`) — after the
+        // domain-latent / wall-attention arms so the rows are exactly what the
+        // attention below consumes.
+        #[cfg(feature = "kv_capture")]
+        if let Some(cap) = ctx.kv_capture.as_mut() {
+            cap.push(layer_idx, pos, &ctx.q[..n], &ctx.k[..kvd], &ctx.v[..kvd]);
+        }
+
         // Store K,V in per-layer cache (kv_dim elements per position)
         let pos_off = pos * kvd;
         unsafe {

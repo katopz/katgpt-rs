@@ -2221,6 +2221,7 @@ A second consolidated table for standalone opt-in features with their own plans,
 | `msa_*` family | 256 | MSA blockwise sparse attention — **3× GOAT FAILED**, see [negative_results §36](negative_results.md#36-msa-blockwise-sparse-attention-family---3-goat-failed-stays-opt-in-permanently) |
 | `still_kv` | 245 | StillKV perceiver-based KV cache compaction — modelless |
 | `maxsim` | 080 | MaxSim late-interaction scoring (Research 45). Forwards to `katgpt-quant` (TurboQuant + OCTOPUS integration). |
+| `kv_capture` | — | Raw-QKV calibration capture sink (Issue 960 T0b): ForwardContext gains an optional `KvCaptureBuf` that `forward_base` / `forward_quantized` fill with the exact per-layer Q/K/V tensors attention consumes (post domain-latent / wall-attention arms). Calibration-only — the probe is a one-shot step, exempt from G4; `None` = one branch per layer, feature-off = field compiled out. Feeds `kv_sensitivity`'s real-forward run. |
 | `kv_sensitivity` | — | Per-channel KV quantization sensitivity probe (Issue 960 T0, Research 633 arXiv:2606.09864 — the PCR diagnostic): reduction + attribution modes over captured tensors, behavioral-damage ranking (top-k attention-target overlap, not MSE); T2's behavioral-damage weighting for the water-fill allocator consumes this ranking. Opt-in instrument, no serving path. |
 | `engram` | 299 | Engram — hash-addressed, sigmoid-fused static pattern memory (arXiv:2601.07372) |
 | `memory_soup_dtree` | — | Experimental DDTree branch merging |

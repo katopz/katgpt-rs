@@ -59,6 +59,12 @@ default = []
 # CNA: contrastive neuron attribution runtime modulator (Plan 087).
 cna_steering = ["katgpt-pruners/cna_steering"]
 
+# Raw-QKV calibration capture sink (issue 960 T0b): ForwardContext gains an
+# optional `KvCaptureBuf` that forward_base fills with the exact per-layer
+# Q/K/V tensors attention consumes. Calibration-only (the KV-quant probe is a
+# one-shot step, never a serving path) — no alloc discipline behind this gate.
+kv_capture = []
+
 # Sparse MLP active-indices/value buffers (Plan 022).
 sparse_mlp = ["katgpt-core/sparse_mlp"]
 

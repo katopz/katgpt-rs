@@ -36,6 +36,54 @@ use katgpt_transformer::WallPrefixState;
 // to this crate). Keep this crate focused on ForwardContext + its delta-routing
 // helper only.
 
+/// One raw-QKV capture row (`kv_capture`, issue 960 T0b): the per-layer
+/// projections at one position, exactly the tensors that layer's attention
+/// consumes (post domain-latent injection / wall-attention rescaling).
+#[cfg(feature = "kv_capture")]
+#[derive(Debug, Clone)]
+pub struct KvCaptureRow {
+    pub layer: usize,
+    pub pos: usize,
+    /// `[n_embd]` query projection.
+    pub q: Vec<f32>,
+    /// `[kv_dim]` key projection (all kv heads flattened).
+    pub k: Vec<f32>,
+    /// `[kv_dim]` value projection (all kv heads flattened).
+    pub v: Vec<f32>,
+}
+
+/// Bounded raw-QKV capture sink (`kv_capture`, issue 960 T0b). Install via
+/// `ctx.kv_capture = Some(buf)` before a forward; the layer loop appends one
+/// row per (layer, position). Calibration-only — the KV-quant probe is a
+/// one-shot step, never a serving path, so the copies here carry no alloc
+/// discipline (issue 960 G4 exempts the probe explicitly).
+#[cfg(feature = "kv_capture")]
+#[derive(Debug, Clone, Default)]
+pub struct KvCaptureBuf {
+    pub rows: Vec<KvCaptureRow>,
+    /// Recording stops (deterministically, oldest first in capture order)
+    /// once `rows.len()` reaches this cap; `None` = unbounded. A capped run
+    /// is detectable: `rows.len() == max_rows` and later positions absent.
+    pub max_rows: Option<usize>,
+}
+
+#[cfg(feature = "kv_capture")]
+impl KvCaptureBuf {
+    /// Append one row unless the cap is reached.
+    pub fn push(&mut self, layer: usize, pos: usize, q: &[f32], k: &[f32], v: &[f32]) {
+        if self.max_rows.is_some_and(|cap| self.rows.len() >= cap) {
+            return;
+        }
+        self.rows.push(KvCaptureRow {
+            layer,
+            pos,
+            q: q.to_vec(),
+            k: k.to_vec(),
+            v: v.to_vec(),
+        });
+    }
+}
+
 /// Pre-allocated buffers for zero-alloc forward passes.
 /// Create once, reuse across calls.
 pub struct ForwardContext {
@@ -72,6 +120,10 @@ pub struct ForwardContext {
     // SubstrateGate: per-sequence capability mask for dual sparsity (Plan 216)
     #[cfg(feature = "substrate_gate")]
     pub substrate_mask: Option<katgpt_pruners::SubstrateMask>,
+    // Raw-QKV calibration capture sink (issue 960 T0b, `kv_capture`). `None`
+    // costs one branch per layer; calibration-only, exempt from G4.
+    #[cfg(feature = "kv_capture")]
+    pub kv_capture: Option<KvCaptureBuf>,
     // Paged KV cache: pre-allocated flat buffers for attention computation
     pub paged_flat_key: Vec<f32>,   // [block_size * kv_dim]
     pub paged_flat_value: Vec<f32>, // [block_size * kv_dim]
@@ -208,6 +260,8 @@ impl ForwardContext {
             active_values: vec![0.0; config.mlp_hidden],
             #[cfg(feature = "substrate_gate")]
             substrate_mask: None,
+            #[cfg(feature = "kv_capture")]
+            kv_capture: None,
             paged_flat_key: vec![0.0; block_kv],
             paged_flat_value: vec![0.0; block_kv],
             raven_query_buf: vec![0.0; kvd.max(64)],

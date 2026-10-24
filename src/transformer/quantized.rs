@@ -56,6 +56,14 @@ pub fn forward_quantized<'a, C: types::QuantizedKVCache>(
         matmul(&mut ctx.k, &layer_weights.attn_wk, &ctx.x, kvd, n);
         matmul(&mut ctx.v, &layer_weights.attn_wv, &ctx.x, kvd, n);
 
+        // Issue 960 T0b: raw-QKV calibration capture (`kv_capture`) — the raw
+        // projections before the quantizing store, exactly what attention would
+        // consume on the lossless path.
+        #[cfg(feature = "kv_capture")]
+        if let Some(cap) = ctx.kv_capture.as_mut() {
+            cap.push(layer_idx, pos, &ctx.q[..n], &ctx.k[..kvd], &ctx.v[..kvd]);
+        }
+
         // Store compressed K,V
         cache.store_key(layer_idx, pos, &ctx.k[..kvd]);
         cache.store_value(layer_idx, pos, &ctx.v[..kvd]);
