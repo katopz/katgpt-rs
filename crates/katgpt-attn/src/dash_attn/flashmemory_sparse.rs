@@ -373,6 +373,50 @@ impl GqaFlashMemoryBlockCache {
         }
     }
 
+    /// Append-only decode update: recompute ONLY the last block's centroid.
+    ///
+    /// The decode loop appends one token per step, so blocks before the last
+    /// are immutable (keys are append-only) and a full [`rebuild_from_keys`]
+    /// — O(seq_len × kv_dim) — recomputes every centroid to move one block.
+    /// This recomputes just the final (partial) block from its key range:
+    /// O(block_size × kv_dim), and bit-identical to a fresh rebuild for the
+    /// touched block (same zero → ascending-accumulate → scale order), so
+    /// incremental-per-step and rebuild-every-step produce identical caches.
+    ///
+    /// A block COUNT change (a new block opening) is handled: the new block's
+    /// count is set and `n_active_blocks` follows `seq_len`. A jump of more
+    /// than one block (a prefill catch-up) must use [`rebuild_from_keys`] —
+    /// this updates exactly one block, the last.
+    pub fn update_last_block_from_keys(&mut self, keys: &[f32], seq_len: usize) {
+        let kv_dim = self.n_kv_head * self.head_dim;
+        debug_assert!(keys.len() >= seq_len * kv_dim, "key cache too short");
+        if seq_len == 0 {
+            return;
+        }
+        let n_blocks = seq_len.div_ceil(self.block_size).min(self.max_blocks);
+        self.n_active_blocks = n_blocks;
+        let block_idx = n_blocks - 1;
+        let start = block_idx * self.block_size;
+        let end = (start + self.block_size).min(seq_len);
+        let count = end - start;
+        self.block_counts[block_idx] = count;
+
+        let centroid_off = block_idx * self.n_kv_head * self.head_dim;
+        let centroid =
+            &mut self.key_centroids[centroid_off..centroid_off + self.n_kv_head * self.head_dim];
+        centroid.fill(0.0);
+        for tok in start..end {
+            let key_off = tok * kv_dim;
+            for h in 0..self.n_kv_head {
+                let src = &keys[key_off + h * self.head_dim..key_off + (h + 1) * self.head_dim];
+                let dst = &mut centroid[h * self.head_dim..(h + 1) * self.head_dim];
+                simd_add_inplace(dst, src);
+            }
+        }
+        let inv = 1.0 / count as f32;
+        simd_scale_inplace(centroid, inv);
+    }
+
     /// Number of active blocks (blocks with at least one token).
     #[inline]
     pub fn n_active_blocks(&self) -> usize {
@@ -2920,6 +2964,63 @@ mod tests {
         }
         assert_eq!(sel.refresh_count(), 2);
         assert_eq!(refreshes_at, vec![0, 5]);
+    }
+
+    /// Issue 1117 T2 (riir-infer decode lane): updating ONLY the last block
+    /// per append must produce the same cache as a full rebuild after every
+    /// step — centroids (per KV head), block counts, active count — across
+    /// several block-boundary crossings and within-block appends alike.
+    #[test]
+    fn gqa_update_last_block_matches_rebuild() {
+        let fm = FlashMemoryConfig {
+            block_size: 4,
+            refresh_period: 5,
+            threshold: 0.5,
+        };
+        let n_kv_head = 2usize;
+        let head_dim = 8usize;
+        let kv_dim = n_kv_head * head_dim;
+        let max_seq = 40usize;
+        let mut incremental = GqaFlashMemoryBlockCache::new(n_kv_head, head_dim, &fm, max_seq);
+        let mut rebuilt = GqaFlashMemoryBlockCache::new(n_kv_head, head_dim, &fm, max_seq);
+
+        // Deterministic pseudo-random keys, appended one token per step.
+        let mut keys = vec![0.0f32; max_seq * kv_dim];
+        let mut state = 0x9E3779B97F4A7C15u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state % 2000) as f32 / 1000.0 - 1.0
+        };
+
+        for seq_len in 1..=max_seq {
+            for d in 0..kv_dim {
+                keys[(seq_len - 1) * kv_dim + d] = next();
+            }
+            incremental.update_last_block_from_keys(&keys, seq_len);
+            rebuilt.rebuild_from_keys(&keys, seq_len);
+
+            assert_eq!(
+                incremental.n_active_blocks(),
+                rebuilt.n_active_blocks(),
+                "active block count diverged at seq_len {seq_len}"
+            );
+            for b in 0..incremental.n_active_blocks() {
+                assert_eq!(
+                    incremental.block_count(b),
+                    rebuilt.block_count(b),
+                    "block {b} count diverged at seq_len {seq_len}"
+                );
+                for h in 0..n_kv_head {
+                    assert_eq!(
+                        incremental.key_centroid(b, h),
+                        rebuilt.key_centroid(b, h),
+                        "centroid (block {b}, head {h}) diverged at seq_len {seq_len}"
+                    );
+                }
+            }
+        }
     }
 
     /// Bonsai-scale smoke test: n_kv_head=8, head_dim=256, 64 tokens.
