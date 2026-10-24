@@ -21,7 +21,7 @@ The centroid-dot score (the shipped one) beats Quest bounds and both recency bas
 
 - [x] **T1 — opt-in primitive.** DONE `aa439587c`. `with_budget(rho)` on `GqaFlashMemorySelector` and `FlashMemorySelector` behind `flashmemory_budget_select`; the selectors' rule is now one private `RowRule` enum (Absolute / Margin / Budget) through the shared `select_scored_row`; top-k via `select_nth_unstable_by` on a reserved rank scratch (zero alloc in steady state, gated by a counting-allocator test); deterministic ties (lower index); output ascending. Tests: `crates/katgpt-attn/tests/flashmemory_budget_select.rs` (5).
 - [x] **T2 — 128K confirmation** (the oracle's ~10% regime, 256 queries): HOLDS and strengthens — centroid top-ρ beats Quest, window and sink+window at every ρ and layer; ρ 0.10 keeps mean cos 0.980 / 0.990 / 0.991 (min 0.957 / 0.850 / 0.917). Open risk: layer 35's worst case stays ~0.85 for ρ ≤ 0.15 (riir-train Bench 671 reading 5).
-- [ ] **T3 — serving consumer + end-to-end gate:** riir-infer Issue 1117 (filed `5041fcb`) — `forward_attention_layer_flashmemory` has no caller outside its tests, so the decode-loop wiring and the NLL / next-token-agreement gate live there.
+- [x] **T3 — serving consumer + end-to-end gate:** riir-infer Issue 1117 — LANDED 2026-10-25 (zed-m3-continue): the ternary decode-lane wiring `51f52f4` + the incremental-substrate method `3d3152fbd` (this repo) + the G1 battery (ρ=1.0 bit-identical to dense over 700 synth steps, incremental ≡ rebuild, budget moves+prunes); the end-to-end teacher-forced NLL/top-1 gate (T3/T4 of 1117) runs on the real Bonsai-2 PQ2_0 at ctx 32K, ρ ∈ {0.05,0.10,0.15,0.30} — the riir-infer issue carries the record.
 
 ## Promotion note
 
