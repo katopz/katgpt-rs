@@ -1,7 +1,63 @@
-# Bench 954 — kv960 T0b: real-forward KV-sensitivity capture + ranking
+# Bench 954 — kv960 T0b + T1: real-forward KV-sensitivity capture, ranking, and failure-mode classification
 
-**Status:** COMPLETE — T0b landed; the T3-shaped structural-correlation finding recorded.
+**Status:** COMPLETE — T0b + T1 landed; the T3-shaped structural-correlation finding + the T1 mode classification recorded.
 **Issue:** [`.issues/960`](../.issues/960_kv_quant_behavioral_subspace_poc.md) (T0b) · Research 633 (arXiv:2606.09864, the KV-quant alignment-collapse law) · instrument: Bench from T0a (`ec7d3e2af`).
+
+## T1 — failure-mode classification (same harness, second test)
+
+`kv960_t1_failure_mode_classification` classifies each head's sensitivity
+profile into the paper's three PCR modes (translated to non-safety
+vocabulary) via the sign of ρ(damage, channel-range) at τ = 0.4, plus the
+model-level layer-mass delocalization index `(PR − 1)/(n − 1)` (PR =
+(Σm)²/Σm² ∈ [1, n]; 1 = flat = diluted, n⁻¹-normalized 0 = one hot layer).
+
+| layer | kvh | ρ(damage,range) | mode (full) |
+|---|---|---|---|
+| 0 | 0 | 0.532 | behavior-in-outliers |
+| 0 | 1 | 0.341 | diffuse |
+| 0 | 2 | 0.450 | behavior-in-outliers |
+| 1 | 0 | 0.329 | diffuse |
+| 1 | 1 | 0.362 | diffuse |
+| 1 | 2 | 0.571 | behavior-in-outliers |
+| 2 | 0 | 0.553 | behavior-in-outliers |
+| 2 | 1 | 0.415 | behavior-in-outliers |
+| 2 | 2 | 0.697 | behavior-in-outliers |
+| 3 | 0 | 0.415 | behavior-in-outliers |
+| 3 | 1 | 0.400 | behavior-in-outliers |
+| 3 | 2 | 0.709 | behavior-in-outliers |
+
+**Verdicts: modes 9 behavior-in-outliers / 0 quiet-channels / 3 diffuse of 12
+heads; layer masses [92.3, 94.2, 95.6, 98.8] → delocalization index 0.999 =
+DILUTED (mode 3); mean ρ(damage,range) 0.481 (pinned > 0.3); ρ half-split
+rank stability 0.804 (pinned > 0.5); sub-budget (10-prompt) mode agreement
+6/12 — reported, not gated: borderline heads at τ flip under a half corpus,
+the paper's budget classifies ONCE at full corpus.**
+
+Reading (honest):
+
+- **behavior-in-outliers 9/12 with positive mean ρ is the EXPECTED mechanical
+  outcome on random weights** — the per-channel uniform quantizer's step is
+  range/(2^bits − 1), so damage tracks range whenever score sensitivity is
+  roughly channel-uniform. This head-count is the negative control behaving
+  as expected; the classifier's discriminating power (the quiet-channels
+  mode, T2's justifying case) needs trained models where damage and range
+  dissociate. 0/12 quiet-channels here says nothing about trained models.
+- **Dilution (mode 3) fires: the damage mass is spread flat across layers**
+  (92–99 per layer, ~7% spread) — per-layer fixes fail; allocation must
+  spread cross-layer. This is a property of the mass SHAPE on this model
+  class; re-read on trained models.
+- **outlier-crushes-behavior (paper mode 1) is EXCLUDED BY CONSTRUCTION on
+  the reduction instrument**: the per-channel quantizer gives every channel
+  its own min–max grid, so no shared scale exists for outliers to stretch.
+  That mode needs the attribution path over a real backend store (T2/T3) —
+  and a per-channel-scale backend IS the mitigation for it, which the
+  reduction instrument already bakes in. Stated in the classifier output,
+  not silently dropped.
+- The mitigation map emitted per mode: behavior-in-outliers → finer
+  granularity on the damaged channels; behavior-in-quiet-channels →
+  range-blind behavioral-damage weighting (T2's lever); diffuse →
+  allocation-spread axes; outlier-crushes → per-channel scales
+  (attribution-mode lane).
 
 ## What ran
 
