@@ -441,6 +441,8 @@ pub struct GqaFlashMemorySelector {
     head_dim: usize,
     max_blocks: usize,
     refresh_count: usize,
+    /// Row-relative margin δ (Issue 961). `None` = the absolute threshold rule.
+    margin: Option<f32>,
 }
 
 impl GqaFlashMemorySelector {
@@ -460,7 +462,21 @@ impl GqaFlashMemorySelector {
             head_dim,
             max_blocks,
             refresh_count: 0,
+            margin: None,
         }
+    }
+
+    /// Switch to the row-relative rule `s_b ≥ s_max − delta` (Issue 961);
+    /// `config.threshold` is then unused. `delta` is in score (logit) units.
+    #[cfg(feature = "flashmemory_margin_select")]
+    pub fn with_margin(mut self, delta: f32) -> Self {
+        assert!(
+            delta.is_finite() && delta >= 0.0,
+            "margin must be finite and >= 0"
+        );
+        self.margin = Some(delta);
+        self.selection_valid = false;
+        self
     }
 
     pub fn refresh_count(&self) -> usize {
@@ -512,12 +528,12 @@ impl GqaFlashMemorySelector {
                 *score_slot = simd_dot_f32(q_h, centroid, self.head_dim) * attn_scale;
             }
 
-            for (block_idx, &score) in scores.iter().enumerate().take(n_blocks) {
-                let sig = katgpt_core::sigmoid(score);
-                if sig >= self.config.threshold {
-                    self.last_selection.blocks_per_head[kv_head].push(block_idx);
-                }
-            }
+            select_scored_row(
+                scores,
+                self.config.threshold,
+                self.margin,
+                &mut self.last_selection.blocks_per_head[kv_head],
+            );
         }
 
         &self.last_selection
@@ -574,6 +590,33 @@ impl PerHeadSelection {
     }
 }
 
+/// Push the selected block indices of one head's scored row into `out`.
+///
+/// - `margin == None` — the absolute rule: `σ(s_b) ≥ threshold` (the paper's).
+/// - `margin == Some(δ)` — the row-relative rule (Issue 961): `s_b ≥ s_max − δ`,
+///   i.e. `σ(s_b − s_max + δ) ≥ 0.5`. Invariant to a per-row logit offset;
+///   one extra max-fold over the already-computed scores, no allocation.
+#[inline]
+fn select_scored_row(scores: &[f32], threshold: f32, margin: Option<f32>, out: &mut Vec<usize>) {
+    match margin {
+        None => {
+            for (block_idx, &score) in scores.iter().enumerate() {
+                if katgpt_core::sigmoid(score) >= threshold {
+                    out.push(block_idx);
+                }
+            }
+        }
+        Some(delta) => {
+            let cut = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max) - delta;
+            for (block_idx, &score) in scores.iter().enumerate() {
+                if score >= cut {
+                    out.push(block_idx);
+                }
+            }
+        }
+    }
+}
+
 /// The periodic sparse selector with refresh amortization.
 ///
 /// Scores blocks per-head using sigmoid threshold and caches the result.
@@ -592,6 +635,8 @@ pub struct FlashMemorySelector {
     max_blocks: usize,
     /// Count of refresh calls (for testing / amortization verification).
     refresh_count: usize,
+    /// Row-relative margin δ (Issue 961). `None` = the absolute threshold rule.
+    margin: Option<f32>,
 }
 
 impl FlashMemorySelector {
@@ -605,7 +650,21 @@ impl FlashMemorySelector {
             n_heads,
             max_blocks,
             refresh_count: 0,
+            margin: None,
         }
+    }
+
+    /// Switch to the row-relative rule `s_b ≥ s_max − delta` (Issue 961);
+    /// `config.threshold` is then unused. `delta` is in score (logit) units.
+    #[cfg(feature = "flashmemory_margin_select")]
+    pub fn with_margin(mut self, delta: f32) -> Self {
+        assert!(
+            delta.is_finite() && delta >= 0.0,
+            "margin must be finite and >= 0"
+        );
+        self.margin = Some(delta);
+        self.selection_valid = false;
+        self
     }
 
     /// Number of times the selection was refreshed (for amortization tests).
@@ -674,13 +733,12 @@ impl FlashMemorySelector {
                 *score_slot = simd_dot_f32(q_c_h, centroid, d_h) * attn_scale;
             }
 
-            // Sigmoid threshold selection: σ(score) ≥ threshold
-            for (block_idx, &score) in scores.iter().enumerate().take(n_blocks) {
-                let sig = katgpt_core::sigmoid(score);
-                if sig >= self.config.threshold {
-                    self.last_selection.blocks_per_head[head].push(block_idx);
-                }
-            }
+            select_scored_row(
+                scores,
+                self.config.threshold,
+                self.margin,
+                &mut self.last_selection.blocks_per_head[head],
+            );
         }
 
         &self.last_selection

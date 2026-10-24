@@ -2548,6 +2548,10 @@ Distills FlashMemory-DeepSeek-V4's lookahead sparse attention ([arXiv:2606.09079
 
 **Honest negative result (NIAH semantic-needle diagnostic, `bench_023`):** single-layer retrieval is **not testable** — the needle block has near-uniform dense attention (rank 34/34, mass ~0.03) at layer 3/8 on raw-embedding inputs; retrieval is an emergent multi-layer property. Positive diagnostic: per-head Pearson r between FlashMemory centroid block-mass and dense per-token block-mass = 0.965 (min 0.765). Output accuracy (G1) is the load-bearing gate; full-model NIAH deferred to Phase 2.
 
+### Row-relative margin selection (`flashmemory_margin_select`, Issue 961)
+
+`with_margin(δ)` on `GqaFlashMemorySelector` / `FlashMemorySelector`: select block b iff `s_b ≥ max s − δ` on the SAME centroid-dot scores (`σ(s_b − s_max + δ) ≥ 0.5`) instead of the absolute `σ(s_b) ≥ threshold`. Invariant to a per-row logit offset; one max-fold per head, zero allocation; the threshold path is unchanged when no margin is set. Offline evidence (riir-train Bench 669, Bonsai-2 PQ2_0 ladder, sel @ recall 0.97): beats the absolute rule at 8K/32K/64K/128K (−5/−7/−13/−3 pts) and matches/beats a native-trained d5 indexer from 32K up — a modelless gain. **Opt-in** until the forward-level G1 (attention-output fidelity at matched retention, Issue 961 T2) runs; the operating δ is context-dependent (6.3 → 8.4 over 8K → 128K). Tests: `crates/katgpt-attn/tests/flashmemory_margin_select.rs` (4).
+
 ### Trained dual-encoder indexer (`trained_indexer`, riir-train Plan 337)
 
 Two tiny trained MLPs (Q-Indexer + K-Indexer, 2114 params at Kimi-K3 d_h=64) that replace the modelless centroid-dot scorer — an upgrade, never a requirement. FlashMemory's periodic batch-scoring works with ANY scorer.
