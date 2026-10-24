@@ -276,7 +276,7 @@ Gate results: G1/G3/G4/G5 PASS; **G2 FAIL** (target ≤1.0×). Absolute numbers 
 - More Python data (10 → 30 prompts) barely moved agreement (+0.4645 → +0.4755, +0.011 gain) — the ceiling is fundamental.
 - The modelless path is **declared exhausted**. Reopens only on a **non-hidden-state construction** (AST/clippy/ownership-graph features — see Proposal 010, draft).
 
-**What STILL ships (the intra-arch + substrate GOAT, Bench 562):** the `katgpt-canon` crate (3 adapters: Procrustes / Subspace / Mask) carries a measured G1/G2/G4 GOAT stamp (17/17 PASS). The SubspaceAdapter preserves the cross-arch ALIGNMENT result (Bench 423: G5 GO at k∈{2,4}, mean cosine +0.87/+0.75 on Gemma ↔ MiniCPM held-out). The cross-arch DIRECTION claim is what failed — the substrate is useful, just narrower than the Super-GOAT headline.
+**What STILL ships (the intra-arch + substrate GOAT, Bench 562):** the `katgpt-canon` crate (3 adapters: Procrustes / Subspace / Mask) carries a measured G1/G2/G4 GOAT stamp (17/17 PASS). The SubspaceAdapter preserves the cross-arch ALIGNMENT result (Bench 423: G5 GO at k∈{2,4}, +0.87/+0.75 — **⛔ REFUTED 2026-10-24 (riir-train Issue 644 T4, riir-train `0a290e94`): on the routing-fixed Gemma-2 forward Bench 423 reads k=2 +0.62, k=4 +0.56 (AMBIGUOUS), k=16 +0.48 (NO-GO); a reverted-fix control reproduces the +0.82 exactly — the G5 GO was the delta-routing bug. No cross-arch measurement supports SubspaceAdapter.**). The cross-arch DIRECTION claim is what failed — the substrate is useful, just narrower than the Super-GOAT headline.
 
 **Features stay opt-in** (`canon`, `canon_subspace`, `canon_mask`, default-off). Promotion to default-on would require a new proposal re-arguing the substrate's value proposition post-demotion.
 

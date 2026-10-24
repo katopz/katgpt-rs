@@ -54,7 +54,7 @@ stamp on the paths that remain load-bearing:
 | **G2** perf | d=256 **16.17µs** ≤ 50µs (post-SIMD, was 29µs) | k=4 d_b=1536 **417ns** ≤ 50µs | d=2304 **1.38µs** ≤ 50µs |
 | **G4** alloc-free | 0 allocs / 1000 hot-path calls | 0 allocs / 1000 hot-path calls | 0 allocs / 1000 hot-path calls |
 
-**SubspaceAdapter carries the load-bearing Bench 423 G5 GO at k∈{2,4}** — mean
+**⛔ REFUTED 2026-10-24 (riir-train Issue 644 T4, riir-train `0a290e94`): on the routing-fixed Gemma-2 forward Bench 423 reads k=2 +0.62, k=4 +0.56 (AMBIGUOUS), k=16 +0.48 (NO-GO); a reverted-fix control reproduces the +0.82 exactly — the G5 GO was the delta-routing bug. No cross-arch measurement supports SubspaceAdapter.** Prior record: **SubspaceAdapter carries the load-bearing Bench 423 G5 GO at k∈{2,4}** — mean
 cosine +0.87/+0.75 on Gemma2-2B ↔ MiniCPM5-1B real weights, held-out prompts. The
 cross-arch shared-subspace ALIGNMENT is genuinely real; the cross-arch DIRECTION
 claim is what failed. Replacing the P2 random projection with joint SVD recovered

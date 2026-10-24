@@ -17,6 +17,7 @@ remain load-bearing:
 - **SubspaceAdapter** (cross-arch joint-SVD substrate) — the shared-subspace
   ALIGNMENT preservation result (Bench 423 G5 GO at k∈{2,4}) is real and
   ships here. The cross-arch canonical DIRECTION claim is what failed.
+  **⛔ REFUTED 2026-10-24 (riir-train Issue 644 T4, riir-train `0a290e94`): on the routing-fixed Gemma-2 forward Bench 423 reads k=2 +0.62, k=4 +0.56 (AMBIGUOUS), k=16 +0.48 (NO-GO); a reverted-fix control reproduces the +0.82 exactly — the G5 GO was the delta-routing bug. No cross-arch measurement supports SubspaceAdapter.**
 - **MaskAdapter** (lottery-ticket application) — modelless elementwise multiply.
 
 The cross-arch G5 (cosine preservation on real model weights) and G6
