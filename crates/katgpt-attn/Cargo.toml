@@ -202,8 +202,9 @@ asentmax_schedule = ["dash_attn"]
 trained_indexer = ["flashmemory_sparse"]
 # Issue 961 — row-relative margin-to-max block selection (`with_margin(δ)` on
 # both FlashMemory selectors): select s_b >= s_max - delta on the SAME scores.
-# Modelless; opt-in until the forward-level G1 (attention-output fidelity at
-# matched retention) runs. Offline evidence: riir-train Bench 669.
+# Modelless. Offline recall win (riir-train Bench 669) did NOT survive the
+# forward-level G1 (attention-output cos at matched retention FAILS) — never
+# promote; kept opt-in as an evaluation instrument (HISTORY.md Issue 961).
 flashmemory_margin_select = ["flashmemory_sparse"]
 
 # ── Issue 713 T2: `required-features` on `#![cfg]`-gated GOAT gates ─────────
