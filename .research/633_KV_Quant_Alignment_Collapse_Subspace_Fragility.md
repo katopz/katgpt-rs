@@ -1,6 +1,6 @@
 # Research 633: Alignment Collapse Under KV Cache Quantization — the Behavioral-Subspace Fragility Law
 
-**Status:** RECORD — distilled 2026-10-24 (alphaxiv interpretability trends digest, user addition request). Verdict: **GAIN** (modelless track; katgpt-rs Issue 960 filed). Training track: **NONE** — the paper's protocol is explicitly training-free; no riir-train plan. Source: Bruce Changlong Xu, Adarsh Kumarappan, Mu Zhou, [arXiv:2606.09864](https://arxiv.org/abs/2606.09864) "Alignment Collapse Under KV Cache Quantization: Diagnosis and Mitigation" (v2 2026-08-08; submitted 2026-06-01; 61 pp, 9 figs).
+**Status:** RECORD — distilled 2026-10-24 (alphaxiv interpretability trends digest, user addition request); **full-text read + number verification 2026-10-24** (the 61-pp v2 PDF, jina render — the abstract-only disclosure below is DISCHARGED; every table number verified, additions in the §Full-text section). Verdict: **GAIN** (modelless track; katgpt-rs Issue 960 filed). Training track: **NONE** — the paper's protocol is explicitly training-free; no riir-train plan. Source: Bruce Changlong Xu, Adarsh Kumarappan, Mu Zhou, [arXiv:2606.09864](https://arxiv.org/abs/2606.09864) "Alignment Collapse Under KV Cache Quantization: Diagnosis and Mitigation" (v2 2026-08-08; submitted 2026-06-01; 61 pp, 9 figs).
 
 ## TL;DR
 
@@ -8,7 +8,7 @@ KV cache quantization — the single most-deployed serving memory lever — can 
 
 This is **external validation #4** of the stack's lossy-surface gate (Issue-750-T3) — and the first one carrying the **mechanism**: not just "aggregates blind, behavior flips" (observed four times now) but *why* — the behavior lives in a subspace the aggregate metric averages away.
 
-## Paper core (read from the v2 abstract + the alphaxiv guide's section — the full 61-pp PDF was NOT read this session; the note is a RECORD, not a replication, and every number below is abstract- or guide-sourced)
+## Paper core (every number below verified against the FULL v2 text 2026-10-24 — see §Full-text verification; the original abstract-only caveat is discharged)
 
 | Finding | Number |
 |---|---|
@@ -37,6 +37,24 @@ The stack's **Lossy-surface promotion rule** (Issue-750-T3, katgpt-rs/riir-ai AG
 - vs **#2 (2610.15139 horizon law)**: that law says *when* a bit-width stops being certified (decode horizon, feedback instability); this paper says *where* the damage concentrates (channel/layer/subspace geometry) and *which* mitigation direction that geometry implies. A bit-width claim without its horizon is one blind spot; a bit-width claim without its subspace-sensitivity map is the other. Complementary, both needed.
 - vs **#3 (noise-floor bar)**: that rule fixes how to *measure* the error (relative to the output's own scale); this paper fixes how to *weight* the error across the representation (a nats-scale aggregate error can hide a 10²–10³× -amplified error inside one behavioral subspace). The noise floor is necessary but subspace-blind.
 - vs **#2 (2610.14475 LCDF)**: LCDF is the *metric* that separates methods PPL cannot; PCR is the *diagnostic* that explains and repairs what LCDF detects. Detect → diagnose → mitigate is the complete chain now.
+
+## Full-text verification + additions (2026-10-24, the 61-pp v2 PDF)
+
+**Verified against the full text (every number in the table above):** Mistral-7B −15.2% refusals @ 1.03× PPL at 4-bit (§5.1, AdvBench N=520); Qwen L0 single-layer flip 68.8% at 3-bit per-tensor (Table 2/28); L0–1 FP16 protection 90.3% → 1.9% = 97.8% recovery (Table 57); α ~ 10⁻³–10⁻² ⇒ κ = 1/α = 10²–10³ subspace vulnerability (Prop 2); PCR = 1 − flip_per-channel/flip_per-tensor (Eq. 2); 3 failure modes + the PCR × layer-spread taxonomy (Table 1); directional mitigation accuracy 9/9 primary + 72B + OLMo-2 held-out (Table 41/61, App. E); KIVI 97.2% recovery = M-Small-24B at 2-bit (B.10); vLLM FP8 e5m2 30.3% / e4m3 7.1% vs simulated-INT8 0.2% (B.15). Classifier: WildGuard, κ=0.86 vs blinded human adjudication, headline flips move ≤2 pp (A.5). Seed-deterministic; temperature-robust ±5 pp (B.11/B.17). ~500 GPU-hours total; the 35-min protocol covers 7–9B models on one RTX 3090.
+
+**New material from the full text (not in the abstract/guide), by relevance to this stack:**
+
+1. **K-dominance (App. C.13) — the cheapest mitigation lever.** K-only KV quantization accounts for **76–102% of the alignment damage in 8/9 models** (K-projection MSE 4–87× V's; Qwen 154× asymmetry). Practical implication the paper states: preserve K at FP16, quantize V to 4-bit → **half the memory cost of full FP16 protection at ≤0.6% safety loss** for concentrated/diffuse models. Maps directly onto the stack's asymmetric-K/V surface (ShardKV; KVarN's per-K/V lanes): a K-side bit-width floor is a first-class allocation knob, not a heuristic.
+2. **PCR predicts DIRECTION, not magnitude — the gate-design honesty.** KIVI never hurts (0/8 models) and PCR called the direction 8/8, but recovery magnitude is NOT monotone in PCR (DeepSeek: PCR 87.5% → only 22.1% KIVI recovery at 2-bit; LLaMA G64 single-layer reduction NEGATIVE −45.8% via multi-layer dilution; the paper attributes mid-range failures to factors beyond PCR × spread). Issue 960's diagnostic should assert direction and REPORT magnitude — never gate on a magnitude prediction.
+3. **Speculative decoding is blind to the collapse (B.12).** Quantized verifier: refusal 63.2% → 0.0% while acceptance (23.5%) and throughput (17.0 tok/s) stay in plausible ranges; verifier entropy is the only signal that moves. Relevant wherever the stack layers a draft/verify loop over a lossy backend — the acceptance-rate metric certifies nothing about behavior.
+4. **FP8 mantissa ≫ bit-width (B.15).** Nominally-8-bit FP8 e4m3 causes 7.1% flip — **35× worse than simulated uniform INT8 (0.2%)** — because 3 mantissa bits under-resolve the safety channels; e5m2 (2 mantissa bits) hits 30.3%. A bit-width claim without the dtype/mantissa profile is incomplete — the same disclosure law as validation #2's decode horizon.
+5. **Non-monotonic protection curves (D.4/D.7).** Protecting MORE FP16 layers can be WORSE (Qwen L0–3: 16.7% flip vs L0–1's 10.4%) — the FP16/quant boundary injects precision-mismatch damage of its own. A protection sweep is mandatory; naive top-k protection backfires. (Our allocation lane's GOAT must sweep the budget, not test one operating point.)
+6. **Diagnostic-scheme choice is load-bearing (C.14).** The layer scan uses per-tensor SYMMETRIC quantization deliberately: it AMPLIFIES latent vulnerabilities that per-token asymmetric masks (Qwen L27: 56.3% flip under per-tensor, 0.0% under per-token — visible only under the harsher diagnostic scheme; cross-scheme Spearman ρ 0.42–0.50). Issue 960's T0 probe must pick its diagnostic scheme by this same amplification logic, not by deployment fidelity.
+7. **Dual degradation, not threshold shift (B.2).** At 2-bit models simultaneously over-refuse safe prompts AND comply with unsafe ones (Yi-9B false refusal 2.0% → 85.2%) — the loss is discriminative capacity. A retention gate that only measures one direction (pick-flip on held answers) can miss the mirror channel (abstention-flip); measure both.
+8. **Calibration protocol specifics (A.7/H).** Layer scan needs N≥50; the PCR read needs N=20 — a FIXED PREFIX (all 19 refusal + first privacy prompt), not random sampling, for reproducibility; low-signal models (Mixtral, Yi-34B) bump to 50. Critical layers are NOT always early (Yi L31, Phi L12, M-Small L14) — a fixed "first-k layers" prior is wrong; the scan is the point.
+9. **Real-dtype validation (A.10/B.14):** real INT8 storage ≡ simulated INT8 (identical refusal counts, same flipped prompt); real packed INT4 catastrophic; a Triton kernel reading FP8 storage directly reproduces the storage-level boundary. The simulated-quantize-dequantize methodology (exactly what our T0 capture does) is externally validated.
+
+**Verdict unchanged: GAIN** — the full text strengthens it (the mechanism has a proved MSE analog, Prop 1: PCR_MSE = 1 − R̄²_S/R², so the diagnostic is a bound, not just an empirical correlation).
 
 ## Three-track verdict
 
@@ -74,7 +92,7 @@ The user's request targeted the whole alphaxiv interpretability trends page; the
 
 ## References
 
-- Xu, Kumarappan, Zhou — [arXiv:2606.09864](https://arxiv.org/abs/2606.09864) "Alignment Collapse Under KV Cache Quantization: Diagnosis and Mitigation" (the primary; all numbers above from the v2 abstract + the guide's per-layer ablation section).
+- Xu, Kumarappan, Zhou — [arXiv:2606.09864](https://arxiv.org/abs/2606.09864) "Alignment Collapse Under KV Cache Quantization: Diagnosis and Mitigation" (the primary; all numbers verified against the full v2 text 2026-10-24 — 61 pp incl. appendices A–H).
 - alphaxiv Interpretability trends digest — <https://www.alphaxiv.org/trends/interpretability> (the input; its guide section independently reproduces the layer-0/layer-1 keep-precision mitigation numbers).
 - Internal cousins: Research 159 (KVarN — the family's strongest KV backend, task-suite evals), Research 083 (Asymmetric K/V compression — compound-quantization attention-pattern flips, the behavior-flip precedent inside our own corpus), Research 065 / Plan 100 (rotation family), Bench 053 (KVarN GOAT), Proposal 001 (the `katgpt-quant` crate promotion), riir-refine Research 265 walk-15 rows 2610.15139/2610.14475 (validation #2), riir-refine Batch 242 rule `lossy-route-physical-error-bar-from-noise-floor` (validation #3), riir-infer Issue 959 T6 (the golden-NLL oracle — the aggregate metric this law says is insufficient alone).
 - Filed: `katgpt-rs/.issues/960_kv_quant_behavioral_subspace_diagnostic.md` (the modelless PoC).
