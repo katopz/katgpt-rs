@@ -441,8 +441,10 @@ pub struct GqaFlashMemorySelector {
     head_dim: usize,
     max_blocks: usize,
     refresh_count: usize,
-    /// Row-relative margin δ (Issue 961). `None` = the absolute threshold rule.
-    margin: Option<f32>,
+    /// Per-row selection rule (absolute threshold unless a builder changed it).
+    rule: RowRule,
+    /// Scratch for the budget rule's top-k (capacity `max_blocks`, reused).
+    rank_buf: Vec<usize>,
 }
 
 impl GqaFlashMemorySelector {
@@ -462,7 +464,8 @@ impl GqaFlashMemorySelector {
             head_dim,
             max_blocks,
             refresh_count: 0,
-            margin: None,
+            rule: RowRule::Absolute,
+            rank_buf: Vec::with_capacity(max_blocks),
         }
     }
 
@@ -474,7 +477,19 @@ impl GqaFlashMemorySelector {
             delta.is_finite() && delta >= 0.0,
             "margin must be finite and >= 0"
         );
-        self.margin = Some(delta);
+        self.rule = RowRule::Margin(delta);
+        self.selection_valid = false;
+        self
+    }
+
+    /// Switch to the budget rule (Issue 962): per head keep the top
+    /// `round(rho · n_blocks) − 1` complete blocks by score plus the current
+    /// (most recent) block — a fixed retention fraction per row, whatever the
+    /// row's logit scale. `config.threshold` is then unused.
+    #[cfg(feature = "flashmemory_budget_select")]
+    pub fn with_budget(mut self, rho: f32) -> Self {
+        assert!(rho > 0.0 && rho <= 1.0, "budget must be in (0, 1]");
+        self.rule = RowRule::Budget(rho);
         self.selection_valid = false;
         self
     }
@@ -531,8 +546,9 @@ impl GqaFlashMemorySelector {
             select_scored_row(
                 scores,
                 self.config.threshold,
-                self.margin,
+                self.rule,
                 &mut self.last_selection.blocks_per_head[kv_head],
+                &mut self.rank_buf,
             );
         }
 
@@ -590,29 +606,67 @@ impl PerHeadSelection {
     }
 }
 
-/// Push the selected block indices of one head's scored row into `out`.
+/// How a selector turns one head's block scores into a selection.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum RowRule {
+    /// `σ(s_b) ≥ threshold` — the paper's rule and the default.
+    Absolute,
+    /// `s_b ≥ s_max − δ` (Issue 961; failed its forward-level G1, opt-in only).
+    #[cfg_attr(not(feature = "flashmemory_margin_select"), allow(dead_code))]
+    Margin(f32),
+    /// Top `round(ρ·n) − 1` complete blocks + the current block (Issue 962).
+    #[cfg_attr(not(feature = "flashmemory_budget_select"), allow(dead_code))]
+    Budget(f32),
+}
+
+/// Push the selected block indices of one head's scored row into `out`
+/// (`scores[b]` = block b's logit; the last block is the current one).
 ///
-/// - `margin == None` — the absolute rule: `σ(s_b) ≥ threshold` (the paper's).
-/// - `margin == Some(δ)` — the row-relative rule (Issue 961): `s_b ≥ s_max − δ`,
-///   i.e. `σ(s_b − s_max + δ) ≥ 0.5`. Invariant to a per-row logit offset;
-///   one extra max-fold over the already-computed scores, no allocation.
+/// - [`RowRule::Absolute`] — `σ(s_b) ≥ threshold`.
+/// - [`RowRule::Margin`] — `s_b ≥ s_max − δ`, one extra max-fold.
+/// - [`RowRule::Budget`] — top `k = round(ρ·n) − 1` of the complete blocks by
+///   score (ties: lower index) plus the current block; output ascending. Uses
+///   `rank` as scratch, so it allocates nothing once `rank` has `n` capacity.
 #[inline]
-fn select_scored_row(scores: &[f32], threshold: f32, margin: Option<f32>, out: &mut Vec<usize>) {
-    match margin {
-        None => {
+fn select_scored_row(
+    scores: &[f32],
+    threshold: f32,
+    rule: RowRule,
+    out: &mut Vec<usize>,
+    rank: &mut Vec<usize>,
+) {
+    match rule {
+        RowRule::Absolute => {
             for (block_idx, &score) in scores.iter().enumerate() {
                 if katgpt_core::sigmoid(score) >= threshold {
                     out.push(block_idx);
                 }
             }
         }
-        Some(delta) => {
+        RowRule::Margin(delta) => {
             let cut = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max) - delta;
             for (block_idx, &score) in scores.iter().enumerate() {
                 if score >= cut {
                     out.push(block_idx);
                 }
             }
+        }
+        RowRule::Budget(rho) => {
+            let Some(current) = scores.len().checked_sub(1) else {
+                return;
+            };
+            let k = (((rho * scores.len() as f32).round() as usize).max(1) - 1).min(current);
+            rank.clear();
+            rank.extend(0..current);
+            if k < current {
+                rank.select_nth_unstable_by(k, |&a, &b| {
+                    scores[b].total_cmp(&scores[a]).then(a.cmp(&b))
+                });
+                rank.truncate(k);
+            }
+            rank.sort_unstable();
+            out.extend_from_slice(rank);
+            out.push(current);
         }
     }
 }
@@ -635,8 +689,10 @@ pub struct FlashMemorySelector {
     max_blocks: usize,
     /// Count of refresh calls (for testing / amortization verification).
     refresh_count: usize,
-    /// Row-relative margin δ (Issue 961). `None` = the absolute threshold rule.
-    margin: Option<f32>,
+    /// Per-row selection rule (absolute threshold unless a builder changed it).
+    rule: RowRule,
+    /// Scratch for the budget rule's top-k (capacity `max_blocks`, reused).
+    rank_buf: Vec<usize>,
 }
 
 impl FlashMemorySelector {
@@ -650,7 +706,8 @@ impl FlashMemorySelector {
             n_heads,
             max_blocks,
             refresh_count: 0,
-            margin: None,
+            rule: RowRule::Absolute,
+            rank_buf: Vec::with_capacity(max_blocks),
         }
     }
 
@@ -662,7 +719,19 @@ impl FlashMemorySelector {
             delta.is_finite() && delta >= 0.0,
             "margin must be finite and >= 0"
         );
-        self.margin = Some(delta);
+        self.rule = RowRule::Margin(delta);
+        self.selection_valid = false;
+        self
+    }
+
+    /// Switch to the budget rule (Issue 962): per head keep the top
+    /// `round(rho · n_blocks) − 1` complete blocks by score plus the current
+    /// (most recent) block — a fixed retention fraction per row, whatever the
+    /// row's logit scale. `config.threshold` is then unused.
+    #[cfg(feature = "flashmemory_budget_select")]
+    pub fn with_budget(mut self, rho: f32) -> Self {
+        assert!(rho > 0.0 && rho <= 1.0, "budget must be in (0, 1]");
+        self.rule = RowRule::Budget(rho);
         self.selection_valid = false;
         self
     }
@@ -736,8 +805,9 @@ impl FlashMemorySelector {
             select_scored_row(
                 scores,
                 self.config.threshold,
-                self.margin,
+                self.rule,
                 &mut self.last_selection.blocks_per_head[head],
+                &mut self.rank_buf,
             );
         }
 

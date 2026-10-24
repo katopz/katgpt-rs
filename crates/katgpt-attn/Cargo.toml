@@ -206,6 +206,12 @@ trained_indexer = ["flashmemory_sparse"]
 # forward-level G1 (attention-output cos at matched retention FAILS) — never
 # promote; kept opt-in as an evaluation instrument (HISTORY.md Issue 961).
 flashmemory_margin_select = ["flashmemory_sparse"]
+# Issue 962 — budget (top-rho) block selection (`with_budget(rho)` on both
+# FlashMemory selectors): keep the top round(rho*n)-1 complete blocks by the
+# SAME centroid-dot score + the current block. Forward-level evidence
+# (riir-train D1 top-rho, Bonsai-2 32K): at matched retention it beats the
+# absolute rule, Quest bounds, window and sink+window at every rho and layer.
+flashmemory_budget_select = ["flashmemory_sparse"]
 
 # ── Issue 713 T2: `required-features` on `#![cfg]`-gated GOAT gates ─────────
 #
@@ -387,3 +393,9 @@ required-features = ["pyramid_topk", "hga"]
 [[test]]
 name = "flashmemory_margin_select"
 required-features = ["flashmemory_margin_select"]
+
+# Issue 962 — budget (top-rho) selection semantics through the public GQA
+# selector (exact k, current block kept, deterministic ties, alloc-free).
+[[test]]
+name = "flashmemory_budget_select"
+required-features = ["flashmemory_budget_select"]
