@@ -62,6 +62,12 @@ stiff_anomaly = []
 # MaxSim late-interaction forward kernel.
 maxsim = []
 
+# Issue 960 T0 (Research 633) — per-channel KV quantization sensitivity probe
+# (reduction + attribution modes; the PCR diagnostic's in-tree translation).
+# Opt-in instrument: offline capture-tensor math, no serving path. T2's
+# `kv_sensitivity_alloc` weighting (same issue) consumes this module's ranking.
+kv_sensitivity = []
+
 # Dual-gram PCA eigenbasis calibration.
 dual_gram_pca = []
 

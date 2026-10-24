@@ -58,6 +58,12 @@ pub mod spectral_budget;
 #[cfg(feature = "stiff_anomaly")]
 pub mod stiff_anomaly;
 
+// Issue 960 T0 (Research 633) — per-channel KV quantization sensitivity probe
+// (the PCR diagnostic's in-tree translation). Opt-in instrument; T2's
+// behavioral-damage weighting feeds the water-fill allocator from here.
+#[cfg(feature = "kv_sensitivity")]
+pub mod kv_sensitivity;
+
 #[cfg(feature = "outlier_guard")]
 pub mod outlier_guard;
 
