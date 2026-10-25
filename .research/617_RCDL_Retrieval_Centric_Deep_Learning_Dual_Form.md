@@ -6,6 +6,7 @@
 > **Related Research:** 024 (δ-Mem — the primal cousin; carries the NL-DGD redirect this paper's §4 independently confirms), 070 (GDN2 — the linear-attention family), 028 (HLA), 615 (CMM Sync EWMA)
 > **Related Plans:** —
 > **Cross-ref (riir-train):** Issue 628 (delta-rule-decay + mesa-FOOF optimizer probe; `acba5ba8`)
+> **Outcome (2026-10-25, riir-train Issue 628 CLOSED):** delta-rule decay as an SGD regulariser NEGATIVE (riir-train Bench 672 — loses to multiplicative decay and plain SGD); mesa/FOOF PARITY with tuned AdamW at 0.99× CPU when amortised (riir-train Bench 673) — gate PASS, no gain, no port. Record in riir-train HISTORY.md.
 > **Classification:** Public
 
 ---
