@@ -104,7 +104,7 @@ Additional core traits in `katgpt-core/src/traits.rs`: `DominoPruner`, `Completi
 
 ### Crate Dependency DAG
 
-The workspace has **28 in-tree crates** (plus the root) organized in three
+The workspace has **34 in-tree crates** (plus the root — derived from the root `members` list, 2026-10-26) organized in three
 layers: shared leaves (depend on `katgpt-types` or nothing), `katgpt-core`
 (traits + cognitive kernels, depends on leaves), domain stacks (depend on
 `katgpt-core` + other domain crates), and the root crate (`katgpt-rs`) which
@@ -131,6 +131,9 @@ graph TD
         percepta["katgpt-percepta<br/>(transformer-VM, zero katgpt deps)"]
         proofcert["katgpt-proof-cert<br/>(GOAT proof certificates)"]
         deprecated["katgpt-deprecated<br/>(exiled losers)"]
+        nn["katgpt-nn<br/>(shared NN primitives)"]
+        tetris["katgpt-tetris<br/>(Tetris sim + lookahead, zero katgpt deps)"]
+        deviceverify["katgpt-device-verify<br/>(no_std device-side verify, zero katgpt deps)"]
     end
     subgraph Core["Core layer"]
         core["katgpt-core<br/>(traits, attention primitives, cognitive kernels)"]
@@ -150,6 +153,9 @@ graph TD
         claim["katgpt-claim<br/>(claim rubric, CLR)"]
         ruliology["katgpt-ruliology<br/>(Wolfram ruliology)"]
         backend["katgpt-backend<br/>(CPU/ANE/GPU inference backends)"]
+        canon["katgpt-canon<br/>(canonical intent space)"]
+        extract["katgpt-extract<br/>(extraction substrate, Fathom F0)"]
+        mokawasm["katgpt-moka-wasm<br/>(standalone Moka WASM build)"]
     end
     root["katgpt-rs (root)<br/>(runtime, feature surface)"]
 
@@ -214,6 +220,13 @@ graph TD
     validator --> core
     validator --> tokenizer
     deprecated --> core
+    nn --> types
+    canon --> core
+    canon --> spectral
+    extract --> core
+    mokawasm --> core
+    mokawasm --> nn
+    mokawasm --> types
     root --> core
     root --> transformer
     root --> forward
@@ -238,12 +251,17 @@ graph TD
     root --> sense
     root --> dec
     root --> deprecated
+    root -.dev-dep.-> tetris
 ```
 
 **Dependency rules:**
-- Arrows point from consumer → dependency. Dashed = optional feature-gated dep.
+- Arrows point from consumer → dependency. Dashed = optional feature-gated dep (or `dev-dep`, as labelled).
 - **Leaf crates** depend on `katgpt-types` (or nothing, for `katgpt-percepta`,
-  `katgpt-proof-cert`, and `katgpt-assign`). `katgpt-core` consumes the leaf
+  `katgpt-proof-cert`, `katgpt-assign`, `katgpt-tetris` and
+  `katgpt-device-verify`). `katgpt-canon`, `katgpt-extract`,
+  `katgpt-moka-wasm` and `katgpt-device-verify` have no in-workspace
+  consumer — they are standalone surfaces (built with `-p`), not part of
+  the root feature surface. `katgpt-core` consumes the leaf
   substrate crates (`katgpt-hla`, `katgpt-dec`, `katgpt-assign`,
   `katgpt-micro-belief`, `katgpt-personality`,
   `katgpt-sense`, `katgpt-sleep`) and re-exports them as `katgpt_core::*`.
@@ -3549,7 +3567,7 @@ katgpt-core = { path = "../katgpt-rs/crates/katgpt-core" }
 ## 📁 Project Structure
 
 ```
-crates/  (28 in-tree crates — see Proposal 003 for the full Phase 0–12 history)
+crates/  (34 in-tree crates — see Proposal 003 for the full Phase 0–12 history)
   katgpt-types/        Leaf: Config, Rng, SIMD kernels, shared enums (DashAttnConfig, ...)
   katgpt-hla/          Leaf: HLA substrate (kernel + types) — O(1) inference cache
   katgpt-tokenizer/    Leaf: BPE tokenizer + ConvexTok LP vocabulary optimizer
