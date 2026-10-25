@@ -1,6 +1,7 @@
 # Issue 964 — katgpt-assign: precompute the solver's static invariants (bbtree-class ordered-structure audit)
 
-**Status:** OPEN — findings filed by the bbtree distill session (workspace distill Research 322); unclaimed; every fix behind its own GOAT gate.
+**Status:** IN PROGRESS — findings filed by the bbtree distill session (workspace distill Research 322); every fix behind its own GOAT gate.
+**Claimed:** katgpt-rs-m3-964a, epoch=1792932000, expires 2026-10-27T12:40:00Z
 **Date:** 2026-10-25
 **Type:** perf / refactor (zero-risk class: O(m log m) per call on STATIC data)
 
