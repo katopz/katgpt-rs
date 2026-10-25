@@ -50,8 +50,8 @@
 //!
 //! spectral_pencil — the affine matrix pencil scalar gate f(x) =
 //! λk(A₀ + Σ xᵢAᵢ) (Issue 676, Research 495, arXiv:2608.08003 "The
-//! Spectral Neuron"). Shape-by-construction + coefficient transparency
-//! + seeded γk ≥ ½ init. Opt-in; see the module doc for the determinism
+//! Spectral Neuron"). Shape-by-construction + coefficient transparency +
+//! seeded γk ≥ ½ init. Opt-in; see the module doc for the determinism
 //! policy (pinned Jacobi/Sturm/QR — no library eigensolver on committed
 //! paths).
 

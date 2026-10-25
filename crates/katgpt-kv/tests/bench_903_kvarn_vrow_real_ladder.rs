@@ -111,8 +111,10 @@ fn main() {
     let mut aligned = Vec::with_capacity(want);
     aligned.extend(
         payload
-            .chunks_exact(4)
-            .map(|c| f32::from_le_bytes(c.try_into().unwrap())),
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| f32::from_le_bytes(*c)),
     );
     let rows_f32: &[f32] = &aligned;
     println!(

@@ -66,8 +66,8 @@
 //! chain — deterministic subspace iteration → PCA whitening → entropic-
 //! Sinkhorn self-labeling → orthogonal-Procrustes polar factor (reusing the
 //! always-on `linalg::symmetric_eig`) — then scores kNN attribute-transfer
-//! top-1 against the majority-class chance baseline + the neighborhood-hit
-//! + alignment-quality diagnostics. Distinguishes from
+//! top-1 against the majority-class chance baseline + the neighborhood-hit +
+//! alignment-quality diagnostics. Distinguishes from
 //! `latent_confounder_audit` (single-space, counterfactual slices over OUR
 //! directions) by operating ACROSS two spaces with no encoder access. Zero
 //! deps; audit-cadence allocation (the analytic_lattice::audit precedent).
