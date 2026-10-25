@@ -1,7 +1,6 @@
 # Issue 962 — FlashMemory selector: budget (top-ρ) block selection (`flashmemory_budget_select`)
 
-**Status:** Open — T1 DONE (`aa439587c`); **T2 DONE** (128K confirms, riir-train Bench 671); T3 (serving consumer + end-to-end gate) filed as riir-infer Issue 1117.
-**Claimed:** katgpt-rs-m5-452e1, 1792865680, expires 2026-10-27T12:00:00+00:00
+**Status:** Open — T1 DONE (`aa439587c`); **T2 DONE** (128K confirms, riir-train Bench 671); T3 (serving consumer + end-to-end gate) filed as riir-infer Issue 1117 (claimed there). Lease released 2026-10-26 — nothing left in this repo until 1117 reports.
 **Origin:** riir-train Issue 452 E1 — after the margin rule (Issue 961, closed) failed its forward-level G1, the D1 top-ρ harness (riir-train `cf8144e1`, `682d9eae`) compared selectors at EXACTLY matched retention on attention-output cos.
 
 ## Finding that motivates it
