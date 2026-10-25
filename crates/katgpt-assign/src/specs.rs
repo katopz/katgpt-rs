@@ -50,6 +50,11 @@ pub struct Compiled {
     /// Capacity-row metadata for the `explain` surface: one entry per
     /// `(capacity spec, container)` violation row, in compilation order.
     pub capacity_rows: Vec<CapacityRowInfo>,
+    /// Per-`GroupCount`-spec sorted+deduped member lists, spec-index
+    /// aligned (empty for other specs). Computed once here; the solver's
+    /// heat path reads these instead of re-cloning+sorting+deduping the
+    /// raw member list on every recompute (Issue 964).
+    pub group_members: Vec<Vec<u32>>,
 }
 
 /// One capacity violation row's addressing (`explain` reads this to report
@@ -116,16 +121,37 @@ pub fn compile(problem: &Problem) -> Compiled {
     // and the CSR layout. AssignmentAffinities contributes its entries;
     // GroupCount contributes member × every-container pairs (the spread
     // reads each member's count in each container).
+    // ── Per-GroupCount-spec sorted+deduped member lists (spec-index
+    // aligned; empty for other specs). One sort per spec at COMPILE time;
+    // the at-pair family below, the goal-term build, and the solver's
+    // heat path all read these (the heat path's per-recompute
+    // clone+sort+dedup is the Issue-964 finding).
+    let group_members: Vec<Vec<u32>> = problem
+        .specs
+        .iter()
+        .map(|spec| match spec {
+            Spec::GroupCount { members, .. } => {
+                let mut group: Vec<u32> = members.clone();
+                group.sort_unstable();
+                group.dedup();
+                group
+            }
+            _ => Vec::new(),
+        })
+        .collect();
+
     let mut at_pairs: Vec<(u32, u32)> = Vec::new();
-    for spec in &problem.specs {
+    for (s, spec) in problem.specs.iter().enumerate() {
         match spec {
             Spec::AssignmentAffinities { affinities } => {
                 for a in affinities {
                     at_pairs.push((a.object, a.container));
                 }
             }
-            Spec::GroupCount { members, .. } => {
-                for &o in members {
+            Spec::GroupCount { .. } => {
+                // Raw duplicates collapse in the dedup below, so feeding
+                // the precomputed deduped list yields the same at_pairs.
+                for &o in &group_members[s] {
                     for c in 0..b as u32 {
                         at_pairs.push((o, c));
                     }
@@ -226,7 +252,7 @@ pub fn compile(problem: &Problem) -> Compiled {
 
     // ── Goal terms.
     let mut terms: Vec<NodeId> = Vec::new();
-    for spec in &problem.specs {
+    for (s, spec) in problem.specs.iter().enumerate() {
         match spec {
             Spec::Capacity { .. } | Spec::AvoidMoving { .. } => {}
             Spec::Balance { dim, weight } => {
@@ -256,13 +282,12 @@ pub fn compile(problem: &Problem) -> Compiled {
                 };
                 terms.push(term);
             }
-            Spec::GroupCount { members, weight } => {
+            Spec::GroupCount { members: _, weight } => {
                 // Per-container member COUNT = Σ at(o, b) over the (deduped,
                 // sorted) members; spread = max_b count − min_b count — the
-                // Balance shape over counts instead of utilizations.
-                let mut group: Vec<u32> = members.clone();
-                group.sort_unstable();
-                group.dedup();
+                // Balance shape over counts instead of utilizations. The
+                // list is the compile-time precompute (group_members[s]).
+                let group = &group_members[s];
                 let mut counts: Vec<NodeId> = Vec::with_capacity(b);
                 let mut neg_counts: Vec<NodeId> = Vec::with_capacity(b);
                 for c in 0..b as u32 {
@@ -330,6 +355,7 @@ pub fn compile(problem: &Problem) -> Compiled {
         violation_root,
         goal_root,
         capacity_rows,
+        group_members,
     }
 }
 

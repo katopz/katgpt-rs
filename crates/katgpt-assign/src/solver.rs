@@ -64,6 +64,9 @@ pub struct Solver<'p> {
     member_snapshot: Vec<u32>,
     heat: Vec<i64>,
     heat_order: Vec<ContainerId>,
+    /// Per-recompute zeroed count scratch (GroupCount heat; filled, never
+    /// reallocated — G4).
+    count_scratch: Vec<i64>,
     /// Seeded container permutation — the tie-break under equal heat.
     tie_perm: Vec<u32>,
     /// Per referenced dim: integer mean utilization (heat input; the
@@ -138,7 +141,18 @@ impl<'p> Solver<'p> {
         let mut rng = SplitMix64::new(seed.0);
         rng.shuffle_u32(&mut tie_perm);
 
-        let mut members: Vec<Vec<u32>> = vec![Vec::new(); b];
+        // Static heat-order baseline: containers in tie-permutation order
+        // (Issue 964). refresh_heat sorts this by the moving heat key; tie
+        // values are unique, so the output is the exact (Reverse(heat), tie)
+        // order a from-scratch 0..b sort would produce — byte-identical.
+        let mut heat_order: Vec<ContainerId> = (0..b as u32).collect();
+        heat_order.sort_unstable_by_key(|&c| tie_perm[c as usize]);
+
+        // Membership preallocated to the G4 worst case — the widest
+        // container can hold every object — so a solve never grows a
+        // membership Vec mid-run (Issue 964's G4 finding: a container
+        // exceeding its construction high-water reallocated once).
+        let mut members: Vec<Vec<u32>> = (0..b).map(|_| Vec::with_capacity(n)).collect();
         let mut obj_pos = vec![0u32; n];
         for (o, &c) in problem.initial.iter().enumerate() {
             obj_pos[o] = members[c as usize].len() as u32;
@@ -227,7 +241,19 @@ impl<'p> Solver<'p> {
         // Pre-size scan scratch to worst case so the hot loop never grows
         // a buffer (G4): the widest container can hold every object.
         let scratch = dag.scratch();
-        let leaf_deltas = Vec::with_capacity(2 * compiled.referenced_dims.len() + 2);
+        // Delta scratch sizing (G4): the widest object at-slice (a
+        // GroupCount member pairs with EVERY container) plus the builders'
+        // worst case — triple: a per-container util push per dim + 3 moved
+        // flags. Sized once here; the hot loop never grows the buffer
+        // (the at-leaf regrowth was the Issue-964 G4 finding).
+        let max_at = compiled
+            .at_off
+            .windows(2)
+            .map(|w| (w[1] - w[0]) as usize)
+            .max()
+            .unwrap_or(0);
+        let leaf_deltas =
+            Vec::with_capacity(3 * max_at + compiled.referenced_dims.len() * (b + 2) + 3);
         let member_snapshot = Vec::with_capacity(n);
         let mut solver = Self {
             problem,
@@ -240,7 +266,8 @@ impl<'p> Solver<'p> {
             leaf_deltas,
             member_snapshot,
             heat: vec![0; b],
-            heat_order: Vec::with_capacity(b),
+            heat_order,
+            count_scratch: vec![0; b],
             tie_perm,
             ref_dim_mean,
             limits,
@@ -575,7 +602,7 @@ impl<'p> Solver<'p> {
         for h in self.heat.iter_mut() {
             *h = 0;
         }
-        for spec in &self.problem.specs {
+        for (s, spec) in self.problem.specs.iter().enumerate() {
             match spec {
                 Spec::Capacity { dim, limit, .. } => {
                     let ref_idx = self
@@ -603,19 +630,22 @@ impl<'p> Solver<'p> {
                     }
                 }
                 Spec::MinimizeMovement { .. } => {}
-                Spec::GroupCount { members, .. } => {
+                Spec::GroupCount { .. } => {
                     // Count-deviation mass: |count(c) − mean_count| — the
                     // Balance arm over member counts (mean is
-                    // assignment-invariant, deduped like the compile).
-                    let mut group: Vec<u32> = members.clone();
-                    group.sort_unstable();
-                    group.dedup();
+                    // assignment-invariant). The sorted/deduped membership
+                    // is the compile-time precompute (Issue 964) and the
+                    // count scratch is reused, never reallocated (G4).
+                    let group = &self.compiled.group_members[s];
                     let mean = (group.len() / b.max(1)) as i64;
-                    let mut count = vec![0i64; b];
-                    for &o in &group {
-                        count[self.assignment[o as usize] as usize] += 1;
+                    {
+                        let count = &mut self.count_scratch;
+                        count.fill(0);
+                        for &o in group {
+                            count[self.assignment[o as usize] as usize] += 1;
+                        }
                     }
-                    for (c, &cnt) in count.iter().enumerate() {
+                    for (c, &cnt) in self.count_scratch.iter().enumerate() {
                         self.heat[c] += (cnt - mean).abs();
                     }
                 }
@@ -643,9 +673,9 @@ impl<'p> Solver<'p> {
             }
         }
         // Hot-first, seeded permutation breaking ties — the unique key
-        // makes the unstable sort fully deterministic.
-        self.heat_order.clear();
-        self.heat_order.extend(0..b as u32);
+        // makes the unstable sort fully deterministic. The baseline (0..b
+        // in tie order) is static (Solver::new); only the heat key moves,
+        // so the sort output is unchanged (Issue 964).
         let tie = &self.tie_perm;
         let heat = &self.heat;
         self.heat_order
@@ -657,7 +687,7 @@ impl<'p> Solver<'p> {
     pub fn heat_of_container(&self, c: ContainerId) -> i64 {
         let mut h = 0i64;
         let b = self.problem.num_containers;
-        for spec in &self.problem.specs {
+        for (s, spec) in self.problem.specs.iter().enumerate() {
             match spec {
                 Spec::Capacity { dim, limit, .. } => {
                     let ref_idx = self
@@ -681,13 +711,13 @@ impl<'p> Solver<'p> {
                     h += (u - mean).abs();
                 }
                 Spec::MinimizeMovement { .. } => {}
-                Spec::GroupCount { members, .. } => {
-                    let mut group: Vec<u32> = members.clone();
-                    group.sort_unstable();
-                    group.dedup();
+                Spec::GroupCount { .. } => {
+                    // The sorted/deduped membership is the compile-time
+                    // precompute (Issue 964).
+                    let group = &self.compiled.group_members[s];
                     let mean = (group.len() / b.max(1)) as i64;
                     let mut count = 0i64;
-                    for &o in &group {
+                    for &o in group {
                         if self.assignment[o as usize] == c {
                             count += 1;
                         }
