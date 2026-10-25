@@ -12,7 +12,13 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-WORKSPACE = Path(os.environ.get("LINKCHECK_WORKSPACE", "/Users/katopz/git"))  # cross-box: set to the local workspace root
+# Cross-box: the default derives the workspace from this script's own home
+# (<workspace>/katgpt-rs/.agents/skills/doc-sync/tools/linkcheck_sweep.py →
+# parents[5]); LINKCHECK_WORKSPACE overrides for any layout where that walk
+# is wrong (recorded upstream repair, doc-sync unit #41: the old default
+# hardcoded /Users/katopz/git and silently swept nothing on any other box).
+_DEFAULT_WORKSPACE = Path(__file__).resolve().parents[5]
+WORKSPACE = Path(os.environ.get("LINKCHECK_WORKSPACE", str(_DEFAULT_WORKSPACE)))
 SKIP_PATH_PARTS = ("/.agents/",)  # skill files carry intentional example links
 NAMESPACE_MARKERS = (
     ".issues/", ".plans/", ".benchmarks/", ".research/",
