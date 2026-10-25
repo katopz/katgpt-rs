@@ -87,8 +87,8 @@
 //!
 //! Plan 353 — Head Substitution Gate (Gain-tier, opt-in). Small decision
 //! struct that decides when a FuncAttn-style surrogate should substitute for
-//! a real attention head, using the paper's IoU cheap-proxy (§3 Fig 5b r>0.9)
-//! + cached FaithfulnessProfile veto (Plan 287 SinkAware cadence). NOT a new
+//! a real attention head, using the paper's IoU cheap-proxy (§3 Fig 5b r>0.9) +
+//! cached FaithfulnessProfile veto (Plan 287 SinkAware cadence). NOT a new
 //! primitive — the original draft proposed a redundant ProgramSynthesizedHead
 //! primitive that was dropped after re-review identified FuncAttn (above) as
 //! the existing primitive surface. Stays opt-in: Gain-tier, and the plan's

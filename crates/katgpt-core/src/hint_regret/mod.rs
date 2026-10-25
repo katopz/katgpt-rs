@@ -66,8 +66,8 @@
 //! guide riir-ai .research/340). The frontier-curriculum discriminator: how
 //! much would ONE hint (demo / revealed arm) improve the return on this
 //! content? Paired CRN estimator (Welford, zero-alloc) + Hoeffding /
-//! empirical-Bernstein machinery + sigmoid band gate + three-regime triage
-//! + Beta-LCB frontier ordering (DRY over best_belief) + regret-scored
+//! empirical-Bernstein machinery + sigmoid band gate + three-regime triage +
+//! Beta-LCB frontier ordering (DRY over best_belief) + regret-scored
 //! memory with absorbing-intractable eviction. Opt-in pending the GOAT
 //! verdict; consumers: riir-ai Guide 340 P0 (supersedes the mmorpg inline
 //! collapse), riir-train Plan 346 arena opponent selection.

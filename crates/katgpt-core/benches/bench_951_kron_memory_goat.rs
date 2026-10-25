@@ -665,7 +665,7 @@ fn run_g5b() -> bool {
     // The candidate's multiplier q is calibrated AFTER the cal slice by the
     // empirical 90% two-sided quantile of |residual|/signal.
     let mut abs_res = Vec::with_capacity(n_cal + n_eval);
-    for (i, (k, v, c, _t)) in stream.iter().enumerate() {
+    for (k, v, c, _t) in stream.iter() {
         let forecast = cell.read(k, v);
         abs_res.push((forecast - *c).abs());
         cell.write_newton(k, v, *c);

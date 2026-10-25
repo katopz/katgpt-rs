@@ -1698,17 +1698,13 @@ mod tests {
         // Rust projector machinery against the same instance.)
         let inv_sqrt2 = std::f32::consts::FRAC_1_SQRT_2;
         let protected = inv_sqrt2; // the single protected direction's norm-1 vector (1-D span)
-        let side = SideBasis::Protected {
+        // The anchor this instance describes (kept as documentation; the
+        // protected-apply is module-private, so the leak is computed by
+        // hand below rather than through it). P_prot = B Bᵀ on ![1, 1]: the
+        // projection is the WHOLE vector (it IS the protected direction).
+        let _side = SideBasis::Protected {
             basis: vec![protected, protected],
         };
-        // P_prot = B Bᵀ on ![1, 1]: the projection is the WHOLE vector (it
-        // IS the protected direction).
-        let x = [1.0f32, 1.0];
-        let mut t = [0.0f32; 1];
-        let mut y = [0.0f32; 2];
-        // P_prot · x via the protected-apply (module-private; the test
-        // reads it through the anatomy on a 2×2 delta instead).
-        let _ = (&side, &t, &mut y);
         // The transform diag(1, 0) applied to ![1, 1] is ![1, 0]; its
         // protected projection is ![0.5, 0.5], so the leak (complement
         // component) has norm² = ‖![1,0] − [0.5,0.5]‖² = 0.5 — nonzero,
