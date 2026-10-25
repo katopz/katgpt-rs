@@ -3,7 +3,7 @@
 **Status:** OPEN — filed from the Claude verdict on seal-remake Proposal 009; implementation is its own reviewed arc. **Ordering:** arms A/B of the seal-remake pilot run on the CURRENT pin — this bump lands ONLY if arm B (cargo + dev-profile tweaks) does not clear the want-faster bar on its own.
 **Date:** 2026-10-25
 **Type:** refactor / toolchain (the pin authority lives HERE — Issue 739 lineage)
-**Consumers:** [seal-remake Proposal 009](../../seal-remake/.proposals/009_blaze_dev_loop_build_driver.md) + [Issue 122](../../seal-remake/.issues/122_blaze_dev_loop_pilot.md) (the blaze dev-loop pilot needs exactly 1.99.0 + rust-src) · seal-game-editor + seal-remake follow this anchor
+**Consumers:** [seal-remake Proposal 009](../../seal-remake/.proposals/009_blaze_dev_loop_build_driver.md) + [Issue 126](../../seal-remake/.issues/126_blaze_dev_loop_pilot.md) (the blaze dev-loop pilot needs exactly 1.99.0 + rust-src; allocated as Issue 122, renumbered 126 before landing) · seal-game-editor + seal-remake follow this anchor
 
 ---
 
