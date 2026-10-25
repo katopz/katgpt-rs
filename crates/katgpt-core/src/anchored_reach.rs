@@ -77,8 +77,8 @@
 //! context-scaled threshold + median subtraction over the hack-carrying
 //! population + band window — resists capture by the population-dominant
 //! degenerate mode; the CLR crowd-panic failure is the named consumer, T3
-//! PoC pending) and the ANCHORED SIGNED-REACH blend operator (out = anchor +
-//! A·(cand − anchor); five regimes clamp/blend/adopt/overshoot/repel;
+//! PoC pending) and the ANCHORED SIGNED-REACH blend operator (out = anchor
+//! + A·(cand − anchor); five regimes clamp/blend/adopt/overshoot/repel;
 //! bit-identical pole fast paths at A ∈ {0,1}; A(r) schedules linear /
 //! 2σ(kr)−1 / (2r−1)/β̄). Both zero-alloc, modelless,
 //! sigmoid-not-softmax by construction. Opt-in POC — promotion only via the

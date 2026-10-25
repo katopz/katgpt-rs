@@ -42,15 +42,6 @@ would prove nothing. This gate closes the other end.
   distinction the gate would be unrunnable on any partial box.
 - ⛔ **ORPHAN** — the target's repo is absent from disk **and** absent from
   `repo_set.txt`. The class. Walled at **0**.
-- **EXCLUDED** — an ORPHAN whose citing manifest sits under a directory its
-  repo's ROOT `[workspace] exclude` lists (seal-remake Issue 129: the
-  scenario-DAG view crate path-deps seal-game-editor, a repo the contract does
-  not claim). Cargo never loads an excluded crate's manifest while resolving
-  the workspace, so the CITING repo stays buildable — only that one crate,
-  built by `--manifest-path`, needs the sibling. Reported and counted on the
-  PASS line, never walled: the exclusion is explicit and reviewable in the
-  root manifest, which is the opposite of the silent class this gate exists
-  for.
 - ⛔ **BROKEN-SUBPATH** — the repo is present but the crate directory under it
   is not. An ordinary broken dep, walled at 0 too; kept as its own verdict
   because the remedy is completely different (fix the path, not clone a repo).
@@ -118,47 +109,6 @@ def strip_toml_comments(text: str) -> str:
             i += 1
         out.append(line)
     return "\n".join(out)
-
-
-WS_EXCLUDE = re.compile(r'^\s*exclude\s*=\s*\[(.*?)\]', re.S | re.M)
-
-
-def workspace_excludes(root_manifest_text: str) -> tuple:
-    """The `[workspace] exclude` entries of a repo's ROOT Cargo.toml, as
-    normalized relative paths (no leading `./`, no trailing `/`).
-
-    Only the `[workspace]` table is read — an `exclude` key under
-    `[package]` is cargo's publish-file filter, a different thing entirely,
-    and reading it would excuse ORPHANs nobody excluded from anything.
-    """
-    text = strip_toml_comments(root_manifest_text)
-    out = []
-    table = None
-    body = []
-    for line in text.split("\n"):
-        head = line.strip()
-        if head.startswith("[") and not head.startswith("[["):
-            if table == "workspace":
-                break
-            table = head.strip("[] ")
-            continue
-        if table == "workspace":
-            body.append(line)
-    m = WS_EXCLUDE.search("\n".join(body))
-    if m:
-        for q in re.findall(r'"([^"]*)"', m.group(1)):
-            q = q.strip().removeprefix("./").rstrip("/")
-            if q:
-                out.append(q)
-    return tuple(out)
-
-
-def is_excluded(rel_manifest: str, excludes: tuple) -> bool:
-    """Does the manifest at repo-relative `rel_manifest` sit under an
-    excluded directory? Component-wise, so `crates/a` never excludes
-    `crates/ab/Cargo.toml`."""
-    parent = rel_manifest.replace("\\", "/").rsplit("/", 1)[0] if "/" in rel_manifest else ""
-    return any(parent == e or parent.startswith(e + "/") for e in excludes)
 
 
 def repo_set(root: Path) -> set:
@@ -276,11 +226,6 @@ def scan(root: str, ws=None, partial=None, repos_on_disk=None, registry=None,
             candidates, _ = tracked_files(str(repo), "*.toml")
         except Exception:
             continue
-        try:
-            excludes = workspace_excludes(
-                (repo / "Cargo.toml").read_text(encoding="utf-8", errors="replace"))
-        except OSError:
-            excludes = ()
         for m in candidates:
             m = Path(m)
             if m.name != "Cargo.toml":
@@ -298,8 +243,6 @@ def scan(root: str, ws=None, partial=None, repos_on_disk=None, registry=None,
                     continue
                 n_deps += 1
                 rel = str(m.relative_to(repo)).replace("\\", "/")
-                if verdict == "ORPHAN" and is_excluded(rel, excludes):
-                    verdict = "EXCLUDED"
                 rows.setdefault(verdict, []).append((repo_name, rel, raw, name))
     return {"rows": rows, "manifests": n_manifests, "deps": n_deps,
             "on_disk": on_disk, "registered": registered, "partial": partial}
@@ -417,28 +360,6 @@ def selftest() -> list:
     if repo_set(Path("/definitely/not/here")) != set():
         fails.append("an unreadable registry must read as empty, not raise")
 
-    # 9b. The [workspace] exclude reader (seal-remake Issue 129). Only the
-    #     WORKSPACE table counts — a [package] exclude is a publish filter —
-    #     and the match is component-wise.
-    got = workspace_excludes(
-        '[package]\nexclude = ["pkg-only"]\n'
-        '[workspace]\nmembers = ["crates/a"]\n'
-        '# exclude = ["commented"]\n'
-        'exclude = [\n  "./crates/view/",\n  "tools/x",  # note\n]\n'
-        '[dependencies]\nexclude = ["dep-table"]\n')
-    if got != ("crates/view", "tools/x"):
-        fails.append(f"workspace_excludes read {got}")
-    if workspace_excludes('[package]\nname = "x"\n') != ():
-        fails.append("a manifest with no [workspace] must exclude nothing")
-    if not is_excluded("crates/view/Cargo.toml", ("crates/view",)):
-        fails.append("a manifest AT an excluded dir must be excluded")
-    if not is_excluded("crates/view/sub/Cargo.toml", ("crates/view",)):
-        fails.append("a manifest UNDER an excluded dir must be excluded")
-    if is_excluded("crates/viewer/Cargo.toml", ("crates/view",)):
-        fails.append("prefix match must be component-wise (crates/view vs crates/viewer)")
-    if is_excluded("Cargo.toml", ("crates/view",)):
-        fails.append("the ROOT manifest is never excluded")
-
     # 10. ⛔ `scan()` ITSELF, over a real fixture workspace (Issue 837).
     #     Arms 1-9 assert `classify()`, which is the classifier; `scan()` is
     #     the VERDICT layer above it and had NO arm at all, so its three
@@ -469,34 +390,6 @@ def selftest() -> list:
                        capture_output=True)
         subprocess.run(["git", "-C", str(a), "commit", "-qm", "b"], check=True,
                        capture_output=True)
-
-        # Issue 129 fixture: a SECOND repo whose root excludes crates/view,
-        # and that excluded crate path-deps a repo in neither set; plus a
-        # MEMBER crate with the same dep, which must stay a finding.
-        g = ws / "gamma"
-        (g / "crates" / "view").mkdir(parents=True)
-        (g / "crates" / "member").mkdir(parents=True)
-        for a2 in (("init", "-q", "-b", "main"),
-                   ("config", "user.email", "t@t"), ("config", "user.name", "t")):
-            subprocess.run(["git", "-C", str(g), *a2], check=True, capture_output=True)
-        (g / "Cargo.toml").write_text(
-            '[workspace]\nmembers = ["crates/member"]\nexclude = ["crates/view"]\n',
-            encoding="utf-8")
-        (g / "crates" / "view" / "Cargo.toml").write_text(
-            '[dependencies]\ned = { path = "../../../nobody/crates/ed" }\n', encoding="utf-8")
-        (g / "crates" / "member" / "Cargo.toml").write_text(
-            '[dependencies]\ned = { path = "../../../nobody/crates/ed" }\n', encoding="utf-8")
-        subprocess.run(["git", "-C", str(g), "add", "-A"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(g), "commit", "-qm", "g"], check=True,
-                       capture_output=True)
-        gx = scan(str(a), ws=ws, partial=False,
-                  repos_on_disk={"gamma"}, registry={"gamma"})
-        exc = gx["rows"].get("EXCLUDED", [])
-        orph = gx["rows"].get("ORPHAN", [])
-        if [r[1] for r in exc] != ["crates/view/Cargo.toml"]:
-            fails.append(f"an ORPHAN under a [workspace] exclude dir must be EXCLUDED: {gx['rows']}")
-        if [r[1] for r in orph] != ["crates/member/Cargo.toml"]:
-            fails.append(f"the same ORPHAN in a MEMBER crate must stay ORPHAN: {gx['rows']}")
 
         got = scan(str(a), ws=ws, partial=False,
                    repos_on_disk={"alpha", "beta"}, registry={"alpha", "beta"})
@@ -590,10 +483,6 @@ def main(argv) -> int:
     orphan = rows.get("ORPHAN", [])
     broken = rows.get("BROKEN-SUBPATH", [])
     deferred = rows.get("DEFERRED", [])
-    excluded = rows.get("EXCLUDED", [])
-    for repo, man, raw, name in excluded:
-        print(f"    ⚠ EXCLUDED  {repo}/{man}  ->  {raw}   (ORPHAN in a [workspace] "
-              f"exclude crate — the citing workspace loads; this crate alone needs the sibling)")
 
     for verdict, label in (("ORPHAN", "no repo on disk AND no repo_set.txt row"),
                            ("BROKEN-SUBPATH", "repo present, crate directory missing")):
@@ -635,9 +524,7 @@ def main(argv) -> int:
                  f"A green line here is not evidence that path works]")
     print(f"    ✓ cross-repo path-dep gate PASSED — 0 ORPHAN, 0 BROKEN-SUBPATH over "
           f"{r['deps']} cross-repo path dep(s) (floor {MIN_DEPS}) in {r['manifests']} "
-          f"tracked Cargo.toml (floor {MIN_MANIFESTS}){extra}"
-          f"  [{len(excluded)} EXCLUDED — ORPHAN deps of [workspace]-excluded crates, "
-          f"reported, never walled]. "
+          f"tracked Cargo.toml (floor {MIN_MANIFESTS}){extra}. "
           f"⚠ It does NOT claim a resolvable dep is CORRECT — version skew, a stale "
           f"sibling, and a dep pointing at the wrong crate all resolve")
     return 0

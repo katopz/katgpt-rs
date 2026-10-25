@@ -51,8 +51,8 @@
 //! vocabularies; decode returns (template, fill indices) and REFUSES
 //! anything else (Unknown / Ambiguous — never a guess). Decode-only,
 //! corpus-limited per protocol version; `verify_closed` proves each table
-//! ambiguity-free over its full fill product. The losslessness-measurement +
-//! laya-traffic-intake arm of the game-decision lane (Lz4FlexDrafter
+//! ambiguity-free over its full fill product. The losslessness-measurement
+//! + laya-traffic-intake arm of the game-decision lane (Lz4FlexDrafter
 //! lineage, Plan 285). Opt-in; zero deps; zero-alloc decode.
 
 /// Maximum slots per template (`u8` fill indices keep the match buffer

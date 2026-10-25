@@ -33,8 +33,8 @@
 //!
 //! Stale-residual speculative layer pipelining — the modelless analysis half
 //! (Issue 691 / Research 508, arXiv:2608.23841 §6.3 Approach A+B — the
-//! paper's own UNTESTED hypothesis): residual-dominance ratios ‖δℓ‖/‖x_in‖ +
-//! the paper's viability bar (>50% of layers, median ratio < 0.05), the
+//! paper's own UNTESTED hypothesis): residual-dominance ratios ‖δℓ‖/‖x_in‖
+//! + the paper's viability bar (>50% of layers, median ratio < 0.05), the
 //! accept/rollback threshold gate, the KL/top-1 SpecOutcome metrics + θ-sweep
 //! reduction, and the stream-ratio-aware (C+IO)/max(C,IO) overlap latency
 //! model (bits/weight-parameterized so ternary 1.58 b/w and Q4 4.6 b/w
