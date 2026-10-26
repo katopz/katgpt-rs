@@ -5827,8 +5827,13 @@ tension law), Research 623. Source:
 
 Two closed-world scoring primitives from the Terminal-RSI paper's reward
 family — no training, no domain semantics; the modelless residue of its
-dense-reward design. Both OPT-IN landings with **no promotion claim** (the
-issue's GOAT shapes are named, not yet run).
+dense-reward design. Both OPT-IN landings — **bench 945 ran 2026-10-26 and
+PASSED** (`f0af7f264`: fdr_credit G1a ordering dominance Spearman 0.632 vs
+raw 0.364, 15/16 seeds; G2 bootstrap stability CV 0.043/τ 0.878; G3 top-3
+never-worse 16/16; G4 zero-alloc; spr_order paired read 0 selection flips,
+0 law violations) — and both STAY OPT-IN on the consumer clause (synthetic
+adjudicated harness; consumers unwired, real-template corpus pending),
+not on any gate failure.
 
 - **`fdr_credit` — the Family Dense Reward `R = max(P/D_f, 0)`.**
   `FdrCalibration::freeze` computes per-family p90 divisors from a reference
@@ -5864,13 +5869,12 @@ issue's GOAT shapes are named, not yet run).
   up to 1.0 against a zero-pass success) is executed in a test, not
   hand-waved; `mass_on_failures` is the paper's F1 eval-board diagnostic
   (fraction of reward mass on failures) — sequential fold, local-only.
-- **Deferred (per the issue's own split)**: T1's GOAT (G1 FDR-vs-raw-P
-  ordering on adjudicated held-out quality + bootstrap D_f stability + G4
-  alloc-free scoring) and T2's paired read on a frozen candidate corpus
-  (byte-identical-to-incumbent = honest no-op, kept as a drift guard) —
-  both need corpus/bench windows; T3 (decay-free bounded-credit reshape vs
-  the shipped 0.7 decay) is a pinned-posture bench campaign, deferred with
-  the issue.
+- **Ran (bench 945, 2026-10-26)**: T1's GOAT (G1 FDR-vs-raw-P ordering
+  Spearman 0.632 vs 0.364 + bootstrap D_f stability + G4 alloc-free) and
+  T2's paired read (0 selection flips — byte-identical-to-incumbent, kept
+  as a drift guard) — both PASS, verdict consumer-clause opt-in (above).
+  Still deferred: T3 (decay-free bounded-credit reshape vs the shipped 0.7
+  decay), a pinned-posture bench campaign, deferred with the issue.
 
 ## 152. gated_summary — InfiLoop Gated N/D Running Summary (Issue 950 / riir-train Plan 465 track, Research 626, arXiv:2610.11570)
 
