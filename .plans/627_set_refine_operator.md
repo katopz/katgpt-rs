@@ -1,12 +1,8 @@
 # Plan 627 — the `set_refine` operator: the one capability an independent option scorer structurally lacks
 
 **Status:** T1-T3 COMPLETE 2026-10-16 — T3 GOAT verdict: MEASURED NEGATIVE (G1 fail, monotone in γ; reflex Bench 150). The lane stays opt-in katgpt-core-side (`set_refine` feature) + reflex-side (`set_refine` feature, knob default 0.0); promotion REFUSED on G1 — T4's proposal is moot (the plan's own law: a negative is a valid landing). See §5 records.
-for a new katgpt-core primitive; implementation unclaimed. Downstream of reflex
-Issue 090 C2 (the Jeva fusion follow-up; the issue text is the seed spec). The
-promotion decision stays gated on the MEASURED GOAT (§4) — nothing here promotes
-or wires by default.
-**Claimed:** 4090-setrefine, 1792106760, expires 2026-10-17T23:26:00Z
-**Note:** claim scope T1-T3; the claim epoch was 2026-10-15T23:26Z (format-normalized to epoch digits by set-refine-t1-m3, semantics unchanged).
+Origin context: downstream of reflex Issue 090 C2 (the Jeva fusion follow-up; the issue text is the seed spec).
+**Lease closed:** 4090-setrefine, claimed 2026-10-15T23:26Z, retired at execution — T1-T3 landed 2026-10-16 within the lease (scope discharged by the landing above). (Reshaped 2026-10-26 from a stale `**Claimed:**` line the landing never retired — the work landed, the line stayed claim-shaped.)
 
 ## 1. Substrate-first verdict (the gate this plan exists to record)
 

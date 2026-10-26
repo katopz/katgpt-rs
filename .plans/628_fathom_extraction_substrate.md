@@ -6,7 +6,7 @@
 **Source:** Cloudflare Clairic preview (2026-10-19, hosted-only, open weights pending) — the extraction-model class
 **Target:** `katgpt-rs/crates/katgpt-core/src/extraction_wire/` (contract only) + NEW member crate `katgpt-rs/crates/katgpt-extract/` (everything that grows: parsers, span scorer, estimate/forecast heads, Temper substrate) + features `extraction_wire`, `span_pointer`, `extraction_estimate`
 **Status:** Phase 0 COMPLETE 2026-10-24 (T0.0–T0.7 landed; the last gate — span control-arm promotion's release-G2 + quiet-box preflight — discharged, `span_pointer` PROMOTED to default). Phase 1 (repo birth) OWNER-GATED at Proposal 016 §7. Claude verdict round 1: REVISE addressed 2026-10-20 — member-crate placement, Duckling/Recognizers-Text grammar source, estimate/forecast conditioner split, external G5 fixture.
-**Claimed:** katgpt-rs-fathom-phase0, 1792461810, expires 2026-10-22T02:03:30Z
+**Lease closed:** katgpt-rs-fathom-phase0, claimed ~2026-10-20T02:03Z, expired 2026-10-22T02:03:30Z — Phase 0 (T0.0–T0.7) landed 2026-10-24 discharging the claim's scope; Phase 1 stays owner-gated at Proposal 016 §7. (Reshaped 2026-10-26 from a stale `**Claimed:**` line the landing never retired.)
 
 ---
 
