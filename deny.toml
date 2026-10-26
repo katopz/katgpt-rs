@@ -1,0 +1,36 @@
+# cargo-deny configuration — the supply-chain advisories gate.
+# Landed via the plan 298 T2.4 fan-out (the riir-refine pilot: Batch 294 /
+# Research 332). Division of labor: cargo-deny owns vulnerable CRATES
+# (lockfile surface); the sec corpus owns vulnerable USAGE (code-span classes).
+#
+# Scope decision (the pilot's): ADVISORIES ONLY are gated
+# (`cargo deny check advisories`). licenses/bans/sources keep tool defaults
+# until a later plan adjudicates them per repo.
+#
+# The ignore list is a MEMBERSHIP PIN: every row carries a reason + a tracking
+# reference. A bare ignore entry with no reason is a defect in this file.
+# katgpt-rs is the PUBLIC repo: this gate is the supply-chain face of the
+# funnel — the ledger here is upstream truth for every consumer pin.
+
+[advisories]
+version = 2
+ignore = [
+    # RUSTSEC-2023-0089 — atomic-polyfill UNMAINTAINED (archived), not
+    # vulnerable. Target-specific transitive via postcard 1.x → heapless 0.7.
+    # THE FIX LIVES HERE: heapless 0.8 / postcard bump (plan 298 T2.3, the
+    # katgpt-rs lane). Until that bump lands, every consumer repo pins this
+    # row with a reason pointing at this lane.
+    { id = "RUSTSEC-2023-0089", reason = "unmaintained, not vulnerable; target-specific transitive via postcard→heapless 0.7; THE fix is the heapless/postcard bump in THIS repo (plan 298 T2.3)" },
+    # RUSTSEC-2024-0436 — paste 1.0.15 UNMAINTAINED (archived 2024), not
+    # vulnerable. Transitive via metal 0.33 (katgpt-backend's Metal dep) as a
+    # proc-macro helper. Fix is upstream in metal-rs.
+    { id = "RUSTSEC-2024-0436", reason = "unmaintained, not vulnerable; transitive via metal 0.33 (katgpt-backend) proc-macro helper; fix is upstream in metal-rs" },
+    # RUSTSEC-2026-0192 — ttf-parser 0.20.0 UNMAINTAINED, not vulnerable.
+    # Transitive via plotters 0.3.7. Fix is upstream in plotters.
+    { id = "RUSTSEC-2026-0192", reason = "unmaintained, not vulnerable; transitive via plotters 0.3.7; fix is upstream in plotters" },
+    # RUSTSEC-2026-0204 — crossbeam-epoch 0.9.18: fmt::Pointer dereference on
+    # invalid pointers (vulnerability class). Below patched floor; the bump
+    # rides the plan 298 T2.2 small-bump set (owning lane) — katgpt-rs is the
+    # upstream, so a bump here propagates to every consumer lock.
+    { id = "RUSTSEC-2026-0204", reason = "crossbeam-epoch 0.9.18 below patched floor (fmt::Pointer invalid-pointer edge); bump = plan 298 T2.2 small-bump set" },
+]
