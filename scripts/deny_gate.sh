@@ -25,26 +25,36 @@
 # "ERROR (stale lock?)" and needs `cargo update -p <changed>` or a re-lock,
 # never a silent pass.
 
-set -u
+set -eu
+# ⚠ The guards `-e` demands (the trap_sentinel_gate wall: PRECAUTIONARY is one
+# added `-e` away from laundering, so the gate carries BOTH defences — errexit
+# AND the completion flag):
+#   - `command -v` fails (rc 1) when cargo-deny is absent — the not-installed
+#     SKIP LOUD arm must stay a skip, not an abort; guarded with `|| true`.
+#   - the --scan loop CAPTURES a failing cargo-deny to read its RUSTSEC ids —
+#     `rc=0; out=$(...) || rc=$?` keeps the read alive (a bare `rc=$?` after an
+#     -e kill would never run).
+# Everything else is conditional-context (if/else arms) or sets the flag first.
 
-complete=deny_gate_incomplete
+complete=0  # the completion-sentinel flag (the classifier's LITERAL law: every assignment is a bare literal, never a word)
 cleanup() {
     rc=$?
-    if [ "$complete" = "deny_gate_incomplete" ]; then
-        echo "ABORTED: deny_gate did not reach its last line (exit $rc)" >&2
-        rc=1
+    if [ "$complete" != "1" ] && [ "$rc" = "0" ]; then
+        echo "ABORTED: deny_gate did not reach its last line while reporting success —" >&2
+        echo "  forcing exit 1 (a premature death must never read as a pass)." >&2
+        exit 1
     fi
     exit $rc
 }
 trap cleanup EXIT
 
-deny_bin=$(command -v cargo-deny 2>/dev/null)
+deny_bin=$(command -v cargo-deny 2>/dev/null) || true
 if [ -z "$deny_bin" ] && [ -x "$HOME/.cargo/bin/cargo-deny" ]; then
     deny_bin="$HOME/.cargo/bin/cargo-deny"
 fi
 if [ -z "$deny_bin" ]; then
     echo "SKIP LOUD: cargo-deny not installed — run: cargo install cargo-deny --locked"
-    complete=deny_gate_complete
+    complete=1
     exit 0
 fi
 
@@ -56,7 +66,7 @@ fi
 if [ "$mode" = "gate" ]; then
     if [ ! -f Cargo.lock ]; then
         echo "SKIP LOUD: no Cargo.lock at $(pwd) — nothing to audit"
-        complete=deny_gate_complete
+        complete=1
         exit 0
     fi
     echo "== deny_gate (advisories): $(pwd)"
@@ -77,8 +87,8 @@ else
     for d in "$farm"/*/; do
         [ -f "${d}Cargo.lock" ] || continue
         name=$(basename "$d")
-        out=$(cd "$d" && "$deny_bin" check advisories 2>&1)
-        rc=$?
+        rc=0
+        out=$(cd "$d" && "$deny_bin" check advisories 2>&1) || rc=$?
         if [ $rc -eq 0 ]; then
             echo "${name}|CLEAN"
         else
@@ -94,5 +104,5 @@ else
     rc_total=0
 fi
 
-complete=deny_gate_complete
+complete=1  # the last line — the completion sentinel (see cleanup above)
 exit $rc_total

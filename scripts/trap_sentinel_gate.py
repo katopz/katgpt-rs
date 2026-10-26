@@ -75,6 +75,12 @@ PINNED_SENTINELLED = {
     # it runs cargo for tens of minutes, which is exactly the window in which a
     # SIGTERM or a `set -e` trip lands.
     "scripts/x86_64_execution_matrix.sh",
+    # Plan 298 T2.4 fan-out (2026-10-26) — landed with a completion flag but
+    # nounset-only; the docs-gate wall reded it PRECAUTIONARY (one added `-e`
+    # from laundering). Hardened 2026-10-27 to `set -eu` + the full_gate.sh
+    # sentinel shape (verified: gate/skip/abort arms + the guarded --scan
+    # capture under -e).
+    "scripts/deny_gate.sh",
 }
 POPULATION_FLOOR = 2  # a FLOOR: the classifier going blind must RED, not pass
 
