@@ -1,0 +1,106 @@
+# Pins for scripts/python_syntax_floor_drift_sweep.py — EVERY contract repo.
+#
+# Format, 4 whitespace-separated fields:
+#
+#   <repo> <min_py_files> <min_parsed> <max_syntax>
+#
+# Re-pin DELIBERATELY, in the commit that changes the measured value, with the
+# reason in the commit message. A pin that drifts behind reality is a pin
+# nobody trusts.
+#
+# ⛔ There is deliberately NO max_unparsed column: the HEAD rescan cannot
+# classify a blob that parses at no grammar, so an UNPARSED ceiling fed from
+# delta.head would be dead plumbing that only looks like it works. UNPARSED is
+# a DIRECT FLAG on the worktree scan in the sweep (the subprocess_encoding
+# sweep's identical shape) — same wall-at-zero red, one honest mechanism.
+#
+# ── the ceiling is a WALL, not a ratchet ─────────────────────────────────────
+# max_syntax is 0 in every measured repo (2026-10-26), and that zero is
+# EARNED: the landing census ran the 3.9-grammar parse over all 391 tracked
+# .py on this box and found exactly ONE live site — reflex-site
+# scripts/render_flows.py (a PEP 701 f-string backslash, 3.12-only; the
+# feature-grep census that closed Issue 965's class missed it, the grammar
+# parse did not) — fixed a24f4dd the same day. There is no DELIBERATE class
+# here: a file that cannot parse cannot run. Do not raise the ceiling; the
+# repair is rewriting the construct.
+#
+# ⚠ A SYNTAX finding is not visible on the box that lands it when that box
+# runs a newer python: the file imports fine there and only the floor parse
+# sees it. That invisibility is the reason this is a pinned sweep and not a
+# sweep-and-done.
+#
+# ── BOTH floors, and what each one moves on ──────────────────────────────────
+# A ceiling of 0 is green over whatever the walk can SEE, and the walk shells
+# out to `git ls-files` — a regression takes the population to 0 and the
+# ceiling passes, indistinguishable from a clean repo.
+#
+#   min_py_files  moves when the WALK goes blind
+#   min_parsed    moves when the SCAN LOOP stops iterating early on an
+#                 unchanged tree (in every passing state parsed == files —
+#                 any file failing the floor parse is a finding above)
+#
+# Both are pinned and neither is derived from the other — they fail in
+# different blind modes.
+#
+# Floors are ~50-60% of measured where the count is large enough for that to
+# mean anything; at MEASURED for the small/new rows (the reflex 2026-09-21
+# birth precedent — re-pin at the first re-measure). katgpt-rs's two floors
+# are NOT free: they must equal python_syntax_floor_gate.FLOOR_PY_FILES /
+# FLOOR_PARSED, and the sweep ASSERTS that rather than trusting it.
+#
+#                    min_py  min_parsed  max_syntax
+katgpt-rs               60          60           0
+jup-tool                 0           0           0  # not on the landing box (22 of 31 measured); unmeasured zero, re-pin at first measure
+katgpt-web               0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
+mmorpg-editor            0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
+mmorpg-remake            6           6           0  # measured 11/11
+mmorpg-remaster          0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
+reflex-site              6           6           0  # measured 10/10 at the landing — the render_flows.py PEP 701 site lived here and is fixed (a24f4dd)
+riir-ai                 14          14           0  # measured 25/25
+riir-auth                0           0           0  # measured 0/0: no .py
+riir-chain               2           2           0  # measured 4/4
+riir-dapps               4           4           0  # measured 7/7
+riir-deployer            0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
+riir-esp32               0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
+riir-dao                 0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
+riir-game-sdk            1           1           0  # measured 1/1 at MEASURED (birth precedent), re-pin at first re-measure
+riir-infer               4           4           0  # measured 8/8
+riir-instinct            3           3           0  # measured 5/5
+riir-kat                 0           0           0  # measured 0/0: no .py
+riir-llm                 0           0           0  # measured 0/0: no .py
+riir-mmorpg-examples     1           1           0  # measured 2/2
+riir-neuron-db           0           0           0  # measured 0/0: no .py
+riir-refab               0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
+riir-refine             16          16           0  # measured 31/31
+riir-reflex             20          20           0  # measured 37/37
+riir-reflexer            0           0           0  # measured 0/0: no .py
+riir-rethink             7           7           0  # measured 14/14
+riir-shader              7           7           0  # measured 14/14
+riir-train              60          60           0  # measured 114/114
+riir-viewbridge          0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
+seal-render              0           0           0  # measured 0/0: no .py
+seal-std                 1           1           0  # measured 1/1 at MEASURED (birth precedent), re-pin at first re-measure
+
+# ── landing measurement, 2026-10-26 (22 of 31 repos on amo) ─────────────────
+# Per-repo (tracked .py / parsed at the 3.9 grammar), for the next re-pin's
+# slack arithmetic:
+#
+#   riir-train 114/114 · katgpt-rs 107/107 · riir-reflex 37/37 ·
+#   riir-refine 31/31 · riir-ai 25/25 · mmorpg-remake 11/11 ·
+#   reflex-site 10/10 (1 live PEP 701 site, fixed a24f4dd) · riir-rethink
+#   14/14 · riir-shader 14/14 · riir-infer 8/8 · riir-dapps 7/7 ·
+#   riir-instinct 5/5 · riir-chain 4/4 · riir-mmorpg-examples 2/2 ·
+#   riir-game-sdk 1/1 · seal-std 1/1 · riir-auth 0 · riir-kat 0 · riir-llm 0 ·
+#   riir-neuron-db 0 · riir-reflexer 0 · seal-render 0
+#
+#   totals: 391 tracked .py · 391 parsed · 1 live finding (fixed same day)
+#
+# Absent from the landing box (9): jup-tool, katgpt-web, mmorpg-editor,
+# mmorpg-remaster, riir-dao, riir-deployer, riir-esp32, riir-refab,
+# riir-viewbridge — they ride the shared population verdict as DEFERRED under
+# DOCS_GATE_PARTIAL_CLONE=1 (Issues 793 + 782) and their zero rows are
+# UNMEASURED, not observations.
+#
+# ⚠ Read that list as a MEASUREMENT RECORD, not as a second set of pins. The
+# floors above are the claim; these are what they were derived from, dated so
+# a later reader can tell a real shrink from a re-pin nobody justified.

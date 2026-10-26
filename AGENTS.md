@@ -284,6 +284,7 @@ develop work. One line per check:
 | `import_health_gate.py` | a tracked scripts/*.py that does not IMPORT — the EXECUTION half of Issue 848, where the static half (cross_module_attr_gate) cannot reach: a circular import, a missing third-party dependency, a raise in top-level code. The instrument that already executes every module is arm_reach_gate's BASELINE-CRASH, kept out of this budget at 157.6s; this is its cheap half, one child, 0.11s of import. A per-module subprocess was measured too and is not worth 3x (10.28s vs 7.52s, identical verdicts). ⛔ The affordability measurement found its own blocker — 6.238s of 6.34s was ONE module whose whole body was top-level, guarded in the same change. MISSING-DEP is its own bucket and is never flagged: pinning it would red the gate on a box that HAS the package (Issue 848 T3) |
 | `shipped_target_feature_gate.py` | a SHIPPED path selecting its fast arm on a COMPILE-time target_feature — that predicate is OFF by default on x86_64, so the arm compiles to NOTHING on every ordinary build and the dispatcher silently runs its fallback. AGENTS.md documented this shape only for GATES, where the cost is an unproven claim; on a shipped path the cost is latency on every call, measured at 4.4-5.6x in a DEFAULT-ON feature and 2.4-2.5x on bf16 RNE narrowing. Three exclusions a naive grep gets wrong — wasm32/simd128 (no runtime detection there, so a compile-time gate is the only option), NEON (implied by the arch), and the runtime probe's own body, which is the same attribute doing the opposite job. The key is line-free and resolved by brace counting, the two cases needing opposite lookups — an attribute inside a body belongs to its enclosing fn, one ON an item to the NEXT. Membership + a reason per row, both directions, floors on the walk and on the attribute parse; --prove-fires is two-sided (Issue 847 T3) |
 | `timed_region_guard_gate.py` | a latency ceiling with no loud-zero defence — rustc + fat LTO deletes a timed loop whose result is dead, so the bar is satisfied by **absent work** and passes with MAXIMUM margin. This is the `#![cfg]` green-zero rule one layer down, and worse: the assertion RUNS, so the output is a plausible number rather than a zero count and no count floor can see it. ⛔ Not reasoned about — **executed**: all 34 asserting regions at n ≥ 1000 were run and **7 were satisfied by absent work** (20.6%), two of them GOAT gates, one printing `Speedup: 8657.9×`, one printing a well-formed `0.00x` because only the NUMERATOR vanished. ⚠ The static predicate Issue 855 T4 proposed is REFUTED by that run — `let _ =` vanished **3 of 15** against **4 of 19** for the rest, i.e. the base rate wearing a grep; the column that separates is `black_box`, **7 of 23** without it against **0 of 11** with. So the gate does not predict which region is broken; it gates the decidable thing — *is there a loud-zero defence at all*. ⛔ Two tiers, and the split is the honest part: a LITERAL loop bound is the population that was READ end to end (membership wall, one MEASURED number per row), while a bound needing one hop of resolution is real and **unread** (a ratchet on the derivative — pinning an unread bucket by name is Issue 785's forbidden shape). One hop is not optional: T1's own two founding specimens are `let n = 100_000; for _ in 0..n`, so a literal-only predicate would have shipped the class it was written for. ⚠ It does NOT claim a pinned region is safe — `black_box` is the weakest of three defences (result, **arguments**, **receiver**) and two arms vanished carrying one (Issue 855 T4) |
+| `python_syntax_floor_gate.py` | tracked *.py parses at the 3.9 grammar — a 3.10+ only file is a dead tool on the workstation's python3 3.9.6, dying at import before any verdict; two ceilings (SYNTAX + UNPARSED) over walk + parse floors (Issue 965) |
 | `check_validation_gate.py` | a CHECK in this array whose own arithmetic no arm asserts — including one whose arm is flag-gated and so never runs (Issue 789) |
 | `docs_gate_checks_sync.py` | this CHECKS array vs the AGENTS.md table documenting it — membership both ways + quantity words (Issue 750) |
 | `skill_size_gate.py` | a skill SKILL.md over the 80KB ceiling — the THIRD 100KB-regrowth class (doc-sync 09-05/09-11/09-21, boundary-guard 09-08/09-11/09-21: the one-line convention held, the ~8 rows/day cadence didn't) — the gate forces each file's documented prune-to-15 maintenance rule; recovery via git log -p |
@@ -333,7 +334,8 @@ them): `docs_drift_sweep.py`, `numbering_drift_sweep.py`,
 `timed_region_drift_sweep.py`, `shared_temp_path_drift_sweep.py`,
 `pipefail_discard_drift_sweep.py`, `toolchain_override_drift_sweep.py`,
 `orphaned_attr_drift_sweep.py`, `wasm32_surface_drift_sweep.py`,
-`len_derived_drift_sweep.py`, `instrument_reachability_drift_sweep.py` — plus
+`len_derived_drift_sweep.py`, `instrument_reachability_drift_sweep.py`,
+`python_syntax_floor_drift_sweep.py` — plus
 the report halves `pipefail_discard_audit.py` and `toolchain_override_audit.py`,
 `sibling_docs_drift.yml` (reusable workflow, one caller), and
 `ci_gate_coverage.py` (report, always exit 0 — deliberately NOT in the CHECKS
@@ -343,6 +345,27 @@ the family-wide mechanisms, ceilings pinned under `scripts/*_floors.txt`;
 **take the family size and the wiring verdict from
 `scripts/sweep_advisory_membership_gate.py`'s PASS line, never from a count
 here** (this paragraph's own counts went stale within hours, twice).
+
+**Python 3.9 syntax floor** — `python_syntax_floor_gate.py` (per-push, this
+repo) + `python_syntax_floor_drift_sweep.py` (workstation, every contract
+repo, pinned in `python_syntax_floor_drift_floors.txt`): every tracked `*.py`
+must parse at `ast.parse(feature_version=(3, 9))` — the boxes' `python3` is
+3.9.6 and the instruments are invoked with it DIRECTLY, so a 3.10+ only file
+dies at import before any verdict (Issue 965; founding incident
+`staged_set_audit.py`, fixed `95e031d95`). SYNTAX (fails the 3.9 grammar,
+passes the box's own) and UNPARSED (fails everywhere) are separate ceilings,
+both walls at 0 — a file that cannot parse cannot run, so there is no
+DELIBERATE class; floors are `min_py_files` (the walk) + `min_parsed` (the
+scan loop), neither derived from the other. The gate is a GRAMMAR check, not
+an interpreter pin: `tomllib` imports (3.11+) parse fine at 3.9, and PEP 604
+in annotation position rides `from __future__ import annotations`. Fixtures
+are DATA built by concatenation (the gate is itself under its own gate), and
+the planted-construct arms assert the current-grammar parse ACCEPTS what the
+floor parse rejects — detector liveness in the only direction that matters.
+The landing census validated the sweep's reason to exist: the feature-grep
+census had closed the class at zero, and the full-grammar parse found one
+live 3.12-only site (`reflex-site/scripts/render_flows.py`, a PEP 701
+f-string backslash) and fixed it (`a24f4dd`) the same day.
 
 ⛔ **Before fixing a rule-in-one-instrument class, grep the whole family and
 land the repair as one shared mechanism** — the recorded failure mode,

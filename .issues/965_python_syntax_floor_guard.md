@@ -1,7 +1,6 @@
 # Issue 965 — a Python 3.9 syntax-floor guard for the workspace's tracked `*.py` instruments
 
-**Status:** OPEN — filed 2026-10-26. The CLASS this issue guards is already FIXED at zero (measured below); this issue is the guard so it stays there. katopz/katgpt-rs issue; sibling fixes ref'd inline.
-**Claimed:** katgpt-rs-965-impl, epoch=1793012662, expires 2026-10-28T11:04:22+0000
+**Status:** CLOSED — 2026-10-26, landed the same session that filed it. The gate (`python_syntax_floor_gate.py`), the sweep (`python_syntax_floor_drift_sweep.py`), and the pins (`python_syntax_floor_drift_floors.txt`) landed with the workspace GREEN at the 3.9 grammar (391 tracked `*.py`, 0 findings). Landing commit: this repo (gate + sweep + wiring, `docs:`). ⚠ The premise below was CORRECTED at landing: the class was NOT at zero workspace-wide — see "The landing census correction". katopz/katgpt-rs issue; sibling fixes ref'd inline.
 
 ## The measured incident
 
@@ -15,7 +14,13 @@ Census (the subprocess-encoding lesson applied: the population is tracked `*.py`
 | riir-train | `scripts/plan335_phase5_gate.py` | 7 | `4948aecd` (2026-10-26) |
 | riir-train | `scripts/plan335_t7_decide.py` | 1 | `4948aecd` (2026-10-26) |
 
-9 sites, 3 files, 2 repos — all rewritten branch-for-branch identical (`if`/`elif`; guards folded into conditions), each verified on the box: `ast.parse(src, feature_version=(3, 9))` passes, plus real executions (`staged_set_audit` ran end-to-end exit 0; `decide()` 5/5 verdict combinations identical; `phase5_gate` no-args → doc + exit 2). The wider class is clean: no PEP 604 unions at runtime, no `dataclass(slots=True)`, no `typing.TypeAlias`/`ParamSpec` imports, no `itertools.pairwise`, no `zip(strict=)` — and a workspace `*.py` grep for `^\s*match .*?:$` now returns ZERO. All three files already carry `from __future__ import annotations`, so annotation-position `X | Y` never was a break.
+9 sites, 3 files, 2 repos — all rewritten branch-for-branch identical (`if`/`elif`; guards folded into conditions), each verified on the box: `ast.parse(src, feature_version=(3, 9))` passes, plus real executions (`staged_set_audit` ran end-to-end exit 0; `decide()` 5/5 verdict combinations identical; `phase5_gate` no-args → doc + exit 2). All three files already carry `from __future__ import annotations`, so annotation-position `X | Y` never was a break.
+
+## The landing census correction (2026-10-26, the implement session)
+
+The feature-grep census above closed the class at zero — and was WRONG about the workspace. The landing session ran the actual detector (`ast.parse(feature_version=(3, 9))`) over all 391 tracked `*.py` in the 22 contract repos on this box and found **one live site the grep census had missed**: `reflex-site/scripts/render_flows.py` — a backslash inside an f-string EXPRESSION (`f"...{re.match(r'<(\w+)', t)...}"), PEP 701, legal only on 3.12+, `SyntaxError` on 3.9–3.11. Exactly the class this issue guards, alive in a repo whose scripts the closing session never greped for it. Fixed reflex-site `a24f4dd` the same day (hoist the regex out of the expression). Lesson recorded twice over: a census greps for KNOWN spellings, a grammar parse reads ALL of them — the detector is the floor, not the list.
+
+Final measured state at landing (22 of 31 repos on amo, `DOCS_GATE_PARTIAL_CLONE=1` posture): 391 files, 391 parsed, 0 findings; floors pinned per repo in `python_syntax_floor_drift_floors.txt`; katgpt-rs floors (60/60) owned by the gate and asserted by the sweep.
 
 ## What lands (the guard)
 
