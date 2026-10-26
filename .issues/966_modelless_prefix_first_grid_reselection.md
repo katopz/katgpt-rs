@@ -1,6 +1,7 @@
 # Issue 966: Modelless prefix-first grid re-selection for the factorized block drafter (the DCOCO-class corrector, zero training)
 
 **Status:** Open — fusion idea / POC, novelty TBD (re-search owed at execution); gated on the lane's coverage-premise measurement
+**Claimed:** zed-amo-966-coverage, 1793056465, expires 2026-10-29T00:54:25Z
 
 **Pinned claim (novelty-audit form):** Training-free **prefix-first re-selection over a factorized block drafter's own top-K candidate grid**, transition-scored by a static corpus bigram prior — distinguished from LiLiCorr (arXiv:2608.20530) / DCOCO (arXiv:2610.12570) / Domino / DSpark (all LEARNED correctors) and from prompt-lookup / FLy / Training-Free-Loosely-Speculative (draft GENERATION, entropy gating, acceptance loosening — none re-selects inside a drafter's grid) by requiring **zero trained parameters beyond the drafter itself**.
 
