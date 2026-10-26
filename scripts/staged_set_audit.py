@@ -469,16 +469,17 @@ def main() -> int:
         for p, _ in skip:
             print(f"      skip     {p}")
 
-    match len(groups) > 1:
-        case True if staged:
+    # if/elif, not `match` — the box's python3 is 3.9.6 and match is 3.10+.
+    if staged:
+        if len(groups) > 1:
             print(
                 f"  REVIEW: {len(groups)} editing episodes in one staged set. If you did not "
                 "write the older one(s), unstage them — see AGENTS.md on `git add -A`."
             )
-        case _ if staged:
+        else:
             print("  ✓ one editing episode")
-        case _:
-            print("  (nothing staged — episode clustering not applicable)")
+    else:
+        print("  (nothing staged — episode clustering not applicable)")
     # Report, never a gate: the refusing version is Issue 709 T3's owner call.
     return 0
 
