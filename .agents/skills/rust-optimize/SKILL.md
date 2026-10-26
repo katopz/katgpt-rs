@@ -39,6 +39,7 @@ If you only summarized what you read without changing code, say "no optimization
     - GUI repaint storms: `bevy_egui` sets `set_request_repaint_callback` that fires `bevy_winit::WakeUp` on `delay.is_zero()` — bypasses reactive `max_wait` and spins the loop. Diagnose via in-process perf overlay before assuming the engine itself is the hog.
     - Frame-rate cap fallback: a `Last`-schedule `std::thread::sleep` system capped at e.g. 60 FPS is a belt-and-suspenders defense when vsync + reactive mode somehow don't throttle
 11. **Perf diagnosis**: ship an in-process perf overlay (`sysinfo` for CPU/RAM + Bevy's `Time::delta()` for FPS) inside the GUI itself — external `ps` sampling misses focused-window swings and requires keeping a terminal attached
+12. **Sorted indexes & scans** (see § Sorted Indexes & Scans for details): seek to a prefix (never skip-walk), visitor/borrowing scans (0 alloc), bulk insert via sorted merge, order maintained at mutation not per-read, sort keys computed once, early-exit bounded scans
 
 ## Rules
 
@@ -79,6 +80,24 @@ Hot-path Rust optimization patterns. Apply to any microsecond-sensitive code.
 - Track per-slot aggregates during insert/evict instead of scanning on read
 - Cache allocations: `Vec::with_capacity()` once, `clear()` + reuse across calls
 - Pass pre-allocated scratch buffers as `&mut [T]` parameters instead of allocating inside hot loops
+
+### Sorted Indexes & Scans
+
+Patterns measured on the riir-neuron-db LocalKv / ShardIndex / Bm25 wave (2026-10-24..26, ndb issues 633/634/635/636) and their consumers:
+
+- **Seek, don't skip-walk.** A scan starting at a prefix must move the cursor straight to the first key >= prefix. An `O(skipped)` `skip_while` walk over 50k keys was **342.6x** slower than a direct seek (`LocalKv::scan_after_prefix`, exhaustive 1600-pair G1); the same seek at consumers made verdict-agreement scans read **1270-1430x** less data (riir-dapps issue 636 T4).
+- **Visitor scans, not materialized Vecs.** `scan_prefix_visit(&mut impl FnMut(&K, &V))` beat the collecting scan **4.9-6.3x** with **0 allocs/row** — the closure consumes each row in place; nothing builds intermediate key/value Vecs.
+- **Bulk insert = sorted merge.** Building an index by merging N sorted batches (one two-finger walk) beat N individual inserts **35-327x** at build and **137x** per flush — and is byte-identical to sequential insertion, so determinism gates stay green (`ShardIndex::insert_shards_batch`).
+- **Read values from the index you are already iterating.** A second random probe per row vs reading the value adjacent in the sorted index: **2.6x** per scan. Same family — denormalize hot metadata into the entry: inlining doc length into the Bm25 posting removed a second `doc_lengths` probe per posting, **3.3-3.5x** at 9.6k scored postings, bit-identical.
+- **Maintain order at mutation, never at read.** Keep the side structure ascending at insert/evict and every read is sort-free: the AOI fan-out deleted its per-fan-out roster sort (riir-game-sdk issue 051); KarmaLedger histories kept sorted once -> binary-search lookups + a sortless broadcast, **18.1x** on the SOCL path (riir-ai issue 1125 Finding 3).
+- **Compute sort keys once.** A `sort_by` whose key is computed per comparison is `O(n log n)` key builds; cache keys before sorting (or `sort_by_cached_key`) — the `pull_unproven` cached-key fix (riir-dapps issue 132).
+- **Early-exit bounded scans.** A bounded sweep stops one decodable row past its bound — reads `max_rows + 1` rows, never the remainder of the set (tuna expiry sweep).
+- **Cheap derived key columns.** A hull-key column beside the expensive key lets queries pre-filter on a cheap scalar (**1.08-1.25x**, promoted default); column-major layout for argmax/top-k over many rows sharing a type-run (**1.6x** `query_top_k`).
+- **Resolve names to indices at build time.** Name -> id lookups resolved once when the book/library is built, never per log/render line (seal-std issue 003 F1+F3: log-time name resolution in seal-anim, once-per-book index in seal-quest).
+- **Pack compound keys.** Two u32 ids packed into one u64 -> one hash probe, zero-alloc: BPE merge ranks re-keyed to packed token-id pairs, **2.03x** encode, bit-identical output, constant alloc (riir-infer issue 1118).
+- **Fast-path the n=1 batch.** A batch API's single-entry arm skips the batch machinery the common call doesn't need (`put_batch_durable`).
+- **Cache derived aggregates incrementally.** `chain_commitment_cache`: cache the root, check per-TX divergence against it in O(1), rebuild in parallel on miss — **22x** at N=1e5 (riir-chain issue 166, promoted default).
+- **Batch I/O under the receiver's queue cap.** Emitting DTLS outputs every 16 datagrams (under the peer's 30-deep rx queue) batched SACKs into burst steps and killed 150-250 ms stalls from per-pair dribbles + silently-dropped `Err`s (seal-remake issue 119). Bounded batches also make the emission count auditable via census counters.
 
 ### Manifold / Cell-Complex Geometry
 
@@ -483,6 +502,22 @@ The batch API turns N×M individual calls into 1 call. The WASM module internall
 
 Laptop CPUs throttle aggressively. A 30% "regression" may just be heat.
 Always compare same-commit, back-to-back runs to isolate feature impact from system noise.
+
+### Don't: Reach for branchless / micro-idioms without measuring
+
+The ShardIndex branchless-search probe measured **REJECTED** — the cheap derived key column won instead, in the same issue on the same benchmark (ndb issue 633 T5). Branchless is a hypothesis, not a win; the boring index-shaped fix frequently beats it.
+
+### Don't: Keep sorted order at every write site
+
+Order-maintenance is a cost paid per mutation, and adding it at a second site just doubles the maintenance. Sorted-insert at the flush path measured **NEGATIVE** (riir-ai issue 1125 Finding 2); bucket-partitioning before the per-tick global sort measured **NEGATIVE** too (Finding 1). Keep order at the ONE site where mutation is rarest/cheapest and let every other path consume it sorted.
+
+### Don't: Clone keys inside scan predicates
+
+Key clones were **60-70%** of a scan's cost; the seek+walk share was only 13-18% (ndb issue 633 T3, declined on measurement). Borrow `&K` through the visitor; clone only at the API boundary.
+
+### Don't: Trust a concurrency test that doesn't rendezvous
+
+An ordering assertion can pass green on scheduler luck — the `put_batch_durable` T2 order race held a "vacuity floor" that was pure scheduling fortune until the test was made to rendezvous participants explicitly. Concurrent-order tests must synchronize their participants (barrier/channel); otherwise the floor is vacuous and the fix ships unproven.
 
 ## Profiling Template
 
