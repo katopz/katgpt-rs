@@ -35,5 +35,7 @@ riir-rethink
 riir-shader
 riir-train
 riir-viewbridge
+seal-game-editor
 seal-render
 seal-std
+zed

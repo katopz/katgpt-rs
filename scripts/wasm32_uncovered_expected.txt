@@ -41,3 +41,4 @@ mmorpg-remaster     seal-poc-submodule
 # was also what proved the by-dep credit (Issue 774) did not become a blanket
 # amnesty — that repo is read-only from here, and arm-vs-row is its owner's
 # call.
+zed zed_extension_api  # observed 2026-10-27 at birth registration: upstream zed's published extension-API crate carries positive wasm32 cfg code no lane row in the FORK reaches — the crate's wasm surface compiles in UPSTREAM's own CI, not this workspace's; uncovered by design (upstream structure), the fork lane owns any re-arm

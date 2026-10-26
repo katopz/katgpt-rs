@@ -104,3 +104,5 @@ seal-std                 1           1           0  # measured 1/1 at MEASURED (
 # ⚠ Read that list as a MEASUREMENT RECORD, not as a second set of pins. The
 # floors above are the claim; these are what they were derived from, dated so
 # a later reader can tell a real shrink from a re-pin nobody justified.
+seal-game-editor 11 11 0  # observed 2026-10-27: joined the workspace at birth measurement (BOUNDARY.md-declared — seal-game-editor 2026-09-01 riir-ai issue 839, zed 2026-10-26); pinned at MEASURED (the seal-render 2026-10-22 precedent), re-pin at the first re-measure
+zed 47 47 0  # observed 2026-10-27: joined the workspace at birth measurement (BOUNDARY.md-declared — seal-game-editor 2026-09-01 riir-ai issue 839, zed 2026-10-26); pinned at MEASURED (the seal-render 2026-10-22 precedent), re-pin at the first re-measure

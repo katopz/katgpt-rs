@@ -1374,7 +1374,7 @@ distillation, novelty + GOAT gates, modelless-unblock protocol §3.5):
 > **Repo count:** the **product/distillation set is 7** — `katgpt-rs` (public) +
 > `riir-ai`, `riir-chain`, `riir-neuron-db`, `riir-train`, `riir-game-sdk`,
 > `riir-dapps` (private). That is NOT the repo total: the
-> workspace is **31 repos**, all of which carry a root `BOUNDARY.md`
+> workspace is **33 repos**, all of which carry a root `BOUNDARY.md`
 > (add `riir-mmorpg-examples`, `riir-refine`, `riir-viewbridge`,
 > `riir-auth`, `katgpt-web`, `riir-dao`, `riir-deployer`,
 > `riir-esp32`, `riir-llm`, `mmorpg-editor`, `mmorpg-remake`,
@@ -1390,7 +1390,13 @@ distillation, novelty + GOAT gates, modelless-unblock protocol §3.5):
 > rescue tooling for the two compromised wallets (Rust binary + CF
 > Worker, hand-rolled Solana wire primitives); `seal-render` — born
 > 2026-10-21, the Seal editor's canvas core carved out of seal-game-editor
-> (plan 412 step 1c), no egui dep by its manifest test)).
+> (plan 412 step 1c), no egui dep by its manifest test; `seal-game-editor`
+> — registered 2026-10-27: BOUNDARY.md-declared since 2026-09-01 precisely
+> so the workspace gate audits its real `riir-neuron-db` edge
+> (riir-ai issue 839), the derived walk already carried it; `zed` —
+> registered 2026-10-27, the editor dev fork (auto_prompt + the agent
+> lanes), public-leaf law, zero family path-deps by its own contract
+> (BOUNDARY.md 2026-10-26)).
 >
 > Read a count in prose as a claim, not a fact — and read a count that
 > MATCHES as a claim too: a count is not a checksum over a set. Drift
