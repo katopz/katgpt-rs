@@ -1617,6 +1617,16 @@ entropic_tilt = []  # KL-budgeted entropic (max-seeking) advantage tilt — TTT-
 # core (2c17f08) is the deterministic collapse this primitive supersedes
 # generically. Opt-in pending the GOAT verdict (Bench 576).
 hint_regret = ["best_belief"]
+# Plan 631: the two-tier pairwise comparator (verdict class → fired fraction
+# → draw; NO third tier in the shipped form) + first-index champion scan,
+# extracted VERBATIM from the riir-scenelab scenario arena (Proposal 029 P4 —
+# the arena's inline rule is the extraction SPEC; its adoption must keep Elo
+# tables + champion choice byte-identical, pinned by the in-module spec-match
+# grid). `two_tier_score_with_ticks` is the opt-in THIRD tier for the runtime
+# consumer (riir-ai Plan 642) only — the arena never consumes it. Opt-in,
+# adoption-gated promotion (T2.2): promotes to the consumers' default surface
+# only after their benches land.
+harness_evolution = []
 # risk_control_exit (Plan 575 / Research 494 "Conformal Thinking"
 # arXiv:2602.03814, 2026-08-20): modelless dual-threshold compute-exit —
 # upper stop-when-confident + parametric lower stop-when-not-progressing
@@ -2794,6 +2804,17 @@ required-features = ["escalation_probe_gate"]
 name = "bench_621_state_probe"
 harness = false
 required-features = ["state_probe"]
+
+# Plan 631 Phase 2 T2.1 — harness_evolution GOAT gate: G4 zero-alloc on the
+# comparator + champion-scan path (the bench_039 pattern: counting
+# allocator, harness = false) + total-order stability across 10⁶ shuffles
+# of tied inputs (first-index champion law, draw exactness) + informational
+# ns/call readouts. The gain axis is the CONSUMERS' benches (sdk Plan 009
+# T4 / riir-ai Plan 642 G2) — referenced, never restated here (T2.2).
+[[bench]]
+name = "harness_evolution_goat"
+harness = false
+required-features = ["harness_evolution"]
 
 # Plan 621 Phase 4 T4.4 — the healer-lane Super-GOAT bench: the T4.2 table
 # + matched-spend verdict + T4.3 cost line asserted at the RELEASE posture

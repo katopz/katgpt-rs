@@ -156,6 +156,13 @@ pub use best_belief::{best_belief_score, best_belief_scores, select_best_belief}
 #[cfg(feature = "hint_regret")]
 pub mod hint_regret;
 
+// Plan 631: the two-tier pairwise comparator + first-index champion scan,
+// extracted VERBATIM from the riir-scenelab scenario arena (the arena's
+// inline rule is the SPEC; adoption there must keep Elo tables + champion
+// choice byte-identical — pinned by the spec-match grid in-module).
+#[cfg(feature = "harness_evolution")]
+pub mod harness_evolution;
+
 #[cfg(feature = "state_probe")]
 pub mod state_probe;
 
