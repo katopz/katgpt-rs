@@ -6149,3 +6149,92 @@ target compiles to nothing).
 Plan: [`.plans/628_fathom_extraction_substrate.md`](../../.plans/628_fathom_extraction_substrate.md)
 (Phase 0 COMPLETE; Phases 1+ owner-gated at Proposal 016) ·
 Benchmark: [`.benchmarks/950_f0_t07_span_baselines.md`](../../.benchmarks/950_f0_t07_span_baselines.md).
+
+## 158. sst_project — Tail-Subspace Weight-Delta Substrate (Issue 958 / Research 631, arXiv:2610.22293 "Subspace Tuning")
+
+Feature `sst_project` (implies `subspace_phase_gate` + `karc_forecaster`, the
+basis_split precedent) in `crates/katgpt-core/src/sst_certified.rs`. The
+spectral accounting layer for the stack's runtime weight mutations
+(freeze/thaw deltas, `LoraPair` overlays, TIES-style merges, consolidation
+deltas): WHERE does a delta write relative to the base weights' capability
+substrate?
+
+- `fit_anchor` — two-sided protected anchor: Gram eigendecomposition on the
+  SMALLER side (via `karc_forecaster`'s `jacobi_eigen`), σ-propagation to the
+  wide side, per-side storage economy (narrow stores the free complement,
+  wide stores the protected k columns).
+- `anatomy` / `anatomy_factored_into` — the per-delta protected/free energy
+  split as TWO POSITIVE terms (`‖P_lΔ‖² + ‖P_⊥lΔP_r‖²`), never the cancelling
+  three-term form; the rank-r path never forms m×n.
+- `factor_tail` — the quantization-safe shipping form `ΔW = U_⊥ C V_⊥ᵀ`: the
+  tail span is closed under the product, so a quantized C decodes confined;
+  the dropped energy is REPORTED, never silently truncated.
+- `certify_decoded_tail` — the RELATIVE-tolerance certifier: leak is measured
+  and REFUSED, never a near-zero absolute bar; rel_tol band [1e-5, 1] = the
+  f32 resolution floor.
+- `compose_tail` — same-anchor chained overlays stay confined under addition;
+  leak bounds additive (triangle inequality); basis-byte mismatch refuses
+  loud.
+- Rotation-invariant anchor digest — BLAKE3 over the projector's 64-probe
+  ACTION (sign-flip/within-span-permutation invariant, never raw basis
+  bytes); the re-anchor churn gate: `SstCertificate::verify_against` refuses
+  stale certs loud.
+
+The G1 isotropic-rounding negative is the non-vacuity proof: dense-
+project-then-quantize FAILS the certifier at a noise budget where the
+factored arm PASSES.
+
+**Verdict (Bench 953): G1–G4 PASS, stays OPT-IN** — promotion needs a wired
+consumer per the issue's own consumer-dependency clause (riir-neuron-db
+Issue 629 envelope side, riir-ai Issue 1116 merge-admission side; producer
+riir-train Plan 470). G2 is the honest-cost reading: fit is CALIBRATION-time
+and Jacobi-sweep-dominated (137 s measured at (1024,4096)); dense anatomy is
+Θ(mnk) (seconds-class at 4k² shapes); the FACTORED path is sub-second at
+head shapes (81 ms at (1024,4096,r=8)); apply — the shipping hot path — is
+313 µs at (1024,4096) and never materializes the delta. G4 zero-alloc
+(warm scratch) across anatomy/factored/factor/certify/apply/decode/compose.
+The Lean pair (`.proofs/KatgptProof/Sst/`) pins the diagonal no-leak law:
+the scalar/level-set arm + the 2×2 `diag(1,0)` counterexample (the Rust
+spec-match mirror rides the inline tests).
+
+Plan: [`riir-train .plans/470_sst_continual_refit_recipe.md`](../../riir-train/.plans/470_sst_continual_refit_recipe.md)
+(producer) · Benchmark:
+[`.benchmarks/953_sst_certified_goat.md`](../../.benchmarks/953_sst_certified_goat.md).
+
+## 159. harness_evolution — Two-Tier Harness Comparator (Plan 631 / Research 637, arXiv:2604.21003)
+
+Feature `harness_evolution` (empty — pure extraction, zero deps) in
+`crates/katgpt-core/src/harness_evolution.rs`. The two-tier pairwise
+comparator (verdict class → fired fraction → draw; NO third tier in the
+shipped form) + first-index champion scan, extracted VERBATIM from the
+riir-scenelab scenario arena (sdk Proposal 029 P4) — the arena's inline rule
+is the extraction SPEC, and the spec-match grid pins bit-identity over the
+full rank × fraction cross product (Elo tables + champion choice
+byte-identical, pinned by the in-module grid + the sdk `arena_gates` G1
+test).
+
+- `VerdictRank` / `two_tier_score` / `two_tier_score_with_ticks` —
+  `two_tier_score_with_ticks` is the opt-in THIRD tier (budget-normalized
+  ticks, lower wins) for the runtime consumer (riir-ai Plan 642) ONLY — the
+  arena never consumes it.
+- `champion_index` — first-index champion scan; the total-order stability
+  law: full tie scores exactly 0.5 both orders, all-equal table → first
+  index under every permutation.
+
+**Verdict (Bench 957): extraction-class GOAT — G1 + G4 PASS, G2
+informational.** G1 spec-match 4/4 over the full 3×3×8×8 cross product +
+10⁶-shuffle stability (0 violations); G4 zero-alloc on the comparator +
+champion-scan path; G2 readouts ~1 ns/call (informational by design — the
+load-bearing gates are G1/G4; the GAIN axis is the CONSUMERS' benches: sdk
+Plan 009 T4 / riir-ai Plan 642 G2, referenced never restated here).
+Zero-alloc, zero-cost-unless-invoked.
+
+**Opt-in — adoption-gated promotion (T2.2):** promotes to the consumers'
+default surface only after the sdk 009 / riir-ai Plan 642 benches land.
+First consumer LANDED: sdk Plan 009 (arena generation chaining, the
+history-conditioned arm selector). The riir-ai Plan 642 runtime lane is the
+promotion gate.
+
+Plan: [`.plans/631_harness_evolution_loop.md`](../../.plans/631_harness_evolution_loop.md) ·
+Benchmark: [`.benchmarks/957_harness_evolution_extraction_goat.md`](../../.benchmarks/957_harness_evolution_extraction_goat.md) ·
+Research: [`.research/637_Harness_Evolution_Loop_Primitive.md`](../../.research/637_Harness_Evolution_Loop_Primitive.md).
