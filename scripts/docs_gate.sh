@@ -149,7 +149,7 @@ resolve_py() {
     # reds 7 checks as ImportError (measured on the 4090: py -0 lists 3.14 +
     # 3.10; the first-working probe order resolved 3.10).
     # A uv-managed interpreter joins the candidates (the workspace's Python
-    # toolchain is uv): measured 2026-10-23 on seal1 — PATH carried only the
+    # toolchain is uv): measured 2026-10-23 on amo — PATH carried only the
     # system 3.9 while uv held 3.12, and 21 of 35 checks red on import/kwarg
     # errors that a 3.12 run cleared to 4. An array, not a word list: a uv
     # path can contain spaces on Windows.

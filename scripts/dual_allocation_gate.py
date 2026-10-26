@@ -259,7 +259,7 @@ def counter_fixture(base: Path) -> Path:
            capture_output=True)
     (a / ".issues").mkdir()
     # `write_text(newline=...)` is 3.10+; this gate must run on 3.9 (measured
-    # 2026-10-23: the kwarg crashed the whole gate on the seal1 box) — the
+    # 2026-10-23: the kwarg crashed the whole gate on the amo box) — the
     # open()-form is behavior-identical (LF preserved, no translation).
     with open(a / ".issues" / ".highwater", "w", encoding="utf-8", newline="") as f:
         f.write("949\n")
