@@ -1,7 +1,6 @@
 # Plan 631: Harness Evolution Loop — Comparator Extraction (from the scenelab arena)
 
-**Status:** Active — Phase 1 not started
-**Claimed:** zed-glme53flash-arena-gen, 1793031528, expires 2026-10-28T16:18:48Z
+**Status:** Active — T1.1/T1.4 + T2 GOAT LANDED 2026-10-27 (`dae2da52`, bench 957); T1.2/T1.3 dropped per their own condition; T3.1 (arena adoption) LANDED sdk-side same day
 **Date:** 2026-10-26
 **Research:** [katgpt-rs/.research/637_Harness_Evolution_Loop_Primitive.md](../.research/637_Harness_Evolution_Loop_Primitive.md)
 **Source paper:** [arXiv:2604.21003](https://arxiv.org/abs/2604.21003) — "The Last Harness You'll Ever Build" (two-level harness/meta-evolution framework)
@@ -19,14 +18,14 @@ Extract the arena's two-tier pairwise comparator — **exactly as it ships** (ve
 
 ### Tasks
 
-- [ ] **T1.1** `VerdictRank`/`two_tier_score` — the arena's pairwise comparator EXACTLY (verdict class → fired fraction → draw; first-index tie rule per the determinism law); the arena's inline rule is the SPEC and adoption must leave Elo tables + champion byte-identical; unit tests for boundary/tie/draw cases. `two_tier_score_with_ticks` — the opt-in third tier (mean terminal tick, budget-normalized) for the runtime consumer (Plan 642) only; the arena never consumes it.
-- [ ] **T1.2** `BestKeeper<H>` — CONDITIONAL: land only with ≥2 committed consumers (arena generations via sdk Plan 009 + riir-ai Plan 642; optionally riir-refine `EvolveRecorder`); bounded fixed-capacity history ring, zero-alloc iteration, evolve-from-best read, full-history digest for chaining. If consumers do not commit, this stays consumer-local and is dropped from the plan.
-- [ ] **T1.3** `MutationArms` trait — CONDITIONAL (same rule as T1.2): the arena's ladder+clamp+seed pattern generic over dial domains — bounded per-arm grammar, seed-pinned candidate stream, deterministic lowest-index tie-break. Land in katgpt-core only once ≥2 consumers commit (arena + Plan 642); with one consumer (the arena) it stays in scenelab. Selection glue REUSES `hint_regret::beta_lcb_order_into` + `wilson_score_ci` — no new LCB in this module.
-- [ ] **T1.4** Feature `harness_evolution` (opt-in); no default-feature surface change; doc example wiring a toy worker/evaluator.
+- [x] **T1.1** `VerdictRank`/`two_tier_score` — the arena's pairwise comparator EXACTLY (verdict class → fired fraction → draw; first-index tie rule per the determinism law); the arena's inline rule is the SPEC and adoption must leave Elo tables + champion byte-identical; unit tests for boundary/tie/draw cases. `two_tier_score_with_ticks` — the opt-in third tier (mean terminal tick, budget-normalized) for the runtime consumer (Plan 642) only; the arena never consumes it. *(LANDED `dae2da52`: spec-match grid pins bit-identity over the full rank × fraction cross product; `champion_index` = the first-index scan extracted beside it.)*
+- [ ] **T1.2** `BestKeeper<H>` — CONDITIONAL: land only with ≥2 committed consumers (arena generations via sdk Plan 009 + riir-ai Plan 642; optionally riir-refine `EvolveRecorder`); bounded fixed-capacity history ring, zero-alloc iteration, evolve-from-best read, full-history digest for chaining. If consumers do not commit, this stays consumer-local and is dropped from the plan. *(DROPPED 2026-10-27 per its own condition: sdk Plan 009's driver keeps its own `GenerationLog`; Plan 642 uncommitted; `EvolveRecorder` not a committed consumer.)*
+- [ ] **T1.3** `MutationArms` trait — CONDITIONAL (same rule as T1.2): the arena's ladder+clamp+seed pattern generic over dial domains — bounded per-arm grammar, seed-pinned candidate stream, deterministic lowest-index tie-break. Land in katgpt-core only once ≥2 consumers commit (arena + Plan 642); with one consumer (the arena) it stays in scenelab. Selection glue REUSES `hint_regret::beta_lcb_order_into` + `wilson_score_ci` — no new LCB in this module. *(DROPPED 2026-10-27, same reason: the arm table lives in scenelab's `arena_generations::ARM_TABLE`; Plan 642 is the only potential second consumer and is unimplemented.)*
+- [x] **T1.4** Feature `harness_evolution` (opt-in); no default-feature surface change; doc example wiring a toy worker/evaluator. *(Default posture clippy clean; flag counts 716 → 717 across README + examples/README claims, `count_features.py` green.)*
 
 ## Phase 2 — GOAT Gate
 
 ### Tasks
 
-- [ ] **T2.1** Zero-alloc microbench (`benches/harness_evolution_goat.rs` behind the feature): comparator + keeper path allocation count = 0; total-order stability across 10⁶ shuffles of tied inputs.
-- [ ] **T2.2** Verdict note in `.benchmarks/` (enabling primitive — consumer gain benches referenced, never restated). **Promotion rule: adoption-gated** — promote to the arena/642 consumers' default surface only after their benches land; otherwise stays opt-in.
+- [x] **T2.1** Zero-alloc microbench (`benches/harness_evolution_goat.rs` behind the feature): comparator + keeper path allocation count = 0; total-order stability across 10⁶ shuffles of tied inputs. *(LANDED `dae2da52`: G4 0 allocs across 200k comparator+scan calls; G1 10⁶ shuffles 0 violations; the keeper path does not exist (T1.2 dropped) — the bench covers comparator + `_with_ticks` + scan.)*
+- [x] **T2.2** Verdict note in `.benchmarks/` (enabling primitive — consumer gain benches referenced, never restated). **Promotion rule: adoption-gated** — promote to the arena/642 consumers' default surface only after their benches land; otherwise stays opt-in. *(Bench 957; the ARENA-side adoption landed the same wave (sdk 009 T3.1, bench 037) — the feature stays opt-in until the 642 bench; the sdk consumer forwards it under its own `arena` feature.)*
