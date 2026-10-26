@@ -1,7 +1,6 @@
 # Issue 965 — a Python 3.9 syntax-floor guard for the workspace's tracked `*.py` instruments
 
 **Status:** OPEN — filed 2026-10-26. The CLASS this issue guards is already FIXED at zero (measured below); this issue is the guard so it stays there. katopz/katgpt-rs issue; sibling fixes ref'd inline.
-**Claimed:** zed-amo-965, epoch=1793012690, expires 2026-10-28T11:04:50Z
 **Claimed:** katgpt-rs-965-impl, epoch=1793012662, expires 2026-10-28T11:04:22+0000
 
 ## The measured incident
