@@ -174,6 +174,108 @@ impl CorrelationBudgetAllocator {
     }
 }
 
+// ── TopKPoolCoverage (Issue 966 premise gate) ──────────────────
+
+/// The rank of `token` in a slot's candidate pool (the drafter's top-K
+/// ordering for that slot), or `None` when the token is outside the pool.
+/// Linear scan — K ≤ 64 by construction (the drafter's retained pool).
+#[inline]
+pub fn rank_of(pool: &[u32], token: usize) -> Option<usize> {
+    pool.iter().position(|&c| c as usize == token)
+}
+
+/// Per-depth top-K pool coverage of the verifier-committed token — the
+/// Issue 966 / Research 636 A0 premise gate.
+///
+/// The DCOCO-class premise: a parallel drafter's per-slot candidate pool
+/// (the top-K marginals at that slot) contains the token the verifier
+/// eventually commits far more often than per-slot argmax does — the grid
+/// has the right tokens and argmax fails to select them. If pool coverage
+/// ≈ top-1 coverage on a posture, re-selection over the grid has nothing
+/// to recover and the whole class is dead there — measured BEFORE any
+/// corrector arm is built.
+///
+/// Exact counts, not an EMA: this is a measurement instrument (the
+/// controller's EMA lives in [`CorrelationBudgetAllocator`]); a posture
+/// read must be reproducible from the counts, never smoothed by a
+/// warmup-dependent alpha.
+///
+/// # Recording
+///
+/// After each speculative decode step, for each depth `d`, the consumer
+/// resolves the committed token's rank in that slot's candidate ordering
+/// ([`rank_of`] over the retained top-K pool — the drafter's top-K at that
+/// slot, K = 16 at the bigram_markov/DCOCO scale) and calls
+/// [`record`](TopKPoolCoverage::record). A token outside the pool records
+/// `None` and counts against the denominator — a miss is data, never a
+/// skip.
+#[derive(Debug, Clone, Default)]
+pub struct TopKPoolCoverage {
+    top1_hits: Vec<u64>,
+    pool_hits: Vec<u64>,
+    counts: Vec<u64>,
+}
+
+impl TopKPoolCoverage {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record one committed token at `depth` by its rank in the slot's
+    /// candidate ordering (`Some(0)` = the argmax pick; `None` = outside
+    /// the retained pool).
+    pub fn record(&mut self, depth: usize, rank: Option<usize>) {
+        while self.counts.len() <= depth {
+            self.top1_hits.push(0);
+            self.pool_hits.push(0);
+            self.counts.push(0);
+        }
+        self.counts[depth] += 1;
+        if let Some(r) = rank {
+            if r == 0 {
+                self.top1_hits[depth] += 1;
+            }
+            self.pool_hits[depth] += 1;
+        }
+    }
+
+    /// Share of committed tokens that were the slot's argmax pick.
+    /// `0.0` while unmeasured (no count at this depth).
+    pub fn top1_rate(&self, depth: usize) -> f64 {
+        match self.counts.get(depth) {
+            Some(&n) if n > 0 => self.top1_hits[depth] as f64 / n as f64,
+            _ => 0.0,
+        }
+    }
+
+    /// Share of committed tokens present anywhere in the slot's retained
+    /// pool. The premise gate reads THIS against [`top1_rate`](Self::top1_rate):
+    /// pool ≈ top-1 ⇒ the class is dead on the posture.
+    pub fn pool_rate(&self, depth: usize) -> f64 {
+        match self.counts.get(depth) {
+            Some(&n) if n > 0 => self.pool_hits[depth] as f64 / n as f64,
+            _ => 0.0,
+        }
+    }
+
+    /// Committed tokens recorded at `depth` (the denominator).
+    pub fn count(&self, depth: usize) -> u64 {
+        self.counts.get(depth).copied().unwrap_or(0)
+    }
+
+    /// Number of depths with at least one recording.
+    pub fn tracked_depths(&self) -> usize {
+        self.counts.len()
+    }
+
+    /// Clear every counter (a fresh posture read).
+    pub fn reset(&mut self) {
+        self.top1_hits.clear();
+        self.pool_hits.clear();
+        self.counts.clear();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,5 +415,72 @@ mod tests {
         assert!(alloc.agreement_rate(0) > 0.5);
         assert!(alloc.agreement_rate(1) < 0.5);
         assert!(alloc.agreement_rate(2) > 0.5);
+    }
+
+    // ── TopKPoolCoverage (Issue 966 premise gate) ─────────────
+
+    #[test]
+    fn test_rank_of_finds_position() {
+        let pool = [42u32, 7, 913, 5];
+        assert_eq!(rank_of(&pool, 42), Some(0));
+        assert_eq!(rank_of(&pool, 913), Some(2));
+        assert_eq!(rank_of(&pool, 8), None);
+        assert_eq!(rank_of(&[], 1), None);
+    }
+
+    #[test]
+    fn test_coverage_records_all_three_classes() {
+        let mut cov = TopKPoolCoverage::new();
+        // argmax hit (top-1 AND pool)
+        cov.record(0, Some(0));
+        // pool hit below argmax (pool only — the class re-selection recovers)
+        cov.record(0, Some(5));
+        // outside the pool (a miss counts against the denominator)
+        cov.record(0, None);
+        assert_eq!(cov.count(0), 3);
+        assert!((cov.top1_rate(0) - 1.0 / 3.0).abs() < 1e-12);
+        assert!((cov.pool_rate(0) - 2.0 / 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_coverage_per_depth_separation() {
+        let mut cov = TopKPoolCoverage::new();
+        for _ in 0..10 {
+            cov.record(0, Some(0)); // depth 0: top-1 always
+            cov.record(2, Some(4)); // depth 2: pool-only always
+        }
+        assert!((cov.top1_rate(0) - 1.0).abs() < 1e-12);
+        assert!((cov.pool_rate(0) - 1.0).abs() < 1e-12);
+        assert_eq!(cov.top1_rate(1), 0.0); // unmeasured depth
+        assert_eq!(cov.pool_rate(1), 0.0);
+        assert_eq!(cov.count(1), 0);
+        assert_eq!(cov.top1_rate(2), 0.0);
+        assert!((cov.pool_rate(2) - 1.0).abs() < 1e-12);
+        // depths 0..=2 exist; the empty depth 1 keeps its zero row
+        assert_eq!(cov.tracked_depths(), 3);
+    }
+
+    #[test]
+    fn test_coverage_unmeasured_reads_zero_not_panic() {
+        let cov = TopKPoolCoverage::new();
+        assert_eq!(cov.count(7), 0);
+        assert_eq!(cov.top1_rate(7), 0.0);
+        assert_eq!(cov.pool_rate(7), 0.0);
+        assert_eq!(cov.tracked_depths(), 0);
+    }
+
+    #[test]
+    fn test_coverage_reset_clears_state() {
+        let mut cov = TopKPoolCoverage::new();
+        cov.record(0, Some(0));
+        cov.record(1, None);
+        cov.reset();
+        assert_eq!(cov.tracked_depths(), 0);
+        assert_eq!(cov.count(0), 0);
+        // post-reset recording starts a fresh posture read
+        cov.record(0, Some(2));
+        assert_eq!(cov.count(0), 1);
+        assert!((cov.pool_rate(0) - 1.0).abs() < 1e-12);
+        assert_eq!(cov.top1_rate(0), 0.0);
     }
 }
