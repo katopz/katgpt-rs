@@ -1,7 +1,7 @@
 # Bench 955 — kv960 T2: behavioral-damage-weighted bit allocation GOAT
 
 **Status:** COMPLETE — GOAT PASS (G1 + G2 + G3-compile + G4); stays opt-in (random-weight caveat; the trained-model read is T3).
-**Issue:** [`.issues/960`](../.issues/960_kv_quant_behavioral_subspace_poc.md) (T2) · Research 633 (arXiv:2606.09864) · instrument: Bench 954 (T0b + T1 at `3b5bc8faf`), T0a (`ec7d3e2af`).
+**Issue:** [Issue 960](../HISTORY.md) (closed 2026-10-24, record in HISTORY.md; T2) · Research 633 (arXiv:2606.09864) · instrument: Bench 954 (T0b + T1 at `3b5bc8faf`), T0a (`ec7d3e2af`).
 
 ## What shipped
 

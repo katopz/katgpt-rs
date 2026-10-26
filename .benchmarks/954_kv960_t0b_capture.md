@@ -1,7 +1,7 @@
 # Bench 954 — kv960 T0b + T1: real-forward KV-sensitivity capture, ranking, and failure-mode classification
 
 **Status:** COMPLETE — T0b + T1 landed; the T3-shaped structural-correlation finding + the T1 mode classification recorded.
-**Issue:** [`.issues/960`](../.issues/960_kv_quant_behavioral_subspace_poc.md) (T0b) · Research 633 (arXiv:2606.09864, the KV-quant alignment-collapse law) · instrument: Bench from T0a (`ec7d3e2af`).
+**Issue:** [Issue 960](../HISTORY.md) (closed 2026-10-24, record in HISTORY.md; T0b) · Research 633 (arXiv:2606.09864, the KV-quant alignment-collapse law) · instrument: Bench from T0a (`ec7d3e2af`).
 
 ## T1 — failure-mode classification (same harness, second test)
 
