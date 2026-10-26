@@ -47,6 +47,8 @@ A new script legitimately joining the population is a one-line pin update in
 the same commit — the ratchet discipline layers elsewhere in this repo use.
 """
 
+from __future__ import annotations
+
 import importlib.util
 import os
 import sys

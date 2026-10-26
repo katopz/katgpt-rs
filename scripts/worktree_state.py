@@ -151,7 +151,11 @@ def worktree_fixture(tmp: Path, tracked: str = "scripts/a.py",
     main = _repo(tmp, "main")
     t = main / tracked
     t.parent.mkdir(parents=True, exist_ok=True)
-    t.write_text("x = 1\n", encoding="utf-8", newline="")
+    # Path.write_text's newline= kwarg is 3.10+; open() has had it forever —
+    # this fixture must run on the boxes' python3 3.9.6 (the
+    # dual_allocation_gate.py:261 rule, generalised 2026-10-26, Issue 965).
+    with open(t, "w", encoding="utf-8", newline="") as _t:
+        _t.write("x = 1\n")
     _run(main, "add", "-A")
     _run(main, "commit", "-qm", "base")
 
@@ -159,7 +163,8 @@ def worktree_fixture(tmp: Path, tracked: str = "scripts/a.py",
     _run(main, "worktree", "add", "--detach", "-q", str(wt), "HEAD")
     u = wt / untracked
     u.parent.mkdir(parents=True, exist_ok=True)
-    u.write_text("y = 1\n", encoding="utf-8", newline="")
+    with open(u, "w", encoding="utf-8", newline="") as _u:
+        _u.write("y = 1\n")
     return main, wt
 
 

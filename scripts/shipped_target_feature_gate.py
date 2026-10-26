@@ -315,28 +315,32 @@ def selftest() -> list[str]:
         root = Path(td)
         src = root / "src"
         src.mkdir(parents=True)
-        (src / "good.rs").write_text(
-            '#[cfg(target_arch = "x86_64")]\n'
-            '#[target_feature(enable = "avx2")]\n'
-            "unsafe fn ok(x: u8) {\n    let _ = x;\n}\n",
-            encoding="utf-8", newline="")
-        (src / "bad.rs").write_text(
-            "fn dispatch(x: u8) {\n"
-            '    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]\n'
-            "    {\n        let _ = x;\n    }\n}\n",
-            encoding="utf-8", newline="")
+        # Path.write_text's newline= kwarg is 3.10+ (Issue 965: these
+        # fixtures must run on the boxes' python3 3.9.6).
+        with open(src / "good.rs", "w", encoding="utf-8", newline="") as _f:
+            _f.write(
+                '#[cfg(target_arch = "x86_64")]\n'
+                '#[target_feature(enable = "avx2")]\n'
+                "unsafe fn ok(x: u8) {\n    let _ = x;\n}\n")
+        with open(src / "bad.rs", "w", encoding="utf-8", newline="") as _f:
+            _f.write(
+                "fn dispatch(x: u8) {\n"
+                '    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]\n'
+                "    {\n        let _ = x;\n    }\n}\n")
         # A fixture STRING holding the defect is test input, not a site — the
         # class three sibling instruments here have each met.
-        (src / "fixture.rs").write_text(
-            "const SAMPLE: &str = r#\"\n"
-            '#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]\n'
-            "\"#;\n",
-            encoding="utf-8", newline="")
+        with open(src / "fixture.rs", "w", encoding="utf-8", newline="") as _f:
+            _f.write(
+                "const SAMPLE: &str = r#\"\n"
+                '#[cfg(all(target_arch = "x86_64", target_feature = "avx2")]\n'
+                "\"#;\n")
         # tests/ is not the SHIPPED path: a gate may gate itself on +avx2.
         (root / "tests").mkdir()
-        (root / "tests" / "t.rs").write_text(
-            '#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]\n'
-            "fn t() {}\n", encoding="utf-8", newline="")
+        with open(root / "tests" / "t.rs", "w", encoding="utf-8",
+                  newline="") as _f:
+            _f.write(
+                '#[cfg(all(target_arch = "x86_64", target_feature = "avx2")]\n'
+                "fn t() {}\n")
         keys, counts, walked = scan(root)
         check(keys == ["src/bad.rs::dispatch#1"],
               f"the synthetic tree did not yield exactly the one site: {keys}")
@@ -390,11 +394,15 @@ def selftest() -> list[str]:
         check(read_expected(pin) == {},
               "a MISSING pin file did not read as zero pins")
 
-        pin.write_text("# only a comment\n\n", encoding="utf-8", newline="")
+        # Path.write_text's newline= kwarg is 3.10+ (Issue 965: these
+        # fixtures must run on the boxes' python3 3.9.6).
+        with open(pin, "w", encoding="utf-8", newline="") as _p:
+            _p.write("# only a comment\n\n")
         check(read_expected(pin) == {},
               "comments and blank lines were parsed as rows")
 
-        pin.write_text("a::b = a real reason\n", encoding="utf-8", newline="")
+        with open(pin, "w", encoding="utf-8", newline="") as _p:
+            _p.write("a::b = a real reason\n")
         check(read_expected(pin) == {"a::b": "a real reason"},
               "a well-formed row did not parse")
 
@@ -402,7 +410,8 @@ def selftest() -> list[str]:
         # arm's expected noise rather than this gate's verdict — swallowed,
         # or a green run carries two `⛔` lines above its own `✓`.
         def _refuses(text: str) -> bool:
-            pin.write_text(text, encoding="utf-8", newline="")
+            with open(pin, "w", encoding="utf-8", newline="") as _p:
+                _p.write(text)
             try:
                 with contextlib.redirect_stdout(io.StringIO()):
                     read_expected(pin)

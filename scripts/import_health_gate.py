@@ -221,7 +221,10 @@ def selftest() -> list[str]:
         sc.mkdir()
 
         def write(name: str, src: str) -> None:
-            (sc / name).write_text(src, encoding="utf-8", newline="")
+            # Path.write_text's newline= kwarg is 3.10+ (Issue 965: these
+            # fixtures must run on the boxes' python3 3.9.6).
+            with open(sc / name, "w", encoding="utf-8", newline="") as _f:
+                _f.write(src)
 
         write("ok_mod.py", "X = 1\n")
         write("boom.py", "raise RuntimeError('planted')\n")
@@ -296,11 +299,13 @@ def selftest() -> list[str]:
         check(read_expected(pin) == {},
               "a MISSING pin file did not read as zero pins")
 
-        pin.write_text("# only a comment\n\n", encoding="utf-8", newline="")
+        with open(pin, "w", encoding="utf-8", newline="") as _p:
+            _p.write("# only a comment\n\n")
         check(read_expected(pin) == {},
               "comments and blank lines were parsed as rows")
 
-        pin.write_text("a::b = a real reason\n", encoding="utf-8", newline="")
+        with open(pin, "w", encoding="utf-8", newline="") as _p:
+            _p.write("a::b = a real reason\n")
         check(read_expected(pin) == {"a::b": "a real reason"},
               "a well-formed row did not parse")
 
@@ -308,7 +313,8 @@ def selftest() -> list[str]:
         # arm's expected noise rather than this gate's verdict — swallowed,
         # or a green run carries two `⛔` lines above its own `✓`.
         def _refuses(text: str) -> bool:
-            pin.write_text(text, encoding="utf-8", newline="")
+            with open(pin, "w", encoding="utf-8", newline="") as _p:
+                _p.write(text)
             try:
                 with contextlib.redirect_stdout(io.StringIO()):
                     read_expected(pin)

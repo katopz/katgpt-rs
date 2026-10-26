@@ -358,7 +358,10 @@ def selftest() -> list[str]:
         sc.mkdir()
 
         def write(name: str, src: str) -> None:
-            (sc / name).write_text(src, encoding="utf-8", newline="")
+            # Path.write_text's newline= kwarg is 3.10+ (Issue 965: these
+            # fixtures must run on the boxes' python3 3.9.6).
+            with open(sc / name, "w", encoding="utf-8", newline="") as _f:
+                _f.write(src)
 
         write("lib.py", "def good():\n    pass\n")
         write("user.py", "import lib\nlib.good()\nlib.gone()\n")
@@ -421,11 +424,14 @@ def selftest() -> list[str]:
         root = Path(td)
         sc = root / "scripts"
         (sc / "kimi_ref").mkdir(parents=True)
-        (sc / "top.py").write_text("X = 1\n", encoding="utf-8", newline="")
-        (sc / "kimi_ref" / "dump.py").write_text("Y = 2\n", encoding="utf-8",
-                                                 newline="")
-        (sc / "untracked.py").write_text("Z = 3\n", encoding="utf-8",
-                                         newline="")
+        with open(sc / "top.py", "w", encoding="utf-8", newline="") as _t:
+            _t.write("X = 1\n")
+        with open(sc / "kimi_ref" / "dump.py", "w", encoding="utf-8",
+                  newline="") as _d:
+            _d.write("Y = 2\n")
+        with open(sc / "untracked.py", "w", encoding="utf-8",
+                  newline="") as _u:
+            _u.write("Z = 3\n")
         for cmd in (["init", "-q", str(root)],
                     ["-C", str(root), "config", "user.email", "t@t"],
                     ["-C", str(root), "config", "user.name", "t"],
@@ -456,11 +462,13 @@ def selftest() -> list[str]:
         check(read_expected(pin) == {},
               "a MISSING pin file did not read as zero pins")
 
-        pin.write_text("# only a comment\n\n", encoding="utf-8", newline="")
+        with open(pin, "w", encoding="utf-8", newline="") as _p:
+            _p.write("# only a comment\n\n")
         check(read_expected(pin) == {},
               "comments and blank lines were parsed as rows")
 
-        pin.write_text("a::b = a real reason\n", encoding="utf-8", newline="")
+        with open(pin, "w", encoding="utf-8", newline="") as _p:
+            _p.write("a::b = a real reason\n")
         check(read_expected(pin) == {"a::b": "a real reason"},
               "a well-formed row did not parse")
 
@@ -468,7 +476,8 @@ def selftest() -> list[str]:
         # arm's expected noise rather than this gate's verdict — swallowed,
         # or a green run carries two `⛔` lines above its own `✓`.
         def _refuses(text: str) -> bool:
-            pin.write_text(text, encoding="utf-8", newline="")
+            with open(pin, "w", encoding="utf-8", newline="") as _p:
+                _p.write(text)
             try:
                 with contextlib.redirect_stdout(io.StringIO()):
                     read_expected(pin)
