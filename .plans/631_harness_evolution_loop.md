@@ -1,6 +1,7 @@
 # Plan 631: Harness Evolution Loop — Comparator Extraction (from the scenelab arena)
 
 **Status:** Active — Phase 1 not started
+**Claimed:** zed-glme53flash-arena-gen, 1793031528, expires 2026-10-28T16:18:48Z
 **Date:** 2026-10-26
 **Research:** [katgpt-rs/.research/637_Harness_Evolution_Loop_Primitive.md](../.research/637_Harness_Evolution_Loop_Primitive.md)
 **Source paper:** [arXiv:2604.21003](https://arxiv.org/abs/2604.21003) — "The Last Harness You'll Ever Build" (two-level harness/meta-evolution framework)
