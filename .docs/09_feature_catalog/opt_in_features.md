@@ -6197,7 +6197,7 @@ The Lean pair (`.proofs/KatgptProof/Sst/`) pins the diagonal no-leak law:
 the scalar/level-set arm + the 2×2 `diag(1,0)` counterexample (the Rust
 spec-match mirror rides the inline tests).
 
-Plan: [`riir-train .plans/470_sst_continual_refit_recipe.md`](../../riir-train/.plans/470_sst_continual_refit_recipe.md)
+Plan: [`riir-train .plans/470_sst_continual_refit_recipe.md`](../../../riir-train/.plans/470_sst_continual_refit_recipe.md)
 (producer) · Benchmark:
 [`.benchmarks/953_sst_certified_goat.md`](../../.benchmarks/953_sst_certified_goat.md).
 
