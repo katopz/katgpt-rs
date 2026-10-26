@@ -1353,6 +1353,12 @@ signal (coordinate or pick another unit); to claim, append
 `**Claimed:** <session>, <epoch>, expires <ISO-UTC>` under the Status line
 and push BEFORE implementing (48 h expiry; advisory — the push stays the
 arbiter; exit 1 = the instrument could not read, never a silent pass).
+Before that push, lint the edited file:
+`py ../katgpt-rs/scripts/claim_lease_check.py --lint <file>` (P92 — exit 1
+on a malformed claim line or ambiguous multiple leases, with the exact
+reshape printed; the class re-mints — measured 2026-10-26, a live lane
+landed a fresh malformed line WHILE a sweep was fixing three others, and a
+malformed line blinds the read-time check for every lane in that repo).
 
 ⛔ **A concurrent session is the OTHER way this gate gets skipped, and the
 cost is a NEGATIVE RESULT rather than a duplicate** (Issue 825): two sessions

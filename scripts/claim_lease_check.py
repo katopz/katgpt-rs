@@ -18,6 +18,7 @@ an expired lease is a normal re-read, not a ceremony.
 
     git fetch origin && py ../katgpt-rs/scripts/claim_lease_check.py [--item NNN]
                                                     [--epoch N | CLAIM_LEASE_EPOCH]
+    py ../katgpt-rs/scripts/claim_lease_check.py --lint <file.md> [...]   # P92 write-time guard
 
 The script NEVER fetches — instruments are observers, not ref writers;
 freshness comes from the caller's fetch and the FETCH_HEAD age is DISCLOSED
@@ -31,6 +32,17 @@ instrument cannot read — a MALFORMED claim line (genuine-looking but
 unparseable), AMBIGUOUS multiple leases in one file, an unreadable
 issues/plans dir, or a self-test failure. Blind is loud; a green zero is
 only ever printed by a scan that read everything it looked at.
+
+`--lint` is the WRITE-TIME guard (P92, from the 2026-10-26 malformed-claim
+sweep): the class re-mints — a live lane landed a fresh malformed line WHILE
+a sweep was reshaping three others (5 repos in one window) — so
+repair-at-read is a treadmill. The writer lints the edited file BEFORE the
+push and the malformed shape dies at birth. Exit 0 = the file carries only
+clean leases / templates / prose; exit 1 = a malformed claim line (the exact
+reshape is printed for the writer to apply — report-only, never auto-edited)
+or AMBIGUOUS multiple distinct leases in one file (the scanner's other blind
+class) or an unreadable path. NOT a parser weakening: the strict loud
+MALFORMED read-time verdict stays.
 
 Template placeholders (`Claimed: <session>, <epoch>, ...` spelled in prose)
 contain `<...>` and are ignored — a spec file that QUOTES the convention
@@ -114,6 +126,72 @@ def leases_in_file(path: Path) -> list[tuple[str, int, datetime] | str]:
             if parsed not in found:
                 found.append(parsed)
     return found
+
+
+CANONICAL_CLAIM = "**Claimed:** <session>, <epoch digits>, expires <ISO-UTC>"
+
+
+def reshape_hint(line: str) -> str:
+    """The exact reshape for a malformed claim line — recover the fields the
+    line already carries, template the rest. Report-only: the writer applies
+    it; nothing here edits. Recovery mirrors the validator exactly (epoch =
+    digits, >= 9 chars; expiry = an ISO-8601-UTC-parsable token), so a fully
+    recovered hint would have parsed — a hint that still shows a placeholder
+    names the slot the writer must fill."""
+    m = CLAIM_LINE_RE.match(line)
+    if not m:
+        return CANONICAL_CLAIM
+    body = m.group(1).strip()
+    if PLACEHOLDER_RE.search(body):
+        return CANONICAL_CLAIM
+    parts = [p.strip() for p in body.split(",")]
+    session = None
+    if parts and parts[0]:
+        session = parts[0].strip("`* ") or None
+    epoch = None
+    if len(parts) > 1:
+        cand = parts[1].strip()
+        if cand.isdigit() and len(cand) >= 9:
+            epoch = cand
+    expiry = None
+    em = EXPIRY_RE.search(body)
+    if em:
+        tok = em.group(1)
+        if parse_expiry(tok) is not None:
+            expiry = tok
+    return ("**Claimed:** " + (session or "<session>") + ", "
+            + (epoch or "<epoch digits>") + ", expires "
+            + (expiry or "<ISO-UTC>"))
+
+
+def lint_file(path: Path) -> list[str] | None:
+    """The write-time guard (P92): findings for one file, or None if
+    unreadable. Findings = malformed claim lines (each with the exact
+    reshape) + the AMBIGUOUS class (>1 distinct lease in one file — the
+    scanner's other exit-1 blind). Templates and prose continuations are
+    ignored, exactly as at read time."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    findings: list[str] = []
+    leases: list[tuple[str, int, datetime]] = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        parsed = parse_claim_line(line)
+        if parsed == "malformed":
+            findings.append(
+                f"  ⛔ LINT {path}:{lineno} malformed claim line:\n"
+                f"      {line.strip()}\n"
+                f"      reshape → {reshape_hint(line)}")
+        elif isinstance(parsed, tuple) and parsed not in leases:
+            leases.append(parsed)
+    if len(leases) > 1:
+        sessions = ", ".join(s for s, _, _ in leases)
+        findings.append(
+            f"  ⛔ LINT {path}: AMBIGUOUS — {len(leases)} distinct leases "
+            f"({sessions}); the scanner goes BLIND on this file; keep "
+            f"exactly one **Claimed:** line")
+    return findings
 
 
 def classify(repo: Path, now: datetime) -> tuple[list[dict], list[str]]:
@@ -240,6 +318,40 @@ def selftest() -> list[str]:
             fails.append("target_rows missed the item-numbered file")
         if target_rows(rows, "999"):
             fails.append("target_rows matched a foreign number")
+    # P92 lint arms — the write-time guard shares the read-time grammar.
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td)
+        clean = d / "clean.md"
+        clean.write_text(
+            "# t\n**Status:** Open\n"
+            "**Claimed:** s1, 1790000000, expires 2099-01-01T00:00:00Z\n"
+            "Claimed: <session>, <epoch>, expires <UTC>\n"
+            "claimed. prose continuation\n", encoding="utf-8")
+        if lint_file(clean) != []:
+            fails.append(f"lint flagged a clean file: {lint_file(clean)}")
+        broken = d / "broken.md"
+        broken.write_text(
+            "Claimed: s2, notanumber, expires someday\n"
+            "**Claimed:** s3, 12345678, expires 2099-01-01T00:00:00Z\n",
+            encoding="utf-8")
+        bf = lint_file(broken)
+        if bf is None or len(bf) != 2:
+            fails.append(f"lint missed malformed lines: {bf}")
+        elif "reshape → **Claimed:** s2," not in bf[0]:
+            fails.append(f"the reshape lost the recoverable session: {bf[0]}")
+        if lint_file(d / "nope.md") is not None:
+            fails.append("lint invented findings for a missing file")
+        ambig = d / "ambig.md"
+        ambig.write_text(
+            "**Claimed:** a, 1790000000, expires 2099-01-01T00:00:00Z\n"
+            "**Claimed:** b, 1790000001, expires 2099-01-01T00:00:00Z\n",
+            encoding="utf-8")
+        af = lint_file(ambig)
+        if not af or "AMBIGUOUS" not in af[0]:
+            fails.append(f"lint missed the ambiguous pair: {af}")
+        hint = reshape_hint("Claimed: lane-x, 1792085272, expires soon")
+        if hint != "**Claimed:** lane-x, 1792085272, expires <ISO-UTC>":
+            fails.append(f"reshape hint wrong: {hint!r}")
     return fails
 
 
@@ -300,6 +412,14 @@ def prove_fires() -> list[str]:
         rows2, blind2 = classify(repo, now)
         if "MALFORMED" not in {r["state"] for r in rows2}:
             fails.append(f"the malformed claim did not surface: {rows2}")
+        # (4b) the P92 write-time lint sees the same class at birth —
+        # the guard that lets the writer catch it BEFORE the push.
+        lint_hits = lint_file(repo / ".issues" / "901_broken.md")
+        if not lint_hits:
+            fails.append("the write-time lint saw nothing on the malformed "
+                         "fixture")
+        if lint_file(repo / ".issues" / "825_two_sessions_one_issue.md") != []:
+            fails.append("the write-time lint flagged a valid lease")
         # (5) fetch-age on a real (tiny) git repo vs a bare dir.
         import subprocess as sp
         shared = root / "shared.git"
@@ -397,9 +517,51 @@ def main() -> int:
         for f in fails:
             print(f"    {f}")
         return 1
+
+    if "--lint" in sys.argv:
+        paths: list[str] = []
+        skip_next = False
+        for a in argv:
+            if skip_next:
+                skip_next = False
+                continue
+            if a in ("--item", "--epoch"):
+                skip_next = True          # the flag's VALUE is not a path
+                continue
+            if not a.startswith("--"):
+                paths.append(a)
+        if not paths:
+            print("usage: claim_lease_check.py --lint <file.md> [more.md ...]")
+            return 1
+        findings_total = 0
+        for p in paths:
+            path = Path(p)
+            if not path.exists():
+                print(f"✗ lint {path}: no such file")
+                findings_total += 1
+                continue
+            hits = lint_file(path)
+            if hits is None:
+                print(f"✗ lint {path}: unreadable")
+                findings_total += 1
+                continue
+            for h in hits:
+                print(h)
+            if hits:
+                findings_total += len(hits)
+            else:
+                print(f"✓ lint {path}: clean")
+        if findings_total:
+            print(f"✗ lint: {findings_total} finding(s) — fix before the "
+                  f"push: a malformed claim line makes the read-time check "
+                  f"BLIND for every lane in that repo")
+            return 1
+        return 0
+
     if len(args) > 1:
         print("usage: claim_lease_check.py [repo] [--item NNN] "
-              "[--epoch N] | --prove-fires | --self-test")
+              "[--epoch N] | --lint <file.md> [...] | --prove-fires "
+              "| --self-test")
         return 1
     repo = Path(args[0]).resolve() if args else Path.cwd()
     if not repo.is_dir():
