@@ -17,13 +17,21 @@ verification come from re-running linkcheck_sweep.py afterwards.
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import unquote
 
 _DEFAULT_WORKSPACE = Path(__file__).resolve().parents[5]
 WORKSPACE = Path(os.environ.get("LINKCHECK_WORKSPACE", str(_DEFAULT_WORKSPACE)))  # cross-box: the default derives this script's own home (<workspace>/katgpt-rs/.agents/skills/doc-sync/tools/link_fix.py → parents[5]); LINKCHECK_WORKSPACE overrides for any layout where that walk is wrong (shared-mechanism repair with linkcheck_sweep.py, doc-sync unit #41/#46)
 REPO = (WORKSPACE / sys.argv[1]).resolve()  # resolve() kills any .. segments — an unresolved path can fail exists() downstream
-FINDINGS = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("/tmp/linkcheck_full.txt")
+# Cross-box default (Windows repair, doc-sync unit 2026-10-26: the hardcoded
+# /tmp/linkcheck_full.txt resolved to cwd-drive-root \\tmp on native Windows
+# python and crashed FileNotFoundError before any finding was read).
+# tempfile.gettempdir() honors TMPDIR/%TEMP% and matches the file
+# linkcheck_sweep.py writes by default — the pair works with zero operator
+# path handling; argv[2] still overrides for an explicit findings file.
+_DEFAULT_FINDINGS = Path(tempfile.gettempdir()) / "linkcheck_full.txt"
+FINDINGS = Path(sys.argv[2]) if len(sys.argv) > 2 else _DEFAULT_FINDINGS
 
 REPO_NAMES = sorted(
     d.name for d in WORKSPACE.iterdir()

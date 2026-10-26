@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -108,13 +109,26 @@ def main():
                             (str(md.relative_to(repo)), lineno, missing)
                         )
     total = sum(len(v) for v in findings.values())
-    print(f"scanned {scanned} tracked markdown files across {len(repo_set())} repos")
+    lines = [f"scanned {scanned} tracked markdown files across {len(repo_set())} repos"]
     for repo_name in sorted(findings):
         rows = findings[repo_name]
-        print(f"\n== {repo_name}: {len(rows)}")
+        lines.append(f"\n== {repo_name}: {len(rows)}")
         for rel, lineno, shown in rows:
-            print(f"  {rel}:{lineno} ({shown})")
-    print(f"\nTOTAL: {total}")
+            lines.append(f"  {rel}:{lineno} ({shown})")
+    lines.append(f"\nTOTAL: {total}")
+    report = "\n".join(lines)
+    print(report)
+    # Write the same text to the findings file link_fix.py reads by default
+    # (tempfile.gettempdir()/linkcheck_full.txt on EVERY box — the old workflow
+    # hand-piped stdout to a /tmp path that native-Windows python cannot resolve).
+    # link_fix's parser matches only '== repo:' and two-space rows, so the
+    # header/TOTAL lines here are inert to it.
+    out = Path(tempfile.gettempdir()) / "linkcheck_full.txt"
+    try:
+        out.write_text(report + "\n", encoding="utf-8")
+        print(f"findings file: {out}")
+    except OSError as e:
+        print(f"findings file: UNWRITTEN ({e}) — pass it to link_fix.py as argv[2]")
     return 0
 
 
