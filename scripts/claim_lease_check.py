@@ -428,8 +428,9 @@ def main() -> int:
               f"(was {r['expiry'].isoformat()}) — re-claim is a normal re-read")
     for r in live:
         left = r["expiry"] - now
+        hours = int(left.total_seconds()) // 3600
         print(f"  LIVE     {r['file']}  {r['session']} epoch={r['epoch']} "
-              f"expires={r['expiry'].isoformat()} ({left.seconds // 3600}h left)")
+              f"expires={r['expiry'].isoformat()} ({hours}h left)")
     for r in bad:
         print(f"  ⛔ MALFORMED {r['file']} — a claim-shaped line that cannot "
               f"parse (want `**Claimed:** session, <epoch digits>, expires "
