@@ -20,7 +20,7 @@ rayon = "1.10"
 # serde for rt_turbo calibration/projection serialization (Plan 126).
 serde = { version = "1", features = ["derive"], optional = true }
 # postcard for rt_turbo binary calibration roundtrip (Plan 126).
-postcard = { version = "1", features = ["alloc"], optional = true }
+postcard = { version = "1", default-features = false, features = ["alloc"], optional = true }
 # blake3 for spechop segment_match content-addressed segment hashing.
 blake3 = { version = "1", optional = true }
 # katgpt-kv for cache_prune (RollingHash, SummedAreaTable) consumed by spechop

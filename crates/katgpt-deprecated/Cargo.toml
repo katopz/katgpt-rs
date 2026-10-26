@@ -14,7 +14,7 @@ publish = false
 # feedback.rs needs InferenceResult (re-exported from katgpt-core::types).
 katgpt-core = { path = "../katgpt-core" }
 # feedback.rs serializes InferenceResult via postcard.
-postcard = { version = "1", features = ["alloc"] }
+postcard = { version = "1", default-features = false, features = ["alloc"] }
 # feedback.rs logs via log::debug!.
 log = "0.4"
 

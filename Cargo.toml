@@ -105,7 +105,7 @@ blake3 = "1"
 fastrand = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-postcard = { version = "1", features = ["alloc"] }
+postcard = { version = "1", default-features = false, features = ["alloc"] }
 bevy_ecs = { version = "0.19", optional = true }  # Standalone ECS (Plan 033 bomber + Plan 035 monopoly arenas; bumped 0.15→0.19, Issue 799)
 wasmi = { version = "2", optional = true, features = ["simd"] }  # WASM bomber validator (Plan 034, wasmi migration Plan 167). `simd`: hosts load +simd128-built modules
 papaya = { version = "0.2", optional = true }      # Lock-free concurrent HashMap (Plan 037)

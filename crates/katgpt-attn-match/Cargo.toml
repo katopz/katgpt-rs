@@ -17,7 +17,7 @@ rayon = "1"
 # serde: HeadBudgetSchedule serialization (head_budget/schedule.rs). Always-on.
 serde = { version = "1", features = ["derive"] }
 # postcard: HeadBudgetSchedule serialization (head_budget/schedule.rs). Always-on.
-postcard = { version = "1", features = ["alloc"] }
+postcard = { version = "1", default-features = false, features = ["alloc"] }
 # blake3: HeadBudgetSchedule tamper-detection hash (head_budget/schedule.rs).
 # Per AGENTS.md ("Use blake3 as possible instead of SHA1, SHA256"). Always-on.
 blake3 = "1"

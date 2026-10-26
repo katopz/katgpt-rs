@@ -15,12 +15,12 @@
 [advisories]
 version = 2
 ignore = [
-    # RUSTSEC-2023-0089 — atomic-polyfill UNMAINTAINED (archived), not
-    # vulnerable. Target-specific transitive via postcard 1.x → heapless 0.7.
-    # THE FIX LIVES HERE: heapless 0.8 / postcard bump (plan 298 T2.3, the
-    # katgpt-rs lane). Until that bump lands, every consumer repo pins this
-    # row with a reason pointing at this lane.
-    { id = "RUSTSEC-2023-0089", reason = "unmaintained, not vulnerable; target-specific transitive via postcard→heapless 0.7; THE fix is the heapless/postcard bump in THIS repo (plan 298 T2.3)" },
+    # RUSTSEC-2023-0089 (atomic-polyfill UNMAINTAINED) — DISCHARGED 2026-10-27
+    # (plan 298 T2.3): the fix landed HERE — postcard's `default =
+    # ["heapless-cas"]` feature was the ONLY heapless path; every declaration
+    # is now `default-features = false` (alloc only), the tree unified on
+    # heapless 0.9 (portable-atomic), atomic-polyfill left the lock. Consumer
+    # repos: drop your 0089 pin when your lane re-locks against this bump.
     # RUSTSEC-2024-0436 — paste 1.0.15 UNMAINTAINED (archived 2024), not
     # vulnerable. Transitive via metal 0.33 (katgpt-backend's Metal dep) as a
     # proc-macro helper. Fix is upstream in metal-rs.

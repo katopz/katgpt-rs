@@ -15,7 +15,7 @@ publish = false  # only katgpt-core ships to crates.io
 serde = { version = "1", features = ["derive"] }
 # postcard: binary persistence format for certificate bundles (serde_impls.rs).
 # Always-on — `save_certificates` / `load_certificates` use it unconditionally.
-postcard = { version = "1", features = ["alloc"] }
+postcard = { version = "1", default-features = false, features = ["alloc"] }
 # blake3: checksum integrity for saved certificate bundles. Always-on —
 # `serde_impls::save_certificates` and `verify_checksum` use it unconditionally
 # (the always-on binary format includes a checksum). The `wasm_proof_witness`
