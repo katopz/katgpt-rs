@@ -20,7 +20,8 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote
 
-WORKSPACE = Path(os.environ.get("LINKCHECK_WORKSPACE", "/Users/katopz/git"))  # cross-box: set to the local workspace root
+_DEFAULT_WORKSPACE = Path(__file__).resolve().parents[5]
+WORKSPACE = Path(os.environ.get("LINKCHECK_WORKSPACE", str(_DEFAULT_WORKSPACE)))  # cross-box: the default derives this script's own home (<workspace>/katgpt-rs/.agents/skills/doc-sync/tools/link_fix.py → parents[5]); LINKCHECK_WORKSPACE overrides for any layout where that walk is wrong (shared-mechanism repair with linkcheck_sweep.py, doc-sync unit #41/#46)
 REPO = (WORKSPACE / sys.argv[1]).resolve()  # resolve() kills any .. segments — an unresolved path can fail exists() downstream
 FINDINGS = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("/tmp/linkcheck_full.txt")
 
