@@ -1,18 +1,18 @@
 # Issue 968 — kill the `block v0.1.6` future-incompat (vendored `[patch.crates-io]` fork; the "dependency-bump lane" has NO bump)
 
 **Status:** LANDED 2026-10-27 — vendored fork + `[patch.crates-io]` at
-`5e216a761` (all gates green, see below). Open residue: the other 7 locks
-carrying registry `block 0.1.6` (riir-ai, riir-infer, riir-instinct,
-riir-refine, riir-reflex, riir-rethink, riir-train) each need the same
-per-workspace patch; measured reachability today = katgpt-rs + riir-train,
-the other six pull it only under feature postures (their default
-`cargo tree -i block@0.1.6` does not resolve it — trace with
-`--all-features` when picking the patch up).
+`5e216a761` (all gates green, see below). Open residue: the remaining 6
+locks carrying registry `block 0.1.6` (riir-ai, riir-infer, riir-instinct,
+riir-reflex, riir-rethink, riir-train — riir-refine landed same day at
+riir-refine `e07980c4`: own vendor copy + patch row, tree + lock + clippy +
+lib 2749/0 green) each need the same per-workspace patch; measured
+reachability today = katgpt-rs + riir-train, the other five pull it only
+under feature postures (their default `cargo tree -i block@0.1.6` does not
+resolve it — trace with `--all-features` when picking the patch up).
 **Lease closed:** zed-amo-blockfix (claimed 1793121000) — the claimed work
 landed same day at `5e216a761`.
-**Claimed:** zed-amo-refine-blockpatch, 1793079375, expires 2026-10-29T05:45Z
-(residue slice: the riir-refine lock only — same vendored fork +
-`[patch.crates-io]` row; the other six locks stay unclaimed)
+**Lease closed:** zed-amo-refine-blockpatch (claimed 1793079375) — the
+riir-refine slice landed same day at riir-refine `e07980c4`.
 
 ## The finding (why the bump lane cannot exist)
 
