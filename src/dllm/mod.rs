@@ -25,6 +25,20 @@ pub mod text_corpus;
 #[cfg(feature = "replaid_schedules")]
 use crate::pruners::variance_minimizer::{VarianceMinimizer, VarianceMinimizerConfig};
 
+/// `1 − p_target = σ(m − z_t)` for the collapse-free CE backward, where
+/// `m = ln(sum_excl) + max_l` is the log-sum-exp over every NON-target logit
+/// (`sum_excl = Σ_{o≠t} exp(z_o − max_l)`). Keeps full f32 range past the
+/// Softmax Collapse cliff where `p_t − 1` rounds to exactly 0.0
+/// (arXiv:2610.31642). Returns 0.0 when every other logit underflowed.
+#[inline]
+pub(crate) fn ce_one_minus_p_target(sum_excl: f32, max_l: f32, z_t: f32) -> f32 {
+    if sum_excl <= 0.0 {
+        return 0.0;
+    }
+    let gap = sum_excl.ln() + max_l - z_t;
+    1.0 / (1.0 + (-gap).exp())
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Loss Averaging Strategy
 // ═══════════════════════════════════════════════════════════════
@@ -1193,7 +1207,11 @@ fn backward(
             }
 
             if last {
-                // Cross-entropy backward: d_logit[i] = softmax(logit)[i] - (1 if i==target else 0)
+                // Cross-entropy backward: d_logit[i] = softmax(logit)[i] - (1 if i==target else 0),
+                // collapse-free (arXiv:2610.31642, riir-train Issue 651): the naive
+                // `p_t - 1` rounds to exactly 0.0 past the f32 margin cliff (~16.6)
+                // while p_i≠t stay positive. The target slot is −σ(m − z_t) with m the
+                // EXCLUDED log-sum-exp; p_i≠t = σ(m − z_t)·exp(z_i − max)/Σ_{o≠t}.
                 let logits_p = &act.logits[p * vocab..(p + 1) * vocab];
                 let target = tokens[p];
                 let max_l = katgpt_core::simd::simd_max_f32(logits_p);
@@ -1201,10 +1219,12 @@ fn backward(
                 bctx.d_logits[..vocab].copy_from_slice(logits_p);
                 katgpt_core::simd::simd_add_scalar_inplace(&mut bctx.d_logits[..vocab], -max_l);
                 katgpt_core::simd::simd_exp_inplace(&mut bctx.d_logits[..vocab]);
-                let sum_exp = katgpt_core::simd::simd_sum_f32(&bctx.d_logits[..vocab]);
-                let inv_sum = 1.0 / sum_exp;
-                katgpt_core::simd::simd_scale_inplace(&mut bctx.d_logits[..vocab], inv_sum);
-                bctx.d_logits[target] -= 1.0;
+                bctx.d_logits[target] = 0.0; // exclude the target from the LSE
+                let sum_excl = katgpt_core::simd::simd_sum_f32(&bctx.d_logits[..vocab]);
+                let s = crate::dllm::ce_one_minus_p_target(sum_excl, max_l, logits_p[target]);
+                let scale = if sum_excl > 0.0 { s / sum_excl } else { 0.0 };
+                katgpt_core::simd::simd_scale_inplace(&mut bctx.d_logits[..vocab], scale);
+                bctx.d_logits[target] = -s;
 
                 // LM Head: d_lm_head += outer(d_logits, hidden_final)
                 let hf_base = (l_total - 1) * q_stride;

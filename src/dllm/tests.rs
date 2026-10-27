@@ -5,6 +5,27 @@
 
 use super::*;
 
+// ── Softmax Collapse regression (arXiv:2610.31642, riir-train Issue 651) ──
+
+#[test]
+fn ce_target_grad_survives_f32_collapse_cliff() {
+    let logits = [20.0f32, 0.0, -1.0];
+    let max_l = 20.0f32;
+    // Naive form: p_t − 1 collapses to exactly 0.0 at margin 20.
+    let sum_all: f32 = logits.iter().map(|z| (z - max_l).exp()).sum();
+    assert_eq!(
+        1.0 / sum_all - 1.0,
+        0.0,
+        "premise: the naive form collapses"
+    );
+    let sum_excl: f32 = logits[1..].iter().map(|z| (z - max_l).exp()).sum();
+    let s = ce_one_minus_p_target(sum_excl, max_l, logits[0]);
+    let other = 0.0f64.exp() + (-1.0f64).exp();
+    let want = other / (20.0f64.exp() + other);
+    assert!(s > 0.0 && ((f64::from(s) - want) / want).abs() < 1e-5);
+    assert_eq!(ce_one_minus_p_target(0.0, max_l, logits[0]), 0.0);
+}
+
 // ── Task 0.1: Bidirectional Attention ──
 
 #[test]
