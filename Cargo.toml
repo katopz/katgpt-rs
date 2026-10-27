@@ -3893,3 +3893,9 @@ required-features = ["kv_capture", "kv_sensitivity", "domain_latent"]
 name = "kv960_t2_damage_alloc"
 path = "tests/kv960_t2_damage_alloc.rs"
 required-features = ["kv_capture", "kv_sensitivity_alloc", "domain_latent"]
+
+# Issue 968: vendored 1-line fix for the block v0.1.6 future-incompat
+# (static of uninhabited type, rust#74840) — see vendor/block/FORK.md.
+# Remove when katgpt-backend moves metal -> objc2-metal (the only real exit).
+[patch.crates-io]
+block = { path = "vendor/block" }
