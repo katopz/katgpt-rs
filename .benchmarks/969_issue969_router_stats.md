@@ -3,7 +3,7 @@
 **Status:** LANDED 2026-10-27 — BOTH arms measured; Issue 969 CLOSED. K3 arm (this bench): verdict CORPUS_INDEPENDENT_BUT_LOAD_BEARING (mixed by layer, see §Reading). Control arm: reflex [Bench 167](../../riir-reflex/.benchmarks/167_router_stats_control/BENCH_167.md) — **CONTROL LIVE** (shuffled-domain pick change 0.59/0.30/0.98 on ag_news/emotion/banking77; sst5 the structural-zero class).
 
 **Date:** 2026-10-27
-**Issue:** [`Issue 969`](../.issues/969_kimi_k3_router_statistics_diagnostic.md) (Research 639 / arXiv:2610.31818 Nestor App C.6)
+**Issue:** `Issue 969` (Research 639 / arXiv:2610.31818 Nestor App C.6)
 **Instrument:** `benches/bench_969_router_stats.rs` (`required-features = ["kimi_k3_loader"]`, `harness = false`, report-only — no serving-path change, no feature promotion)
 
 ## Run posture
