@@ -109,8 +109,17 @@ MIN_FILES = 8
 # the `std::env::` and bare `env::` spellings occur in this tree.
 TEMP_DIR = re.compile(r"\benv::temp_dir\(\)")
 
-# The DEFECT: that call joined directly with a string literal.
-FIXED_JOIN = re.compile(r"\benv::temp_dir\(\)\s*\.join\(\s*\"([^\"]*)\"\s*\)")
+# The DEFECT: that call joined directly with a string literal — unless the
+# literal is a fixed DIRECTORY whose very next join is the process-unique
+# filename (`temp_dir().join("app").join(format!("f_{}", process::id()))`):
+# every process then owns its own file, which is the repair's own shape one
+# level down. Measured specimen: seal-remake crates/seal-view/src/quest_talk.rs
+# `default_snapshot`, a false positive under the bare predicate. `[^;]` bounds
+# the lookahead to the one statement.
+FIXED_JOIN = re.compile(
+    r"\benv::temp_dir\(\)\s*\.join\(\s*\"([^\"]*)\"\s*\)"
+    r"(?!\s*\.join\(\s*format!\([^;]*?process::id\(\))"
+)
 
 
 # ── the masker ──────────────────────────────────────────────────────────────
@@ -543,6 +552,23 @@ def classifier_arms() -> list[str]:
     check(
         sites('let p = env::temp_dir().join(unique_temp_id("x"));') == {},
         "a helper-built path must NOT classify",
+    )
+    # A fixed DIRECTORY followed by the process-unique filename is safe; the
+    # same directory followed by a FIXED filename (or a pid-free format!) is
+    # not — the lookahead must carve out exactly the first.
+    check(
+        sites('let p = env::temp_dir()\n    .join("app")\n    .join(format!("f_{}.json", std::process::id()));')
+        == {},
+        "a fixed dir + process-unique file must NOT classify",
+    )
+    check(
+        sites('let p = env::temp_dir().join("app").join("f.json");') == {"app": 1},
+        "a fixed dir + fixed file must classify",
+    )
+    check(
+        sites('let p = env::temp_dir().join("app").join(format!("f_{}", n));\nlet q = std::process::id();')
+        == {"app": 1},
+        "the process-unique lookahead must not reach past the statement",
     )
     check(
         sites("let p = env::temp_dir().join(name);") == {},
