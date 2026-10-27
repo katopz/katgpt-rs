@@ -3,7 +3,7 @@
 > **Source:** "The 4-bitter Lesson: Balancing Stability and Performance in NVFP4 RL" — Ziang Li & humans& ai, July 10, 2026. https://humansand.ai/blog/nvfp4-rl?v=3
 > **Date:** 2026-07-11
 > **Status:** Done — Pass (inference) + → riir-train (training)
-> **Related Research:** 202 (QAT Infusion — same principles explored), 020 (TurboQuant — online quantization), 265 (b-posit — alternative precision format), 200 (quant outlier collapse), 085 (riir-ai multi-precision NPC switching)
+> **Related Research:** 202 (QAT Infusion — same principles explored), 020 (TurboQuant — online quantization), 265 (b-posit — alternative precision format), 200 (quant outlier collapse), 085 (riir-ai multi-precision NPC switching), riir-infer 017 (CroissAttn — the re-evaluation this note's trigger called for, landed 2026-10-27)
 > **Classification:** Public
 
 ---
@@ -14,6 +14,8 @@ The blog develops the first stable hardware-native NVFP4 (4-bit float) RL traini
 
 **Distilled for katgpt-rs (modelless, inference-time):**
 The 4/6 adaptive block scaling (per-block choose max=4 or max=6 to minimize MSE) is novel to our codebase (zero prior art for "block scaling" / "adaptive scaling" / "four over six"), but it's format-specific to NVFP4 (E2M1 + E4M3 block scales). We don't ship FP4 — our quantization stack uses TurboQuant (rotation + Lloyd-Max), KVarN (variance-normalized), OCTOPUS (octahedral), and ternary (1.58-bit). The transferable principle — "adapt the quantization range per local block, not just the scale" — could apply to our existing codecs but has no concrete consumer today.
+
+> **PASS-Redirects (synthesis):** "CroissAttn: A Complete FP4 Attention Backward" (ICLR 2027 submission, anonymous, @ 6faeb979, no arXiv ID) — the re-evaluation this note's re-open trigger called for arrived 2026-10-27: still hardware-gated (no FP4 tensor cores in fleet), but the complete six-product recipe now exists to copy the day Blackwell-class hardware joins; verdict + Path 0 inventory in `riir-infer/.research/017_Croissattn_FP4_Attention_Backward.md`, training-law filing in `riir-train/.plans/473`.
 
 ---
 
