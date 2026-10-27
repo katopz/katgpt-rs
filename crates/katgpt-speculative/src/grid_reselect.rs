@@ -120,10 +120,14 @@ pub fn topk_pools_into(
     // The floor path needs a NaN-PROPAGATING block max to route NaN rows to
     // the tail path (the NEON kernel is one; x86's `max_ps` is not).
     let floor_path = cfg!(target_arch = "aarch64") && slot_len <= FLOOR_MAX_POOL;
+    // One scratch per CALL, not per row: zeroing 20 KiB of block maxima per
+    // row was ~0.5 µs at a 32 000 vocab — the whole residual over the G2 bar.
+    // Every row writes `[..nblk]` before reading it, so reuse is exact.
+    let mut scratch = FloorScratch::new();
     for p in 0..max_steps {
         let margs = &marginals_flat[p * vocab_size..p * vocab_size + vocab_size];
         let pool = &mut pools[p * slot_len..p * slot_len + slot_len];
-        if !(floor_path && scan_row_floor(margs, pool)) {
+        if !(floor_path && scan_row_floor(margs, pool, &mut scratch)) {
             scan_row_tail(margs, pool);
         }
     }
@@ -140,6 +144,24 @@ const SUBS: usize = SKIP_BLOCK / BLOCK_MAX_SUB_WIDTH;
 
 /// Widest pool [`scan_row_floor`] ranks (a stack top-list).
 const FLOOR_MAX_POOL: usize = 64;
+
+/// Per-call block + sub-block maxima for [`scan_row_floor`] (stack, 20 KiB).
+/// A row reads only the `[..nblk]` prefix it wrote, so one zeroing serves
+/// every row of a [`topk_pools_into`] call.
+struct FloorScratch {
+    bmax: [f32; FLOOR_MAX_BLOCKS],
+    smax: [f32; FLOOR_MAX_BLOCKS * SUBS],
+}
+
+impl FloorScratch {
+    #[inline(always)]
+    fn new() -> Self {
+        Self {
+            bmax: [0f32; FLOOR_MAX_BLOCKS],
+            smax: [0f32; FLOOR_MAX_BLOCKS * SUBS],
+        }
+    }
+}
 
 /// Block-floor row scan (Issue 967 follow-up). Pass 1 computes every block's
 /// max + its 64-wide sub-block maxima and, fused into the same loop, ranks
@@ -158,14 +180,13 @@ const FLOOR_MAX_POOL: usize = 64;
 /// measured ~25% faster than a per-32-block running floor at a 32 000 vocab:
 /// the looser prefix floor admits more candidate blocks than L1 residency
 /// saves.
-fn scan_row_floor(margs: &[f32], pool: &mut [(u32, f32)]) -> bool {
+fn scan_row_floor(margs: &[f32], pool: &mut [(u32, f32)], scratch: &mut FloorScratch) -> bool {
     let slot_len = pool.len();
     let nblk = margs.len().div_ceil(SKIP_BLOCK);
     if nblk > FLOOR_MAX_BLOCKS {
         return false;
     }
-    let mut bmax = [0f32; FLOOR_MAX_BLOCKS];
-    let mut smax = [0f32; FLOOR_MAX_BLOCKS * SUBS];
+    let FloorScratch { bmax, smax } = scratch;
     // top[..slot_len] descending; the last entry is the running τ.
     let mut top = [f32::NEG_INFINITY; FLOOR_MAX_POOL];
     let (full, rest) = margs.as_chunks::<SKIP_BLOCK>();

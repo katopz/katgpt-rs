@@ -77,3 +77,12 @@ a 32-wide probe was slower than 16, chunked ranking was noise, fusing the
 ranking into the max loop was noise, and a per-32-block running floor was
 about 25% slower (the looser floor admits more candidates than L1 residency
 saves).
+
+**Closed (2026-10-27, katgpt-rs-88): 1.409 / 1.407 / 1.414 @32k · 1.126 /
+1.124 / 1.124 @152k — PASS.** The open cell's ~8 µs was not rescans or
+ranking: `scan_row_floor` zero-filled its 20 KiB `bmax`/`smax` stack scratch
+on every row, though a 32 000 vocab reads only 125 of the 1024 blocks.
+Hoisting it to one `FloorScratch` per `topk_pools_into` call (exact — every
+row writes `[..nblk]` before reading it) cut reselect from 32.5 to ~21.7 µs
+per 16-step block at a 15.4 µs argmax. Box: `PROVENANCE: power=AC Power
+load=3.89 swap=5483.62M canary=skipped powermode=0(auto)`.
