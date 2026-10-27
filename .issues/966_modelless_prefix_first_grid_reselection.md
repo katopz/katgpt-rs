@@ -2,6 +2,7 @@
 
 **Status:** Open — novelty re-search DISCHARGED 2026-10-27 (claim survives; DRelay 2610.01439 = the new learned-corrector prior art, its pool premise supports ours); premise-gate INSTRUMENT landed (`TopKPoolCoverage`, `correlation_budget.rs`) — the live measurement rides the riir-ai Plan 614 / Issue 1011 lane posture (quiet riir-ai + quiet-Metal window owed)
 **Lease released:** zed-amo-966-coverage (claimed 2026-10-27, epoch 1793056465) — the instrument unit landed `08922f9d7` same day; the live measurement belongs to the riir-ai Plan 614 / Issue 1011 lane posture, so the slot is released to it.
+**Claimed:** zed-m3-966-reselect, 1793064699, expires 2026-10-29T09:00Z
 
 **Pinned claim (novelty-audit form):** Training-free **prefix-first re-selection over a factorized block drafter's own top-K candidate grid**, transition-scored by a static corpus bigram prior — distinguished from LiLiCorr (arXiv:2608.20530) / DCOCO (arXiv:2610.12570) / Domino / DSpark (all LEARNED correctors) and from prompt-lookup / FLy / Training-Free-Loosely-Speculative (draft GENERATION, entropy gating, acceptance loosening — none re-selects inside a drafter's grid) by requiring **zero trained parameters beyond the drafter itself**.
 
