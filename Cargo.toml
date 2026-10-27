@@ -1197,6 +1197,17 @@ path = "benches/bench_012_kimi_k3_trajectory_geometry.rs"
 required-features = ["kimi_k3_loader", "latent_trajectory_geometry"]
 harness = false
 
+# Issue 969 — the Nestor App C.6 routing-statistics diagnostic on kimi_k3's
+# shipped MoE (real checkpoint + the reflex seated suites) + the forced-routing
+# counterfactual seam. Report-only; no serving-path change, no feature
+# promotion. Skips loud without the model material (the 1.5 GB
+# model.safetensors) or the seated datasets.
+[[bench]]
+name = "bench_969_router_stats"
+path = "benches/bench_969_router_stats.rs"
+required-features = ["kimi_k3_loader"]
+harness = false
+
 # Issue 883 P0 second fixture — the Kimi-K3 MLA/KDA R² dashboard
 # (dashboard-only; the gemma-2 half is riir-infer Bench 004). Taps the two
 # MLA layers' up-projected K/V (w_uk·c vs w_uv·c) replayed exactly from the

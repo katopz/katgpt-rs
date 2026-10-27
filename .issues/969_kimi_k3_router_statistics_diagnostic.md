@@ -1,6 +1,6 @@
 # Issue 969 — routing-statistics diagnostic suite (Nestor App C.6) on kimi_k3's shipped MoE + reflex `pick_domain`
 
-**Status:** Open — 2026-10-27. PoC/proof task from Research 639 (arXiv:2610.31818, Nestor).
+**Status:** Open — 2026-10-27. PoC/proof task from Research 639 (arXiv:2610.31818, Nestor). **K3 arm (T1+T2) DONE 2026-10-27** ([Bench 969](../.benchmarks/969_issue969_router_stats.md): all four statistics measured on the real checkpoint, byte-stability + engagement gates PASS, verdict hint CORPUS_INDEPENDENT_BUT_LOAD_BEARING — bimodal by layer: front layers 1–3 strongly load-bearing (shuffle rel-L2 0.27–0.48, last-pos flips 20–33%), back layers 4–7 weak (≤ 2% rel-L2) with a collapsed-router shape (eff 0.39–0.50, max-load 0.44–0.48); corpus MI low everywhere (0.03–0.13 bits). Remaining: **T3** (the reflex `pick_domain` liveness CONTROL arm) — T4's final verdict row quotes both arms.
 **Claimed:** zed-amo-969-router-stats, 1793120641, expires 2026-10-29T17:04:01Z
 
 ## What
@@ -30,8 +30,8 @@ Port the paper's App C.6 routing-statistics methodology as a zero-training, offl
 
 ## Tasks
 
-- [ ] **T1** — kimi_k3 MoE assignment capture: forward N eval sequences through the real checkpoint, record per-layer routed-expert assignments (feature `kimi_k3_loader`; skip loud without weights). **Provenance to record in the T1 row:** `data/kimi-k3-0.40b/` carries the UPSTREAM Moonshot release layout (`config.json` + `modeling_kimi_k3.py` + `tiktoken.model`, file dated 2026-08-01 — consistent with R447's "K3 weights drop 2026-07-27"), NOT a C13/C14 training artifact; T1 records the source run/step (upstream release) beside the stats so "undertrained router" reads against the right baseline.
-- [ ] **T2** — the four statistics + the shuffled/random counterfactual output delta, on the named checkpoint + corpus; golden-serialize the stats (seeded corpus, byte-stable).
+- [x] **T1** — kimi_k3 MoE assignment capture: forward N eval sequences through the real checkpoint, record per-layer routed-expert assignments (feature `kimi_k3_loader`; skip loud without weights). **Provenance to record in the T1 row:** `data/kimi-k3-0.40b/` carries the UPSTREAM Moonshot release layout (`config.json` + `modeling_kimi_k3.py` + `tiktoken.model`, file dated 2026-08-01 — consistent with R447's "K3 weights drop 2026-07-27"), NOT a C13/C14 training artifact; T1 records the source run/step (upstream release) beside the stats so "undertrained router" reads against the right baseline.
+- [x] **T2** — the four statistics + the shuffled/random counterfactual output delta, on the named checkpoint + corpus; golden-serialize the stats (seeded corpus, byte-stable).
 - [ ] **T3** — reflex `pick_domain` arm: assignment capture over the seated suites + shuffled-domain top-1 delta on the frozen read; this arm doubles as the liveness CONTROL.
 - [ ] **T4** — verdict row vs the paper's Table 9/10 shapes: K3's single routed level — which regime? `pick_domain` — per-level MI split + load-bearingness. Both rows carry the two scope caveats above.
 

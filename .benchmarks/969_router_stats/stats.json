@@ -1,0 +1,15 @@
+{
+  "meta": {"baseline_s": 4.001, "total_s": 66.689},
+  "corpus": {"suites": ["ag_news", "banking77", "emotion", "sst5"], "n_seqs_per_suite": 16, "max_tokens": 48, "total_tokens": 1503, "drift_levels": [0.05, 0.2]},
+  "layers": [
+    {"layer": 1, "n_tokens": 1503, "effective_choices": 0.923450, "max_load_frac": 0.209581, "mi_bits": 0.068692, "drift": [0.043247, 0.142382], "shuffle": {"mean_cos": 0.851691, "mean_rel_l2": 4.836e-1, "flip_rate": 0.328125}, "random": {"mean_cos": 0.854117, "mean_rel_l2": 4.838e-1, "flip_rate": 0.359375}},
+    {"layer": 2, "n_tokens": 1503, "effective_choices": 0.874167, "max_load_frac": 0.231537, "mi_bits": 0.055663, "drift": [0.066534, 0.188955], "shuffle": {"mean_cos": 0.927930, "mean_rel_l2": 3.298e-1, "flip_rate": 0.281250}, "random": {"mean_cos": 0.925636, "mean_rel_l2": 3.386e-1, "flip_rate": 0.250000}},
+    {"layer": 3, "n_tokens": 1503, "effective_choices": 0.995720, "max_load_frac": 0.149035, "mi_bits": 0.133631, "drift": [0.055223, 0.218896], "shuffle": {"mean_cos": 0.951658, "mean_rel_l2": 2.751e-1, "flip_rate": 0.203125}, "random": {"mean_cos": 0.949356, "mean_rel_l2": 2.834e-1, "flip_rate": 0.218750}},
+    {"layer": 4, "n_tokens": 1503, "effective_choices": 0.422943, "max_load_frac": 0.437791, "mi_bits": 0.061221, "drift": [0.025283, 0.066534], "shuffle": {"mean_cos": 0.994920, "mean_rel_l2": 2.193e-2, "flip_rate": 0.000000}, "random": {"mean_cos": 0.994291, "mean_rel_l2": 2.368e-2, "flip_rate": 0.000000}},
+    {"layer": 5, "n_tokens": 1503, "effective_choices": 0.497472, "max_load_frac": 0.431803, "mi_bits": 0.043556, "drift": [0.037924, 0.109115], "shuffle": {"mean_cos": 0.996667, "mean_rel_l2": 1.726e-2, "flip_rate": 0.031250}, "random": {"mean_cos": 0.996694, "mean_rel_l2": 1.813e-2, "flip_rate": 0.031250}},
+    {"layer": 6, "n_tokens": 1503, "effective_choices": 0.386496, "max_load_frac": 0.484032, "mi_bits": 0.028420, "drift": [0.031936, 0.080506], "shuffle": {"mean_cos": 0.998177, "mean_rel_l2": 1.085e-2, "flip_rate": 0.000000}, "random": {"mean_cos": 0.997221, "mean_rel_l2": 1.471e-2, "flip_rate": 0.000000}},
+    {"layer": 7, "n_tokens": 1503, "effective_choices": 0.535938, "max_load_frac": 0.453426, "mi_bits": 0.052027, "drift": [0.045908, 0.141051], "shuffle": {"mean_cos": 0.996902, "mean_rel_l2": 1.734e-2, "flip_rate": 0.031250}, "random": {"mean_cos": 0.996966, "mean_rel_l2": 1.790e-2, "flip_rate": 0.031250}}
+  ],
+  "engagement": {"plan_applied": 21042, "plan_mismatches": 0}
+  "verdict_hint": "CORPUS_INDEPENDENT_BUT_LOAD_BEARING (Nestor column-level regime: low MI, large shuffle cost)"
+}

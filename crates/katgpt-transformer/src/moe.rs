@@ -320,6 +320,16 @@ pub struct MoeForwardScratch {
     pub latent_hidden: Vec<f32>,
     /// Latent MoE output accumulator `[d_moe]` — sum of weighted expert outputs.
     pub latent_output: Vec<f32>,
+    /// Diagnostic forced routing (Issue 969, Nestor App C.6 counterfactuals):
+    /// when `Some`, these expert indices REPLACE the router's top-K selection
+    /// for this call. The gate weights still renormalize this token's OWN
+    /// sigmoid scores over the forced experts (step 5) — the assignment is the
+    /// donor's, the gate values stay the receiver's ("re-routed at unchanged
+    /// load"). Written only by the routing-statistics instrument through the
+    /// model runtime, which clears the slot on every layer call so stale state
+    /// cannot leak across tokens; production paths always see `None` (one
+    /// predictable branch, zero allocation).
+    pub forced_topk: Option<Vec<usize>>,
 }
 
 impl MoeForwardScratch {
@@ -346,6 +356,7 @@ impl MoeForwardScratch {
             expert_output: vec![0.0; max_d_out],
             latent_hidden: vec![0.0; d_moe],
             latent_output: vec![0.0; d_moe],
+            forced_topk: None,
         }
     }
 }
@@ -429,6 +440,17 @@ pub fn moe_forward_token(
         k_r,
         &mut scratch.topk_indices[..k_r],
     );
+
+    // ── 4.5. Diagnostic forced routing (Issue 969) ───────────────────────
+    // The routing-statistics instrument re-routes this token by writing the
+    // slot through the model runtime. Weights recompute in step 5 from this
+    // token's OWN sigmoid scores over the (possibly forced) indices, so the
+    // counterfactual is assignment-only: "re-routed at unchanged load".
+    // Production paths never arm it — one predictable branch, zero alloc.
+    if let Some(forced) = &scratch.forced_topk {
+        debug_assert_eq!(forced.len(), k_r, "forced assignment must cover K_r");
+        scratch.topk_indices.copy_from_slice(forced);
+    }
 
     // ── 5. Renormalize selected experts' RAW scores (NOT biased!) ────────
     //    Per Research 328 §3.3: the bias is selection-only.

@@ -208,6 +208,14 @@ pub struct KimiK3Runtime {
     pub scratch_hidden: Vec<f32>,
     /// Logits output buffer [vocab_size].
     pub logits: Vec<f32>,
+    /// Issue 969 routing-statistics instrument: when armed, row `l` forces
+    /// decoder layer `l`'s top-K assignment for the CURRENT token (`None` rows
+    /// keep the router's own choice; rows past `layers.len()` are ignored).
+    /// Re-armed per token by the diagnostic; both forward loops copy the row
+    /// into the layer's MoE scratch and CLEAR it when disarmed, so stale state
+    /// cannot leak across tokens. `reset()` also disarms. The production
+    /// forward is byte-identical while this stays `None`.
+    pub forced_router_plan: Option<Vec<Option<Vec<usize>>>>,
 }
 
 impl KimiK3Runtime {
@@ -291,6 +299,7 @@ impl KimiK3Runtime {
             hidden: vec![0.0; d],
             scratch_hidden: vec![0.0; d],
             logits: vec![0.0; config.vocab_size],
+            forced_router_plan: None,
         }
     }
 
@@ -303,6 +312,7 @@ impl KimiK3Runtime {
             }
         }
         self.block_state.clear();
+        self.forced_router_plan = None;
     }
 }
 
@@ -378,6 +388,27 @@ pub fn kimi_k3_forward_token_hidden<'a>(
     forward_decoder_to_logits(config, weights, runtime)
 }
 
+/// Issue 969: copy the armed plan row for `layer_idx` into the layer's MoE
+/// scratch. Called by both forward loops immediately before the layer call so
+/// the slot is refreshed (and cleared, when disarmed) on EVERY layer visit —
+/// stale forced state cannot leak across tokens. Dense layers have no MoE
+/// scratch to arm and are skipped.
+fn arm_forced_router(
+    layer_cfg: &KimiDecoderLayerConfig,
+    runtime: &mut KimiK3Runtime,
+    layer_idx: usize,
+) {
+    let forced = runtime
+        .forced_router_plan
+        .as_ref()
+        .and_then(|p| p.get(layer_idx))
+        .cloned()
+        .flatten();
+    if matches!(layer_cfg.ffn, KimiFfnConfig::Moe(_)) {
+        runtime.layers[layer_idx].ffn_scratch.moe.forced_topk = forced;
+    }
+}
+
 /// The shared decoder core: steps 2-5 of the forward pass.
 ///
 /// Reads `runtime.hidden` (set by the caller — either via embedding lookup
@@ -398,6 +429,9 @@ fn forward_decoder_to_logits<'a>(
     // ── Step 2: Decoder layers ────────────────────────────────────────────
     for (layer_idx, layer_w) in weights.layers.iter().enumerate() {
         let layer_cfg = config.layer_config(layer_idx);
+
+        arm_forced_router(&layer_cfg, runtime, layer_idx);
+
         let layer_rt = &mut runtime.layers[layer_idx];
 
         kimi_decoder_layer_forward(
@@ -664,6 +698,9 @@ pub fn kimi_k3_forward_token_traced<'a>(
     // ── Step 2: Decoder layers + per-layer snapshot ───────────────────────
     for (layer_idx, layer_w) in weights.layers.iter().enumerate() {
         let layer_cfg = config.layer_config(layer_idx);
+
+        arm_forced_router(&layer_cfg, runtime, layer_idx);
+
         let layer_rt = &mut runtime.layers[layer_idx];
 
         kimi_decoder_layer_forward(
