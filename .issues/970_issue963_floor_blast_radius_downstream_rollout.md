@@ -55,9 +55,11 @@ The pin follows on the lane's own quiet touch (the 963 anchor semantics, "downst
 - [ ] riir-ai — **post-bout only** (live league lane; override until then; guard run after)
 - [ ] riir-refine — live T2.2 lease to 21:15Z 10-28 + B298 authoring on amo; bump at the next quiet touch
 - [ ] riir-kat / riir-auth / riir-chain / riir-neuron-db / riir-dapps — the migrate/recovery rehearsal plane (refine 175 T7 live); bump together as one quiet group
-- [ ] riir-game-sdk / riir-mmorpg-examples / seal-game-editor — the seal-consumer group (sge is 963 T3's own deferred row)
+- [x] riir-game-sdk — **measured BROKEN → FIXED** (`43ba18d`): fresh `cargo check --workspace` at the 1.98.1 pin failed resolve (`katgpt-transformer`/`katgpt-validator` require rustc 1.99.0 — the ledger's device-verify guess was the wrong floored member; measured ones recorded here); validation at 1.99.0 = ci_feature_guard --quick (L1 + the full L2 clippy posture series) PASS + lib tests 29/29 + ci_wasm32_guard 8/8 combos
+- [ ] riir-mmorpg-examples — NOT MOUNTED on the m3 box (absent from the workspace roots, 2026-10-28): the bump must land from a box that carries the checkout (it still pins 1.98.1 per the matrix above and its graph reaches floored members like sdk's — expect the same resolve failure)
+- [x] seal-game-editor — live 963 T3 claim (zed-m3-t3-toolchain-sync, expires 2026-10-28T23:01Z): not this session's row
 - [ ] riir-rethink / riir-reflex — the amo measurement lanes (032 claim to 12:00Z, 013 T4 running); bump at their quiet touch
-- [ ] riir-dao — passes today (protocol tier only); bump opportunistically with the kat group (its riir-kat dep can grow floored members any time)
+- [x] riir-dao — **landed** (`6f79dec`, the opportunistic row discharged early): passed at 1.98.1 as measured, bumped preventively; validation at 1.99.0 = the repo's own ci_feature_guard ALL LAYERS PASS (direction gate + self-test + clippy ×2 + tests ×2 incl. the dapps contract pins)
 
 ## The floor-hold fallback (declined for now, recorded)
 
@@ -65,7 +67,7 @@ Holding `[workspace.package] rust-version` back at 1.98.1 while the channel stay
 
 ## Acceptance
 
-- [ ] Every repo in the "likely broken" rows either bumped (with its own clippy+test evidence) or carrying a dated reason in this ledger.
+- [x] Every repo in the "likely broken" rows either bumped (with its own clippy+test evidence) or carrying a dated reason in this ledger. — sdk landed `43ba18d`; mmorpg-examples carries the not-mounted reason; sge is the live T3 claim's; rethink/reflex the amo lanes'
 - [ ] The migrate-plane group lands as one commit train, after the 175 rehearsal closes.
 - [ ] riir-ai's bump lands with the next post-bout quiet window, followed by its own guard.
 
