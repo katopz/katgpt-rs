@@ -1,6 +1,6 @@
 # Issue 963 — Toolchain bump 1.98.1 → 1.99.0 (+ rust-src): the anchor pin moves, blaze pilot consumes it
 
-**Status:** OPEN — filed from the Claude verdict on seal-remake Proposal 009; implementation is its own reviewed arc. **Ordering:** arms A/B of the seal-remake pilot run on the CURRENT pin — this bump lands ONLY if arm B (cargo + dev-profile tweaks) does not clear the want-faster bar on its own.
+**Status:** OPEN — filed from the Claude verdict on seal-remake Proposal 009; implementation is its own reviewed arc. **Ordering:** arms A/B of the seal-remake pilot run on the CURRENT pin — this bump lands ONLY if arm B (cargo + dev-profile tweaks) does not clear the want-faster bar on its own. **2026-10-27 UPDATE: the bump is UNCOUPLED from the pilot** — arm B cleared the bar at all three sites (p50 5374/5864/7889 ms ≤ 8000; seal-remake [Bench 043](../../seal-remake/.benchmarks/043_blaze_pilot_arms_ab.md), bar decision `a69881a1`) → no bump, no arm C; this issue stands or falls on its own merits alone.
 **Date:** 2026-10-25
 **Type:** refactor / toolchain (the pin authority lives HERE — Issue 739 lineage)
 **Consumers:** [seal-remake Proposal 009](../../seal-remake/.proposals/009_blaze_dev_loop_build_driver.md) + [Issue 126](../../seal-remake/.issues/126_blaze_dev_loop_pilot.md) (the blaze dev-loop pilot needs exactly 1.99.0 + rust-src; allocated as Issue 122, renumbered 126 before landing) · seal-game-editor + seal-remake follow this anchor
