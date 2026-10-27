@@ -1,0 +1,84 @@
+# Nestor — Nested Sparsity for Scalable Pretraining and Continual Learning (639)
+
+> **Paper:** [arXiv:2610.31818 "Nested Sparsity for Scalable Pretraining and Continual Learning"](https://arxiv.org/abs/2610.31818) — Chu*, Pai*, Ma (HKU / UC Berkeley), 2026-10-22.
+> **Website:** https://ma-lab-berkeley.github.io/Nestor/ · **Code:** https://github.com/Ma-Lab-Berkeley/Nestor
+> **Local clone:** `.raw/Nestor/` @ `9c25256fd358f4f3b0b92da175158db20fc035b3` (shallow; NO LICENSE file found in the repo at this sha — upstream has no declared license; quotes re-verified against the clone; delete after landing).
+> **Date:** distilled 2026-10-27.
+> **Verdict per track (never pooled):**
+> - **Model-based (architecture adoption): DEFER.** From-scratch pretraining only (routing is learned; EMO/SMELT cannot-retrofit precedent, Research 009/073). A real adjudication of the paper's scaling-law multiplier needs 250–400 GPU-h (≥3 scales × ≥3 seeds × 2 arms) — 10–17 days exclusive on the 4090 — for an architecture with NO served consumer (the fleet's league model is dense ternary Bonsai; decision serving is modelless/encoder lanes). Reopen triggers below.
+> - **Model-based (training recipe): FILE one item** — the App C.4 freeze-protocol A/B on the Plan 324 ouro/C14 continual phase (a few GPU-h, existing substrate): riir-train Issue 652.
+> - **Modelless: GAIN (modest).** Routing-statistics diagnostic suite (paper App C.6) applied to kimi_k3's shipped MoE and reflex's `pick_domain` → katgpt-rs Issue 969. R(S) cost law + forgetting design law recorded here.
+
+---
+
+## TL;DR
+
+MoE transformers confine conditional computation to the MLP. Nestor adds a second, **attention-level** routing mechanism: C attention operators ("columns") with separate parameters; a column router sends each token to Kc of C columns **once per M-layer block**; the token's attention is computed **only over the tokens routed to the same columns** (U_c = co-routed token set). Each column carries its OWN E experts + own router — a hierarchical MoE where the level-1 decision selects **both the attention parameters AND the attention context**. Kc ramps 3→8=C with depth (sparse early, global late — the routed analog of interleaved local/global layers). One routing decision yields three coupled sparsities: attention-parameter, attention-map, and expert.
+
+Empirical: 1.13–1.29× compute efficiency vs an iso-sparsity MoE transformer at equal held-out loss (100M→1B active, no downward trend), 3.1–4.1× vs dense. Continual pretraining: adapts to new domains as well as MoE while forgetting ~3% less (dense forgets 21% more); long-context extension 4k→64k preserves the margin at equal tokens and GROWS it at equal FLOPs (R(S) = (S₀+S)/(S₀+ρS), ρ = mean Kc/C → 1/ρ as S→∞). Theory (one-layer linear model): the flat MoE predictor needs C² pattern blocks + CE row spaces; the nested predictor needs C + C; forgetting on old coarse labels in the flat predictor flows ENTIRELY through the shared value map V — which is REDUNDANT (freezing it at identity leaves the function class unchanged) — and scales with the principal-angle overlap of old/new value-map row spaces; the nested predictor has zero forgetting on other coarse labels.
+
+**Routing statistics (App C.6) — the finding this note transfers:** the column assignment carries almost NO corpus information (0.05 bits of 2.32) yet is the most load-bearing decision (shuffling costs 0.40–0.74 nats — 18–28× the Nestor/MoE loss gap); expert-within-column carries the corpus signal (0.28 bits, same as the MoE's expert level); column assignments drift least under domain adaptation (4.7% with frozen routers vs 26% expert-level). NOTE: this is a TWO-level router contrast; a single-level MoE (kimi_k3's flat top-2) can only be classified into one of the two regimes, not split (Issue 969's scope caveat).
+
+## Path 0 inventory (training-target decomposition)
+
+| # | Component | Value type | Modelless coverage / extraction | Verdict |
+|---|---|---|---|---|
+| 1 | Column-routed attention (architecture) | trained arch | none — routing learned from scratch; cannot retrofit a pretrained MoE (Research 009 EMO precedent) | model-based DEFER |
+| 2 | Nested per-column experts | trained arch | none | model-based DEFER |
+| 3 | R(S) cost law + eq-19 attention-FLOP share (×Kc/C; S→∞ ⇒ 1/ρ ceiling) | closed form | YES — one-pass cost instrument from any router's assignment histogram | extracted, record-only (no served routed-attention model to price; `nestor/continual/flops.py` is the reference implementation) |
+| 4 | App C.6 routing-statistics suite (effective-choices entropy, per-level corpus MI, assignment-drift, shuffled/random counterfactuals) | offline diagnostics | YES — runs on frozen weights + a corpus | extracted → **Issue 969** (kimi_k3 real MoE + reflex `pick_domain`) |
+| 5 | Forgetting law (shared-component gradient = the channel; V redundant/freezable; row-space overlap predicts magnitude) | design law + offline predictor | YES — (a) freeze-shared directive for any adaptation run; (b) subspace-overlap (principal-angle) forgetting PREDICTOR computable by SVD over existing frozen snapshots — zero training | law recorded here; A/B filed → **riir-train Issue 652** |
+| 6 | Frozen-router adaptation protocol (App C.4: freeze router weights + selection biases, disable routing noise; routing recomputed from live hidden states) | mask policy (modelless-compatible) | YES for any MoE fine-tune | folded into riir-train Issue 652 |
+| 7 | Depth-ramped Kc schedule (sparse early → global late; gradual beats constant AND beats two-level at equal layers/FLOPs/params — Table 2) | schedule/design finding | loose analog only: coarse-filter-early / widen-late staging in retrieval (riir-refine fan-out). Metaphor, not mechanism | recorded (§Fusion) |
+| 8 | Attention residual with per-column streams + deviations-at-output | trained-arch detail | `katgpt-transformer::attn_res` already ships the Kimi attention-residual Nestor builds on; the column-stream variant needs training | recorded |
+
+## Per-track verdicts
+
+### Track A — model-based architecture: DEFER (with reopen triggers)
+
+Adoption = from-scratch pretraining of a Nestor transformer (column router, gather/scatter per-column attention, nested expert pools, column residual streams). Panel pricing (model-based advocate, disk-grounded):
+
+- **Single cell** (100M active, 5B tokens, 2 arms): ~0.02 PFLOP/s-days ≈ **16–24 GPU-h** on the 4090 — one seed, one point. 100M-scale seed noise (±1–3% loss) vs a 1.13–1.29× effect (3–12% loss delta): can refute gross regressions, cannot confirm the multiplier.
+- **Real adjudication** (≥3 scales × ≥3 seeds × 2 arms): **250–400 GPU-h = 10–17 days exclusive**, crowding out Plan 469 Phase 0, league re-cells, and trainer work. Our corpora also sit 1–2 orders below the paper's 50B-token fits; scaling multipliers do not transfer down reliably.
+- **K3-Nestor variant is a rider, not an adjudication**: kimi_k3's hybrid MLA/KDA layers are not the paper's full-attention backbone; a hybrid tests our stack with a Nestor rider, not the paper's claim. If ever run: Plan 452-pattern arch screen — G1 held-out loss ≤ matched-MoE at matched FLOPs (multi-seed before any multiplier claim); G2 routed-path throughput ≥ baseline; G3 continual-phase domain delta < unfrozen-router baseline; G4 zero-alloc routed gather. Expected honest outcome at smoke scale: G1 inside the noise floor.
+
+**Reopen triggers:** (a) Plan 469 Phase 0 starts any from-scratch K3 run ≥5B tokens → arm the Nestor-column rider at smoke scale; (b) a production MoE LLM lane enters the stack (league model gains routing); (c) the co-routed gather-attention kernel becomes a `kernel_opt` distill target (refine Batch lane, not training).
+
+### Track B — model-based training recipe: FILE (Issue 652)
+
+The App C.4 freeze protocol (freeze `router_weight` + `e_score_correction_bias` — the bias is selection-only, so it cannot drift silently) maps onto Plan 324's C14 continual phase as TWO separable arms: B1 = the paper's protocol (router + bias); B2 = B1 + the shared expert (our extension — the paper's redundancy argument covers Nestor's shared value map, NOT a DeepSeek-style shared expert, which is real adaptation capacity in a standard MoE). A few GPU-h. **Honest caveats:** the theory is proven for Nestor's nested columns, not standard MoE; freeze-router-on-adaptation is also MoE folklore (Li et al. 2025, cited in-paper); the K3 trainer has no router input noise, so the protocol's noise-off clause is a no-op here. This tests whether folklore + redundancy hold at 0.4B on C14 — a default-change candidate, not a confirmation of the paper. Dense lanes (`quest_grammar`, `edge_lora`) have no routing to freeze — zero applicability.
+
+### Track C — modelless: GAIN (Issue 969 + this note)
+
+**E1 (→ katgpt-rs Issue 969): routing-statistics diagnostic suite.** Offline, frozen-weights, zero-training: (a) effective-choices entropy `H(p)/E` per router family/layer; (b) per-level corpus mutual information (level-1 vs level-2 assignment vs corpus label); (c) assignment-drift % under a perturbation/adaptation; (d) **shuffled/random counterfactuals** — re-route each token with another token's (or a random) assignment at equal load, measure the loss/accuracy delta. Interpretation rule: a near-zero shuffle delta is a FINDING ("router not load-bearing") on a measured subject, and an INSTRUMENT FAILURE only on a known load-bearing control — Issue 969 uses reflex `pick_domain` seated suites as that control. Two consumers:
+- **kimi_k3 (shipped forward + real trained checkpoint on disk, `data/kimi-k3-0.40b/model.safetensors`):** K3 routes at ONE level (8 routed top-2 + 1 always-on shared expert), so only the single-level question is answerable — which regime does K3's routed level live in? Standing caveat: the owner classifies K3 0.4B as a test arch — a verdict row describes THAT router, never Nestor or MoE in general.
+- **reflex `pick_domain` (corpus router):** shuffle the routed domain per query, measure top-1 drop → quantifies how load-bearing domain routing is; the MI-per-level decomposition applies HERE (`pick_domain` → per-span is two levels). This half is the healer-adjacent fusion (priority-ladder surface #2) and the liveness control.
+GOAT shape: G1 determinism (seeded corpus, byte-stable stats) + the counterfactual-liveness arm ON THE CONTROL; G2/G4 per the hot-path rules. Nearest in-repo cousins and why they don't cover it: `benches/bench_015` perturbs router WEIGHTS (sensitivity), not assignment STRUCTURE (load-bearingness); Research 059 D1 measures adjacent-token slot overlap (temporal locality), not corpus dependence. Signal-diff recorded per §3.6.
+
+**E2 (record-only): R(S) + eq-19 cost law.** `R(S) = (S₀+S)/(S₀+ρS)`, ρ = mean active fraction; the routed quadratic attention term is ×Kc/C of dense; R→1/ρ is the long-context advantage ceiling. One-pass from an assignment histogram. No consumer today (nothing routed is served at long context); revive as a riir-infer cost module the day a routed/mixture lane enters the league ladder.
+
+**E3 (recorded law): the forgetting design law.** Forgetting under continual adaptation flows through SHARED components (the value map in the paper's model; any always-on shared weight generally), scales with row-space (subspace) overlap of old/new adaptation directions, and the shared map is redundant — freezable at zero function-class cost. Corollaries for this stack: (a) validates the freeze/thaw + deterministic-LoRA-overlay doctrine from the theory side (adaptation capacity should live in partitioned weights, never shared ones); (b) an offline forgetting PREDICTOR: principal-angle overlap between frozen snapshots' relevant subspaces (SVD over weights we already store in `MerkleFrozenEnvelope`-class stores) — rank-able against measured forgetting across existing checkpoint pairs; (c) the coarse-stability canary: if level-1 assignments move a lot under adaptation, the adaptation is violating the structural assumption. Cross-refs: ASFT (anchored SFT, Plan 090), Research 103 (state-distribution view: MMD drift ≠ forgetting), BAKE (riir-train R093, precision-weighted continual LoRA — the Bayesian cousin).
+
+## Fusion
+
+- **639 × 009 (EMO):** EMO constrains routing per DOCUMENT to get extractable domain experts; Nestor shows the level-1 routing decision that matters most carries ~no corpus information — domain modularity lives at the level-2 (expert) assignment in BOTH papers' statistics. Fusion shape: a two-level router whose coarse level is stabilized (frozen/regularized) while the fine level carries adaptation = EMO's extractability + Nestor's forgetting immunity. Novelty TBD — no shipped two-level trained router exists here to fuse onto.
+- **639 × 969-suite × reflex:** the shuffle-counterfactual as a standard "is this router load-bearing?" gate for every router we ship (kimi_k3, `pick_domain`, scenelab strategy routing). Cheap, reusable, honest.
+- **Game-side echo (record, no plan):** the cortical-column reading (blocks = lobes, columns = cortical columns, Hawkins) resonates with per-NPC zone-gated cognition (`latent_functor::zone_gating`), but our cognition substrate routes CONTENT (gates), not attention PARAMETERS+CONTEXT — the mechanism does not transfer without a transformer cognition substrate. Metaphor only.
+
+## Closest cousins (read, not just matched)
+
+| Cousin | Relationship | Delta |
+|---|---|---|
+| Research 009 EMO | Training-time routing constraint for extractable MoE modularity; verdict "cannot retrofit" | Nestor is a second member of the same from-scratch-only class, with a forgetting theorem EMO lacks. 009's "MoE architecture: None" barrier row is now stale (kimi_k3 ships a real MoE; the cannot-retrofit conclusion survives) |
+| Research 073 SMELT PASS-Redirect | Looped-MoE scaling laws → riir-train, out of scope | Same verdict pattern; Nestor adds the continual-learning axis SMELT doesn't touch |
+| TokenGate (riir-infer R013 / Plan 622 / riir-train Plan 469) | Trained token-gated attention = attention-MAP sparsity with a learned gate | Nestor = parameter+map sparsity in ONE per-block decision, plus nested experts; TokenGate selects key tokens per query, no parameter routing |
+| SwitchHead / MoH / Piekos MoSA / ModuleFormer (paper's own related work) | Attention-parameter MoE family | Nestor's distinguishing claim: one decision selects parameters AND context, held M layers, shared with the expert hierarchy — the NESTING is the ablated win (Table 4: neither part alone beats the MoE) |
+| dash_attn (R068) / Lighthouse (R022) | Sparse attention MAP methods | All tokens share attention parameters there; approximating full attention. Nestor's columns are not map approximations — they are routed modules |
+| bench_015 perturb_moe | Router WEIGHT sensitivity | Assignment-structure statistics (C.6) are a different instrument (Issue 969 owns the delta) |
+| Research 103 / ASFT / BAKE | Forgetting measurement + mitigation | Nestor contributes the mechanistic CHANNEL (shared-component gradient) + a freezable-redundancy argument + an offline overlap predictor |
+
+## Provenance
+
+- Clone pinned `9c25256fd358f4f3b0b92da175158db20fc035b3` (shallow, 2026-10-27). Upstream repo declares NO license at this sha — reference-only reading, nothing vendored, `.raw/` deleted after landing.
+- K3 MoE config verified on disk by the model-based panel pass: `MoeConfig::kimi_k3_0_40b()` = 8 routed experts, top-2, 1 shared (always-on, never routed — so K3 is a SINGLE-level router), sigmoid router, latent-MoE routed dim 512. Real checkpoint on disk: `katgpt-rs/data/kimi-k3-0.40b/model.safetensors` (1.5 GB). No router input noise exists in the K3 trainer (verified by grep — the paper's noise-off clause is a no-op on this substrate). R447 is the K3 architecture distillation note (KDA/AttnRes/LatentMoE), not a serving lane — "served" language from earlier drafts of this note was unverified and has been corrected.
+- Panel: No-GD advocate (session 289db862) + model-based advocate (session 1f9d57ea) + headline/component web searches (no replications/critiques within a month of publication; published landscape = the paper's own related-work section).

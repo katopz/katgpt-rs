@@ -146,6 +146,8 @@ The key difference: EMO's "experts" are neural network weight slices. Our "exper
 | LoRA selection | Not implemented | `Option<PathBuf>` in registry | Actual adapter loading |
 | MoE architecture | None | None | Only if models scale to 1B+ params |
 
+> **2026-10-27 amendment (Research 639):** the "MoE architecture: None" cell above is now STALE — katgpt-rs ships a real MoE forward + trained checkpoint on disk since Proposal 032/Plan 318 (`kimi_k3`: 8 routed top-2 + 1 shared, sigmoid router + additive score-correction bias; `data/kimi-k3-0.40b/model.safetensors`). The core verdict SURVIVES unchanged: EMO's document-level constraint and every nested/structured-routing architecture (incl. Nestor, arXiv:2610.31818 → Research 639) remain TRAINING-TIME — routing cannot be retrofitted onto a pretrained checkpoint, so adoption is still gated on a from-scratch pretraining decision, not on substrate availability.
+
 ---
 
 ## Honest Caveats
