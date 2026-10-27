@@ -1,8 +1,6 @@
 # Issue 963 — Toolchain bump 1.98.1 → 1.99.0 (+ rust-src): the anchor pin moves, blaze pilot consumes it
 
-**Status:** ARC LANDED 2026-10-28 at the anchor (katgpt-rs) — T1/T2/T4/T5 done, evidence in HISTORY.md (full gate green at 1.99.0, 0 new lints). **T3 (seal-remake + seal-game-editor downstream pins) DEFERRED**: both repos had a live sibling session mid-flight at claim time (seal-remake writes 02:41, sge 01:51–02:28, 2026-10-28) — a toolchain flip under a running guard would split its layers across two rustc versions and corrupt the verdict. The pins follow on their next quiet touch (anchor semantics: downstream follows, never the reverse). Re-open T3 by re-running this arc's last step: bump both `rust-toolchain.toml` → 1.99.0 (+ rust-src optional there — only blaze needs it, and the pilot is decoupled) + each repo's own guard run.
-**Claimed:** zed-m3-t3-toolchain-sync, 1793132071, expires 2026-10-28T23:01:11Z
-T3 re-open claim: both repos quiet (no cargo procs, HEAD==origin) at re-claim time.
+**Status:** ARC COMPLETE 2026-10-28 — T1/T2/T4/T5 landed at the anchor (`8d54ddb96`); **T3 LANDED same day**: seal-remake `657e1f45` + seal-game-editor `d9f15a4db` — both pins at 1.99.0, both own guards ALL LAYERS GREEN. The seal-remake guard run surfaced four PRE-EXISTING reds (none 1.99-specific; the first full pass since the p043/D21 waves): the mesh_visuals `dep:seal-scene` E0433 (the ungated camera fns' posture class, root-caused to the gate feature), four test binaries' `PlannedEntry.warp_role` initializers, the layer-10 ceiling raise 5000→5200 (retroactive, red on develop since 10-26), and the 1.99 `fetch_update`→`try_update` deprecation rename. seal-game-editor passed first run. **Lease released:** katgpt-rs-963-bump (idle loop), claimed 1793132071 — T3 re-open arc complete
 **Lease released:** katgpt-rs-963-bump (idle loop), claimed 1793145600 — the anchor half landed `8d54ddb96`; T3 deferred for sibling-session safety, not abandoned
 **Date:** 2026-10-25
 **Type:** refactor / toolchain (the pin authority lives HERE — Issue 739 lineage)
@@ -36,9 +34,11 @@ the shape: raise in its own reviewed commit and fix the new lints there.
       INCONCLUSIVE discharged by a fingerprint wipe): 347 units, 0 warnings, 0 unbuildable;
       scoped core 2167/0. **No new lint fires at 1.99.0 on this tree — the `-D` list is
       unchanged** (zero residuals to add; zero unknown-lint errors, so nothing to drop).
-- [ ] T3 Downstream pin sync in the same arc: seal-remake + seal-game-editor
-      `rust-toolchain.toml` follow the anchor (each repo's own guard run). — DEFERRED (live
-      sibling sessions in both repos at claim time; see Status for the re-open recipe).
+- [x] T3 Downstream pin sync in the same arc: seal-remake + seal-game-editor
+      `rust-toolchain.toml` follow the anchor (each repo's own guard run). — LANDED
+      2026-10-28: seal-remake `657e1f45` (guard 163 ✓ rows, ALL LAYERS GREEN — the run
+      also fixed four pre-existing reds, see Status) + seal-game-editor `d9f15a4db`
+      (guard PASSED first run).
 - [x] T4 Document the revert path (pin back to 1.98.1) — a bad 1.99.0 surface is a one-commit
       rollback, not an investigation. — In HISTORY.md: `git revert` of the bump commit; pin +
       floor move together, one commit.
