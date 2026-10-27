@@ -13,6 +13,7 @@ resolve it — trace with `--all-features` when picking the patch up).
 landed same day at `5e216a761`.
 **Lease closed:** zed-amo-refine-blockpatch (claimed 1793079375) — the
 riir-refine slice landed same day at riir-refine `e07980c4`.
+**Claimed:** zed-amo-blockpatch-residue, 1793081415, expires 2026-11-03T06:10:15Z — the riir-instinct + riir-reflex + riir-rethink slices (the three clean, uncontended trees; riir-ai/riir-infer deferred — both dirty with mid-flight sibling lanes; riir-train stays under the routing restriction, its lane's to land).
 
 ## The finding (why the bump lane cannot exist)
 
