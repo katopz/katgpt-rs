@@ -557,10 +557,31 @@ def scan_file(path: Path, masked: str, attrs: list, bin_file: bool) -> FileScan:
                 hi = mid
         return lo + 1
 
+    def closed_group_between(a_end: int, pos: int) -> bool:
+        """The attribute sits inside a `(...)` group that closes before pos.
+
+        A cfg on a fn PARAMETER (`fn f(#[cfg(wasm32)] s: S) {`) or on a
+        tuple/call argument gates THAT element, never the block after the
+        group. Measured: seal-remake viewer.rs `poll_and_apply`, one wasm32
+        parameter attr, read the whole ~1050-line system body as wasm32-only
+        and minted 5 false findings.
+        """
+        d = 0
+        for ch in masked[a_end:pos]:
+            if ch == "(":
+                d += 1
+            elif ch == ")":
+                d -= 1
+                if d < 0:
+                    return True
+        return False
+
     def pending_attr_ctx(pos: int, since: int) -> Ctx:
         ctx = Ctx()
         for a in outer:
             if a.end <= since or a.end > pos:
+                continue
+            if closed_group_between(a.end, pos):
                 continue
             ctx = ctx.and_(pred_atoms(a.preds))
             if ctx.unmodelled:
@@ -568,7 +589,8 @@ def scan_file(path: Path, masked: str, attrs: list, bin_file: bool) -> FileScan:
         return ctx
 
     def pending_allow(pos: int, since: int) -> bool:
-        return any("dead_code" in a.raw for a in outer if since < a.end <= pos)
+        return any("dead_code" in a.raw for a in outer
+                   if since < a.end <= pos and not closed_group_between(a.end, pos))
 
     def bare_pub_before(idx: int) -> bool:
         """A bare `pub` (not `pub(...)`) among this item's qualifiers."""
@@ -1184,6 +1206,19 @@ const WIDE: usize = 16;
 #[cfg(feature = "simd")]
 fn simd() -> usize { WIDE }
 '''}, set()),
+
+    ("a cfg on a fn PARAMETER does not gate the body", {
+        "src/lib.rs": '''
+const STEP: usize = 16;
+fn system(#[cfg(target_arch = "wasm32")] server: u8, n: usize) -> usize { n * STEP }
+'''}, set()),
+
+    ("an item cfg still gates the body past a parameter list", {
+        "src/lib.rs": '''
+const STEP: usize = 16;
+#[cfg(target_arch = "wasm32")]
+fn system(n: usize) -> usize { n * STEP }
+'''}, {"STEP"}),
 
     ("bare `unix` is target_family and DOES narrow", {
         "src/lib.rs": '''
