@@ -10,6 +10,9 @@ the other six pull it only under feature postures (their default
 `--all-features` when picking the patch up).
 **Lease closed:** zed-amo-blockfix (claimed 1793121000) — the claimed work
 landed same day at `5e216a761`.
+**Claimed:** zed-amo-refine-blockpatch, 1793079375, expires 2026-10-29T05:45Z
+(residue slice: the riir-refine lock only — same vendored fork +
+`[patch.crates-io]` row; the other six locks stay unclaimed)
 
 ## The finding (why the bump lane cannot exist)
 
