@@ -57,3 +57,15 @@ riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs fwht_forward_co
 riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs fwht_forward_copy_f32 src_handle 1
 riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs fwht_rotate_forward_f32 x_handle 1
 riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs fwht_rotate_inverse_f32 x_handle 1
+#
+# 2026-10-27 — the Issue 1113 fused kernels (riir-infer `dd48839`), provenance
+# read: gdn_permute_rotate_f32 binds `self.recurrent_out` -> `self.permute_tmp`
+# (both created from `vec![0.0; n_v_heads * head_dim]`, bound at
+# `v_dim = n_v_heads * head_dim`); swiglu_rotate_fused_f32 binds
+# `self.ffn_gate_up` (`vec![0.0; 2 * mlp]`, bound `2 * n`) -> `self.ffn_hidden`
+# (`vec![0.0; mlp]`, bound `n`). Every buffer is EXACT-sized to its live range
+# today; persistent struct fields, so eyed — a capacity-sized re-alloc reds.
+riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs gdn_permute_rotate_f32 out_handle 1
+riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs gdn_permute_rotate_f32 src_handle 1
+riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs swiglu_rotate_fused_f32 gate_up_handle 1
+riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs swiglu_rotate_fused_f32 out_handle 1
