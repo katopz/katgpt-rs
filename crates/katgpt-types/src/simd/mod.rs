@@ -112,7 +112,11 @@ pub use activations::{
     logsumexp_parts, simd_exp_inplace, simd_exp_sum_inplace, simd_reciprocal_inplace,
     simd_sigmoid_inplace, simd_sigmoid_tanh_clamp_inplace, simd_tanh_inplace,
 };
-pub use argmax::simd_argmax_f32;
+pub use argmax::{
+    BLOCK_MAX_SUB_WIDTH, BLOCK_MAX_WIDTH, simd_argmax_blocked_f32, simd_argmax_f32,
+    simd_argmax_lanewise_f32, simd_block_max_256_into, simd_block_max_256_sub64,
+    simd_block_max_256_sub64_into, simd_first_ge_f32,
+};
 pub use dot::{
     dot_f32_ordered, simd_dot_f16_f16, simd_dot_f16_f32, simd_dot_f32, simd_fma_row,
     simd_matmul_f16_f16_rows, simd_matmul_f16_f16_rows_parallel, simd_matmul_f16_f32_rows,

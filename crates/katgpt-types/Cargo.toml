@@ -27,7 +27,14 @@ rayon = "1.10"  # Parallel matmul variants in simd::dot and simd::ternary (alway
 # lib.rs — mirroring the pre-promotion behavior where the whole `types`
 # module compiled inside katgpt-core and these flags only controlled the
 # re-export visibility.
-default = []
+default = ["argmax_blocked"]
+
+# Issue 967 — blocked two-level NEON argmax in `simd_argmax_f32`'s aarch64
+# dispatch (8 independent max accumulators per 256-float block + one-block
+# first-index rescan; NaN slices fall back to the lane-wise kernel).
+# GOAT PASS 2026-10-27 → DEFAULT (G1 bit-identity battery; G2 blocked/lane-wise
+# 0.19–0.44 at n ≥ 512 on every max-position shape; Bench 958).
+argmax_blocked = []
 
 # DomainLatent embedding type (Plan 038).
 domain_latent = []
@@ -196,6 +203,12 @@ required-features = ["ternary_trit_pack"]
 [[test]]
 name = "bench_864_bitcos_goat"
 required-features = ["bitcos", "ternary_trit_pack"]
+
+# Issue 967 — blocked vs lane-wise NEON argmax: bit-identity battery + the
+# interleaved A/B ratio (--release). Both kernels are always callable, so no
+# feature is required.
+[[test]]
+name = "bench_967_argmax_blocked_ab"
 
 # Issue 583 A/B: group scale hoisted vs folded in the bit-plane NEON kernel.
 # Needs plasma_path only because the harness shares bench_578's feature shape.

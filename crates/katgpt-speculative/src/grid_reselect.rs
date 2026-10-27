@@ -59,7 +59,10 @@
 
 use crate::bigram_markov::BigramMarkovTable;
 use crate::pair_select::pick_pair_scored;
-use katgpt_types::simd::simd_max_f32;
+use katgpt_types::simd::{
+    BLOCK_MAX_SUB_WIDTH, BLOCK_MAX_WIDTH, simd_block_max_256_sub64, simd_block_max_256_sub64_into,
+    simd_first_ge_f32, simd_max_f32,
+};
 
 /// Block width for the full-pool skip in [`topk_pools_into`]: once the pool
 /// is full, a block is admitted to the per-element path only when its SIMD
@@ -67,7 +70,7 @@ use katgpt_types::simd::simd_max_f32;
 /// measured 2.7–3.0× the stack's SIMD argmax). 256 f32 = 1 KiB: long enough
 /// to amortise the reduction call, short enough that one hot token does not
 /// drag a large span through the scalar path.
-const SKIP_BLOCK: usize = 256;
+const SKIP_BLOCK: usize = BLOCK_MAX_WIDTH;
 
 /// Second-level width inside an admitted [`SKIP_BLOCK`] (8 NEON / 4 AVX2
 /// vectors): the scalar insert path only ever sees the 32-wide spans whose
@@ -96,10 +99,10 @@ pub const DEFAULT_TOP_K: usize = 16;
 /// no transform — so downstream comparisons are comparisons of the
 /// drafter's own numbers.
 ///
-/// Zero-alloc: bounded insertion over a caller-owned buffer. Once the pool is
-/// full, whole [`SKIP_BLOCK`]-wide blocks whose SIMD max does not beat the
-/// pool tail are skipped — exact, not approximate (the pool is bit-identical
-/// to the per-element scan; see the in-loop note for the tie + NaN argument).
+/// Zero-alloc: bounded insertion over a caller-owned buffer. Whole
+/// [`SKIP_BLOCK`]-wide blocks that cannot reach the pool are skipped — exact,
+/// not approximate (the pool is bit-identical to the per-element scan; see
+/// [`scan_row_floor`] and [`scan_row_tail`] for the tie + NaN arguments).
 pub fn topk_pools_into(
     marginals_flat: &[f32],
     steps: usize,
@@ -114,41 +117,153 @@ pub fn topk_pools_into(
     let max_steps = steps
         .min(marginals_flat.len() / vocab_size)
         .min(pools.len() / slot_len);
+    // The floor path needs a NaN-PROPAGATING block max to route NaN rows to
+    // the tail path (the NEON kernel is one; x86's `max_ps` is not).
+    let floor_path = cfg!(target_arch = "aarch64") && slot_len <= FLOOR_MAX_POOL;
     for p in 0..max_steps {
         let margs = &marginals_flat[p * vocab_size..p * vocab_size + vocab_size];
         let pool = &mut pools[p * slot_len..p * slot_len + slot_len];
-        let mut len = 0usize;
-        let mut base = 0usize;
-        while base < vocab_size {
-            let end = (base + SKIP_BLOCK).min(vocab_size);
-            let block = &margs[base..end];
-            // Full pool: a later index can never win a tie against the tail
-            // (every pooled token has a SMALLER index than `j`), so the entry
-            // rule reduces to `s > tail` and a whole block whose max is
-            // `<= tail` cannot change the pool. `<=` (not `!(>)`) keeps a
-            // NaN-propagating max (NEON `vmaxq`) on the exact per-element
-            // path; a NaN-ignoring max is safe too (NaN never enters).
-            if len == slot_len && simd_max_f32(block) <= pool[slot_len - 1].1 {
-                base = end;
-                continue;
-            }
-            // Admitted: re-check each SKIP_SUB-wide sub-block against the
-            // CURRENT tail (it rises as the block inserts), so one hot token
-            // pulls 32 elements through the scalar path, not 256.
-            for (si, sub) in block.chunks(SKIP_SUB).enumerate() {
-                if len == slot_len && simd_max_f32(sub) <= pool[slot_len - 1].1 {
-                    continue;
-                }
-                let sub_base = base + si * SKIP_SUB;
-                for (off, &s) in sub.iter().enumerate() {
-                    len = insert_candidate(pool, len, slot_len, (sub_base + off) as u32, s);
-                }
-            }
-            base = end;
+        if !(floor_path && scan_row_floor(margs, pool)) {
+            scan_row_tail(margs, pool);
         }
-        debug_assert_eq!(len, slot_len, "pool under-filled at slot {p}");
     }
     max_steps
+}
+
+/// Floor-path capacity: 1024 blocks × [`SKIP_BLOCK`] covers vocabs to
+/// 262 144 (20 KiB of stack for block + sub-block maxima); wider rows take
+/// the tail path.
+const FLOOR_MAX_BLOCKS: usize = 1024;
+
+/// Sub-blocks per [`SKIP_BLOCK`] (64 floats each).
+const SUBS: usize = SKIP_BLOCK / BLOCK_MAX_SUB_WIDTH;
+
+/// Widest pool [`scan_row_floor`] ranks (a stack top-list).
+const FLOOR_MAX_POOL: usize = 64;
+
+/// Block-floor row scan (Issue 967 follow-up). Pass 1 computes every block's
+/// max + its 64-wide sub-block maxima and, fused into the same loop, ranks
+/// the block maxima: τ = the `slot_len`-th largest. τ lower-bounds the final
+/// pool — each block max is a distinct element, so at least `slot_len`
+/// elements are `>= τ` — so an element `< τ` is never in the final pool, and
+/// the pool over the offered SUPERSET of the top-`slot_len` is the same pool
+/// (and fills). Once full, an element `<= tail` never enters (every pooled
+/// token has a smaller index, so a tie loses). Pass 2 rescans only the
+/// sub-blocks clearing both bounds.
+///
+/// Returns `false` without a usable pool when the row is out of range (more
+/// than [`FLOOR_MAX_BLOCKS`] blocks) or a block max is NaN — a NaN appended
+/// while the pool fills is never evicted, so dropping its block would change
+/// the pool; the caller re-runs the row on the tail path. A whole-row floor
+/// measured ~25% faster than a per-32-block running floor at a 32 000 vocab:
+/// the looser prefix floor admits more candidate blocks than L1 residency
+/// saves.
+fn scan_row_floor(margs: &[f32], pool: &mut [(u32, f32)]) -> bool {
+    let slot_len = pool.len();
+    let nblk = margs.len().div_ceil(SKIP_BLOCK);
+    if nblk > FLOOR_MAX_BLOCKS {
+        return false;
+    }
+    let mut bmax = [0f32; FLOOR_MAX_BLOCKS];
+    let mut smax = [0f32; FLOOR_MAX_BLOCKS * SUBS];
+    // top[..slot_len] descending; the last entry is the running τ.
+    let mut top = [f32::NEG_INFINITY; FLOOR_MAX_POOL];
+    let (full, rest) = margs.as_chunks::<SKIP_BLOCK>();
+    for (b, block) in full.iter().enumerate() {
+        let (m, s4) = simd_block_max_256_sub64(block);
+        bmax[b] = m;
+        smax[b * SUBS..b * SUBS + SUBS].copy_from_slice(&s4);
+        if m > top[slot_len - 1] {
+            let mut i = slot_len - 1;
+            while i > 0 && top[i - 1] < m {
+                top[i] = top[i - 1];
+                i -= 1;
+            }
+            top[i] = m;
+        } else if m.is_nan() {
+            return false;
+        }
+    }
+    if !rest.is_empty() {
+        let b = full.len();
+        simd_block_max_256_sub64_into(
+            rest,
+            &mut bmax[b..b + 1],
+            &mut smax[b * SUBS..b * SUBS + SUBS],
+        );
+        let m = bmax[b];
+        if m.is_nan() {
+            return false;
+        }
+        if m > top[slot_len - 1] {
+            let mut i = slot_len - 1;
+            while i > 0 && top[i - 1] < m {
+                top[i] = top[i - 1];
+                i -= 1;
+            }
+            top[i] = m;
+        }
+    }
+    let tau = top[slot_len - 1];
+    let mut len = 0usize;
+    for (b, &m) in bmax[..nblk].iter().enumerate() {
+        if m < tau || (len == slot_len && m <= pool[slot_len - 1].1) {
+            continue;
+        }
+        let base = b * SKIP_BLOCK;
+        let block = &margs[base..(base + SKIP_BLOCK).min(margs.len())];
+        for (q, sub) in block.chunks(BLOCK_MAX_SUB_WIDTH).enumerate() {
+            let mut thr = match len == slot_len {
+                true => pool[slot_len - 1].1.max(tau),
+                false => tau,
+            };
+            if smax[b * SUBS + q] < thr {
+                continue;
+            }
+            let sub_base = base + q * BLOCK_MAX_SUB_WIDTH;
+            let mut i = 0usize;
+            while let Some(off) = simd_first_ge_f32(&sub[i..], thr) {
+                let j = i + off;
+                len = insert_candidate(pool, len, slot_len, (sub_base + j) as u32, sub[j]);
+                if len == slot_len {
+                    thr = pool[slot_len - 1].1.max(tau);
+                }
+                i = j + 1;
+            }
+        }
+    }
+    debug_assert_eq!(len, slot_len, "floor path under-filled the pool");
+    true
+}
+
+/// Tail-skip row scan (the Issue-966 G2 path; non-aarch64, NaN rows, wide
+/// pools). Once the pool is full, a later index can never win a tie against
+/// the tail (every pooled token has a SMALLER index than `j`), so the entry
+/// rule reduces to `s > tail` and a whole block whose max is `<= tail` cannot
+/// change the pool. `<=` (not `!(>)`) keeps a NaN-propagating max (NEON
+/// `vmaxq`) on the exact per-element path; a NaN-ignoring max is safe too
+/// (NaN never enters a full pool).
+fn scan_row_tail(margs: &[f32], pool: &mut [(u32, f32)]) {
+    let slot_len = pool.len();
+    let mut len = 0usize;
+    for (bi, block) in margs.chunks(SKIP_BLOCK).enumerate() {
+        if len == slot_len && simd_max_f32(block) <= pool[slot_len - 1].1 {
+            continue;
+        }
+        // Admitted: re-check each SKIP_SUB-wide sub-block against the
+        // CURRENT tail (it rises as the block inserts), so one hot token
+        // pulls 32 elements through the scalar path, not 256.
+        for (si, sub) in block.chunks(SKIP_SUB).enumerate() {
+            if len == slot_len && simd_max_f32(sub) <= pool[slot_len - 1].1 {
+                continue;
+            }
+            let sub_base = bi * SKIP_BLOCK + si * SKIP_SUB;
+            for (off, &s) in sub.iter().enumerate() {
+                len = insert_candidate(pool, len, slot_len, (sub_base + off) as u32, s);
+            }
+        }
+    }
+    debug_assert_eq!(len, slot_len, "tail path under-filled the pool");
 }
 
 /// One candidate into a `(score desc, token asc)`-sorted pool holding `len`
@@ -276,12 +391,17 @@ mod tests {
     #[test]
     fn block_skip_is_bit_identical_to_the_per_element_scan() {
         let mut rng = fastrand::Rng::with_seed(9662);
-        // vocab not a multiple of SKIP_BLOCK; k > vocab; k == vocab.
+        // vocab not a multiple of SKIP_BLOCK; k > vocab; k == vocab; then
+        // rows with many more blocks than k (the block floor τ binds — a
+        // strong one at k=4), and one past FLOOR_MAX_BLOCKS (tail fallback).
         for &(steps, vocab, k) in &[
             (4usize, 1000usize, 16usize),
             (3, 777, 8),
             (2, 10, 16),
             (2, 16, 16),
+            (3, 32_077, 16),
+            (2, 8192, 4),
+            (1, FLOOR_MAX_BLOCKS * SKIP_BLOCK + 65, 16),
         ] {
             let shapes: [fn(&mut fastrand::Rng, usize) -> f32; 4] = [
                 |r, _| r.f32(),

@@ -84,6 +84,7 @@ struct Row {
     max: f64,
     a_us: f64,
     b_us: f64,
+    pool_us: f64,
 }
 
 fn run_vocab(vocab: usize) -> Row {
@@ -145,6 +146,14 @@ fn run_vocab(vocab: usize) -> Row {
         sink_b = sink_b.wrapping_add(checksum(black_box(&out_b)));
         t0.elapsed()
     });
+    // Reported decomposition: the pool extraction alone (the walk is the
+    // remainder of b_us).
+    let pool_us = best_of_us(3, 15, || {
+        let t0 = Instant::now();
+        let n = topk_pools_into(black_box(&m), STEPS, vocab, K, &mut pools);
+        sink_b = sink_b.wrapping_add(n as u64 + u64::from(black_box(&pools)[0].0));
+        t0.elapsed()
+    });
     assert!(
         sink_a != 0 && sink_b != 0,
         "a sink stayed zero — an arm's output was never produced"
@@ -156,6 +165,7 @@ fn run_vocab(vocab: usize) -> Row {
         max: ab.max(),
         a_us,
         b_us,
+        pool_us,
     }
 }
 
@@ -166,11 +176,13 @@ fn g2_reselect_overhead_vs_argmax() {
         return;
     }
     let rows: Vec<Row> = [32_000usize, 151_936].into_iter().map(run_vocab).collect();
-    eprintln!("\n966 G2 | vocab | median B/A | [min, max] | argmax µs | reselect µs | bar");
+    eprintln!(
+        "\n966 G2 | vocab | median B/A | [min, max] | argmax µs | reselect µs | (pools µs) | bar"
+    );
     for r in &rows {
         eprintln!(
-            "966 G2 | {:>7} | {:.3} | [{:.3}, {:.3}] | {:.1} | {:.1} | ≤ {G2_MAX_RATIO}",
-            r.vocab, r.median, r.min, r.max, r.a_us, r.b_us
+            "966 G2 | {:>7} | {:.3} | [{:.3}, {:.3}] | {:.1} | {:.1} | ({:.1}) | ≤ {G2_MAX_RATIO}",
+            r.vocab, r.median, r.min, r.max, r.a_us, r.b_us, r.pool_us
         );
     }
     for r in &rows {
