@@ -11,7 +11,7 @@ this Rust workspace from Cloudflare's `security-audit-skill` (MIT — provenance
 bottom). A candidate without a concrete affected principal, resource, or security
 outcome is not a finding — it is a hardening note.
 
-## Two modes
+## Three modes
 
 - **Guidance mode** (default): the user asks a security question or wants a focused
   review of one surface. Use only the relevant sections below. Do not create output
@@ -19,6 +19,9 @@ outcome is not a finding — it is a hardening note.
 - **Full audit mode**: the user explicitly asks to audit or pen-test a codebase, or
   wants a full / comprehensive / end-to-end review, or asks for report artifacts. Run
   all six phases and write the artifact set.
+- **Post-flow pass**: the user asks to security-review a landed diff, branch, or PR
+  before merge ("review this diff", "security-check these changes", a pre-merge
+  gate). Diff-scoped — see the dedicated section below. Never a whole-repo claim.
 
 If the request could mean either, ask one focused question before writing any file.
 
@@ -81,9 +84,46 @@ unit; prior `rejected` suppresses only the exact failed claim, never the unit.
   evidence too; they stop the same candidate from being re-raised next run.
 
 Never upgrade by severity inflation: a missing header, a missing rate limit, or a
-missing flag is NOT a finding by itself — show an accepted invalid request, a
-cross-principal impact, a downgrade, or a disclosure. Verify framework and library
-defaults before claiming a defect; an unknown version makes it `needs_validation`.
+  missing flag is NOT a finding by itself — show an accepted invalid request, a
+  cross-principal impact, a downgrade, or a disclosure. Verify framework and library
+  defaults before claiming a defect; an unknown version makes it `needs_validation`.
+
+## The post-flow pass — diff-scoped, three extra checks
+
+Scope is the diff: touched files plus their reachable callers. Phases 2–4 run over
+  diff-derived hypothesis units — every touched trust boundary (new endpoint,
+  parser, FFI fn, secret handling, subprocess, egress, path use) is one ledger
+  unit; untouched surfaces are out of scope and the report says so. The
+  three-verdict evidence bar is unchanged. Three checks are unique to this mode:
+
+1. **Guard-removal check.** A diff line that deletes, weakens, bypasses, or narrows
+   a validation, authorization, rate-limit, allowlist, capability, or determinism
+   guard must name its replacement protection in the same change. A guard removed
+   without a named replacement is a `needs_validation` finding on its own: the edge
+   case it protected stays exposed until proven otherwise.
+2. **Severity calibration — marginal-capability caps** (transcribed from
+   google/mantis `mantis-calibrate`, Apache-2.0 — see Provenance). Severity is
+   bounded by the capability the attacker gains OVER their prerequisite position:
+   - Force LOW: reproduction failed / not attempted (unless the evidence is stale
+     against a drifted snapshot — keep the score, mark the outcome UNKNOWN, name
+     the staleness); inputs unreachable from any trust boundary; config hygiene
+     with no exploit path; equivalent primitives (the attacker position already
+     grants the capability).
+   - Cap HIGH: statically confirmed but never reproduced (exception: a sanitizer
+     or crash trace from real execution lifts the cap — unless that trace is
+     stale against the current tree); exploitation requires an attacker-owned
+     supply-chain / build position; non-default configuration; probabilistic
+     LLM-mediated vectors.
+   - Cap MEDIUM: local attack vector only; self-contained blast radius — impact
+     confined to the triggering principal's own domain with no isolation boundary
+     crossed, no shared infrastructure touched, no supply-chain position gained.
+   The caps are transcribed policy, unmeasured here — their value is unproven
+   until the first real diff run grades against them.
+3. **Fix re-attack verification.** A diff claiming to FIX a known finding must
+   close every attack vector the original reproducer demonstrated: re-run the
+   reproducer against the patched tree (the attack must fail to bypass) and the
+   functional tests (no regression). Unverified fixes are `needs_validation`,
+   never `confirmed`.
 
 ## Rust attack-class quick reference
 
@@ -170,3 +210,10 @@ MIT License, Copyright (c) 2025-2026 Cloudflare, Inc., inspected at pin
 workspace adaptation (Rust-shaped classes, workspace conventions, artifact policy) —
 consult the upstream repo for the full per-domain hunting checklists, the coverage
 ledger schema, and the findings validators when running a deep audit.
+
+- google/mantis (https://github.com/google/mantis), Apache License 2.0, inspected
+  at pin `f3162c039ecd9c9d5d8bc404dd1373c7ca3152f7` (2026-10-27). The post-flow
+  pass's guard-removal law, marginal-capability severity caps, and fix re-attack
+  verification are transcribed from its `mantis-advise` and `mantis-calibrate`
+  skills (original Rust-workspace adaptation; the full 27-rule calibration
+  catalogue lives upstream).
