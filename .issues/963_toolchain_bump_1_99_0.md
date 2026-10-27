@@ -1,6 +1,8 @@
 # Issue 963 — Toolchain bump 1.98.1 → 1.99.0 (+ rust-src): the anchor pin moves, blaze pilot consumes it
 
 **Status:** ARC LANDED 2026-10-28 at the anchor (katgpt-rs) — T1/T2/T4/T5 done, evidence in HISTORY.md (full gate green at 1.99.0, 0 new lints). **T3 (seal-remake + seal-game-editor downstream pins) DEFERRED**: both repos had a live sibling session mid-flight at claim time (seal-remake writes 02:41, sge 01:51–02:28, 2026-10-28) — a toolchain flip under a running guard would split its layers across two rustc versions and corrupt the verdict. The pins follow on their next quiet touch (anchor semantics: downstream follows, never the reverse). Re-open T3 by re-running this arc's last step: bump both `rust-toolchain.toml` → 1.99.0 (+ rust-src optional there — only blaze needs it, and the pilot is decoupled) + each repo's own guard run.
+**Claimed:** zed-m3-t3-toolchain-sync, 1793132071, expires 2026-10-28T23:01:11Z
+T3 re-open claim: both repos quiet (no cargo procs, HEAD==origin) at re-claim time.
 **Lease released:** katgpt-rs-963-bump (idle loop), claimed 1793145600 — the anchor half landed `8d54ddb96`; T3 deferred for sibling-session safety, not abandoned
 **Date:** 2026-10-25
 **Type:** refactor / toolchain (the pin authority lives HERE — Issue 739 lineage)
