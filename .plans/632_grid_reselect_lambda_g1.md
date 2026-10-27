@@ -45,7 +45,7 @@ Decision criteria (record the pick + one-line rationale in this file, then strik
 
 ## Tasks
 
-- [ ] T0: record the lane-hosting pick (A/B/C) here — the owner call if (B)'s cost exceeds a day (the plan-614 lane is production; ask before porting into it)
+- [x] T0: record the lane-hosting pick (A/B/C) here — **PICKED (C) Lane D first, 2026-10-28.** The cost estimate that gated the owner call collapsed on the boundary read: riir-infer's BOUNDARY.md (line 116) already allowlists `katgpt-speculative` as a NON-OPTIONAL public-upstream dep AND it is a live dep today (the DDTree/weaver substrate flows through it) — the port is compose-only (~150–250 LOC: the bigram table + the prefix-first walk over `DraftWalk`'s per-slot `candidates[i]`/`scores[i]`), well under the one-day threshold, so the criterion's owner-call trigger does not fire. The verdict lane (claude_code reviewer) was UNAVAILABLE this session ("Authentication required", two rounds) — noted here; the pick rides the delegated-owner precedent (opt-in arms land, PROMOTION is the owner-gated part — the Issue-1113/1124 arm precedents) and stays revisitable. The compose lands as an OPT-IN default-off arm (config knob, byte-identical when off, the KeyedPremiseRead telemetry pattern); a Lane-K mirror happens ONLY if the Lane-D verdict differs from the premise read's direction.
 - [ ] T1: the λ sweep per the pre-registered grid (both workloads, λ=0 control)
 - [ ] T2: GOAT G1–G4 per the pre-registered bars (paired interleaved; the honest-negative clause honored on fail)
 - [ ] T3: bench record + 966/plan updates + commit+push
