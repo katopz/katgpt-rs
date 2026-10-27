@@ -1,6 +1,7 @@
 # Issue 970 — the 963 floor bump hard-broke every downstream pin that still reads 1.98.1: measured matrix + the T3-generalized rollout ledger
 
 **Status:** OPEN — the rollout is the remedy; two quiet repos landed same-session (reflexer `7a6c255`, instinct `22fb8a9`); every other broken repo needs its own lane's quiet touch or the one-line override. No anchor-side change requested (see "The floor-hold fallback" — declined unless the rollout stalls).
+**Claimed:** zed-amo-idle-b309, 1793136990, expires 2026-10-29T21:36:30+00:00 (scope: the riir-mmorpg-examples rollout row only — the one unchecked cell landable from amo, which carries the checkout the m3 lane flagged absent)
 **Date:** 2026-10-28
 **Type:** cross-repo toolchain ripple (files against [Issue 963](963_toolchain_bump_1_99_0.md) T3's scope, not its anchor half)
 **Discoverer:** zed-m3-floor-sweep (m3 idle cycle, 2026-10-28 ~03:1x–04:1x +07), while running the idle-loop clippy sweep — `riir-refine` and `riir-reflexer` builds failed with `error: rustc 1.98.1 is not supported by the following package: katgpt-device-verify@0.1.0 requires rustc 1.99.0`.
