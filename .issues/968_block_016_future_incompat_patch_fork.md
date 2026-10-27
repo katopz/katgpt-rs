@@ -1,9 +1,15 @@
 # Issue 968 — kill the `block v0.1.6` future-incompat (vendored `[patch.crates-io]` fork; the "dependency-bump lane" has NO bump)
 
-**Status:** OPEN — root cause measured 2026-10-27; the named "dependency-bump
-lane" is IMPOSSIBLE (see the finding), so this lands as a vendored 1-line-fix
-fork instead.
-**Claimed:** zed-amo-blockfix, 1793121000, expires 2026-10-29T00:00:00Z
+**Status:** LANDED 2026-10-27 — vendored fork + `[patch.crates-io]` at
+`5e216a761` (all gates green, see below). Open residue: the other 7 locks
+carrying registry `block 0.1.6` (riir-ai, riir-infer, riir-instinct,
+riir-refine, riir-reflex, riir-rethink, riir-train) each need the same
+per-workspace patch; measured reachability today = katgpt-rs + riir-train,
+the other six pull it only under feature postures (their default
+`cargo tree -i block@0.1.6` does not resolve it — trace with
+`--all-features` when picking the patch up).
+**Lease closed:** zed-amo-blockfix (claimed 1793121000) — the claimed work
+landed same day at `5e216a761`.
 
 ## The finding (why the bump lane cannot exist)
 
@@ -48,18 +54,27 @@ fork instead.
   `objc2-metal` (the only real exit), or when upstream ever ships a fixed
   release.
 
-## Gates
+## Gates (all measured green at `5e216a761`, isolated worktree,
+CARGO_TARGET_DIR=/tmp/krs-blockfix-target)
 
-- [ ] `cargo build -p katgpt-backend --features gpu_inference` (isolated
-      worktree, fresh lock) completes with **no future-incompat report naming
-      block**.
-- [ ] `cargo test -p block` green in-workspace (the patched crate's doc tests
-      exercise REAL ObjC blocks on macOS — the liveness proof that the ABI
-      type change broke nothing).
-- [ ] `cargo clippy -p katgpt-backend --features gpu_inference --all-targets`
-      clean (repo rule: clippy over check).
-- [ ] Cargo.lock source row for `block` moves registry -> path, version still
-      0.1.6.
+- [x] `cargo build -p katgpt-backend --features gpu_inference` — completes
+      with NO future-incompat report (previously named block v0.1.6); the
+      fork compiles from `vendor/block` (path source in the build log).
+- [x] **Liveness (replaced the gate below — see the note):** an ObjC-block
+      harness against the fork (ConcreteBlock -> heap copy -> real runtime
+      call, captured-variable readback) returns correct results — the ABI
+      type change broke nothing. `cargo test -p block` is IMPOSSIBLE for a
+      patched non-member ("requires dev-dependencies and is not a member of
+      the workspace"), so the crate's own doc tests cannot run in-workspace;
+      the harness is the stronger proof (public API + real ObjC runtime).
+- [x] `cargo clippy -p katgpt-backend --features gpu_inference --all-targets`
+      — ZERO warnings (en route: the vendored 2021-era `extern` sites tripped
+      46 current-toolchain ABI deprecations under macro expansion; fixed
+      mechanically in the fork with explicit "C" annotations, re-measured
+      zero).
+- [x] Cargo.lock `block` row: source registry -> path, version still 0.1.6.
+- [x] Default (no-feature) posture + `cargo build -p katgpt-rs`: clean, no
+      unused-patch noise.
 
 ## Residuals (NOT this issue)
 
