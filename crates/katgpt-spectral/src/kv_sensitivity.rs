@@ -437,7 +437,11 @@ pub fn joint_key_read(
         for j in 0..seq {
             scratch.col_buf[j] = t.k_ref[j * d + c];
         }
-        uniform_quant_error_into(&scratch.col_buf[..seq], b as u32, &mut scratch.err_col[..seq]);
+        uniform_quant_error_into(
+            &scratch.col_buf[..seq],
+            b as u32,
+            &mut scratch.err_col[..seq],
+        );
         scratch.err_matrix[c * seq..(c + 1) * seq].copy_from_slice(&scratch.err_col[..seq]);
     }
 
@@ -495,7 +499,8 @@ pub fn joint_key_read(
             let mut min_val = scratch.kbuf_val[0];
             for pos in 1..k {
                 let tv = scratch.kbuf_val[pos];
-                if tv < min_val || (tv == min_val && scratch.kbuf_idx[pos] > scratch.kbuf_idx[min_pos])
+                if tv < min_val
+                    || (tv == min_val && scratch.kbuf_idx[pos] > scratch.kbuf_idx[min_pos])
                 {
                     min_val = tv;
                     min_pos = pos;
@@ -990,7 +995,10 @@ mod tests {
                 &mut sc,
             );
         }));
-        assert!(attr.is_err(), "attribution mode must refuse (reduction posture only)");
+        assert!(
+            attr.is_err(),
+            "attribution mode must refuse (reduction posture only)"
+        );
     }
 
     #[test]
@@ -1005,12 +1013,7 @@ mod tests {
             &mut sc,
         );
         assert_eq!(zero.damage, 0.0);
-        let zero = joint_key_read(
-            key_probe(&[], &[], 2, 0, 0, None),
-            &[],
-            &cfg,
-            &mut sc,
-        );
+        let zero = joint_key_read(key_probe(&[], &[], 2, 0, 0, None), &[], &cfg, &mut sc);
         assert_eq!(zero.damage, 0.0);
         let k = vec![0.5f32; 6 * 4];
         let zero = joint_key_read(

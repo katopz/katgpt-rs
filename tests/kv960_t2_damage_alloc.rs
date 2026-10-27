@@ -58,7 +58,9 @@ use katgpt_forward::{ForwardContext, KvCaptureBuf, forward_base};
 use katgpt_spectral::kv_sensitivity::{
     JointKeyRead, KeyTensors, ProbeConfig, ProbeScratch, joint_key_read, probe_key_channels,
 };
-use katgpt_spectral::kv_sensitivity_alloc::{BitTable, allocate_bits, behavioral_waterfill_weights};
+use katgpt_spectral::kv_sensitivity_alloc::{
+    BitTable, allocate_bits, behavioral_waterfill_weights,
+};
 use katgpt_spectral::spectral::{BitAllocator, calibrate_eigenbasis};
 use katgpt_transformer::{MultiLayerKVCache, TransformerWeights};
 
@@ -233,8 +235,7 @@ fn capture_and_probe(config: &Config) -> CaptureRun {
                 let mut qi = 0usize;
                 for h in (kvh * group)..(kvh * group + group) {
                     for row in buf.rows.iter().filter(|r| r.layer == layer) {
-                        q_mat[qi * hd..qi * hd + hd]
-                            .copy_from_slice(&row.q[h * hd..(h + 1) * hd]);
+                        q_mat[qi * hd..qi * hd + hd].copy_from_slice(&row.q[h * hd..(h + 1) * hd]);
                         qi += 1;
                     }
                 }
@@ -455,8 +456,7 @@ fn kv960_t2_behavioral_damage_bit_allocation_goat() {
     for layer in 0..n_layer {
         for kvh in 0..n_kv {
             stab_sum += spearman(&run.k_cal_first[layer][kvh], &run.k_cal[layer][kvh]);
-            disjoint_sum +=
-                spearman(&run.k_cal_first[layer][kvh], &run.k_cal_second[layer][kvh]);
+            disjoint_sum += spearman(&run.k_cal_first[layer][kvh], &run.k_cal_second[layer][kvh]);
         }
     }
     let heads_f = (n_layer * n_kv) as f64;
@@ -479,8 +479,12 @@ fn kv960_t2_behavioral_damage_bit_allocation_goat() {
     };
     {
         let head = &run.heads[0][0][0];
-        let table =
-            allocate_bits(&w_behavioral[0][0], BIT_LADDER[BASELINE_RUNG], MIN_BITS, MAX_BITS);
+        let table = allocate_bits(
+            &w_behavioral[0][0],
+            BIT_LADDER[BASELINE_RUNG],
+            MIN_BITS,
+            MAX_BITS,
+        );
         let read = |scratch: &mut ProbeScratch| {
             joint_key_read(
                 KeyTensors {
@@ -543,12 +547,7 @@ fn kv960_t2_behavioral_damage_bit_allocation_goat() {
     for (r, &avg) in BIT_LADDER.iter().enumerate() {
         println!(
             "{:<10} {:>6} {:>11.4} {:>11.4} {:>11.4} {:>12.4}",
-            avg,
-            total_bits_seen[0][r],
-            curves[0][r],
-            curves[1][r],
-            curves[2][r],
-            flip_curves[0][r]
+            avg, total_bits_seen[0][r], curves[0][r], curves[1][r], curves[2][r], flip_curves[0][r]
         );
     }
 

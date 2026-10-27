@@ -53,7 +53,10 @@ fn bit_table_lookup_is_zero_alloc() {
     }
 
     let n_alloc = ALLOCS.load(Ordering::SeqCst);
-    assert!(n_alloc == 0, "G4: {n_alloc} allocs over {rounds} lookup rounds");
+    assert!(
+        n_alloc == 0,
+        "G4: {n_alloc} allocs over {rounds} lookup rounds"
+    );
     // The checksum is data-dependent on the reads (bits() panics OOB), so
     // the loop cannot be deleted; printing it keeps it live.
     println!("G4 PASS — 0 allocs over {rounds} BitTable lookup rounds (checksum {acc})");

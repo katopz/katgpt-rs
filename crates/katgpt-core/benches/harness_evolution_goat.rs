@@ -53,11 +53,7 @@ impl Lcg {
 }
 
 fn verdict(pass: bool) -> &'static str {
-    if pass {
-        "PASS"
-    } else {
-        "FAIL"
-    }
+    if pass { "PASS" } else { "FAIL" }
 }
 
 fn main() {

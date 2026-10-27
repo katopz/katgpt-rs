@@ -215,17 +215,38 @@ mod tests {
     #[test]
     fn class_order_and_draw_boundaries() {
         // Class dominates fraction on BOTH directions.
-        assert_eq!(two_tier_score(VerdictRank::PASS, VerdictRank::PARTIAL, 0.0, 1.0), 1.0);
-        assert_eq!(two_tier_score(VerdictRank::FAIL, VerdictRank::PASS, 1.0, 0.0), 0.0);
+        assert_eq!(
+            two_tier_score(VerdictRank::PASS, VerdictRank::PARTIAL, 0.0, 1.0),
+            1.0
+        );
+        assert_eq!(
+            two_tier_score(VerdictRank::FAIL, VerdictRank::PASS, 1.0, 0.0),
+            0.0
+        );
         // Fail vs Partial is a class step (NOT a same-class fraction
         // fight) — and Fail vs Timeout-class is a DRAW at equal fraction
         // (one class).
-        assert_eq!(two_tier_score(VerdictRank::FAIL, VerdictRank::PARTIAL, 1.0, 0.0), 0.0);
-        assert_eq!(two_tier_score(VerdictRank::FAIL, VerdictRank::FAIL, 0.5, 0.5), 0.5);
+        assert_eq!(
+            two_tier_score(VerdictRank::FAIL, VerdictRank::PARTIAL, 1.0, 0.0),
+            0.0
+        );
+        assert_eq!(
+            two_tier_score(VerdictRank::FAIL, VerdictRank::FAIL, 0.5, 0.5),
+            0.5
+        );
         // Same class, fraction decides; exact equality draws.
-        assert_eq!(two_tier_score(VerdictRank::PARTIAL, VerdictRank::PARTIAL, 0.75, 0.25), 1.0);
-        assert_eq!(two_tier_score(VerdictRank::PARTIAL, VerdictRank::PARTIAL, 0.25, 0.75), 0.0);
-        assert_eq!(two_tier_score(VerdictRank::PASS, VerdictRank::PASS, 0.9, 0.9), 0.5);
+        assert_eq!(
+            two_tier_score(VerdictRank::PARTIAL, VerdictRank::PARTIAL, 0.75, 0.25),
+            1.0
+        );
+        assert_eq!(
+            two_tier_score(VerdictRank::PARTIAL, VerdictRank::PARTIAL, 0.25, 0.75),
+            0.0
+        );
+        assert_eq!(
+            two_tier_score(VerdictRank::PASS, VerdictRank::PASS, 0.9, 0.9),
+            0.5
+        );
         // Negated inputs flip the sign symmetrically (the pairwise
         // antisymmetry the Elo fold relies on).
         for &(ra, rb, fa, fb) in &[
@@ -243,25 +264,11 @@ mod tests {
     fn third_tier_only_breaks_exact_two_tier_draws() {
         // A class or fraction decision is NEVER overridden by ticks.
         assert_eq!(
-            two_tier_score_with_ticks(
-                VerdictRank::PASS,
-                VerdictRank::FAIL,
-                0.0,
-                1.0,
-                1.0,
-                0.0
-            ),
+            two_tier_score_with_ticks(VerdictRank::PASS, VerdictRank::FAIL, 0.0, 1.0, 1.0, 0.0),
             1.0
         );
         assert_eq!(
-            two_tier_score_with_ticks(
-                VerdictRank::FAIL,
-                VerdictRank::PASS,
-                1.0,
-                0.0,
-                0.0,
-                1.0
-            ),
+            two_tier_score_with_ticks(VerdictRank::FAIL, VerdictRank::PASS, 1.0, 0.0, 0.0, 1.0),
             0.0
         );
         // Exact two-tier draw → ticks decide, LOWER wins.
