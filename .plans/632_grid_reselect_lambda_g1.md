@@ -1,0 +1,50 @@
+# Plan 632 — grid-reselect λ calibration + GOAT G1 (the 966 continuation after the premise read)
+
+**Status:** OPEN — filed 2026-10-28 from [Issue 966](../.issues/966_modelless_prefix_first_grid_reselection.md) after [riir-ai Bench 1012](../../riir-ai/.benchmarks/1012_issue966_premise_gate_read.md) read the premise ALIVE (pool 0.6174 vs 0.0625 floor on the DFlash2 keyed lane posture, sel-rank mode 2). Nothing implemented yet; the plan exists so the arc starts plan-first with pre-registered bars. NO lease taken — claim per Issue-943 before implementing.
+
+## Why now
+
+The premise gate was 966's blocking unknown ("if pool coverage ≈ top-1, the class is dead — close"). It read ALIVE at 9.88× floor. The next tasks in the issue (λ calibration, then G1) are unblocked but un-designed: the issue's prose still conflates two lanes, and the premise result sharpened the question this plan resolves FIRST.
+
+## T0 — the lane-hosting decision (resolves before any sweep)
+
+The issue ships TWO drafter lanes and they must not be silently blended:
+
+- **Lane K (katgpt-speculative)**: the `grid_reselect` substrate's own lane — `dflash.rs` marginals + `bigram_markov` top-16 table + the prefix-first walk. Modelless, in-crate, testable without the 27B (the G2 instrument's synthetic shapes). Its verify loop / accepted-length harness does NOT exist yet.
+- **Lane D (DFlash2, riir-ai plan 614)**: the z-lab drafter lane where the premise was actually measured — real 27B target, keyed posture, mean_j 3.793 (Bench 1012's side finding). Its loop is production-shaped (byte-exact gates) and NOW carries the premise evidence. The corrector is NOT built here.
+
+Decision criteria (record the pick + one-line rationale in this file, then strike the other rows):
+- (A) **Measure in Lane K, argue transfer.** Cheapest (no 27B), keeps the substrate self-contained; but the premise evidence lives in Lane D — a Lane-K-only G1 would repeat the Bench-965 "offline signal did not transfer" class.
+- (B) **Port the compose to Lane D.** The premise is certified THERE; the loop already reports slot-resolved acceptance (hist) and the premise read's plumbing (KeyedPremiseRead) is the natural host for a re-selection arm. Cost: the bigram table + walk must be built for the DFlash2 candidate shape (candidates[i] + scores[i] already flow out of DraftWalk — the lattice source exists); riir-infer would consume katgpt-core's bigram substrate (already a dep) — no new repo edges.
+- (C) **Both, Lane D first** — the honest default IF (B)'s cost is confirmed small (≤ a day): the Lane-D result is the decision-grade one; a Lane-K mirror only if it changes the verdict.
+
+⛔ The pick is recorded HERE before any sweep runs; a sweep run against the un-picked lane is a wasted 4090 window.
+
+## T1 — the λ sweep (pre-registered before data)
+
+- Grid: λ ∈ {0, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6} over the SAME corpus/posture as the premise read (doc-prose, seed `0x5eed`, T = 0.6) plus ONE code-cell (`B614_DOC` = a code file) — Bench 965's lesson: prose-only cells overstate.
+- λ = 0 is the byte-identity control: the re-selected stream must equal the argmax walk's stream EXACTLY (the substrate's own λ=0 pin re-asserted at the compose site).
+- The bigram term scale: log-probability vs log-probability (the substrate-half note) — record the chosen scale beside λ in the results file.
+- Report per λ: mean_j, effective tokens/cycle (draft-phase cost + verify cost amortized — the C_K/L_eff shape from plan 614's Phase-0 gate), per-slot hit-rate, and the premise columns (the KeyedPremiseRead analog under re-selection: does the re-pick convert corrections?).
+- **Posture:** 4090, `E:\git\p614-target` (kept warm, Bench 1012), Issue-834 exclusivity gate; Plan-337 zero-contention if a sibling measurement is live.
+
+## T2 — GOAT G1 (pre-registered bars)
+
+- **G1**: the re-selection arm's mean_j at its best λ must exceed the argmax baseline's mean_j on BOTH workloads (prose + code), with the paired interleaved protocol (the ab_timing shape) and a pre-registered minimum margin. Pre-register the margin as **+5% relative mean_j on both cells** (picks up Bench 965's noise scale; anything lower is window noise by that record's own decomposition).
+- **G2 (no-regression)**: the draft-phase cost of the re-selection pass must not exceed +15% of the walk phase (the extraction is µs-class; the bigram lookups are O(B·K) — pin it, don't assume it).
+- **G3**: lossless contract untouched — the verify stream remains the serial keyed decode BY CONSTRUCTION (re-selection changes WHICH tokens are proposed, never the acceptance rule); the G1-keyed byte-identity gate re-runs green with the corrector arm on.
+- **G4**: zero-alloc in the compose (the substrate's existing canary pattern).
+- Honest-negative clause stands: G1 fail at every λ ⇒ close 966 with the negative record (the premise was necessary, not sufficient — the bigram prior may be too weak over a 151k vocab even where the grid is right); the walk + coverage instrument survive as the reusable parts (already landed).
+
+## T3 — records + hygiene
+
+- One bench file (next number per `.highwater` + dual_allocation_gate) carrying the sweep table, both workloads, the box provenance lines, and the verdict per gate.
+- Update 966 (T-table + status) + this plan's checkboxes in the same commit as the landing.
+- The second-window replication note from Bench 1012's limitations is DISCHARGED by T2's paired protocol (two workloads × interleaved) — record that explicitly.
+
+## Tasks
+
+- [ ] T0: record the lane-hosting pick (A/B/C) here — the owner call if (B)'s cost exceeds a day (the plan-614 lane is production; ask before porting into it)
+- [ ] T1: the λ sweep per the pre-registered grid (both workloads, λ=0 control)
+- [ ] T2: GOAT G1–G4 per the pre-registered bars (paired interleaved; the honest-negative clause honored on fail)
+- [ ] T3: bench record + 966/plan updates + commit+push
