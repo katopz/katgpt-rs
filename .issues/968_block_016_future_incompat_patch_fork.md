@@ -25,6 +25,9 @@ both trees dirty with mid-flight sibling lanes (and behind origin) when this
 lane ran — pick them up when their lanes land and the trees go clean+synced.
 riir-train stays under the routing restriction, its lane's to land.
 
+**Claimed:** zed-glm-idle-b304, 1793092000, expires 2026-10-29T09:05Z
+
+
 ## The finding (why the bump lane cannot exist)
 
 1. `block` 0.1.6 is the TERMINAL version — the registry has no 0.1.7+ (index
