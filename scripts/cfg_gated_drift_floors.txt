@@ -85,7 +85,6 @@ riir-neuron-db                65     40           8             0
 riir-shader                    3      0           0             0  # observed 2026-09-12: 3 targets, 0 gated (min at measured — tiny)
 riir-train                   369    229          19             0
 riir-viewbridge                6      0           0             0
-mmorpg-editor              44      0           0             0
 mmorpg-remaster          24      0           0             0  # Issue 842: first REAL measurement 2026-09-19 (24 targets / 0 gated) — the seal-core/seal-edge-worker migration (2026-09-16) took the repo's gated targets with it; min_gated 1 -> 0 records the shrink, it does not excuse a walk going blind (orphaned_attr's 248-row floors the same migration one file over).
 mmorpg-remake                   43     12           2             0  # Issue 842: first REAL measurement 2026-09-19 (43 targets / 12 gated); SILENT-NOW ratcheted 0 -> 2 at the measured backlog — two targets zero on a plain cargo test behind non-default features; the same shape riir-clippy carries 3 of. Arming them is the repo owners' lane.
 riir-reflex                 2      2           0             0  # observed 2026-09-21: joined the workspace 2026-09-21 (Plan 603 T1.1 registration, owner-delegated repo birth)

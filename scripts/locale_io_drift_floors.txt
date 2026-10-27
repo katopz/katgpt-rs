@@ -41,7 +41,6 @@ riir-shader              8      6    0    # repaired 7a65dd4; +8 sites (bake/thu
 riir-train              60    110   0    # repaired 39d0b8d4, 15db2c67; +4 sites (plan441 corpus io) repaired 2026-10-09 45fc7799 (katgpt-rs 928 wave 2); min_io raised 0 -> 110 (~60% of measured io=183; min_py stays 60)
 riir-viewbridge          0      0    0
 katgpt-web               0      0    0
-mmorpg-editor            0      0    0
 mmorpg-remake            0      0    0
 mmorpg-remaster          0      0    0
 riir-dao                 0      0    0

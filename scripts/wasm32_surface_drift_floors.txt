@@ -57,7 +57,6 @@ riir-neuron-db                 0            0               0
 riir-shader                    4            2               0
 riir-train                     0            0               0
 riir-viewbridge                1            1               0
-mmorpg-editor               0            0               0
 mmorpg-remaster           1            1               0  # Issue 842: 2/2 -> 1/1 2026-09-19 — first REAL measurement; the seal-core/seal-edge-worker migration (2026-09-16) took most of the wasm32 surface out. The one remaining UNCOVERED package is seal-poc-submodule, pinned BY NAME in wasm32_uncovered_expected.txt.
 mmorpg-remake                   12            1               0
 TOTALS                       115           16               0

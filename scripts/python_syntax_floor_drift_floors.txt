@@ -52,7 +52,6 @@
 katgpt-rs               60          60           0
 jup-tool                 0           0           0  # not on the landing box (22 of 31 measured); unmeasured zero, re-pin at first measure
 katgpt-web               0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
-mmorpg-editor            0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
 mmorpg-remake            6           6           0  # measured 11/11
 mmorpg-remaster          0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
 reflex-site              6           6           0  # measured 10/10 at the landing — the render_flows.py PEP 701 site lived here and is fixed (a24f4dd)

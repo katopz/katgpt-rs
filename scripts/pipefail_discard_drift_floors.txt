@@ -84,7 +84,6 @@ riir-neuron-db              3     15         1         0
 riir-shader                 4      9         0         0
 riir-train                 28    103         0         0
 riir-viewbridge             1     10         0         0
-mmorpg-editor            2      6         0         0
 mmorpg-remaster        4     15         0         0
 mmorpg-remake                 3     40         0         0
 riir-reflex                   1      0         0         0  # observed 2026-09-21: joined the workspace 2026-09-21 (Plan 603 T1.1 registration, owner-delegated repo birth)

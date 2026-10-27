@@ -84,7 +84,6 @@ riir-neuron-db             120      1950         0           0
 riir-shader                 38       640         0           0
 riir-train                 670     10400         0           0
 riir-viewbridge             14       150         0           0
-mmorpg-editor           140      3650         0           0
 mmorpg-remaster       248      2251         0           0  # Issue 842: 360/7400 -> 248/2251 2026-09-19 — first REAL measurement; the drop is the seal-core/seal-edge-worker migration out (2026-09-16), not a walk going blind.
 mmorpg-remake            441     10779         1           0  # Issue 842: max_findings 0 -> 1 2026-09-19, first REAL measurement — lighting_panel.rs:35 imports FrameRateCap ungated, its only use wasm32-gated; FILED as seal-remake .issues/032 (the file carries a concurrent session's WIP, so the one-attribute repair is theirs). Re-pin to 0 when 032 lands.
 

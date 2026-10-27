@@ -73,7 +73,6 @@ riir-neuron-db            115            300              0
 riir-shader                35             50              0
 riir-train                620           1700              0
 riir-viewbridge            13             10              0
-mmorpg-editor          128            130              0
 mmorpg-remaster       248            175              0  # Issue 842: 335/310 -> 248/175 2026-09-19 — first REAL measurement (the alias-mapped open used to measure nothing, and the old floors were typed through that zero). The drop is the seal-core/seal-edge-worker migration out of this deprecated repo (owner directive 2026-09-16), a committed upstream shrink, not a walk going blind.
 mmorpg-remake                30            100              0
 

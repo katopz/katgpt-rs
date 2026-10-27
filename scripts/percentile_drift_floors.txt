@@ -104,7 +104,6 @@ riir-neuron-db               125      6    0      0       0     0
 riir-shader                 27      0    0      0       0     0  # observed 2026-09-12: 46 .rs, 0 sites
 riir-train                   730      3    0      0       0     0  # Issue 777 re-pin: 1129 tracked .rs; the 2500 pin counted .runs/target-*/ OUT_DIR sources
 riir-viewbridge               15      0    0      0       0     0
-mmorpg-editor             125      0    0      0       0     0
 mmorpg-remaster       248      2    0      0       0     0  # Issue 842: 335 -> 248 2026-09-19 — first REAL measurement; the drop is the seal-core/seal-edge-worker migration out (2026-09-16). Sites: 4 measured (all decidable-clean), floor stays 2.
 mmorpg-remake                   15      0    0      0       0     0
 riir-reflex                  8      0    0      0       0     4  # observed 2026-09-21: joined the workspace 2026-09-21 (Plan 603 T1.1 registration, owner-delegated repo birth)  # trunc_var 4 DELIBERATE 2026-10-22: the engine's frozen percentile law idx=floor(n*p) clamped (src/engine/threshold.rs percentile_law + its harness parity test, runner.rs old_quantile_law migration oracle, runner/gate_drift.rs quantile_row which prints tail support) - calibrated thresholds depend on it; a law change is riir-reflex's call, not a sweep repair

@@ -86,7 +86,6 @@ riir-neuron-db                   0          0             0
 riir-shader                      0          0             0
 riir-train                       5         11             0
 riir-viewbridge                  0          0             0
-mmorpg-editor                 0          0             0
 mmorpg-remaster             0          0             0
 mmorpg-remake                      0          0             0
 #
