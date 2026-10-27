@@ -103,7 +103,7 @@ riir-chain               40    1
 riir-refine              85   17
 riir-dao                  2    0  # observed 2026-09-18: 4 temp_dir sites, 0 fixed
 riir-dapps               10    0
-riir-deployer             6    5  # observed 2026-09-18: 11 temp_dir sites, 5 fixed
+riir-deployer             6    2  # 2026-10-27: max_fixed 5 -> 2, measured 2 fixed of 25 temp_dir sites at clean HEAD (three repaired since). Prior: observed 2026-09-18: 11 temp_dir sites, 5 fixed
 riir-esp32                0    0  # observed 2026-09-18: no temp_dir sites
 # ⬇ 1 → 0, riir-game-sdk `ef66117` (2026-09-18): the single site
 #   (`node_identity_from_ssh_key_roundtrip`) repaired IN that repo; lib 29
