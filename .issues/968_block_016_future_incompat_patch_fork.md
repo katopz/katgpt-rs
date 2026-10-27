@@ -25,7 +25,15 @@ both trees dirty with mid-flight sibling lanes (and behind origin) when this
 lane ran — pick them up when their lanes land and the trees go clean+synced.
 riir-train stays under the routing restriction, its lane's to land.
 
-**Claimed:** zed-glm-idle-b304, 1793092000, expires 2026-10-29T09:05Z
+**Lease closed:** zed-glm-idle-b304 (claimed 1793092000) — the riir-ai
+slice landed same day at riir-ai `8a097d23b` (patch row covers BOTH edges —
+metal 0.31 -> riir-gpu metal_tensor_gemm + macOS dev-deps, AND metal 0.33 ->
+katgpt-backend -> katgpt-rs gpu_inference; lock flipped; default cargo check
+green; tree -i resolves vendor/block at both postures) and the riir-infer
+slice at riir-infer `b9ea066` (block unreachable at every posture there —
+the lock entry was vestigial; the row ARMS the healed fork for any future
+metal->block re-edge; cargo flipped the lock itself on first metadata).
+Remaining residue: riir-train only (routing restriction — its lane lands it).
 
 
 ## The finding (why the bump lane cannot exist)
