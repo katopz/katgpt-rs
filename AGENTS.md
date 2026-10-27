@@ -45,7 +45,8 @@ the drift history live in HISTORY.md.
 ## Build Commands
 
 ```bash
-# Toolchain: pinned by rust-toolchain.toml (1.98.1, issue 739) — cargo resolves
+# Toolchain: pinned by rust-toolchain.toml (1.99.0 + rust-src, issue 963; the
+# 1.98.1 anchor lineage is issue 739) — cargo resolves
 # it automatically; full_gate.yml is the deliberate RUSTUP_TOOLCHAIN=stable
 # rot-gate exception.
 
