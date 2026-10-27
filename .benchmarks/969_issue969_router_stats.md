@@ -1,6 +1,6 @@
 # Bench 969 — Issue 969: kimi_k3 router-statistics diagnostic (Nestor App C.6) — GOAT PASS (report-only instrument)
 
-**Status:** LANDED 2026-10-27 — K3 arm (T1+T2) measured end-to-end green; verdict hint CORPUS_INDEPENDENT_BUT_LOAD_BEARING (mixed by layer, see §Reading). T3 (reflex `pick_domain` liveness CONTROL) is the remaining half of the issue's G1.
+**Status:** LANDED 2026-10-27 — BOTH arms measured; Issue 969 CLOSED. K3 arm (this bench): verdict CORPUS_INDEPENDENT_BUT_LOAD_BEARING (mixed by layer, see §Reading). Control arm: reflex [Bench 167](../../riir-reflex/.benchmarks/167_router_stats_control/BENCH_167.md) — **CONTROL LIVE** (shuffled-domain pick change 0.59/0.30/0.98 on ag_news/emotion/banking77; sst5 the structural-zero class).
 
 **Date:** 2026-10-27
 **Issue:** [`Issue 969`](../.issues/969_kimi_k3_router_statistics_diagnostic.md) (Research 639 / arXiv:2610.31818 Nestor App C.6)
@@ -40,7 +40,7 @@ Artifact: [`969_router_stats/stats.json`](969_router_stats/stats.json) (stats + 
 
 - G1 (byte-stability): PASS — two full computations serialize identically.
 - G1 (engagement, K3-arm half): PASS — 0 plan mismatches over 21,042 forced applications; max shuffle rel_l2 = 4.8e-1 (the forced path provably executes).
-- G1 (liveness CONTROL, reflex `pick_domain` arm): **T3 — still open** (the issue's control half; a separate seam + harness mode in riir-reflex).
+- G1 (liveness CONTROL, reflex `pick_domain` arm): **PASS** — reflex [Bench 167](../../riir-reflex/.benchmarks/167_router_stats_control/BENCH_167.md): CONTROL LIVE, pick change 0.59/0.30/0.98 on three suites; sst5's 0.000 is the named structural-zero class (1-byte digit candidates; the abstain-delta movement proves the seam engaged).
 - G2/G3/G4: n/a — report-only, no serving path touched, no promotion claimed. The seam additions (`MoeForwardScratch::forced_topk`, `KimiK3Runtime::forced_router_plan`) are `None` on every production path (one predictable branch), and the whole-model default clippy surface is clean at both postures (default + `kimi_k3_loader`).
 
 ## What landed (this bench's diff)
@@ -51,5 +51,5 @@ Artifact: [`969_router_stats/stats.json`](969_router_stats/stats.json) (stats + 
 
 ## Follow-ups
 
-- T3 (reflex control arm) — the issue's remaining half.
+- ~~T3 (reflex control arm)~~ DONE same day — reflex Bench 167, CONTROL LIVE; Issue 969 closed.
 - The layer 4–6 collapse shape is worth one follow-up question on a REAL checkpoint (not this test-arch one) before any generalization is attempted — file only if a consumer exists (the issue's standing bar for the 0.40B artifact).
