@@ -1,6 +1,7 @@
 # Issue 969 — routing-statistics diagnostic suite (Nestor App C.6) on kimi_k3's shipped MoE + reflex `pick_domain`
 
 **Status:** Open — 2026-10-27. PoC/proof task from Research 639 (arXiv:2610.31818, Nestor).
+**Claimed:** zed-amo-969-router-stats, 1793120641, expires 2026-10-29T17:04:01Z
 
 ## What
 
