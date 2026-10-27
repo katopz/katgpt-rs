@@ -59,6 +59,20 @@
 
 use crate::bigram_markov::BigramMarkovTable;
 use crate::pair_select::pick_pair_scored;
+use katgpt_types::simd::simd_max_f32;
+
+/// Block width for the full-pool skip in [`topk_pools_into`]: once the pool
+/// is full, a block is admitted to the per-element path only when its SIMD
+/// max beats the pool tail (Issue 966 G2 — the per-element tail compare alone
+/// measured 2.7–3.0× the stack's SIMD argmax). 256 f32 = 1 KiB: long enough
+/// to amortise the reduction call, short enough that one hot token does not
+/// drag a large span through the scalar path.
+const SKIP_BLOCK: usize = 256;
+
+/// Second-level width inside an admitted [`SKIP_BLOCK`] (8 NEON / 4 AVX2
+/// vectors): the scalar insert path only ever sees the 32-wide spans whose
+/// max beats the tail.
+const SKIP_SUB: usize = 32;
 
 /// Default per-slot pool width — DCOCO's K scale, and the bigram table's
 /// own default `top_m` (Issue 659); keeping the two at the same scale makes
@@ -82,8 +96,10 @@ pub const DEFAULT_TOP_K: usize = 16;
 /// no transform — so downstream comparisons are comparisons of the
 /// drafter's own numbers.
 ///
-/// Zero-alloc: bounded insertion over a caller-owned buffer; candidates
-/// below the current k-th best are skipped after one compare.
+/// Zero-alloc: bounded insertion over a caller-owned buffer. Once the pool is
+/// full, whole [`SKIP_BLOCK`]-wide blocks whose SIMD max does not beat the
+/// pool tail are skipped — exact, not approximate (the pool is bit-identical
+/// to the per-element scan; see the in-loop note for the tie + NaN argument).
 pub fn topk_pools_into(
     marginals_flat: &[f32],
     steps: usize,
@@ -102,35 +118,71 @@ pub fn topk_pools_into(
         let margs = &marginals_flat[p * vocab_size..p * vocab_size + vocab_size];
         let pool = &mut pools[p * slot_len..p * slot_len + slot_len];
         let mut len = 0usize;
-        for (j, &s) in margs.iter().enumerate() {
-            let j = j as u32;
-            if len == slot_len {
-                // Full: the candidate enters only by beating the tail
-                // (score desc, then token asc). Otherwise skip.
-                let tail = pool[slot_len - 1];
-                let better = s > tail.1 || (s == tail.1 && j < tail.0);
-                if !better {
+        let mut base = 0usize;
+        while base < vocab_size {
+            let end = (base + SKIP_BLOCK).min(vocab_size);
+            let block = &margs[base..end];
+            // Full pool: a later index can never win a tie against the tail
+            // (every pooled token has a SMALLER index than `j`), so the entry
+            // rule reduces to `s > tail` and a whole block whose max is
+            // `<= tail` cannot change the pool. `<=` (not `!(>)`) keeps a
+            // NaN-propagating max (NEON `vmaxq`) on the exact per-element
+            // path; a NaN-ignoring max is safe too (NaN never enters).
+            if len == slot_len && simd_max_f32(block) <= pool[slot_len - 1].1 {
+                base = end;
+                continue;
+            }
+            // Admitted: re-check each SKIP_SUB-wide sub-block against the
+            // CURRENT tail (it rises as the block inserts), so one hot token
+            // pulls 32 elements through the scalar path, not 256.
+            for (si, sub) in block.chunks(SKIP_SUB).enumerate() {
+                if len == slot_len && simd_max_f32(sub) <= pool[slot_len - 1].1 {
                     continue;
                 }
-                len -= 1; // evict the tail, fall through to the insert
+                let sub_base = base + si * SKIP_SUB;
+                for (off, &s) in sub.iter().enumerate() {
+                    len = insert_candidate(pool, len, slot_len, (sub_base + off) as u32, s);
+                }
             }
-            // len < slot_len: every candidate belongs in the pool (append
-            // at the tail when it is worse-or-equal to everything held).
-            // Insert position: first entry strictly worse than (s, j)
-            // under (score desc, token asc).
-            let at = pool[..len]
-                .iter()
-                .position(|&(ti, ts)| s > ts || (s == ts && j < ti))
-                .unwrap_or(len);
-            // Make room: rotate the tail right by one (the old tail falls
-            // off when full), then write the candidate at `at`.
-            pool[at..=len].rotate_right(1);
-            pool[at] = (j, s);
-            len += 1;
+            base = end;
         }
         debug_assert_eq!(len, slot_len, "pool under-filled at slot {p}");
     }
     max_steps
+}
+
+/// One candidate into a `(score desc, token asc)`-sorted pool holding `len`
+/// of `slot_len` entries; returns the new length.
+#[inline(always)]
+fn insert_candidate(
+    pool: &mut [(u32, f32)],
+    mut len: usize,
+    slot_len: usize,
+    j: u32,
+    s: f32,
+) -> usize {
+    if len == slot_len {
+        // Full: the candidate enters only by beating the tail
+        // (score desc, then token asc). Otherwise skip.
+        let tail = pool[slot_len - 1];
+        let better = s > tail.1 || (s == tail.1 && j < tail.0);
+        if !better {
+            return len;
+        }
+        len -= 1; // evict the tail, fall through to the insert
+    }
+    // len < slot_len: every candidate belongs in the pool (append at the
+    // tail when it is worse-or-equal to everything held). Insert position:
+    // first entry strictly worse than (s, j) under (score desc, token asc).
+    let at = pool[..len]
+        .iter()
+        .position(|&(ti, ts)| s > ts || (s == ts && j < ti))
+        .unwrap_or(len);
+    // Make room: rotate the tail right by one (the old tail falls off when
+    // full), then write the candidate at `at`.
+    pool[at..=len].rotate_right(1);
+    pool[at] = (j, s);
+    len + 1
 }
 
 /// Prefix-first scored walk over the extracted pools (Issue 966's
@@ -204,6 +256,55 @@ mod tests {
                 best as u32
             })
             .collect()
+    }
+
+    /// The pre-G2 per-element scan, kept as the oracle the block skip must
+    /// reproduce bit-for-bit (ties, NaN, ragged tail block included).
+    fn pools_per_element(m: &[f32], steps: usize, vocab: usize, k: usize) -> Vec<(u32, f32)> {
+        let slot_len = k.min(vocab);
+        let mut pools = vec![(0u32, 0f32); steps * slot_len];
+        for p in 0..steps {
+            let pool = &mut pools[p * slot_len..(p + 1) * slot_len];
+            let mut len = 0;
+            for (j, &s) in m[p * vocab..(p + 1) * vocab].iter().enumerate() {
+                len = insert_candidate(pool, len, slot_len, j as u32, s);
+            }
+        }
+        pools
+    }
+
+    #[test]
+    fn block_skip_is_bit_identical_to_the_per_element_scan() {
+        let mut rng = fastrand::Rng::with_seed(9662);
+        // vocab not a multiple of SKIP_BLOCK; k > vocab; k == vocab.
+        for &(steps, vocab, k) in &[
+            (4usize, 1000usize, 16usize),
+            (3, 777, 8),
+            (2, 10, 16),
+            (2, 16, 16),
+        ] {
+            let shapes: [fn(&mut fastrand::Rng, usize) -> f32; 4] = [
+                |r, _| r.f32(),
+                // heavy ties: 4 distinct levels
+                |r, _| f32::from(r.u8(0..4)) * 0.25,
+                // peaked (softmax-like): one hot token per 300
+                |r, j| if j % 300 == 7 { 0.9 } else { r.f32() * 1e-4 },
+                // NaN sprinkled
+                |r, _| if r.u8(0..20) == 0 { f32::NAN } else { r.f32() },
+            ];
+            for make in &shapes {
+                let m: Vec<f32> = (0..steps * vocab)
+                    .map(|i| make(&mut rng, i % vocab))
+                    .collect();
+                let slot_len = k.min(vocab);
+                let mut got = vec![(0u32, 0f32); steps * slot_len];
+                topk_pools_into(&m, steps, vocab, k, &mut got);
+                let want = pools_per_element(&m, steps, vocab, k);
+                let bits =
+                    |v: &[(u32, f32)]| v.iter().map(|&(t, s)| (t, s.to_bits())).collect::<Vec<_>>();
+                assert_eq!(bits(&got), bits(&want), "shape ({steps},{vocab},{k})");
+            }
+        }
     }
 
     #[test]

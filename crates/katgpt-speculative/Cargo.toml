@@ -413,6 +413,12 @@ required-features = ["entropy_bounded_commit"]
 name = "grid_reselect_alloc_check"
 required-features = ["grid_reselect"]
 
+# Issue 966 G2 — re-selection overhead vs the per-slot argmax it replaces
+# (paired interleaved median ratio, shared ab_timing harness; --release).
+[[test]]
+name = "bench_966_grid_reselect_g2"
+required-features = ["grid_reselect"]
+
 # Issue 917 T3 — deterministic counts bench: EB vs fixed-width-k at matched
 # settings. Counts are the metric (per-pass commit-count distributions +
 # DDTree expansion counts) — box-independent, no timing.
