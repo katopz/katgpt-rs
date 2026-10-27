@@ -1,8 +1,8 @@
 # Bench 958 — blocked two-level NEON argmax GOAT gate (Issue 967)
 
-**Status:** RECORD — G1 + G2 PASS → `argmax_blocked` promoted to katgpt-types DEFAULT (2026-10-27)
+**Status:** RECORD — G1 + G2 PASS → `argmax_blocked` promoted to katgpt-types DEFAULT (2026-10-27, `355ce381b`)
 **Date:** 2026-10-27
-**Issue:** [967](../.issues/967_blocked_neon_argmax.md) (found by Issue 966 G2)
+**Issue:** 967 (closed + removed; landed `355ce381b`; found by Issue 966 G2). Open follow-up from it: a blocked AVX2 variant for x86_64, deferred to the x86_64 matrix box, since Issue 817 measured the two-pass idiom as the x86_64 winner.
 **Vehicle:** `cargo test -p katgpt-types --release --test bench_967_argmax_blocked_ab -- --nocapture --test-threads=1`
 
 ## What changed
