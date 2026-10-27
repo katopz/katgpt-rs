@@ -108,6 +108,12 @@ pub mod bigram_markov;
 // adjacent-pair coherence from the same table, walked greedily.
 #[cfg(feature = "bigram_markov")]
 pub mod pair_select;
+// Grid re-selection — the Issue 966 DCOCO-class corrector: top-K pools over
+// the DRAFTER's own step-major marginals (dflash output) + prefix-first
+// scored walk via pair_select's shared selection core. Implies bigram_markov
+// (the transition prior).
+#[cfg(feature = "grid_reselect")]
+pub mod grid_reselect;
 // NFCoT FlowScore Generator + QGF Fusion (Plan 229 / Plan 268 T6). nf_flow
 // (the scorer core) is already ungated above; these two compose it with
 // spec_generator / QGuidedDrafter and are gated on both parents.

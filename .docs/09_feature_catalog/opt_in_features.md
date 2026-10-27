@@ -6242,3 +6242,25 @@ promotion gate.
 Plan: [`.plans/631_harness_evolution_loop.md`](../../.plans/631_harness_evolution_loop.md) ·
 Benchmark: [`.benchmarks/957_harness_evolution_extraction_goat.md`](../../.benchmarks/957_harness_evolution_extraction_goat.md) ·
 Research: [`.research/637_Harness_Evolution_Loop_Primitive.md`](../../.research/637_Harness_Evolution_Loop_Primitive.md).
+
+## 160. grid_reselect — Prefix-First Re-Selection over the Drafter's Own Top-K Grid (Issue 966)
+
+**Feature flag:** `grid_reselect = ["bigram_markov"]` in katgpt-speculative (zero new deps, opt-in).
+
+The DCOCO-class corrector, zero training: restricts the FACTORIZED BLOCK DRAFTER's
+own step-major marginal output (`dflash_predict_with`'s `marginals_flat`) to
+per-slot top-K pools (`topk_pools_into`, stable `(score desc, token asc)`, exact,
+bit-exact scores), then re-selects one token per slot by the prefix-first scored
+walk (`reselect_block_into`) — `ln U_p(b) + λ·ln P(b|a)` via the SHARED
+`pair_select::pick_pair_scored` core (Issue 671; one selection law, two lattice
+adapters — `pair_select` propagates its own bigram-only marginals, this module
+re-selects WITHIN the drafter's grid). Missing pairs floor at
+`MISSING_PAIR_LOGP` (hits relatively favored — the sparse-table discipline);
+λ = 0 is bit-identical to per-slot argmax (pinned); zero-alloc steady state
+(`grid_reselect_alloc_check`, 0 bytes / 1000 cycles, `--release`). Post-pass by
+design: `dflash_predict_with` is untouched, flag-off is trivially byte-identical,
+and the consumer wiring rides the lane once the premise gate
+(`TopKPoolCoverage`, Issue 966) reads alive on the target posture.
+
+Issue: [`.issues/966_modelless_prefix_first_grid_reselection.md`](../../.issues/966_modelless_prefix_first_grid_reselection.md) —
+the premise-gate measurement, λ sweep, G1/G2 are the open quiet-window tasks.

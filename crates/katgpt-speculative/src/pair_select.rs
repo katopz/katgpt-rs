@@ -235,6 +235,49 @@ pub fn tstep_marginals_into<'s>(
     &scratch.positions
 }
 
+/// The per-position selection core shared by both pair-scored walks
+/// ([`pair_scored_path_into`] over the bigram-propagated lattice, and the
+/// Issue 966 grid-reselection walk over the drafter's own top-K pools).
+///
+/// Picks `argmax_b [ ln U(b) + lambda · ln P(b|a) ]` over `cands` —
+/// `(token, U)` pairs, ANY order (scoring is per-candidate, not rank
+/// dependent). Missing pairs score at [`MISSING_PAIR_LOGP`]. First strict
+/// max wins (deterministic; `lambda = 0` with `(U desc, token asc)`-sorted
+/// candidates reduces bit-identically to argmax-of-marginals — the G1
+/// property, Issue 671 T5 — because equal scores keep the earlier entry and
+/// sorted order puts the marginal argmax first).
+///
+/// Empty `cands` returns `u32::MAX` (the caller stalls the walk; the walk
+/// adapters treat that as their own empty-position signal).
+#[inline]
+pub fn pick_pair_scored(
+    cands: &[(u32, f32)],
+    prev: u32,
+    table: &BigramMarkovTable,
+    lambda: f32,
+) -> u32 {
+    if cands.is_empty() {
+        return u32::MAX;
+    }
+    let mut best_tok = cands[0].0;
+    let mut best_score = f32::NEG_INFINITY;
+    for &(b, u) in cands.iter() {
+        let u_logp = u.ln();
+        let pair_p = table.probability(prev, b);
+        let pair_logp = if pair_p > 0.0 {
+            pair_p.ln()
+        } else {
+            MISSING_PAIR_LOGP
+        };
+        let score = u_logp + lambda * pair_logp;
+        if score > best_score {
+            best_score = score;
+            best_tok = b;
+        }
+    }
+    best_tok
+}
+
 /// Greedy pair-scored walk over the marginal lattice (Issue 671 T1/T3).
 ///
 /// From `a = prev`, each position picks `argmax_b [ ln U_t(b) + λ_t · ln P(b|a) ]`
@@ -257,21 +300,9 @@ pub fn pair_scored_path_into(
             break;
         }
         let lambda = gate_lambda(cfg, pos);
-        let mut best_tok = pos[0].0;
-        let mut best_score = f32::NEG_INFINITY;
-        for &(b, u) in pos.iter() {
-            let u_logp = u.ln();
-            let pair_p = table.probability(a, b);
-            let pair_logp = if pair_p > 0.0 {
-                pair_p.ln()
-            } else {
-                MISSING_PAIR_LOGP
-            };
-            let score = u_logp + lambda * pair_logp;
-            if score > best_score {
-                best_score = score;
-                best_tok = b;
-            }
+        let best_tok = pick_pair_scored(pos, a, table, lambda);
+        if best_tok == u32::MAX {
+            break;
         }
         path.push(best_tok);
         a = best_tok;

@@ -192,6 +192,11 @@ best_buddies = []
 # Opt-in until the riir-ai Bonsai consumer gate proves the gain (Issue 659 T4).
 # Zero deps beyond the crate's mandatory katgpt-types/katgpt-core.
 bigram_markov = []
+# Grid re-selection (Issue 966) — the DCOCO-class corrector over the
+# DRAFTER's own top-K candidate grid; prefix-first scored walk on the shared
+# pair_select core, transition-scored by the bigram_markov table. Zero
+# training, zero new deps; opt-in until the premise gate + GOAT read.
+grid_reselect = ["bigram_markov"]
 # Domino Causal Correction — PrefixCorrectionTable + domino_score (Plan 197).
 # Pulls blake3 for prefix hashing.
 domino_correction = ["dep:blake3"]
@@ -400,6 +405,13 @@ required-features = ["entropy_bounded_commit"]
 [[test]]
 name = "entropy_bounded_lane_alloc_check"
 required-features = ["entropy_bounded_commit"]
+
+# Issue 966 G4 — zero-alloc steady state for grid_reselect's pool extraction
+# + prefix-first walk (the entropy_bounded convention: separate single-fn
+# binary so a CountingAllocator sees no parallel-test allocations).
+[[test]]
+name = "grid_reselect_alloc_check"
+required-features = ["grid_reselect"]
 
 # Issue 917 T3 — deterministic counts bench: EB vs fixed-width-k at matched
 # settings. Counts are the metric (per-pass commit-count distributions +
