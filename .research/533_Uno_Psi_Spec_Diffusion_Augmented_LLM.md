@@ -2,6 +2,8 @@
 
 **Status:** RECORD — dual-track verdicts: training track GOAT→ `riir-train/.plans/376_uno_tv_self_drafter_distillation.md`; modelless protocol track Gain→ folded into that plan's serving/consumption phases (+ katgpt-rs-side primitives flagged for the drafter trait).
 
+> **Follow-up (2026-10-27):** LoopUno — the recipe replicated on a looped host (Nanbeige4.2-3B, 22L×2) with the one-hour cost curve, agentic-acceptance ranking, step-cost constants and the self-data plateau fix — distilled in [`638_LoopUno_Looped_Host_Lossless_Drafter.md`](638_LoopUno_Looped_Host_Lossless_Drafter.md); Plan 376 amended accordingly (ladder, effective-step grid, rung cap, self-data arm, vehicle re-point).
+
 - **Paper:** arXiv:2609.04010 "Unlocking Lossless Speedups in LLMs via Discrete Diffusion" (Sahoo et al., IFM-AI / MBZUAI / Cornell / Cerebras, 2026-09-03).
 - **Code:** `github.com/ifm-ai/uno` @ `46fbdb66f026bae9c68a1e5a3f97a17c7805c778` (Apache-2.0), cloned to `.raw/uno` (ephemeral, removed at landing; sha is the provenance — every code anchor below was read at this pin).
 - **Checkpoints:** HF `s-sahoo/uno-qwen3-8B` @ `b8a7577b3223bdcf2b3af0f2fc6e95258b3bbc29` (code-pinned default in `training/constants.py:3-4`), `IFM/K2-Horizon-7B-Uno`, `IFM/K2-Horizon-0.9B-Uno`.
