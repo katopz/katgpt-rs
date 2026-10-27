@@ -13,7 +13,17 @@ resolve it — trace with `--all-features` when picking the patch up).
 landed same day at `5e216a761`.
 **Lease closed:** zed-amo-refine-blockpatch (claimed 1793079375) — the
 riir-refine slice landed same day at riir-refine `e07980c4`.
-**Claimed:** zed-amo-blockpatch-residue, 1793081415, expires 2026-11-03T06:10:15Z — the riir-instinct + riir-reflex + riir-rethink slices (the three clean, uncontended trees; riir-ai/riir-infer deferred — both dirty with mid-flight sibling lanes; riir-train stays under the routing restriction, its lane's to land).
+**Lease closed:** zed-amo-blockpatch-residue (claimed 1793081415) — landed the
+riir-instinct (`dc1002b`), riir-reflex (`e90760a`), riir-rethink (`19886b2`)
+slices the same session; each = own `vendor/block` copy + root
+`[patch.crates-io]` row + lock flip, patch reachability verified per repo via
+`cargo tree -i block@0.1.6 --features <metal gate>` resolving to the LOCAL
+vendor copy (instinct laya-face-metal / reflex laya-riir-metal / rethink
+serve-encoder-metal), default posture inert (block not default-reachable —
+matches the issue's reachability table). riir-ai + riir-infer slices remain:
+both trees dirty with mid-flight sibling lanes (and behind origin) when this
+lane ran — pick them up when their lanes land and the trees go clean+synced.
+riir-train stays under the routing restriction, its lane's to land.
 
 ## The finding (why the bump lane cannot exist)
 
