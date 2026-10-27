@@ -1388,7 +1388,39 @@ def blindness_arms() -> list[str]:
     return fails
 
 
+def audit_units(p: Path) -> list[Path]:
+    """The directories ONE path argument expands to — each gets its own
+    `=== Auditing <name> ===` block. Shared by both auditors' CLI and by
+    `docs_drift_sweep.run_auditor`, which must attribute those blocks back to
+    the repo it asked about: a repo with no root Cargo.toml is audited per
+    child crate under the CHILD's name, and a sweep looking the repo up by its
+    own name then silently read (0, 0) (measured 2026-10-27: reflex-site's
+    only manifest is `wasm-head/Cargo.toml`). Sorted, so the block order is
+    the same on every filesystem."""
+    if (p / "Cargo.toml").exists():
+        return [p]
+    children = sorted(d for d in p.iterdir()
+                      if d.is_dir() and (d / "Cargo.toml").exists())
+    return children or [p]
+
+
 def selftest() -> None:
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        for sub in ("rooted", "split/b", "split/a", "split/docs", "bare/docs"):
+            (root / sub).mkdir(parents=True)
+        for m in ("rooted/Cargo.toml", "split/b/Cargo.toml", "split/a/Cargo.toml"):
+            (root / m).write_text("", encoding="utf-8")
+        got = [[u.relative_to(root).as_posix() for u in audit_units(root / r)]
+               for r in ("rooted", "split", "bare")]
+        if got != [["rooted"], ["split/a", "split/b"], ["bare"]]:
+            raise SystemExit(
+                "✗ audit_units self-test FAILED\n"
+                f"  got: {got}\n"
+                "  a root manifest audits the repo itself; a manifest-less repo\n"
+                "  audits each child crate, SORTED; a repo with neither audits\n"
+                "  itself — the sweep attributes blocks by exactly this rule.")
     reach = reachable_features(REACHABILITY_CASE)
     if "osc_npc" not in reach or "tropical_algebra" in reach:
         raise SystemExit(
@@ -1598,16 +1630,8 @@ def main(argv: list[str]) -> int:
             if not p.is_dir():
                 print(f"skip (not a dir): {arg}", file=sys.stderr)
                 continue
-            if (p / "Cargo.toml").exists():
-                total += audit_repo(p)
-            else:
-                children = [d for d in p.iterdir()
-                            if d.is_dir() and (d / "Cargo.toml").exists()]
-                if children:
-                    for c in children:
-                        total += audit_repo(c)
-                else:
-                    total += audit_repo(p)
+            for unit in audit_units(p):
+                total += audit_repo(unit)
         print(f"\n=== TOTAL mismatches across all repos: {total} ===")
         return 0 if total == 0 else 1
     except BlindRead as e:

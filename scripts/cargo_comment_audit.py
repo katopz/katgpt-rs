@@ -61,6 +61,7 @@ import tomllib
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from bench_doc_audit import (
     UNTRACKED_SKIPPED,
+    audit_units,
     find_cargo_defaults,
     find_defined_features,
     iter_cargo_manifests,
@@ -826,17 +827,8 @@ def main(argv: list[str]) -> int:
         if not p.is_dir():
             print(f"skip (not a dir): {arg}", file=sys.stderr)
             continue
-        if (p / "Cargo.toml").exists():
-            total += audit_repo(p)
-        else:
-            children = [
-                d for d in p.iterdir() if d.is_dir() and (d / "Cargo.toml").exists()
-            ]
-            if children:
-                for c in children:
-                    total += audit_repo(c)
-            else:
-                total += audit_repo(p)
+        for unit in audit_units(p):
+            total += audit_repo(unit)
     print(f"\n=== TOTAL mismatches across all repos: {total} ===")
     return 0 if total == 0 else 1
 

@@ -106,21 +106,13 @@ def read_floors() -> dict[str, tuple[int, int]]:
     return floors
 
 
-def run_auditor(script: str, pattern: re.Pattern[str], repos: list[Path]) -> dict[str, tuple[int, int]]:
-    """One invocation over every repo — both auditors accept N paths."""
-    proc = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "scripts" / script), *(str(p) for p in repos)],
-        capture_output=True, encoding="utf-8", errors="replace",
-        # Pin the CHILD's encoder as well as our decoder — Issue 778.
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-    )
-    if proc.returncode not in (0, 1):
-        # A crash is not a clean sweep. Surface it rather than parsing partial
-        # output, which would silently under-report (Issue 702's whole theme).
-        raise SystemExit(f"✗ {script} crashed (exit {proc.returncode})\n{proc.stderr}")
+def attribute_counts(stdout: str, pattern: re.Pattern[str],
+                     owner: dict[str, str], wanted: list[str]):
+    """-> (counts keyed on the REQUESTED repo, the requested repos with no
+    answer). Pure — the arms in `attribution_arms` drive it directly."""
     counts: dict[str, tuple[int, int]] = {}
     current: str | None = None
-    for line in proc.stdout.splitlines():
+    for line in stdout.splitlines():
         header = AUDITING_RE.match(line)
         if header:
             current = header.group(1)
@@ -132,8 +124,80 @@ def run_auditor(script: str, pattern: re.Pattern[str], repos: list[Path]) -> dic
             # CONTRACT spelling. display() is the identity on unaliased boxes
             # and normalizes the alias box — the alias content itself must
             # never leak further than this one mapping.
-            counts[repo_alias.display(current)] = (int(hit.group(1)),
-                                                   int(hit.group(2)))
+            key = owner.get(current, repo_alias.display(current))
+            lab, mis = counts.get(key, (0, 0))
+            counts[key] = (lab + int(hit.group(1)), mis + int(hit.group(2)))
+    return counts, sorted(set(wanted) - counts.keys())
+
+
+def attribution_arms() -> list[str]:
+    """The two 2026-10-27 defects, replayed on literal auditor output."""
+    fails: list[str] = []
+    pat = AUDITORS[1][1]
+    split = ("\n=== Auditing a ===\n  -> checked 2 inline comments, 1 mismatch\n"
+             "\n=== Auditing b ===\n  -> checked 3 inline comments, 0 mismatch\n")
+    got = attribute_counts(split, pat, {"a": "site", "b": "site"}, ["site"])
+    if got != ({"site": (5, 1)}, []):
+        fails.append(f"attribution: a manifest-less repo's child blocks must "
+                     f"SUM into the repo they were requested for, got {got}")
+    crashed = "Traceback (most recent call last):\nModuleNotFoundError\n"
+    got = attribute_counts(crashed, pat, {"r": "r"}, ["r"])
+    if got[1] != ["r"]:
+        fails.append(f"attribution: a child that printed NO block is a "
+                     f"missing verdict, never (0, 0) — got {got}")
+    return fails
+
+
+def run_auditor(script: str, pattern: re.Pattern[str], repos: list[Path]) -> dict[str, tuple[int, int]]:
+    """One invocation over every repo — both auditors accept N paths.
+
+    Counts are keyed on the REQUESTED repo, not on the auditor's block header:
+    a repo with no root Cargo.toml is audited per child crate (`audit_units`),
+    so its blocks carry the children's names and are summed back here."""
+    # Lazy: bench_doc_audit imports tomllib (3.11+), and the no-verdict
+    # message below is the useful failure on an older interpreter.
+    try:
+        from bench_doc_audit import audit_units
+    except ModuleNotFoundError as e:
+        raise SystemExit(
+            f"✗ docs-drift sweep NO VERDICT — the auditors cannot import on "
+            f"python {sys.version.split()[0]} ({e}); they need >= 3.11 for "
+            f"tomllib. Run with a newer interpreter (uv python find '>=3.11').")
+
+    owner: dict[str, str] = {}
+    for p in repos:
+        key = repo_alias.display(p.name)
+        for unit in audit_units(p.expanduser().resolve()):
+            prior = owner.setdefault(unit.name, key)
+            if prior != key:
+                raise SystemExit(
+                    f"✗ {script}: audit unit '{unit.name}' is claimed by both "
+                    f"{prior} and {key} — the block header cannot attribute it")
+    proc = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts" / script), *(str(p) for p in repos)],
+        capture_output=True, encoding="utf-8", errors="replace",
+        # Pin the CHILD's encoder as well as our decoder — Issue 778.
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    if proc.returncode not in (0, 1):
+        # A crash is not a clean sweep. Surface it rather than parsing partial
+        # output, which would silently under-report (Issue 702's whole theme).
+        raise SystemExit(f"✗ {script} crashed (exit {proc.returncode})\n{proc.stderr}")
+    wanted = [repo_alias.display(p.name) for p in repos]
+    counts, missing = attribute_counts(proc.stdout, pattern, owner, wanted)
+    if missing:
+        # ⛔ Exit 1 is ALSO what an uncaught Python exception exits with, so
+        # the returncode test above cannot tell "findings" from "crashed at
+        # import". Measured 2026-10-27: on the box's python3 3.9.6 both
+        # auditors died on `import tomllib` (3.11+), exited 1, and were parsed
+        # as (0, 0) in every repo — the adjudication arms then reported five
+        # INERT-fixture failures, a misdiagnosis of a dead child. The auditor
+        # was asked about N repos; an answer missing for any is no verdict.
+        raise SystemExit(
+            f"✗ {script} gave NO VERDICT for {len(missing)} of {len(repos)} "
+            f"repo(s) (exit {proc.returncode}): {', '.join(missing[:5])}"
+            f"{' …' if len(missing) > 5 else ''} — a crashed child is not a "
+            f"clean sweep\n{proc.stderr[-2000:]}")
     return counts
 
 
@@ -347,7 +411,7 @@ def adjudicate_arms() -> list[str]:
     Unlike its siblings this sweep has no row-level delta to stub: its
     adjudication IS the choice of which results dict the pins read.
     """
-    fails = adjudicate_cases()
+    fails = attribution_arms() + adjudicate_cases()
     real = globals()["adjudicate"]
     globals()["adjudicate"] = lambda repos, results: (results, None)
     try:
