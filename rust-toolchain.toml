@@ -22,6 +22,6 @@
 # (The weekly rot gate deliberately overrides
 # this pin with `RUSTUP_TOOLCHAIN=stable` — see .github/workflows/full_gate.yml.)
 [toolchain]
-channel = "1.98.1"
+channel = "1.99.0"
 profile = "minimal"
-components = ["clippy", "rustfmt"]
+components = ["clippy", "rustfmt", "rust-src"]
