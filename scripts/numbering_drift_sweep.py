@@ -79,6 +79,14 @@ The population floor `min_bench` (tracked numbered documents in
 `.benchmarks/` + `.docs/`) sits under the new classes the same way `min_files`
 sits under the serial ones: a wall is only as good as the walk beneath it.
 
+The rename/hand CAPS for THIS repo are additionally SYNCED on every run
+against the per-push gate's scalars (`numbering_floors.txt`, the CI half
+landed 2026-10-29 in `numbering_gate.py`): two instruments, one classifier
+(imported), so pin divergence between the two floors files is the only way
+their verdicts can disagree — `classified_pin_sync` refuses loud (exit 2)
+before any repo verdict. Floors are deliberately not synced (different slack
+under the same measured population is not a record of the same quantity).
+
 The MALFORMED check runs over every numbered directory including those two,
 because a file that is not an integer is undecidable under no convention.
 
@@ -141,6 +149,10 @@ import repo_alias  # noqa: E402 — the machine-local name codec (see its docstr
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKSPACE = REPO_ROOT.parent
 PINS = Path(__file__).resolve().parent / "numbering_drift_floors.txt"
+# The per-push gate's pins — the classified-class CAPS below are ONE measured
+# record in two media across these two files, and the sweep is the instrument
+# that can see both (the gate's CI checkout is katgpt-rs-only).
+GATE_PINS = Path(__file__).resolve().parent / "numbering_floors.txt"
 
 # DATA, not derived from the tree — see the module docstring's scope section.
 SERIAL_DIRS = (".plans", ".issues", ".research", ".proposals")
@@ -189,6 +201,67 @@ def parse_rows(path: Path) -> dict[str, dict[str, int]]:
             raise ValueError(f"malformed pin row (want {want} fields): {raw!r}")
         rows[parts[0]] = {k: int(v) for k, v in zip(PIN_FIELDS, parts[1:])}
     return rows
+
+
+# The classified-class CAPS the sweep's own-repo row shares with the per-push
+# gate's scalars. The classifier is shared by import (`ng.classify_stems`), so
+# once both instruments classify the same repo, the ONLY way their verdicts for
+# these classes can diverge is this pair of hand-maintained pin files drifting
+# apart — measured 2026-10-29 both sides agree (0/59), and this keeps them
+# agreeing. Floors are deliberately NOT synced: `min_bench` and the gate's
+# `min_files.benchmarks` are headroom estimates under the same measured
+# population and may legitimately differ (392 vs 400 at the 2026-10-29
+# landing); equality on a floor is not a meaningful record, only equality on
+# an exact measured cap is.
+SYNC_CAP_PAIRS = (("max_rename", "max_rename_residue"),
+                  ("max_hand", "max_hand_read"))
+
+
+def classified_pin_sync(row: dict[str, int] | None, gate_pins: dict,
+                        own: str) -> list[str]:
+    """The sweep row for THIS repo vs the per-push gate's pins.
+
+    Two instruments classify katgpt-rs's numbered directories with the SAME
+    classifier (`numbering_gate.classify_stems`, imported above): the per-push
+    gate (numbering_gate.py + numbering_floors.txt, CI) and this sweep
+    (numbering_drift_floors.txt, workstation). Equal-by-construction held only
+    while nobody looked; the 2026-10-29 gate port made the per-push half real,
+    which made pin divergence a live verdict-splitting hazard — the sweep would
+    red (or green) a state the gate calls the opposite, for no repo reason.
+    This is the sync assertion: extracted so selftest can arm it (Issue 775's
+    law — main() below invokes it unconditionally, on every run).
+
+    Scope: the two CAPS only, and the gate's family lane EXISTING at all. A
+    vanished `family_dirs` means the classified classes lost their per-push
+    half silently — a divergence of scope, not of value, and just as verdict-
+    splitting. Floors (`min_bench` vs `min_files.benchmarks`) are excluded by
+    design — different slack conventions under the same measured population,
+    not one record in two media (SYNC_CAP_PAIRS above).
+    """
+    flags: list[str] = []
+    if row is None:
+        flags.append(f"own-repo pin row missing for {own} in {PINS.name} — "
+                     f"the sweep cannot verify its own classified caps "
+                     f"against the gate's")
+        return flags
+    if "family_dirs" not in gate_pins:
+        flags.append("gate pins declare NO family_dirs — the classified "
+                     "classes lost their per-push half (numbering_floors.txt "
+                     "scope regressed to serial-only); the CI-side wall is "
+                     "gone and this sweep is the only instrument left")
+        return flags
+    for sweep_key, gate_key in SYNC_CAP_PAIRS:
+        gv = gate_pins.get(gate_key)
+        if not isinstance(gv, int):
+            flags.append(f"gate pin {gate_key} is not an integer: {gv!r} — "
+                         f"the gate itself would refuse this posture")
+            continue
+        if row[sweep_key] != gv:
+            flags.append(
+                f"{sweep_key}: sweep row pins {row[sweep_key]} ({PINS.name}) "
+                f"!= gate pin {gate_key}={gv} (numbering_floors.txt) — ONE "
+                f"measured record in two media; re-pin both in one commit")
+    return flags
 
 
 def audit(repo: Path) -> dict:
@@ -761,6 +834,39 @@ def selftest() -> list[str]:
             fails.append(f"verdict: a bench-walk regression must red the "
                          f"min_bench floor: {ff}")
 
+        # ── the classified-cap SYNC against the gate's pins (2026-10-29):
+        #    one measured record in two media; divergence is itself the defect.
+        sync_row = {"max_rename": 0, "max_hand": 59}
+        sync_gp = {"family_dirs": ".benchmarks", "max_rename_residue": 0,
+                   "max_hand_read": 59}
+        if classified_pin_sync(sync_row, sync_gp, "katgpt-rs") != []:
+            fails.append("pin-sync: agreeing caps must not flag")
+        sf = classified_pin_sync({**sync_row, "max_hand": 57}, sync_gp, "r")
+        if len(sf) != 1 or "57" not in sf[0] or "59" not in sf[0]:
+            fails.append(f"pin-sync: hand divergence must name both sides: {sf}")
+        sf = classified_pin_sync({**sync_row, "max_rename": 1}, sync_gp, "r")
+        if len(sf) != 1 or "max_rename" not in sf[0]:
+            fails.append(f"pin-sync: rename divergence must flag: {sf}")
+        if len(classified_pin_sync(None, sync_gp, "r")) != 1:
+            fails.append("pin-sync: missing own-repo row must flag")
+        sf = classified_pin_sync(
+            sync_row, {k: v for k, v in sync_gp.items() if k != "family_dirs"}, "r")
+        if len(sf) != 1 or "family_dirs" not in sf[0]:
+            fails.append(f"pin-sync: a vanished gate family lane must flag: {sf}")
+        sf = classified_pin_sync(
+            sync_row, {"family_dirs": ".benchmarks"}, "r")
+        if (len(sf) != 2 or "max_rename_residue" not in sf[0]
+                or "max_hand_read" not in sf[1]):
+            fails.append(f"pin-sync: missing gate scalars flag PER PAIR: {sf}")
+        sf = classified_pin_sync(
+            sync_row, {"family_dirs": ".benchmarks", "max_rename_residue": 0}, "r")
+        if len(sf) != 1 or "max_hand_read" not in sf[0] or "not an integer" not in sf[0]:
+            fails.append(f"pin-sync: one missing gate scalar flags once: {sf}")
+        sf = classified_pin_sync(
+            sync_row, {**sync_gp, "max_hand_read": "junk"}, "r")
+        if len(sf) != 1 or "not an integer" not in sf[0]:
+            fails.append(f"pin-sync: non-integer gate pin must flag: {sf}")
+
     return fails + adjudicate_arms()
 
 
@@ -1063,6 +1169,26 @@ def main() -> int:
         return 2
     if not pins:
         print("✗ pins file declares NO repos — an empty expectation set is refused")
+        return 2
+
+    # The sweep's own-repo classified caps and the per-push gate's pins are ONE
+    # measured record in two media — refuse loud on divergence BEFORE any repo
+    # verdict (a sweep computing this repo's verdicts against a stale cap would
+    # disagree with the CI gate for no repo reason). Single home: the sweep is
+    # the side that reads both files; the gate needs no mirror of this.
+    if GATE_PINS.is_file():
+        own = repo_alias.apply((REPO_ROOT.name,))[0]
+        sync_flags = classified_pin_sync(
+            pins.get(own), ng.parse_pins(GATE_PINS), own)
+    else:
+        sync_flags = [f"gate pins file missing: {GATE_PINS} — the "
+                      f"classified-cap sync cannot run"]
+    if sync_flags:
+        print("✗ classified-cap SYNC between the two numbering instruments "
+              "FAILED — this sweep's verdicts for its own repo would not "
+              "match the per-push gate's:")
+        for f in sync_flags:
+            print(f"    {f}")
         return 2
 
     show_hist = "--hist-rows" in sys.argv

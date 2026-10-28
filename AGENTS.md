@@ -1506,7 +1506,13 @@ the witness, armed on every push (Issue 850).
   rename/hand-read ratcheted at measured via `numbering_floors.txt`'s
   `family_dirs` / `max_rename_residue` / `max_hand_read`, the raw `dup`
   ratchet and the historical walk stay serial-only, and the family dir keeps
-  its floor + above-highwater checks.
+  its floor + above-highwater checks. The two instruments' classified CAPS
+  for this repo are ONE measured record in two media, so the sweep syncs its
+  own-repo row against the gate's pins on every run
+  (`classified_pin_sync`) — divergence refuses exit 2 before any repo
+  verdict, since the classifier is shared by import and pin drift is the
+  only way two verdicts can disagree (floors excluded by design: different
+  slack under one measured population is not the same record).
  Population delta, disclosed: the classifier sees numbered .md documents only
   (no directories, no non-md sidecars — riir-train's gate is the broader
   one for its own repo).
