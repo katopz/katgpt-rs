@@ -38,6 +38,74 @@ import pathlib
 NUMBERED = re.compile(r"^(\d+)_.+\.md$")
 HIGHWATER = ".highwater"
 
+# ── duplicate-group classification (the on-disk discriminator) ─────────────
+# Ported from riir-train scripts/numbering_duplicate_gate.py (issue 556 step
+# 3, 2026-10-25) into the shared scanner 2026-10-29, when a live riir-ai
+# collision (.benchmarks/1011, held twice on one history line) proved no
+# automatic instrument outside riir-train could even SEE the class: the drift
+# sweep's `dup` counts raw duplicates in the SERIAL dirs only, on the
+# "undecidable without knowing the convention" reasoning — which the
+# classifier retired, because owner identity IS decidable from the stems.
+#
+# Population delta, disclosed: THIS module's `NUMBERED` matches numbered .md
+# documents only (no directories, no non-md sidecars), so riir-train's
+# SUFFIX-FAMILY class is structurally unreachable here — every holder in a
+# group carries the same .md extension. The other four classes port verbatim,
+# and the sweep selftest's golden vectors encode riir-train's arms (including
+# its real 809/872/1008/884 collisions, resolved 2026-10-29) so the two
+# copies cannot silently disagree.
+OWNER_TOKEN = re.compile(r"(?i)(?<![a-z0-9])(plan|issue)[-_]?(\d+)(?![0-9])")
+
+
+def normalize_stem(stem: str) -> str:
+    return re.sub(r"[-_.\s]+", "", stem).lower()
+
+
+def owner_tokens(stem: str) -> set[str]:
+    return {f"{kind.lower()}{num}" for kind, num in OWNER_TOKEN.findall(stem)}
+
+
+def classify_stems(stems: list[str]) -> str:
+    """Classify one duplicate group from its number-stripped stems.
+
+    Same discriminator as riir-train's `classify` (the issue-556 data-forced
+    rule: OWNER IDENTITY, not directory): disjoint non-empty token sets =
+    COLLISION (two unrelated owners on one number — walls at zero, the fix is
+    renumber the loser); all stems equal after normalization = RENAME-RESIDUE
+    (one document under two spellings); every stem naming the same single
+    owner = FAMILY-EXPLICIT (the intended one-plan-many-benches convention);
+    anything else = HAND-READ (undecidable from filenames — a ratchet, never
+    adjudicated by this instrument).
+    """
+    norms = {normalize_stem(s) for s in stems}
+    if len(stems) >= 2 and len(norms) == 1:
+        return "RENAME-RESIDUE"
+    token_sets = [owner_tokens(s) for s in stems]
+    for i in range(len(token_sets)):
+        for j in range(i + 1, len(token_sets)):
+            if (token_sets[i] and token_sets[j]
+                    and token_sets[i].isdisjoint(token_sets[j])):
+                return "COLLISION"
+    if stems and all(token_sets) and len(set().union(*token_sets)) == 1:
+        return "FAMILY-EXPLICIT"
+    return "HAND-READ"
+
+
+def stem_of(name: str) -> str:
+    """The number-stripped, extension-stripped stem NUMBERED matched (`809_x.md` -> `x`).
+
+    ⛔ NUMBERED matches the WHOLE filename (`.+` spans to `.md`), so the split
+    must come from the GROUP, never from `m.end()` — the end of the match is
+    the end of the string, and slicing past it yields `""` for every file,
+    which classifies every group RENAME-RESIDUE (all empty stems normalize
+    equal). The selftest's real-vector arms fire on exactly this.
+    """
+    m = NUMBERED.match(name)
+    if m is None:
+        return name
+    stem = name[len(m.group(1)) + 1:]
+    return stem[:-3] if stem.endswith(".md") else stem
+
 
 def parse_pins(path: Path) -> dict[str, int]:
     pins: dict[str, int] = {}

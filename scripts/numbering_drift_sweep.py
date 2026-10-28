@@ -34,22 +34,50 @@ never typed, per Issue 703. The expectations are COMMITTED, in
 `scripts/numbering_drift_floors.txt`, because deriving both from one walk is
 what makes a cross-repo gate permanently green.
 
-Ceilings here are a RATCHET, not a wall. 32 duplicates exist today across repos
-this session does not own; resolving one is a citation-weight arbitration
-(Issue 724 T2's precedent: the file with 27 inbound mentions keeps the number,
-the other moves), not a rename. So each repo's ceiling is pinned at its
-MEASURED count: a new collision reds immediately, and the standing backlog is
-visible in the pins rather than silently tolerated. Lower a pin in the commit
-that resolves a collision.
+Ceilings here are a RATCHET, not a wall — with ONE exception: the classified
+collision class walls at zero in every repo, because a filename-decidable
+two-owner number is not an arbitration backlog, it is a defect (riir-train
+issue-556's law: the pinned COLLISION row is a work item, never an excuse).
+Everything else keeps the measured-ratchet rule: a new collision of the
+ratcheted classes reds immediately, and the standing backlog is visible in the
+pins rather than silently tolerated. Lower a pin in the commit that resolves a
+collision.
 
 Scope, which is the load-bearing decision
 -----------------------------------------
-Duplicate + above-highwater checks run ONLY over allocator-serial directories
+Raw `dup` + above-highwater checks run ONLY over allocator-serial directories
 (`.plans/.issues/.research/.proposals`). `.benchmarks/` and `.docs/` are
-excluded for exactly the reason numbering_floors.txt gives: there the leading
-number is the OWNING plan/issue and a family per owner is the intended
-convention, so "duplicate" is not decidable without knowing which convention a
-given file follows — and a gate must not guess.
+excluded from the RAW count for exactly the reason numbering_floors.txt gives:
+there the leading number is the OWNING plan/issue and a family per owner is
+the intended convention, so "duplicate" is not decidable without knowing which
+convention a given file follows — and a gate must not guess.
+
+⛔ But the classifier (numbering_gate.classify_stems, ported from riir-train
+issue-556's gate 2026-10-29) RETIRED the decidability excuse for the classes
+that ARE decidable from the stems. Since then every ≥2-tracked-holder group in
+ALL six directories classifies, and the classified classes gate over every
+directory:
+
+  collision       token-disjoint holders (two unrelated owners on one number)
+                  — a WALL at zero, never pinned, never a ratchet. The fix is
+                  the issue-556 renumber protocol (loser moves, every citation
+                  moves in the same commit). Found live the day it landed:
+                  riir-ai 809/872/1008 + riir-infer 884, all four resolved
+                  before the wall armed (2d591ea, b5f9a8c2f, 4427a6547).
+  rename_residue  one document under two spellings — ratchet at measured (0
+                  everywhere at landing; raise only with the adjudication in
+                  the commit message).
+  hand_read       undecidable from filenames (no owner tokens — the
+                  old-convention multi-record bench numbers). RATCHET at
+                  measured: the standing backlog stays visible in the pins, a
+                  NEW token-less group reds. The pairwise token rule still
+                  catches a token-carrying intruder inside a hand-read family.
+  FAMILY-EXPLICIT the intended convention — counted, disclosed, never a
+                  finding (the `fam=` column).
+
+The population floor `min_bench` (tracked numbered documents in
+`.benchmarks/` + `.docs/`) sits under the new classes the same way `min_files`
+sits under the serial ones: a wall is only as good as the walk beneath it.
 
 The MALFORMED check runs over every numbered directory including those two,
 because a file that is not an integer is undecidable under no convention.
@@ -144,7 +172,8 @@ def contract_repos(workspace: Path) -> list[Path]:
 
 
 PIN_FIELDS = ("min_files", "max_dup", "max_above", "max_malformed",
-              "max_resets", "min_numbers", "max_hist")
+              "max_resets", "min_numbers", "max_hist",
+              "min_bench", "max_rename", "max_hand")
 
 
 def parse_rows(path: Path) -> dict[str, dict[str, int]]:
@@ -190,13 +219,21 @@ def audit(repo: Path) -> dict:
     """
     tracked = ng.tracked_paths(repo, list(ALL_DIRS))
     dup, above, malformed, resets, unbumped = [], [], [], [], []
+    collision, rename_res, hand_read = [], [], []
     n_serial = 0
+    n_family = 0
+    n_bench = 0
+    grouped: list[tuple[str, dict]] = []
     for dirname in ALL_DIRS:
         by_num, hw, n, hw_bad = ng.scan(repo, dirname, tracked)
+        grouped.append((dirname, by_num))
         if hw_bad is not None:
             malformed.append(f"{dirname}/.highwater = {hw_bad!r}")
+        if dirname in (".benchmarks", ".docs"):
+            n_bench += sum(1 for files in by_num.values()
+                           for _nm, tr in files if tr)
         if dirname not in SERIAL_DIRS:
-            continue                       # family convention — not decidable
+            continue                       # raw dup stays serial-scoped
         n_serial += n
         for num, files in sorted(by_num.items()):
             if sum(1 for _, tr in files if tr) < 2:
@@ -205,6 +242,34 @@ def audit(repo: Path) -> dict:
             dup.append(f"{dirname}/{num:03d} ×{len(files)}: {names}")
         if hw is not None and by_num and max(by_num) > hw:
             above.append(f"{dirname}: max {max(by_num)} > .highwater {hw}")
+    # ── the classified classes (every dir, tracked holders only). The raw
+    # `dup` above keeps its serial-only ratchet semantics and its existing
+    # pins; these are the decidability upgrade — see the docstring's scope
+    # section. A collision group of a FAMILY plus one token-carrying intruder
+    # still fires: the pairwise token rule runs over every holder pair.
+    for dirname, by_num in grouped:
+        in_family_dir = dirname not in SERIAL_DIRS
+        for num, files in sorted(by_num.items()):
+            held = [(nm, tr) for nm, tr in files if tr]
+            if len(held) < 2:
+                continue
+            stems = [ng.stem_of(nm) for nm, _tr in held]
+            cls = ng.classify_stems(stems)
+            names = " · ".join(nm for nm, _tr in held)
+            row = f"{dirname}/{num} ×{len(held)}: {names}"
+            if cls == "COLLISION":
+                collision.append(row)
+            elif cls == "RENAME-RESIDUE":
+                rename_res.append(row)
+            elif cls == "HAND-READ":
+                hand_read.append(row)
+            else:
+                n_family += 1
+                if in_family_dir:
+                    continue               # the intended convention — silent
+                # a serial-dir FAMILY is disclosed under dup's own row above;
+                # nothing more to say here.
+                continue
     # ── the counter-transition classes (Issues 769 + 770): every dir WITH a
     # counter, judged per-commit against its own parents (merge commits
     # included). The walker is the audit's, imported not re-implemented.
@@ -237,7 +302,9 @@ def audit(repo: Path) -> dict:
             for d, num, stems in hist_rows]
     return {"dup": dup, "above": above, "malformed": malformed,
             "resets": resets, "unbumped": unbumped, "hist": hist,
-            "n_files": n_serial, "n_numbers": n_numbers}
+            "collision": collision, "rename_residue": rename_res,
+            "hand_read": hand_read, "n_family": n_family,
+            "n_files": n_serial, "n_numbers": n_numbers, "n_bench": n_bench}
 
 
 def head_listing(repo: Path) -> dict[str, list[str]] | None:
@@ -312,12 +379,20 @@ def head_audit(repo: Path) -> dict | None:
         return None
     tracked = {f"{d}/{n}" for d, ns in listing.items() for n in ns}
     dup, above, malformed = [], [], []
+    collision, rename_res, hand_read = [], [], []
     n_serial = 0
+    n_family = 0
+    n_bench = 0
+    grouped: list[tuple[str, dict]] = []
     for dirname in ALL_DIRS:
         by_num, n = ng.group_numbered(listing[dirname], dirname, tracked)
+        grouped.append((dirname, by_num))
         hw, hw_bad = ng.parse_highwater(head_text(repo, f"{dirname}/{ng.HIGHWATER}"))
         if hw_bad is not None:
             malformed.append(f"{dirname}/.highwater = {hw_bad!r}")
+        if dirname in (".benchmarks", ".docs"):
+            n_bench += sum(1 for files in by_num.values()
+                           for _nm, tr in files if tr)
         if dirname not in SERIAL_DIRS:
             continue
         n_serial += n
@@ -328,11 +403,31 @@ def head_audit(repo: Path) -> dict | None:
             dup.append(f"{dirname}/{num:03d} ×{len(files)}: {names}")
         if hw is not None and by_num and max(by_num) > hw:
             above.append(f"{dirname}: max {max(by_num)} > .highwater {hw}")
+    for dirname, by_num in grouped:
+        for num, files in sorted(by_num.items()):
+            held = [(nm, tr) for nm, tr in files if tr]
+            if len(held) < 2:
+                continue
+            stems = [ng.stem_of(nm) for nm, _tr in held]
+            cls = ng.classify_stems(stems)
+            names = " · ".join(nm for nm, _tr in held)
+            row = f"{dirname}/{num} ×{len(held)}: {names}"
+            if cls == "COLLISION":
+                collision.append(row)
+            elif cls == "RENAME-RESIDUE":
+                rename_res.append(row)
+            elif cls == "HAND-READ":
+                hand_read.append(row)
+            else:
+                n_family += 1
     return {"dup": dup, "above": above, "malformed": malformed,
-            "n_files": n_serial}
+            "collision": collision, "rename_residue": rename_res,
+            "hand_read": hand_read, "n_family": n_family,
+            "n_files": n_serial, "n_bench": n_bench}
 
 
-ADJUDICATED = ("dup", "above", "malformed")
+ADJUDICATED = ("dup", "above", "malformed",
+               "collision", "rename_residue", "hand_read")
 
 
 def adjudicate(repo: Path, got: dict) -> tuple[dict, dict]:
@@ -368,8 +463,10 @@ def adjudicate(repo: Path, got: dict) -> tuple[dict, dict]:
     # another session's uncommitted deletion took a citation population from
     # 607 to 601, and a floor re-pinned from such a run bakes an in-flight edit
     # into a tracked file. `n_files` is the population behind `min_files`, so
-    # it is HEAD's count that the floor adjudicates.
+    # it is HEAD's count that the floor adjudicates — and `n_bench` is the
+    # population behind `min_bench` under exactly the same rule.
     judged["n_files"] = head["n_files"]
+    judged["n_bench"] = head["n_bench"]
     return deltas, judged
 
 
@@ -385,6 +482,29 @@ def pin_flags(got: dict, row: dict[str, int]) -> list[str]:
     flags = []
     if got["n_files"] < row["min_files"]:
         flags.append(f"population FLOOR breached: {got['n_files']} < {row['min_files']}")
+    if got["n_bench"] < row["min_bench"]:
+        flags.append(
+            f"bench population FLOOR breached: {got['n_bench']} < {row['min_bench']} "
+            f"— the classified classes (collision/rename/hand) are green over a "
+            f"blind walk if this fires; a wall is only as good as the walk "
+            f"beneath it")
+    if got["collision"]:
+        flags.append(
+            f"COLLISION WALL: {len(got['collision'])} filename-decidable "
+            f"two-owner number group(s) — never pinned, never a ratchet; "
+            f"renumber the loser by the issue-556 protocol (first allocation "
+            f"keeps, every citing site moves in the same commit): "
+            + " | ".join(got["collision"]))
+    if len(got["rename_residue"]) > row["max_rename"]:
+        flags.append(
+            f"rename residues {len(got['rename_residue'])} > pinned "
+            f"{row['max_rename']} — one document under two spellings; the "
+            f"content read decides which copy dies (git history keeps it)")
+    if len(got["hand_read"]) > row["max_hand"]:
+        flags.append(
+            f"hand-read groups {len(got['hand_read'])} > pinned {row['max_hand']} "
+            f"— a NEW token-less duplicate group; the ratchet catches the next "
+            f"one, the standing backlog lives in the pins")
     if got["n_numbers"] < row["min_numbers"]:
         flags.append(
             f"HISTORY WALK floor breached: {got['n_numbers']} < {row['min_numbers']} "
@@ -535,19 +655,22 @@ def selftest() -> list[str]:
             fails.append(f"hist: the history walk must widen the population it "
                          f"floors ({got6['n_numbers']} <= {got5['n_numbers']})")
 
-        # row parser: 8 fields, comments stripped, arity enforced
+        # row parser: 11 fields, comments stripped, arity enforced
         pins = ws / "pins.txt"
-        pins.write_text("# c\nrepo-a\t10\t0\t0\t0\t0\t7\t2  # trailing\n\n", encoding="utf-8")
+        pins.write_text("# c\nrepo-a\t10\t0\t0\t0\t0\t7\t2\t50\t0\t3  # trailing\n\n", encoding="utf-8")
         if parse_rows(pins) != {"repo-a": {"min_files": 10, "max_dup": 0,
                                            "max_above": 0, "max_malformed": 0,
                                            "max_resets": 0, "min_numbers": 7,
-                                           "max_hist": 2}}:
-            fails.append("row parse: 8-field row not read correctly")
-        # ⚠ a 6-field row is the PRE-820 shape and must be REFUSED, not read
-        # with the new columns defaulted: a defaulted `min_numbers = 0` is a
-        # floor that cannot fail, and `max_hist = 0` would red every repo.
-        # Both directions of arity, so the parser cannot only ever loosen.
-        for bad_row in ("repo-a 1 2 3 4 5\n", "repo-a 1 2 3 4 5 6 7 8\n"):
+                                           "max_hist": 2, "min_bench": 50,
+                                           "max_rename": 0, "max_hand": 3}}:
+            fails.append("row parse: 11-field row not read correctly")
+        # ⚠ a 10-field row is the PRE-classifier shape and must be REFUSED, not
+        # read with the new columns defaulted: a defaulted `min_bench = 0` is a
+        # floor that cannot fail, and `max_hand = 0` would red every repo with
+        # a token-less bench family. Both directions of arity, so the parser
+        # cannot only ever loosen.
+        for bad_row in ("repo-a 1 2 3 4 5 6 7 8 9\n",
+                        "repo-a 1 2 3 4 5 6 7 8 9 10 11\n"):
             pins.write_text(bad_row, encoding="utf-8")
             try:
                 parse_rows(pins)
@@ -562,23 +685,82 @@ def selftest() -> list[str]:
         # it — the defect AGENTS.md records against injected probes, and the
         # reason `pin_flags` was extracted out of main() at all.
         row = {"min_files": 0, "max_dup": 9, "max_above": 9, "max_malformed": 9,
-               "max_resets": 9, "min_numbers": 5, "max_hist": 1}
+               "max_resets": 9, "min_numbers": 5, "max_hist": 1,
+               "min_bench": 0, "max_rename": 9, "max_hand": 9}
         base = {k: [] for k in ("dup", "above", "malformed", "resets", "hist")}
         for n_hist, n_num, want in ((1, 5, False), (2, 5, True),
                                     (1, 4, True), (0, 5, False), (0, 4, True)):
             got_f = pin_flags({**base, "hist": ["x"] * n_hist,
-                               "n_files": 0, "n_numbers": n_num}, row)
+                               "n_files": 0, "n_bench": 0, "collision": [],
+                               "rename_residue": [], "hand_read": [],
+                               "n_numbers": n_num}, row)
             if bool(got_f) != want:
                 fails.append(f"verdict: hist={n_hist} nums={n_num} "
                              f"flags={got_f}, want fired={want}")
         # and the classes must be DISTINGUISHABLE in the message, or a reader
         # cannot tell a blind walk from a real new collision
-        blind = pin_flags({**base, "n_files": 0, "n_numbers": 0}, row)
-        grew = pin_flags({**base, "hist": ["x", "y"], "n_files": 0, "n_numbers": 9}, row)
+        blind = pin_flags({**base, "n_files": 0, "n_bench": 0, "collision": [],
+                           "rename_residue": [], "hand_read": [],
+                           "n_numbers": 0}, row)
+        grew = pin_flags({**base, "hist": ["x", "y"], "n_files": 0,
+                          "n_bench": 0, "collision": [], "rename_residue": [],
+                          "hand_read": [], "n_numbers": 9}, row)
         if not (blind and "WALK floor" in blind[0]):
             fails.append(f"verdict: a blind history walk must name itself: {blind}")
         if not (grew and "historical collisions" in grew[0]):
             fails.append(f"verdict: a new collision must name itself: {grew}")
+
+        # ── the classified classes: the classifier's vectors first (pure, no
+        # git), then the WALL's verdict arithmetic through pin_flags — the
+        # function main() calls, never a re-derivation (the arm above's rule).
+        # The vectors encode riir-train issue-556's arms INCLUDING the four
+        # live collisions this sweep's landing resolved, so the two classifiers
+        # are pinned to agree by data, not by comment.
+        vec = [
+            (("issue771_flash_cmma", "issue772_expand_l2_staged_sum"), "COLLISION"),  # riir-ai 809
+            (("issue879_t3_kv_weight_quant_nll", "issue880_t0_warm_read_stall"), "COLLISION"),  # riir-ai 872
+            (("issue1127_t4_recell_bundle", "issue1132_metal_launch_floor_census_w1"), "COLLISION"),  # riir-ai 1008
+            (("plan619_clef_text_ane_latency", "plan621_gdn_l8_eager_prefill"), "COLLISION"),  # riir-infer 884
+            (("421_a", "421_b", "421_c"), "HAND-READ"),                  # the token-less family shape
+            (("plan421_p05", "plan421_p2", "plan421_p3"), "FAMILY-EXPLICIT"),
+            (("issue663_a", "issue663_b"), "FAMILY-EXPLICIT"),
+            (("549_plan354_p2_t1", "549_plan354_p2t1"), "RENAME-RESIDUE"),  # the 556 founding residue
+            (("plan999_x", "issue777_y"), "COLLISION"),                  # cross-kind disjoint tokens
+            (("x", "y"), "HAND-READ"),
+            (("plan421_a", "plan421_b", "plan888_z"), "COLLISION"),      # a token-carrying intruder inside a family
+            (("421_a", "421_b", "999_z"), "HAND-READ"),                  # a TOKEN-LESS intruder is undecidable, like its family
+            (("plan300_t1", "plan300_t2", "issue300_extra"), "COLLISION"),  # plan300 vs issue300 differ
+        ]
+        for stems_v, want_cls in vec:
+            got_cls = ng.classify_stems(list(stems_v))
+            if got_cls != want_cls:
+                fails.append(f"classify: {stems_v} -> {got_cls}, want {want_cls}")
+        # the stem splitter itself: the whole-filename-match trap (see the
+        # stem_of docstring) yields "" for every file, classifying every
+        # group RENAME-RESIDUE and greenning every wall — this arm caught it
+        if ng.stem_of("809_issue771_flash_cmma.md") != "issue771_flash_cmma":
+            fails.append("stem_of: whole-filename match trap: "
+                         f"{ng.stem_of('809_issue771_flash_cmma.md')!r}")
+        if ng.stem_of("0841_x.md") != "x" or ng.stem_of("0421_a.md") != "a":
+            fails.append("stem_of: multi-digit prefix or plain-stem handling broke")
+        wall_row = {"min_files": 0, "max_dup": 0, "max_above": 0,
+                    "max_malformed": 0, "max_resets": 0, "min_numbers": 0,
+                    "max_hist": 0, "min_bench": 0, "max_rename": 0,
+                    "max_hand": 0}
+        wall_base = {**{k: [] for k in base}, "n_files": 0, "n_bench": 50,
+                     "n_numbers": 9, "collision": ["x"], "rename_residue": [],
+                     "hand_read": []}
+        wf = pin_flags(wall_base, wall_row)
+        if not any("COLLISION WALL" in f for f in wf):
+            fails.append(f"verdict: the collision wall must fire through "
+                         f"pin_flags regardless of every pin: {wf}")
+        # and the bench population floor through the same seam
+        ff = pin_flags({**wall_base, "collision": [], "n_bench": 1},
+                       {**wall_row, "min_bench": 50})
+        if not any("bench population FLOOR" in f for f in ff):
+            fails.append(f"verdict: a bench-walk regression must red the "
+                         f"min_bench floor: {ff}")
+
     return fails + adjudicate_arms()
 
 
@@ -733,11 +915,79 @@ def adjudicate_cases() -> list[str]:
         (plain / ".issues" / "001_a.md").write_text("x", encoding="utf-8")
         if head_audit(plain) is not None:
             fails.append("head_audit: a non-repository produced a HEAD view")
-        got = {"dup": ["r"], "above": [], "malformed": [], "n_files": 1}
+        got = {"dup": ["r"], "above": [], "malformed": [], "n_files": 1,
+               "collision": [], "rename_residue": [], "hand_read": [],
+               "n_bench": 0}
         deltas, judged = adjudicate(plain, got)
         if judged["dup"] != ["r"] or deltas["dup"].uncommitted:
             fails.append(f"adjudicate: a repo with no HEAD must leave every "
                          f"row COMMITTED ({deltas['dup']})")
+
+    # h. A STAGED token-disjoint collision in .benchmarks — the class the raw
+    #    dup never saw. Tracked, so the worktree reports it; no commit
+    #    contains it, so the wall must NOT red: a colleague's in-flight renumber
+    #    is exactly the shape the UNCOMMITTED split exists for.
+    with tempfile.TemporaryDirectory() as td:
+        repo = fixture(td)
+        (repo / ".benchmarks").mkdir()
+        (repo / ".benchmarks" / ng.HIGHWATER).write_text("2\n", encoding="utf-8")
+        (repo / ".benchmarks" / "010_plan1_a.md").write_text("x", encoding="utf-8")
+        (repo / ".benchmarks" / "010_plan2_b.md").write_text("y", encoding="utf-8")
+        git(repo, "add", ".benchmarks")
+        got, deltas, judged = run(repo)
+        if not got["collision"]:
+            fails.append(f"arm h: the fixture is INERT — a staged token-"
+                         f"disjoint benchmark pair must classify COLLISION "
+                         f"({got['collision']})")
+        if judged["collision"] or len(deltas["collision"].uncommitted) != 1:
+            fails.append(f"adjudicate: a STAGED collision reached the wall "
+                         f"({judged['collision']}) instead of UNCOMMITTED")
+
+    # i. The COMMITTED collision reds the wall through pin_flags even with
+    #    every ceiling at zero-and-generous — and a committed FAMILY beside it
+    #    does not. This is the two-sided non-vacuity arm for the whole class.
+    with tempfile.TemporaryDirectory() as td:
+        repo = fixture(td)
+        (repo / ".benchmarks").mkdir()
+        (repo / ".benchmarks" / ng.HIGHWATER).write_text("3\n", encoding="utf-8")
+        (repo / ".benchmarks" / "011_plan1_a.md").write_text("x", encoding="utf-8")
+        (repo / ".benchmarks" / "011_plan2_b.md").write_text("y", encoding="utf-8")
+        (repo / ".benchmarks" / "012_plan3_c.md").write_text("z", encoding="utf-8")
+        (repo / ".benchmarks" / "012_plan3_d.md").write_text("w", encoding="utf-8")
+        git(repo, "add", "-A")
+        git(repo, "-c", "commit.gpgsign=false", "commit", "-qm", "coll+family")
+        got, deltas, judged = run(repo)
+        if len(judged["collision"]) != 1:
+            fails.append(f"arm i: a COMMITTED collision must reach the wall "
+                         f"({judged['collision']})")
+        if got["n_family"] != 1:
+            fails.append(f"arm i: the fixture is INERT — the committed family "
+                         f"must count as FAMILY-EXPLICIT (n_family="
+                         f"{got['n_family']})")
+        flags = pin_flags(judged, {"min_files": 0, "max_dup": 0,
+                                   "max_above": 0, "max_malformed": 0,
+                                   "max_resets": 0, "min_numbers": 0,
+                                   "max_hist": 0, "min_bench": 0,
+                                   "max_rename": 0, "max_hand": 0})
+        if not any("COLLISION WALL" in f for f in flags):
+            fails.append(f"arm i: the wall must red through pin_flags on a "
+                         f"committed collision with every ceiling 0: {flags}")
+        if any("max_dup" in f for f in flags) or any("hand" in f for f in flags):
+            fails.append(f"arm i: a family plus a collision must not leak into "
+                         f"the raw dup or hand-read ceilings: {flags}")
+
+    # j. min_bench is a floor, and a floor is a pin too (Issue 797): it reads
+    #    HEAD's count, never the worktree's.
+    with tempfile.TemporaryDirectory() as td:
+        repo = fixture(td)
+        (repo / ".benchmarks").mkdir()
+        (repo / ".benchmarks" / "020_plan9_only.md").write_text("x", encoding="utf-8")
+        git(repo, "add", "-A")
+        got, deltas, judged = run(repo)
+        if got["n_bench"] != 1 or judged["n_bench"] != 0:
+            fails.append(f"adjudicate: the bench population floor read the "
+                         f"worktree ({got['n_bench']}) instead of HEAD "
+                         f"({judged['n_bench']})")
 
     return fails
 
@@ -789,6 +1039,23 @@ def main() -> int:
     if not PINS.is_file():
         print(f"✗ pins file missing: {PINS}")
         return 2
+    if "--measure-bench" in sys.argv:
+        # Early-exit measurement mode: paste-ready values for the three new
+        # pin columns, BEFORE the pins exist to be read (the landing run's
+        # chicken-and-egg). Worktree counts; a landing re-pins from HEAD
+        # verdicts, but the two agree on a clean tree by construction.
+        repos_m = contract_repos(WORKSPACE)
+        if not repos_m:
+            print("✗ empty population")
+            return 2
+        for repo_m in repos_m:
+            path_m = open_repo(repo_m.name, WORKSPACE)
+            got_m = audit(path_m)
+            print(f"{repo_m.name}\tbench={got_m['n_bench']}\t"
+                  f"rename={len(got_m['rename_residue'])}\t"
+                  f"hand={len(got_m['hand_read'])}\t"
+                  f"fam={got_m['n_family']}\tcoll={len(got_m['collision'])}")
+        return 0
     try:
         pins = parse_rows(PINS)
     except ValueError as e:
@@ -809,6 +1076,7 @@ def main() -> int:
     seen = {p.name for p in repos}
     bad = False
     tot_dup = tot_above = tot_mal = tot_reset = tot_unb = tot_hist = 0
+    tot_coll = tot_rename = tot_hand = tot_fam = 0
     tot_uncommitted = tot_masked = 0
 
     for repo in repos:
@@ -830,6 +1098,10 @@ def main() -> int:
         tot_mal += len(got["malformed"])
         tot_reset += len(got["resets"])
         tot_unb += len(got["unbumped"])
+        tot_coll += len(got["collision"])
+        tot_rename += len(got["rename_residue"])
+        tot_hand += len(got["hand_read"])
+        tot_fam += got["n_family"]
         # Issue 821: an acknowledged known-extra owes no pin row. This landed
         # here first (Issue 820 T6) as a local copy; it is `pin_row_exempt`
         # now, shared with the other 14 sweeps — the whole point of 821 being
@@ -843,7 +1115,9 @@ def main() -> int:
         # quantity is a function of which branch the box carries — printed
         # like the citation sweep's undecided rows, never pinned, never red.
         status = "✗" if flags else ("·" if (got["dup"] or got["above"] or got["malformed"]
-                                    or got["resets"] or got["unbumped"]) else "✓")
+                                    or got["resets"] or got["unbumped"]
+                                    or got["collision"] or got["rename_residue"]
+                                    or got["hand_read"]) else "✓")
         n_masked = sum(len(d.masked) for d in deltas.values())
         split = ""
         if held or n_masked:
@@ -854,7 +1128,10 @@ def main() -> int:
         print(f"{status} {repo.name:22s} files={got['n_files']:<5d} nums={got['n_numbers']:<5d} "
               f"dup={len(got['dup'])} hist={len(got['hist'])} "
               f"stale={len(got['above'])} malformed={len(got['malformed'])} "
-              f"resets={len(got['resets'])} unbumped={len(got['unbumped'])}{split}")
+              f"resets={len(got['resets'])} unbumped={len(got['unbumped'])} "
+              f"bench={got['n_bench']:<4d} coll={len(got['collision'])} "
+              f"ren={len(got['rename_residue'])} hand={len(got['hand_read'])} "
+              f"fam={got['n_family']}{split}")
 
         def mark(r: str) -> str:
             return " [UNCOMMITTED — not adjudicated]" if r in held else ""
@@ -872,6 +1149,18 @@ def main() -> int:
             print(f"      stale:      {r}{mark(r)}")
         for r in got["dup"]:
             print(f"      duplicate:  {r}{mark(r)}")
+        # Collision + residue rows print ALWAYS: the wall expects zero, and a
+        # row nobody can see is the masked-direction failure mode. Hand-read
+        # rows print on breach only — the workspace backlog is ~150 groups of
+        # old-convention bench families, and printing them every run is the
+        # cries-wolf failure (the --hist-rows reasoning, one class over).
+        for r in got["collision"]:
+            print(f"      ⛔ COLLISION: {r}{mark(r)}")
+        for r in got["rename_residue"]:
+            print(f"      ⛔ rename-residue: {r}{mark(r)}")
+        if row is not None and len(got["hand_read"]) > row["max_hand"]:
+            for r in got["hand_read"]:
+                print(f"      hand-read:  {r}{mark(r)}")
         # A MASKED row is NOT in the worktree buckets — that is what MASKED
         # means — so it prints from the HEAD side or it prints nowhere, and a
         # ceiling reds over a row nobody can see.
@@ -944,7 +1233,10 @@ def main() -> int:
     print(f"\n{len(repos)} contract repo(s) · {tot_dup} tracked duplicate(s) · "
           f"{tot_hist} historical collision(s) · "
           f"{tot_above} stale allocator(s) · {tot_mal} malformed allocator(s) · "
-          f"{tot_reset} counter reset(s) · {tot_unb} un-bumped counter(s) [report-only]")
+          f"{tot_reset} counter reset(s) · {tot_unb} un-bumped counter(s) [report-only]\n")
+    print(f"  classified (all six dirs, tracked .md holders): "
+          f"{tot_coll} COLLISION · {tot_rename} rename-residue · "
+          f"{tot_hand} hand-read · {tot_fam} family-explicit")
     print(f"  ⛔ `tracked duplicate` and `historical collision` are NOT two "
           f"views of one quantity (Issue 820). The first reads the worktree, "
           f"so it goes green the moment both holders CLOSE — and every number "
@@ -960,17 +1252,17 @@ def main() -> int:
           f"it — merge resolutions taking the lower side included). Pinned at "
           f"measured as a ratchet — a NEW reset reds at its pin. unbumped rows "
           f"are checkout state (branch-dependent), printed, never gated.")
-    # Say the scope at the point of READING, not only in the docstring. A green
-    # `dup=0` is green over SERIAL_DIRS only, and riir-ai carried four genuine
-    # cross-topic `.benchmarks/` collisions (617/619, resolved 2026-09-05) while
-    # this line printed `dup=0` for it — the number was right and the reader's
-    # inference from it was not.
+    # Say the scope at the point of READING, not only in the docstring. The
+    # raw `dup` ratchet is still SERIAL-scoped (its pins were measured there),
+    # but the classified classes cover every numbered directory: the
+    # "undecidable convention" excuse retired when the stem classifier landed
+    # (2026-10-29) — owner identity IS decidable from the filenames.
     family = "/".join(d for d in ALL_DIRS if d not in SERIAL_DIRS)
-    print(f"  scope: duplicate + stale checks cover {'/'.join(SERIAL_DIRS)} ONLY; "
-          f"{family} share numbers by OWNER convention (a family per plan/issue "
-          f"is intended) and are malformed-checked only — see "
-          f"{PINS.name} for the measured reason. A `dup=0` above is NOT a claim "
-          f"about {family}.")
+    print(f"  scope: the RAW duplicate + stale checks cover {'/'.join(SERIAL_DIRS)} "
+          f"only; the classified classes (COLLISION wall, rename-residue, "
+          f"hand-read) cover ALL numbered dirs incl. {family} — a `coll=0` "
+          f"above is a wall over every directory, a `dup=0` is NOT a claim "
+          f"about {family}. See {PINS.name} for the measured pins.")
     if bad:
         print("✗ numbering sweep FAILED — see the ✗ rows above")
         for _d in deferred:

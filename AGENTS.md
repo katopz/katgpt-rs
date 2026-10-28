@@ -1484,6 +1484,25 @@ the witness, armed on every push (Issue 850).
   counters; no major repo contiguous) — an over-claiming witness VALIDATES
   wrong addresses, and the contiguous-suffix witness was declined (decline is
   a correct answer).
+- **The on-disk duplicate classifier (2026-10-29, ported from riir-train's
+  issue-556 gate into `numbering_gate.classify_stems`)**: a ≥2-tracked-holder
+  (number, directory) group classifies from its stems alone — COLLISION
+  (token-disjoint: two unrelated owners on one number), RENAME-RESIDUE (one
+  document, two spellings), FAMILY-EXPLICIT (the intended one-owner family),
+  HAND-READ (token-less, undecidable). `numbering_drift_sweep.py` classifies
+  every numbered directory — the old "`.benchmarks/` is undecidable" excuse
+  retired, because owner identity IS decidable — and walls COLLISION at zero
+  in every repo (pinned or not; the issue-556 law: a pinned COLLISION row is
+  a work item, never an excuse), ratchets rename/hand-read at measured, and
+  floors the bench population (`min_bench`). Found live on landing day and
+  resolved BEFORE the wall armed: riir-ai `.benchmarks/` 809/872/1008 +
+  riir-infer `884` (four two-owner numbers; first-allocation adjudication,
+  losers renumbered 1016/1017/1018/926, every citation moved in-commit —
+  2d591ea, b5f9a8c2f+4427a6547). The raw `dup` ratchet keeps its serial-only
+  semantics and its existing pins; the classified classes are the upgrade.
+ Population delta, disclosed: the classifier sees numbered .md documents only
+  (no directories, no non-md sidecars — riir-train's gate is the broader
+  one for its own repo).
 
 ## Branch
 
