@@ -37,9 +37,9 @@ Fan the wall out to the workspace, lifting riir-train's classifier — DRY over 
 
 ## Observed state at filing (disclosure, not findings of this issue)
 
-- riir-ai live `.benchmarks` collisions the reproduction surfaced: **809, 872, 1008** (1008 is a TRIPLE: `issue1127_t4_recell_bundle` + `issue1132_metal_launch_floor_census_w1` + `issue1132_w2_reduce.py`). Unadjudicated — owner plan/issue identity per group not yet determined; they become the new wall's first population when it lands.
-- riir-ai pre-existing drift: `.issues` highwater stale vs holders 1135/1136; stale HAND-READ pins (421/423 plan-family groups "no longer on disk"); floors pinned from a fuller box. riir-ai's own lanes'.
-- `numbering_drift_sweep.py` is red on riir-refine (hist=6 vs max_hist=5 — a new historical collision) and riir-ai (stale highwater + resets) as of this filing — pre-existing, disclosed so the new wall's first run is not blamed for red it inherited.
+- riir-ai live `.benchmarks` collisions the reproduction surfaced: **809, 872, 1008** (1008 is a TRIPLE: `issue1127_t4_recell_bundle` + `issue1132_metal_launch_floor_census_w1` + `issue1132_w2_reduce.py`). Unadjudicated — owner plan/issue identity per group not yet determined; they become the new wall's first population when it lands. — **Disposition 2026-10-29: adjudicated + renumbered (task 1, `b5f9a8c2f`+`4427a6547`, `2d591ea`).**
+- riir-ai pre-existing drift: `.issues` highwater stale vs holders 1135/1136; stale HAND-READ pins (421/423 plan-family groups "no longer on disk"); floors pinned from a fuller box. riir-ai's own lanes'. — **Disposition 2026-10-29: the highwater repair landed `636a449ea` (1134→1136, the 66dc7f0a9 regression — the 971 housekeeping lane); pins/floors re-measured at the landing (`a1f0751aa`).**
+- `numbering_drift_sweep.py` is red on riir-refine (hist=6 vs max_hist=5 — a new historical collision) and riir-ai (stale highwater + resets) as of this filing — pre-existing, disclosed so the new wall's first run is not blamed for red it inherited. — **Disposition 2026-10-29: routed + ratcheted `0f3abc835` (refine max_hist 5→6, `.research/344` the named work item; ai max_resets 9→10) — the 971 housekeeping lane.**
 - The naming law quirk this incident also exercised: `dual_allocation_gate` is armed on every push but cannot see same-checkout divergences BY DESIGN; its complement (this wall) was armed in ONE repo. The pairing is the finding.
 
 ## Tasks
