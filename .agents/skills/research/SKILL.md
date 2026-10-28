@@ -16,14 +16,13 @@ Do NOT activate for: pure refactor, bug fixes with no research angle, or ordinar
 ## Repos
 
 **Canonical count + membership: `katgpt-rs/AGENTS.md` §"Repo count"** — the
-product/distillation set is **7** (first block below); the workspace is **27
-contract repos at the 2026-10-07 read** (all with a root `BOUNDARY.md`; the
-Instinct/Rethink carve added two 2026-10-03 — this file's typed counts have
-rotted before, so derive the set, never trust this or any number here):
+product/distillation set is **7** (first block below). The workspace around
+it is every sibling with a root `BOUNDARY.md` + `.git`. Derive it; never type
+a count here (this file's typed counts have gone stale three times):
 
 ```bash
-cd /Users/katopz/git && for d in */; do
-  case "$d" in *.wprobe/) continue;; esac   # probe artifacts carry BOUNDARY.md + .git but are not repos (naive derive returns 28)
+cd "$(git -C katgpt-rs rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel)/.." && for d in */; do  # run from katgpt-rs or its parent
+  case "$d" in *.wprobe/) continue;; esac   # probe artifacts carry BOUNDARY.md + .git but are not repos (a naive derive over-counts)
   [ -f "$d/BOUNDARY.md" ] && [ -d "$d/.git" ] && echo "${d%/}"
 done
 ```
@@ -38,7 +37,7 @@ The product/distillation set (7):
 - `riir-game-sdk/` — private facade + dev-tool workspace; downstream consumer, rarely a distillation target.
 - `riir-dapps/` — private dApp layer (added 2026-08-20). Game outcome → generic chain settlement (`Settlement`, `MultiClaimEscrow` composition) + the KAT ledger/service SERVER plane (kat_ledger, epoch settle, payment rails, CF worker/DO shell). Route settlement-composition + service-economy papers here, NOT riir-chain.
 
-**The wider workspace (the other 20 — route here only when the insight is
+**The wider workspace (route here only when the insight is
 inseparable from that surface; the first three entries are first-class PUBLIC
 distillation targets, not last resorts):
 
@@ -55,10 +54,8 @@ distillation targets, not last resorts):
 - `riir-viewbridge/` — private Unity FFI seam, **PARKED 2026-09-03** (Bevy is the shipping render path). FFI raw/latent-wall papers only; expect no consumer until unfreeze.
 - `katgpt-web/` — PUBLIC explainer site ("The Anatomy of KatGPT-RS"). Presentation surface only — **nothing private may ever appear here**; never a distillation target.
 - `riir-shader/` — private shader surface (workspace member per `scripts/repo_set.txt`; no established research routing yet).
-- (`riir-armageddon/` sat in the product set until it was retired 2026-09-02, owner
-  act — the directory is gone; do not route to it.)
 - Also on disk, never routed by name: `riir-mmorpg-examples`, `riir-llm`,
-  `mmorpg-editor`, `mmorpg-remake`, `mmorpg-remaster`, `riir-reflexer`,
+  `seal-game-editor`, `seal-remake`, `seal-render`, `seal-std`, `riir-refab`, `jup-tool`, `zed`, `mmorpg-remake`, `mmorpg-remaster`, `riir-reflexer`,
   `reflex-site` — consumers/leaf/presentation surfaces, targets of last resort
   (`riir-mmorpg-examples` is the reference game consumer; `reflex-site` is the
   public bench-publish front).
@@ -417,7 +414,7 @@ If §4 surfaces rich landscape, use web search for deeper exploration of specifi
 2. **Latent-to-latent preferred** — operate in latent space as long as possible. Decode/project only at boundary. **Sigmoid, never softmax**, for projections onto learned directions. Semantic (emotion/mood/curiosity/style) → latent. Physical (position/HP/wallet) → raw, deterministic, synced.
 3. **Freeze/thaw over fine-tuning** — only runtime weight mutation is swapping a frozen snapshot (atomic, versioned, BLAKE3-checked) or applying a deterministically-constructed LoRA overlay (raw/lora hot-swap, no GD). Never mutate weights in-place during inference. Gradient updates (after §3.5) → riir-train.
 4. **Self-learn / adaptive CoT welcome** — runtime curiosity, latent prediction, trajectory folding, collapse detection. Update latent state / direction vectors / routing tables, NOT base weights.
-5. **7-repo discipline** (the product/distillation set; canonical list in `katgpt-rs/AGENTS.md` §"Repo count") — katgpt-rs (public) → riir-ai → riir-chain → riir-neuron-db → riir-train (all private) + riir-game-sdk (facade) + riir-dapps (dApp layer: game outcome → generic chain settlement, added 2026-08-20). It read "8-repo" and included `riir-armageddon` until 2026-09-03; that repo was retired 2026-09-02 (owner act, directory gone). The WORKSPACE around that set is 27 contract repos at the 2026-10-07 read (canonical: `katgpt-rs/AGENTS.md` §"Repo count"; the Instinct/Rethink carve added two 2026-10-03) — `riir-refine`, `riir-auth`, `riir-dao`, `riir-viewbridge`, `riir-rethink` carry `.research/` too (healer-domain notes file in riir-refine per the MOAT table; rethink's carries the ESC-depth line; instinct's is created on first use); `riir-infer`, `riir-reflex` AND `riir-instinct` are PUBLIC first-class routing targets (MOAT rows in §1.6 — inference-substrate papers file in riir-infer, decision-serving papers in riir-reflex, open-stack/grammar papers in riir-instinct); the rest (riir-kat, riir-deployer, riir-esp32, katgpt-web, riir-mmorpg-examples, riir-shader, riir-llm, riir-reflexer) are consumers/protocol/leaf/POC/presentation surfaces — routing targets of last resort. **Read a count in prose as a claim, not a fact — derive the set (§Repos).** Training how never leaks to katgpt-rs; chain IP in riir-chain; shard IP in riir-neuron-db; SDK stays facade over `riir-games-shared`; riir-infer + riir-reflex are the sanctioned public substrate/serving tiers, not runtime/chain/shard/train IP.
+5. **7-repo discipline** (the product/distillation set; canonical list in `katgpt-rs/AGENTS.md` §"Repo count") — katgpt-rs (public) → riir-ai → riir-chain → riir-neuron-db → riir-train (all private) + riir-game-sdk (facade) + riir-dapps (dApp layer: game outcome → generic chain settlement, added 2026-08-20). The WORKSPACE around that set is larger. The count and membership live only in `katgpt-rs/AGENTS.md` §"Repo count" and `scripts/repo_set.txt`; never copy the number here. `riir-refine`, `riir-auth`, `riir-dao`, `riir-viewbridge` and `riir-rethink` carry `.research/` too: healer-domain notes go in riir-refine per the MOAT table, rethink's holds the ESC-depth line, and instinct's is created on first use. `riir-infer`, `riir-reflex` AND `riir-instinct` are PUBLIC first-class routing targets (MOAT rows in §1.6): inference-substrate papers file in riir-infer, decision-serving papers in riir-reflex, and open-stack/grammar papers in riir-instinct. The rest are consumers/protocol/leaf/POC/presentation surfaces, routing targets of last resort. The retired `riir-armageddon` history is in git. **Read a count in prose as a claim, not a fact — derive the set (§Repos).** Training how never leaks to katgpt-rs; chain IP in riir-chain; shard IP in riir-neuron-db; SDK stays facade over `riir-games-shared`; riir-infer + riir-reflex are the sanctioned public substrate/serving tiers, not runtime/chain/shard/train IP.
 6. **SOLID, DRY** — per `katgpt-rs/.contexts/optimization.md`. Zero-alloc hot paths. Pre-computed lookup tables. Fixed-size arrays for bounded domains.
 7. **Tests/examples** — before/after showing the gain. Latent ops: projection preserves ranking. Freeze/thaw: readers never see torn snapshots.
 8. **CPU/GPU/ANE auto-route** — threshold-adaptive. Plasma (µs SIMD) → Hot (sub-ms GPU) → Warm/Cold (ms+ GPU/ANE). L1-fitting latent ops stay SIMD; batched matmul goes GPU.
@@ -425,15 +422,7 @@ If §4 surfaces rich landscape, use web search for deeper exploration of specifi
 
 ## Latent vs raw space rules (critical for game AI)
 
-- **Physical** (position, velocity, HP, wallet): MUST be raw exact. Deterministic replay, quorum sync, anti-cheat require bit-identical reconstruction.
-- **Semantic** (emotion, mood, curiosity, style, habit): SHOULD be latent via dot-product + sigmoid onto learned direction vectors.
-- **Social** (encounters, relationships, factions): SHOULD produce KG triples from latent/embedding proximity, not raw coordinate distance.
-
-**Sync boundary:** if data flows through `SyncBlock → ChainConsensus` quorum → Cold tier, it MUST be raw + deterministic. If consumed locally (emotion projection, shard retrieval, consolidation sleep-cycle), it SHOULD be latent. Bridge functions (raw→latent projection, latent→raw scalar clamp) MUST be zero-alloc, gateable, sync-invariant.
-
-**KG triple emission:** semantic encounters → KG triple from latent similarity. Physical events → TxDelta with raw values, NOT KG triple. Never substitute latent embedding for raw position in anti-cheat.
-
-**Spatial cognition (two-brain model):** info brain = real `MapPos` (synced, ground truth). Think brain = per-NPC `SpatialBelief` (zone KG triple + stale last_known_pos, fog-of-war gated, NOT synced). Bridge is one-way: real position → belief update only when within `visible_radius`. Confidence decay: `sigmoid(-λ * (current_tick - last_observed_tick))`. Two brains MUST exist independently — divergence is emergent, not a bug.
+Physical → raw, exact, synced; semantic → latent, dot-product + sigmoid; social → KG triples from latent proximity; two-brain spatial cognition. The full rules, including the sync boundary, bridge pattern and KG-triple emission, are in [`latent_raw.md`](latent_raw.md). **Read it before any verdict that touches game AI or sync.**
 
 ## Cross-references (read on demand)
 
