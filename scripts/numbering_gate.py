@@ -15,8 +15,9 @@ this; nothing checked that it was consulted, and it repeatedly was not:
     checks.
 
 Scope, floors and ceilings are DATA, in `scripts/numbering_floors.txt`, which
-also carries the measured reason `.benchmarks/` and `.docs/` are excluded. Read
-that file before widening this one.
+also carries the measured reason `.docs/` is excluded and why `.benchmarks/`
+is CLASSIFIED (owner-keyed families) rather than raw-counted. Read that file
+before widening this one.
 
 Report + gate. Exit 0 clean, 1 on drift, **2 if the instrument itself is
 untrustworthy** (selftest failure) — an unreliable instrument is not the same
@@ -107,15 +108,43 @@ def stem_of(name: str) -> str:
     return stem[:-3] if stem.endswith(".md") else stem
 
 
-def parse_pins(path: Path) -> dict[str, int]:
-    pins: dict[str, int] = {}
+def classify_groups(by_num: dict) -> dict:
+    """Classify every >=2-TRACKED-holder group in one family directory.
+
+    -> {class: [(number, [stems])]}, and classes with no groups are ABSENT
+    from the dict — FAMILY-EXPLICIT silence is structural, never a printed
+    zero. Untracked holders are excluded exactly as in the drift sweep's
+    classification loop: a colleague's in-flight file is not a repo defect,
+    and the raw-dup warning lane already names the mixed groups.
+    """
+    out: dict = {}
+    for num, files in sorted(by_num.items()):
+        held = [(nm, tr) for nm, tr in files if tr]
+        if len(held) < 2:
+            continue
+        stems = [stem_of(nm) for nm, _tr in held]
+        out.setdefault(classify_stems(stems), []).append((num, stems))
+    return out
+
+
+def parse_pins(path: Path) -> dict:
+    """-> {key: int-or-str}. `family_dirs` is a comma-list of directory names,
+    so a value that does not parse as an int is KEPT AS ITS STRING rather than
+    crashing the parse: the pins file is DATA shared by two pin vocabularies
+    (numeric ceilings and the family-dir list), and one parser for both beats
+    a second file format. A key that NEEDS to be numeric is validated where it
+    is consumed (`int(val)` in the verdict code), never assumed here."""
+    pins: dict = {}
     # UTF-8-explicit: the locale codec (cp1252 on Windows) cannot decode pins with non-ASCII prose (2026-09-06 catch)
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line or "=" not in line:
             continue
         key, val = (p.strip() for p in line.split("=", 1))
-        pins[key] = int(val)
+        try:
+            pins[key] = int(val)
+        except ValueError:
+            pins[key] = val
     return pins
 
 
@@ -326,21 +355,26 @@ def selftest() -> list[str]:
     if int("075") != int("75"):
         fails.append("zero-pad normalization broken")
 
-    # 3. pin parsing: comments stripped, dotted keys kept
+    # 3. pin parsing: comments stripped, dotted keys kept, string scalars kept
+    #    as strings (family_dirs is a comma-list, not a number — the two pin
+    #    vocabularies share one file and one parser; 2026-10-29)
     import tempfile
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "pins.txt"
         p.write_text(
             "# a comment\nmax_duplicate_numbers = 0\n"
-            "min_files.plans = 400  # trailing comment\n\nnot a pin line\n", encoding="utf-8"
+            "min_files.plans = 400  # trailing comment\n"
+            "family_dirs = .benchmarks,.plans \n\nnot a pin line\n", encoding="utf-8"
         )
         pins = parse_pins(p)
         if pins.get("max_duplicate_numbers") != 0:
             fails.append("pin parse: ceiling missing")
         if pins.get("min_files.plans") != 400:
             fails.append("pin parse: trailing comment not stripped")
-        if len(pins) != 2:
-            fails.append(f"pin parse: expected 2 pins, got {len(pins)}")
+        if pins.get("family_dirs") != ".benchmarks,.plans":
+            fails.append(f"pin parse: string scalar mangled: {pins.get('family_dirs')!r}")
+        if len(pins) != 3:
+            fails.append(f"pin parse: expected 3 pins, got {len(pins)}")
 
     # 4. the tracked/untracked split -- the whole reason this gate can land
     #    green today, so a regression here silently turns a WIP file into a
@@ -618,13 +652,57 @@ def collision_verdict(rows, scalars, pins) -> tuple[list[str], list[str]]:
     return fails, notes
 
 
+def classified_verdict(fam: list, scalars: dict) -> tuple:
+    """-> (failures, notes) over the classified FAMILY directories — the
+    per-push half of the 2026-10-29 classifier fan-out (the workstation half
+    is numbering_drift_sweep.py, which shares this module's classifier).
+
+    Three classes carry teeth; the fourth IS the convention:
+
+      * COLLISION — walls at 0 and is NEVER pinnable (the riir-train issue-556
+        law verbatim: a pinned COLLISION row is a work item, never an excuse).
+        The remedy is the loser's renumber + every citation moved in the same
+        commit, so the message names it.
+      * RENAME-RESIDUE / HAND-READ — ratchets at measured (`max_rename_residue`
+        / `max_hand_read`), the legacy_ratchet discipline: growth reds and the
+        commit that grew the population re-pins it; shrinkage is the
+        re-pin-DOWN note, never a failure (refusing the commit that RESOLVED
+        a group would be the gate punishing the repair).
+      * FAMILY-EXPLICIT — the intended one-owner-many-benches convention;
+        silent by construction (classify_groups omits empty classes).
+    """
+    fails, notes = [], []
+    for dirname, classes in fam:
+        for num, stems in classes.get("COLLISION", []):
+            fails.append(
+                f"COLLISION {dirname}/{num:03d}: {' · '.join(stems)} — two "
+                f"unrelated owners on one number; renumber the loser and move "
+                f"every citation in the same commit")
+    for cls, key, label in (("RENAME-RESIDUE", "max_rename_residue", "rename-residue groups"),
+                            ("HAND-READ", "max_hand_read", "hand-read groups")):
+        n = sum(len(classes.get(cls, [])) for _d, classes in fam)
+        cap = int(scalars[key])
+        if n > cap:
+            fails.append(f"{label} {n} > ratchet {cap} — re-pin in the commit "
+                         f"that grew the population:")
+            for dirname, classes in fam:
+                for num, stems in classes.get(cls, []):
+                    fails.append(f"    {dirname}/{num:03d}: {' · '.join(stems)}")
+        elif n < cap:
+            notes.append(f"{label} {n} < ratchet {cap} — re-pin DOWN in this commit")
+    return fails, notes
+
+
 def collision_arms() -> list[str]:
     """The Issue 795 verdict's OWN arithmetic, which no classifier reaches.
 
     Issue 775's rule, one gate over: a gate's pin arithmetic sits between two
     calls into a classifier, so the classifier's self-test cannot see it. Both
     halves are armed here — the pin PARSER (which refuses a reasonless row) and
-    the two-regime verdict.
+    the two-regime verdict — plus, since the 2026-10-29 fan-out, the
+    CLASSIFIED family verdict the per-push `.benchmarks/` wall rides: the
+    classifier's stem vectors (shared with the drift sweep's selftest, so the
+    two copies are pinned to agree by data) and the per-class arithmetic.
     """
     import tempfile
 
@@ -875,6 +953,66 @@ def collision_arms() -> list[str]:
     eq("parse: M / R / un-numbered rows and malformed headers add NO deletion",
        dl, {})
 
+    # ── the CLASSIFIED family classes (2026-10-29 fan-out, per-push half).
+    # First the classifier's own discriminators — the same vectors the drift
+    # sweep's selftest carries, INCLUDING the four live collisions its landing
+    # resolved, so the gate and the sweep are pinned to the same answers by
+    # data, not by comment:
+    VEC = [
+        (("issue771_flash_cmma", "issue772_expand_l2_staged_sum"), "COLLISION"),
+        (("issue1127_t4_recell_bundle", "issue1132_metal_launch_floor_census_w1"), "COLLISION"),
+        (("plan619_clef_text_ane_latency", "plan621_gdn_l8_eager_prefill"), "COLLISION"),
+        (("421_a", "421_b", "421_c"), "HAND-READ"),
+        (("plan421_p05", "plan421_p2", "plan421_p3"), "FAMILY-EXPLICIT"),
+        (("549_plan354_p2_t1", "549_plan354_p2t1"), "RENAME-RESIDUE"),
+        (("plan999_x", "issue777_y"), "COLLISION"),
+        (("x", "y"), "HAND-READ"),
+        (("plan421_a", "plan421_b", "plan888_z"), "COLLISION"),
+        (("421_a", "421_b", "999_z"), "HAND-READ"),
+    ]
+    for stems_v, want_cls in VEC:
+        eq(f"classify {stems_v[0][:24]}…", classify_stems(list(stems_v)), want_cls)
+    # the stem_of whole-filename-match trap (the sweep's selftest caught the
+    # port bug through this shape; the gate's wall now rides the same split):
+    eq("stem_of splits from the GROUP, not the whole-filename match end",
+       stem_of("809_issue771_flash_cmma.md"), "issue771_flash_cmma")
+
+    # classify_groups: tracked-only grouping, structural FAMILY silence.
+    CG = {809: [("809_issue771_x.md", True), ("809_issue772_y.md", True)],
+          300: [("300_a.md", True), ("300_wip.md", False)],
+          294: [("294_plan294_g1.md", True), ("294_plan294_g2.md", False)]}
+    cg = classify_groups(CG)
+    eq("classify_groups routes a disjoint-token tracked pair to COLLISION",
+       [n for n, _ in cg.get("COLLISION", [])], [809])
+    eq("classify_groups excludes UNTRACKED holders (the WIP warning lane's job)",
+       cg.get("HAND-READ"), None)
+    eq("classify_groups: a single TRACKED holder forms no group",
+       294 in cg, False)
+
+    # classified_verdict: the wall is absolute and unpinnable; the ratchets
+    # grow red / shrink note; FAMILY-EXPLICIT is structurally silent.
+    FAM = [(".benchmarks", {"COLLISION": [(809, ["issue771_x", "issue772_y"])],
+                            "HAND-READ": [(421, ["a", "b"])]}),
+           (".plans", {})]
+    f, n = classified_verdict(FAM, {"max_rename_residue": 0, "max_hand_read": 1})
+    eq("a COLLISION walls at zero and is never pinned",
+       (len(f), len(n)), (1, 0))
+    eq("...and the message names the renumber remedy", "renumber" in f[0], True)
+    f, _ = classified_verdict(FAM, {"max_rename_residue": 0, "max_hand_read": 0})
+    eq("hand-read GROWTH over its ratchet is a finding with its rows",
+       (sum(1 for x in f if x.startswith("hand-read groups")),
+        sum(1 for x in f if x.startswith("    .benchmarks/421"))), (1, 1))
+    f, n = classified_verdict([(".benchmarks", {})],
+                              {"max_rename_residue": 1, "max_hand_read": 1})
+    eq("an EMPTY family set under nonzero ratchets is the re-pin-DOWN note",
+       (len(f), len(n)), (0, 2))
+    f, n = classified_verdict(
+        [(".benchmarks", {"FAMILY-EXPLICIT": [(294, ["plan294_g1", "plan294_g2"])],
+                          "RENAME-RESIDUE": [(549, ["a", "a"])]})],
+        {"max_rename_residue": 1, "max_hand_read": 0})
+    eq("FAMILY-EXPLICIT is silent and a rename AT its ratchet is clean",
+       (f, n), ([], []))
+
     return fails
 
 
@@ -917,17 +1055,45 @@ def main() -> int:
         return 2
     dirs = [f".{d}" for d in dirs]
 
+    # ── the two-lane scope (2026-10-29). FAMILY dirs (`.benchmarks/`) hold
+    # owner-keyed families, so the RAW serial ratchet does not apply to them
+    # (a family per owner is the intended convention — the measured reason in
+    # numbering_floors.txt); the stem classifier adjudicates them instead. The
+    # SERIAL dirs keep the raw-dup ratchet and the historical walk, which for a
+    # family dir would ratchet the convention itself.
+    fam_raw = str(pins.get("family_dirs", "")).strip()
+    # Accept both `benchmarks` and `.benchmarks` spellings — the pin is DATA
+    # written by hand, and a leading-dot convention split across two formats
+    # is exactly the kind of thing that reads fine and scopes to nothing.
+    fam_dirs = {f".{d.strip().lstrip('.')}" for d in fam_raw.split(",") if d.strip()}
+    serial_dirs = [d for d in dirs if d not in fam_dirs]
+    if fam_dirs:
+        if not {"max_rename_residue", "max_hand_read"} <= set(pins):
+            print("✗ family_dirs declared but max_rename_residue / max_hand_read "
+                  "missing — a silent default would either wall a ratchet at 0 "
+                  "or green a class over its blindness")
+            return 2
+        for d in sorted(fam_dirs):
+            if f"min_files{d}" not in pins:
+                print(f"✗ family dir {d} carries no min_files floor — its "
+                      f"population would be undeclared and every ceiling over "
+                      f"it green-able by blindness")
+                return 2
+
     tracked = tracked_paths(repo, dirs)
     dup_tracked: list[str] = []
     dup_untracked: list[str] = []
     above: list[str] = []
     malformed: list[str] = []
     below_floor: list[str] = []
+    fam_groups: list[tuple[str, dict]] = []
     total = 0
 
     for dirname in dirs:
         by_num, hw, n, hw_bad = scan(repo, dirname, tracked)
         total += n
+        if dirname in fam_dirs:
+            fam_groups.append((dirname, classify_groups(by_num)))
         if hw_bad is not None:
             malformed.append(
                 f"{dirname}/.highwater is not a bare integer: {hw_bad!r} — the "
@@ -942,9 +1108,14 @@ def main() -> int:
             names = " · ".join(nm for nm, _ in files)
             n_tracked = sum(1 for _, tr in files if tr)
             row = f"{dirname}/{num:03d} ×{len(files)}: {names}"
-            (dup_tracked if n_tracked >= 2 else dup_untracked).append(
-                row + ("" if n_tracked >= 2 else f"  [{n_tracked} tracked]")
-            )
+            if n_tracked >= 2:
+                # Family dirs are classified, never raw-counted: a tracked pair
+                # there is FAMILY-EXPLICIT most of the time, and the classified
+                # verdict below owns the teeth.
+                if dirname not in fam_dirs:
+                    dup_tracked.append(row)
+            else:
+                dup_untracked.append(row + f"  [{n_tracked} tracked]")
         if hw is not None and by_num and max(by_num) > hw:
             above.append(f"{dirname}: max {max(by_num)} > .highwater {hw} — `value + 1` is already taken")
 
@@ -958,7 +1129,7 @@ def main() -> int:
     except ValueError as e:
         print(f"✗ collision pins file is malformed: {e}")
         return 2
-    crows, cwalked = historical_collisions(repo, dirs)
+    crows, cwalked = historical_collisions(repo, serial_dirs)
     cfails, cnotes = collision_verdict(crows, cscalars, cpins)
     if len(dirs) < cscalars["min_dirs"]:
         cfails.append(f"scope FLOOR: {len(dirs)} dir(s) < {cscalars['min_dirs']} "
@@ -967,6 +1138,10 @@ def main() -> int:
         cfails.append(f"walk FLOOR: {cwalked} number(s) < {cscalars['min_numbers']}"
                       f" — a git-history regression empties this and every "
                       f"ceiling above passes")
+
+    ffails, fnotes = ([], [])
+    if fam_groups:
+        ffails, fnotes = classified_verdict(fam_groups, pins)
 
     max_dup = pins.get("max_duplicate_numbers", 0)
     max_above = pins.get("max_above_highwater", 0)
@@ -995,7 +1170,14 @@ def main() -> int:
               f"tracked-duplicate check above:")
         for r in cfails:
             print(f"    {r}")
-    for r in cnotes:
+    if ffails:
+        bad = True
+        print(f"✗ {len(ffails)} CLASSIFIED family-directory finding(s) — the "
+              f"stem classifier adjudicates what the raw serial ratchet "
+              f"cannot (FAMILY-EXPLICIT is the convention and is silent):")
+        for r in ffails:
+            print(f"    {r}")
+    for r in cnotes + fnotes:
         print(f"  ⚠ {r}")
     if below_floor:
         bad = True
@@ -1013,11 +1195,20 @@ def main() -> int:
 
     if bad:
         return 1
+    n_coll = sum(len(c.get("COLLISION", [])) for _d, c in fam_groups)
+    n_ren = sum(len(c.get("RENAME-RESIDUE", [])) for _d, c in fam_groups)
+    n_hand = sum(len(c.get("HAND-READ", [])) for _d, c in fam_groups)
+    fam_line = ""
+    if fam_dirs:
+        fam_line = (f", families: {n_coll} collision / {n_ren} rename-residue / "
+                    f"{n_hand} hand-read "
+                    f"(ratchets {pins['max_rename_residue']}/{pins['max_hand_read']})")
     print(
         f"✓ numbering gate PASSED — {total} numbered file(s) over {len(dirs)} dir(s), "
         f"0 tracked duplicates, 0 stale allocators, 0 malformed allocators; "
         f"{len(crows)} historical collision(s) over {cwalked} number(s), "
         f"{len(cpins)} pinned above the era boundary"
+        + fam_line
         + (f", {len(dup_untracked)} untracked warning(s)" if dup_untracked else "")
     )
     return 0

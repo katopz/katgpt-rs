@@ -268,7 +268,7 @@ develop work. One line per check:
 | `cfg_gated_floor_gate.py` | `#![cfg]`-gated targets that report a green 0-pass (Issue 713) |
 | `orphaned_attr_gate.py` | a `#[cfg]` separated from its item by a blank line |
 | `percentile_floor_gate.py` | a percentile index that lands on n-1 and so reports the MAX |
-| `numbering_gate.py` | a number allocated twice, or a stale/malformed `.highwater` — walled by membership above the era boundary, ratcheted below it (Issues 724, 725, 795) |
+| `numbering_gate.py` | a number allocated twice, or a stale/malformed `.highwater` — walled by membership above the era boundary, ratcheted below it; `.benchmarks/` stem-CLASSIFIED: COLLISION walls at zero unpinnable, rename/hand-read ratchets at measured, FAMILY-EXPLICIT silent (Issues 724, 725, 795) |
 | `dual_allocation_gate.py` | this checkout and its upstream both allocated a numbered document since their merge base — TWIN (same stem, the rebased own line) annotates exit-neutral, INDEPENDENT (two documents claiming one number) exits 1 naming both sides' adding commits (Issue 796) COUNTER exits non-zero too: the first two verdicts compare DOCUMENTS, and a number allocated and CLOSED in one commit never has a file in any tree, so the counters are the only thing that sees it. A one-sided bump stays green by construction; armed on every push with the reader injected and by a real two-repo fixture under --prove-fires (Issue 850) |
 | `docs_gate_paths_sync.py` | docs_gate.yml's two hand-duplicated trigger `paths:` lists stay identical (Issue 724 T4b) |
 | `required_features_static_gate.py` | a required-features row naming a feature its package cannot enable (riir-train Issue 513) |
@@ -1500,6 +1500,13 @@ the witness, armed on every push (Issue 850).
   losers renumbered 1016/1017/1018/926, every citation moved in-commit —
   2d591ea, b5f9a8c2f+4427a6547). The raw `dup` ratchet keeps its serial-only
   semantics and its existing pins; the classified classes are the upgrade.
+  The per-push `numbering_gate.py` carries the same wall for THIS repo's
+  `.benchmarks/` (the CI-side half; the sweep is workstation-only): family
+  dirs join its scan classified — COLLISION walls at 0 unpinnable,
+  rename/hand-read ratcheted at measured via `numbering_floors.txt`'s
+  `family_dirs` / `max_rename_residue` / `max_hand_read`, the raw `dup`
+  ratchet and the historical walk stay serial-only, and the family dir keeps
+  its floor + above-highwater checks.
  Population delta, disclosed: the classifier sees numbered .md documents only
   (no directories, no non-md sidecars — riir-train's gate is the broader
   one for its own repo).

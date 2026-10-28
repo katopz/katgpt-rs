@@ -5,25 +5,46 @@
 #
 # ── SCOPE (this is the load-bearing decision, not the numbers) ──────────────
 #
-# Only directories whose leading NNN_ is an ALLOCATOR-ISSUED SERIAL belong
-# here. Measured 2026-09-04, two directories must be EXCLUDED and the reason is
-# not stylistic:
+# Two lanes, measured 2026-09-04 and re-cut 2026-10-29 when the stem
+# classifier (numbering_gate.classify_stems, ported from riir-train's
+# issue-556 gate) retired the decidability objection for `.benchmarks/`:
 #
-#   .benchmarks/ — the leading number is the OWNING plan/issue, and a family
-#                  per owner is the intended convention: 010_* x5 are all
-#                  Issue 010's "Report the Floor" benches; 294_ict_g1 / g2 / g3
-#                  / g10 / goat_gates / promotion are all Plan 294's gates.
-#                  ~55 numbers there are shared this way. The directory is
-#                  MIXED — it also holds real serials (700, 701) tracked by its
-#                  own .highwater — so "duplicate" is not decidable there
-#                  without knowing which convention a given file follows, and a
-#                  gate must not guess. A duplicate check here would have
-#                  produced ~55 findings, all false, and been the cries-wolf
-#                  instrument AGENTS.md warns gets ignored.
+# SERIAL (raw-counted: `max_duplicate_numbers`, the above-highwater check, and
+# the historical walk) — directories whose leading NNN_ is an ALLOCATOR-ISSUED
+# SERIAL:
+#   .plans/ .issues/ .research/ .proposals/
+#
+# FAMILY (CLASSIFIED, never raw-counted) — there the leading number is the
+# OWNING plan/issue and a family per owner is the intended convention
+# (010_* x5 are all Issue 010's "Report the Floor" benches; 294_ict_g1 / g2 /
+# g3 / g10 / goat_gates / promotion are all Plan 294's gates), so a raw
+# duplicate count would produce ~55 findings, all false. That objection was
+# decidability; the classifier retired it — owner identity IS decidable from
+# the stems — so `.benchmarks/` JOINS the scan under the classifier:
+#
+#   COLLISION        walls at 0 and is NEVER pinnable (the issue-556 law: a
+#                    pinned COLLISION row is a work item, never an excuse; the
+#                    fix is the loser's renumber + every citation moved in the
+#                    same commit — measured 2026-10-29 on riir-ai 809/872/1008
+#                    and riir-infer 884, all four renumbered exactly this way)
+#   RENAME-RESIDUE   ratcheted at `max_rename_residue`
+#   HAND-READ        ratcheted at `max_hand_read` — a new owner family whose
+#                    stems carry no owner tokens lands here; naming the owner
+#                    in the stem (`294_plan294_g1`) classifies it
+#                    FAMILY-EXPLICIT instead, which is silent — the escape
+#                    hatch is the convention, not an exemption
+#   FAMILY-EXPLICIT  the intended convention; silent by construction
+#
+# The raw ratchet and the historical walk still EXCLUDE family dirs: a family
+# per owner is growth, and ratcheting the convention itself would red on every
+# legitimate bench. The family dir DOES get a floor, above-highwater and
+# malformed-allocator checks like any other scanned directory (the 2026-09-04
+# "700 while 701 existed" incident was this directory's allocator).
+#
 #   .docs/        — no flat NNN_ files at all (nested by topic: 01_orientation,
 #                  02_inference, ...) and no .highwater. Nothing to check.
 #
-# ── FLOORS (not ceilings — read the reason) ─────────────────────────────────
+# ── FLOORS (not ceilings — read the reason) ─────────────────────────────
 #
 # Every verdict in this gate is a CEILING (0 duplicates, max <= highwater), and
 # a ceiling cannot fail once the instrument goes blind: one regex regression
@@ -49,6 +70,26 @@ min_files.issues = 0           # measured 0 (2026-09-05) — and 0 is the SUCCES
                                # Raise this again if issues become long-lived"
 min_files.research = 450       # measured 511
 min_files.proposals = 10       # measured 13
+min_files.benchmarks = 400     # measured 491 (2026-10-29) — the family lane's
+                               # walk floor: the classified classes are
+                               # ceilings over this population, so a walk
+                               # regression must red, not green
+
+# ── the FAMILY lane (classified, never raw-counted — see SCOPE above) ──────
+# Comma-list of family directories. Each MUST carry a min_files floor (the
+# gate refuses an undeclared family population) and the two ratchet scalars
+# below MUST be present (a silent default would wall a ratchet at 0 or green
+# a class over its blindness).
+family_dirs = .benchmarks
+max_rename_residue = 0         # measured 0 (2026-10-29) — one document under
+                               # two spellings is a defect in any class; a
+                               # wall, and it re-pins only downward-never
+max_hand_read = 59             # measured 59 groups (2026-10-29) — a RATCHET,
+                               # the legacy_ratchet discipline: the commit
+                               # that grows the population (a new owner
+                               # family) re-pins it; growth without the re-pin
+                               # reds. Naming the owner in the stem moves a
+                               # group to FAMILY-EXPLICIT (silent) instead.
 
 # ── CEILINGS ────────────────────────────────────────────────────────────────
 #
