@@ -1,8 +1,7 @@
 # Plan 632 — grid-reselect λ calibration + GOAT G1 (the 966 continuation after the premise read)
 
 **Status:** OPEN — filed 2026-10-28 from [Issue 966](../.issues/966_modelless_prefix_first_grid_reselection.md) after [riir-ai Bench 1012](../../riir-ai/.benchmarks/1012_issue966_premise_gate_read.md) read the premise ALIVE (pool 0.6174 vs 0.0625 floor on the DFlash2 keyed lane posture, sel-rank mode 2). Nothing implemented yet; the plan exists so the arc starts plan-first with pre-registered bars. NO lease taken — claim per Issue-943 before implementing.
-**Claimed:** zed-m3-632-lambda-g1, 1793139820, expires 2026-10-29T22:37:00+00:00
-**Lease closed:** zed-m3-632-lambda-g1 (the sweep + records landed same session 2026-10-28; the expiry token above is kept only as the claim's historical record).
+**Lease closed:** zed-m3-632-lambda-g1 (the sweep + records landed same session 2026-10-28; the expiry token above is kept only as the claim's historical record). (claim record: zed-m3-632-lambda-g1, epoch 1793139820, was expires 2026-10-29T22:37:00+00:00 — folded per the lease-reshape rule)
 
 ## Why now
 

@@ -1360,6 +1360,13 @@ on a malformed claim line or ambiguous multiple leases, with the exact
 reshape printed; the class re-mints — measured 2026-10-26, a live lane
 landed a fresh malformed line WHILE a sweep was fixing three others, and a
 malformed line blinds the read-time check for every lane in that repo).
+**Closing a lease FOLDS the claim line into the `**Lease closed:**` row**
+(delete the `**Claimed:**` line, carry its session/epoch/expiry into the
+closed row) — measured 2026-10-28, four files workspace-wide kept both and
+three read LIVE for up to 44 h on items nobody held, a false YIELD signal
+to every lane. Read time classifies a same-session pair CLOSED (a closed row
+naming a DIFFERENT epoch never swallows a re-claim); `--lint` reds the
+leftover as STALE-CLAIM with the fold-in printed.
 
 ⛔ **A concurrent session is the OTHER way this gate gets skipped, and the
 cost is a NEGATIVE RESULT rather than a duplicate** (Issue 825): two sessions

@@ -44,6 +44,17 @@ or AMBIGUOUS multiple distinct leases in one file (the scanner's other blind
 class) or an unreadable path. NOT a parser weakening: the strict loud
 MALFORMED read-time verdict stays.
 
+A CLOSED lease is a claim line whose session is named by a
+`**Lease closed:** <session> ...` row in the same file (the lease-reshape
+rule folds the claim into that row; writers measured leaving both — four
+files workspace-wide on 2026-10-28, three reading LIVE for up to 44 h on
+items nobody held, i.e. a false YIELD signal to every other lane). Read
+time classifies it CLOSED (printed, never hidden, never a WARN); if the
+closed row carries a 9+-digit epoch it must equal the claim's, so a
+same-named RE-claim after an old close is not silently swallowed. `--lint`
+flags the leftover claim line (STALE-CLAIM, exit 1) with the fold-in
+reshape.
+
 Template placeholders (`Claimed: <session>, <epoch>, ...` spelled in prose)
 contain `<...>` and are ignored — a spec file that QUOTES the convention
 must not red the repo that defines it.
@@ -72,6 +83,11 @@ CLAIM_LINE_RE = re.compile(
     r"^\s*\*{0,2}Claimed:\*{0,2}\s*(.+)$")
 PLACEHOLDER_RE = re.compile(r"<[^<>\n]+>")
 EXPIRY_RE = re.compile(r"\bexpires\s+(\S+)\s*$", re.IGNORECASE)
+# `**Lease closed:** <session> (...)` — the closing row of the lease-reshape
+# rule; the session is the first token (backticks/bold stripped).
+CLOSED_LINE_RE = re.compile(
+    r"^\s*\*{0,2}Lease closed:\*{0,2}\s*`?([^\s,(`*]+)")
+EPOCH_TOKEN_RE = re.compile(r"\b(\d{9,})\b")
 
 
 def parse_expiry(raw: str) -> datetime | None:
@@ -109,22 +125,59 @@ def parse_claim_line(line: str) -> tuple[str, int, datetime] | None | str:
     return (parts[0].strip("`* "), int(parts[1]), expiry)
 
 
-def leases_in_file(path: Path) -> list[tuple[str, int, datetime] | str]:
-    """Every parsed claim line in one file. >1 distinct lease = ambiguous."""
+def closed_sessions(lines: list[str]) -> dict[str, set[int]]:
+    """session -> the epochs its `Lease closed:` rows name (empty set = the
+    row names no epoch, i.e. it closes whatever lease that session holds)."""
+    closed: dict[str, set[int]] = {}
+    for line in lines:
+        m = CLOSED_LINE_RE.match(line)
+        if m:
+            closed.setdefault(m.group(1), set()).update(
+                int(e) for e in EPOCH_TOKEN_RE.findall(line[m.end():]))
+    return closed
+
+
+def is_closed(lease: tuple[str, int, datetime],
+              closed: dict[str, set[int]]) -> bool:
+    session, epoch, _ = lease
+    if session not in closed:
+        return False
+    epochs = closed[session]
+    return not epochs or epoch in epochs
+
+
+def fold_hint(line: str) -> str:
+    """The reshape for a stale claim line: delete it, carry its fields into
+    the session's `Lease closed:` row as history."""
+    lease = parse_claim_line(line)
+    if not isinstance(lease, tuple):
+        return "delete the **Claimed:** line"
+    s, e, x = lease
+    return (f"delete the **Claimed:** line; append to the `Lease closed:` "
+            f"row: (claim record: {s}, epoch {e}, was expires "
+            f"{x.isoformat()})")
+
+
+def leases_in_file(path: Path) -> list:
+    """Every parsed claim line in one file: a (session, epoch, expiry) lease,
+    ("closed", lease) when a same-session `Lease closed:` row retires it, or
+    "malformed"/"unreadable". >1 distinct lease = ambiguous."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return ["unreadable"]
     found: list[tuple[str, int, datetime] | str] = []
-    for line in text.splitlines():
+    lines = text.splitlines()
+    closed = closed_sessions(lines)
+    for line in lines:
         parsed = parse_claim_line(line)
         if parsed is None:
             continue
         if parsed == "malformed":
             found.append("malformed")
-        elif isinstance(parsed, tuple):
-            if parsed not in found:
-                found.append(parsed)
+        elif isinstance(parsed, tuple) and parsed not in found:
+            found.append(("closed", parsed) if is_closed(parsed, closed)
+                         else parsed)
     return found
 
 
@@ -176,13 +229,23 @@ def lint_file(path: Path) -> list[str] | None:
         return None
     findings: list[str] = []
     leases: list[tuple[str, int, datetime]] = []
-    for lineno, line in enumerate(text.splitlines(), 1):
+    lines = text.splitlines()
+    closed = closed_sessions(lines)
+    for lineno, line in enumerate(lines, 1):
         parsed = parse_claim_line(line)
         if parsed == "malformed":
             findings.append(
                 f"  ⛔ LINT {path}:{lineno} malformed claim line:\n"
                 f"      {line.strip()}\n"
                 f"      reshape → {reshape_hint(line)}")
+        elif isinstance(parsed, tuple) and is_closed(parsed, closed):
+            findings.append(
+                f"  ⛔ LINT {path}:{lineno} STALE-CLAIM — {parsed[0]}'s lease "
+                f"is closed by a `Lease closed:` row but the claim line "
+                f"remains (read-time sees CLOSED; a reader without this "
+                f"instrument sees a live lease):\n"
+                f"      {line.strip()}\n"
+                f"      reshape → {fold_hint(line)}")
         elif isinstance(parsed, tuple) and parsed not in leases:
             leases.append(parsed)
     if len(leases) > 1:
@@ -215,6 +278,11 @@ def classify(repo: Path, now: datetime) -> tuple[list[dict], list[str]]:
                 elif lease == "malformed":
                     rows.append({"file": rel, "state": "MALFORMED",
                                  "session": "?", "epoch": None, "expiry": None})
+                elif lease[0] == "closed":
+                    session, epoch, expiry = lease[1]
+                    rows.append({"file": rel, "state": "CLOSED",
+                                 "session": session, "epoch": epoch,
+                                 "expiry": expiry})
                 else:
                     session, epoch, expiry = lease
                     state = "LIVE" if expiry > now else "EXPIRED"
@@ -349,6 +417,40 @@ def selftest() -> list[str]:
         af = lint_file(ambig)
         if not af or "AMBIGUOUS" not in af[0]:
             fails.append(f"lint missed the ambiguous pair: {af}")
+        # the closed-lease arms (2026-10-28): a same-session closed row
+        # retires the claim (no epoch, or the matching epoch); a closed row
+        # naming a DIFFERENT epoch must NOT swallow a re-claim; another
+        # session's close must not retire this lease.
+        cl = d / "closed.md"
+        cl.write_text(
+            "**Claimed:** s4, 1790000000, expires 2099-01-01T00:00:00Z\n"
+            "**Lease closed:** s4 (landed same session)\n", encoding="utf-8")
+        cf = lint_file(cl)
+        if not cf or "STALE-CLAIM" not in cf[0] or "epoch 1790000000" not in cf[0]:
+            fails.append(f"lint missed the stale claim: {cf}")
+        if leases_in_file(cl) != [("closed", parse_claim_line(
+                "Claimed: s4, 1790000000, expires 2099-01-01T00:00:00Z"))]:
+            fails.append(f"closed lease not retired: {leases_in_file(cl)}")
+        for body, why in (
+                ("**Lease closed:** s4, 1780000000 (an OLD lease)\n",
+                 "a close naming another epoch swallowed a re-claim"),
+                ("**Lease closed:** s5 (someone else)\n",
+                 "another session's close retired this lease")):
+            cl.write_text(
+                "**Claimed:** s4, 1790000000, expires 2099-01-01T00:00:00Z\n"
+                + body, encoding="utf-8")
+            got = leases_in_file(cl)
+            if not (len(got) == 1 and isinstance(got[0], tuple)
+                    and got[0][0] == "s4"):
+                fails.append(f"{why}: {got}")
+            if lint_file(cl) != []:
+                fails.append(f"{why} (lint): {lint_file(cl)}")
+        cl.write_text(
+            "**Claimed:** `s4`, 1790000000, expires 2099-01-01T00:00:00Z\n"
+            "**Lease closed:** `s4`, 1790000000 — done\n", encoding="utf-8")
+        if not (leases_in_file(cl) and leases_in_file(cl)[0][0] == "closed"):
+            fails.append(f"matching-epoch backticked close not retired: "
+                         f"{leases_in_file(cl)}")
         hint = reshape_hint("Claimed: lane-x, 1792085272, expires soon")
         if hint != "**Claimed:** lane-x, 1792085272, expires <ISO-UTC>":
             fails.append(f"reshape hint wrong: {hint!r}")
@@ -451,6 +553,10 @@ def warn_line(row: dict, item: str, own_epoch: int | None) -> str:
         return (f"— item {item}: lease EXPIRED "
                 f"({row['session']}, expired {row['expiry'].isoformat()}) — "
                 f"re-claiming is a normal re-read, not a ceremony")
+    if row["state"] == "CLOSED":
+        return (f"— item {item}: lease CLOSED by its holder ({row['session']}, "
+                f"epoch {row['epoch']}; the claim line was not reshaped — "
+                f"`--lint {row['file']}` prints the fold-in)")
     return (f"⚠ WARN: item {row['file']} carries a MALFORMED claim line — "
             f"cannot adjudicate; fix the line (session, epoch digits, "
             f"expires ISO-UTC)")
@@ -554,7 +660,9 @@ def main() -> int:
         if findings_total:
             print(f"✗ lint: {findings_total} finding(s) — fix before the "
                   f"push: a malformed claim line makes the read-time check "
-                  f"BLIND for every lane in that repo")
+                  f"BLIND for every lane in that repo; a stale claim line "
+                  f"reads as a LIVE lease to any reader without the "
+                  f"closed-row rule")
             return 1
         return 0
 
@@ -582,12 +690,18 @@ def main() -> int:
     live = [r for r in rows if r["state"] == "LIVE"]
     expired = [r for r in rows if r["state"] == "EXPIRED"]
     bad = [r for r in rows if r["state"] == "MALFORMED"]
+    closed = [r for r in rows if r["state"] == "CLOSED"]
     print(f"claim_lease_check {repo.name}: {len(live)} live, {len(expired)} "
-          f"expired, {len(bad)} malformed claim line(s)"
+          f"expired, {len(closed)} closed-unreshaped, {len(bad)} malformed "
+          f"claim line(s)"
           + (f", target item {item}" if item else ""))
     for r in expired:
         print(f"  EXPIRED  {r['file']}  {r['session']} epoch={r['epoch']} "
               f"(was {r['expiry'].isoformat()}) — re-claim is a normal re-read")
+    for r in closed:
+        print(f"  CLOSED   {r['file']}  {r['session']} epoch={r['epoch']} — "
+              f"a same-session `Lease closed:` row retires it; claim line "
+              f"not reshaped (--lint prints the fold-in)")
     for r in live:
         left = r["expiry"] - now
         hours = int(left.total_seconds()) // 3600
