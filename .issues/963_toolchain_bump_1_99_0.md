@@ -4,7 +4,7 @@
 **Lease released:** katgpt-rs-963-bump (idle loop), claimed 1793145600 — the anchor half landed `8d54ddb96`; T3 deferred for sibling-session safety, not abandoned
 **Date:** 2026-10-25
 **Type:** refactor / toolchain (the pin authority lives HERE — Issue 739 lineage)
-**Consumers:** [seal-remake Proposal 009](../../seal-remake/.proposals/009_blaze_dev_loop_build_driver.md) + [Issue 126](../../seal-remake/.issues/126_blaze_dev_loop_pilot.md) (the blaze dev-loop pilot needs exactly 1.99.0 + rust-src; allocated as Issue 122, renumbered 126 before landing) · seal-game-editor + seal-remake follow this anchor
+**Consumers:** [seal-remake Proposal 009](../../seal-remake/.proposals/009_blaze_dev_loop_build_driver.md) + `Issue 126` (the blaze dev-loop pilot needs exactly 1.99.0 + rust-src; allocated as Issue 122, renumbered 126 before landing) · seal-game-editor + seal-remake follow this anchor
 
 ---
 
