@@ -32,6 +32,14 @@ catches the divergences the running box participates in; a box-vs-box
 collision on the wire is invisible here until a fetch brings it in, and the
 merge-time wall (numbering_gate + 795) owns what lands despite that.
 
+⛔ Complement, not redundancy (Issue 971): this gate is ALSO blind by design
+to a double-hold on ONE checkout's history line — both 1011 holders sat on
+one line for ~15 h and every gate here read zero. The on-disk wall owns that
+class: `numbering_drift_sweep.py` classifies every ≥2-tracked-holder group in
+all six numbered directories and walls COLLISION at zero (`classify_stems`,
+riir-train issue-556's discriminator ported 2026-10-29). Run both; neither's
+green implies the workspace clean.
+
     scripts/dual_allocation_gate.py [repo]        # verdict (default: this repo)
     scripts/dual_allocation_gate.py --prove-fires # the two-session collision
                                                   # fixture, both verdicts
