@@ -6,7 +6,7 @@
 
 **Lease closed:** zed-amo-idle-b309 (claimed 2026-10-28 ~04:4x +07) — the row below landed same-session `dce62c2`; the expiry token above is kept only as the claim's historical record. (claim record: zed-amo-idle-b309, epoch 1793136990, was expires 2026-10-29T21:36:30+00:00 — folded per the lease-reshape rule)
 **Date:** 2026-10-28
-**Type:** cross-repo toolchain ripple (files against [Issue 963](963_toolchain_bump_1_99_0.md) T3's scope, not its anchor half)
+**Type:** cross-repo toolchain ripple (files against Issue 963 T3's scope, not its anchor half — the 963 file is closed+removed per noise-reduction, text in git history)
 **Discoverer:** zed-m3-floor-sweep (m3 idle cycle, 2026-10-28 ~03:1x–04:1x +07), while running the idle-loop clippy sweep — `riir-refine` and `riir-reflexer` builds failed with `error: rustc 1.98.1 is not supported by the following package: katgpt-device-verify@0.1.0 requires rustc 1.99.0`.
 
 ## The mechanism (one paragraph)
@@ -88,6 +88,6 @@ Holding `[workspace.package] rust-version` back at 1.98.1 while the channel stay
 
 ## Related
 
-- [Issue 963](963_toolchain_bump_1_99_0.md) — the anchor arc; T3's deferred recipe is this issue's mechanism
+- Issue 963 — the anchor arc (file closed+removed, text in git history); T3's deferred recipe is this issue's mechanism
 - Issue 739 — the pin's founding record (the anchor semantics)
 - riir-refine `.distill/001_mining_queue_snapshot.md` row `3718c8fc` — the live-lane warning + this session's claim
