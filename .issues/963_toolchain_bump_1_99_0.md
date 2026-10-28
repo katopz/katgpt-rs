@@ -38,7 +38,10 @@ the shape: raise in its own reviewed commit and fix the new lints there.
       `rust-toolchain.toml` follow the anchor (each repo's own guard run). — LANDED
       2026-10-28: seal-remake `657e1f45` (guard 163 ✓ rows, ALL LAYERS GREEN — the run
       also fixed four pre-existing reds, see Status) + seal-game-editor `d9f15a4db`
-      (guard PASSED first run).
+      (guard PASSED first run). **The set was NOT the whole blast radius** — issue 970
+      tracks the general floor and its rollout ledger (eleven repos landed by
+      2026-10-28; the migrate-plane five by the m3 idle lane, deviation disclosed
+      there); read 970 before treating T3 as complete.
 - [x] T4 Document the revert path (pin back to 1.98.1) — a bad 1.99.0 surface is a one-commit
       rollback, not an investigation. — In HISTORY.md: `git revert` of the bump commit; pin +
       floor move together, one commit.
