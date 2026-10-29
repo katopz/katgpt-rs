@@ -1664,6 +1664,16 @@ pub use sst_certified::{
     fit_anchor, fit_anchor_into,
 };
 
+// Issue 972 — the cross-tail interference instrument (delta-vs-delta
+// overlap inside the free tail; report-only, the same sst_project gate).
+#[cfg(feature = "sst_project")]
+pub mod sst_cross_tail;
+#[cfg(feature = "sst_project")]
+pub use sst_cross_tail::{
+    CrossTailReport as SstCrossTailReport, CrossTailScratch, cross_tail_interference,
+    cross_tail_interference_into,
+};
+
 #[cfg(all(feature = "manifold_erasure", feature = "subspace_phase_gate"))]
 pub mod manifold_erasure;
 
