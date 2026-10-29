@@ -295,6 +295,15 @@ Substrate:  LocalKvStore + freeze_avatar_delta + ShardIndex  → exists
 in Mode 1 Step 1 is the canonical reference. Extend it when you discover new
 mismatches.
 
+Variants hide at THREE depths (measured by the SpatialBelief-family census,
+`../riir-ai/.docs/05_reasoning/spatial_belief_family.md`): the **struct name**
+(`SpatialBelief` ×3 vs the canonical `GenericSpatialBelief`), the **fn name**
+(`decay_confidence` vs `confidence_decay` — word-order variants), and the
+**result name** (`confidence(&self, current_tick)` — a method named for what
+it returns, not its mechanism, in a file named for something else entirely;
+invisible to every mechanism grep). A single-depth grep returns confident
+zeros.
+
 ---
 
 ## When NOT to use this skill
@@ -380,6 +389,9 @@ Rows carried full verification narratives until this compaction; `git log -p -- 
   failure pattern (this skill extends it from paper→code to codebase→codebase)
 - AGENTS.md §"Latent vs Raw Space Rules" — domain classification
 - `riir-games-shared/src/game_traits/spatial.rs` — `GenericSpatialBelief<T>` substrate
+- `../riir-ai/.docs/05_reasoning/spatial_belief_family.md` — the SpatialBelief family
+  census + the ONE decay law `belief_confidence` (ex-Issue 1051's consolidated record;
+  the issue file was removed 2026-10-29)
 - `riir-games-shared/src/game_traits/` — vocabulary translation table source
 - Issue 047 (riir-mmorpg-examples) — the ThreatField canonical failure
 - Issue 490 + Issue 493 (riir-game-sdk) — the orchard/motivation canonical failure
