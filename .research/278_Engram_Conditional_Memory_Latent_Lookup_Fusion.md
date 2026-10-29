@@ -6,6 +6,7 @@
 > **Classification:** **Public** (modelless engine primitive)
 > **Related Research:** 006 (Raven RSM — the complementary *computation* axis), 196 (KG Latent Octree — spatial lookup, different substrate), 262 (Lore ContentStore — Merkle-blob lookup), 268 (Forensic Asset Fingerprinting — BLAKE3-seeded addressing, same primitive different domain), 276 (Personality-Weighted Composition — same sigmoid×direction kernel, different source)
 > **Companion plan:** [`.plans/299_Engram_Hash_Addressed_Pattern_Memory.md`](../.plans/299_Engram_Hash_Addressed_Pattern_Memory.md)
+> **Cross-ref (2026-10-29, the retrieved-corpus sibling):** hermabr's [modded-nanogpt PR #367](https://github.com/KellerJordan/modded-nanogpt/pull/367) + [the author's writeup](https://brunborg.com/n-gram-hinted-lm) — exact-match n-gram hints retrieved from the FROZEN training corpus (hint = count-weighted embedding of retrieved next tokens from the model's own table), trusted by retrieval METADATA (length × count × purity) instead of a hidden-state gate, consumer pretrained to read hints. Design-space note only — no change to the P299 primitive (engram's learned table + hidden-state gate stays the inference-side primitive; the PR's table pays off only because its consumer co-trains). Full record: riir-train Research 482 (private); builder distill: riir-refine Research 346 (private).
 > **Cross-ref (private selling-point guide):** `riir-ai/.research/147_Engram_Conditional_Memory_NPC_Guide.md`
 
 ---
