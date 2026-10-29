@@ -1,6 +1,7 @@
 # Issue 972 — Cross-tail interference instrument (Nestor forgetting law × sst_certified)
 
 **Status:** Open — 2026-10-29. Filed from katgpt-rs Research 639 §"2026-10-29 audit addendum" (arXiv:2610.31818, Nestor; modelless track, E3(b) sharpened by the No-GD advocate panel + the sst_certified code read). Spec revised per verdict round 1 (session 3398d5f6): the instrument computes on the FACTORED PAYLOADS, not ambient-space bases. PoC/proof task. Consumer wiring files riir-ai-side on this landing.
+**Claimed:** zed-m3-972-instrument, 1793457000, expires 2026-11-01T12:00:00+00:00
 
 ## Claim under test
 
