@@ -6262,4 +6262,4 @@ design: `dflash_predict_with` is untouched, flag-off is trivially byte-identical
 and the consumer wiring rides the lane once the premise gate
 (`TopKPoolCoverage`, Issue 966) reads alive on the target posture.
 
-Issue 966 — CLOSED-NEGATIVE 2026-10-28 (file removed per noise-reduction): the premise gate read ALIVE (riir-ai Bench 1012) but the pre-registered λ sweep + GOAT G1 FAILED the bar (riir-ai [Bench 1013](../../../.benchmarks/1013_issue966_grid_reselect_lambda_g1.md) — prose best-λ +0.00% vs +5% both-cells; code +5.26% at-bar, exactly tied with the keyed incumbent; coverage ≠ conversion). Execution record: plan 632. The `grid_reselect` arm stays shipped opt-in (λ=0 bit-identical); no serving promotion.
+Issue 966 — CLOSED-NEGATIVE 2026-10-28 (file removed per noise-reduction): the premise gate read ALIVE (riir-ai Bench 1012) but the pre-registered λ sweep + GOAT G1 FAILED the bar (riir-ai `Bench 1013` — prose best-λ +0.00% vs +5% both-cells; code +5.26% at-bar, exactly tied with the keyed incumbent; coverage ≠ conversion). Execution record: plan 632. The `grid_reselect` arm stays shipped opt-in (λ=0 bit-identical); no serving promotion.
