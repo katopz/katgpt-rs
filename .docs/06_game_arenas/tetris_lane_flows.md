@@ -1,7 +1,7 @@
 # Tetris arena lanes — how each lane picks a spot (the site figures)
 
 > **Purpose:** the source of truth for the "How each lane decides" figures on
-> [reflex.gist.rs/arena](https://reflex.gist.rs/arena/). Each `gfflow` block
+> [reflex.riir.ai/arena](https://reflex.riir.ai/arena/). Each `gfflow` block
 > below renders ONE figure (named by its `file` key) as the family swimlane +
 > the 390 px card list + the step-through walk; the renderer is
 > `reflex-site/scripts/render_flows.py`, which writes the outputs beside this
