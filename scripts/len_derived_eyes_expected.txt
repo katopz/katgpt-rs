@@ -69,3 +69,21 @@ riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs gdn_permute_rot
 riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs gdn_permute_rotate_f32 src_handle 1
 riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs swiglu_rotate_fused_f32 gate_up_handle 1
 riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs swiglu_rotate_fused_f32 out_handle 1
+#
+# 2026-10-30 — provenance read, 6 rows:
+# (a) the Issue 1144 radix-4 FWHT twins (riir-infer `3147164`): launch_forward /
+#     launch_forward_copy pick `fwht_*_r4` vs the radix-2 kernel through a
+#     `match` on the SAME handles, bound at the SAME `from_raw_parts(.., total)`
+#     — i.e. the pinned radix-2 binds above under a second kernel name; same
+#     `TernaryDeltanetGpuForward` persistent-field provenance.
+riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs fwht_forward_copy_f32_r4 dst_handle 1
+riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs fwht_forward_copy_f32_r4 src_handle 1
+riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs fwht_rotate_forward_f32_r4 x_handle 1
+# (b) riir-train lm_head_lora_gpu ce_grad_f32 (CeGradCubeCL::launch, called
+#     from ce_forward_backward_nosync with `self.probs` / `self.grad_logits` /
+#     `self.loss_buf`): created `vec![0.0; vocab]`, `vec![0.0; vocab]`, `[0.0; 2]`
+#     and bound at `vocab`, `vocab`, `2` — EXACT-sized to the live range today;
+#     persistent struct fields, so eyed.
+riir-train crates/riir-train-gpu/src/lm_head_lora_gpu.rs ce_grad_f32 grad 1
+riir-train crates/riir-train-gpu/src/lm_head_lora_gpu.rs ce_grad_f32 loss_out 1
+riir-train crates/riir-train-gpu/src/lm_head_lora_gpu.rs ce_grad_f32 probs 1
