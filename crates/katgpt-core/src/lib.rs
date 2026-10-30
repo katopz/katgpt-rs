@@ -156,6 +156,20 @@ pub use best_belief::{best_belief_score, best_belief_scores, select_best_belief}
 #[cfg(feature = "hint_regret")]
 pub mod hint_regret;
 
+// riir-neuron-db Issue 974 (the ndb 640 T7 ledger): the walk-proximity
+// context ranker — embedding-free relational ranking by random-walk visit
+// count (arXiv:2610.17867). Proven ndb-side (mechanism: ndb bench 516; G2
+// latency: ndb bench 517 — defaults 0.07–0.20 ms/call, flat in N); this is
+// the ONE upstream copy, standalone over the 2-method `WalkGraphView`
+// trait; store adapters stay consumer-side. Opt-in until a second consumer
+// adopts it.
+#[cfg(feature = "walk_rank")]
+pub mod walk_rank;
+#[cfg(feature = "walk_rank")]
+pub use walk_rank::{
+    ContextBudget, WalkGraphView, WalkRankConfig, WalkRankedHit, budgeted_context, walk_rank,
+};
+
 // Plan 631: the two-tier pairwise comparator + first-index champion scan,
 // extracted VERBATIM from the riir-scenelab scenario arena (the arena's
 // inline rule is the SPEC; adoption there must keep Elo tables + champion

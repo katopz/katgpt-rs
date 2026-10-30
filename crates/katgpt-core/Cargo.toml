@@ -1617,6 +1617,13 @@ entropic_tilt = []  # KL-budgeted entropic (max-seeking) advantage tilt — TTT-
 # core (2c17f08) is the deterministic collapse this primitive supersedes
 # generically. Opt-in pending the GOAT verdict (Bench 576).
 hint_regret = ["best_belief"]
+# riir-neuron-db Issue 974 (the ndb 640 T7 ledger): the walk-proximity context
+# ranker — embedding-free relational ranking by random-walk visit count
+# (arXiv:2610.17867). Opt-in (no default): pure modelless math over the
+# 2-method WalkGraphView trait; zero new deps (blake3 in tree); proven
+# ndb-side (bench 516 mechanism, bench 517 latency — defaults 50-147x under
+# the 10 ms offline budget) before this upstream copy landed.
+walk_rank = []
 # Plan 631: the two-tier pairwise comparator (verdict class → fired fraction
 # → draw; NO third tier in the shipped form) + first-index champion scan,
 # extracted VERBATIM from the riir-scenelab scenario arena (Proposal 029 P4 —
@@ -2343,6 +2350,16 @@ required-features = ["dec_operators"]
 name = "basis_split_goat"
 harness = false
 required-features = ["basis_split", "subspace_phase_gate"]
+
+# riir-neuron-db Issue 974 (the ndb 640 lift) — walk_rank GOAT: G2 latency at
+# defaults on a synthetic 100k-node view (bar ≤ 10 ms; ndb bench 517 measured
+# 0.13 ms worst cell on the real graph), the W/K sensitivity ladder, and a
+# G1 re-run-identity group that ASSERTS byte-identical output on every timed
+# iteration. Loud-zero defense on every group.
+[[bench]]
+name = "walk_rank_goat"
+harness = false
+required-features = ["walk_rank"]
 
 # Issue 958 — the sst_certified GOAT gate: G1 asserts (oracle agreement,
 # planted-leak refusal, the isotropic negative, compose identity — a

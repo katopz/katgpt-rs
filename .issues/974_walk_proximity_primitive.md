@@ -1,6 +1,6 @@
 # Issue 974 — the walk-proximity context-ranker primitive (lift from riir-neuron-db issue 640)
 
-**Status:** Open — filed by the ndb T7 ledger (ndb issue 640 T1–T5 all PASS: mechanism bench 516, G2 latency bench ndb 517). The primitive is PROVEN ndb-side and ships standalone over a 2-method trait; this issue is the lift to `katgpt-core` so every downstream consumes ONE copy (per the per-stack ledger / the ndb issue's constraint: "Do not fork the math ndb-side permanently"). Modelless: BLAKE3 + splitmix64 + xorshift64 + integer counting — no weights, no gradients.
+**Status:** CLOSED 2026-10-30 — T1–T4 DONE in one arc ([Bench 974](.benchmarks/974_issue974_walk_rank_goat.md): G2 ≈ 0.29 ms/call worst on the synthetic view, 36× under bar; G1 asserted on every timed iteration; G4 alloc gate green). The ndb re-export flip landed the same day (ndb `walk_rank` forwards `katgpt-core/walk_rank`; full ndb suite + bench re-ran green through the shim). ⚠ Sequencing: ndb's git dep floats at katgpt-rs `main` — the sibling-checkout [patch] compiles against the working tree; a bare main fails cargo resolution LOUD until the next develop → main promote (recorded in ndb's Cargo.toml feature comment).
 
 ## What exists (ndb `src/experience_graph/walk_rank.rs`, feature `walk_rank`, opt-in)
 
@@ -18,10 +18,14 @@
 
 ## Scope
 
-- [ ] T1. Move the math (trait + stage-1 + stage-2 + the rng/seed helpers) into `katgpt-core` behind opt-in `walk_rank` (no new deps — blake3 is already in-tree); ndb's `walk_rank` feature re-exports at the same paths (the Plan 319 consumer shape), feature implied by ndb's own flag.
-- [ ] T2. Port the 4 in-module tests + the KG/NS adapter test pattern (adapters stay CONSUMER-side — the trait means the lift moves no graph code).
-- [ ] T3. GOAT: G1 determinism/leak suite + G2 latency surface re-run katgpt-core-side (bars: byte-identical re-runs; defaults ≤ 10 ms at 100k nodes — ndb 517 measured 0.13 ms worst cell, so the bar has 75× headroom); G4 alloc: once-per-call scratch, zero per-step alloc (assert with the counting allocator).
-- [ ] T4. Record in `.benchmarks/` + this file; demote nothing (both sides ship the same flag name; the ndb re-export is the only consumer until a second appears).
+- [x] T1. Move the math (trait + stage-1 + stage-2 + the rng/seed helpers) into `katgpt-core` behind opt-in `walk_rank` (no new deps — blake3 is already in-tree); ndb's `walk_rank` feature re-exports at the same paths (the Plan 319 consumer shape), feature implied by ndb's own flag.
+  **DONE** (`crates/katgpt-core/src/walk_rank.rs` + feature `walk_rank = []` + lib.rs cfg-gated module/re-exports; ndb side: `src/experience_graph/walk_rank.rs` is now the shim — `pub use katgpt_core::walk_rank::*` at the same paths + the ndb-only `ExperienceGraph` methods — and ndb's `walk_rank` forwards `katgpt-core/walk_rank`). Adapters (`GraphWalkView`, `KgTripleWalkView`, `RetrievalMode::WalkProximity`) stayed consumer-side untouched.
+- [x] T2. Port the 4 in-module tests + the KG/NS adapter test pattern (adapters stay CONSUMER-side — the trait means the lift moves no graph code).
+  **DONE** — 6 in-module tests upstream (the ndb 4, minus the graph fixture, plus the alloc gate + the hub-dominance mechanism test over a synthetic `ToyView` with BIDIRECTIONAL link semantics); the ndb fixture tests stayed ndb-side as the adapter integration suite (they now double as the re-export wiring proof — 8 walk tests green through the shim, 512 lib tests total).
+- [x] T3. GOAT: G1 determinism/leak suite + G2 latency surface re-run katgpt-core-side (bars: byte-identical re-runs; defaults ≤ 10 ms at 100k nodes — ndb 517 measured 0.13 ms worst cell, so the bar has 75× headroom); G4 alloc: once-per-call scratch, zero per-step alloc (assert with the counting allocator).
+  **DONE — PASS** ([Bench 974](.benchmarks/974_issue974_walk_rank_goat.md)): G2 defaults ≈ 0.28 ms/call on the synthetic 100k view (36× headroom; higher-degree fixture than ndb's — an upper bound); G1 re-run identity ASSERTED on every timed iteration (a determinism regression fails the bench); G4 via the counting allocator in-module (≤ 16 allocs vs 256 steps, the Issue-741 gate posture).
+- [x] T4. Record in `.benchmarks/` + this file; demote nothing (both sides ship the same flag name; the ndb re-export is the only consumer until a second appears).
+  **DONE** — [Bench 974](.benchmarks/974_issue974_walk_rank_goat.md); the README feature-count sites bumped 720 → 721 (the `count_features` gate green); `cargo refine` miss recorded: `manual_is_multiple_of` (clippy 1.99) is outside the healer's corpus — fixed manually in the ndb bench, file a healer-corpus issue when mining resumes.
 
 ## Non-goals
 
