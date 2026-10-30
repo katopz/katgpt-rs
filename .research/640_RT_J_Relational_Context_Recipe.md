@@ -2,7 +2,7 @@
 
 > **Source:** "RT-J: Large-Scale Pretraining of Relational Transformers for Context-Efficient Predictions" — [arXiv:2610.17867](https://arxiv.org/abs/2610.17867) (NeurIPS 2026), Ranjan, Kothapalli, Agarwal, Kanatsoulis, Upendra, Palczewski, Guestrin, Leskovec (Stanford STAR). CC-BY 4.0. Sites: [star-project.stanford.edu/rt-j](https://star-project.stanford.edu/rt-j); code [stanford-star/relational-transformer](https://github.com/stanford-star/relational-transformer); data [stanford-star/the-join](https://huggingface.co/datasets/stanford-star/the-join) + [plurel](https://huggingface.co/datasets/stanford-star/plurel); models [rt-j](https://huggingface.co/stanford-star/rt-j) / [rt-plurel](https://huggingface.co/stanford-star/rt-plurel).
 > **Date:** 2026-10-30
-> **Status:** Active
+> **Status:** Active — execution order adjudicated 2026-10-30 by delegated-owner verdict in riir-train issue 657 (R8 runs FIRST — box-condition-driven, revising the panel's R7-first ordering; R2 queues on the 4090 behind the i620/638 chain).
 > **Related Research:** 364 (TabFM — the single-table ICL predecessor family; RT is its multi-table relational successor), 238 (Muon — same optimizer family RT-J uses)
 > **Cross-ref:** riir-neuron-db issue 640 (walk-proximity retrieval mode) · riir-reflex issue 104 (learnability-gate class) · riir-train issue 657 (recipe backlog) · ndb `.research/312` (lexical/facet retrieval reference — sibling surface) · ndb Plan 319 (`experience_graph` — the traversal substrate the walk ranker would join)
 > **Classification:** Public
