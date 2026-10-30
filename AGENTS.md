@@ -2,9 +2,9 @@
 
 The global `~/.agents/` rules apply; this file documents repo-local context
 that supplements them. History, resolved-issue records, gate narratives,
-collision precedents: `HISTORY.md` (compacted 2026-10-06 — every `##` heading
-kept; full pre-compaction text in git history). Removed issue files: git
-history.
+collision precedents, and the dated incident arcs behind every rule below:
+`HISTORY.md` (compacted 2026-10-30 — every `##` heading kept; full
+pre-compaction text in git history). Removed issue files: git history.
 
 ## Boundary contract — read `BOUNDARY.md` first
 
@@ -17,9 +17,8 @@ prose, BOUNDARY.md wins.
   (this repo is upstream of everything)? NO → it belongs in another repo; file
   there.
 - Read it before adding any dep, crate, module, System impl, or vocabulary type.
-- Enforcement: `../riir-ai/scripts/ci_boundary_contract.sh` — undeclared
-  cross-repo dep, drift row without its open issue, contract-vs-measured-graph
-  drift. Run boundary checks VIA the `boundary-guard` skill, not ad-hoc greps.
+- Enforcement: `../riir-ai/scripts/ci_boundary_contract.sh` — run boundary
+  checks VIA the `boundary-guard` skill, not ad-hoc greps.
 - Found a violation? File the issue FIRST (`.issues/NNN_boundary_*.md`), add
   the drift row, then fix. Closing the issue removes the row in the same commit.
 
@@ -34,13 +33,10 @@ no gradient descent. The only weight mutations allowed at runtime:
 3. **Latent-space updates** — direction-vector projections, sigmoid gates,
    routing tables; latent state, NOT base weights.
 
-**MANDATORY: exhaust modelless paths before deferring to riir-train.** Before
-deferring ANY gate, mechanism, or plan task ("this needs training"), check the
-three paths above (research skill §3.5). Systematic, characterizable biases
-are modelless-correctable candidates — for a known, named bias, try a
-deterministic reader-LoRA or freeze-state correction before concluding "needs
-gradient descent." Canonical failure: AC-Prefix G1 (Plan 313) — the story and
-the drift history live in HISTORY.md.
+**MANDATORY: exhaust modelless paths before deferring to riir-train** (research
+skill §3.5). A systematic, characterizable, named bias is a modelless-correctable
+candidate — try a deterministic reader-LoRA or freeze-state correction before
+concluding "needs gradient descent" (canonical failure: AC-Prefix G1, Plan 313).
 
 ## Build Commands
 
@@ -63,40 +59,31 @@ cargo check --all-features
 # Specific feature's tests
 cargo test -p katgpt-core --features <feature_name> --lib
 
-# Supply-chain advisories gate (riir-refine plan 298 T2.4; the pilot repo itself): vulnerable
-# CRATES at lockfile level, advisories-only scope — the deny.toml ignore list is
-# a membership pin (reason + tracking ref per row); --scan is a workspace
-# report-only sweep; a missing cargo-deny is a LOUD SKIP; standalone (CI wiring
-# is plan-298 T2.7, owner-gated).
+# Supply-chain advisories gate (riir-refine plan 298 T2.4): vulnerable CRATES at
+# lockfile level, advisories-only; deny.toml ignore list is a membership pin
+# (reason + tracking ref per row); --scan is a report-only workspace sweep; a
+# missing cargo-deny is a LOUD SKIP.
 ./scripts/deny_gate.sh
 ```
 
 ### The full gate — none of the above is a whole-repo claim
 
-Every command above is narrow in at least one **independent** axis, and a green
-result says nothing about what it compiled to nothing. The axes, one line each:
+Every command above is narrow in at least one **independent** axis; a green
+result says nothing about what it compiled to nothing:
 
-- **check vs clippy** — two `cargo refine` escape classes are rejected by
-  clippy's typeck and accepted by `check` (E0689, E0631 in `redundant_closure`).
+- **check vs clippy** — some `cargo refine` escape classes are rejected only
+  by clippy's typeck (E0689, E0631).
 - **default vs `--all-features`** — non-default gated code compiles to nothing.
-- **`-p <crate>` vs `--workspace`** — the ROOT crate's defaults can switch on a
-  crate's non-default feature once selected; per-crate runs also silently
-  *shrink* coverage.
-- **no `--all-targets`** — skips tests/benches/examples, where gated code
-  lives; and `--all-targets` still excludes doc-tests (only `cargo test
-  --doc` reaches them).
-- **dev vs `--release`** — `debug_assertions` is always ON in dev, so every
-  `#[cfg(debug_assertions)]` item only compiles in the configuration where it
-  works. **Neither profile is the safe default — the profile is part of the
-  claim.**
-- **compile vs EXECUTE** — every axis above is compilation; the scoped core
-  (katgpt-rs + katgpt-core `--lib` at default features) is EXECUTED weekly
-  (`test.yml` + `scripts/test_gate.sh`, schedule RE-ARMED 2026-09-23 — the
-  repo is public, Actions minutes free; private siblings stay suspended). An
-  uninvoked assertion is *unknown*, not passing; the other 477
-  integration-test and 176 bench targets are executed by nothing automatic.
-- **host triple vs wasm32, and x86_64** — see below; **a platform is part of
-  the claim, exactly as the profile is.**
+- **`-p <crate>` vs `--workspace`** — root defaults can switch on a crate's
+  non-default feature; per-crate runs silently shrink coverage.
+- **no `--all-targets`** — skips tests/benches/examples; doc-tests need
+  `cargo test --doc` even then.
+- **dev vs `--release`** — `debug_assertions` is ON in dev. **The profile is
+  part of the claim.**
+- **compile vs EXECUTE** — only the scoped core (katgpt-rs + katgpt-core
+  `--lib`, default features) is EXECUTED weekly (`test.yml` +
+  `scripts/test_gate.sh`). An uninvoked assertion is *unknown*, not passing.
+- **host triple vs wasm32, and x86_64** — **a platform is part of the claim.**
 
 So before claiming a repo-wide green, run:
 
@@ -104,82 +91,44 @@ So before claiming a repo-wide green, run:
 cargo clippy --workspace --all-targets --all-features --keep-going -- -D clippy::needless_range_loop -D clippy::map_clone -D clippy::iter_cloned_collect -D clippy::identity_op -D clippy::bool_comparison -D clippy::manual_is_multiple_of -D clippy::collapsible_if -D clippy::map_all_any_identity -D clippy::unnecessary_cast -D clippy::manual_repeat_n -D clippy::question_mark -D clippy::empty_line_after_outer_attr -D clippy::unusual_byte_groupings -D unused_mut -D unused_parens
 ```
 
-The `-D` list (Issue 701 R3b, 2026-09-03) is the mechanical lints whose
-all-features warning surface was healed to ZERO residual — a lint with
-residual > 0 must NOT be added to it. `--keep-going` is not optional: without
-it the run stops at the first failing target and under-reports (red on
-`develop` for days, twice, while narrower gates were green). Don't run it by
-hand — `scripts/full_gate.sh` is the assertion (it refuses a pass off macOS
-and checks that this document still quotes the command it runs).
-`--all-features` is NOT a supported TEST configuration (per-feature RNG/GOAT
-calibrations); the full test surface is priced, not run
-(`.benchmarks/701_full_workspace_execution_pricing.md`).
-
-⛔ **On a non-macOS workstation, run it as
-`scripts/full_gate.sh --allow-partial-platform`** — a workstation SUBSET
-verdict that never prints the `✓ full gate PASSED` line (reserved for a macOS
-run with every target installed). Measured 2026-09-15: `develop` carried 24
-`error[E0560]` + 4 `-D`-listed lint errors for ten hours while `test_gate.sh`
-and `wasm32_gate` were both green — the landing gate was right for what it
-changed; nothing read what it changed for everyone else (Issue 803 closed the
-silent-final-line defect).
-
-**wasm32 is a second platform axis, not a variation on the first.** Nothing
-here compiled it until 2026-09-07 (the only script naming the triple:
-`scripts/build-moka-wasm.sh`, a deploy build). `full_gate.sh` layer 2b closes
-it: derived `-p` list **including the root package** (clippy lints workspace
-path deps — how an orphaned doc block on a crate with no wasm32 code
-surfaced), both simd128 arms (OFF arm clean; ON arm had 14 findings, 11
-`unsafe_op_in_unsafe_fn` on edition 2024), two wasm32 GOAT targets by name,
-and the residue pinned by membership. `--all-targets` dies on dev-deps that
-do not resolve for wasm32 — extra coverage goes in as named targets. Push
-lane: `.github/workflows/wasm32_gate.yml` (main-only, `--wasm32-only`;
-dispatch manually after develop work — no push lane covers develop pushes).
-
-**x86_64 is a THIRD one — Layer 2c (Issue 819, the x86_64 lint lane).** Every
-lane that LINTS compiles the x86_64 arms to nothing; the execution matrix
-below EXECUTES them and reads no warnings — 30 findings on its first cell,
-every one `unsafe_op_in_unsafe_fn`, every one in `dash_attn/channel_aware.rs`,
-against 0 on the avx2-off arm. ⛔ The finding is the **sibling**: two
-transcriptions of one kernel and only the aarch64 arm had the `unsafe { }`
-block — a repair applied to the arm somebody can see is a measurement of
-which arms are visible. The lane is `--all-features` (Layer 3's coverage on
-the x86_64 arch); the TRIPLE is the design decision, printed on the verdict
-line. **The inverse holds too:** running ON macOS silently drops every
-`not(target_os = "macos")` backend. Typecheck that half from the M3 — the
-script PROVES the gated modules were compiled (read-only, from rustc's
-dep-info; `--min-gated N` floors the count), since "Finished" alone is
-indistinguishable from compiled-to-nothing. Args are `<repo> <pkg>
-[features...]` — there is no `--canary` flag (measured 2026-10-13: it is
-read as the repo and REFUSEd):
+- The `-D` list holds only lints whose all-features residual is ZERO — never
+  add a lint with residual > 0. `--keep-going` is mandatory (without it the
+  run stops at the first failing target and under-reports).
+- Don't run it by hand — `scripts/full_gate.sh` is the assertion (refuses a
+  pass off macOS; Layer 5 checks this document quotes the command it runs).
+- `--all-features` is NOT a supported TEST configuration (per-feature
+  RNG/GOAT calibrations); the full test surface is priced, not run
+  (`.benchmarks/701_full_workspace_execution_pricing.md`).
+- ⛔ On a non-macOS workstation: `scripts/full_gate.sh --allow-partial-platform`
+  — a SUBSET verdict that never prints `✓ full gate PASSED`.
+- **wasm32 (Layer 2b):** derived `-p` list including the root package, both
+  simd128 arms, two wasm32 GOAT targets by name, residue pinned by membership.
+  `--all-targets` dies on dev-deps that don't resolve for wasm32 — add extra
+  coverage as named targets. Push lane: `.github/workflows/wasm32_gate.yml`
+  (main-only, `--wasm32-only`; dispatch manually after develop work).
+  (`scripts/build-moka-wasm.sh` is a deploy build, not a gate.)
+- **x86_64 lint lane (Layer 2c):** `--all-features` on the x86_64 triple.
+  ⛔ When repairing one arch arm of a kernel, repair its SIBLING transcription
+  too. The inverse holds: running ON macOS drops every
+  `not(target_os = "macos")` backend — typecheck it and PROVE the gated
+  modules compiled (rustc dep-info; `--min-gated N` floors the count). Args are
+  `<repo> <pkg> [features...]` (no `--canary` flag):
 
 ```bash
 scripts/check_platform_gated_modules.sh --min-gated 1 ../riir-train riir-train-gpu numeric_drift_cuda
 ```
 
-**The profile axis is feature-shaped too (Layer 6b, Issue 758).** Layer 6 runs
-`--all-features` — which SUPPLIES `alloc_tracking` — so the (release ×
-default-features) cell was asserted by nothing until slice_tca's module-level
-`use crate::alloc` fell through it (E0432). The matrix: (dev, default)
-test_gate · (dev, all) Layer 3 · (release, all) Layer 6 · (release, default)
-Layer 6b. Alloc-gated tests carry
-`#[cfg(any(debug_assertions, feature = "alloc_tracking"))]` so they RUN in the
-release+feature configuration and compile away at release-default.
-
-Trigger health: PUSH triggers are MAIN-ONLY + dispatch-only since 2026-09-09
-(owner call: no CI on `develop` pushes); the weekly `schedule:` blocks were
-RE-ARMED 2026-09-23 for THIS repo alone. `scripts/ci_gate_coverage.py`
-reports which declared triggers can actually fire, per workflow, per repo; its
-standing finding is that the lane it produces is ZERO, not reduced (12 of 16
-repos: five without `origin/main` at all, six with no `.github/workflows/`
-there) — until then those gates run only when a human clicks them.
+- **Profile × features matrix (Layer 6b):** (dev, default) test_gate · (dev,
+  all) Layer 3 · (release, all) Layer 6 · (release, default) Layer 6b.
+  Alloc-gated tests carry `#[cfg(any(debug_assertions, feature = "alloc_tracking"))]`.
+- **Trigger health:** PUSH triggers are MAIN-ONLY + dispatch-only (no CI on
+  `develop` pushes); this repo's weekly `schedule:` is armed.
+  `scripts/ci_gate_coverage.py` reports which declared triggers can fire per
+  workflow per repo (report, exit 0; deliberately not a CHECK).
 
 ### The x86_64 half of the EXECUTE row — `scripts/x86_64_execution_matrix.sh`
 
-Every axis above is a COMPILE axis; the matrix EXECUTES. Its first two cells
-caught **15** latent AVX2-transcription defects; the next seven caught two
-more, a router defect red on every non-macOS platform, and a release-profile
-benchmark LLVM constant-folded away so it reported 0 ns/call
+The matrix EXECUTES the x86_64 arms
 ([Bench 806](.benchmarks/806_x86_64_execution_matrix.md)).
 
 ```bash
@@ -189,74 +138,41 @@ scripts/x86_64_execution_matrix.sh --canary     # prove the floors fire
 X86_MATRIX_DIR=/f/scratch scripts/x86_64_execution_matrix.sh
 ```
 
-- **Workstation verdict**, no CI lane. **REFUSES off x86_64** — every arm it
-  exists for compiles to nothing there, and a green run would be a green ZERO
-  wearing a matrix.
-- `RUSTFLAGS="-C target-feature=+avx2"` is **not a tuning knob** — an arm gated
-  on the compile-time feature compiles to nothing without it, and the run then
-  exercises the scalar fallback and proves nothing (`channel_aware.rs` is
-  exactly that shape).
-- ⚠ `CMAKE_BUILD_PARALLEL_LEVEL=1` on Windows is a LOAD-ROBUSTNESS cap, not the
-  fix: both C1001/D804 failures happened only under whole-box concurrent
-  compiler load; quiet-box passes at every parallelism, timings
-  indistinguishable. **The actual remedy is to run the matrix ALONE.**
-- Population **derived** (any package owning a tracked `*.rs` mentioning
-  `target_arch = "x86_64"`), so a new such crate joins by EXISTING; a package
-  reaching the kernels only through a dep joins by a pinned row.
+- **Workstation verdict**, no CI lane. **REFUSES off x86_64** (a green there
+  would be a green zero).
+- `RUSTFLAGS="-C target-feature=+avx2"` is **not a tuning knob** — without it
+  compile-time-gated arms compile to nothing and the scalar fallback runs.
+- **Run the matrix ALONE** (whole-box compiler load causes Windows
+  C1001/D804; `CMAKE_BUILD_PARALLEL_LEVEL=1` is only a robustness cap).
+- Population is **derived** (any package owning a tracked `*.rs` mentioning
+  `target_arch = "x86_64"`); dep-only reach joins by a pinned row.
 - **Every failure is RE-RUN ALONE, then adjudicated by MEMBERSHIP**
-  (`scripts/x86_64_matrix_expected.txt`, a reason per row, refused without
-  one). The bucket is **`PASSED-ALONE`, never `TRANSIENT`** — three classes
-  produce "failed in the cell, passed alone" and they need opposite responses:
-  a load-sensitive perf BAR; a shared-fixed-path CONCURRENCY defect (passes
-  alone BY CONSTRUCTION); an unseeded-RNG COIN FLIP. Arch-conditional dual
-  pins are the resolution for calibration-failed bars (measured T698), never
-  re-typed pins. The membership set is EMPTY: every confirmed failure is
-  unexpected again.
-- Floors in `scripts/x86_64_matrix_floors.txt` — `min_passed` per package plus
-  the integration cell's **two** (targets AND assertions). `--canary` runs an
-  impossible floor through the same comparison path and requires the failure.
-- ⚠ It does NOT cover the macOS device backends, wasm32, `--all-features` for
-  the integration targets, and it does NOT LINT — Layer 2c is the lint half.
+  (`scripts/x86_64_matrix_expected.txt`, reason per row, currently EMPTY).
+  Bucket is **`PASSED-ALONE`, never `TRANSIENT`** — it hides three classes
+  needing opposite responses: load-sensitive perf BAR, shared-fixed-path
+  CONCURRENCY defect (passes alone by construction), unseeded-RNG COIN FLIP.
+  Calibration-failed bars get arch-conditional dual pins, never re-typed pins.
+- Floors in `scripts/x86_64_matrix_floors.txt` (`min_passed` per package +
+  the integration cell's targets AND assertions); `--canary` proves they fire.
+- ⚠ Does NOT cover macOS device backends, wasm32, `--all-features` integration
+  targets, and does NOT LINT (that's Layer 2c).
 
 ## Docs gate + drift sweeps
 
-**Repo names in instruments are CONTRACT names** (`scripts/repo_alias.py`).
-The ten `derive_repos`/`derive_population` predicates return the live
-workspace's directory names passed through a machine-local codec: an optional,
-gitignored `scripts/repo_alias.local.txt` (rows `on-disk=contract`) translates
-a box's on-disk sibling names into the contract spellings every tracked pin is
-keyed on; absent file → identity mapping (CI and fresh clones untouched); the
-count of active mappings is disclosed on stderr, never the names.
-
-⛔ **The open seam is ONE** — `sweep_population.open_repo(name, workspace)` /
-`repo_alias.real(repo)` (Issue 842): a contract spelling is a directory that
-does not exist on an alias box and every walk on it returns 0 — measured, 17
-of 19 sweeps opened wrong directories and seven red walk floors measured TRUE
-pins against the WRONG DIRECTORY; the repair was one seam, not 19 patches.
-⛔ PROSE half, `issue_citation_gate.spelling_aliases` (Issue 846): on-disk
-spellings qualify citations (LENIENCY ONLY — a spelling can clear a row,
-never accuse one), with the `_NAME` boundary regex so `seal-remake` does not
-match inside `seal-remake-unity`. In code, never in the box-local alias file
-(verdicts must not go machine-local).
+**Repo names in instruments are CONTRACT names** (`scripts/repo_alias.py`):
+an optional gitignored `scripts/repo_alias.local.txt` (`on-disk=contract`)
+maps a box's on-disk names; absent → identity. ⛔ The ONE open seam is
+`sweep_population.open_repo(name, workspace)` / `repo_alias.real(repo)` —
+never open a contract spelling as a directory directly. Prose half:
+`issue_citation_gate.spelling_aliases` (leniency only; `_NAME` boundary regex).
 
 `scripts/docs_gate.sh` runs the manifest/doc/skill drift assertions and
-**prints its own timing**. Cite the CPU figure **with the load class it was
-measured under** — 2.7–3.4× CPU inflation under sustained multi-tenant load,
-and a run this file calls loaded can measure LESS CPU than a quiet one, so
-the load class is a disclosure, not a correction factor. Compare CPU only
-within a fixed CHECKS set (it moved four times in one day — write the CHECKS
-count beside the number, never the number alone). The per-check `⏱` line
-shows which check is BLOCKING, never that a check got slower. ⛔ On Windows,
-`times` accounts MSYS children and ~nothing for native ones — the gate
-CALIBRATES (burns a known 0.25s in a child) and prints `CPU SUPPRESSED`
-rather than a plausible number (Issue 792). ↔ The GENERAL rule for any perf
-number lives at §Feature Flag Discipline's G2 bullet; this paragraph is the
-INSTANCE for docs-gate CPU seconds — nothing asserts the two copies agree,
-on purpose.
-
-`.github/workflows/docs_gate.yml` runs it per-push on **`main` only** —
-develop pushes do not fire it, so run `./scripts/docs_gate.sh` locally for
-develop work. One line per check:
+prints its own timing. Cite the CPU figure **with its load class** and only
+within a fixed CHECKS count; the `⏱` line shows which check is BLOCKING, not
+that one got slower. On Windows the gate CALIBRATES and prints
+`CPU SUPPRESSED` rather than a wrong number. `.github/workflows/docs_gate.yml`
+runs it on **`main` only** — run `./scripts/docs_gate.sh` locally for develop
+work. One line per check:
 
 | check | asserts |
 |---|---|
@@ -297,42 +213,24 @@ develop work. One line per check:
 | `docs_gate_checks_sync.py` | this CHECKS array vs the AGENTS.md table documenting it — membership both ways + quantity words (Issue 750) |
 | `skill_size_gate.py` | a skill SKILL.md over the 80KB ceiling — the THIRD 100KB-regrowth class (doc-sync 09-05/09-11/09-21, boundary-guard 09-08/09-11/09-21: the one-line convention held, the ~8 rows/day cadence didn't) — the gate forces each file's documented prune-to-15 maintenance rule; recovery via git log -p |
 
-**Partial-clone boxes (Issue 765):** the three population checks
-(`skill_repo_set_gate`, `population_sync_gate`, `issue_citation_gate`)
-hard-red on a box carrying a subset of the workspace. A known-partial box
-(the 4090: 14 of 20) exports `DOCS_GATE_PARTIAL_CLONE=1` — a loud
-instrument-alive DEFERRAL on the population axis, explicit opt-in, NEVER
-auto-detected (a forgotten removal is set-identical to a partial clone).
-⛔ The Issue-842 alias codec RETIRED the marker on boxes that map their
-spellings (on the 4090 it now reds in exactly the stale-acknowledgement
-direction) — drop the env var, don't widen it.
+**Partial-clone boxes:** the population checks (`skill_repo_set_gate`,
+`population_sync_gate`, `issue_citation_gate`) hard-red on a subset box.
+`DOCS_GATE_PARTIAL_CLONE=1` is an explicit, never-auto-detected DEFERRAL; boxes
+using the alias codec must NOT set it. **Known-extra boxes:**
+`DOCS_GATE_KNOWN_EXTRA=names` — NAMES, never `=1`; reds in both directions
+(stale acknowledgement fails).
 
-**Known-extra boxes (Issue 815):** present-and-unregistered repos the contract
-genuinely does not claim get `DOCS_GATE_KNOWN_EXTRA=names` — NAMES, never
-`=1` (an unnamed extra still reds beside a named one); reds in BOTH
-directions (a name gone from the box, or since registered, is a STALE
-acknowledgement and fails).
-
-**Every sweep answers the partial-clone question the same way, once (Issue
-793): `scripts/sweep_population.py`.** Seven sweeps carried a copy-pasted
-"pinned but ABSENT" loop and hard-red on a known 16-of-20 box with every
-content assertion green — a sweep that always reds is a sweep nobody runs.
-Three verdicts, never interchangeable: **UNREGISTERED** (on disk, absent from
-`repo_set.txt` — reds in every posture), **UNSEEN** (absent, no marker — never
-a pass), **DEFERRED** (the same set with the marker; rides the FINAL line in
-BOTH directions). ⛔ "Every sweep" typed as a NUMBER went stale within two
-hours, twice — the wall is the MECHANISMS registry (worktree section), and a
-subset sweep has TWO populations (hand `population_verdict` the contract
-walk, never the subset — measured 16 phantom absences). Registration scope:
-`scripts/repo_registration_scope.txt` declares per-file SUBSET scope for the
-registration pins (a forgotten declaration reds, a forgotten EVERY would
-green).
+**Sweep population — `scripts/sweep_population.py`**: three verdicts, never
+interchangeable — **UNREGISTERED** (on disk, absent from `repo_set.txt`; reds
+always), **UNSEEN** (absent, no marker; never a pass), **DEFERRED** (with the
+marker; rides the FINAL line). A subset sweep has TWO populations — hand
+`population_verdict` the contract walk, never the subset. Registration scope:
+`scripts/repo_registration_scope.txt`.
 
 **The sweep family** — workstation-only cross-repo verdict halves, each with
-two floors (a ceiling is green over whatever the instrument can SEE, so the
-finding count needs the population floor beneath it; where a sweep re-states a
-quantity its per-push gate owns, it ASSERTS the two agree rather than trusting
-them): `docs_drift_sweep.py`, `numbering_drift_sweep.py`,
+two floors (a ceiling is green over whatever it can SEE, so the finding count
+needs a population floor beneath it; a sweep restating a per-push gate's
+quantity ASSERTS they agree): `docs_drift_sweep.py`, `numbering_drift_sweep.py`,
 `required_features_drift_sweep.py`, `percentile_drift_sweep.py`,
 `cfg_gated_drift_sweep.py`, `cfg_row_implication_drift_sweep.py`,
 `trap_sentinel_drift_sweep.py`, `citation_drift_sweep.py`,
@@ -343,166 +241,85 @@ them): `docs_drift_sweep.py`, `numbering_drift_sweep.py`,
 `pipefail_discard_drift_sweep.py`, `toolchain_override_drift_sweep.py`,
 `orphaned_attr_drift_sweep.py`, `wasm32_surface_drift_sweep.py`,
 `len_derived_drift_sweep.py`, `instrument_reachability_drift_sweep.py`,
-`python_syntax_floor_drift_sweep.py` — plus
-the report halves `pipefail_discard_audit.py` and `toolchain_override_audit.py`,
-`sibling_docs_drift.yml` (reusable workflow, one caller), and
-`ci_gate_coverage.py` (report, always exit 0 — deliberately NOT in the CHECKS
-set: CI's single checkout would derive an empty population and print a
-confident green over zero repos). Every tracked `*_drift_sweep.py` is wired to
-the family-wide mechanisms, ceilings pinned under `scripts/*_floors.txt`;
-**take the family size and the wiring verdict from
-`scripts/sweep_advisory_membership_gate.py`'s PASS line, never from a count
-here** (this paragraph's own counts went stale within hours, twice).
+`python_syntax_floor_drift_sweep.py` — plus report halves
+`pipefail_discard_audit.py` and `toolchain_override_audit.py`, and
+`sibling_docs_drift.yml` (reusable workflow). Ceilings pinned under
+`scripts/*_floors.txt`. **Take the family size and wiring verdict from
+`scripts/sweep_advisory_membership_gate.py`'s PASS line, never a count here.**
 
-**Python 3.9 syntax floor** — `python_syntax_floor_gate.py` (per-push, this
-repo) + `python_syntax_floor_drift_sweep.py` (workstation, every contract
-repo, pinned in `python_syntax_floor_drift_floors.txt`): every tracked `*.py`
-must parse at `ast.parse(feature_version=(3, 9))` — the boxes' `python3` is
-3.9.6 and the instruments are invoked with it DIRECTLY, so a 3.10+ only file
-dies at import before any verdict (Issue 965; founding incident
-`staged_set_audit.py`, fixed `95e031d95`). SYNTAX (fails the 3.9 grammar,
-passes the box's own) and UNPARSED (fails everywhere) are separate ceilings,
-both walls at 0 — a file that cannot parse cannot run, so there is no
-DELIBERATE class; floors are `min_py_files` (the walk) + `min_parsed` (the
-scan loop), neither derived from the other. The gate is a GRAMMAR check, not
-an interpreter pin: `tomllib` imports (3.11+) parse fine at 3.9, and PEP 604
-in annotation position rides `from __future__ import annotations`. Fixtures
-are DATA built by concatenation (the gate is itself under its own gate), and
-the planted-construct arms assert the current-grammar parse ACCEPTS what the
-floor parse rejects — detector liveness in the only direction that matters.
-The landing census validated the sweep's reason to exist: the feature-grep
-census had closed the class at zero, and the full-grammar parse found one
-live 3.12-only site (`reflex-site/scripts/render_flows.py`, a PEP 701
-f-string backslash) and fixed it (`a24f4dd`) the same day.
+**Python 3.9 syntax floor:** every tracked `*.py` must parse at
+`ast.parse(feature_version=(3, 9))` (the boxes' `python3` is 3.9.6, invoked
+directly). SYNTAX and UNPARSED are separate walls at 0; floors `min_py_files`
++ `min_parsed`. A GRAMMAR check, not an interpreter pin (`tomllib` parses;
+PEP 604 annotations ride `from __future__ import annotations`).
 
 ⛔ **Before fixing a rule-in-one-instrument class, grep the whole family and
-land the repair as one shared mechanism** — the recorded failure mode,
-measured ten+ times (Issues 777, 778, 782, 783, 789, 793, 797, 820, 821,
-822). ⛔ **A cross-repo repair is not landed until it is COMMITTED in the
-sibling, and a record HERE claiming one must CITE THE SIBLING COMMIT** (Issue
-798): measured, two tracked files recorded sibling repairs as landed —
-`toolchain_override_drift_floors.txt` ("all five markers are in"),
-`pipefail_discard_expected.txt` (a row DROPPED for a "fix") — two of five
-markers existed, the tail did not, both sweeps RED the whole interval. A SHA
-buys a claim one `git cat-file -e` can check; dropping a pin row for an
-absent fix is the unrecoverable direction.
+land the repair as one shared mechanism.** ⛔ **A cross-repo repair is not
+landed until COMMITTED in the sibling, and a record HERE claiming one must
+CITE THE SIBLING COMMIT** (Issue 798) — never drop a pin row for an absent fix.
 
-**Citation error rates** — `citation_drift_sweep.py` prints its own error
-rates next to its finding count, plural, because a SAMPLE rate does not
-transfer to rows it never sampled: CROSS rows split into the pre-752 corpus
-(**7/43 = 16%** FP, stratified manual read) and the **45** owner-consistency
-rows (**1/45**, full census). Neither number is quotable without the other,
-nor without the walk and population that produced them; IN-LOCAL-RANGE is
-UNDECIDED and never folded into either neighbour. The class that DEFLATED
-the count by ~15%: qualification asked "is a repo named?" and never "does
-that repo own the number?" — attribution followed the code while the number
-followed the document. ⛔ A census is exhaustive over ROWS, not over the
-ORACLE it checks rows against — never quote an error rate without naming the
-instrument the sample was adjudicated against (measured: a census's "wrong
-address" was correct; the oracle was blind to heading-only allocations).
+**Citations** (`citation_drift_sweep.py`): it prints its own error rates
+(plural — a sample rate does not transfer to unsampled rows); never quote one
+without the walk, population and the ORACLE it was adjudicated against.
+IN-LOCAL-RANGE is UNDECIDED, never folded into a neighbour. Qualification
+asks "does the named repo OWN the number?", not just "is a repo named?".
+**Two-lane gap:** a repo with `.highwater_local` declares its local lane's top;
+citations between it and the first git-log file ADD above classify
+CROSS/ORPHAN (`--prove-fires` replays the specimen). **Heading oracle**
+(`heading_allocated()`): incomplete by construction (house-style headings it
+cannot read); take `heading_unread=a/b`, `heading oracle COST` and `novel=`
+from the sweep's output. ⛔ A document that DISCUSSES a misattribution must
+name the true owner inside the citation's own window, not add a pin. ⛔ Never
+re-pin `max_in_local_range` for a heading-blind row.
 
-**The two-lane gap** (Issue 921 Arm B): a repo whose kind dir carries
-`.highwater_local` declares its local lane's top, and citations in
-`counter < n < smallest git-log file ADD above it` classify CROSS/ORPHAN
-instead of IN-LOCAL-RANGE — the floor derives from git-log ADDITIONS only
-(never the worktree walk, never heading allocations, whose additions are
-order-dependent), prints on the per-repo line, `.highwater_local` rides the
-sweep's dirty/upstream advisory patterns, and `citation_drift_sweep.py
---prove-fires` replays the founding specimen two-sided at the riir-infer
-fixtures (a local clone, not an archive extraction — the floor leg is a
-git-log leg). Repos without the file are byte-identical in behavior.
-
-**The heading oracle** (Issues 781, 823, 828): `heading_allocated()` is not a
-complete record — records headed in styles the pattern cannot spell are
-unread, and the class was anchored three times (POSITION, then the blindness
-METER, then the DELIMITER SET — the workspace's most common title delimiter,
-the em dash, was in neither set; most of the unread were this repo's own
-house style). The residual `resolved —`/`follow-up` family has NO sound
-discriminator (arm 2 pins the negative), and the unsound widening was REFUTED
-by pricing it: of the unread records, only ~2 name a number no other oracle
-knows (~99% redundant). All quantities are DERIVED per run — take
-`heading_unread=a/b`, the `heading oracle COST` line and `novel=` from the
-sweep's own lines, never from a sentence here: every hand-typed figure in
-that arc went stale within hours. ⛔ A document that DISCUSSES a
-misattribution has to reproduce it — the repair is to name the true owner
-inside the citation's own window, not a pin. ⛔ Do not re-pin
-`max_in_local_range` for a heading-blind row — a repo at or near `b/b` unread
-cannot have its IN-LOCAL-RANGE count trusted.
-
-⛔ **The pipefail class** (one shared mechanism): a `var="$(pipeline)"`
-assignment under `set -euo pipefail` is killed by a legitimately-empty grep
-AFTER the measured work ran and BEFORE the result was written — the
-`perf_rematch.sh` incident that lost five benchmark cells.
-`scripts/pipefail_discard_audit.py` + `scripts/pipefail_discard_drift_sweep.py`.
-Two bash laws are MEASURED: `local x="$(fails)"` does not kill (local masks
-the status), and an interior `|| true` guards a paren-group. ⛔ The one-line
-"add `|| true`" recipe is INSUFFICIENT wherever the captured value is then
-TESTED: an empty capture matches no pattern and `|| true` alone converts a
-silent death into a silent PASS on the exact regression the check exists to
-catch (`money_format_gate.sh` needed `|| true` AND an emptiness failure; a
-leakage-audit guard's verbatim recipe was strictly WORSE than the defect —
-the security gate PASSED an unverified run). Census: 51 findings → all
-DELIBERATE (the 4 `proof_gate.sh` `grep -c` tripwires) or INERT BY
-CONSTRUCTION; the 37 live kill-shapes fixed across ten repos, including the
-22-site riir-ai `ci_feature_guard.sh` layer-summary cluster and 6 dapps
-`setup.sh` rows.
+⛔ **The pipefail class** (`scripts/pipefail_discard_audit.py` +
+`scripts/pipefail_discard_drift_sweep.py`): `var="$(pipeline)"` under
+`set -euo pipefail` is killed by a legitimately-empty grep AFTER the work ran.
+`local x="$(fails)"` does not kill; an interior `|| true` guards a
+paren-group. ⛔ Where the captured value is then TESTED, `|| true` alone turns
+a silent death into a silent PASS — add an explicit emptiness failure too.
+The four `proof_gate.sh` `grep -c` tripwires are DELIBERATE rows.
 
 ## cfg-gated targets — the green-zero rule
 
 A test file opening with `#![cfg(feature = "x")]` compiles to an **empty
-binary** when x is off; cargo prints `ok. 0 passed` and **exits 0** —
-byte-for-byte a real pass. `required-features` protects the **reader**; the
-`#![cfg]` protects the **count**; a *default-on* gated target still runs on a
-plain `cargo test`, a *default-off* one reports a green zero every time
-anyone names it — read the severity split, never the pooled total.
+binary** when x is off: `ok. 0 passed`, exit 0 — byte-identical to a pass.
+`required-features` protects the **reader**; the `#![cfg]` the **count**.
+Read the default-on/default-off severity split, never the pooled total.
 
-⛔ **There are TWO spellings of that zero (Issue 856).** A file whose entire
-body is `#[cfg(feature = "x")] mod tests { … }` produces the byte-identical
-outcome, and the audit's single inner-attribute regex never saw it —
-measured: 26 such targets here, 7 named `*_goat`, hiding 175 assertions. The
-predicate is now **the gated items are the WHOLE body** (a file with one live
-ungated `#[test]` is not zeroed); a **run** of gated modules is gated by
-`any(...)`, not `all(...)`; a top-level `use` never makes a target non-empty.
-
-**Two traps in the profile dimension (Issue 741).** A file may carry more
-than one whole-file `#![cfg]`, and rustc ANDs them — read all of them. And
-gating a MEASUREMENT on `debug_assertions` makes it impossible in the
-configuration that ships: ask of any such gate whether the thing behind it is
-a **capability** (→ give it a feature, `any(debug_assertions, feature =
-"x")`, and gate the machinery on x too) or genuinely a **profile property**
-(an assertion about `debug_assert!`). Read the auditor's `unfixable` vs
-`escapable` split, never the pooled DEBUG-only count.
+- ⛔ **Two spellings of the zero:** a body that is entirely
+  `#[cfg(feature = "x")] mod tests { … }` is the same outcome. Predicate: the
+  gated items are the WHOLE body; a run of gated modules is gated by
+  `any(...)`; a top-level `use` never makes a target non-empty.
+- **Profile traps:** multiple whole-file `#![cfg]`s are ANDed — read all. A
+  MEASUREMENT gated on `debug_assertions` is impossible where it ships: if it
+  is a **capability**, give it a feature (`any(debug_assertions, feature =
+  "x")`); only a genuine profile property stays on `debug_assertions`. Read
+  the auditor's `unfixable` vs `escapable` split.
 
 ```bash
 scripts/cfg_gated_target_audit.py            # all contract repos (derived)
 scripts/cfg_gated_target_audit.py ../riir-ai # or one, by path
 ```
 
-- A **report, not a gate** (exit 0): `cfg` on `target_os`/`miri` and an
-  `any(...)` of features genuinely cannot be expressed as `required-features`.
-- `scripts/suite_membership_audit.py` answers the next axis down: which
-  `[[test]]` targets no script/workflow names — run it when landing a new
-  gate; if nothing names it, add a suite row or record why not.
-- **Arming a target can RED a binary-counting floor**: an empty gated binary
-  prints `test result: ok. 0 passed` and COUNTS as one. Repair with a
-  **passed-test floor**, not a re-pin. **Run the armed gates with
-  `--release`** — a latency gate in a debug build measures an unoptimised
-  binary.
+- A **report, not a gate** (exit 0): `cfg` on `target_os`/`miri` and `any(...)`
+  of features cannot be expressed as `required-features`.
+- `scripts/suite_membership_audit.py` — which `[[test]]` targets no
+  script/workflow names; run it when landing a new gate.
+- **Arming a target can RED a binary-counting floor** (an empty binary counts
+  as one) — repair with a **passed-test floor**, not a re-pin. Run armed
+  latency gates with `--release`.
 - Verdict half: `scripts/cfg_gated_floor_gate.py` (pins in
-  `scripts/cfg_gated_floors.txt`; `max_load_bearing = 0` earns its keep; some
-  pins are FLOORS — a ceiling cannot fail once the instrument goes blind;
-  `scripts/all_ignored_load_bearing.txt` pins the ALL-IGNORED set by
-  MEMBERSHIP from `all_ignored_target_audit.py` — a set is gateable where its
-  cardinality is not).
+  `scripts/cfg_gated_floors.txt`; `max_load_bearing = 0`; some pins are
+  FLOORS); `scripts/all_ignored_load_bearing.txt` pins the ALL-IGNORED set by
+  MEMBERSHIP from `all_ignored_target_audit.py`.
 
 ## A `required-features` row can EXIST and be WRONG — `scripts/required_features_build_audit.py`
 
-Every audit treats a target as protected once it **has** a row. A row that
-exists and is wrong is strictly worse than a missing one: `cargo test
---workspace` silently **skips** the target, `--all-features` **builds** it —
-and every audit counts it as protected. The row is wrong relative to what the
-file *imports*, and imports resolve through cfg-gated re-exports that defeat
-grep — ask the compiler, once per target:
+A wrong row is worse than a missing one: `cargo test --workspace` silently
+**skips** the target, `--all-features` **builds** it, and every audit counts
+it protected. Imports resolve through cfg-gated re-exports grep cannot follow
+— ask the compiler, once per target:
 
 ```bash
 scripts/required_features_build_audit.py --list            # rows only, no builds
@@ -511,77 +328,51 @@ scripts/required_features_build_audit.py . --grep pruners  # one slice
 scripts/required_features_build_audit.py ../riir-train --batch  # 1 run per set
 ```
 
-- A **report, not a gate** (exit 0; ~28 s/row — filter with `--package` /
-  `--kind` / `--grep` / `--limit`; `--target-dir` when a sibling is building).
-- `--batch` = **one cargo run per (package, EXACT feature set)**, never a
-  superset — a superset build may supply the very import the row forgot.
-- **Neither an error nor an artifact = UNSEEN, never BUILDS** — silence is not
-  evidence; UNSEEN is never folded into the pass column (measured: "will
-  clear after the FAILs" was TESTED and FALSE, and that is how a library
-  break was found).
-- **Read the USE SITES, not the error:** widen the ROW when the body needs
-  the feature unconditionally; narrow the cfg when the use site is already
-  gated (both directions measured).
-- The free static verdict is correct AND insufficient: `dep/feat` rows are
-  valid cargo; only the compiler distinguishes "names a feature that exists"
-  from "names the feature that gates the module".
-- Push half (MAIN-ONLY): `.github/workflows/required_features_touched.yml`
-  checks the rows a main push could have broken (a changed file that IS a
-  row's target source; a changed `Cargo.toml` selects rows whose tuple
-  differs base-vs-head; `--max-rows` REFUSES rather than truncates).
+- **Report** (exit 0; ~28 s/row — filter with `--package`/`--kind`/`--grep`/
+  `--limit`; `--target-dir` when a sibling is building).
+- `--batch` = one cargo run per **EXACT** feature set, never a superset (a
+  superset may supply the import the row forgot).
+- **Neither error nor artifact = UNSEEN, never BUILDS**; never folded into pass.
+- **Read the USE SITES:** widen the ROW when the body needs the feature
+  unconditionally; narrow the cfg when the use site is already gated.
+- Static verdicts (`required_features_static_gate.py`,
+  `cfg_row_implication_gate.py` / `cfg_row_implication_audit.py`) are
+  necessary, not sufficient. Push half (MAIN-ONLY):
+  `.github/workflows/required_features_touched.yml` (`--max-rows` REFUSES
+  rather than truncates).
 
 ## A reported "p99" is often the MAX — `scripts/percentile_index_audit.py`
 
-`sorted[(n as f64 * 0.99) as usize]` and `sorted[n * 99 / 100]` both land on
-`n - 1` — the **maximum** — for every `n <= 1/(1-p)`: n ≤ 100 at p99, n ≤ 20
-at p95, n ≤ 1000 at p999. Below that boundary the site reports one
-observation under a percentile's name; a `.min(len - 1)` clamp prevents a
-panic, not a wrong statistic. The quantity to print is **tail support** =
-`n - idx`: 1 at n=100, 10 at n=1000 — anything under 10 is weak. Assert
-direction matters (a `>= floor` bar goes false-GREEN, not false-RED).
+`sorted[(n as f64 * 0.99) as usize]` and `sorted[n * 99 / 100]` land on
+`n - 1` — the **maximum** — for every `n <= 1/(1-p)` (n ≤ 100 at p99, ≤ 20 at
+p95, ≤ 1000 at p999). A `.min(len - 1)` clamp prevents a panic, not a wrong
+statistic. Print **tail support** = `n - idx`; under 10 is weak. A `>= floor`
+bar goes false-GREEN.
 
 ```bash
 scripts/percentile_index_audit.py             # all contract repos (derived)
 scripts/percentile_index_audit.py ../riir-ai  # or one, by path
 ```
 
-- A **report, not a gate** (exit 0) — half the sites take their sample count
-  from a runtime length no static pass can reach. **UNRESOLVED is not
-  "clean"** — it is "needs a per-site read"; the audit prints site rows only
-  for the four severe classes, so UNRESOLVED appears in the tally and nowhere
-  else. `scripts/list_unresolved_percentile_sites.py <repo>` dumps those rows.
+- **Report** (exit 0). **UNRESOLVED is not clean** — dump those rows with
+  `scripts/list_unresolved_percentile_sites.py <repo>`.
 - Verdict half: `scripts/percentile_floor_gate.py` (pins in
-  `scripts/percentile_floors.txt`; `min_sites_scanned` is a FLOOR — a
-  tokenizer regression takes the population to ~0 and every ceiling passes).
-- **The POPULATION is what git TRACKS — `scripts/tracked_walk.py`, one copy
-  (Issue 777).** A filesystem walk behind a hand-typed skip set is not the
-  same set: measured, a gitignored nested repo's 1404 `.rs` were credited to
-  the outer repo (a correctly-shaped defect at the wrong address) and two
-  `percentile_drift_floors.txt` rows were unsatisfiable by any tracked walk.
-  Tracked-only had landed twice before, never generalised — now ONE file with
-  its own 8-arm self-test; consumers: `platform_dead_code_audit.py`,
-  `percentile_index_audit.py`, `len_derived_binding_audit.py`,
-  `orphaned_attr_gate.py`. A tree with no `.git` falls back to the walk.
-- ⛔ **`.git` answers TWO questions and each spelling is wrong for the other**
-  (Issues 835, 836): *is this a canonical REPO?* → `.is_dir()` (a worktree has
-  a `.git` FILE; counting one attributes its manifests to a repo that does
-  not exist); *can I run git rooted HERE?* → `.exists()` (delegate to
-  `worktree_state.is_checkout` — the silent direction returned "nothing to
-  report" in worktrees). Never write a fresh contract-repo walk — delegate to
-  `skill_repo_set_gate.derive_repos`; `population_sync_gate` exists to catch
-  two predicates disagreeing. ⛔ A name match that never fires is the same
-  silence one layer up: a guard with no else skipped its whole adjudication on
-  a differently-named checkout, and a glob fallback reported untracked scratch
-  (`✗ UNDEFENDED zz_scratch_probe.py`) as findings — measured before
-  repairing, and the repair went in the same change.
+  `scripts/percentile_floors.txt`; `min_sites_scanned` is a FLOOR).
+- **The POPULATION is what git TRACKS — `scripts/tracked_walk.py`, one copy**
+  (consumers: `platform_dead_code_audit.py`, `percentile_index_audit.py`,
+  `len_derived_binding_audit.py`, `orphaned_attr_gate.py`). No `.git` → walk.
+- ⛔ **`.git` answers TWO questions:** *is this a canonical REPO?* →
+  `.is_dir()` (a worktree has a `.git` FILE); *can I run git rooted HERE?* →
+  `.exists()` (delegate to `worktree_state.is_checkout`). Never write a fresh
+  contract-repo walk — delegate to `skill_repo_set_gate.derive_repos`
+  (`population_sync_gate` catches two predicates disagreeing). A name-match
+  guard needs an else, and a glob fallback must not report untracked scratch.
 
 ## A Lean theorem can RESTATE its own definition — `scripts/restatement_theorem_audit.py`
 
 `theorem x_eq_sum : x = magic + version + …` where the RHS **is** the `def`
-body: `decide` closes it whatever the constants hold — green on every
-transcription typo it was written to catch, while `lake build` and the proof
-gate all report a theorem that proves something. Four shipped in
-riir-neuron-db for months (Issue 617, removed `24957a2`).
+body: `decide` closes it whatever the constants hold — a theorem that proves
+nothing (four shipped in riir-neuron-db, removed `24957a2`).
 
 ```bash
 scripts/restatement_theorem_audit.py               # all repos with .proofs (derived)
@@ -589,29 +380,20 @@ scripts/restatement_theorem_audit.py ../riir-chain # or one, by path
 scripts/restatement_theorem_audit.py -v            # every row, not just findings
 ```
 
-- A **report, not a gate** (exit 0). The criterion is symbolic equality over
-  **leaf** constants: unfold composite nullary `def`s, keep numeral-bodied
-  leaves as symbols — the leaf boundary IS the classifier.
-- **CROSS-DEF is not a finding** — it pins two independently maintained
-  definitions, and a perturbation arm proves it reds. **UNRESOLVED is not
-  clean**, and HYPOTHETICAL (binders) is split out, never pooled.
-- Validated against a tree whose answer was known independently; the oracle
-  then found the instrument's own scoping defect (per module + imports now).
-- Verdict half: `scripts/restatement_drift_sweep.py` (pinned in
-  `scripts/restatement_drift_floors.txt`). **Two floors** — `min_lean_files`
-  catches a WALK regression, `min_theorems` a PARSE one, and only the second
-  moves when a tokenizer breaks on an unchanged tree. `--prove-fires` plants
-  a restatement into a COPY of each repo so the ceiling is never a pin nobody
-  has watched fail.
+- **Report** (exit 0). Criterion: symbolic equality over **leaf** constants
+  (unfold composite nullary `def`s; numeral-bodied leaves stay symbols).
+- **CROSS-DEF is not a finding** (pins two independent definitions);
+  **UNRESOLVED is not clean**; HYPOTHETICAL (binders) split out.
+- Verdict half: `scripts/restatement_drift_sweep.py`
+  (`scripts/restatement_drift_floors.txt`; floors `min_lean_files` = walk,
+  `min_theorems` = parse; `--prove-fires` plants a restatement into a COPY).
 
 ## A ratio of two SEQUENTIALLY-timed arms measures the BOX — `scripts/sequential_ab_timing_audit.py`
 
-Two sequential arms of the **same** work measured **+5.2% and +21.7%** thirty
-seconds apart on a loaded box (Issue 723 T5) — a 10% bar is a measurement of
-the scheduler. `tests/common/ab_timing.rs` is the treatment: interleaved
-(a-chunk, b-chunk) pairs, median across pairs, loud zero when the optimiser
-deletes an arm (`best_of_us` the absolute-budget form; `best_of_arms` the
-N-arm round-robin minimum).
+Two sequential arms of the same work differ by +5–22% on a loaded box — a 10%
+bar measures the scheduler. Treatment: `tests/common/ab_timing.rs` —
+interleaved (a, b) chunk pairs, median across pairs, loud zero when an arm is
+deleted (`best_of_us` absolute budget; `best_of_arms` N-arm round-robin min).
 
 ```bash
 scripts/sequential_ab_timing_audit.py            # this repo
@@ -619,57 +401,27 @@ scripts/sequential_ab_timing_audit.py ../riir-ai # or one, by path
 scripts/sequential_ab_timing_audit.py -v         # every row, not just findings
 ```
 
-- A **report, exit 0** — except a blindness floor or a failing self-test,
-  which exit **2**; the self-test runs on every invocation.
-- Buckets, never pooled: **ADOPTED** (names the shared harness — the harness
-  module certifying ITSELF was the count defect) · **HAND-ROLLED**
-  (duplicates it — a DRY finding, never folded into ADOPTED) · **SEQUENTIAL**
-  (two timing-derived identifiers in ONE comparison — a ratio is one surface
-  form; a bare `assert!(a < b)` is the same class) · **UNRESOLVED**, which is
-  **not clean**. Resolvers: `provenance_hits` (timing-derived BY VALUE,
-  transitively), the RELATIVE DIFFERENCE `(a - b) / c`, COUNTY (a count
-  denominator is a rate — but comparing two rates is still comparing two
-  arms, and COUNTY must not filter the comparison shape).
+- **Report** (exit 0; exit **2** on a blindness floor or failing self-test).
+- Buckets, never pooled: **ADOPTED** · **HAND-ROLLED** (DRY finding) ·
+  **SEQUENTIAL** (two timing-derived identifiers in one comparison, ratio or
+  bare `assert!(a < b)`) · **UNRESOLVED** (not clean).
 - ⛔ **No verdict half, deliberately** — migration is a per-target read on
-  FOUR axes, none statically decidable: the a/b ORIENTATION (inverting a
-  throughput claim inverts the bar silently), the CLAIM DIRECTION (a win with
-  no slack must be precise; an overhead ceiling with deliberate room gains
-  almost nothing), the chunk size, `black_box` at both ends. Measured: the
-  flagged GOAT bars were RUN and both had head-room a loaded box cannot cross
-  — reading the bar alone is the mistake.
-- ⛔ **The executed answer beats the static proxies** (Issue 833 T2): of 38
-  `SEQUENTIAL [GATES]` targets RUN in release at their required-features, **3
-  are candidates** — the backlog is the count of *verdicts the box can flip*,
-  strictly smaller than any grep. Thresholds: `< 6` pts flakes idle · `6–22`
-  under load · `≥ 22` out of reach (±21.7% and ±6% are the two measured
-  numbers).
-- Two classes found by executing: **Issue 855** (a latency ceiling satisfied
-  by a loop the optimiser DELETED — needs the loud-zero defence, not a lower
-  bar) and **Issue 856** (the `#[cfg] mod tests` zero above).
-- STATED blind spots remain: a ratio through a helper; a subtraction never
-  divided AND never compared; orientation.
+  four axes (a/b orientation, claim direction, chunk size, `black_box` at both
+  ends). **Execute before migrating**: thresholds `< 6` pts flakes idle ·
+  `6–22` under load · `≥ 22` out of reach.
+- STATED blind spots: a ratio through a helper; an uncompared, undivided
+  subtraction; orientation.
 
 ## A gate that ABORTS reports exit 0 — `scripts/trap_exit_launder_audit.py`
 
-Every script above is a shell gate with `set -euo pipefail` and a cleanup
-trap. On **macOS `/bin/bash` 3.2.57 — and only there**: when bash aborts on
-an **unbound expansion** or an **`eval` syntax error**, it enters the EXIT
-trap with `$?` **already 0** — so an EXIT trap whose last command succeeds
-makes the abort exit **0**: a confident pass over work that never ran,
-everything after the abort silently skipped.
-
-⛔ **This bites the macOS CI lane, not just workstations** (measured on both
-sides): GitHub's `macos-26-arm64` ships bash **3.2.57 ONLY**, so on
-`full_gate.yml` the sentinel is load-bearing IN CI; `ubuntu-latest` (bash 5)
-is immune. **Keep the sentinel regardless** — it costs nothing on 5.x and
-catches every other premature death (SIGTERM, a `set -e` trip, an editing
-slip) on every shell.
-
-`trap 'rc=$?; cleanup; exit $rc' EXIT` does **not** repair it — the rc it
-saves is itself 0. Only a **completion sentinel** does: a flag set on the
-script's own last line, checked by the handler, forcing exit 1 when the run
-is INCOMPLETE *and* claiming success. `scripts/full_gate.sh` and
-`scripts/proof_negative_test.sh` carry it (Issue 734).
+On **macOS `/bin/bash` 3.2.57** (also GitHub's `macos-26-arm64`, so
+load-bearing IN CI), aborting on an **unbound expansion** or an **`eval` syntax
+error** enters the EXIT trap with `$?` already 0 — an EXIT trap whose last
+command succeeds makes the abort exit **0**. `trap 'rc=$?; cleanup; exit $rc'
+EXIT` does **not** repair it. Only a **completion sentinel** does: a flag set
+on the script's own last line, checked by the handler, forcing exit 1 when
+INCOMPLETE and claiming success (`scripts/full_gate.sh`,
+`scripts/proof_negative_test.sh` carry it). Keep the sentinel on every shell.
 
 ```bash
 scripts/trap_exit_launder_audit.py            # population + verdict, all repos
@@ -678,83 +430,44 @@ scripts/trap_sentinel_drift_sweep.py          # the verdict, every repo, pinned
 scripts/trap_launder_premise_matrix.py        # the PREMISE, 11 interpreters
 ```
 
-- Three halves, different questions: the audit derives the **population** and
-  classifies it (report, exit 0); `scripts/trap_sentinel_gate.py` is the
-  **verdict** for this repo (docs-gate CHECK; pins by MEMBERSHIP, floors the
-  population — a classifier that goes blind must RED, not report a green
-  zero; the flag must GATE the failure branch, or the pin certifies nothing —
-  measured, its own canary caught that); `trap_sentinel_drift_sweep.py` the
-  verdict for all repos (pinned in `scripts/trap_sentinel_drift_floors.txt`);
-  `trap_launder_premise_matrix.py` measures the **premise** one interpreter
-  at a time and prints **UNSEEN, never a zero**, when docker is absent.
-- **`errexit` is the precondition, NOT `nounset`** — measured both ways; the
-  population predicate is the UNION, and the measurement MODE is part of the
-  claim (nounset exits 127 from `bash -c`, 1 from a script file).
-- Verdicts: LIVE-FORWARD (a provable abort, every run), EXPOSED, SENTINELLED,
-  UNPARSED, plus REPLACED (2+ EXIT traps — `trap` replaces, earlier cleanup
-  silently dropped). Each finding carries its exposure window and its abort
-  triggers — a window with **zero** triggers provably cannot launder.
-- **UNPARSED is the instrument admitting it cannot read** — a runaway body
-  reads as a false SENTINELLED, which HIDES exposure; never pooled, the
-  verdict gate reds on it (riir-chain's
-  `block_pipeline_reachability_gate.sh` embeds a quoted awk program with an
-  unmatched brace in DATA). The last EXPOSED row in the workspace —
-  `riir-ai/scripts/e2e_internet.sh`, trap on line 41 of 43 — is INERT by its
-  zero triggers.
-- **shellcheck does not find this** (measured): the fatal line got SC2250,
-  brace style. Canonical failure: mmorpg-remake's `ci_feature_guard.sh` — the
-  script its `rust.yml` runs — could not fail past layer 13 for months,
-  because its layer-13 trap named two variables assigned ~20 and ~45 lines
-  later.
+- Halves: audit = population (exit 0); `scripts/trap_sentinel_gate.py` =
+  this repo's verdict (membership pins, population floor; the flag must GATE
+  the failure branch); the sweep = all repos
+  (`scripts/trap_sentinel_drift_floors.txt`); the premise matrix prints
+  **UNSEEN, never zero**, without docker.
+- **`errexit` is the precondition, NOT `nounset`**; the measurement MODE is
+  part of the claim.
+- Verdicts: LIVE-FORWARD, EXPOSED, SENTINELLED, UNPARSED (the instrument
+  cannot read — reds, never pooled), REPLACED (2+ EXIT traps; `trap`
+  replaces). A window with zero abort triggers cannot launder.
+- **shellcheck does not find this.**
 
 ## A lane compiles what it NAMES — `scripts/wasm32_surface_audit.py`
 
-Every wasm32 axis is about *how* a lane compiles what it names; the seventh
-is one level up: **is what it names the whole surface?** A row cannot notice
-a package it does not select — a positive `#[cfg(target_arch = "wasm32")]`
-block no row built, uncompilable since it was written.
+Is what a wasm32 lane names the whole surface? A positive
+`#[cfg(target_arch = "wasm32")]` block no row builds is uncompilable unseen.
 
 ```bash
 scripts/wasm32_surface_audit.py            # all contract repos (derived)
 scripts/wasm32_surface_audit.py ../riir-ai # or one, by path
 ```
 
-- A **report, not a gate** (exit 0). Four buckets, never pooled: **NAMED** ·
-  **BY-DEP** (Issue 774: no row names it, but a named package reaches it
-  through non-optional in-repo path-dep edges — reachability, never folded
-  into NAMED, because that coverage dies by a dep-graph edit in someone
-  else's manifest) · **UNRESOLVED** (a `--workspace` or derived row exists —
-  not clean) · **UNCOVERED** (no row could reach it). `--self-test` proves
-  the by-dep detectors fire in BOTH directions.
-- The predicate is the **positive** cfg (`not(wasm32)` is an ordinary
-  native-only guard; counting it inflates everything); comment lines excluded
-  — prose explaining a cfg is not a cfg. ⛔ It reads ATTRIBUTES, not lines:
-  raw-string fixtures were once a repo's ENTIRE count (the masker is IMPORTED
-  from `platform_dead_code_audit`, not re-written).
-- `cfg!(target_arch = "wasm32")` is a RUNTIME branch — split out, never
-  counted as surface, printed as EXCLUDED. So is **SHARED**: a positive
-  wasm32 term inside a top-level `any(...)` with a natively satisfiable
-  disjunct (`any(not(feature = "x"), target_arch = "wasm32")` compiles on
-  every native default build). A lane is ANY `wasm32-*` triple — every one
-  sets `target_arch = "wasm32"` (a `wasm32-wasip1` deploy build was once
-  read as no lane at all).
-- Standing: 26 NAMED · 2 BY-DEP · 0 UNRESOLVED · 1 UNCOVERED over 29 packages
-  (`mmorpg-poc-submodule` the deliberate negative control). Verdict half:
-  `scripts/wasm32_surface_drift_sweep.py` (sharing `classify_repo()`;
-  `max_unresolved = 0` a WALL — a ratchet on a bucket whose meaning is
-  *unanswered* is a backlog; UNCOVERED pinned by NAME in
-  `scripts/wasm32_uncovered_expected.txt`, reds in BOTH directions; floors in
-  `scripts/wasm32_surface_drift_floors.txt` with a reserved TOTALS row because
-  the walk floor is vacuous in 7 of 16 repos). **Take the figure from a run,
-  never from this bullet** — the standing sentence here went stale once
-  already.
+- **Report** (exit 0). Buckets: **NAMED** · **BY-DEP** (reached via
+  non-optional in-repo path deps — never folded into NAMED) · **UNRESOLVED**
+  (a `--workspace`/derived row — not clean) · **UNCOVERED**. `--self-test`.
+- Predicate is the **positive** cfg; comments excluded; reads ATTRIBUTES, not
+  lines (masker imported from `platform_dead_code_audit`). `cfg!(...)` runtime
+  branches and **SHARED** (`any(...)` with a native disjunct) are EXCLUDED.
+  A lane is ANY `wasm32-*` triple.
+- Verdict half: `scripts/wasm32_surface_drift_sweep.py` (`max_unresolved = 0`
+  WALL; UNCOVERED pinned by NAME in `scripts/wasm32_uncovered_expected.txt`;
+  floors in `scripts/wasm32_surface_drift_floors.txt` with a TOTALS row).
+  **Take the standing from a run.**
 
 ## An arm that exists and RUNS may still reach nothing — `scripts/arm_reach_audit.py`
 
-Mutate a module's source **outside its own arm bodies**, re-exec, run its
-arm, ask whether the arm noticed. Issue 789: 53 hand runs found seven arms
-that certified nothing — a census done by hand is a census that stops being
-done.
+Mutate a module's source **outside its own arm bodies**, re-exec, run its arm,
+ask whether the arm noticed.
 
 ```bash
 scripts/arm_reach_audit.py                    # the report, the CHECKS population
@@ -765,104 +478,45 @@ scripts/arm_reach_gate.py                     # the VERDICT — workstation, min
 scripts/arm_reach_gate.py --canary            # arms over its own arithmetic
 ```
 
-- A **report, not a gate** (exit 0), except a blindness floor or a failing
-  self-test (exit 2). A harness that generates no mutants, or whose runner
-  always says KILLED, prints a *perfect* score — the same output as
-  perfection.
-- ⛔ `BASELINE` is the bucket that was missing: an arm *already failing* kills
-  every mutant and reads as 100% reach — it **inflates** the killed floor.
-  `BASELINE-RED`/`BASELINE-CRASH` are module-level verdicts, not pooled; the
-  gate walls both at 0. Check the ENVIRONMENT first on a RED (drift sweeps
-  need the same markers the gates get).
-- ⛔ `TIMEOUT` is its own verdict with CRASHED's standing (*evidence of
-  nothing*), rows named individually, the flag checked BEFORE the kill; the
-  deadline derives from the module's own baseline run (10×, floored). The
-  watchdog is a thread + `interrupt_main`: it reaches a pure-Python loop and
-  NOT a blocking C call. Run `--include-all` module by module with an
-  external wall timeout — one invocation is unbounded and not resumable.
-- ⛔ The exec namespace is a registered module — a bare dict dies at its
-  `@dataclass` line (seven classifiers carried 796 of the mutants that way;
-  the premise is CPython-version-dependent and asserted, not assumed).
-- **NO-ARM** and **UNREACHED** are their own markers, never pooled: four
-  checks delegated to an imported classifier and had no arm of their own — a
-  classifier's self-test cannot reach its consumer's pin arithmetic, so each
-  needed a `gate_selftest` + a small EXTRACTION (the verdict arithmetic sat
-  inline in `main()` beside its own error messages — unreachable by
-  construction). Extraction IS the repair: measured, it also exposed live
-  defects (a display/tally disagreement; a double-counted state).
-- ⚠ Reach is per MODULE (shared rules read as cross-module survivors — check
-  this class FIRST on any survivor); EQUIVALENT mutants are the other
-  false-positive class, so SURVIVED is arm reach per function, never a defect
-  count.
-- ⛔ OPERATOR SCOPE is narrow — control flow and off-by-one only; regex and
-  string literals are NOT touched, and that is where most decision logic
-  lives. A low kill count is not evidence an arm is weak.
-- ⛔ **In every module the CLASSIFIER was well armed and the VERDICT was
-  not** — writing the reasons down is the adjudication (a third of the
-  pinned "EQUIVALENT" rows were plain functions over plain data: real gaps
-  wearing a label). The three weakest modules went 4→24, 3→19, 4→54 killed —
-  each needed an EXTRACTION or an INJECTION first.
-- The verdict half `scripts/arm_reach_gate.py`: survivors pinned by
-  MEMBERSHIP with a REASON per row
-  (`scripts/arm_reach_survivors_expected.txt`), the wall 0 UNPINNED,
-  `UNREACHED`/`NO-ARM` walled at 0 separately; the key is LINE-FREE (a
-  line-numbered pin reds on every edit above it — a pin file that reds on
-  noise is one people delete); each row's `#= ` comment is VERIFIED against
-  the observed text (a comment nothing can red drifts into a lie). It gates
-  ITSELF, and the two PERMISSIVE sets (`EXEMPT_FUNCTIONS`, `ARM_NAMES`) are
-  pinned by membership because no floor guards them.
-- ⚠ Its cost is a RANGE, not a budget: ONE run in SIX completed, in 868s; the
-  others capped or killed (1800s–121min) — the spread is UNEXPLAINED and left
-  that way rather than given a third mechanism (three earlier causal claims
-  were RETRACTED when the same quantity was re-measured later: consistency
-  across runs is not reproducibility when every run shares one box and one
-  hour). The stable decomposition: cost = SUM of per-module costs spanning
-  three orders of magnitude (0.03s–34.34s). Run it in a DETACHED worktree;
-  kill by PID, never by pattern.
+- **Report** (exit 0; exit 2 on blindness floor / failing self-test).
+- ⛔ `BASELINE-RED`/`BASELINE-CRASH`: an arm already failing kills every
+  mutant and reads as 100% — module-level verdicts, walled at 0. Check the
+  ENVIRONMENT first on a RED.
+- ⛔ `TIMEOUT` = evidence of nothing; deadline 10× the module's baseline. The
+  watchdog cannot interrupt a blocking C call — run `--include-all` module by
+  module under an external timeout.
+- The exec namespace is a registered module (a bare dict dies at `@dataclass`).
+- **NO-ARM** and **UNREACHED** are separate markers. A classifier's self-test
+  cannot reach its consumer's pin arithmetic — add a `gate_selftest` and
+  EXTRACT the verdict arithmetic out of `main()`; extraction IS the repair.
+- ⚠ Reach is per MODULE (check shared rules first on a survivor); EQUIVALENT
+  mutants exist; operator scope is control flow + off-by-one only (no regex /
+  string literals) — SURVIVED is arm reach, not a defect count.
+- Verdict half `scripts/arm_reach_gate.py`: survivors pinned by MEMBERSHIP with
+  a REASON (`scripts/arm_reach_survivors_expected.txt`), line-free keys, each
+  `#= ` comment verified against observed text; `EXEMPT_FUNCTIONS` /
+  `ARM_NAMES` pinned by membership. Cost is a RANGE (minutes to 2 h) — run in
+  a DETACHED worktree; kill by PID, never by pattern.
 
 ## A gate whose own failure path is asserted by nothing — `scripts/check_validation_gate.py`
 
-Issue 775 landed canary arms over a gate's **own pin arithmetic** — a rule
-landed in one gate, never generalised (the sixth recorded instance of that
-shape). Measured: **six of twenty** CHECKS invoked no arm at all, own or
-delegated — 2,050 lines of per-push logic whose failure path no test had
-ever executed.
+Every CHECK must **invoke an arm UNCONDITIONALLY**: `docs_gate.sh` runs each
+check with no arguments, so an arm behind `'--canary' in sys.argv` never runs
+on a push.
 
-- The predicate is **invokes an arm UNCONDITIONALLY**, not "has an arm":
-  `docs_gate.sh` runs each check as `"$PY" "$script"` — **no arguments** — so
-  an arm behind `'--canary' in sys.argv` never fires on a push. Not
-  hypothetical: eight adversary arms landed flag-gated the day before and ran
-  on no push at all, at 0.17s — there was never a cost argument.
-- **Delegation is credited, and must be**: four checks reach their arm
-  through the classifier they import; refusing that pushes every gate toward
-  a second copy of a rule it does not own. But a classifier's self-test
-  cannot reach its consumer's pin arithmetic — that gap needed the
-  `gate_selftest`s (arm-reach section).
-- Exemptions pinned by **membership with a reason per row**
-  (`scripts/check_validation_expected.txt`); the file is **deliberately
-  empty** — a row reading "not written yet" is a backlog wearing a pin. Two
-  floors (`MIN_CHECKS` the array parse, `MIN_ARMED` the AST resolution — a
-  walk that finds every check and credits none looks exactly like nobody
-  having written any arms), plus a canary arm asserting `main` is not in the
-  ARM_NAMES vocabulary (a widened permissive set greens every check
-  silently).
-- `--prove-fires <sha>` is two-sided against an independently known answer
-  (~0.3s, opt-in, `scripts/` only).
-- ⚠ **What it does NOT assert:** that an arm which exists and runs is any
-  *good* — arm quality is not statically decidable and is not claimed; that
-  question is `arm_reach_audit`'s.
-- ⛔ **There is NO sweep half, and that is a measurement**: katgpt-rs is the
-  only repo with a CHECKS array — a sweep would derive a population of ONE
-  and print a confident green over it. Do not add one by symmetry;
-  re-measure first (assumed once, wrong by seven repos).
+- **Delegation is credited** (an arm reached through an imported classifier),
+  but the consumer's pin arithmetic still needs its own `gate_selftest`.
+- Exemptions by membership + reason (`scripts/check_validation_expected.txt`,
+  deliberately empty). Floors `MIN_CHECKS` (array parse) + `MIN_ARMED` (AST
+  resolution); a canary asserts `main` is not in `ARM_NAMES`.
+- `--prove-fires <sha>` is two-sided (opt-in).
+- ⚠ Does NOT assert an arm is any *good* (that's `arm_reach_audit`).
+- ⛔ **No sweep half** — only katgpt-rs has a CHECKS array; re-measure before
+  adding one by symmetry.
 
 ## A census reads the DOCUMENT, so an undocumented instrument is invisible — `scripts/instrument_reachability_gate.py`
 
-Two censuses of the audits AGENTS.md documents against their sweep halves
-were each wrong by exactly one instrument — *a census that reads the document
-cannot see an instrument the document omits*, and reports a confident,
-complete-sounding answer over the subset it can see. The DOCUMENTATION was
-the population nothing floored.
+A census of what AGENTS.md documents cannot see an instrument it omits.
 
 ```bash
 scripts/instrument_reachability_gate.py                  # the verdict, this repo
@@ -871,43 +525,25 @@ scripts/instrument_reachability_gate.py --prove-fires 18dbe980
 scripts/instrument_reachability_drift_sweep.py           # every repo, ratcheted
 ```
 
-- The predicate is **REACHABLE**, not "named in AGENTS.md": roots are
-  `AGENTS.md`, `scripts/docs_gate.sh` and `.github/workflows/*.yml`; the
-  closure follows script → script references, so a helper invoked by a
-  documented instrument counts. Required by this: `all_ignored_target_audit.py`,
-  `cfg_row_implication_audit.py` and `ci_test_execution_report.py` are in no
-  document either, yet each runs per-push via an instrument that IS
-  documented.
-- ⛔ **`HISTORY.md` is deliberately NOT a root** — it is the archive, not
-  loaded into a session, and an instrument findable only from it is the
-  instrument that stops being run; counting it would make the gate vacuous on
-  the motivating case.
-- Pinned by **MEMBERSHIP** with a **REASON per row**
-  (`scripts/instrument_unreferenced_expected.txt`); a reasonless row is
-  refused; reds in both directions. **The default for a real instrument is to
-  make it findable, not to add a row.**
-- Two floors: `min_scripts` the walk; `min_roots` the **permissive**
-  direction — a root set that quietly *widens* makes everything reachable and
-  prints a green.
-- The sweep half is a **ratchet**, and the reason is measured: first run, 95
-  of 152 unreachable workspace-wide, one repo 61 of 61 where the predicate
-  OVER-CAPTURES (plan-scoped one-offs, "unfindable from AGENTS.md" is the
-  correct state) — so this repo's own rows are membership-pinned with reasons
-  and the sweep constrains the DERIVATIVE everywhere else. ⛔ The closure is
-  TEXTUAL — any basename mention credits reachability, and a row leaving the
-  unreachable set without a wiring commit means something started naming it.
-  Take the live figures from the sweep's own summary line.
+- Predicate is **REACHABLE**: roots `AGENTS.md`, `scripts/docs_gate.sh`,
+  `.github/workflows/*.yml`; the closure follows script → script references
+  (e.g. `all_ignored_target_audit.py`, `cfg_row_implication_audit.py`,
+  `ci_test_execution_report.py` are reached via documented instruments).
+- ⛔ **`HISTORY.md` is NOT a root** (archive, not loaded into a session).
+- Unreachable pinned by **MEMBERSHIP + REASON**
+  (`scripts/instrument_unreferenced_expected.txt`); **default for a real
+  instrument is to make it findable, not to add a row.**
+- Floors: `min_scripts` (walk), `min_roots` (permissive direction).
+- Sweep half is a **ratchet** (the predicate over-captures plan-scoped
+  one-offs elsewhere); the closure is TEXTUAL — any basename mention credits.
 
 ## A kernel can derive its SHAPE from a buffer's declared size — `scripts/len_derived_binding_audit.py`
 
-`let n = kv.len() / 2 / kv_stride;` inside a kernel computes that dimension
-from the bound buffer's **declared size**, not the live range — bind a
-capacity-sized handle and the kernel silently derives the WRONG shape: reads
-never-written memory, writes a measured identically-zero result. No panic, no
-NaN, no wrong-looking output. The defect is a **JOIN** of facts in two files,
-and a report over either half alone is noise; HALF C resolves wrapper
-parameters through **workspace** callers — cross-repo by construction, the
-only instrument in its family that is.
+`let n = kv.len() / 2 / kv_stride;` derives a dimension from the bound
+buffer's **declared size**; bind a capacity-sized handle and the kernel
+silently reads never-written memory and writes a measured all-zero result.
+The defect is a **JOIN** across two files; HALF C resolves wrapper parameters
+through **workspace** callers (cross-repo by construction).
 
 ```bash
 scripts/len_derived_binding_audit.py        # the report, all contract repos (derived)
@@ -916,36 +552,21 @@ scripts/len_derived_drift_sweep.py --no-stability   # skip the leave-one-out arm
 scripts/len_derived_drift_sweep.py --canary         # the adversary arms
 ```
 
-- A **report, not a gate** (exit 0), except a WALK REGRESSION — loose global
-  floors refuse a confident zero below them. **UNRESOLVED is not clean** (118
-  of 164 bind sites) and never folded into a neighbour. **PERSISTENT-UPSTREAM
-  is the EYES LIST**, pinned by MEMBERSHIP in
-  `scripts/len_derived_eyes_expected.txt`, keyed line-free on
-  `(repo, file, kernel, handle)` **plus a count within that address**.
-- The verdict half walls the joined buckets (CAPACITY, CAPACITY-UPSTREAM,
-  PERSISTENT) at 0 and floors `min_kernels`/`min_binds` per repo — **vacuous
-  in 14 of 16 repos** (the population shape, not a defect). ⛔ **`DEFERRED`
-  is not enough here**: a partial clone can corrupt the verdict of a row in a
-  repo that IS present — measured both directions (7 of 251 cited caller refs
-  cross-repo; leave-one-out over all repos 0 flips) — so the sweep re-measures
-  a TARGETED leave-one-out every run rather than carrying the measurement
-  forward.
-- It carries **no `min_rs_files` column** on purpose: three sweeps floor that
-  identical walk over that identical population, and the delegation is
-  **ASSERTED** — a pinned repo that loses its non-zero row in
-  `orphaned_attr_drift_floors.txt` reds — with ONE measured exception (Issue
-  902): a repo born md-only has a TRUTHFUL zero row, accepted only while the
-  walk measures ZERO tracked `.rs` in that repo — re-measured every run, the
-  acceptance printed, never a standing amnesty; the first `.rs` to land reds
-  exactly as a zeroed row on a code repo does.
+- **Report** (exit 0) except a WALK REGRESSION. **UNRESOLVED is not clean.**
+  **PERSISTENT-UPSTREAM is the EYES LIST**, pinned by MEMBERSHIP in
+  `scripts/len_derived_eyes_expected.txt` (line-free key + count).
+- Verdict half walls CAPACITY, CAPACITY-UPSTREAM, PERSISTENT at 0; floors
+  `min_kernels`/`min_binds` per repo. ⛔ `DEFERRED` is not enough — a partial
+  clone can flip a present repo's verdict, so the sweep re-measures a TARGETED
+  leave-one-out every run.
+- No `min_rs_files` column: delegated (and ASSERTED) to
+  `orphaned_attr_drift_floors.txt`; an md-only repo's zero row is accepted
+  only while it measures zero tracked `.rs` (Issue 902).
 
 ## An item can be dead on a platform NO lane compiles — `scripts/platform_dead_code_audit.py`
 
-A const declared ungated, used only inside an `#[cfg(target_arch = …)]` fn:
-**dead code everywhere but that arch**, and silent there. `full_gate` is
-macOS/aarch64 and `wasm32_gate` builds a third triple, so the x86_64-native
-lane that emits the warning is a **workstation** lane no automatic gate ever
-sees — five specimens in two days across two repos.
+An ungated item used only inside `#[cfg(target_arch = …)]` code is dead
+everywhere but that arch — the warning appears only on a workstation lane.
 
 ```bash
 scripts/platform_dead_code_audit.py             # all contract repos (derived)
@@ -954,277 +575,130 @@ scripts/platform_dead_code_audit.py --self-test # the classifier arms
 scripts/platform_dead_code_audit.py --prove-fires ea4c2873
 ```
 
-- A **report, not a gate** (exit 0) — except a classifier MISS, which exits
-  **2**: an instrument that cannot classify must not be read as `0 findings`.
-  The self-test runs on every invocation. Tracked `*.rs` only; `vendor/`
-  excluded with its count on the per-repo line.
-- **MOD-REF is a separate bucket and is never folded into the count** — a
-  `mod` referenced only from gated code leaves the module EMPTY, not dead;
-  rustc reports at the ITEM, which this audit reaches independently.
-- ⛔ Its header once claimed it could not INVENT a finding, and that was false
-  on the first sweep: masking string literals dropped Rust 2021 inline format
-  args. A conservative-by-construction argument is a claim about code
-  somebody else wrote; this one survived until a real corpus contradicted it.
-- ⛔ **An arm is only a canary if its own perturbation REDS it**: the
-  `vendor/` arms red nothing because a redundant skip-entry was doing the
-  filtering on the OTHER code path — one exclusion, two code paths, and the
-  arm certified the path it was not aimed at.
-- Verdict halves: `scripts/platform_dead_code_floor_gate.py` per-push in the
-  docs gate (pins in `scripts/platform_dead_code_floors.txt` — two blindness
-  floors, the MOD-REF row by MEMBERSHIP, plus canary arms over the gate's own
-  pin arithmetic, which the classifier's self-test cannot reach) and
-  `scripts/platform_dead_code_drift_sweep.py` on the workstation (population
-  from `repo_set.txt` as well as the walk, so a partial box DEFERS loudly;
-  pinned in `scripts/platform_dead_code_drift_floors.txt`;
-  `--prove-fires` runs by DEFAULT in the sweep and is opt-in on the gate:
-  ~5.6s of `git archive` is worth a workstation run and not a per-push one).
-  Standing: 0 findings · 1 MOD-REF.
+- **Report** (exit 0) except a classifier MISS (exit **2**). Tracked `*.rs`
+  only; `vendor/` excluded with its count printed.
+- **MOD-REF** is separate (a `mod` used only from gated code is empty, not
+  dead); never folded into the count.
+- ⛔ An arm is only a canary if its own perturbation REDS it.
+- Verdict halves: `scripts/platform_dead_code_floor_gate.py` per-push (pins
+  `scripts/platform_dead_code_floors.txt`, two blindness floors, MOD-REF by
+  MEMBERSHIP, canary arms over pin arithmetic) and
+  `scripts/platform_dead_code_drift_sweep.py` (pinned in
+  `scripts/platform_dead_code_drift_floors.txt`; `--prove-fires` default-on in
+  the sweep, opt-in on the gate).
 
 ## `text=True` decodes with the SYSTEM locale — `scripts/subprocess_encoding_gate.py`
 
-`subprocess.run(..., text=True)` decodes the child's pipe with
-`locale.getencoding()`. macOS, `ubuntu-latest` and the M3 are all UTF-8, so
-**nothing that could notice this ever runs it** — while every instrument here
-prints `✓`, `✗`, `⛔` and em-dashes. Measured on a cp874 box: the em dash
-comes back as three wrong chars (silent mojibake — a regex matches nothing
-and reads a confident zero findings), or the decode raises inside
-subprocess's reader THREAD, where `run()` returns normally with the
-returncode PRESERVED and `stdout = None`.
+`subprocess.run(..., text=True)` decodes with `locale.getencoding()`; on a
+non-UTF-8 box that is silent mojibake (a regex reads a confident zero) or a
+reader-thread decode error where `run()` returns with `stdout = None`.
+`PYTHONIOENCODING=utf-8` fixes only the CHILD's encoder. Two classes, pinned
+separately: **DECODE** (`text=True` with no `encoding=`) and **CHILD-ENCODER**
+(a `sys.executable` spawn with no `PYTHONIOENCODING` in `env=`).
 
-`PYTHONIOENCODING=utf-8` does **not** fix the first mode and makes the second
-MORE likely: it pins the CHILD's encoder, so the child emits correct UTF-8
-that the parent then decodes as the locale. Both halves are needed, pinned as
-separate classes — **DECODE** (`text=True` with no `encoding=`) and
-**CHILD-ENCODER** (a `sys.executable` spawn with no `PYTHONIOENCODING` in its
-`env=`) — because a shared pin hides which half regressed.
-
-- It scans the AST (the first design — a paren-matched text scanner — flagged
-  the gate's own fixture strings, and every repair on offer was worse: exempt
-  the gate from itself or obfuscate its test data). `ast` sees a string
-  literal as a literal; a file it cannot parse is **UNPARSED** and reds,
-  never folded into the pass column.
-- It is a per-push **gate**, not sweep-and-done, for a measured reason: the
-  correct form carried a comment naming this exact defect while 27 more call
-  sites were added without it. Ceilings 0 on both classes over floored
-  populations.
-- ⛔ And it shipped with one half — the gate, no sweep (Issue 783): eleven
-  other verdict classes carry both halves, and the asymmetry was a skipped
-  step, not a judgement call. **Before fixing such a class, grep the whole
-  family and land the repair as one shared mechanism.** Measured cross-repo:
-  29 DECODE + 2 CHILD-ENCODER over 5 repos, two not latent
-  (`riir-clippy/scripts/gen_dashboard.py:552` reads em-dash commit subjects
-  across siblings). Verdict half:
-  `scripts/subprocess_encoding_drift_sweep.py` — its two floors are not
-  interchangeable and neither is redundant: `min_calls` is 0 in 10 of 16
-  repos (no subprocess at all), so `min_py_files` is the only blindness
-  detector there. First run also found a site outside `scripts/` entirely
-  (`.agents/skills/doc-sync/tools/linkcheck_sweep.py`) — the population is
-  tracked `*.py`, not `scripts/*.py`.
-- Repair half (DECODE only): `scripts/subprocess_encoding_fix.py [--list]
-  <files>` appends `encoding="utf-8", errors="replace"` (strict would
-  reproduce the reader-thread `None`); it IMPORTS the gate's site predicate
-  and `locale_io_fix.insert_kwarg`. CHILD-ENCODER stays a per-site read
-  (merging into an `env=`). First use 2026-10-22: 36 DECODE over 6 repos.
+- AST scan (string literals are literals); a file it cannot parse is
+  **UNPARSED** and reds. Ceilings 0 on both classes over floored populations.
+- Verdict half: `scripts/subprocess_encoding_drift_sweep.py` (floors
+  `min_calls` and `min_py_files` — the latter is the only blindness detector
+  where there are no calls). Population is tracked `*.py`, not `scripts/*.py`.
+- Repair (DECODE only): `scripts/subprocess_encoding_fix.py [--list] <files>`
+  appends `encoding="utf-8", errors="replace"` (imports the gate's predicate +
+  `locale_io_fix.insert_kwarg`). CHILD-ENCODER is a per-site read.
+- File-I/O sibling: `scripts/locale_io_gate.py` / `scripts/locale_io_fix.py` /
+  `locale_io_drift_sweep.py`; console sibling: `scripts/console_encoding_gate.py`,
+  shared defence `scripts/console_safe.py`, repair
+  `scripts/console_encoding_fix.py`.
 
 ## A sweep reads the WORKTREE, so a finding may exist in NO commit — `scripts/worktree_state.py`
 
-Five-plus concurrent agent sessions write into shared worktrees, so a row a
-sweep prints may sit on a line no commit contains, and a repo a sweep calls
-clean may be clean only because somebody's uncommitted edit removed the
-offending line. Measured: the workspace's entire standing CROSS finding was
-an uncommitted sibling edit's artifact, and the POPULATION moved too
-(607 → 601 citations) — a floor re-pinned from such a run bakes another
-session's in-flight edit into a tracked expectations file, red on every other
-box.
+Concurrent sessions share worktrees. Verdicts, never interchangeable:
+**COMMITTED** (matches HEAD) · **UNCOMMITTED** (worktree-only; displayed,
+never adjudicated — the DISPLAY reads the worktree, the PINS read HEAD) ·
+**MASKED** (HEAD-only; a committed defect read clean — the silent direction).
+⛔ Never re-pin a floor from a dirty run. A fourth axis, **STALE**:
+`behind_origin(root, patterns)` (three-dot diff; rides `sweep_advisory()`;
+the sweep stays RED); `upstream_axis()` is the shared upstream half.
 
-Three verdicts, never interchangeable: **COMMITTED** (the file matches HEAD —
-an ordinary finding) · **UNCOMMITTED** (worktree-only; displayed, never
-adjudicated against a pin — the DISPLAY reads the worktree, the PINS read
-HEAD) · **MASKED** (HEAD-only: a committed defect read clean — the silent
-direction, the worse one; 0 today is a measurement). The display stays honest
-in both directions, every row labelled; MASKED needs no separate teeth — the
-pins already count it.
-
-⛔ **A fourth verdict, a different AXIS: STALE** (Issue 798) — the worktree
-can match its own HEAD and still be 109 commits behind ORIGIN; a committed
-FIX read dirty, and the row was investigated as unfixed until a manual
-`git show origin/develop` settled it. `behind_origin(root, patterns)` rides
-`sweep_advisory()` so the family gets it with zero call-site changes; the
-three-dot diff is load-bearing (a two-dot diff also reports unpushed commits
-— a repo merely AHEAD would read as stale); the sweep deliberately STAYS RED.
-⛔ `upstream_axis()` is the upstream half EXTRACTED — the two entry points
-were NOT equivalent and nothing said so; the one sweep on the low-level path
-had the worktree axis and no upstream axis at all (a finding at a file whose
-repair was already committed upstream). Not a fifth MECHANISMS row — one
-mechanism whose membership test was wrong; the arm pinning the old behaviour
-was REPLACED, not deleted (an arm pinning a false premise is worse than no
-arm).
-
-- **A sweep does NOT fetch** (measured: 250.2s serial / 50.2s at 8-way
-  against sweeps costing 0.04–40s — a per-sweep fetch is 5–30× the cost of
-  the thing it precedes, paid ~19 times over a family run). A `--fetch` flag
-  nobody passes is not a repair, and an automatic fetch turns an observer
-  into a writer of refs other sessions own. **Freshness is a property of the
-  BOX at a moment, not of a sweep**: fetch ONCE per session
-  (`scripts/fetch_contract_repos.py`; `origin` is NAMED, never a bare fetch —
-  one repo carries a second remote stale by design; per-repo `--timeout`
-  bounds the spawn) and let the sweeps DISCLOSE. Exit 1 only on fetch
-  FAILURE, never on "nothing moved". The remedy line names the INSTRUMENT,
-  never a git command (contract spellings are nonexistent directories on an
-  aliased box).
-- ⛔ **Pick the instrument from the CLASSIFIER's shape, never by preference**:
-  `head_delta` (per-file row independence; `.head` = committed + masked,
-  **never `committed`** — a pin adjudicating `committed` understates every
-  ceiling by exactly the silent direction) · `head_overlay` + `delta_of` (ONE
-  interceptable reader; EMPTY dict means skip the second classification, and
-  `None` is a VALUE — tracked but not in HEAD) · `head_tree` (a classifier
-  with several seams runs UNMODIFIED; measured 22–32s per dirty repo against
-  0.04–0.26s clean, so it yields `None` on clean and the caller MUST skip;
-  `paths=` narrows, a dropped file is silently ABSENT — caller's risk;
-  `extra_dirty=` widens the trigger for `os.walk` sweeps). A CROSS-FILE
-  classifier must NOT use the per-file shortcut. The patterns must name every
-  file that can CHANGE a verdict — the ROOTS as well (a dirty root changes
-  other scripts' verdicts), and a bare `("*.rs")` is a footgun: it is a
-  string, not a tuple; the helper coerces and an arm pins both sides.
-- ⛔ **The VERDICT belongs in the row KEY** (a key-matched row is filed
-  COMMITTED carrying the WORKTREE's object — every field the key omits is one
-  where the worktree silently overrides HEAD, and every ceiling partitions by
-  verdict); **a FLOOR is a pin too** (floors read HEAD: the class was
-  measured on a POPULATION, not a finding). Classes can split by ORACLE
-  (worktree vs `git log` vs worktree-by-construction). The row key is
-  deliberately LINE-FREE.
-- **ADVISORY, never a failure**: a sweep that hard-reds on an ordinary dirty
-  worktree is a sweep nobody runs; it rides the FINAL line in BOTH directions
-  and is SILENT when nothing dirty meets that sweep's own population. ⛔ And
-  "wired into every sweep" was typed as a NUMBER first and was wrong within
-  two hours — the repair is mechanical:
-  `scripts/sweep_advisory_membership_gate.py`, a MECHANISMS registry (slug →
-  why + call-names) per family-wide mechanism (worktree-advisory,
-  known-extra-exemption, head-provenance, alias-open), verdict per mechanism
-  NEVER pooled, gated by MEMBERSHIP (a count is green on a swap), reds in
-  BOTH directions, the exemption file deliberately EMPTY, registered only
-  AFTER the fan-out. It asserts the CALL, never that the patterns name the
-  sweep's own population — a per-sweep read.
-- Arm-reach lessons on the module itself: `dirty_files`' separator
-  normalisation red nothing under perturbation because git's OUTPUT SHAPE is
-  the premise — an arm whose flip changes no input is replaced by a premise
-  arm, never deleted as dead. And `n_assertions` was a survivor until
-  `__file__` was injected — the extraction IS the repair. Budget the canary
-  cost before wiring one: each sweep `--canary` re-enters `main()` over every
-  contract repo, and four new arms measurably cost ~45%.
+- **A sweep does NOT fetch** — fetch ONCE per session with
+  `scripts/fetch_contract_repos.py` (names `origin`; per-repo `--timeout`;
+  exit 1 only on fetch FAILURE) and let sweeps DISCLOSE.
+- ⛔ **Pick the instrument from the classifier's shape**: `head_delta`
+  (per-file independence; `.head` = committed + masked, **never
+  `committed`**) · `head_overlay` + `delta_of` (one interceptable reader;
+  empty dict = skip; `None` is a VALUE) · `head_tree` (classifier with several
+  seams, unmodified; yields `None` on clean — caller MUST skip; `paths=`
+  narrows, `extra_dirty=` widens). Cross-file classifiers must not use the
+  per-file shortcut. Patterns must name every file that can change a verdict,
+  ROOTS included; a bare `("*.rs")` is a string, not a tuple.
+- ⛔ **The VERDICT belongs in the row KEY**; **a FLOOR is a pin too** (reads
+  HEAD). Row keys are LINE-FREE.
+- **ADVISORY, never a failure**; rides the FINAL line in both directions,
+  silent when nothing dirty meets the sweep's population. Wiring is gated by
+  `scripts/sweep_advisory_membership_gate.py` — a MECHANISMS registry
+  (worktree-advisory, known-extra-exemption, head-provenance, alias-open),
+  verdict per mechanism never pooled, by MEMBERSHIP, both directions,
+  exemption file empty. It asserts the CALL, not that the patterns are right.
+- Budget canary cost before wiring one: each sweep `--canary` re-enters
+  `main()` over every contract repo.
 
 ## Before committing in a shared worktree — `scripts/staged_set_audit.py`
 
-Several agent sessions write into one worktree routinely, and `git add -A`
-from a repo root is indistinguishable, to git, from intent. Stage **named
-files** (`git -C <repo> add <paths>`), never `-A` — and before a multi-file
-commit, run:
+Stage **named files** (`git -C <repo> add <paths>`), never `-A`. Before a
+multi-file commit, run:
 
 ```bash
 scripts/staged_set_audit.py            # any repo: pass its path as $1
 ```
 
-A **report, not a gate** (exit 0) — a refusing pre-commit hook was decided
-against: every cheap signal has a legitimate-use false positive; a report
-that is read beats a gate that is bypassed. Four signals: **mtime clusters**
-(two clusters = two editing episodes; the older is probably not yours) ·
-**also-dirty** (a staged path with unstaged changes = a concurrent editor) ·
-**stale-vs-HEAD** (a file LACKING substantive lines the newest commit on its
-path added — committing it reverts them; two-stage: mtime then line-set
-containment) · **rustfmt round-trip** (`--fmt`: identical to
-`rustfmt(HEAD)` provably carries zero content — the only signal that yields a
-proof, and the one that refuted a wrong belief on its first run). When you
-must commit into a file a sibling is editing, commit **your blob**: HEAD's
-version + your edit, `git hash-object -w`, then `git update-index
---cacheinfo`.
-
-⛔ **Nothing in git identifies WHICH session did something here, and all
-three fallbacks are measured broken** (Issue 840): shared authorship (every
-commit authors as one address); a shared worktree has **one `HEAD` reflog**
-(what happened and in what order, never whose); elimination fails on an
-incomplete roster (sound only two-session; `ListAgents` shows only live
-sessions — a floor on the count, never the count). One layer UP, in the
-messages: a peer's `from=` names the pipe and is reliable; the name a message
-**signs itself** with is self-asserted prose and is not (messages from one
-pipe signed themselves with the OTHER's name). **Attribute a message by its
-`from=` pipe, never by its signature**; quote the pipe when you attribute;
-treat a disagreeing signature as the two-session question it is. ✅ The one
-form that survives a roster you cannot enumerate: **say what you CHECKED, not
-who you concluded** — it claims no more than the evidence carries. **Put
-`Session: <name>, <epoch>` in the commit body** — a commit's own TEXT is the
-only self-identifying evidence in the repository, names are REUSED (one name
-across two sessions sixteen hours apart — the epoch is load-bearing), and the
-marker is what catches an over-claim, including your own. ⛔ The marker is
-EVIDENCE, not proof (nothing authenticates it); a missing one is no evidence
-at all.
+- **Report** (exit 0). Signals: **mtime clusters** (two editing episodes) ·
+  **also-dirty** (concurrent editor) · **stale-vs-HEAD** (committing would
+  revert lines the newest commit added) · **rustfmt round-trip** (`--fmt`;
+  identical to `rustfmt(HEAD)` = provably zero content).
+- Committing into a file a sibling is editing: commit **your blob** (HEAD +
+  your edit, `git hash-object -w`, `git update-index --cacheinfo`).
+- ⛔ **Nothing in git identifies which session did something** (shared
+  author, one `HEAD` reflog, incomplete rosters). Attribute a message by its
+  `from=` pipe, never its self-signed name. Say what you CHECKED, not who you
+  concluded. **Put `Session: <name>, <epoch>` in the commit body** (names are
+  reused — the epoch is load-bearing); it is evidence, not proof.
 
 ### The same hazard one layer down: a FIXED temp path — `scripts/shared_temp_path_gate.py`
 
-A test writing to `std::env::temp_dir().join("fixed_name.bin")` is safe
-against its sibling tests in one binary — each site has its own filename —
-and **not** safe against another PROCESS running the same test: all temp
-users share one `/tmp`, and `create` truncates. Measured twice, because one
-reproduction is an anecdote: 1 failure in 24 concurrent runs, byte-identical
-to the x86_64 matrix's cell-5 red; and five tests failing AT ONCE across five
-DIFFERENT filenames — another process truncating all five.
+`std::env::temp_dir().join("fixed_name.bin")` is safe against sibling tests
+in one binary and **not** against another PROCESS running the same test
+(`create` truncates). ⛔ Such a defect passes alone BY CONSTRUCTION — "failed
+in the cell, passed alone" does not mean TRANSIENT.
 
-- ⛔ **The lesson is about the CONFIRM step**: the x86_64 matrix filed one of
-  these as **TRANSIENT — failed in the cell, passed alone** — a true
-  statement and the wrong conclusion. A CONCURRENCY defect passes alone BY
-  CONSTRUCTION (alone there is no second process); a load-sensitive BAR is
-  the only class that reasoning is right about.
-- The repair is the form the repo already uses elsewhere:
-  `std::env::temp_dir().join(format!("name_{}", std::process::id()))`. 13
-  sites had it and 27 did not — 25 repaired, 2 adjudicated deliberate — which
-  is why this is a gate and not sweep-and-done: the rule was known and
-  un-enforced. Membership + a reason per row, both directions, floors on the
-  walk AND the predicate. Three STATED blind spots: a `temp_dir()` bound to a
-  variable first; other fixed-scratch spellings; and the cross-repo axis —
-  **count first**, never carry a population-of-one answer across (measured
-  once: wrong by seven repos).
-- ⚠ `cargo fmt -p <crate>` is not usable for a repair of this shape — it
-  reformats ~1300 unrelated lines; format clean files per-file.
-- Verdict half: `scripts/shared_temp_path_drift_sweep.py` — ceiling a RATCHET
-  at measured (a wall would demand 98 repairs in ten trees this session does
-  not own). Repair half: `scripts/shared_temp_path_fix.py` (idempotent,
-  LF-preserving, refuses to leave a line over `--max-width` rather than
-  invite the wholesale reformat). It IMPORTS the gate's `mask` and
-  `FIXED_JOIN` — a repair pass whose idea of a site differs from the gate's
-  either misses rows the gate will red on or edits code the gate never asked
-  about. ⛔ Its first version tested CRLF before asking whether the file had
-  a site at all, printing loud refusals for 18 files carrying none: a message
-  that invites work nobody needs to do is the cries-wolf failure mode, one
-  instrument down.
+- Repair: `std::env::temp_dir().join(format!("name_{}", std::process::id()))`.
+  Gate: membership + reason per row, both directions, floors on walk AND
+  predicate. Blind spots: `temp_dir()` bound to a variable first; other
+  fixed-scratch spellings.
+- ⚠ Never `cargo fmt -p <crate>` for this repair — format clean files per-file.
+- Verdict half: `scripts/shared_temp_path_drift_sweep.py` (ratchet). Repair
+  half: `scripts/shared_temp_path_fix.py` (idempotent, LF-preserving,
+  `--max-width`; imports the gate's `mask` and `FIXED_JOIN`).
 
-**Shared target dir:** a count-pinned or feature-switching gate run
-concurrently with another cargo process in the same `target/` reports a
-failing test that passes when run alone. Read the failure's **SHAPE**:
-`error: test failed` with **no `failures:` block and no `test … FAILED`
-line** means the harness process *died* — nothing asserted anything, and the
-count is truncated too. Diagnose by running the compiled binary directly from
-`target/<profile>/deps/` (no build lock needed; filter out the `#![cfg]`-gated
-copies `--list` reports as 0 tests). A gate whose verdict the box can
-invalidate should **refuse**, not warn — detect concurrent cargo by working
-directory, not command line; a lock-based check cannot work (cargo releases
-`target/<profile>/.cargo-lock` *before* running the test binaries).
+**Shared target dir:** a concurrent cargo process in the same `target/` can
+make a gate report a failure that passes alone. `error: test failed` with **no
+`failures:` block and no `test … FAILED` line** = the harness process DIED
+(count truncated). Diagnose by running the binary in `target/<profile>/deps/`
+directly. A gate whose verdict the box can invalidate should **refuse**, not
+warn — detect concurrent cargo by working directory (cargo releases
+`.cargo-lock` before running test binaries).
 
 ## Formatting — rustfmt defaults, gated (Issue 946, adopted 2026-10-17)
 
-The repo is rustfmt-DEFAULT-styled (`rustfmt.toml` sets only `edition`; no
-wider setting fits — measured). **Run `cargo fmt --all` (or `rustfmt <file>`)
-before committing `.rs`.** ⛔ Never `cargo fmt -p X -- a.rs`: everything after
-`--` is a rustfmt OPTION, so it formats the whole package. The one-time format
-commit is in `.git-blame-ignore-revs` (`git config blame.ignoreRevsFile
-.git-blame-ignore-revs`). Verdict: `scripts/fmt_gate.py`, `full_gate.sh`
-Layer 7 — drift pinned by MEMBERSHIP on `scripts/fmt_pending_expected.txt`, a
-drain list that only shrinks: format a pinned file, delete its row in the same
-commit; never add a row for new drift.
+rustfmt-DEFAULT style (`rustfmt.toml` sets only `edition`). **Run `cargo fmt
+--all` (or `rustfmt <file>`) before committing `.rs`.** ⛔ Never `cargo fmt -p
+X -- a.rs` (everything after `--` is a rustfmt OPTION — formats the whole
+package). Format commit is in `.git-blame-ignore-revs`. Verdict:
+`scripts/fmt_gate.py`, `full_gate.sh` Layer 7 — drift pinned by MEMBERSHIP in
+`scripts/fmt_pending_expected.txt`, a drain list that only shrinks (format a
+pinned file, delete its row; never add a row).
 
 ## Lint healing — `cargo refine` before manual fixes (adopted 2026-08-24)
 
-Mechanical clippy findings (`needless_return`, `unnecessary_map_or`,
-capacity, `collapsible_if`, …) are fixed by the riir-refine healer FIRST,
-manual second:
+Mechanical clippy findings are fixed by the riir-refine healer FIRST:
 
 ```bash
 cargo refine <paths>                                        # DRY RUN (zero edits)
@@ -1233,59 +707,48 @@ cargo refine --fix --write --verify <paths>                 # compile-gated appl
 cargo refine --fix --write --verify --verify-args "--features <set>" <paths>  # gated code
 ```
 
-- Global binary `cargo refine` = `~/.cargo/bin/cargo-refine` → the sibling
-  `riir-refine/target/release/cargo-refine` (built with the RELEASE feature
-  set; a rebuild naming anything less compiles no binary and the symlink
-  silently keeps resolving to a stale one — `--version` prints the truth).
-  Missing sibling → fall back to manual fixes + `cargo clippy --fix`.
-- `--verify` compiles baseline → applies → re-checks → auto-REVERTS breaking
-  edits. Feature-gated code needs `--verify-args "--features <set>"` (a
-  default-features check compiles gated files empty — a green check proves
-  nothing about them).
-- **The healer fixes only what THIS repo's clippy reports**: pedantic/nursery
-  lints only where the target crate enables them (katgpt-rs enables none — a
-  skip here is correct, not lost coverage). Deliberately SILENT on documented
-  divergence classes (comment-guarded matches, array-literal defaults,
-  named-arg renames, nested macro args) — those stay manual; see the
-  `cargo-refine` skill. `cargo clippy --fix` remains fine for one-off trivial
-  fixes; the healer wins on batches (span-preserving, comment guards,
-  compile gate, self-evolve memory). Observed misses → the session record;
-  they feed the post-mining queue (usage-artifact improvement intake).
+- `~/.cargo/bin/cargo-refine` → sibling `riir-refine/target/release/cargo-refine`
+  (RELEASE feature set; `--version` prints the truth). Missing → manual +
+  `cargo clippy --fix`.
+- `--verify` auto-REVERTS breaking edits; gated code needs `--verify-args`.
+- Fixes only what THIS repo's clippy reports (no pedantic/nursery here);
+  silent on documented divergence classes — those stay manual (see the
+  `cargo-refine` skill). Misses → session record / riir-refine issue.
 
 ## Determinism law — synced f32 reductions and picks (Issue 940)
 
 An f32 reduction or pick whose result crosses the sync/quorum boundary
-(committed, exported, hashed, or replay-compared) pins its reduction order
-and tie rule: the sequential fold (`dot_f32_ordered`, plain `+=`/`.sum()`
-folds — never a platform-lane SIMD kernel) and one fixed strict tie rule
-(first-index or documented last-index — never a tolerance band, never
-HashMap iteration order). Anything else must be reclassified local-only
-with the decision recorded at the site. Full census, hazards, and fix
-queue: `.docs/10_audits/float_reduction_order_tie_band_determinism_audit.md`.
-The certified precedent is `katgpt-core/src/closure/bridge_certified.rs`
-(`dot_f32_ordered` + `fast_sigmoid` behind `freeze_version_hash`).
+(committed, exported, hashed, replay-compared) pins its reduction order and
+tie rule: sequential fold (`dot_f32_ordered`, plain `+=`/`.sum()` — never a
+platform-lane SIMD kernel) and one fixed strict tie rule (first-index or
+documented last-index — never a tolerance band, never HashMap order).
+Otherwise reclassify local-only with the decision recorded at the site.
+Census: `.docs/10_audits/float_reduction_order_tie_band_determinism_audit.md`.
+Precedent: `katgpt-core/src/closure/bridge_certified.rs`.
 
 ## Fixed-form softmax numerics family — `katgpt-core/src/softmax_fix.rs` (Issue 959)
 
-arXiv:2610.31642 adoption (Research 632): `precision_cliff`/`PRECISION_CLIFF_NATS`
-(c_d = p·ln2 per ACCUMULATOR format — the Softmax Collapse cliff, ungated),
-`margin_equilibrium(eps, format)` (the m\* = ln(1/ε) Slingshot regime predictor,
-ungated), feature-gated `logspace_diff(_f64)` (exact-0.0-at-equality log-space
-probability differencing, opt-in `logspace_diff`), and feature-gated
-`fixed_log_softmax(_f64)(_target)` (T5, opt-in `fixed_log_softmax` — the
-argmax-excluded-LSE + softplus form: the target slot's log-prob resolves from
-the cliff c_d out to exponent underflow ~103 nats f32 instead of saturating at
-exactly 0.0; first-index argmax + sequential ascending-j fold order pinned at
-the site per the Issue-940 determinism law, LOCAL instrument — any sync crossing
-goes through the `closure/bridge_certified` precedent). Instrument-grade only — never a
-serving-forward replacement. The offline config-audit CLI is
-`scripts/margin_equilibrium_audit.py` (`--self-test` golden asserts; `--sweep`
-prints the paper's regime table). T6 (the riir-infer f64 golden-NLL oracle)
-lands in its own lane, GOAT-gated on T5's.
+`precision_cliff`/`PRECISION_CLIFF_NATS` (c_d = p·ln2 per accumulator format,
+ungated), `margin_equilibrium(eps, format)` (ungated), opt-in `logspace_diff`
+(`logspace_diff(_f64)`), opt-in `fixed_log_softmax` (`fixed_log_softmax(_f64)(_target)`,
+argmax-excluded-LSE + softplus; first-index argmax + sequential ascending-j
+fold pinned per Issue 940; LOCAL instrument — sync crossings go through
+`closure/bridge_certified`). Instrument-grade only, never a serving forward.
+Offline CLI: `scripts/margin_equilibrium_audit.py` (`--self-test`, `--sweep`).
 
 ## Tail-subspace weight-delta substrate — `katgpt-core/src/sst_certified.rs` (Issue 958)
 
-arXiv:2610.22293 (Subspace Tuning, Research 631) adoption: `fit_anchor` (two-sided protected anchor; Gram eigendecomposition on the smaller side via karc `jacobi_eigen`, σ-propagation to the wide side, per-side storage economy — narrow stores the free complement, wide stores the protected k columns), `anatomy`/`anatomy_factored_into` (the per-delta protected/free energy split as TWO POSITIVE terms — `‖P_lΔ‖² + ‖P_⊥lΔP_r‖²` — never the cancelling three-term form; the rank-r path never forms m×n), `factor_tail` (the quantization-safe `ΔW = U_⊥ C V_⊥ᵀ` shipping form — the tail span is closed under the product, so a quantized C decodes confined; the wide-side tail basis is the σ-propagated σ-visible truncation, ≤ min−k, with the dropped energy REPORTED), `certify_decoded_tail` (the RELATIVE-tolerance certifier — leak measured and refused, never a near-zero absolute bar; rel_tol band [1e-5, 1] = the f32 resolution floor), `compose_tail` (same-anchor chained overlays stay confined under addition; leak bounds additive by the triangle inequality; basis-byte mismatch refuses loud), and the rotation-invariant anchor digest (BLAKE3 over the projector's 64-probe action — sign-flip/within-span-permutation invariant, never raw basis bytes; the re-anchor churn gate: `SstCertificate::verify_against` refuses stale certs loud). The G1 isotropic-rounding negative is the non-vacuity proof: dense-project-then-quantize FAILS the certifier at a noise budget where the factored arm PASSES. Anatomy's cost is Θ(mnk) — seconds-class dense at 4k² shapes, sub-second factored (rank-8 ≈ 0.5 GFLOP); the f64 Gram fit is calibration-time (137 s measured at (1024,4096)). Opt-in `sst_project` (implies `subspace_phase_gate` + `karc_forecaster`, the basis_split precedent); consumers: riir-neuron-db Issue 629 (envelope side), riir-ai Issue 1116 (merge-admission side); producer riir-train Plan 470. The Lean pair (`.proofs/KatgptProof/Sst/`) pins the diagonal no-leak law: the scalar/level-set arm + the 2×2 `diag(1,0)` counterexample (the Rust spec-match mirror rides the inline tests). **Cross-tail interference instrument (`katgpt_core::sst_cross_tail`, Issue 972, same `sst_project` gate):** the delta-vs-DELTA half `compose_tail` does not measure — for two same-anchor `TailFactor`s, per-side uncentered-linear-CKA scalars over the input/output Grams (Gram-normalized; basis-free) + cos² principal-angle spectra on σ-truncated eigenbases (cutoff recorded in the report); refusal classes mirror `compose_tail_into` VERBATIM; zero-alloc over caller-owned `CrossTailScratch`; f64 sequential folds + sorted canonical eigenbases (the Issue-940 law); REPORT-ONLY — it prices, never refuses beyond the input guards; consumer: riir-ai Issue 1141's `SstAdmissionReport::record_cross_tail` row.
+Opt-in `sst_project` (implies `subspace_phase_gate` + `karc_forecaster`):
+`fit_anchor`, `anatomy`/`anatomy_factored_into` (energy split as TWO POSITIVE
+terms, never the cancelling form), `factor_tail` (quantization-safe `ΔW =
+U_⊥ C V_⊥ᵀ`; dropped energy REPORTED), `certify_decoded_tail` (RELATIVE
+tolerance, band [1e-5, 1]), `compose_tail` (same-anchor; basis mismatch
+refuses loud), rotation-invariant anchor digest + `SstCertificate::verify_against`
+(stale certs refuse). `katgpt_core::sst_cross_tail` (Issue 972, same gate) is
+REPORT-ONLY cross-tail interference (CKA + cos² spectra; refusal classes mirror
+`compose_tail_into`; f64 sequential folds). Lean pair in
+`.proofs/KatgptProof/Sst/`. Consumers: riir-neuron-db Issue 629, riir-ai Issue
+1116, riir-ai Issue 1141; producer riir-train Plan 470.
 
 ## Feature Flag Discipline
 
@@ -1300,86 +763,52 @@ default-on requires the GOAT gate to pass:
 5. If the gain requires riir-train (training) → keep opt-in, note the
    dependency, do NOT promote.
 
-**Promotion requires modelless gain.** A perf gain on a biased/incorrect
-answer is NOT a modelless gain — the quality gate (G1 or equivalent) must
-pass modellessly for the GOAT to hold.
+**Promotion requires modelless gain** — a perf gain on a biased/incorrect
+answer is NOT one; G1 must pass modellessly.
 
 ⛔ **A latency number without its BOX STATE is not a measurement.** Record
-free RAM, commit-vs-limit (read AT launch — the limit moves both ways),
-concurrent heavy jobs, and on a laptop POWER SOURCE and POWER MODE (`pmset
-powermode` is a three-state enum; "not 0" is not "Low Power"; the sudo-free
-detector is a fixed-kernel canary:
-`riir-reflex/scripts/bench_preflight.sh`, which prints a `PROVENANCE:` line
-to quote beside the number) **next to** any latency figure taken on a shared
-box, or it is not reproducible. Rank concurrent jobs by COMMIT, never by
-working set, and compare the total to the limit read at launch. Free RAM
-right after another job exits is a trough between phases, not a window. G2
-mandates `--release`: a latency gate in a debug build measures an unoptimised
-binary, and on a thrashing box measures the pagefile.
+free RAM, commit-vs-limit (read AT launch), concurrent heavy jobs (ranked by
+COMMIT), and on a laptop POWER SOURCE and POWER MODE (`pmset powermode` is a
+three-state enum; sudo-free detector: `riir-reflex/scripts/bench_preflight.sh`,
+quote its `PROVENANCE:` line) next to any latency figure from a shared box.
 
 **Lossy-surface promotion rule:** a **lossy** surface (quantization,
 compression, any bit-changing transform) gates on **deployed-path behavior —
-per-family, conditional retention**, not on bit-identity or aggregate
-perplexity alone: aggregate metrics can be flat while family-conditional
-behavior flips (external confirmation: 43–45% exact-match under BF16 with
-flat downstream eval aggregates — the exact failure shape).
+per-family, conditional retention**, not bit-identity or aggregate
+perplexity alone (aggregates can be flat while family behaviour flips).
 
 **UQ-bearing primitive GOAT gate extension ("Report the Floor"):** any
-primitive claiming a probability distribution, predictive interval, quantile,
-coverage guarantee, confidence score, or calibrated uncertainty MUST benchmark
-against the **conformal-naive floor**
+primitive claiming a distribution, interval, quantile, coverage, confidence
+or calibrated uncertainty MUST benchmark against the **conformal-naive floor**
 (`ConformalIntervalCalibrator<SeasonalNaiveForecaster>`, Plan 340, `m=1`,
-plain split conformal) on CRPS / coverage / Winkler score. Cannot beat the
-floor ⇒ the GOAT gate FAILS. Grandfathered UQ primitives include the floor at
-their next re-gate.
+plain split conformal) on CRPS / coverage / Winkler. Cannot beat the floor ⇒
+GOAT FAILS. Grandfathered UQ primitives include the floor at next re-gate.
 
 ## Substrate-First Gate (MANDATORY before implementing)
 
 Before implementing ANY new System impl, trait, perception/cognition/emotion
 pipeline, state management, spatial query, or vocabulary type, run the
 `substrate-first` skill: (1) **vocabulary translation** — grep 3+ name
-variants (concepts ship under operator names like `GenericSpatialBelief`; a
-single-vocabulary grep returns ZERO hits even when substrate fully exists);
-(2) **codebase grep** across `*.rs`, not just `.plans`/`.docs`/`.issues`;
-(3) **architectural rule check** — domain classification, two-brain model,
-sync boundary, bridge pattern; (4) **consume vs build** — if substrate
-exists, consume it; if not, file an issue in the right repo FIRST. Prevents
-the drift pattern of a parallel system re-implementing shipped substrate
-under a different name.
+variants; (2) **codebase grep** across `*.rs`, not just docs; (3)
+**architectural rule check** — domain classification, two-brain model, sync
+boundary, bridge pattern; (4) **consume vs build** — if substrate exists,
+consume it; if not, file an issue in the right repo FIRST.
 
-**Before implementing any FILED issue or plan, run the claim-lease check
-(Issue 943):** `git fetch origin && py ../katgpt-rs/scripts/claim_lease_check.py
---item <NNN>` — a foreign live `Claimed:` line on the item is the yield
-signal (coordinate or pick another unit); to claim, append
-`**Claimed:** <session>, <epoch>, expires <ISO-UTC>` under the Status line
-and push BEFORE implementing (48 h expiry; advisory — the push stays the
-arbiter; exit 1 = the instrument could not read, never a silent pass).
-Before that push, lint the edited file:
-`py ../katgpt-rs/scripts/claim_lease_check.py --lint <file>` (P92 — exit 1
-on a malformed claim line or ambiguous multiple leases, with the exact
-reshape printed; the class re-mints — measured 2026-10-26, a live lane
-landed a fresh malformed line WHILE a sweep was fixing three others, and a
-malformed line blinds the read-time check for every lane in that repo).
-**Closing a lease FOLDS the claim line into the `**Lease closed:**` row**
-(delete the `**Claimed:**` line, carry its session/epoch/expiry into the
-closed row) — measured 2026-10-28, four files workspace-wide kept both and
-three read LIVE for up to 44 h on items nobody held, a false YIELD signal
-to every lane. Read time classifies a same-session pair CLOSED (a closed row
-naming a DIFFERENT epoch never swallows a re-claim); `--lint` reds the
-leftover as STALE-CLAIM with the fold-in printed.
+**Claim-lease check before implementing a FILED issue/plan (Issue 943):**
+`git fetch origin && py ../katgpt-rs/scripts/claim_lease_check.py --item <NNN>`
+— a foreign live `Claimed:` line means yield. To claim, append
+`**Claimed:** <session>, <epoch>, expires <ISO-UTC>` under the Status line and
+push BEFORE implementing (48 h expiry; the push is the arbiter; exit 1 = could
+not read, never a silent pass). Lint first:
+`py ../katgpt-rs/scripts/claim_lease_check.py --lint <file>` (malformed or
+ambiguous lines blind the check for every lane). **Closing a lease FOLDS the
+claim line into the `**Lease closed:**` row** (delete `**Claimed:**`, carry
+session/epoch/expiry); `--lint` reds leftovers as STALE-CLAIM.
 
-⛔ **A concurrent session is the OTHER way this gate gets skipped, and the
-cost is a NEGATIVE RESULT rather than a duplicate** (Issue 825): two sessions
-implemented one issue four hours apart, and the second measured a failure,
-filed the negative, removed the issue file and wrote "the paper's 20× does
-not transfer" — it was two defects in its own walker, and the primitive
-shipped green the same day. **Before recording a negative, re-run `git fetch`
-and check whether a sibling shipped the same primitive; if one did, cross-run
-the fixtures before writing the word "does not."** The disagreement was the
-oracle — cheaper than either instrument's self-consistency. **Distrust a
-mechanism inferred from a monotone sequence**: a converging error is
-consistent with many mechanisms. **Repair beats delete when the loser is
-independent** — two benches that agree are stronger than either alone.
+⛔ **Before recording a negative result, `git fetch` and check whether a
+sibling session shipped the same primitive; if so, cross-run the fixtures
+before writing "does not"** (Issue 825). Distrust a mechanism inferred from a
+monotone sequence; repair beats delete when the loser is independent.
 
 Research workflow (paper classification, 7-repo routing, fusion-first
 distillation, novelty + GOAT gates, modelless-unblock protocol §3.5):
@@ -1389,133 +818,53 @@ distillation, novelty + GOAT gates, modelless-unblock protocol §3.5):
 > `riir-ai`, `riir-chain`, `riir-neuron-db`, `riir-train`, `riir-game-sdk`,
 > `riir-dapps` (private). That is NOT the repo total: the
 > workspace is **32 repos**, all of which carry a root `BOUNDARY.md`
-> (add `riir-mmorpg-examples`, `riir-refine`, `riir-viewbridge`,
-> `riir-auth`, `katgpt-web`, `riir-dao`, `riir-deployer`,
-> `riir-esp32`, `riir-llm`, `mmorpg-remake`,
-> `mmorpg-remaster`, `riir-kat`, `riir-shader`, `riir-reflex`,
-> `riir-infer`, `riir-reflexer`, `reflex-site`, `riir-instinct`,
-> `riir-rethink` — born 2026-10-03, the Instinct/Rethink split carve's
-> private moat repo, seeded from `riir-instinct/moat/`; `seal-std` —
-> born 2026-10-07, the Seal remake's shared standard crates — the
-> animation-library leaf both the editor and the runtime resolver run;
-> `riir-refab` — born 2026-10-11, the pure-Rust rigged-GLB refab lane:
-> prompt→motion (the kimodo.cpp idea) + retargeting over sge GLBs,
-> zero workspace deps by contract; `jup-tool` — born 2026-10-14, the JUP
-> rescue tooling for the two compromised wallets (Rust binary + CF
-> Worker, hand-rolled Solana wire primitives); `seal-render` — born
-> 2026-10-21, the Seal editor's canvas core carved out of seal-game-editor
-> (plan 412 step 1c), no egui dep by its manifest test; `seal-game-editor`
-> — registered 2026-10-27 (the former mmorpg-editor codename: ONE repo
-> double-registered under both spellings until Issue 969 retired the
-> codename row): BOUNDARY.md-declared since 2026-09-01 precisely
-> so the workspace gate audits its real `riir-neuron-db` edge
-> (riir-ai issue 839), the derived walk already carried it; `zed` —
-> registered 2026-10-27, the editor dev fork (auto_prompt + the agent
-> lanes), public-leaf law, zero family path-deps by its own contract
-> (BOUNDARY.md 2026-10-26)).
+> (add `riir-mmorpg-examples`, `riir-refine`, `riir-viewbridge`, `riir-auth`,
+> `katgpt-web`, `riir-dao`, `riir-deployer`, `riir-esp32`, `riir-llm`,
+> `mmorpg-remake`, `mmorpg-remaster`, `riir-kat`, `riir-shader`,
+> `riir-reflex`, `riir-infer`, `riir-reflexer`, `reflex-site`,
+> `riir-instinct`, `riir-rethink`, `seal-std`, `riir-refab`, `jup-tool`,
+> `seal-render`, `seal-game-editor`, `zed`).
 >
-> Read a count in prose as a claim, not a fact — and read a count that
-> MATCHES as a claim too: a count is not a checksum over a set. Drift
-> history: HISTORY.md.
+> Read a count in prose as a claim, not a fact — a count that MATCHES is not a
+> checksum over a set. Per-repo birth/registration notes and drift history: HISTORY.md.
 
 ## Numbering Discipline
 
 Issue, plan, doc, benchmark, and research numbers are **monotonic and never
-reused** — even after a file is removed per the noise-reduction rule. Before
-creating a new `.issues/` file, read `.issues/.highwater`, use `value + 1` as
-the number, and write the new value back. Same for `.plans/`, `.docs/`,
-`.benchmarks/`, `.research/` — never recycle a number that git history shows
-was already allocated. `ls` the target folder AND re-read `.highwater` at
-WRITE time (a stale `.highwater` view dual-allocated two numbers once), and
-fetch + run the allocation-time gate:
+reused** — even after a file is removed. Before creating a numbered file, `ls`
+the folder AND re-read `.highwater` at WRITE time, use `value + 1`, write the
+new value back (`.issues/`, `.plans/`, `.docs/`, `.benchmarks/`,
+`.research/`). Then fetch + run the allocation-time gate:
 
 ```bash
 git fetch origin && py ../katgpt-rs/scripts/dual_allocation_gate.py
 ```
 
-It answers the question `ls` cannot: has this checkout's upstream allocated a
-numbered document since their merge base? **TWIN** (same filename stem on
-both lines) is your own rebased work — a fetch resolves it; **INDEPENDENT**
-(different stems) is two documents about to own one number, and it names both
-sides' adding commits. Its reach limit is documented and real: it sees
-divergences THIS box participates in. Probe basis:
-`scripts/dual_allocation_fp_probe.py` (7202 one-sided pairs green by
-construction; 39 real divergence incidents split 31 TWIN / 8 INDEPENDENT —
-naive subject-equality would have cried wolf 31/39). ⛔ **COUNTER** is the
-third verdict: a number allocated and CLOSED in one commit never has a file
-in any tree — both sides bumping `.highwater` past the merge-base value is
-the witness, armed on every push (Issue 850).
-
-- Two documents already sharing a number: the one with the most inbound
-  mentions KEEPS it — and the obvious count is the wrong one (by-NAME
-  citations tie; the weight is in the unqualified `Plan N` mentions).
-  `scripts/citation_weight.py <repo> <dir> <number>` attributes those,
-  awarded only on a strict margin, with everything else printed as its own
-  UNRESOLVED number, never folded into a winner. ⛔ **Do not renumber on a
-  margin the instrument did not award** — leads of +1..+5 with heavy
-  UNRESOLVED, one outright tie and one DECLINED were deliberately left alone;
-  pretending a coin flip can arbitrate is how it gets recorded as a
-  measurement.
-- ⛔ **CLOSING a holder does not retire its row — it is when the row starts
-  being the only record**: the holder is gone, the collision is not;
-  `removed_by_number()` recovers BOTH sides from
-  `git log -M --diff-filter=D --full-history` (the majority case: both
-  holders closed and removed). A pin comes out only when the *number* stops
-  being doubly held, which a deletion never achieves.
-- ⛔ And that recovery ran in ONE repo of sixteen for two days (Issue 820) —
-  the cross-repo verdict half `scripts/numbering_drift_sweep.py` now imports
-  the same function: 0 tracked duplicates against ~183 historical collisions,
-  workspace-wide in ~4s. `max_hist` is a RATCHET at measured (invented
-  reasons are a backlog wearing a pin), and `min_numbers` floors the HISTORY
-  walk — NOT a second `min_files`; they break separately.
-- The verdict is `scripts/numbering_gate.py` in the docs gate, in **two
-  regimes** (`scripts/number_collisions_expected.txt`): at or above
-  `era_boundary = 700` a **WALL pinned by MEMBERSHIP** with a reason per row
-  — a count is green on a swap — and below it a **RATCHET**, counted and
-  never pinned (the pre-gate archive; ratcheting a bucket that means
-  *unread* is forbidden). The boundary is measured, not round.
-  Rename-collapse needs topic + time + stem evidence (line similarity alone
-  resurrects collisions and buries retitles). ⚠ **Take the SCOPE from
-  `scripts/numbering_floors.txt`, never from a walk of the tree** —
-  `.benchmarks/` families per owner are intended, and a tree-derived
-  population over-counted by 74% once.
-- Report-only context: `scripts/highwater_contiguity_audit.py` REFUTED the
-  counter-as-ownership-witness by measurement (438 gaps + 27 resets over 73
-  counters; no major repo contiguous) — an over-claiming witness VALIDATES
-  wrong addresses, and the contiguous-suffix witness was declined (decline is
-  a correct answer).
-- **The on-disk duplicate classifier (2026-10-29, ported from riir-train's
-  issue-556 gate into `numbering_gate.classify_stems`)**: a ≥2-tracked-holder
-  (number, directory) group classifies from its stems alone — COLLISION
-  (token-disjoint: two unrelated owners on one number), RENAME-RESIDUE (one
-  document, two spellings), FAMILY-EXPLICIT (the intended one-owner family),
-  HAND-READ (token-less, undecidable). `numbering_drift_sweep.py` classifies
-  every numbered directory — the old "`.benchmarks/` is undecidable" excuse
-  retired, because owner identity IS decidable — and walls COLLISION at zero
-  in every repo (pinned or not; the issue-556 law: a pinned COLLISION row is
-  a work item, never an excuse), ratchets rename/hand-read at measured, and
-  floors the bench population (`min_bench`). Found live on landing day and
-  resolved BEFORE the wall armed: riir-ai `.benchmarks/` 809/872/1008 +
-  riir-infer `884` (four two-owner numbers; first-allocation adjudication,
-  losers renumbered 1016/1017/1018/926, every citation moved in-commit —
-  2d591ea, b5f9a8c2f+4427a6547). The raw `dup` ratchet keeps its serial-only
-  semantics and its existing pins; the classified classes are the upgrade.
-  The per-push `numbering_gate.py` carries the same wall for THIS repo's
-  `.benchmarks/` (the CI-side half; the sweep is workstation-only): family
-  dirs join its scan classified — COLLISION walls at 0 unpinnable,
-  rename/hand-read ratcheted at measured via `numbering_floors.txt`'s
-  `family_dirs` / `max_rename_residue` / `max_hand_read`, the raw `dup`
-  ratchet and the historical walk stay serial-only, and the family dir keeps
-  its floor + above-highwater checks. The two instruments' classified CAPS
-  for this repo are ONE measured record in two media, so the sweep syncs its
-  own-repo row against the gate's pins on every run
-  (`classified_pin_sync`) — divergence refuses exit 2 before any repo
-  verdict, since the classifier is shared by import and pin drift is the
-  only way two verdicts can disagree (floors excluded by design: different
-  slack under one measured population is not the same record).
- Population delta, disclosed: the classifier sees numbered .md documents only
-  (no directories, no non-md sidecars — riir-train's gate is the broader
-  one for its own repo).
+- Verdicts: **TWIN** (same stem both sides — your rebased work; fetch
+  resolves) · **INDEPENDENT** (different stems on one number; names both
+  adding commits) · **COUNTER** (both sides bumped `.highwater` past the merge
+  base — the only witness for an allocate-and-close in one commit). Reach is
+  limited to divergences THIS box participates in. Probe:
+  `scripts/dual_allocation_fp_probe.py`.
+- Two documents sharing a number: the one with the most inbound mentions keeps
+  it — use `scripts/citation_weight.py <repo> <dir> <number>` (strict margin;
+  UNRESOLVED printed separately). ⛔ Do not renumber on a margin it did not award.
+- ⛔ CLOSING a holder does not retire its collision row; `removed_by_number()`
+  recovers both sides from `git log -M --diff-filter=D --full-history`.
+- Verdict: `scripts/numbering_gate.py` (docs gate), two regimes in
+  `scripts/number_collisions_expected.txt`: ≥ `era_boundary = 700` a WALL by
+  MEMBERSHIP with reasons; below it a RATCHET. Take SCOPE from
+  `scripts/numbering_floors.txt`, never a tree walk. Cross-repo half:
+  `scripts/numbering_drift_sweep.py` (`max_hist` ratchet; `min_numbers` floors
+  the history walk; `min_bench`).
+- **On-disk duplicate classifier** (`numbering_gate.classify_stems`): a
+  ≥2-holder (number, directory) group is COLLISION (token-disjoint — walled at
+  0 everywhere, unpinnable; a pinned COLLISION is a work item) /
+  RENAME-RESIDUE / FAMILY-EXPLICIT (silent) / HAND-READ (ratcheted). The sweep
+  syncs its own-repo row against the gate's pins (`classified_pin_sync`,
+  exit 2 on divergence). Sees numbered `.md` documents only.
+- Report-only: `scripts/highwater_contiguity_audit.py` (the counter is NOT an
+  ownership witness).
 
 ## Branch
 
@@ -1523,8 +872,8 @@ the witness, armed on every push (Issue 850).
 directly on `develop` per the global rule.
 
 ## Models
-- riir-train/data/gemma-2-2b-it-f16.gguf — RETIRED locally 2026-10-07 (riir-train Issue 617,
-  after the loud-fail gate edits); restore with `./scripts/data_backup.sh pull
+- riir-train/data/gemma-2-2b-it-f16.gguf — RETIRED locally 2026-10-07 (riir-train Issue 617);
+  restore with `./scripts/data_backup.sh pull
   data/gemma-2-2b-it-f16.gguf` from the riir-train root. The katgpt-attn spike-census
   sidecars stay committed (the fixture gate reads sidecars, not the GGUF).
 - riir-train/data/MiniCPM5-1B-F16.gguf — LOCAL-KEEP (pin, re-downloadable).

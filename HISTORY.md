@@ -1,1783 +1,1096 @@
-Compacted 2026-10-06: every `##` heading kept verbatim, one compact entry per
+Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per
 record (≤2 short lines); the full pre-compaction text is in git history.
 Operational rules live in `AGENTS.md`; removed issue files: git history.
 
+## AGENTS.md compaction (2026-10-30) — dated incident arcs moved out of the operational doc
+
+Repo births/registrations: riir-rethink 10-03, seal-std 10-07, riir-refab 10-11, jup-tool 10-14, seal-render 10-21, seal-game-editor + zed 10-27 (codename row retired by Issue 969).
+Per-instrument "measured on day X" narratives dropped from AGENTS.md (105KB→58KB); the rules stayed — full text at the parent of this commit.
+
 ## Issue 972 (2026-10-29 → closed 2026-10-30) — cross-tail interference instrument (Nestor forgetting law × sst_certified, Research 639): CLOSED — T1–T5 LANDED, `katgpt_core::sst_cross_tail` `e5ee29c8c` (behind the SAME `sst_project` gate, no new flag; re-export beside sst_certified): `cross_tail_interference[_into]` over two same-anchor `TailFactor`s, refusal classes mirroring `compose_tail_into` VERBATIM (anchor digest / shapes / tail bases → `ComposeMismatch`, never a silent re-factor) + non-finite/zero-payload guards; outputs per-side, never pooled — uncentered-linear-CKA scalars over the input/output Grams (Gram-normalized: the raw-norm form reaches 1.0 only at rank 1) + cos² principal-angle spectra on σ-truncated eigenbases (cutoff 1e-6 σ-relative, recorded in the report beside below-floor energy fractions); zero-alloc over caller-owned `CrossTailScratch`, f64 sequential folds + sorted canonical eigenbases + `karc` jacobi (the Issue-940 law). Gates in C-coordinates (exact f32-representable Givens family, never trig): spectra 1e-12, monotone in θ, EXACT 0.0 at 90°, equal-payload identity, the full-rank separation arm (the trivial-angles killer), five refusal arms; predictor-vs-measured with pinned units and claims SPLIT (spectrum = hard bound with the truncation term ε₁; scalar = RANKING only — the rank-1-vs-identity counterexample is why it carries no upper-bound guarantee); determinism double-runs bit-identical; rotation invariance 1e-12 exact / 1e-5 general (f32 wire floor, honest deviation recorded — the issue's 1e-10 assumed f64 payloads). T5 report-only API law: the instrument prices, never refuses beyond input guards — no gate behavior ships. **Consumer half LANDED same day riir-ai-side** (riir-ai Issue 1141 `698b61d07`+`968cb3a89`: `SstAdmissionReport::record_cross_tail` + sidecar digest-pair comparability + four count-pinned gates; pointer discharge `762776af6`). Gates: clippy −D clean (default / sst_project / --all-targets), 11/11 instrument + 15/15 sst_certified at posture, default lib 2167 passed. Claimed zed-m3-972-instrument, landed same session. File removed per noise-reduction; full text: `git log --follow -- .issues/972_cross_tail_principal_angle_interference.md`.
+
+Outcome as headed; full text in git history.
 
 ## Issue 971 (2026-10-28 → closed 2026-10-29) — the on-disk numbering-duplicate wall (the riir-ai Bench-1011 double-hold was visible to NO automatic gate): CLOSED — detection gap landed same-cycle. Wall: katgpt-rs `a1f0751aa` (riir-train's duplicate classifier ported into the shared scanner `numbering_gate.classify_stems` + `numbering_drift_sweep` extended — COLLISION wall at 0 in every contract repo, rename/hand ratchets, min_bench floors; SUBSTRATE DEVIATION from the issue's one-copy proposal AGREED by the filer lane: two copies (riir-train private, katgpt-rs public) pinned to agree by 12 golden vectors encoding the gate's arms incl. the four founding collisions — a subprocess-over-the-sibling lane would silently degrade on public CI, and the vectors make cross-copy drift loud; cross-copy notes both docstrings, riir-train `bd029dc4`). Adjudications (first-allocation, citations moved in-commit): riir-ai 809→1016 / 872→1017 / 1008→1018 (`b5f9a8c2f`+`4427a6547`), riir-infer 884→926 (`2d591ea`); dual_allocation complement pointer `e4cebb910`. Routing pass (the filer lane, m3 housekeeping): refine max_hist 5→6 + riir-ai max_resets 9→10 ratchets `0f3abc835`; riir-ai `.issues/.highwater` 1134→1136 live-hazard repair `636a449ea` (the issue-1134 arc's stale-counter filing had 1135/1136 live-collideable). Close-out verification: the issue's last open item (the refine `.research/344` renumber) was ALREADY LANDED at `e7e8df51` (citation-weight 59:1, both instruments agree, citations moved, highwater 345) — the resolution block's "stays open for the renumber" was stale; pin stays 6 (measured post-renumber; the walk did not collapse this pair). File removed per noise-reduction; full text: `git log --follow -- .issues/971_workspace_on_disk_numbering_duplicate_wall.md`.
 
+Outcome as headed; full text in git history.
+
 ## Issue 963 (2026-10-25 → arc landed 2026-10-28) — toolchain bump 1.98.1 → 1.99.0 (+ rust-src): the anchor pin moved (`8d54ddb96` + `rust-version` floor raised in the same commit per the pin's own discipline). Full gate GREEN at 1.99.0 on macOS with real evidence — the gate's own loud-zero defense first fired INCONCLUSIVE on the warm cache left by the `RUSTUP_TOOLCHAIN=stable` rot-gate posture (stable = 1.99.0 on this box), discharged by wiping `target/debug/.fingerprint` and re-running: Layers 2/2b/2c (wasm32 both simd128 arms, x86_64-apple-darwin both avx2 arms) + Layer 3 (347 units compiled, **0 warnings — no new 1.99 lint fires on this tree**, the `-D` list unchanged with zero unknown-lint errors) + Layers 6/6b release profiles + Layer 7 fmt (2832 files, 0 drift) all ✓; scoped core 2167/0. T4 revert path: a bad 1.99.0 surface is `git revert` of the bump commit (pin + floor move together, one commit — never investigate, roll back). **T3 (seal-remake + seal-game-editor downstream pins) DEFERRED, not forgotten:** both repos had a live sibling session mid-flight at claim time (seal-remake writes at 02:41, sge at 01:51–02:28, 2026-10-28) — flipping a toolchain under a running guard would run half its layers per rustc and corrupt the verdict; the pins follow on their next quiet touch, per the anchor semantics (downstream follows, never the reverse). riir-refine's `AHEAD_OF_PIN_1_99` registry is NOT this arc — it empties at RIIR-REFINE's own pin bump (batch 230's discipline), and its probes were already verified at an isolated 1.99 toolchain.
+
+Outcome as headed; full text in git history.
 
 ## Issue 950 (2026-10-18 → closed 2026-10-24) — InfiLoop gated N/D summary modelless extraction POC (Research 626, arXiv:2610.11570): CLOSED — P1–P7 LANDED, GOAT ALL PASS (bench_946), P8 deferred-until-pull by its own gate. Opt-in `gated_summary` in `crates/katgpt-pruners/src/posterior/gated_summary.rs`: `GatedSummary<const D>` — two-counter normalized running summary (`N_t = β·N_{t−1} + e_t·z_t`, `D_t = β·D_{t−1} + e_t`, β ∈ (0,1) refused loud outside; sigmoid step view γ = σ(s − ln(β·D)), never softmax) with the `PrecisionVector` substrate consumed as the β=1 + fixed-w BIT-IDENTICAL oracle (never forked), the t=1 γ≡1 edge pinned as bits, ±8 score clip overflow-proof, convex-hull + never-decays-to-zero invariants tested, four-control GOAT battery (PV posture / decay-only / content-only / full) — the full posture is the only retention×adaptation Pareto arm (mid-burst retention 0.060 inside the pinned 4× tax, post-jump adaptation 0.0355 = 21–30× the controls; per-delta clean: gate owns retention, decay owns adaptation); G2 31/72/457 ns/write at D=8/64/512, G4 0 allocs. Scope findings on record in [Bench 946](.benchmarks/946_issue950_gated_summary_goat.md): the β-decay forget horizon `e_adv/(1−β)` under sustained rejection (~10 writes at β=0.55) and decay-only = no defense (`w/(1−β)` equilibrium admits everything). No promotion claim — consumers unwired; riir-train Plan 465 consumes the kernel. P8 (phase_belief two-signal commit fusion) stays DEFERRED-UNTIL-PULL: re-opens when a real phase_belief consumer posture exists (Issue 939's shape). File removed per noise-reduction; full text: `git log --follow -- .issues/950_infiloop_gated_summary_poc.md`.
 
+Outcome as headed; full text in git history.
+
 ## Issue 956 (2026-10-22 → closed 2026-10-24) — binary-diffusion modelless extraction — conflict-triggered lattice reopening + Ψ-sampler knobs (arXiv:2610.28543, Research 480; training track = riir-train Issue 641): CLOSED — T0–T4 all LANDED, one defer with a structural re-open trigger. T1 (`bb95e404d`): `bench_ldt_hardness_stratified_reporting` — 480 deterministic instances, validation-fixed easy/mid/hard bins, `MassScreener` making θ LIVE — the pooled read misrepresents the hard stratum by ~20 pts (LDT hard 15.5 < mid 34.9 < easy 54.2 at budget 500); en-route: the Plan-088 T4 proof never ran `screening_threshold` binding (the bench is the first live θ read). T2 (`729bb73ff`): conflict-triggered targeted candidate reopening — `lattice_reopen.rs` + `ConflictClauseDB::implicated_positions`, elimination-time screener replay at chain context, singleton clause learning, `score^β`-ranked revival at relevance 1.0 (the screening penalty REMOVED so revived candidates compete on their own LLM mass), re-propagation through the same `TreeBuilder`; α-propagator monotonicity untouched; termination = max_rounds + empty-restoration + monotone ledger + no-cycle filter; G3 default-off node-exact; hard +5.6 pts at budget 500, chain read 0 → 2.8/9.6%; the tight-budget regression (−5.6 at 150) named the budget law. T2b (`79dbcd44f`): expected-reopen-count preservation — `eta`/`gamma`/headroom drive with pool-spacing γ normalization (the shipped absolute γ=20 measured ZERO reopens — the loud-zero gate caught it; a distribution-blind fixed slope is the recurring calibration lesson), the deterministic count-above-cut; tight budget 150 hard +25.4 pts (the regression inverted into the bench's largest gain), anti-thrash asserted (134 vs fixed-b 1920 reopens). T3(a)+(c) (`e3eae22ca`): the κ confidence-budgeted commit arm on the d2f decode core (`kappa_eta`/`kappa_gamma`, disarmed byte-identical, EB precedence); the capped-mean bisection LIFTED to the shared `katgpt_core::sigmoid_budget` leaf (305 speculative tests green); T3(b) λ DEFERRED — the decode loop has NO per-position noise level (the whole block shares the step's t); re-open = per-position noise levels land in the decode loop (Plan 108's shape). T4 (`5a97948c3`, probe-first, test-only): flip-move pricing — closed-form reverse rates over the fixture μ — flip-parsimony preserves hard-instance evidence at finite budgets (K=1 pooled 13.3% vs resample 0.0% everywhere) with TWO named production preconditions: set-conditioned scoring (fixed μ starves the flip chain's ADD side) + a set-size floor (T2b's η·headroom shape); the GOAT gate, if pursued, reads a set-conditioned flip lane at the lattice's real verification budget. G2 honest-cost: reopen wall fixed-b 6.45× / η 5.59× (five-run ambient re-pin 2026-10-23 `3752dad8a`, load 2.4–3.5/16 disclosed, absolutes ms-class) — the +10% gate reads DISCLOSURE, the replay + re-propagation genuinely cost it; machinery all opt-in behind `lattice_deduction`, G3 byte-identity at every knob's zero. File removed per noise-reduction; the landing state lives in the code citations (`sigmoid_budget`, `lattice_reopen`, `alpha`, `d2f`) + the four bench targets in `tests/bench_ldt_lattice_deduction.rs`.
+
+Outcome as headed; full text in git history.
 
 ## Issue 958 (2026-10-23 → closed 2026-10-24) — `sst_certified`, the tail-subspace weight-delta substrate (arXiv:2610.22293 adoption, Research 631): CLOSED — LANDED OPT-IN, G1–G4 + Lean ALL PASS (Bench 953). Six lanes in one session (claim `zed-m3-sst958`, epoch 1792784038, code `93aa3dbad`, Lean `2ffc89e22`, close-out `0f1554968`): `crates/katgpt-core/src/sst_certified.rs` — `fit_anchor` (Gram on the smaller side via karc `jacobi_eigen`, f64 sequential folds, sorted eigenpairs paired with σ — the σ-order bug class caught by the roundtrip test before landing), `anatomy`/`anatomy_factored_into` (two-positive-terms `‖P_lΔ‖² + ‖P_⊥lΔP_r‖²`, never the cancelling three-term form; rank-r path via r×r Grams, never m×n), `factor_tail` (`ΔW = U_⊥CV_⊥ᵀ`; the wide-side tail is the σ-propagated σ-visible truncation ≤ min−k with dropped energy REPORTED — full wide-tail needs the wide Gram, infeasible, documented), `certify_decoded_tail` (relative-tolerance band [1e-5, 1] = the f32 resolution floor), `compose_tail` (same-anchor + bit-identical bases; leak bounds additive), and the rotation-invariant anchor digest (BLAKE3 over the projector's 64-probe action — exactly invariant under basis sign flips, refit-deterministic; the Lane-6 stale-cert gate `verify_against`). G1: the isotropic-rounding negative — dense-project-then-quantize FAILS the certifier at a noise budget the factored arm PASSES (non-vacuity proven); thin_svd oracle subspace agreement < 1e-4; planted-leak refusal MEASURED (α=1/3 → fraction 0.1±0.05). G2 honest-cost (the issue's µs-class round-1 target was wrong at rank, as it predicted): anatomy Θ(mnk) — 9 ms dense at 128×512, 8.6 s at (1024,4096); factored rank-8 575 µs → 81 ms at (1024,4096) — the issue's 0.7–5 GFLOP figure confirmed on the factored path; fit is Jacobi-sweep-dominated calibration-time (137 s at (1024,4096); the 4k² Gram is hours-class — a randomized-range fit lane is future work, priced not built). G4 zero-alloc 1000 cycles over all armed paths. Lean pair (`.proofs/KatgptProof/Sst/`): the diagonal no-leak scalar arm + level-set instance + the 2×2 `diag(1,0)` counterexample + the leak read (4 theorems, proof_gate 53→57, axiom budget clean; en-route: `Mathlib.LinearAlgebra.Span.Basic` alone does NOT pull the ℝ instances on this pin — the Sigmoid import carries them). Opt-in `sst_project` (implies `subspace_phase_gate` + `karc_forecaster`, the basis_split precedent); feature count 710→711 re-pinned at every claim site; AGENTS.md substrate section; consumer sides stay in riir-neuron-db Issue 629 + riir-ai Issue 1116 (unclaimed); producer riir-train Plan 470. Records: [Bench 953](.benchmarks/953_sst_certified_goat.md). File removed per noise-reduction.
 
+Outcome as headed; full text in git history.
+
 ## Issue 954 (2026-10-20 → closed 2026-10-20) — `kron_memory`, the pair-addressed scalar-target delta-rule cell (Kronecker Delta Rule, Research 630, arXiv:2610.26834): CLOSED — LANDED OPT-IN, **G0 FALSIFIER FIRED, promotion refused** (Bench 951). The full cell shipped in one session: fixed-size `[[f32; DV]; DK]` Pod + pair registry, Newton-step writes under a contraction governor, exact-zero write elision (the frozen-state identity fixed point hash-pinned over 64 replayed writes — the Issue 940 `dot_f32_ordered` law end to end, `KRON_READ_ORDER v1`), the pre-write interference audit into caller scratch (zero alloc, loud truncation), audited surgical unlearning with closed-form repair, single-level tolerance-pinned undo (`EPS_UNDO = 1e-5`) + bit-exact touched-rows snap undo, analytic health gauges (λ̂_min over EMA marginal Grams, half-life, the norm-budget envelope, measured independence-violation — all lower-bound heuristics with the caveats on their face), LS-snap consolidation over the tracked moments (shipped `symmetric_eig`, ridge-regularized), and the `kron_chunk_wy` chunked form (Gram Hadamard product + unit-LT solve). 19/19 G1 property tests; G4 zero-alloc; G2 write 1017 ns / read 1010 ns / audit 2867 ns (all PASS). **The negatives, honestly:** G0 (the pre-registered falsifier) — at matched 16 KB state and 48 pairs (1.2% slot load) the plain one-hot slot table wins BOTH statistics (collateral 0.00016 vs 0.00482, paired LB95 −0.00494 < 0; recall 0.994 vs 0.780) → the flag stays opt-in forever; the double gate IS real against the vector contract (17× more surgical, LB95 +0.081 > 0) but loses to the table at low load; re-open = a G0′ at matched load ≥ 50%, own pre-registration, owner-gated. G2 chunk arm 0.56× (SLOWER than sequential — unpromoted; re-open = blocked-GEMM Grams via kron_tile/simd_matmul, priced not attempted). G5b: the analytic CI dropped (lost CRPS to the conformal-naive floor 2.156 vs 2.036 despite winning coverage 0.896 vs 0.203 and Winkler 2.62 vs 11.64 — all three required) → ships signal-only (`residual_signal()`). **What validated (G5a PROMOTED):** the self-consistent interference-envelope sizer `MSE(P) ≈ σ²_c/(1 − P·β²/(d_k·d_v))` held the [0.5, 2] band at x = 0.0625/0.25 — promoted for NEW-config sizing in the sub-saturation regime; the measured mechanism (no-decay erosion SATURATES at ≈ σ²_c — an interference floor, not a retention cliff) is the durable finding. En-route fairness fixes to the bench itself before recording: the floor observes the cal slice (a starved floor is not the canonical floor) and the first envelope draft's missing base-variance term (a derivation error, fixed pre-verdict). Records: [Bench 951](.benchmarks/951_issue954_kron_memory_goat.md) + [`.docs/03_memory/kron_memory.md`](.docs/03_memory/kron_memory.md) + feature catalog §154 + negative_results §47. Feature count 703 → 705 (README + examples/README re-pinned, docs gate 35/35). Claimed `katgpt-rs-kron-m3`, landed same session. File removed per noise-reduction.
+
+Outcome as headed; full text in git history.
 
 ## Issue 959 (2026-10-23 → closed 2026-10-24) — fixed-form softmax numerics primitives (arXiv:2610.31642 adoption, Research 632): CLOSED — T1–T6 all landed. T1–T4 (`14c356c03`, session epoch 1792774280): `crates/katgpt-core/src/softmax_fix.rs` — FloatFormat + PRECISION_CLIFF_NATS + precision_cliff(_bits) (ungated, the c_d = p·ln2 law is ours — the paper states numbers), margin_equilibrium (the Slingshot golden 18.42 > 16.64 HAZARD; CLI scripts/margin_equilibrium_audit.py — its console_safe defense landed with T5 after the console-encoding gate caught it), the −σ(−m) doctrine citation + the cliff-band fast_sigmoid property test (caught the issue's garbled expm1 reference — it is −tanh(m/2), not −σ(−m)), and opt-in logspace_diff(_f64) (anchored expm1, exact +0.0 at equality, overflow-safe). T5 (`9ccd7fa1a`, epoch 1792776198): opt-in fixed_log_softmax — fixed_log_softmax(_f64) + fixed_log_softmax_target(_f64) (the NLL-oracle shape, bit-identical to the full form's slot); the argmax-excluded-LSE softplus form log p_i = (z_i − z_a) − ln_1p(R), R = Σ_{j≠a} e^{z_j − z_a} — the target slot resolves from the cliff c_d to exponent underflow (~103 nats f32) instead of saturating at exactly 0.0; overflow-free by construction; branch-free hot loop + the argmax-slot overwrite (also fixes a lone +inf max); feature count 709→710 at all claim sites. G1: 207-rung ladder 0..103, both slots ≤ 2 ulp of the f64 oracle (the f32 libm composition budget — expf ≤ 1 ulp + log1p ≤ 1 ulp — disclosed; the issue's aspirational 1-ulp holds at most rungs); the incumbent's exact-0.0 saturation witnessed at the cliff in both f32 and f64. TEST-SUITE FINDING worth keeping: the G1 oracle's naive ln(1.0 + e^{−m}) close reproduced Softmax Collapse INSIDE the test — on this box at m = 28.5, ln(1.0 + 4.1938e-13) returns 4.19442e-13, a 1.5e-4 relative corruption of ε (the add round's half-ulp of 1.0 is 2.65e-4 of ε) — the oracle reads ln_1p and the incident is documented at the test. G2: benches/softmax_fix_log_softmax_goat (interleaved A/B ×9, median, black_box'd; M3 Max AC 94% mem free load 4.4–6.3, epoch 1792777601): ratios 0.562 (n=2, fixed FASTER) / 1.212 (n=64) / 1.315 (n=1024), gate ≤ 1.5 PASS ×3 — the branch-free loop took n=1024 from 1.472 to 1.315. G4: tests/softmax_fix_g4_alloc, 0 allocs/1000 mixed calls. G3: default lib 2167/0 unchanged. Determinism-law seam: first-index argmax + sequential ascending-j += fold pinned at the site (Issue 940 class); LOCAL instrument — sync crossings go through closure/bridge_certified. T6 (riir-infer `019bd45`, same epoch): opt-in golden_nll (forwards katgpt-core/fixed_log_softmax) — riir_infer_core::golden_nll (GoldenNllScratch::read_target: widen-once scratch → per-token NLL via fixed_log_softmax_target_f64 + the top-2 margin coordinate) + si_zero_shot_ppl --golden-nll (base-only reference mode, pooled Δ, the fp32/f64 confidence bands, the disagreement census; loud refusal without the feature). Module tests: golden ≈ incumbent f64-lse 1e-12 at ordinary margins; at a 100-nat margin the incumbent f64 form reads EXACTLY 0.0 while golden resolves ~e^-100 (the gate-relevant delta). Real-model smoke (league PQ2_0, 65 scored): pooled Δ +1.3e-15 nats/token, max |Δ| 6.7e-14 — f64-composition noise on a healthy model; the PQ2_0/GDN_STATE_HALF lossy gates diff THEIR variant checkpoints through this readout in their own lanes. Validation T5: 12 gated + 5 ungated module tests, lib 2167/0, clippy -D ×3 postures, all-features check, fmt clean, docs_gate 35/35. Validation T6: clippy -D ×3 postures, bin at both golden postures, release smoke green, refusal verified. Files removed per noise-reduction; the landing state lives in the feature catalog §156 + AGENTS.md numerics family section.
 
+Outcome as headed; full text in git history.
+
 ## Issue 955 (2026-10-20 → closed 2026-10-20) — `CellComplex::grid_2d(0, h)` / `(w, 0)` wraps its loop bounds and pushes forever (release-mode OOM): CLOSED — one-branch guard landed (`0cacf71d6`). `grid_2d` computed `w-1`/`h-1` on `usize` for the counts and loop bounds; with a zero dimension the counts stayed zero (`usize::MAX * 0`) so the `reserve_exact`s pre-allocated nothing and nothing looked wrong, while the B₂ face loop's outer bound wrapped to `usize::MAX` and pushed 4 triplets per iteration forever → realloc → unbounded growth → OOM-kill in release (measured ~8 s on M3 Max, ~87% of profiler samples in `RawVec::finish_grow` under `grid_2d`); debug builds panicked on the overflow — the release shape (silent hang) was the dangerous one. Found from the consumer side wiring riir-ai Issue 1100 T0 (a caller reading a not-yet-allocated field naturally has dims `(0,0)`); this issue owned the substrate half. Fix: `assert!(w > 0 && h > 0)` — the contract, not a limitation (a 0-dim grid has no cells of any rank, no operators apply; a silent empty complex would resurface the same silence one layer later in the laplacian edge-list path), matching the `grid_3d` precedent in the same file. All shipped callers pass w,h ≥ 1 (benches 3×3..256×256; `grid_coarsen_2x2` asserts `> 0` upstream) — no caller changes. Gates: katgpt-dec lib 253/253 including the three `should_panic` zero-dim arms + the `grid_2d(1,1)` keeps-working pin; clippy `-D warnings` clean; fmt clean. The first full run's `bench_hodge_decompose_256x256` latency-bar red passed alone at 110.8 s vs its ~120 s bar (load-class, PASSED-ALONE — the change is one branch at construction). No GOAT implications (no perf surface; one branch on a constructor). File removed per noise-reduction.
+
+Outcome as headed; full text in git history.
 
 ## Issue 957 (2026-10-23 → closed 2026-10-23) — the int8-activation ternary matvecs panicked `RefCell already borrowed` when two forwards shared the rayon pool: CLOSED — shared `simd::with_thread_scratch` landed (`4ede8e7b4`). `simd_ternary_q2_matvec_q8_parallel[_n]` and `simd_ternary_group_matvec_q8_parallel` ran their row-parallel rayon region INSIDE a `thread_local! RefCell::with_borrow_mut` over the activation scratch; a worker waiting in that region work-steals, and a stolen job that is another forward calling the same matvec re-entered the borrowed cell on the same thread. Found from riir-infer Issue 1111 T3: one more concurrent-forward test in `bonsai2_rotation_load` turned that binary red ~1 run in 100, a different victim each time, never alone — the shared-state concurrency class that passes alone BY CONSTRUCTION (backtrace `with_q2_activations` → `on_rayon_worker`). Fix: move the scratch out for the call and back after (no borrow spans `f`; a re-entrant call allocates its own — only on actual re-entry; steady state still zero-alloc, a `Vec` move allocates nothing). Family sweep over every tracked `*.rs` in katgpt-rs/riir-infer/riir-train/riir-ai with `thread_local!` + a borrow + a parallel construct: these two sites; riir-infer-gpu `weight_buffer_cache` STAGING and `ATTN_TAP` hold no borrow across one. Regression arms `nested_parallel_calls_are_reentrant_and_bit_identical` in both modules (64 outer rayon tasks × the parallel matvec, 8 rounds, bit-identical to serial) — RED before (both panic), GREEN after; katgpt-types lib 204 / 212 / 196 pass (`ternary_q2_q8` / `+decode_spin_pool` / `ternary_group_q8_act`), clippy clean both sets; downstream riir-infer `bonsai2_rotation_load` ≈4/435 red before → 0/600 after. No GOAT surface moves (two `mem::replace`s of 2–4 empty-or-moved `Vec`s per call vs a µs-scale matvec — not re-benched, the box was under sweep load). File removed per noise-reduction.
 
+Outcome as headed; full text in git history.
+
 ## Issue 949 (2026-10-19 → closed 2026-10-20) — `path_kernel_sim` POC (sensitivity-fingerprint response-space kernel): CLOSED — T1–T9 LANDED, T9 verdict **KEEP-OFF**. Feature `path_kernel_sim` opt-in in katgpt-core: `SensitivityFingerprint` (p ≤ 64 knob-gradient at w0, scratch-buffer API) + closed-form σ'-arm / pinned-h central-difference arm + normalized kernel + Spearman ρ + Gram PR/effective-rank (substrate reuse: `linalg::symmetric_eig` + `subspace_phase_gate::participation_ratio` — no new solver). Near-zero-norm fingerprints ABSTAIN (sentinel, never NaN). G1 7/7 lib tests (T5a the linear-in-knobs collapse identity PROVEN — kernel ≡ input-feature cosine to 1e-5; T1 stationary-point + NaN abstain; T4 rank-1 Gram end-to-end) · G2 79–132 ns/call + 49–52 ns/pair at p=64 (bars 5 µs / 1 µs, black_box args+receiver) · G3 default suite untouched (2157 passed, purely additive feature) · G4 zero-alloc hot path (counting allocator, 0 allocs/100 pairs at p=64). **T9: the planted-class battery (independent labels, pure-cross-term exponent, release) read a THREE-WAY TIE — fingerprint 1.000 · input-cosine 1.000 · output-vector 1.000 — and T5d's own law fires: the tangent kernel adds nothing over gradient-free response probing at matched information → promoted nowhere, ships opt-in as a diagnostic instrument.** Structural finding: Ŝ(x) is a deterministic transform of x, so a full-rank probe battery (m ≥ p) is at-least-as-informative; the residual edge regimes (probe coverage m ≪ p, probe degradation) are consumption-side — re-open bar = a consumer whose probe budget is genuinely ≪ p. Records: [Bench 947](.benchmarks/947_issue949_path_kernel_sim_goat.md) + Research 625 §7 + feature catalog §153. File removed per noise-reduction.
+
+Outcome as headed; full text in git history.
 
 ## Issue 948 (2026-10-18 → closed 2026-10-19) — Terminal-RSI modelless extractions (FDR grader + SPR ordering + T3 reshape): CLOSED — ALL THREE LANDED/EXECUTED. **T1+T2** (`1f0c9300b`, 2026-10-18): `fdr_credit` + `spr_order` opt-in features in `katgpt-pruners` (family-calibrated partial-credit `delta_absorb` hinge + success-offset lexicographic ordering; 13 tests, flag-OFF compiles to nothing; feature catalog §151). **T1 GOAT + T2 paired read ALL GATES PASS** ([Bench 945](.benchmarks/945_issue948_fdr_spr_goat.md), 2026-10-19: G1a FDR ordering dominance Spearman 0.632 vs raw-P 0.364 (15/16 seeds), G2 bootstrap stability (divisor CV 0.043 mean, ordering τ 0.878), G3 top-3 never-worse 16/16, G4 zero-alloc; T2 = honest no-op, 0 flips — the tie-group guard ships as the drift guard; honest scope: synthetic adjudicated harness, estimator saturates at small K). **T3 EXECUTED same day — honest-negative for promotion** ([riir-ai Bench 990](../riir-ai/.benchmarks/990_issue948_t3_bandit_reshape_goat.md), `bench_990_bandit_reshape_vs_decay_goat`, riir-engine, feature `cgsp_runtime`): the SPR `P/(P+D')` reshape read as a bandit priority collapses to the sample-average estimator; under the SHIPPED CDF-sampling consumer law it carries +31.1% post-shift regret (cap-regime shift) / +8.0% (demotable shift) vs the shipped `DEFAULT_BANDIT_DECAY = 0.7` — the reshape ships nowhere (G3 structural: zero production delta). Recorded nuances: the reshape is variance-free and wins the cap-regime p90 tail (623.6 vs 703.9) + adoption 16/16 vs 6/16 — the shipped posture's cap-regime lock-out tail (10/16 seeds) is the drift-guard datum; its loss is partly an exploration tax under CDF sampling (entropy 0.97 vs 0.24). Deterministic (frozen seeds, re-run byte-identical). Features stay opt-in (no wired consumer). File removed per noise-reduction.
 
+Outcome as headed; full text in git history.
+
 ## Issue 917 (2026-10-03 → closed 2026-10-19) — EB-Sampler-class entropy-bounded commitment (D2F/DDTree/Drafter commit paths): CLOSED — the full arc landed opt-in and the lane A/B EXECUTED. T1 primitive `katgpt-core/src/entropy_bounded_commit.rs` (2026-10-03, catalog §141, [Bench 917](.benchmarks/917_entropy_bounded_commit_goat.md): oracle PASS — no-stall everywhere, EB needs 5–19% fewer NFE than the floored τ=0.9 incumbent at equal validity); T3 DDTree + DFlash wiring (10-07); T2 D2F decode wiring + cousins flashar/set-diffusion (10-08, `D2fDecodeConfig.eb_gamma ≥ 0` arms / −1.0 disarmed default, two-level flag gate, flag-off byte-identical); the riir-side `gemma2_d2f` GPU model-forward lane wired 10-16 (riir-infer `44ca3cb` + riir-gpu `34e462835`, `Gemma2D2fConfig.eb_gamma` disarm-default). **Lane A/B (riir-train Bench 645 = Plan 437 T0.2, 2026-10-18, M3 Metal — the 4090 was busy, a same-device relative read is valid): EB converges 16/16 at 8.00 NFE vs every τ ∈ {0.5, 0.7, 0.9} stuck at 16.00 — the near-uniform ~0.02 committed confidence of the barely-trained head never crosses any fixed τ — at matched confidence (0.0202 vs 0.0199) and the same 0/128 quality floor; a POLICY-BEHAVIOR read on the weak Phase-0 0.4B checkpoint, priced as such by the 2026-10-08 owner-gate verdict (3-round Claude → AGREE: Phase 0 first, relative quality only, never an absolute claim).** The §7 parity gate's first real-checkpoint run caught the Metal `tanh` NaN negative-tail defect (cubecl's safe_tanh guards only x > 43; the trained adapter pushed masked-token scores to raw/softcap ≈ −177) — fixed by the ±42 clamp in all four softcap kernels, `tanh(±42) = ±1.0` exact in f32 (riir-infer `2f65031` + regression test; clean parity 3.3e-3 rel, cos 1.000000). En-route the Phase-0 trainer revival itself: riir-train `c1f48627` (621 filed, `WIRING-ARCH: gemma2-04b` named) → 621 CLOSED 10-18 (smoke `18dd21f6`, the 4090 10k-step window, T0.3 AR control arm `65a5443c`, T0.2 parity + A/B). Stays OPT-IN: promotion needs a checkpoint whose committed confidence actually separates (plan-410 T3 / Plan 437 Phase 4, owner-gated) re-running the A/B with the quality axis live; the γ dial stays uncalibrated for production until that lane. File removed per noise-reduction.
+
+Outcome as headed; full text in git history.
 
 ## Issue 944 (2026-10-16 → closed 2026-10-17) — one ULP metric + ApproxContract (the ink-lang Research 475 consolidation): CLOSED — LANDED (`7da012f55`). `katgpt_types::approx`, deliberately UNGATED (the green-zero law: a feature here would compile every migrated gate to a silent `ok. 0 passed`; test/bench-only, zero hot-path) — the issue pre-authorized the ungated alternative as "the simpler law". `ulp_distance(f32, f32) -> Option<u32>` settles the semantics the three copies punted on: signed zeros share ONE position (the raw map's ~2³¹ artifact retired), non-finite FAILS CLOSED (`None`, never a bit-distance over NaN payloads), finite same-sign domains bit-identical to the raw two's-complement map (deterministic-stride test pin, no RNG). `ApproxContract` is the declarative half (measure-across-sweep + assert-within), fail-closed on all three silent-pass shapes: non-finite poisons, an EMPTY contract refuses to assert (an unrun sweep is not a pass — the repo's loud-zero law at contract granularity), a violation names the worst pair. Migrated all three: bench_844 G1a (two named contracts; verdict identical — exact max 2 ULP), `simd/activations.rs` exact_sigmoid tests, bench_871 (`ulp_delta` now a one-line `expect` wrapper; its "same-sign finite" precondition subsumed by the shared law; gates ≤1/4/5/18/55 unchanged; root `Cargo.toml` gains the `katgpt-types` dev-dep). Gates: 169 katgpt-types lib + 2 doctests, 2157 katgpt-core lib, docs gate 35/35, clippy clean on every touched target, both benches re-run green. Declined: the optional Lean face (the analytic bound has no decision riding on it; the Rust pins are the contract). File removed per noise-reduction.
 
+Outcome as headed; full text in git history.
+
 ## Issue 940 (2026-10-16 → closed 2026-10-16) — float reduction-order + tie-band determinism audit (handwired distill, Research 621): CLOSED — AUDIT + ALL 11 FIX UNITS LANDED, one working day, 13 commits. The law (AGENTS.md §"Determinism law"): an f32 reduction or pick whose result crosses the sync/quorum boundary (committed, exported, hashed, replay-compared) pins its reduction order and tie rule — the sequential fold (`dot_f32_ordered`, plain `+=`/`.sum()`, never a platform-lane SIMD kernel) and one fixed strict tie rule (first-index or documented last-index — never a tolerance band, never HashMap iteration order); anything else reclassified local-only with the decision at the site. T1 census: 24 committed-state reduction sites across 9 crates (headline: the certified `dot_f32_ordered` pattern existed in exactly ONE lane; every other committed lane used platform-lane kernels). Part C fix queue 11/11: ① MB-1/2 micro-belief bridge+attractor → ordered (`b66056fcc`); ② PE-1 personality drift → ordered, the synced BLAKE3 commitment's cross-node stability pinned (`bb0ffb339`); ③ MB-4 bom_arena RNG-seed dot → ordered (`bef1f0f2f`); ④ HL-1/2/3 + the missed fourth site — HLA committed-moments dots → ordered, G2 discharged FIRST (Bench 939, +36.7 ns = +0.8%/step) (`052f7e732`); ⑤ SE-2/3/4/7 sense SIMD names DELEGATE to the pinned scalar cores + two census-missed matrix paths pinned, the `simd_fused_sub_scale_inplace` per-cell hole recorded (`0419d5e52`); ⑥ SP-2/3 + CL-1/2/3 ordered folds + the census-missed procrustes residual arm + the KERNEL repair: `simd_fused_scale_acc{,_f16}` tails were two-op vs FMA bodies (unit-⑤ class, inverted; procrustes' KG-committed M flows through it) — four tails fixed to single-rounding `mul_add` at the root (`5b4f3fdf7`); ⑦ DE-2 canonical mass order: `boundary_flux_mass_indexed` CANONICAL, scan paths DIAGNOSTIC (1e-4 envelope, zero production consumers — pure documentation) (`fa45702f5`); ⑧ NaN-hardened calibration sorts → `total_cmp` (`4fde9c260`); ⑨ UNST ×4: all collection-order ties → lowest-key determinism (ruliology promoted_winner lower arm index — was a run-to-run random winner; best_elo/sorted_by_elo/sampler/trial_log lower id/arm) (`4e3ad9a84`); ⑩ TOL ×4: brevity band KEPT+documented (the module doc's false "never changes which answer wins" corrected; pins both sides), percepta hard-attention 1e-9 band → BIT-EQUALITY (matches hull + the law; ~4M-ulp leniency retired), tournament EPSILON band → exact equality (rates differ ≥ 1/total — the band only ever fired on ties), α-grid fallthrough documented+executable-pinned, interpolation declined (`4ac43fba7`); ⑪ 41 LAST-index pin comments across the 22 audit-named files + the `usize::MAX` sentinel guard in `complexity_prior::top_k` (all-`-inf` round → lowest unchosen index, never the sentinel) (`23a04077c`). ~25 load-bearing pins + 3 module-doc false-claim corrections + the per-platform craft-search technique (squares can't cancel — divergence found at the 2³⁰ ulp boundary, s = 32768). ⚠ One-time committed-bits changes recorded per unit (hla_moments h/n, attractor beliefs, bridge scalars, personality w + snapshot BLAKE3s, sense activations, procrustes/rewire/CLR/fused-scale-acc-tail lanes). Gated-posture discipline re-proven twice (spectral procrustes/rewire + induced_cwm_tournament — the default lib runs compile both to nothing). Known-remaining (recorded, not fixed): `simd_fused_sub_scale_inplace` scalar-vs-SIMD arm split (tolerance-domain callers only); the x86_64 execution matrix re-run over the new pins is the next quarterly hygiene pass. Durable record: [`.docs/10_audits/float_reduction_order_tie_band_determinism_audit.md`](.docs/10_audits/float_reduction_order_tie_band_determinism_audit.md) (§"The fix commits" carries every hash). File removed per noise-reduction.
+
+Outcome as headed; full text in git history.
 
 ## Issue 943 (2026-10-15 → closed 2026-10-16) — the issue-level claim lease: CLOSED — ALL FOUR DELIVERABLES LANDED. The convention: a session starting work on an `.issues/NNN_*.md`/`.plans/NNN_*.md` item appends `**Claimed:** <session>, <epoch>, expires <ISO-UTC>` under the Status line and pushes BEFORE implementing (48 h expiry; the mining-queue claim-marker shape extended to the surfaces concurrent sessions actually allocate against; re-claim after expiry is a normal re-read). The instrument `scripts/claim_lease_check.py` (`35ef26420`): cross-repo callable (`git fetch origin && py ../katgpt-rs/scripts/claim_lease_check.py --item <NNN> [--epoch N]`), never fetches (observers, not ref writers) — FETCH_HEAD age DISCLOSED every run so a stale fetch cannot read as a clean scan; scans `.issues/`+`.plans/`, prints every live/expired lease; target live-leased by a foreign epoch = a loud WARN, NEVER a block (the push stays the arbiter — the private-lane yield proved post-hoc arbitration correct); exit 0 clean/own-epoch/warned, exit 1 only when the instrument cannot read (malformed claim line, ambiguous multiple leases, unreadable dirs, self-test failure). Grammar: exact-shape, case-sensitive, colon required — the first cross-repo run caught the wrapped-prose false-positive class (`claimed. Reopen condition: …`, riir-refine .plans/019) and the defense is pinned as a self-test arm; template placeholders (`<...>`) ignored so a spec quoting the convention cannot red its own repo. `--prove-fires` replays the Issue-825 second-session posture over temp trees (no epoch → WARN; own epoch → clean; expired → clean re-claim posture; malformed → loud; FETCH_HEAD age resolves on a real fetched clone and only there). Wire: AGENTS.md beside the substrate-first gate (`35ef26420`) + the riir-refine loop skill (`101a6157`). Claim-first dogfooded on this very issue (`dd6f4e4d5`). Deferred v2 (semantic term-overlap search) stays deferred — unblocks ONLY on a genuinely semantic fixture (different numbers AND different vocabulary); building it speculatively is the §1.55 "validates-our-design" trap. File removed per noise-reduction.
 
+Outcome as headed; full text in git history.
+
 ## Issue 938 (2026-10-13 → closed 2026-10-13) — lattice_memory 3D axis remedy + measured-erosion capacity gate (the μLattice distill): CLOSED — T1 LANDED (gates PASS), T2 LANDED + RECORDED NEGATIVE at G2. T2.1/T2.2 (`f5e088925`): the lattice is const-generic over the axis count (`LshAxes<A>`/`LatticeConfigG<A>`/`LatticeMemoryG<A>`; `LatticeMemory`/`LatticeConfig` stay the A=2 aliases — bench 919 re-run DIGIT-IDENTICAL G1 0.9830@10⁶ + identical verdicts + N_max 63,336, the G3 no-regression evidence); `lattice_memory_3d` (opt-in, implies `lattice_memory`); the G6 pricing pinned BEFORE the build (76³ = 438,976 cells × 4096 B = 1.674 GiB at d_v=32, under the 2 GiB bar; d_v=64 the recorded boundary row); `capacity_per_cell_eroded` (defaults bit-for-bit `0.35·d_k`, asserted d_k 1..128) + `sized_eroded` (same-cell E[cos²] from the fit corpus, fit-time only) + `read_direct` (the exact positional-copy lane, T4). T2.3–T2.5 (Bench 938, release, PROVENANCE AC/load 2.49/high): at the cell 2D cannot size (10⁶/0.05σ, λ=2.28) — G1 recall 0.9345 PASS, G5 graded recovery 0.184 vs Engram 0.004 PASS (curve 0.934→0.917→0.766→0.186 through the support), G6 857 MB PASS, **G2 FAIL: 7379 ns vs PKM 5171 ns (0.70×)** — cause measured by the cell-matched tap arm (27 vs 9 taps = 2.90× kernel MACs, the predicted ≈3×); G4 0 allocs both arities. The negative is Bench 919 rider #4 — the envelope's SECOND measured remedy (widen d_k breaks key=embedding; widen AXES clears recall+memory, not latency); the 2-tap kernel (8 vs 27 taps) is the named re-open lever (T3.2, deferred). T1.3 (G1, `lattice_memory_gates::erosion_survival_brackets_the_predicted_curve`): random keys bracket the aggregate law (promise 0.723 ≥ 0.5 at λ=11); clustered keys (ê=0.184) SATURATE above it (0.30 vs predicted 0.131 at λ=11) and track the exact key-recursion algebra k_eff ← k_eff − (k_effᵀkw)kw ± 0.08 — the eroded surface is CONSERVATIVE for parallel keys (the safe direction); mLattice's 0.083 never adopted (hypothesis input in one unit-test arithmetic pin). Records: [`.benchmarks/938_lattice_3d_axis_goat.md`](.benchmarks/938_lattice_3d_axis_goat.md) + Bench 919 rider. File removed per noise-reduction.
+
+Outcome as headed; full text in git history.
 
 ## Issue 936 (2026-10-13 → closed 2026-10-13) — decode-scoped spin-barrier pool for the row-parallel matvecs: CLOSED — ALL TASKS DONE, PROMOTED BOTH LANES. T1–T3 (bb3b24f2e, 65574c5d9, 9c4f7f9dd): thread-local SpinPool (idle-spin ≤ 100 µs then condvar park), opt-in `decode_spin_pool`, bit-identical; promoted downstream into riir-infer `deltanet_ternary_inference` (27a4da7): Bonsai-2-27B CPU decode ~100 → ~72 ms/token on the M3. T3b: the 11-worker macOS default measured in-model (11 < 10 < 9 < 7 ms/tok, 4 interleaved rounds, 0 mismatches; katgpt-rs-21, issue 937 T4 closed c47a1dffd). T5 Metal hooked lane (riir-infer `decode_spin_pool_gpu_goat` bdc0dd0): G1 0/24 bit-identity, G2 no-harm median 0.994 (pool 218.3 vs rayon 220.0 ms/tok) — the idle window parks workers through the ~2 ms Metal dispatches exactly as designed; the hooked lane stays a fallback posture (CPU 72 ms/tok). T4 off-macOS PROMOTION (cbaeac926): the two prior sessions' 0.97–3.93× losses predated the idle window; the worktree-isolated re-measure on the 4090 i7-13700K (the box's main katgpt-core manifest was sibling-WIP-dirty — dual worktrees + repointed path deps, never touched the WIP) reads a WIN at every grid point WITH the idle window — 0.862 @ 23 / 0.851 @ 15 / 0.866 @ 11 / 0.902 @ 7 workers, G1 bit-identical ×4, flat plateau 23/15/11 → default-on off-macOS at ≥ 8 logical CPUs (n−1 workers; the boundary IS the measurement floor — smaller hosts unmeasured, keep rayon via the 0-worker refusal), confirmed env-free on the box (default 23 engaged, 0.870, G1 clean); `machine_default` test re-pins the contract; KATGPT_SPIN_POOL_WORKERS overrides everywhere. Files removed per noise-reduction.
 
+Outcome as headed; full text in git history.
+
 ## Issue 933 (2026-10-11 → closed 2026-10-13) — attn_res decode online-merge + the fixed-query modelless probe: CLOSED — T1 DECLINED on analysis (single-token decode has no reuseable online state — the (sublayer, summary) pair is used exactly once), T2/T3/T5 DONE (`12e031cff`, Bench 937: push-time Σv² cache + prepared score weight, bit-identical, live path 9–28% / prepared 21–31% faster at N=2/8/32) + **T4 GREEN-candidate** (the E5 probe, Research 619 MSAR): substrate `apply_attn_res_depth_profile` (`ca35f9ca9` — score[i] = −λ·age[i], a deterministic exponential-depth profile replacing the learned `score_weight`; gated by the EXISTING `transformer_attn_res`, no feature-count change; λ=∞ the disarmed byte-identity posture, pinned bitwise by test) + the riir-infer probe fork (`issue933_attn_res_probe`, `a9f5b0c`: the gemma-2 f16 forward re-forked at the three Kimi-semantics wiring points) + the frozen-read ppl A/B (riir-infer Bench 882, chat_probe 4096 tok paired): **λ=∞ bitwise-identical to stock (4096/4096 positions ΔNLL≡0); λ=4 Δppl −0.65% (BETTER than base); λ=3 −0.01%; λ=2 +21.6% (the cliff)** — the pre-registered |Δppl|≤1% bar met twice ⇒ the modelless fixed-query posture is VIABLE (opt-in, default-off); the improvement direction UNCONFIRMED (single corpus/offset; confirm reads recorded in the bench — second slice, λ∈[3.5,5] sweep, benchmark read; promotion owner-gated). Consumer honesty stands: the only `apply_attn_res` consumer is `src/kimi_k3/` (test-arch-only) — substrate hygiene throughout. File removed per noise-reduction.
-**T3 fallout closed 2026-10-15** (riir-train issue 630's arc): the residuals-privacy change compiled green at default features because every direct reader sits behind a non-default feature — the green-zero class — and broke the gated kimi_k3 consumers in THREE repos. Sixteen sites now read through `residuals()` (byte-identical): here `2de11d40a` (backward/checkpoint/delay/stale_residual) · riir-ai `7e7fb2e37` (kimi_k3_gpu_forward) · riir-train `5db202b2` (kimi_k3_cublas_forward). REAL latent bug found en route: `stale_residual.rs`'s clear+extend restore left the T2 `sum_sq` cache EMPTY, so `apply_attn_res`'s scores×residuals×sum_sq zip silently no-oped the whole attn-res mix after any speculative rewind; the new `AttnResBlockState::restore()` recomputes the cache via clear+push. Gates: 252 lib + checkpoint-equivalence 7/7 + grad-check 3/3 at `kimi_k3_backward,delay_arch,stale_residual`.
+
+T3 fallout closed 2026-10-15: residuals() reads fixed in 16 sites; here `2de11d40a`, riir-ai `7e7fb2e37`, riir-train `5db202b2`.
+Found latent stale_residual sum_sq cache bug that silently no-oped attn-res mix.
 
 ## Issue 935 (2026-10-13 → closed 2026-10-13) — the Q2_0_g128 ternary matvec is the whole Bonsai-2-27B CPU decode (compute-bound ~25×): CLOSED — ALL TASKS DONE. T1 chunk-cap 32 (0.67–0.72× wall, work-stealing over 12P+4E) + T1b real-model (`0c5ed0fe7`: tg 1.96/2.03→2.46/2.47 tok/s, pp +32%, 65/65 greedy identical) + T2 `ternary_group_q8_act` int8-activation SDOT kernel (~7 ops/16 weights, NEON bit-identical to the scalar integer reference) + T3 real-model GOAT (top-1 256/256 + 510/512, confident 165/165 + 348/348, NLL Δ −0.003/−0.019, wall 0.319/0.326×; PROMOTED in riir-infer — `deltanet_ternary_inference` implies `ternary_q8_act`; e2e tg 7.86 tok/s, Bench 877) + T4 AVX2 port `2522dc2a9` (`avx2_q8_row_range`, runtime-probed `is_avx2_fma_available`, psignb+pmaddubsw+pmaddwd, integer inner sum ⇒ bit-identical to the same scalar reference ⇒ the aarch64 real-model GOAT transfers to x86_64 exactly; Rosetta-verified 21/21 + `saturated_extremes` + mutation canary, clippy clean both triples) + T4b native 4090 wall (this close; synced via the `gitsync` schtask per the task's own instruction, after the Plan-620 session released the box): q8 = **0.266/0.324/0.255/0.336×** the shipped f32 kernel on the four Bonsai-2 decode shapes (462.6/580.3/440.4/232.8 µs vs 1745.0/1767.2/1708.3/691.3 µs; i7-13700K, 24 rayon threads, idle box — 0 compute procs, GPU 1%) — beats the Rosetta-translated 0.467–0.482× indication AND every f32 chunk arm (best 0.69–0.75×; q8 ≈ 0.38× of chunk-16 on the big shapes); the `twt_perf_tg_pp` e2e leg artifact-blocked on this box (`--collapsed` GGUFs + `audition_calib.txt` are M3-side, parser requires both — indicative only, no promotion rides on it). File removed per noise-reduction.
 
+Outcome as headed; full text in git history.
+
 ## Issue 934 (2026-10-13 → closed 2026-10-13) — divisive `evolve_belief` saturates ≥ 6/8 dims for per-tick never-reset hosts: CLOSED — verdict (c) RECORDED-INTENDED (bounded-episode kernel). Consumer census: every production host is bounded (riir-engine `sense/brain` `reconstruct` builds a fresh state per call; riir-games `multi_hypothesis` reloads per K-step branch) or already bypasses (riir-ai mmorpg `sync_relation_lane` feeds its channels directly — it had measured the same saturation independently); the three per-tick entry points (`sense_tick`, `observe_reconstruction`, `maybe_evolve_belief`) have no game-loop caller. Landed: the full caveat on `ReconstructionState::evolve_belief` (this repo, closing commit) + one-line pointers at the three entry points (riir-ai `d16c911a4`). T2 (a substrate evidence-retention knob) NOT built: zero consumers chose windowing. The probe (`56ad37c4c`) pins the premise. File removed per noise-reduction.
+
+Outcome as headed; full text in git history.
 
 ## Issue 932 (2026-10-12 → closed 2026-10-13) — belief-views multi-scale temporal retrieval (Research 619 MSAR time-depth transpose): CLOSED NEGATIVE at T3 — "single-stream belief stays". Probe `56ad37c4c` (real `route → accumulate → evolve_belief`, 16 seeds × 2000 ticks): the divisive kernel has NO self-dynamics (δ reads evidence only; interior map a pure translation, drift 1.6e-7) and cumulative evidence pins ≥ 6/8 dims at −1 for ANY stream (96.9% channel-ticks clamped, 96/128 channels constant) → views over a constant are dead (failure mode 2) and the clamp destroys only a zero-information signal; the additive kernel never clamps and is exactly invertible (b_{t-1} = (b_t − (1−α)d_t)/α) → nothing destroyed for retrieval to recover, and its multi-view analogue is a multi-α EMA bank (`temporal_deriv` already ships fast/slow). T2/T4–T7 not run (gated on T1+T3). The saturation itself was a new substrate finding → Issue 934 (consumer-side, riir-ai). File removed per noise-reduction.
 
+Outcome as headed; full text in git history.
+
 ## Issue 930 (2026-10-10 → closed 2026-10-12) — CMM sync-relation-surprise primitive (SyncBank, arXiv:2610.07907): CLOSED — PROMOTED TO DEFAULT. All measurable tasks landed: T1b accessor, T3 property tests, T4 G1a PASS, T5 G1b real-fixture PASS (δ_surprise 23/23 warm events at EVERY matched FP budget vs value-surprise 0/23; Wilson 95% intervals disjoint; McNemar 23-0-0; AUC 0.72 vs 0.55 — the pinning test re-measures per run), T6 G2 quiet-box (D=8 observe 54.8 ns, readouts 59.8 ns/pair, D=64 observe 2354.1 ns; load 2.15/16, AC), G4 zero-alloc, unarmed-per-instance path byte-identical (γ=0). Promotion = owner GO (do-as-suggest): katgpt-rs `605bc3d2b` (root+core default arrays, comments, README counts, catalog §147) + the riir-ai consumer half `9a1137859` (engine `sync_relation_gate` DEFAULT-ON per the 1049 Defense-3 shape; mmorpg forward + LTM stay opt-in; w_sync stays 0.0 — follow-ups filed at riir-ai Issue 1060). File removed per noise-reduction.
+
+Outcome as headed; full text in git history.
 
 ## Issue 931 (2026-10-12 → closed 2026-10-12) — the "symmetric_eig QL divergence" was two basis_split defects manufacturing ±inf into the eigensolve: CLOSED — root cause round 3: the ZCA whitener built the wrong matrix (scaled eigvecs ROWS; eigenvectors are COLUMNS — ≈Σ⁻¹ only on the diagonal sigmas every test used) and the whitened-moment product aliased (M' written into the buffer still read as T, compounding W row-on-row to f64 overflow ~row 41 at d=64). Fixed at `be9b2cbd2`: true W = V Λ⁻¹ᐟ²Vᵀ (column convention) + three-buffer M' product + 3 two-sided regression tests (WΣWᵀ=I on rotated graded σ; moment_scratch == naive W M Wᵀ; graded style-shard e2e d=64) + the g4 alloc canary serialized (latent parallel-test race on the shared allocator counter) + 3 mechanical lint fixes in the T1/T2 tests. GOAT re-run: G1 PASS, G2 2.081 ms (<10 ms; the corrected whitener costs ~8% over the defective 1.923), G4 PASS ×5, adversarial PASS. T3 ai-half: the basis_purity_audit re-run via the riir-ai Bench-980 lattice (ai `37b029ae7` / riir-ai Bench 980 Addendum 2) — affect A1-fear SURVIVES (0.295→0.264 identity mass; robust, not an artifact); style's FIRST complete run reads S1 0/77 (no block structure — ai-1056 finding). symmetric_eig itself was never defective — its round-2 guards caught the poison exactly as designed (file removed per noise-reduction).
 
+Outcome as headed; full text in git history.
+
 ## Issue 928 (2026-10-09 → closed 2026-10-09) — cross-repo drift-sweep debt: seal-std registration census + 4-wave repair: CLOSED — console/locale/instrument sweeps ALL GREEN family-wide (file removed per noise-reduction)
 
-The seal-std registration census (`c007cf543`) surfaced committed sibling drift
-across the contract set; four same-day waves closed it. W1 (katgpt-rs):
-instrument floors re-measured, the load-bearing green-zero test targets armed.
-W2 (4 quiet repos): riir-shader `1f2a195`, riir-refine `c126f441` (the CRLF lesson
-— EOL-preserving repairs), riir-train `45fc7799`, riir-reflex `00b4ee1` —
-80 consoles + 35 locale sites. W3 (seal-remake `b69ee61`): 10 CROSS citations
-qualified, hot-repo instrument rows re-pinned at stable HEADs (riir-ai's
-artifact_boundary.py = a real gate findable from NO root, wiring stays that
-repo's owners' call), len_derived stability pin class landed (`8bc96908c`,
-canaries 15/15). W4 (sessions ended): riir-ai `dc37d0693` + riir-rethink
-`25074d7` — the last 7 consoles + 6 locale sites. End state: console 252/252
-defended over 28 repos, locale 0/1345, instrument exit 0 — the drift family
-fully defended workspace-wide. Same session (wave 4 tail): the elementwise_cubecl
-shape-parameterization ROOT FIX landed (riir-infer `02e7a65` — sigmoid/silu bound
-by the EXPLICIT params[0]=n, the copy_f32_grid2d idiom, oversized-binding sentinel
-test; both stability rows retired at katgpt-rs `d956bf716`, canary 15/15), riding
-the repair of the vendored wgpu-hal metal adapter's u64/usize E0308 (which had
-broken every macOS cubecl_runtime build since 3564a72 — the metal arm never
-compiled on the author's CUDA lane). Successors: Issues 920/926/929 (quiet-box
-lanes).
+Census `c007cf543`; four waves closed family-wide: riir-shader `1f2a195`, riir-refine `c126f441`, riir-train `45fc7799`, riir-reflex `00b4ee1`, seal-remake `b69ee61`.
+80 consoles + 35 locale sites repaired.
 
 ## Issue 922 (2026-10-07 → closed 2026-10-07) — loop-straightness monitor family, the DEC-native stalemate signal (LiFT modelless residue): CLOSED — primitive half landed, GOAT ALL PASS (file removed per noise-reduction)
 
-Landed same-day: katgpt-dec `loop_straightness` (opt-in; katgpt-core + root
-forwards) — `path_action` (Σ‖Δ_k‖²/δ_k, chord², Σδ in one pass) +
-`action_efficiency` (η = chord²/(Σ·Σδ) ∈ (0,1]; 1 iff straight at constant
-grid-speed, 1−η the exact wasted-motion fraction). Signal-diff executed
-pre-implementation: all four named cousins are counters/entropy/classifiers,
-none geometric — recorded in the module doc + Bench 922. GOAT (Bench 922):
-G1 8 tests — the 500-walk nonuniform-grid floor sweep caught the landing's
-OWN formula bug (first cut multiplied by Σδ, η=1.38 > 1; uniform fixtures
-mask that class — recorded as the lesson); G2 38.7 ns @ K=8 dim=4, 26× under
-bar, K=64 dim=32 disclosed 1,137 ns / 29.4× scaling; G3 clippy both postures
-(denied `needless_range_loop` + `redundant_slicing` caught pre-landing);
-G4 0 allocs/1000. Row `katgpt-dec:257:loop_straightness`; counts 674→675;
-count_features green (675=675). Consumer half = riir-ai Issue 1037 (each
-row owes its own signal-diff); promotion waits on a production consumer.
+Landed katgpt-dec `loop_straightness` (path_action, action_efficiency eta); Bench 922 GOAT all pass.
+G2 38.7 ns @ K=8 dim=4; G1 sweep caught the landing's own formula bug.
 
 ## Issue 924 (2026-10-07 → closed 2026-10-07) — citation_weight's dialects are case-sensitive; lowercase `plan N` prose is invisible to duplicate adjudication: CLOSED — both instruments repaired, oracle confirmed (file removed per noise-reduction)
 
-Landed `b98c340dc`: `citation_re()` scopes `(?i:…)` over long-form prefixes
-(bare letters stay uppercase — lowercase `p<NNN>`/`b<NNN>` measured as
-identifier noise, 68/80 sites in riir-ai); measured counts recorded in the
-DIALECTS comment (seal-game-editor lowercase-DOMINANT: `plan` 1,119 vs 591,
-issue 719 vs 228; riir-ai 406/340; katgpt-rs 224/146). Family sweep:
-`issue_citation_gate.py` carried the same class — `_HEAD`/`_HEAD_1D`/`_TAIL_1D`
-+ the trail re-search got the same scoped `(?i:)`, `citations()` normalizes to
-the canonical KIND (scanned 475→476: the previously-invisible `issue 739` in
-AGENTS.md); `numbering_drift_sweep` (no dialect regex) and `citation_drift_sweep`
-(by-name stems) adjudicated NOT the class; 163 lowercase heads across sibling
-AGENTS/HISTORY docs reported, none gated (this gate scans its own repo's pinned
-docs). riir-kat HISTORY: three unpadded single-digit citations re-spelled
-`issue 003` (width-bound readability, that
-file's own zero-pad convention). Oracle re-run: sge 241 sites 4→15 (verdict
-WEAK → `241_glb_delivery_lane` +5 over 9 decided), 272 3→12; all 4 hand-read
-lowercase sites visible + attributable, PLUS ~10 `.rs`-comment sites the
-hand-read's `.md`-only pass missed (`tools/neuron-publish/src/*`, `regate.py`).
-Validation: citation_weight + gate selftests PASS, numbering_gate PASS,
-numbering_drift_sweep PASS, docs_gate 35/35 (86.3s wall).
+Fix `b98c340dc`: citation_re() scoped case-insensitive over long-form prefixes; issue_citation_gate got the same fix.
+Scanned 475 to 476 citations.
 
 ## Issue 923 (2026-10-07 → closed 2026-10-07) — escalation_guard, the shared serving-escalation guard primitive (riir-refine Plan 202 R1): CLOSED — all tasks landed, cross-recorded (file removed per noise-reduction)
 
-Landed `6118539c7`: katgpt-core `escalation_guard` (opt-in) — `RollingRateLatch`
-(both-bounds + cost-ceiling-only shapes, rate() None until full, sticky demotion,
-O(1) alloc-free observe), `demote_only_decode` + env helper, ns-parameterized
-receipt tiers (`ns="ESC"` reproduces rethink's bytes exactly),
-`rate_bounds_valid`. GOAT (Bench 923): G1 17 tests, G2 1.74 ns/observe
-(ceiling 20), G3 default surface unchanged (2141 default lib count), G4
-0 allocs/1000 observes. Test-gate row `katgpt-core:2158:escalation_guard`.
-Consumer halves cross-recorded in riir-refine Plan 202 R1 (refine manifest half
-+ instinct consumption `9e1fc37` — `EscalateSpec::validate` consumes the ONE
-`rate_bounds_valid` definition). The tpr/ugc private kill-switch copies STAY
-(default-on surfaces an opt-in feature cannot serve; truth tables cross-pinned
-both sides). Remaining follow-up lives in riir-refine Plan 202 R1's
-"Remaining" block: rethink's migration onto the shared latch via instinct's
-pub surface — deliberately its own unit.
+Landed `6118539c7`: katgpt-core `escalation_guard` (RollingRateLatch, demote_only_decode); Bench 923: 1.74 ns/observe, 0 allocs.
+Consumer halves in riir-refine Plan 202 R1.
 
 ## Issue 921 (2026-10-07 → closed 2026-10-07) — citation oracle two-lane self-reference blind spot: CLOSED — Arm B landed, corpus repaired, sweep green (file removed per noise-reduction)
 
-riir-infer's nine IN-LOCAL-RANGE rows were narrated-only local-lane numbers
-(004–009 never existed as files on any ref, either box). Owner verdict: Arm B
-(two-lane gap via `.highwater_local`) LANDED; Arm A (own-name heading variant)
-and Arm C (accept the red) REJECTED by verdict. Hash-pinned: corpus repair —
-`f0191e3` (qualify `riir-ai Issue 980`) + `71c8eed` (six self-allocation
-headings rewritten into the readable date-led grammar, AGENTS.md grammar rule
-pinned) in riir-infer; Arm B `3249672d1` here (`citation_drift_sweep.py`
-two-lane gap boundary + two-sided `--prove-fires`; ILR 9→0, novel 3→0,
-`max_in_local_range: 0` pin holds; gap rows carry a `[two-lane gap …]` note;
-`.highwater_local` rides both advisory patterns). Normative design lives in
-AGENTS.md (§the heading oracle / the two-lane gap). The two ghost proposal
-citations (numbers 17 and 13 — rows in riir-dapps / riir-instinct docs naming
-proposals owned elsewhere; full rows in this file's git-recovered 921 record)
-remain owner-gated.
+Arm B landed `3249672d1` (two-lane gap via .highwater_local); riir-infer corpus repair `f0191e3` + `71c8eed`.
+IN-LOCAL-RANGE 9 to 0.
 
 ## Issue 919 (2026-10-06 → closed 2026-10-07) — spike census + delimiter-sink PoC: CLOSED — census channel key REFUTED; measured-diagonal KV exemption + delimiter folding both NO-GO (file removed per noise-reduction)
 
-Filed from Research 605 (arXiv:2603.05498). Nothing promoted; three
-hash-pinned verdicts:
-
-- **T1 census** (`ff2f40e64`): weight-derived FFN spike census over four
-  packs — Bonsai-8B matches_table1_shape, gemma-2-2b weak (sandwich+QKNorm
-  suppression confirmed on an untested model); self-test caught the asentmax
-  f16 subnormal off-by-one. Sidecars + blake3 pins:
-  `tests/fixtures/spike_census/`.
-- **T2 channel screen REFUTED** (`eccb13b9c`): census top-K vs measured
-  channel maxima P@4 = 0 on both cells — the stat screens big weight-rows,
-  not activation-carrying channels; block-level Spearman +0.48 survives.
-- **T3 measured-diagonal KV exemption NO-GO** (cell 1 `0952590e1` /
-  riir-infer `47efae7`; decisive cell 2 `3c7fe7709` / riir-infer `9ebf3e2` +
-  `d91971b`): gemma G-MAIN PASS but thin (+0.0008 ppl vs seeded-random
-  equal-budget); Bonsai-27B G-MAIN NEGATIVE, G-487 Δ −0.0011 — **QK-norm
-  squashes per-channel scale upstream of the cache, so the 487 Q8KV-gap
-  premise does not apply on QK-normed archs.** Same lane fixed the
-  riir-infer `QuantizedKvMirror` multi-layer refresh bug the G0 control
-  exposed (`47efae7`; Issue-013 absolute-PPL caveat recorded).
-- **T4 delimiter-sink constancy NEGATIVE** (`3b800c932` / riir-infer
-  `b473196`): pre-RoPE K is context-dominated, not constant — pooled cos
-  0.80–0.89, worst per-cell median 0.37–0.50 vs the pre-registered 0.99
-  bar; V worse everywhere. Conditional T5 never opened.
-- **T6** satisfied as a pointer: the census artifact stays supplied to
-  riir-train Issue 614 T4 (the merge-drift consumer). The FFN-side surface
-  (down_proj inputs, the 140–581× class) is deliberately UNFILED — backlog
-  only, if ever re-opened.
+Three verdicts, nothing promoted: T1 census `ff2f40e64`, T2 channel screen REFUTED `eccb13b9c` (P@4 = 0), T3 KV exemption NO-GO `0952590e1`.
+Delimiter folding also NO-GO.
 
 ## Issue 906 (2026-10-05) — owner-gate pickup CLOSED: E12 Gemma base-model check RETIRED (option b); E13 rust-version pin scoped to publish=false only (file removed per noise-reduction)
 
-Claude verdict ruled every row. E13: `rust-version.workspace` removed from the 8
-crates.io-shipping manifests (landing `880619731` had over-scoped), kept on the 25
-`publish = false` packages; E12 retired on its standing negative (12/12 harmful
-recirc cells; record `.plans/613_e12_gemma_base_model_options.md`).
+E13: rust-version removed from 8 crates.io manifests (landing `880619731` over-scoped), kept on 25 publish=false.
+E12 retired on standing negative (12/12 harmful recirc cells).
 
 ## Issue 918 (2026-10-05) — posterior (truncated-Gumbel) inverse sampler, max-first: CLOSED (file removed per noise-reduction)
 
-`keyed_posterior_gumbel_noise` (default-on `ac_prefix`, Plan-614 substrate, commit
-`9ad5e21ce`-era lane) — exact posterior noise given a realized pick; Bench 918 ALL
-GATES PASS (G1 argmax identity + KS joint law 0.0078–0.0135 while the biased
-construction fails; G2 2.08×; G4 0 allocs). Consumer: riir-train Plan 437 GSF
-training coupling.
+`keyed_posterior_gumbel_noise` in default-on ac_prefix, `9ad5e21ce`-era lane; Bench 918 all gates pass (G2 2.08x, 0 allocs).
+Consumer: riir-train Plan 437.
 
 ## Issue 916 (2026-10-03 → closed 2026-10-03) — two_fidelity_bai G2 cost debt: CLOSED — δ-correct baseline (a) + lazy-discharge resolver (b) (file removed per noise-reduction)
 
-(a) baseline rebuilt as the LUCB-MCTS/UGapE class (`3aa27c149`, cap `321a4a7c6`) —
-GOAT PASS (Bench 615); (b) the ~10–50× cost attributed structurally (trace
-`a3b3d435c`), resolved by opt-in `SearchConfig::lazy_discharge` (`ca9fb1617`,
-ported from the authors' `twoffs.py`) — 236–1117× below v1, knob off
-bit-identically.
+(a) LUCB-MCTS/UGapE baseline `3aa27c149`, Bench 615 GOAT PASS; (b) opt-in `lazy_discharge` `ca9fb1617`, 236-1117x below v1.
 
 ## Issue 915 (2026-10-02 → closed 2026-10-03) — two_fidelity_bai certified-interval invalidity: CLOSED — root cause was the BENCH FIXTURE, not the module (file removed per noise-reduction)
 
-The fixture's slow oracle violated its own `MinimaxSpace` contract (`mu` filled only
-at leaves); the module's containment induction was sound. Fix: `slow_sample` draws
-around `vstar[node]` + a FIXTURE-honesty gate arm; re-arm 8/8 certified, 0
-guard-fires; the next finding filed as Issue 916.
+Root cause was the bench fixture's slow oracle violating MinimaxSpace; fixed, re-arm 8/8 certified.
+Next finding filed as Issue 916.
 
 ## Issue 914 (2026-10-01 → closed 2026-10-02) — Pseudo-head mixing runtime (IHA distill, Research 600): CLOSED NEGATIVE before any implementation (file removed per noise-reduction)
 
-Blocked-on riir-train Issue 606 evidence, which killed it: Bench 621 (`e6b94720`)
-arm 5 catastrophic on both tasks (ternary residual == the token-only-majority bound
-exactly); no trained-with-mixing consumer exists ⇒ the pre-registered close clause
-fired. Arm 4 stays a training-side question.
+Killed by riir-train Issue 606 evidence: Bench 621 (`e6b94720`) arm 5 catastrophic on both tasks.
+No trained-with-mixing consumer exists.
 
 ## Issue 913 (2026-10-01) — Grouped-evidence noise-weighting primitives (riir-train Research 463, EasyPPO modelless half): CLOSED (T1–T4 landed opt-in; file removed per noise-reduction)
 
-Four primitives in `crates/katgpt-core/src/grouped_evidence.rs` behind
-`grouped_evidence_weighting` (`9ad5e21ce`, Bench 905); T3 shipped as a ranking score
-(coverage 0.883 at nominal 0.95 — no UQ claim, the conformal floor binds any
-consumer that claims coverage). Consumer: riir-clippy Issue 139 (`e5b4d56d`); kill
-clock 2026-10-31.
+Four primitives in `grouped_evidence.rs` behind `grouped_evidence_weighting`, `9ad5e21ce`, Bench 905; T3 coverage 0.883 at nominal 0.95.
+Consumer riir-clippy Issue 139 (`e5b4d56d`).
 
 ## Issue 912 (2026-10-01) — Dirichlet-distribution primitives: sampler repair + exact explore-dial sampling + Dirichlet-EMA (Research 596): CLOSED (T1–T5 landed opt-in; file removed per noise-reduction)
 
-T1 `7745cfb9c` repaired `sample_dirichlet_into` to honor α (α=1 path kept verbatim);
-T2–T5 `9b98ee3dc` (Bench 904) `dirichlet_dist.rs`: `sample_conc_into`, log-space
-`thinning_into` (G2 183 ns @ N=8), `DirichletEma` with the drawn-variance correction
-`C = ε(1−β^M)`. Feature `dirichlet_dist`, no coverage claim.
+T1 `7745cfb9c` sampler repair; T2-T5 `9b98ee3dc` (Bench 904) dirichlet_dist.rs, thinning 183 ns @ N=8, DirichletEma.
 
 ## Plan 612 (2026-09-30) — PISA pyramid Top-K + LSE block selection: CLOSED with a G2 iso-quality NEGATIVE (latency slope CONFIRMED; two Phase-1 defects caught by the gate's pins, fixed with regressions)
 
-The gate caught two real Phase-1 defects BEFORE any number was quoted. Bench 612 on
-real qwen38 FA captures: pyramid_lse −0.133 Recall@8 at L ≥ 32K vs exact-LSE —
-`pyramid_topk` STAYS OPT-IN; aggregate latency slope 1.07 vs 1.99 confirmed;
-riir-train Issue 586 + riir-ai Issue 1017 consume the harness/ladder.
+Bench 612: pyramid_lse -0.133 Recall@8 at L>=32K, pyramid_topk stays opt-in; latency slope 1.07 vs 1.99.
+Gate caught two Phase-1 defects before any number was quoted.
 
 ## Issue 898 (2026-09-30) — KL effective depth exit calibration for the looped runtime: CLOSED (instrument landed, G1 PASS on all three fixtures; NO Config default justified — calibrated exits are checkpoint-dependent; the contingent BO arm deferred with its unblock recorded here)
 
-`katgpt_core::loop_depth_probe` (`aa3a7d382`, Bench 899) — G1 holdout PASS; the
-hand-tuned defaults STAND (calibrated exits are checkpoint-dependent); en-route
-fixed a latent Issue-717 `LoopDeepStats::clear()` defect (twin filed Issue 900). BO
-arm blocked on a BO-trained checkpoint (riir-train `.plans/421` Phase 4, `9560ce0a3`).
+`loop_depth_probe` `aa3a7d382` (Bench 899), G1 holdout PASS; hand-tuned defaults stand.
+BO arm blocked on riir-train `.plans/421` Phase 4 (`9560ce0a3`).
 
 ## Issue 911 (2026-09-30) — ties stopped at their source: the resolution-aware `w` floor + the zero-tolerance AUC guard: CLOSED (verdict round 2; the SE tolerance retired, the "preserved by construction" docs made f32-honest; companion reflex promotion landed in the same arc)
 
-`resolution_w_floor` (2-ulp floor; clamped candidates re-solve intercepts before the
-loss-argmin) + a zero-tolerance AUC guard; near-constant fits keep every distinct
-score at measured ≤ ~1e-5 clamp cost. Companion: reflex `--gate-fit-calibrated`
-PROMOTED default (closes reflex Issue 056).
+`resolution_w_floor` (2-ulp) + zero-tolerance AUC guard; clamp cost <= ~1e-5.
+reflex `--gate-fit-calibrated` promoted default.
 
 ## Issue 910 (2026-09-30) — the Platt solver needs Lin–Lin–Weng, not a candidate fallback as the primary repair: CLOSED (LLW solve + the AUC ranking guard; the round-1 review's reference optima reproduced EXACTLY; held-out floors + a 48-cell property sweep pin the behavior)
 
-`solve_smoothed_mle` is the LLW form (base-rate init + Armijo backtracking); the f64
-reference reproduces the production optima EXACTLY (banking77 8.6736/71.5657 etc.).
-Benches 807 4/4 + 808 GOAT PASS; `COMMITMENT_VERSION` 1→2.
+`solve_smoothed_mle` is LLW form (Armijo backtracking); f64 reference reproduces production optima exactly.
+Benches 807 4/4 + 808 GOAT PASS; COMMITMENT_VERSION 1 to 2.
 
 ## Issue 909 (2026-09-30) — `sigmoid_calibration` narrow-window degenerate stall + f32 tie-collapse: CLOSED (three-candidate loss-argmin fallback + output-side saturation guard; the audit refuted the early-break theory; reflex Issue 056's AUC regression confirmed fixed end-to-end)
 
-Fixtures are the real production windows (`RIIR_DEBUG_CAL_WINDOW`); the recorded
-early-break theory overstated (corrected by Issue 910: root cause is Platt's
-undamped full Newton step from identity). Repair: three-candidate loss-argmin +
-`window_keeps_resolution` guard; Bench 808 re-run PASS.
+Three-candidate loss-argmin + `window_keeps_resolution` guard; Bench 808 re-run PASS.
+Early-break theory corrected by Issue 910.
 
 ## Issue 908 (2026-09-29) — Plan 612 T2.1 FA-layer Q/K capture lane: CLOSED (qwen3.8-27B captured at all four lengths; Bonsai PRIMARY a documented loader blocker; riir-infer `6cb354d`+`836d28e`)
 
-The `qwen38_pyramid_capture` bin + Q-tap/K-download seams (riir-infer-gpu); 50
-committed fixture bins + `manifest.json` in
-`crates/katgpt-attn/tests/fixtures/pyramid_612/` (~65 MB). Bonsai blocked:
-`load_weights_gpu` refuses Q2_0 (`expected Q4_K/Q6_K`) — the error is the record.
+Qwen3.8-27B Q/K captured at four lengths; 50 fixture bins (~65 MB) in pyramid_612; riir-infer `6cb354d` + `836d28e`.
+Bonsai blocked: load_weights_gpu refuses Q2_0.
 
 ## Issue 907 (2026-09-29) — KVarN V-row bit arms are not a pure bit ladder on real rows: CLOSED (cache-level reproduction + crossed-config attribution on REAL captured rows — the 3-bit var-norm arm is the defect site; consumer non-interpolation rule in kvarn docs; commit `2c93727be`)
 
-Bench 903: the b2 < b4 < b3 inversion reproduces at cache level on real rows
-(riir-infer `vrow_capture`); crossed-config sweep attributes by ELIMINATION — the
-3-bit var-norm arm is the defect site. Rule landed in kvarn docs: never interpolate
-V-row quality across KVarN bit arms.
+Commit `2c93727be`; Bench 903: b2<b4<b3 inversion reproduces on real rows, 3-bit var-norm arm is the defect site.
+Rule: never interpolate V-row quality across KVarN bit arms.
 
 ## Issue 904 (2026-09-28) — `fit_woodbury` f32 sample-Gram Cholesky panic bypassed `tick_karc`'s warn-and-keep: CLOSED (fit paths degrade to `FitError::Singular`; commit `b8913aaa5`)
 
-`try_cholesky_f32`/`try_ridge_solve_woodbury_f32` return `Result` (the error carries
-pivot + tol); `fit_woodbury` maps to the append-only `FitError::Singular = 2` and
-commits `Wout` only on success. Found by the riir-ai Proposal 048 T8 GOAT's first
-run; panicking forms stay for callers that want the assert.
+Commit `b8913aaa5`: try_cholesky_f32 / try_ridge_solve_woodbury_f32 return Result; fit_woodbury maps to FitError::Singular = 2.
+Found by riir-ai Proposal 048 T8 GOAT.
 
 ## Issue 903 (2026-09-27) — `row_logit_floor` promotion lane — all four boxes PASS (Bench 902); the model-bound G1 was closed by riir-infer Bench 003; the `ForwardContext.logit_floor` default flip stays the owner act: CLOSED (staged, not deferred; commits `fdca94d7a` + `93740fe21`)
 
-riir-infer Bench 003 closed the model-bound G1 (6-bit the admissibility floor; the
-sink exemption is LOAD-BEARING — a ppl-only gate would have promoted the defect);
-katgpt-rs Bench 902 per-family walk + full-forward G2 A/B pass, 8-bit the width of
-record. The default flip is a TWO-PART owner act (first riir-infer default feature +
-the cfg field), staged with its verdict.
+Commits `fdca94d7a` + `93740fe21`; Bench 902 all four boxes PASS, model-bound G1 closed by riir-infer Bench 003.
+Default flip stays a two-part owner act.
 
 ## Issue 902 (2026-09-26) — md-only contract repos can never pass `len_derived`/`shared_temp_path` (the delegated `.rs` floor demanded non-zero): CLOSED (measured zero-row acceptance; commit `26ba6afdd`)
 
-Shared predicate `sweep_population.zero_walk_floor_accepted`: the zero delegated row
-is accepted only while `tracked_walk` measures ZERO tracked `.rs` — re-measured
-every run, the acceptance PRINTED. The measurement caught riir-reflexer's stale
-md-only premise (16 tracked `.rs`) and re-addressed 4 gemv EYES rows to riir-infer.
+Commit `26ba6afdd`: `sweep_population.zero_walk_floor_accepted` accepts a zero row only while tracked_walk measures zero .rs.
+Caught riir-reflexer's stale md-only premise.
 
 ## Issue 900 (2026-09-26) — issue-717 damping G4 failed at the wider feature combo: the gain_cost_halt probe buffers allocated unconditionally per call: CLOSED (lazy-sized; the measured region is combo-stable; commit `e272057be`)
 
-Two step-direction scratch `Vec`s were sized whenever `gain_cost_halt` was COMPILED
-even with a `None` halter (16 allocs / 1024 B over 8 runs, byte-for-byte); now sized
-iff the halter can run. Static sibling hunt over a 6-line cfg-attr × allocating-`let`
-window found ZERO second instances.
+Commit `e272057be`: probe scratch Vecs now lazily sized (was 16 allocs / 1024 B over 8 runs).
+Static sibling hunt found zero second instances.
 
 ## Issue 899 (2026-09-26) — second-moment, null-normalized drift alignment (the Plan 610 redesign): CLOSED (negative on 2 of 6 bars; became the default summary inside opt-in `arm_drift_alignment`; no promotion)
 
-`SecondMomentDrift` (`3485ec59e`, Bench 901) is the only summary loop-sound in both
-directions, so it is the feature's default; held-out 0.766 FAIL + G4 2.07× FAIL
-recorded. New mandatory bar for curiosity-class primitives: loop soundness in BOTH
-reward directions (necessary, not sufficient).
+`SecondMomentDrift` `3485ec59e`, Bench 901 is the default summary in opt-in `arm_drift_alignment`; held-out 0.766 FAIL, G4 2.07x FAIL.
+New bar: loop soundness in both reward directions.
 
 ## Issue 895 (2026-09-25) — guided width rollouts on the belief host (GRAM re-distill, Research 590): CLOSED (T1–T7 + T9 landed opt-in; G1 FAILED, demote TRIGGERED, no promotion; T8 handed to riir-ai Issue 1008)
 
-`guided_width_rollouts` + `guided_width_hodge` (`a4421939f`/`ae7b13320`, Bench 898):
-width beats depth on MULTI (+0.117 ± 0.049) but loses on SINGLE (−0.188 ± 0.036) —
-G1 FAILED, guided table off-by-default forever. Pass arms: E9 MULTI coverage 0.59 →
-3.32, G2 14.9 µs/decision, G4 0.
+`a4421939f`/`ae7b13320`, Bench 898: MULTI +0.117, SINGLE -0.188, G1 FAILED, guided table off forever.
+G2 14.9 us/decision; T8 to riir-ai Issue 1008.
 
 ## Issue 897 (2026-09-25) — katgpt-kv's KVarN `static_cal_tables` branches were gated on an undeclared feature and named a missing module: CLOSED (deleted, not wired; `unexpected_cfgs` allow removed; a second instance, `memory_soup_dtree`, restored)
 
-Dead since the Issue-015 extraction (`b61a34f7b`) — ~3 months of "static cal replaces
-Sinkhorn" described uncompiled code; quality fails anyway (static ≡ plain RTN, max
-|Δ| 1.2e-4; latency 0.034× Sinkhorn). Removing `#![allow(unexpected_cfgs)]`
-(`f3e3a4f56`) surfaced `memory_soup_dtree` — restored as opt-in.
+Deleted dead static_cal_tables branches (dead since Issue-015 extraction `b61a34f7b`); `f3e3a4f56` removed unexpected_cfgs allow.
+Surfaced `memory_soup_dtree`, restored opt-in.
 
 ## Issue 896 (2026-09-25) — KVarN's raw tile buffer was shared across layers, and the in-progress tile dequantized to zeros (2-bit keys panicked): CLOSED (fixed under `kvarn`; layer-major bit-identical; no consumer's published quality figure carried it)
 
-One raw tile per layer (`62fd22b5f`, ~1 → ~27 MB); layer-major oracle 960 cases /
-10,427,200 elements / 0 differing bits; 240 decode-order cases bit-exact;
-revert-probed. Perf: Bench 894 GOAT + bench_895 unchanged.
+Fix `62fd22b5f`: one raw tile per layer (~1 to ~27 MB); layer-major oracle 960 cases / 10,427,200 elements, 0 differing bits.
+Bench 894 GOAT unchanged.
 
 ## Issue 883 (2026-09-25) — fitted token-value tables (K=V+ retrofit, mean-removed V quant, V-cache halving): CLOSED (P0–P4 landed opt-in; two primitive-level G2 bars FAILED and are recorded; the model-bound half is riir-infer Issue 013)
 
-P0–P3 (`0b768e95d`, Bench 895). Promotion 2026-10-05: HOLD then re-fire the SAME
-DAY — PROMOTED TO DEFAULT via the fused deferred-restore kernel + bitwise (sin,cos)
-table (riir-infer `fe75497`, Bench 017: 1.050×/1.123× @4097 under the ≤ 1.20 bar);
-the losers (P1 mean-removal, P2 K=V+) demoted on the Bench 011/012 negatives.
+P0-P3 `0b768e95d`, Bench 895; promoted default 2026-10-05 via riir-infer `fe75497` (Bench 017: 1.050x/1.123x @4097).
+P1 and P2 demoted on Bench 011/012 negatives.
 
 ## Issue 894 (2026-09-25) — KVarN dequant loops were scalar (bounds-checked indexing); rewritten as bit-identical zips: CLOSED (GOAT PASS, ships under `kvarn`)
 
-`bf7d37244` — zip/as_chunks strided iterators, per-element ops and order unchanged;
-bit-identity 960 cases / 10,407,928 elements / 0 differing bits (revert-probed).
-G2: value 4-bit 2.46× faster (bar ≤ 0.90); 883 P1 G2 FAIL recorded (+13%).
+`bf7d37244`: bit-identical zip/as_chunks rewrite, 960 cases / 10,407,928 elements, 0 differing bits.
+G2 value 4-bit 2.46x faster; 883 P1 G2 +13% FAIL recorded.
 
 ## Issue 882 (2026-09-25) — differential anchor scoring (common-mode rejection on score surfaces we own): CLOSED (P0–P4 landed, all opt-in; promotion owed to consumers)
 
-P0 `differential_anchor` (Bench 886, λ*=0.55; law: hubness = top-1 WIN-COUNT
-distribution), P1 `attention_snr`, P2 `row_logit_floor` (→ riir-infer Issue 011),
-P3 `differential_kv_eviction` (Bench 894; the model-bound half closed SPLIT in
-riir-infer Issues 012 — the λ axis is synthetic-regime-bound; λ=0 max-recent is the
-real-text policy), P4 riders (Bench 897).
+P0 `differential_anchor` (Bench 886, lambda*=0.55), P1 attention_snr, P2 row_logit_floor, P3 differential_kv_eviction (Bench 894), P4 riders (Bench 897).
+Model-bound halves in riir-infer Issues 011/012.
 
 ## Issue 886 (2026-09-25) — activation-diagonal weight-quant fitting (AWQ/imatrix-class substrate): CLOSED (P0 + P1 landed opt-in incl. the model-bound half; P2 deferred)
 
-P0 `act_channel_moments` (`0fb2254d9`, Bench 896) + P1 `act_aware_fit`; the
-model-bound half (riir-infer Issue 014, Bench 007): born-ternary clean negative (the
-shipped amax payload IS the fit family's fixed point), dense-parent lane TRANSFERS
-(−34.6%). P2 (AWQ α-rescale) deferred, reopen on a PTQ-of-dense consumer.
+P0 `0fb2254d9` (Bench 896) + P1 act_aware_fit; riir-infer Issue 014 / Bench 007: born-ternary negative, dense-parent -34.6%.
+P2 deferred to a PTQ-of-dense consumer.
 
 ## Issue 887 (2026-09-25) — `ladder_gate` streak-gated advancement + corrective backtracking FSM: CLOSED (GOAT PASS, stays opt-in)
 
-`ba7fb89ba` (Research 589 / arXiv:2609.19717 ATC): advance after m consecutive evals
-≥ τ, retreat to the SHALLOWEST failing stage, fail closed; Bench 891 G1 17/17, G2
-0.8–1.2 ns/eval, G4 0. No production consumer (opt-in).
+`ba7fb89ba` (Research 589, arXiv:2609.19717): streak-gated advance, shallowest-failure retreat; Bench 891 G1 17/17, 0.8-1.2 ns/eval, G4 0.
+No production consumer.
 
 ## Issue 885 (2026-09-25) — `laya-tetris-v3` real-hard-drop lane (Issue 884 path B): CLOSED (every lane landed and deployed)
 
-`1a05a9764` DropRule v2/v3 + enumerator; v3 fixture blake3 `12035ebf…` (oracle re-run
-on 3 changed states only); reflex `ca1483c`+`a56d850` serve v3; reflex-site
-`6116e70`+`2e99eca` deployed (parity 809/809; wasm sha256-identical to `b935412`).
+`1a05a9764` DropRule v2/v3; reflex `ca1483c`+`a56d850`; reflex-site `6116e70`+`2e99eca` deployed, parity 809/809.
 
 ## Issue 878 (2026-09-24) — tetris_sim fidelity boundary: RECORD RELOCATED (2026-09-25)
 
-The standing rule (never swap in a guideline Tetris engine; new fidelity = NEW lane
-with its own fixture and head) lives at
-`.docs/06_game_arenas/tetris_sim_fidelity_boundary.md`; sim path updated to
-`crates/katgpt-tetris/src/sim.rs`.
+Rule (never swap in a guideline Tetris engine; new fidelity = new lane) now at `.docs/06_game_arenas/tetris_sim_fidelity_boundary.md`.
 
 ## Issue 873 (2026-09-22) — governed paged-pool primitives from mini-AGI: CLOSED (all three landed, opt-in; consumer work handed off)
 
-Research 581 (volotat/mini-AGI @ `96784b7`): `pool_admission` `eabd0cb80` (Bench
-873), `rate_control` `ee01f1598` (Bench 875), `dying` `650faeac7` (Bench 874) — all
-GOAT, opt-in. Consumer A/B handed to riir-train Plan 416 (`e2721e83`).
+Research 581: `pool_admission` `eabd0cb80` (Bench 873), `rate_control` `ee01f1598` (Bench 875), `dying` `650faeac7` (Bench 874); all GOAT opt-in.
+Consumer A/B to riir-train Plan 416.
 
 ## Issue 884 (2026-09-25) — tetris_sim `hard_drop` tunnels through roofs: CLOSED (fix path A, site-side; corpus untouched)
 
-Real defect: hard_drop rests at the DEEPEST collision-free row, tunnelling under
-overhangs (3 of 2660 options). Claude verdict: path A — live-play filter
-top-unreachable spots (reflex-site `c1fcf88`, deployed `31744b04`); sim + fixture
-unchanged; the pinned count-3 test is the drop-the-filter signal.
+Path A: live-play filter in reflex-site `c1fcf88` (deployed `31744b04`); hard_drop tunnels 3 of 2660 options; sim and fixture unchanged.
 
 ## Issue 880 (2026-09-24) — calibrated-mass router gate, `exact_mass_admit` consumer lane (a): CLOSED (shipped opt-in, G2 FAIL by construction)
 
-`gate_sigmoid_topk_mass_into` (opt-in `calibrated_mass_gate`, Bench 885): |Σm−k| ≤
-9e-7; G2 FAILS BY CONSTRUCTION — the ≤1.05× bar was inherited from a comparison of
-ALTERNATIVES, and the upgrade composes them. Lesson: a ratio between two operators
-does not transfer to one built from both.
+`gate_sigmoid_topk_mass_into` (opt-in `calibrated_mass_gate`, Bench 885): |sum m - k| <= 9e-7; G2 fails by construction.
+Lesson: a ratio between alternatives does not transfer to their composition.
 
 ## Issue 881 (2026-09-24) — the numbering sweep's standing backlog, three repos over their ratchets: CLOSED
 
-T1 riir-ai: 17 of 17 new resets were walker PHANTOMS (`216defb9b` — `git cat-file
---batch` framed by LINE; parser now reads by byte size). T2 riir-shader: five
-collisions were renames `-M` cannot pair (`3141a0467`; `collapse_renames` +
-`--full-history`). T3 mmorpg-editor: one real reset; pin 5 → 6.
+T1 riir-ai: 17 walker phantoms (`216defb9b`); T2 riir-shader renames (`3141a0467`); T3 mmorpg-editor one real reset, pin 5 to 6.
 
 ## 2026-09-23 — the owner-gates menu v2 executed: schedules re-armed (row 5), pipefail residue closed (4e), toolchain batch-pin (4f), and the opt-in verdicts recorded (4a/4b/4c/4d)
 
-Schedules RE-ARMED (`test.yml`, `full_gate.yml`, `feature_isolation_weekly.yml`);
-pipefail residue closed (last site riir-neuron-db `c5c11b5a273e`); toolchain
-batch-pin in 5 repos (`8c7755b3fdbb`, `c47227e06fcb`, `d0c917f1eb60`,
-`ee8b6c2bee6c`, `d54fbe8ebf32`); verdicts: `certified_frontier` promote-with-consumer,
-`gw_alignment` NO, `hint_regret` opt-in; the alias codec retired
-`DOCS_GATE_KNOWN_EXTRA` (local `scripts/repo_alias.local.txt` carries the 3 rows).
+Schedules re-armed; pipefail residue closed (riir-neuron-db `c5c11b5a273e`); toolchain batch-pin in 5 repos (`8c7755b3fdbb`, `c47227e06fcb`, `d0c917f1eb60`, `ee8b6c2bee6c`, `d54fbe8ebf32`).
+Verdicts: certified_frontier promote-with-consumer, gw_alignment NO, hint_regret opt-in.
 
 ## 2026-09-23 — Issue 877 CLOSED (merge `b701cf564`): the main↔develop sync — origin/main merged into develop with `-s ours`, zero content delta, ancestry restored
 
-Main's three commits were transplants of develop work (`git merge-tree`: every main
-hunk existed on develop, evolved); `-s ours` restored ancestry, pushed `--atomic
-origin develop HEAD:main`. Lessons: merge-tree hashes are spelling-bound (quote the
-FILE SET); a pin measured before the commit carrying it is stale (`HEAD^{tree} ==
-HEAD^1^{tree}`).
+Merge `b701cf564` (-s ours), zero content delta, pushed atomically to main.
+Lesson: merge-tree hashes are spelling-bound; quote the file set.
 
 ## 2026-09-23 — Issue 867 CLOSED (+ the issue): the non-hidden-state canonical-AST construction — G5 returned NO attributable signal; instrument-broken, not claim-refuted
 
-T1 `65b199b0` + T2 `67884461` in `katgpt-canon`; G5 (riir-train Bench 605) PRIMARY
-+0.50..0.55 but the fit-time shuffle null alone gives +0.41..0.44 — no attributable
-rung. Control failing = instrument broken, never claim closed (the Issue-825
-clause); reopen paths in riir-train Bench 605 §Verdict(6).
+T1 `65b199b0` + T2 `67884461` in katgpt-canon; G5 (riir-train Bench 605) PRIMARY +0.50..0.55 but shuffle null alone +0.41..0.44.
+Instrument broken, not claim refuted.
 
 ## 2026-09-23 — Issue 875 T3 CLOSED (+ the issue): time-annealed sampling ranges + the closed-form truncation predicate (Bench 883)
 
-`TimeAnnealRange` + the truncation predicate (`ε = ((T−t_cut)/(T−t_min))²`) in
-`horizon_weights` + the `dllm_solver` seam; the gate ran CROSS-REPO on the
-riir-train C9 toy: flat 0.4084 = PFD, the truncation cost law measured (+9.0% W1 for
-9.37% mass dropped). All arms OPT-IN.
+`TimeAnnealRange` + truncation predicate eps=((T-t_cut)/(T-t_min))^2; Bench 883, cross-repo on riir-train C9 toy: +9.0% W1 for 9.37% mass dropped.
 
 ## 2026-09-22 — Plan 607 ACCEPTED + T0a/T4a/T0b landed: the modelless game-decision lane's first three tasks (substrate gate, the laya-Tetris enumerator, the G1-oracle fixture)
 
-Thesis: laya's protocol (code arithmetic → templated English → BERT) is the
-closed-grammar regime where corpus-limited scoring is lossless. T4a
-`examples/tetris_01_state_enum.rs` (120 states / 2,660 options; v2 grammar 245
-distinct sentences, cross-sentence ties 0); T0b oracle generator lives in
-riir-reflex first (`e4bf657`), fixture byte-identical.
+T4a `tetris_01_state_enum.rs` (120 states / 2,660 options, 245 sentences, 0 ties); T0b oracle in riir-reflex `e4bf657`.
 
 ## 2026-09-22 — Issue 874 closed: G8 re-founded on real claims — the dead speedup gate became a bit-contract pin + a relocated, executing throughput floor (two sessions, one issue)
 
-G8 asserted ≥1.5× SIMD but both routes ran the same `dot_8wide` — it always SKIPped.
-Verdict: retire the relative claim; G8a `g8_route_bit_agreement` (exact to_bits) +
-G8b `g8_throughput_floor` relocated onto bench_271 in the x86_64 matrix (`best_of_us`
-+ black_box). G7's constant-folded "0ns" fixed the same day.
+G8 retired as relative claim: G8a bit-agreement + G8b throughput floor on bench_271 in x86_64 matrix; G7's constant-folded 0ns fixed same day.
 
 ## 2026-09-22 — Issue 873 primitive B landed twice in one evening: the twin-duplicate resolution (third of the class)
 
-Two sessions took "primitive B (`rate_control`) remains" from one handoff summary;
-origin-first `ee01f1598` won, the duplicate reset away, its verifier ran the
-winner's gates. Rule: a handoff naming remaining work is an ASSIGNMENT to every
-reader — `git fetch` + check before pushing; on the twin tell, drop yours and
-VERIFY the winner.
+Origin-first `ee01f1598` won, duplicate reset away. Rule: a handoff naming remaining work is an assignment to every reader; git fetch and check before pushing.
 
 ## 2026-09-22 — Issue 871 closed: the `algebraic_*` A/B measured end-to-end — feature-gated `algebraic_dot` ADOPTED (owner verdict a′), the in-crate codegen truth repaired, T6/T7 deferred on-record
 
-`katgpt-attn-match` opt-in `algebraic_dot` (twin of `dot_8wide`, 1.77×–8.8×, accuracy
-IMPROVED on cancellation data); `algebraic_div`/`algebraic_rem` BANNED
-(`scripts/algebraic_op_ban_gate.py`). T5 codegen: 0 packed float-math at both
-x86_64 arms — the 2026-07-29 "optimal fmla" story was never true.
+`algebraic_dot` adopted opt-in (1.77x-8.8x); `algebraic_div`/`algebraic_rem` banned via `scripts/algebraic_op_ban_gate.py`.
 
 ## 2026-09-22 — Issue 872: SIMD bitstream whitespace splitter for `encode_into_pretok` (the bitcannon-class port) — scan 1.60×/1.69× measured, bit-identity by differential, four live bugs caught by the harness
 
-`fast_bpe/simd_split.rs` (16B SSE2 / 32B AVX2 runtime-probed / NEON SWAR / scalar),
-Unicode bit-identity via `char::is_whitespace`; avx2 1.60×/1.69×. The differential
-harness caught four live bugs (VT exclusion; `b == 0x80`; `1u32 << 32` wrap;
-multibyte ws at word end). fast_bpe stays opt-in.
+`fast_bpe/simd_split.rs` scan 1.60x/1.69x (avx2); differential harness caught four live bugs; stays opt-in.
 
 ## 2026-09-22 — Issue 870 closed: distance_abstain's rationale-free sigmoid copy → exact_sigmoid delegation, measured 3-ULP envelope, bench_845 GOAT re-run identical
 
-The substrate-first Mode 2 audit (`683d06d8`) found an unpinned local sigmoid beside
-sanctioned patterns; delegated to `exact_sigmoid` with a measured 3-ULP envelope pin
-(`sigmoid_delegation_matches_frozen_legacy_body`); bench_845 G1–G5 PASS identical.
+Delegated to `exact_sigmoid` with 3-ULP envelope pin; audit `683d06d8`; bench_845 G1-G5 identical.
 
 ## 2026-09-22 — Issue 869 T5: the mini dllm lane goes per-layer honest end-to-end — the gradient check caught a live backward bug the loss-decreases gates never could
 
-Training/eval/decode honor `config.n_layer`; the gradient check caught the
-`!is_masked[p]` skip valid only at the readout layer (~10-150% per-element corruption
-at inner layers, EXACT under full masking — why the loss gates passed). Fix `last &&
-!is_masked[p]`; bench_602's calibration is model-class-specific (re-open at Bonsai
-scale).
+Gradient check caught backward bug (`!is_masked[p]` skip valid only at readout layer); fix `last && !is_masked[p]`.
 
 ## 2026-09-22 — Issue 869: multi-layer D2F decode + taps at depth — the Issue-865 Bonsai-scale unblock lands; bitcos x86_64-lane clippy debt repaired in passing
 
-`forward_block_causal_with` over `D2fContext::decode_n_layer` (per-layer KV planes;
-depth defaults to 1) + `set_probe_tap_layers` (the old `tap_layer != 0` rejection
-REMOVED — the unblock). Found: `micro_dllm_text()` declares n_layer=2 but indexes
-layers[0] only (T5 migrates it).
+`forward_block_causal_with` + `set_probe_tap_layers` land the multi-layer D2F unblock; `micro_dllm_text()` indexes layers[0] only (T5 migrates).
 
 ## 2026-09-21 — Issue 864 closed: BITCOS tier ships opt-in — footprint PASS, latency honestly LOSES on this host (Bench 846)
 
-`bitcos` (presence bitmap + compacted neg-sign stream, z-meter, three GEMVs,
-dispatch): footprint beats both tiers above z=0.375; G2b(a) latency FAIL → opt-in
-(instruction-bound on the 13700K). Two codec bugs caught pre-timing (pack must pext
-not pdep; the scalar pos plane is `p & !neg`).
+`bitcos` footprint PASS above z=0.375, latency G2b(a) FAIL on the 13700K, so opt-in (Bench 846); two codec bugs caught pre-timing.
 
 ## 2026-09-22 — Issue 868 closed NEGATIVE: engram-fused PUCT G5 FAIL — the evidence gate worked, and that is why nothing happened (Bench 848)
 
-`engram_puct` (Plan 605): G5 FAIL 48.1% h2h (Wilson lower 44.8% < 50%), budget arm
-35.7%; the evidence gate correctly damped 99.98% of lookups (mined positions all
-n < 4). G1/G4/G6 PASS; re-open on a transposition-dense domain or larger corpus +
-re-mining (`EngramHotSwap`).
+`engram_puct` G5 FAIL 48.1% h2h (Plan 605, Wilson lower 44.8%); G1/G4/G6 PASS; re-open on transposition-dense domain.
 
 ## 2026-09-21 — Issue 858 closed: g8's arch-conditional bar gets its aarch64 executing lane (PERF_ROWS)
 
-`g8_cached_faster_than_uncached` red on the M3 alone (0.68–0.71 vs bar 0.5) — arch
-CONFIRMED, cache regression REFUTED (13/13 x86_64 PASS at 0.39–0.47). Dual pin
-`G8_BAR` (aarch64 0.75, else strict 0.5) + a new `scripts/test_gate.sh` `PERF_ROWS`
-row kind (`katgpt-rs:12:belief_drafter_goat`, `--release --test-threads=1`).
+Arch confirmed, cache regression refuted (13/13 x86_64 PASS); dual pin `G8_BAR` + `PERF_ROWS` row kind in `scripts/test_gate.sh`.
 
 ## 2026-09-21 — the x86_64 execution matrix caught a day-old test that had never executed on x86_64: the ordered-dot anti-dedup pin was crafted at NEON's vector width
 
-Cell 7 confirmed `ordered_dot_differs_from_simd_dot` (landed `5458dd69`) red 3/3
-ALONE: the len-4 pin sits below AVX2's 8-wide floor where the scalar tail IS the
-ordered fold. Recrafted at len 16 (hand-computed per backend: ordered 3.0, every
-reassociating backend 6.0); rerun 7/7.
+`ordered_dot_differs_from_simd_dot` (`5458dd69`) red on x86_64: len-4 pin below AVX2 floor; recrafted at len 16, rerun 7/7.
 
 ## 2026-09-21 — the first full-gate run since 09-16 caught the Issue-860 landing RED: 8 `-D`-list errors in the opt-in feature's test code, invisible to every default-feature lane
 
-Layer 3: 8 errors in `successor_density_critic.rs` `#[cfg(test)]` — the Issue-803
-class on the non-default axis (an opt-in module compiles to nothing everywhere but
-all-features). Repaired; riders in `set_diffusion_schedule.rs`, `ugc_schedule.rs`,
-`bench_602`; after: `⚠ full gate PARTIAL — every layer that RAN is clean`, 1120s warm.
+Layer 3: 8 `-D` errors in `successor_density_critic.rs` test code (opt-in feature, all-features only); repaired, 1120s warm.
 
 ## 2026-09-20 — the x86_64 execution matrix's first full run since 09-16 (354 commits of drift): 11,344 assertions PASSED, and one more load-flipped bar caught by execution
 
-Cells 1–7 green; cell 8: `bench_105_gdn2_goat::goat_6_context_scaling_flat_o1`
-PASSED-ALONE 3/3 (0.306 vs 0.30 bar) — the fourth Issue-833 member found by
-execution. Repair: `tests/common/ab_timing.rs` gains `best_of_arms` (round-robin
-N-arm, per-arm MINIMUM, loud-zero); after: spreads 0.038 / 0.051 / 0.102 vs 0.30.
+11,344 assertions PASSED; `bench_105_gdn2_goat` goat_6 PASSED-ALONE (0.306 vs 0.30); fixed via `best_of_arms` in `tests/common/ab_timing.rs`.
 
 ## 2026-09-20 — Issue 861 CLOSED: the ugc_alloc_check Windows G4 alloc was a per-call env read — and the issue's own isolation table was wrong
 
-50/50 G4 failures on Windows/MSVC traced (via the armed-window allocator) to
-`std::env::var("UGC_DEBUG")` per call — Windows converts the name to a UTF-16
-`Vec<u16>` (Unix `getenv` doesn't allocate); the filing table had blamed the sampler.
-Fix: `ugc_debug_enabled()` caches in `OnceLock<bool>`; G4 0 allocations. Lesson:
-every hot-path env read takes the OnceLock form.
+Per-call `std::env::var("UGC_DEBUG")` allocated on Windows; fixed with `OnceLock<bool>` caching, G4 0 allocations.
 
 ## 2026-09-20 — Issue 859 CLOSED: Jev structured reads — POC GOAT + 4090 reference + T5 policy arm measured; promotion declined on layer posture (evidence-banked)
 
-Research 574 (vLLM PR #57250) → `structured_read[_into]` + `sample_label_index`
-(opt-in `structured_reads`, katgpt-forward); Bench 816 GOAT; 4090 T1 corpora 10/10;
-T5 (Bench 817): agreement bars do NOT beat single-read analytic confidence; maxprob
-beats entropy on wide sets. Stays opt-in, evidence-banked; re-arm = first production
-consumer.
+`structured_read[_into]` opt-in (Research 574, Bench 816 GOAT, Bench 817 T5); agreement bars do not beat single-read confidence; stays opt-in.
 
 ## 2026-09-19 — the open-issue backlog is cleared by owner call (12 files removed; triggers recorded here)
 
-Every open issue adjudicated in one owner session: resolved work got a closure
-record, open work a PARKED / PULL-GATED / DECLINED verdict with its reopen trigger;
-files removed (git history); no number reused.
+Every open issue adjudicated in one owner session; 12 files removed, reopen triggers recorded; no number reused.
 
 ## Issue 780 — CLOSED as PARKED: OnlineLinearReadout waits on a consumer that measured itself absent (2026-09-19)
 
-The primitive stands but its live consumer closed NEGATIVE first (riir-clippy Issue
-107, `5dfa1daff`); building now would be a synthetic-fixture GOAT pass speaking to
-nothing measured. Reopen triggers recorded (organic fixseq ring + populated
-span-embed column; riir-train store densification; post-keep-fix corpus ordering
-shift).
+Primitive stands but consumer closed NEGATIVE (riir-clippy Issue 107, `5dfa1daff`); reopen triggers recorded.
 
 ## Issue 827 — CLOSED: T4 decided by owner call — known-extra repos ARE legitimate oracles; the freshness guards T2/T5 landed are the correct limit (2026-09-19)
 
-T1/T2/T3/T5 landed (`6d084c38`, `7464fc6e`, `3948f0e2`): the ORACLE-STALE bucket
-(never clean/counted/ratcheted), per-row oracle disclosure, two-sided fixture arms,
-and the fetch-age `⚠ UNVERIFIED UPSTREAM` advisory. T4 STATUS QUO — the measured
-hazard was FRESHNESS, not AUTHORITY.
+T1/T2/T3/T5 landed (`6d084c38`, `7464fc6e`, `3948f0e2`): ORACLE-STALE bucket, fetch-age advisory; T4 status quo (hazard was freshness).
 
 ## Issue 833 — CLOSED: the class is measured, the executed backlog is 3 of 38, and the residue is routed (2026-09-19)
 
-T3's resolvers closed every STATED blind spot they could (`381f01f7`,
-`e56e6773`, `1b7756c3`, `71d97908`); T2 EXECUTED all 38 root-`tests/` GATES rows in
-release — 3 candidates (bench_176 ×2, bench_164) + two other-class defects (Issues
-855, 856). T4: no verdict half, deliberately — migration is a four-axis per-target
-read.
+T3 resolvers (`381f01f7`, `e56e6773`, `1b7756c3`, `71d97908`); T2 executed 38 GATES rows, 3 candidates; spawned Issues 855/856; no verdict half.
 
 ## Issue 834 — CLOSED: census shipped, the count reframed as a sampling population, and the shared-crate question is decided NO (2026-09-19)
 
-T1 shipped `scripts/sequential_ab_timing_audit.py` (`8045fae9`); the decided count
-is a population every matrix run SAMPLES FROM. T3 owner call: `ab_timing.rs` STAYS a
-`#[path]`-included module — NO shared crate (katgpt-rs is the public upstream
-funnel); reopen threshold: a fourth sibling hand-rolls a twin.
+T1 shipped `scripts/sequential_ab_timing_audit.py` (`8045fae9`); T3: `ab_timing.rs` stays `#[path]`-included, no shared crate.
 
 ## Issue 835 — CLOSED: T4 decided by owner call — the path dep is the workspace convention; publishing is contrary to Research 003 (2026-09-19)
 
-T1 = docs-gate CHECK `cross_repo_path_dep_gate.py` (`5b09c3f4`); riir-llm cloned and
-registered, gate green over 311 deps / 183 manifests. T4: riir-llm keeps its path
-dep, not published — path deps against `/git/` ARE the workspace contract.
+T1 `cross_repo_path_dep_gate.py` (`5b09c3f4`), green over 311 deps / 183 manifests; riir-llm keeps its path dep.
 
 ## Issue 839 — CLOSED: kron_tile 4/4 GOAT; T7 DECLINED on measurement (2026-09-19)
 
-T1–T6 + T8 done (`a623d7d4`, Bench 839; stays opt-in per the no-default-consumer
-rule). T7 DECLINED: Bench 843's width sweep measured ternary/f32 1.56× slower at
-w=32, peak 3.70× at m=512 — a 32×32 f32 factor is already L1-resident and
-add/sub-accumulate loses to FMA at every tile width.
+kron_tile 4/4 GOAT (`a623d7d4`, Bench 839, opt-in); T7 declined: Bench 843 ternary/f32 1.56x slower at w=32.
 
 ## Issue 841 — CLOSED as lead-backlog dissolved: 7 rows landed, the remaining leads stay at their research-note homes (2026-09-19)
 
-Landed: `.kpt` archive POC (opt-in `kpt_archive`, Bench 841), the fix_verify
-refusal-vs-truncation audit (riir-clippy `651728c0`), `legal_token_set` PROMOTED
-default-on (20.6–22.5× tree build), `kv_sink_window` (5/5 GOAT, pull-gated on Issue
-857), calibration staleness + all four seams (`2057ac3b` etc.). Remaining leads stay
-at their Research 568/570/571 homes.
+Landed `.kpt` archive POC (Bench 841), `legal_token_set` default-on (20.6-22.5x), `kv_sink_window` 5/5 GOAT, calibration staleness (`2057ac3b`); leads at Research 568/570/571.
 
 ## Issue 852 — CLOSED as PARKED: the τ(t) P_e-LUT POC waits on a D2F model consumer (2026-09-19)
 
-The modelless half is landable, but GOAT G2 needs a measured P_e curve at matched
-step budget and no in-repo D2F model harness exists — landing now is the
-synthetic-fixture pass Issue 780 refused. Reopen: a real D2F lane, or riir-train's
-RecFM twin (its Issue 563).
+Modelless half landable but G2 needs a D2F model harness that does not exist; reopen on real D2F lane or riir-train Issue 563.
 
 ## Issue 853 — CLOSED as PARKED: the autoguidance POC waits on its measurement arms (2026-09-19)
 
-Arm A needs a DDTree acceptance harness over a served model; Arm B is riir-train
-Issue 563's free-rider. Prior art in Research 572 (the logit-space arm =
-contrastive-decoding ADOPTION; the dual-dropout latent arm = the fusion candidate).
+Arm A needs a DDTree acceptance harness; Arm B is riir-train Issue 563's free-rider; prior art Research 572.
 
 ## Issue 854 — CLOSED: the wedge is diagnosed, the repair scoped, and T3 stays trigger-gated by design (2026-09-19)
 
-Landed (`dded36d8`, `65bf2944`, `d8b55a34`, `c83f0f84`): the SLOW-vs-WEDGED recipe,
-the census (exposure is in mutation runs, not the 131 git call sites), NO in-process
-wall bound (it would share the watchdog's defect), and the external per-module
-timeout as practice. Reopen: a stall on a NON-mutation run voids T2.
+Landed `dded36d8`, `65bf2944`, `d8b55a34`, `c83f0f84`: SLOW-vs-WEDGED recipe, census, external per-module timeout; T3 trigger-gated.
 
 ## Issue 855 — CLOSED: every task resolved; the guard gate + ratchet sweep both shipped (2026-09-19)
 
-T3 ran all 34 asserting timed regions at n ≥ 1000 — 7 VANISHED, all repaired; T4:
-the static `let _ =` detector REFUTED by execution, `timed_region_guard_gate.py`
-shipped as a docs-gate CHECK (`196a4cda`); T5 ran all 33 sibling rows (repaired at
-riir-ai `3712d51b6`); T6 `timed_region_drift_sweep.py` (`72ee0f5b`).
+7 of 34 timed regions vanished, all repaired; `timed_region_guard_gate.py` (`196a4cda`); riir-ai `3712d51b6`; sweep `72ee0f5b`.
 
 ## Issue 857 — CLOSED as PULL-GATED: the corpus builds when riir-ai 882's consumer fires, not before (2026-09-19)
 
-Boundary answered (`51291548`): corpus + harness = riir-train, canary wiring =
-riir-ai Issue 882 T2, the scoring instrument = here (shipped). riir-ai 882's
-T-Pull-1 is the pull-gate, owned there; the fire condition and sizing rules are
-recorded.
+Boundary answered (`51291548`): corpus/harness = riir-train, canary = riir-ai Issue 882 T2, scorer here; pull-gated on riir-ai 882 T-Pull-1.
 
 ## Issue 843 — CLOSED: the plasma_path ternary dense matvec loses below L3 on every served shape; T4 resolved as per-shape dispatch (2026-09-19)
 
-Ternary matvec is 1.9–3.0× slower whenever the f32 operand fits L3 — every served
-shape; x86_64 crosses at L3, NEON never to 1 GiB. T4 owner call: per-shape dispatch
-`simd_matvec_plasma_dispatch` (+ cached `l3_cache_bytes()`); Bench 843-dispatch GOAT
-GREEN; `plasma_path` STAYS DEFAULT-ON.
+Ternary matvec 1.9-3.0x slower when f32 fits L3; per-shape `simd_matvec_plasma_dispatch` GOAT GREEN; `plasma_path` stays default-on (Bench 843).
 
 ## Issue 831 — CLOSED: bench_171 P3 reclassified as instrument-health + mechanism by owner call (2026-09-19)
 
-The coin flip was repaired 2026-09-18 (the screener's work was deleted by `let _ =
-acc`; 63–64% release with one `black_box`). T5 owner call: P3 gates instrument
-health + mechanism as exact CALL COUNT (13,824 vs 41,472); the ≥30% latency assert
-REMOVED, not lowered.
+P3 now gates instrument health + exact call count (13,824 vs 41,472); the >=30% latency assert removed, not lowered.
 
 ## Issue 847 — CLOSED: `simd_lut_dequant`'s AVX2 kernels compiled to NOTHING on every ordinary x86_64 build — and the bf16 sweep that followed was right for one kernel of three (2026-09-19)
 
-`#[cfg(all(x86_64, target_feature = "avx2"))]` on SHIPPED paths compiles to nothing
-by default — repaired with runtime `simd_level()` (1.7×, 4.4–5.6×; RNE 2.4–2.5×
-probed in; trunc a REGRESSION). T3 walled `scripts/shipped_target_feature_gate.py`.
-Through-line: three wrong answers from sound-looking measurements.
+Runtime `simd_level()` replaced compile-time avx2 gate (1.7x, 4.4-5.6x, RNE 2.4-2.5x); `shipped_target_feature_gate.py` walls it.
 
 ## Issue 850 — CLOSED: the UNVERIFIED-upstream guard challenged only ONE of `behind_origin`'s two silent readings — and then PRINTED a false statement about the one it gained (2026-09-19)
 
-T1 gap: `(n, 0)` was silent; the repair surfaced 6 findings in 3 repos, 4 already
-FIXED upstream. T2: sweep FETCH? NO — 250.2s serial / 50.2s 8-way vs sweeps
-0.04–40s; `scripts/fetch_contract_repos.py` landed. T4 armed the COUNTER axis both
-ways. T3: the guard's false statement now carries `(age, commits_behind)` per repo.
+Guard gap repaired (6 findings, 3 repos); sweep FETCH? NO (250.2s vs 50.2s 8-way); `fetch_contract_repos.py`; COUNTER axis armed.
 
 ## Issue 832 — CLOSED: the last fixed shared-temp site is repaired — the non-demo backlog is zero, the ratchet is the wall (2026-09-19)
 
-Final site seal-remake `db68f5e`; test-class sites repaired with sibling SHAs
-(riir-ai `9d138531b`, riir-chain `8a3b0f5`, riir-game-sdk `ef66117`, riir-clippy
-`f5ada0ec`, riir-deployer `b551028`); the demo class adjudicated; the x86_64 matrix
-fully green (11,177 assertions).
+Final site seal-remake `db68f5e`; siblings riir-ai `9d138531b`, riir-chain `8a3b0f5`, riir-game-sdk `ef66117`, riir-clippy `f5ada0ec`; matrix 11,177 assertions green.
 
 ## Issue 844 — CLOSED: the dot-delegation crossover is length 24, per-ISA, measured on BOTH arches — not a backlog (2026-09-19; full record at the 09-19 dated entry below, file removed this commit)
 
-Full record: the 2026-09-19 dated entry below (M3 NEON: delegation wins at EVERY
-length ≥ 4; x86_64 crossover 24).
+Crossover is length 24 on x86_64, delegation wins at every length >=4 on M3 NEON; full record in the 09-19 dated entry.
 
 ## Issue 840 — RESOLVED: two `.research/569` documents landed forty minutes apart and tripped two detectors — the rewrite set was EMPTY, and the attribution lessons became the staged-set rules (2026-09-19)
 
-Both live peers confirmed neither document was theirs; the hand-derived rewrite set
-(3 sites) was EMPTY when measured. Durable output: the attribution discipline in
-AGENTS.md §staged-set (`4e82cc489` + `c0995ea4b`).
+Neither document was a peer's; rewrite set empty; durable output is the AGENTS.md staged-set attribution rules (`4e82cc489`, `c0995ea4b`).
 
 ## Issue 836 — CLOSED: a `git worktree` made the entire head-provenance mechanism silently inert — `.git` answers TWO questions and each spelling was wrong for the other (2026-09-19)
 
-T1 `f6749af5c` (every `worktree_state` guard used `.is_dir()` — in a worktree
-`sweep_advisory` returned `[]`); T2+T4 `c12e96415` (three private copies measured
-then DELEGATED to `worktree_state.is_checkout`); T3 cross-repo (3 sites in 2
-siblings, 1 defect) repaired at riir-ai `9637d09ea`.
+T1 `f6749af5c` (`.is_dir()` -> worktree guard); T2+T4 `c12e96415` delegate to `worktree_state.is_checkout`; riir-ai `9637d09ea`.
 
 ## Issue 845 — CLOSED: `channel_aware`'s duplicated dot kernel deleted; T5 measured NEON PARITY — the x86_64 1.8–7.8× penalty does not transfer to aarch64 (2026-09-19)
 
-The crate's `simd_dot_f32` was a ~200-line duplicate whose AVX2 arm was cfg-off by
-default (2.72–7.76× slower); repaired by delegation (`32056164e`), the bench
-converted to a bit-identity gate. T5 NEON: parity 0.98–1.04× — "shipped is faster"
-is x86_64-only.
+~200-line duplicate AVX2 arm cfg-off (2.72-7.76x slower) deleted by delegation (`32056164e`); NEON parity 0.98-1.04x.
 
 ## Issue 851 — CLOSED: `muon_update` step scale repaired to the canonical √max family (update RMS ≈ 1.0) (2026-09-19)
 
-The default-on Muon wrapper scaled `1/max(rows, cols)` (D× below canonical) while
-claiming standard scaling; fix `1ebe39f61` to `√max(rows, cols)` (Keller and
-Moonlight forms differ by LR-absorbable constants); regression pin update RMS ∈
-[0.68, 1.12]; Bench 050 unaffected.
+Fix `1ebe39f61`: scale `1/max` -> `sqrt(max(rows, cols))`; regression pin update RMS in [0.68, 1.12]; Bench 050 unaffected.
 
 ## Issue 842 — CLOSED: the alias-mapped sweeps opened a directory that does not exist, and the first real read surfaced a workspace of hidden findings (2026-09-19)
 
-17 of 19 drift sweeps opened `WORKSPACE / <contract-name>` — nonexistent on an alias
-box, every walk returned 0. T1: one seam (`sweep_population.open_repo` +
-`repo_alias.real`, identity when unmapped); T2 labeling law: resolve the path you
-READ FROM, keep the name you LABEL WITH; T3 the first real read surfaced the hidden
-findings; T5 the citation sweep stayed red = true positives (Issue 846).
+17 of 19 sweeps opened nonexistent dirs; one seam `sweep_population.open_repo` + `repo_alias.real`; hidden findings surfaced.
 
 ## Issue 846 — CLOSED: the alias seam has a PROSE half — 44 true CROSS rows, 37 cleared by teaching the qualifier the on-disk spellings, 7 by prose (2026-09-19)
 
-Nearly every row was the ON-DISK spelling (`seal-*` vs contract `mmorpg-*`).
-Classifier: `issue_citation_gate.spelling_aliases()` in code, LENIENCY ONLY, with
-the `_NAME` boundary regex (`seal-remake` must not match inside
-`seal-remake-unity`). Prose half fixed at riir-dao `160f9a1`, riir-kat `51994ee`,
-riir-neuron-db `3f6cf67`; sweep rc=0.
+Qualifier taught on-disk spellings (`issue_citation_gate.spelling_aliases()`, leniency only); fixes riir-dao `160f9a1`, riir-kat `51994ee`, riir-neuron-db `3f6cf67`.
 
 ## Issue 838 — CLOSED-as-decided: a shell script spawning a NATIVE child is a third encoding seam, and the population is measured at zero live instances, so it is deliberately NOT gated (2026-09-18)
 
-Census (`c9afca9dd`): 43 native-child lines across 197 tracked `*.sh`, only 2 with
-non-ASCII (both comments) — a gate would govern an empty population. Keep native
-children ASCII. Adjacent gap: the matrix picked the memory source on EXISTENCE not
-ANSWERS (MSYS `/proc/meminfo` shape).
+Census (`c9afca9dd`): 43 native-child lines, 2 non-ASCII comments; population zero so not gated; keep native children ASCII.
 
 ## Issue 837 — CLOSED: registering a contract repo reds the whole sweep family, and the ONE file a gate checks is not the twenty-one that make them red (2026-09-18)
 
-`riir-llm` registered with only `repo_set.txt` + AGENTS.md — 19 of 21 sweeps red
-UNPINNED, hiding four live findings. T2: `scripts/repo_registration_gate.py` (every
-`*_drift_floors.txt` needs a row per on-disk canonical repo; subset scope declared
-in `scripts/repo_registration_scope.txt`, reds both ways). Registration is a
-22-file operation with one file gated.
+`riir-llm` registration reddened 19 of 21 sweeps; T2 `scripts/repo_registration_gate.py` + `repo_registration_scope.txt`.
 
 ## Issue 825 — CLOSED POSITIVE, after a same-day RETRACTION of its own negative close. Coulomb crowd redistribution ships as `coulomb_flow`; the "negative result" was a bench walker with two defects (2026-09-18)
 
-Two sessions landed opposite verdicts four hours apart; settled by running the
-LOSER's fixtures through the WINNER's readout (MAE 0.0 vs 0.119) — disagreement is a
-cheaper oracle than self-consistency. `coulomb_flow` ships opt-in (Bench 825,
-G1–G4 PASS); Bench 815 repaired (the absorption rule IMPORTED, not copied).
+`coulomb_flow` ships opt-in (Bench 825, G1-G4 PASS); earlier negative was two walker defects; MAE 0.0 vs 0.119; Bench 815 repaired.
 
 ## Issue 830 — CLOSED: Issue 829's anchor class one seam deeper — the locale-I/O classifier was anchored to a CALL-NAME SET, and it had repaired one side of a round trip in this repo's own instrument (2026-09-18)
 
-The class is a text-mode FILE OBJECT (`p.open("w")`, `tempfile` text factories,
-`os.fdopen`, `io.TextIOWrapper`) — `locale_io_fix.sites()` gains the forms behind
-`_text_mode()`; `.open` admitted only on a literal TEXT mode, the no-mode blind spot
-counted (5 sites) and PRINTED. 11 sites total; siblings cited (riir-train
-`15db2c67`, riir-clippy `54b999de`).
+`locale_io_fix.sites()` gains text-mode file-object forms (11 sites); siblings riir-train `15db2c67`, riir-clippy `54b999de`.
 
 ## Issue 828 — CLOSED: Issue 823's anchor class, third position — the heading oracle was anchored to a DELIMITER SET, and the biggest unread family is this repo's own house style (2026-09-18)
 
-The delimiter set lacked the em dash — 56 of the unread are katgpt-rs's own
-`## Issue NNN — …: CLOSED (date)` house style; adding a delimiter KEEPS the
-discriminator (`follow-up` still rejected, pinned in both delimiters). T4 ANSWERED
-Issue 823 T5 by PRICING: of 153 unread records only 2 carry a number no other oracle
-knows — 98.7% redundant. ⛔ The arm that could not pass was cp874 mangling the
-fixture's em dash = Issue 829.
+Em dash added to the delimiter set (56 unread were house style); pricing: 2 of 153 unread novel (98.7% redundant); cp874 mangling = Issue 829.
 
 ## Issue 823 — CLOSED: the heading oracle was anchored to a POSITION, and its own blindness meter was anchored to the same one; T5 ANSWERED by Issue 828 T4 (2026-09-18)
 
-`_SELF_HEADING` anchored to the LEADING kind — six repos write the date first, 74
-records unreadable; the meter `_HEADING_SHAPED` had the same anchor and failed
-toward clean (riir-chain printed a PERFECT 0/1 over 20 unread). Repair
-`_SELF_HEADING_DATED`; workspace IN-LOCAL-RANGE 54 → 27, ratchets tightened. ⛔ Do
-not re-pin `max_in_local_range` for a heading-blind row — read `heading_unread=a/b`
-first.
+`_SELF_HEADING_DATED` repair; IN-LOCAL-RANGE 54 -> 27; the blindness meter failed toward clean; answered by Issue 828 T4.
 
 ## Issue 829 — CLOSED: the FILE seam under Issue 778's PIPE seam: 273 text-I/O sites decode with the system locale, and the first one found was making a whole file of arms pass for the wrong reason (2026-09-18)
 
-Found by Issue 828's dash arm failing where a scratch copy passed (cp874: bare
-`Path.write_text` writes U+2014 as `0x97`). Census 273 sites / 8 repos; repair half
-`scripts/locale_io_fix.py` (`col_offset` is a UTF-8 BYTE offset; newline style
-preserved; the kwarg joins the last ARGUMENT); verdict half
-`scripts/locale_io_gate.py` (UNPARSED reds, exemptions deliberately empty); the
-sweep half landed in the SAME CHANGE (118 sibling rows with SHAs: riir-train
-`39d0b8d4`, riir-clippy `638fa224`, riir-ai `4df109c65`, riir-chain `bebf78a`).
+273 text-I/O sites in 8 repos; `scripts/locale_io_fix.py` + `locale_io_gate.py`; 118 sibling rows (riir-train `39d0b8d4`, riir-clippy `638fa224`, riir-ai `4df109c65`, riir-chain `bebf78a`).
 
 ## Issue 824 — CLOSED: the family gate watched the failure it was built for happen beside it (2026-09-17)
 
-Issue 821's close-out said "wired into 16 sweeps"; the family is 19 —
-`cfg_row_implication_drift_sweep` hard-red live. Repair: the
-`sweep_advisory_membership_gate.MECHANISMS` registry (verdict per mechanism, never
-pooled); pin key `(mechanism, sweep)`. Found by reading EXIT CODES (a glyph grep
-printed `<no verdict line>` 19 times).
+Family is 19 not 16 sweeps; repair is the `sweep_advisory_membership_gate.MECHANISMS` registry, pinned per `(mechanism, sweep)`.
 
 ## Issue 821 — CLOSED: Issue 815's marker never reached the sweep family: 8 sweeps red on 0 findings, and two live ratchet breaches sat behind them (2026-09-17)
 
-`DOCS_GATE_KNOWN_EXTRA` landed in the final-line disclosure but not the per-repo pin
-loop — 8 of 9 sweeps red on repos where they found nothing, hiding two genuine
-riir-train breaches. Repair: `sweep_population.pin_row_exempt(name)` wired into 16
-sweeps. ⛔ A scripted multi-file edit needs a `py_compile` sweep; Python
-`write_text` flips files to CRLF.
+`sweep_population.pin_row_exempt(name)` wired into 16 sweeps; two hidden riir-train breaches surfaced.
 
 ## Issue 820 — CLOSED: the numbering sweep is blind to Issue 795's class, so 15 repos read `dup=0` over 113 collisions (2026-09-17)
 
-`numbering_gate.historical_collisions()` never reached the sweep — 183 historical
-collisions over 16 repos in 3.7s, 113 in repos called clean. `max_hist` ratchet at
-measured + `min_numbers` floor on the HISTORY walk; katgpt-rs's row asserts the
-gate's VERDICT. T5 unplanned: 819 dual-allocated — the sigmoid lane KEEPS it (7 of
-10 inbound).
+183 historical collisions over 16 repos (113 hidden); `max_hist` ratchet + `min_numbers` floor; 819 dual-allocation kept by sigmoid lane.
 
 ## Issue 822 (2026-09-18) — CLOSED. An UNCOMMITTED row was counted into a RATCHET; all 19 sweeps adjudicate against HEAD now, and the mechanism is GATED
 
-`worktree_state.py` three instruments by classifier shape (`head_delta` per-file /
-`head_overlay` cross-file / `head_tree` multi-seam, 22–32s per dirty repo); rules:
-the VERDICT belongs in the row KEY, a FLOOR is a pin too, classes split by ORACLE.
-Closed with the `head-provenance` MECHANISMS registry row; the first live MASKED row
-landed four hours later. ⛔ Attribution hazard: shared author + one reflog — only a
-`Session: <name>` body line is reliable.
+`worktree_state.py` head_delta/head_overlay/head_tree; verdict in row KEY, floors are pins; `head-provenance` MECHANISMS row.
 
 ## Issue 819 (2026-09-17) — CLOSED. The x86_64 arm was LINTED by nothing; the finding is not the 30, it is the sibling
 
-30 `unsafe_op_in_unsafe_fn` in `channel_aware.rs`'s AVX2 arm (0 with avx2 off); the
-NEON twin had the `unsafe { }` + `// SAFETY:` — a repair applied to the arm somebody
-can see is a measurement of which arms are visible. T3: `full_gate.sh` Layer 2c
-(both avx2 arms; the TRIPLE printed on the verdict line). ⚠ 819 is held by two
-documents; adjudication pinned in `scripts/number_collisions_expected.txt`.
+30 `unsafe_op_in_unsafe_fn` in AVX2 arm of `channel_aware.rs`; T3 `full_gate.sh` Layer 2c; 819 dual-held, pinned in `number_collisions_expected.txt`.
 
 ## Issue 819, second holder (2026-09-17) — the sigmoid prior-logit lane KEPT the number; RESOLVED (file removed)
 
-Won the same-day dual allocation (7 of 10 inbound, Issue 724 T2). T1–T3 + T5 landed
-with Bench 813 (G1–G4 ALL PASS): the sigmoid prior-logit lane + sink-stability
-forecast (Research 566) as two OPT-IN features. "Issue 819" in .research/566, 258,
-392 means THIS lane, never the x86_64 lint lane (disambiguated per Issue 794).
+Sigmoid prior-logit lane kept 819 (7 of 10 inbound); Bench 813 G1-G4 PASS; two opt-in features (Research 566).
 
 ## Issue 815 (2026-09-17) — CLOSED by its own criterion: the box is green. Option 2 landed as `DOCS_GATE_KNOWN_EXTRA`, and options 1 and 3 remain the owner's
 
-MIRROR of `DOCS_GATE_PARTIAL_CLONE`; takes NAMES never `=1`, reds both directions,
-one classifier (`skill_repo_set_gate.known_extra_state`). Three instrument defects
-found landing (the partial-set-as-whole display; ambient-env selftests; a cp874
-UnicodeEncodeError) + a fourth via arm_reach closed by EXTRACTION.
+`DOCS_GATE_KNOWN_EXTRA` mirrors PARTIAL_CLONE (names only, reds both ways); `skill_repo_set_gate.known_extra_state`; options 1 and 3 remain owner's.
 
 ## Issue 808 (2026-09-17) — CLOSED: T1 landed option 2, the AVX2 `argtopk` dispatch narrowed to k ≤ 4 on x86_64; the measured loss is GONE and the wins are kept
 
-`AVX2_ARGTOPK_K_MAX = 4` (x86_64 only; NEON keeps k ≤ 16): late_peak k=8
-0.41–0.72× → 0.98–0.99×; wins kept (k=2 5.11×, k=1 6.73×). Option 1 refused:
-`N_MIN` is distribution-sensitive. T2 closed in two halves (a load-immune pin + a
-timing floored at 0.85×).
+`AVX2_ARGTOPK_K_MAX = 4` on x86_64: late_peak k=8 0.41-0.72x -> 0.98-0.99x; k=2 5.11x, k=1 6.73x kept.
 
 ## Issue 806 (2026-09-17) — CLOSED: T8 was the last open task and it was entirely Issue 808's T1
 
-T6/T7 closed 2026-09-16 (Bench 806 Addenda I+II); record
-`.benchmarks/806_x86_64_execution_matrix.md`; the matrix stays a workstation
-verdict, no CI lane.
+T6/T7 closed 2026-09-16 (Bench 806 Addenda); T8 was Issue 808's T1; matrix stays a workstation verdict.
 
 ## Issue 818 CLOSED (2026-09-17) — the four no-default `--all-targets` breaks gated both halves; bench_412's green-zero row found in the same sweep
 
-Fix `78a1ac5d7`: four targets fixed with whole-file `#![cfg]` + matching
-`required-features` rows; the fifth (`bench_412`) had the cfg but no row (green-zero
-class). Corollary: promoting/demoting a default-on feature must MOVE its target
-gates, never delete them.
+Fix `78a1ac5d7`: whole-file `#![cfg]` + `required-features` rows for four targets; bench_412 green-zero found.
 
 ## Issue 808 (2026-09-17) — T4 LANDED: `argtopk` AVX2 dispatch re-measured on six realistic block-score distributions + per-k `N_MIN` crossover (Bench 810)
 
-Across six distributions × both profile arms the k≤16 loss SURVIVES except
-early_peak and DEEPENS on late_peak (no n-floor rescues k=8); k≤4 is
-distribution-robust; `N_MIN` is distribution-sensitive. Instrument: interleaved
-median-of-ratios (`tests/common/ab_timing.rs`).
+Six distributions: k<=16 loss survives, deepens on late_peak; k<=4 robust; `N_MIN` distribution-sensitive (Bench 810).
 
 ## Issue 817 (2026-09-17) — single-pass AVX2 `argmax` port measured NEGATIVE + reverted; the NEON premise does not transfer (Bench 812)
 
-A single-pass AVX2 port of the NEON kernel was a NET LOSS (iid 0.24–0.28×, early
-0.20–0.23× at n ≥ 256); won only `late` and n=64. Demote-on-loss: dispatch reverted,
-kernel deleted, numbers + reopen trigger in the doc comment;
-`bench_817_argmax_dispatch_ab.rs` KEPT as the reopen instrument.
+Single-pass AVX2 argmax a net loss (0.20-0.28x at n>=256); dispatch reverted, kernel deleted; `bench_817_argmax_dispatch_ab.rs` kept (Bench 812).
 
 ## Issue 811 CLOSED (2026-09-17) — DBTM confidence-commit anchor rule: PoC PASS → Plan 600 landed end-to-end, promotion EXECUTED via Plan 601
 
-Research 563 (arXiv:2609.15903) → Plan 600 `ConfidenceAnchorConfig` +
-`anchor_then_fill_with` (`8bd6d7132`, Bench 600 GOAT) → Plan 601 real-text eval
-(Bench 601) → promotion EXECUTED: `ConfidenceAnchorConfig::default()` = κ 0.9 +
-floor. Deferrals discharged via the Issue-813 seam + Bench 809 + the Issue-816
-trainer.
+Research 563 -> Plan 600 (`8bd6d7132`, Bench 600) -> Plan 601 promotion: `ConfidenceAnchorConfig::default()` kappa 0.9 + floor.
 
 ## riir-ai Issue 964 C2 LANDED (2026-09-16) — `CalibratedActionBridge`: decision-level confidence calibration for the ABSTAIN threshold (Bench 808)
 
-The second `sigmoid_calibration` consumer: calibration in front of the ABSTAIN
-threshold, argmax invariant (selection stays on raw scores). Bench 808 GOAT: ECE
-0.0220 → 0.0088; the ABSTAIN point moved 4.4× toward oracle; 0 allocs.
+`CalibratedActionBridge` (Bench 808): ECE 0.0220 -> 0.0088; ABSTAIN point 4.4x toward oracle; 0 allocs.
 
 ## riir-ai Issue 964 C1 LANDED (2026-09-16) — `clr_calibration`: the CLR verifier becomes the first `sigmoid_calibration` consumer (Bench 807)
 
-`CalibratedVerifier<V>` (katgpt-claim, opt-in): planted-drift ECE 0.0924 → 0.0164;
-the calibrated G2 fixture undisturbed; substrate fix: the `apply` identity fast path
-at (w,c)=(1,0) (logit→sigmoid is not bit-exact in f32).
+`CalibratedVerifier<V>` in katgpt-claim (opt-in, Bench 807): ECE 0.0924 -> 0.0164; identity fast path at (w,c)=(1,0).
 
 ## Issue 812 CLOSED (2026-09-16) — the bench_doc_audit BlindRead context split was a TMPDIR-FORM split; the arm now matches paths form-independently
 
-`TMPDIR=/tmp/...` vs resolved `/private/tmp/...` — the fix:
-`root_forms = (str(root), str(root.resolve()))` in `scripts/bench_doc_audit.py`;
-the pre-fix red is the canary.
+Fix: `root_forms = (str(root), str(root.resolve()))` in `scripts/bench_doc_audit.py` (TMPDIR-form split).
 
 ## Issue 810 CLOSED (2026-09-16) — `sigmoid_calibration`: the Platt-style calibrated sigmoid gate lands as a PoC with all four gates green
 
-`SigmoidGateCalibrator` (FIFO observe, deterministic 2-param Newton refit
-off-hot-path, BLAKE3 commitment); the guard `w = 1/T > 0` never reorders (G3 by
-construction). Planted: ECE 0.0696 → 0.0322. Consumers filed as riir-ai Issue 964.
+`SigmoidGateCalibrator` (FIFO, 2-param Newton, BLAKE3 commit); ECE 0.0696 -> 0.0322; consumers filed as riir-ai Issue 964.
 
 ## Issue 809 T1+T2 CLOSED (2026-09-16) — the global-RNG census is read; the class is gated; the T3 `Rng::new()` census is deferred with a reason
 
-Wide predicate: 20 sites / 9 files, one defect (an unseeded bench fixture → seeded
-`Rng::with_seed(809)`). T2 `scripts/global_rng_gate.py` (membership, LINE-FREE
-keys, both directions; the canary found an UNTRACKED planted file invisible — `git
-ls-files` IS the population). T3 landed same day `6d120abeb`: `Rng::new()` /
-`Rng::default()` joined (147 sites / 55 files, all pinned).
+20 sites / 9 files, one defect fixed; T2 `scripts/global_rng_gate.py`; T3 `6d120abeb`: 147 `Rng::new()` sites pinned.
 
 ## Issue 806 T6 CLOSED (2026-09-16, the M3 side) — t698_t5_kv_mean adjudicated arch-dependent with dual pins; kda grad-check floor was below its own noise
 
-Passes on aarch64 (pin `23d0daab3f087159`); x86_64 measures `4d0b592740db9358` (band
-bits one ulp apart) → arch-conditional dual pins; the stale row removed from
-`scripts/x86_64_matrix_expected.txt`. kda grad-check floor raised 5e-4 → 2e-3 (was
-below its own measured FD noise).
+aarch64 pin `23d0daab3f087159`, x86_64 `4d0b592740db9358` -> dual pins; kda grad-check floor 5e-4 -> 2e-3.
 
 ## Issue 807 (2026-09-16) CLOSED — `lthash`: incremental homomorphic multiset hash, the shared substrate for the Agave-mined commitment/state-hash proposals
 
-Mined from Agave (eprint 2019/227 LtHash) for riir-chain Proposal 010 D1 +
-riir-dapps Proposal 005 D1; `crates/katgpt-core/src/lthash.rs` opt-in; Bench 771:
-`replace` 31.6 ns vs a 1000-member 33.8 µs rebuild ≈ 1069×. Awaits first consumer.
+`crates/katgpt-core/src/lthash.rs` opt-in (eprint 2019/227); Bench 771: `replace` 31.6 ns vs 33.8 us rebuild ~1069x; awaits consumer.
 
 ## First x86_64 execution of the katgpt-core/katgpt-types SIMD suites (2026-09-16) — 15 latent AVX2 bugs caught and fixed; Bench 800's execution-parity caveat resolved NEGATIVE then closed
 
-15 FAILED on the first x86_64 `+avx2` run, all never-executed AVX2 defects (bf16 RNE
-dropped the final `t >> 16`; the LUT gathers used SSE4.1 `_mm_cvtepu8_epi32`).
-Lessons: a parity caveat resting on a shared-algorithm argument is a conjecture
-until run; record `target_feature` flags with every run.
+15 FAILED on first x86_64 `+avx2` run (bf16 RNE dropped `t >> 16`, SSE4.1 gather misuse); all fixed; Bench 800 caveat closed negative.
 
 ## Issue 805 (2026-09-16) CLOSED — `numbering_gate.py --help` printed ten "remove the row" lines about a repo it could not read
 
-`--help` was read as a repo PATH; git failure → EMPTY set → every pin STALE with
-destructive remedies first. Repair: `unmeasurable(repo)` → exit 2 via toplevel
-EQUALITY. The census found `orphaned_attr_gate.py` passing over a nonexistent repo
-at exit 0 — fixed (UNSEEN); final arm_reach: 25 modules / 691 mutants / 465 killed /
-0 UNREACHED / 0 NO-ARM / 0 BASELINE.
+`--help` read as repo path -> ten false STALE lines; fix `unmeasurable(repo)` exit 2; arm_reach 25 modules / 691 mutants / 465 killed.
 
 ## Issue 804 (2026-09-16) CLOSED — 28 instruments crashed when run the way AGENTS.md says to run them; the cross-repo axis is seven repos, not one
 
-On cp874, `print()` of the verdict glyphs dies with NO verdict — UNREAD findings
-(the restatement sweep was unlooked at while the family read green). Repair:
-`scripts/console_safe.py` (`errors="backslashreplace"`), 28 callers;
-`console_encoding_gate.py` joined CHECKS. Cross-repo: 71 undefended across SEVEN
-repos vs katgpt-rs 0/72 — the sweep ratchets the derivative.
+console_safe.py (backslashreplace) across 28 callers; console_encoding_gate.py joined CHECKS. Cross-repo 71 undefended in 7 repos vs katgpt-rs 0/72.
 
 ## Issue 803 (2026-09-16) CLOSED — the off-macOS partial gate printed the SAME final line as a full pass
 
-`develop` carried 24 `error[E0560]` + 4 `-D` lint errors for ten hours while the
-narrow gates were green; `--allow-partial-platform` would have read it but printed a
-final line byte-identical to a full pass. Repaired: the final line carries the
-partial verdict and names the unmeasured axes (`3ceb541b`).
+Final line of the partial gate now names the partial verdict and unmeasured axes (`3ceb541b`); develop had carried 24 E0560 + 4 lint errors for ten hours.
 
 ## Issue 802 (2026-09-16) CLOSED — commitment-gap calibration rig: residue DEAD-BY-DOMINATION at micro scale; stability features (item 3) shipped earlier in the day
 
-Bench 802: G3 FAIL — the no-gate one-forward baseline dominates (+3.5 acc at half
-NFE); mechanism: self-consistency labels blind to context contamination. Revival
-needs all of: large would-miss mass, improving revisions, an iterating baseline,
-DAgger-style calibration. Also: root `katgpt_rs::speculative` re-exports
-`StabilityTracker`/`TOPK_DRIFT_K`/`N_STABILITY_FEATURES`.
+Bench 802 G3 FAIL: no-gate one-forward baseline dominates (+3.5 acc at half NFE). Root speculative re-exports StabilityTracker/TOPK_DRIFT_K/N_STABILITY_FEATURES.
 
 ## Issue 800 Arm C phase 1 (2026-09-16) — GraphStablePool<T> extracted: the common contract verified across 4 sites (a 4th found in-repo)
 
-`877e06eb2` + Bench 800-C: index-stable slots, LIFO free list, append-only growth —
-ships 4× (radix_prefix / PagedKVCache / riir-gpu arenas + `BranchBank`); INDEX
-stability is the pool's; payload-ADDRESS stability belongs to the stored type.
+`877e06eb2` + Bench 800-C: index-stable slots, LIFO free list; contract shared by 4 sites (radix_prefix, PagedKVCache, riir-gpu arenas, BranchBank).
 
 ## Issue 801 (2026-09-16) CLOSED — T4 PoC: composition-quality REFUTED, disagreement-trace CONFIRMED; T5 routing: meld stays opt-in as a contradiction detector, Super-GOAT Q3 blocked-as-refuted, T2 audit stands
 
-T4 (riir-ai Bench 932): mean matches/beats every meld arm — composition quality
-REFUTED. Positive: the λ̃ disagreement trace (contradiction AUC 0.976, precision@8
-0.997) shipped in `katgpt_core::meld` (opt-in). Research 560 DOWNGRADED.
+riir-ai Bench 932: composition quality REFUTED; lambda disagreement trace (AUC 0.976, precision@8 0.997) shipped opt-in in `katgpt_core::meld`. Research 560 downgraded.
 
 ## Issue 800 Arms A+B closed (2026-09-16) — bf16 SIMD G2 FAIL-honest (autovec parity); slot-flip DECLINE (ties mpsc); JSD kernel lands (Issue 802 item 2)
 
-Arm A (`f314d5006`): LLVM auto-vectorizes the scalar reference — 1.00× widen/trunc,
-1.19–1.23× RNE vs the ≥4× gate; FAIL-honest, opt-in. Arm B: slot-ownership beats
-serial +21–46% but TIES mpsc → DECLINE. The NaN-safe bounded top-K JSD kernel
-(`jsd_topk`) landed.
+Arm A `f314d5006`: bf16 SIMD 1.00x widen/trunc vs >=4x gate, FAIL-honest opt-in. Arm B slot-flip DECLINE (ties mpsc). `jsd_topk` kernel landed.
 
 ## Issue 801 T1–T3 (2026-09-16) — NAP audit + `meld` primitive: the census survives code-level scrutiny; the algebra holds, the quality ladder did NOT transfer (T4 is the sole adjudicator)
 
-Research 560 audit: 4 INADMISSIBLE / 1 PARTIAL / 1 N.A.; `meld` (`43f15f7c8`)
-bit-exact commutative soft-min with λ⋆ ≤ 3.24e-7. Bench 801 red flag: the paper's
-quality ladder did not reproduce at D=32 — T4 is the sole adjudicator.
+`meld` (`43f15f7c8`) bit-exact commutative soft-min, lambda* <= 3.24e-7; Research 560 audit 4 INADMISSIBLE/1 PARTIAL/1 N.A.; paper quality ladder did not reproduce at D=32 (Bench 801).
 
 ## Issue 800 Arm A (2026-09-16) — bf16⇄f32 SIMD kernels: G2 FAIL-honest — the pufferlib kernel-shape premise does not exist on M3+rustc
 
-NEON/AVX2/scalar bf16⇄f32, RNE bit-exact vs `half` incl. the NaN class; G2 FAIL
-1.00× widen/trunc (LLVM auto-vectorizes the scalar loops into identical NEON). Kept
-for G1 correctness + the ISA guarantee; `bf16_simd` opt-in, AVX2 compile-verified
-only.
+bf16<->f32 NEON/AVX2/scalar kernels RNE bit-exact vs half; G2 FAIL 1.00x (LLVM autovec parity). `bf16_simd` opt-in, AVX2 compile-verified only.
 
 ## Issue 799 (2026-09-16) — bevy_ecs 0.15→0.19 bump landed: the arenas are load-bearing evidence infrastructure, bevy_ecs is a schedule-free utility layer
 
-The ARENA is load-bearing (Bench 432 evidence), bevy_ecs ≈23.5K LOC of `World` +
-queries — bumped `e0f02ab93` (`Events<E>`→`Messages<E>`, `#[derive(Event)]`→
-`#[derive(Message)]`); uuid 1.26 pulls getrandom 0.4 (wasm pin). Bench 799: G1
-byte-identity PASS; G2 full-game harness ~2× slower, documented.
+bevy_ecs 0.15->0.19 bump `e0f02ab93` (Events->Messages); Bench 799 G1 byte-identity PASS, full-game harness ~2x slower, documented.
 
 ## Issue 798 (2026-09-15) — a tracked landing record claimed a sibling-repo repair that was never committed
 
-Two `scripts/` files recorded cross-repo repairs as landed; neither existed, both
-sweeps RED throughout (`toolchain_override_drift_floors.txt` "all five markers are
-in" — 2 of 5; `pipefail_discard_expected.txt` DROPPED a row — the unrecoverable
-direction). Rule: a cross-repo repair is landed only when COMMITTED in the sibling,
-and the record must cite the sibling commit. ⛔ This session then committed the same
-defect (`b592a213` cited three dropped SHAs) — cite AND check it resolves. T2:
-`behind_origin()` (the mirror of MASKED); T3: `n_assertions()` derives the count.
+Record claimed uncommitted sibling repairs; rule: cite the sibling commit and check it resolves (`b592a213` repeated the defect). T2 behind_origin(), T3 n_assertions().
 
 ## riir-train Issue 549 fixed in `490b662e` (2026-09-15, M3 + 4090 session) — avx2_exp_sum_inplace: the one exp kernel missing the n-clamp
 
-Below −87.3 nats the AVX2 exponent WRAPS: exp(−300) = 6.9e23 — surfaced as
-riir-train Issue 511's Windows collapse. New
-`simd_exp_sum_extreme_inputs_underflow_not_wrap` pins all three paths; missed
-because the truth sweeps stayed clear of |x| > ~88.
+riir-train Issue 549 fixed `490b662e`: avx2_exp_sum_inplace lacked n-clamp (exp(-300)=6.9e23 wrapped); new test pins all three paths.
 
 ## Issue 779 T1+T2 (2026-09-15, M3 session) resolved — subspace_intervention promoted + the FUNCATTN spectral arm POSITIVE (Bench 766)
 
-`katgpt_core::subspace_intervention` opt-in (the Issue-778 POC promoted; a real POC
-bug caught — 778's "ridge" collapsed to class-sum `W = XᵀY`). T2
-`spectral_pre_rotate` POSITIVE: eigen-aligned 0.802 vs random 0.354, and > full
-0.656 — projection DENOISES.
+`subspace_intervention` opt-in; Bench 766 spectral_pre_rotate POSITIVE: eigen-aligned 0.802 vs random 0.354, above full 0.656.
 
 ## Issue 779 T3 (2026-09-16, M3 session) resolved — real-bank affinity: saturated plateau, NO re-pin; three-arm POSITIVE on real tensors (Bench 767)
 
-riir-ai `future_probe_bank_capture` over gemma-2-2b: the bank regenerates
-BLAKE3-IDENTICAL (`99edecca…8b81`). Affinity: CEILING PLATEAU (L02–L25 all 1.000) —
-no re-pin needed. Three-arm POSITIVE: top-4 probe-SVD dims = full (1.000) vs
-random-4 0.146; projecting them OUT collapses 0.344 → 0.000.
+Bench 767 real gemma-2-2b bank, BLAKE3-identical regeneration; affinity ceiling plateau, no re-pin; top-4 probe-SVD dims = full (1.000) vs random-4 0.146.
 
 ## Issue 782 (2026-09-15, M3 session) resolved — slt_sweep: the noise-sweep λ̂ estimator (781 T4), GOAT G1–G4 ALL PASS, promoted default-on
 
-`katgpt_core::slt::sweep` default-on (Bench 765): v1's windowed mirrored-Hill was
-−28…−37% biased; v2 fits the log-log CDF slope over an order-statistic ladder
-(χ²₄ ~2%). Geometry: TUBE/CONE near-unbiased; ISOLATED minima −18…−19% at d ≥ 4
-(ranking preserved); the ReLU toy boundary recorded as the instrument boundary.
+`slt::sweep` v2 (log-log CDF slope) GOAT G1-G4 PASS, promoted default-on (Bench 765); v1 was -28..-37% biased; isolated minima -18..-19% at d>=4.
 
 ## Issue 781 (2026-09-15, M3 session) resolved in `580bda30` — slt: the RLCT λ + WBIC selection primitive, GOAT G1–G4 + floor ALL PASS, promoted default-on
 
-`katgpt_core::slt` (Bench 764): six closed-form SLT selection functions;
-planted-rank recovery — WBIC picks 6, raw loss picks r_max, naive BIC over-penalizes
-(~24 nats inside the window). Loss convention: per-SAMPLE nats (the first draft
-averaged, shrinking gains 8×). UQ floor: a thin ~1% margin recorded honestly. T0
-novelty KEEP with caveat (λ̂ is the classical Hill estimator; the novelty is the
-application).
+`580bda30`: `katgpt_core::slt` six closed-form RLCT/WBIC functions, G1-G4 + floor PASS, default-on (Bench 764); WBIC recovers planted rank 6; UQ margin ~1%.
 
 ## Issue 775 (2026-09-14, M3 session) resolved in `3a59abe1` — dual_wave: the PC-ALM dual accumulator + closed-form rate laws (core) + the ballistic DEC wave kernel (dec), GOAT ALL PASS, opt-in
 
-Research 554 (PC-ALM) → opt-in `dual_wave` in katgpt-core + katgpt-dec; reach wave
-LINEAR (18/97/212 ticks at L=16/64/128) vs heat quadratic (×9 growth — the Eq-23
-law). Lessons in the bench doc: per-layer Jury rates blow up the coupled chain; the
-power-iteration estimate is ‖AᵀAv‖, NOT its square. NOT promoted (zone hierarchies
-are L≈4).
+`3a59abe1`: opt-in `dual_wave`, GOAT PASS; reach wave linear (18/97/212 ticks at L=16/64/128) vs heat quadratic; not promoted (zone hierarchies L~4).
 
 ## Issue 777 (2026-09-14, M3 session) resolved in `7e2a2638` — modality_additive belief kernel: FLYNN's linear-sensory-integration property distilled, measured, GOAT-passed, promoted same-day
 
-The PoC confirmed FLYNN's prediction and refuted two of its specifics (the failure
-is RATIO-flavored; `AttractorKernel` passes near-linear — P1 necessary-not-sufficient).
-`evolve_belief_additive` measures EXACT superposition at 26.8 ns/tick — promoted to
-katgpt-sense default. Hygiene: an unsink'd timing loop DCEs to 0.0 ns; a 2×
-comparative gate is ill-posed for a COEXISTING method (gate an absolute budget).
+`7e2a2638`: `evolve_belief_additive` exact superposition at 26.8 ns/tick, promoted to katgpt-sense default; PoC refuted two FLYNN specifics.
 
 ## Issue 789 (2026-09-14) — a gate whose own failure path is asserted by nothing: CLOSED
 
-Six of twenty CHECKS invoked NO arm at all (2,050 lines of per-push logic whose
-failure path never executed). The first census over-reported (grepped CLI flags;
-three checks DELEGATE to their classifier). T1: the shared fence parser was blind to
-tilde fences (exposure LATENT: 0 tilde lines workspace-wide); T2
-`scripts/check_validation_gate.py`; T4: NO sweep — katgpt-rs is the only repo with a
-CHECKS array; don't add one by symmetry. The standing lesson, recorded seven times:
-a rule landed in one instrument and never generalised.
+Six of twenty CHECKS invoked no arm; added `scripts/check_validation_gate.py`; no sweep half by design (katgpt-rs sole repo with a CHECKS array).
 
 ## Issue 788 — the population-predicate registry was hand-maintained, and a careful reading missed two of ten: CLOSED (2026-09-14)
 
-`PREDICATES` registered seven while ten existed. Three defects fell out: the eighth
-was WRONG (`.exists()` not `.is_dir()`); two were UNPARAMETERISED; the
-real-workspace verdict coupled to unrelated failures. `SUBSET_PREDICATES` is its own
-tuple; the discriminator for predicate-shaped defs is DIRECTORY ITERATION (`ast`
-deliberately unused — a sibling's syntax error must not blind this gate).
+PREDICATES registered 7 of 10; fixed (.exists vs .is_dir, params, coupling); SUBSET_PREDICATES split; discriminator is directory iteration.
 
 ## Issue 787 — a census reads the DOCUMENT, so an undocumented instrument is invisible to it: CLOSED (2026-09-14)
 
-Both censuses enumerated audits AGENTS.md documents — `len_derived_binding_audit.py`
-was in none. The predicate is REACHABLE (roots AGENTS.md + `scripts/docs_gate.sh` +
-workflows; closure follows script → script); HISTORY.md deliberately NOT a root. Of
-9 unreachable: two wired into AGENTS.md (the default), seven pinned by MEMBERSHIP
-with reasons. The sweep is a RATCHET (riir-train 61 of 61 over-captured). The
-closure is TEXTUAL — false reachable is the dangerous direction.
+Reachability predicate (roots AGENTS.md + docs_gate.sh + workflows); of 9 unreachable, 2 wired, 7 pinned with reasons; sweep is a ratchet; HISTORY.md not a root.
 
 ## Issue 786 — the `.len()`-derived binding audit had no verdict half, and the reason it went unnoticed is the finding: CLOSED (2026-09-14)
 
-Ninth instance, the QUIETEST: an undocumented instrument has no symptom — it just
-stops running. Three measurements decided the pins: a bimodal population (floors
-vacuous in 14 of 16), cross-repo-by-construction verdicts (leave-one-out 0 flips),
-UNRESOLVED 118 of 164 stays unpinned. No `min_rs_files` column — three sweeps floor
-that identical walk; the delegation is ASSERTED.
+Ninth instance of the undocumented-instrument class; verdict half added; floors vacuous in 14 of 16 repos; UNRESOLVED 118 of 164 stays unpinned.
 
 ## The platform-dead_code class got an instrument — `scripts/platform_dead_code_audit.py`, and it was wrong on its first sweep (2026-09-14, 4090 session)
 
-Three things wrong first: it INVENTED a finding (masking strings dropped Rust 2021
-inline format args); a `mod` row is not a rustc finding (MOD-REF its own bucket); an
-arm passing under its own perturbation certifies nothing (the vendor arm). Two real
-rows compile-verified and fixed on riir-ai (`note_ane_dispatch`, `gen_u64_bytes`).
-Standing: 0 findings · 1 MOD-REF.
+Audit wrong on first sweep (invented a finding, MOD-REF bucket, vendor arm); two real riir-ai rows fixed. Standing 0 findings, 1 MOD-REF.
 
 ## The Windows all-features lane — NEON_U8 platform gate, first specimen of the platform-dead_code class (2026-09-14, 4090 session)
 
-`NEON_U8` (katgpt-pruners `interval_pruner/simd.rs:27`) ungated, used only in
-aarch64-gated code — dead on non-aarch64, fixed `ea4c2873` (mirrors `AVX2_U8`).
-Instrument lesson: a `clippy::`-prefixed JSON grep reads FALSE all-clean (rustc
-codes have no prefix). Recurred same-day in the zed fork (riir-clippy
-`.distill/001` P22).
+`NEON_U8` ungated but aarch64-only used; fixed `ea4c2873`. Lesson: a `clippy::`-prefixed JSON grep reads false all-clean.
 
 ## Post-riir-train-513 develop drift — the 09-12→09-14 touched-rows window audited green on the workstation (2026-09-14, M3 session)
 
-The touched-rows gate over the drift window: 25 selected rows, 25/25 BUILDS at EXACT
-feature set · 0 FAIL · 0 UNSEEN. Rows since 09-11 had drifted to 710 via develop
-landings the main-only CI never audits.
+Touched-rows gate over the drift window: 25/25 BUILDS, 0 FAIL, 0 UNSEEN; rows had drifted to 710.
 
 ## Issue 774 (2026-09-14, M3 session) resolved in `22e65be4` — the wasm32 surface audit's BY-DEP verdict: the row predicate was dep-blind, closed with a five-canary self-test
 
-The resolver credited only ROW evidence, so transitively-built crates read UNCOVERED
-(compile-verified riir-shader effects). Fix: the fourth verdict `by-dep`, never
-folded into NAMED; credit = non-optional in-repo path deps positively naming wasm32.
-Standing 26 NAMED · 2 BY-DEP · 0 UNRESOLVED · 1 UNCOVERED (the negative control).
+`22e65be4`: fourth verdict `by-dep` (non-optional in-repo path deps naming wasm32), never folded into NAMED; standing 26 NAMED/2 BY-DEP/0 UNRESOLVED/1 UNCOVERED.
 
 ## Issue 748 (2026-09-14, M3 session) resolved — option (a): all three unwired Lean negative tests now run in their lean_proofs.yml CI jobs (~162s/main push)
 
-Three of four `proof_negative_test.sh` invocations were wired to NOTHING; each repo
-adds the script to BOTH `paths:` lists + a step after `proof_gate.sh` in the SAME
-job (katgpt-rs `3c97358c`, riir-ai `ecb21f3f7`, riir-neuron-db `4a68575`). Gap 1 (no
-develop lane) UNCHANGED BY DESIGN.
+Three Lean negative tests wired into lean_proofs.yml (~162s/main push): katgpt-rs `3c97358c`, riir-ai `ecb21f3f7`, riir-neuron-db `4a68575`.
 
 ## Issue 773 (2026-09-14, M3 session) resolved — the 772-B2 removal's stale re-export: root lib E0432 under `flashar_consensus,plasma_path`, found by riir-ai's guard through the path dep
 
-The double cfg hid the stale re-export from the 772 wave's default lanes;
-riir-ai's guard Layer 1 died E0432. Fixed `b7fcabd8` (3-line deletion) — the first
-scoped-closeout found cross-repo by a DOWNSTREAM gate.
+Stale root re-export under `flashar_consensus,plasma_path` (E0432) found by riir-ai's guard; fixed `b7fcabd8`, 3-line deletion.
 
 ## Issue 771 (2026-09-14, M3 session) resolved — the radix-tree prefix KV cache primitive (RadixAttention index) shipped opt-in; G1–G4 ALL PASS, promotion deferred to the serving lane
 
-`katgpt_kv::radix_prefix::RadixPrefixTree` (16-token chunks, leaf-preferential LRU,
-the tree owns page INDICES — CUDA-graph address stability by construction); G2
-hit-rate 2.45× flat control, match latency 9.8×. STAYS OPT-IN (every lane
-single-stream); a racing duplicate dropped per numbering discipline, its tests
-adapted.
+`RadixPrefixTree` opt-in, G1-G4 PASS: hit-rate 2.45x flat control, match latency 9.8x; stays opt-in (all lanes single-stream).
 
 ## Issue 770 (2026-09-13, M3 session) resolved — the counter walker rebuilt per-commit; the 769 adjudication was partly an instrument artifact (verdict-review round 2)
 
-15 of 31 reset rows named FORWARD-stepping commits (date-ordered hunks around one
-`current`); "all 31 non-merge" was true BY CONSTRUCTION (`git log -p` doesn't diff
-merges). Repair: each commit's counter read at the commit AND each parent; merge
-resets now visible. 27 real resets; the Issue-768 verdict stands.
+Counter walker rebuilt per-commit: 15 of 31 resets were phantoms; 27 real resets; Issue-768 verdict stands.
 
 ## Issue 769 (2026-09-13, M3 session) resolved — the counter-reset class lands in the numbering sweep; all 31 measured resets adjudicated
 
-`numbering_drift_sweep.py` gains `resets` (committed BACKWARD moves re-spend
-numbers; ratchet-pinned) + `unbumped` (worktree counter below committed max —
-REPORT-to-owner). The walker imported from `highwater_contiguity_audit.py`; read
-with Issue 770's correction (15 of 31 phantoms).
+numbering_drift_sweep gains `resets` (ratchet) + `unbumped` (report); walker from highwater_contiguity_audit.py, read with Issue 770's correction.
 
 ## Issue 768 (2026-09-13, M3 session) resolved — the .highwater ownership witness REFUTED by measurement; highwater_contiguity_audit.py landed
 
-438 gaps + 27 resets over 73 counters — no major repo contiguous; an over-claiming
-witness VALIDATES wrong addresses. The contiguous-suffix witness DECLINED (T1 found
-zero live rows it would change — decline is a correct answer). Protection stays on
-the canonical heading.
+438 gaps + 27 resets over 73 counters: ownership witness REFUTED; contiguous-suffix witness DECLINED; protection stays on the canonical heading.
 
 ## The all-features E0252 root-name collision — ooo_audit::AuditScratch aliased (2026-09-13, M3 idle sweep)
 
-The root re-exported `AuditScratch` twice — collides only with both opt-ins on;
-fixed `a0ca7d36` (`AuditScratch as OooAuditScratch` at root only, zero root-path
-consumers).
+Root re-exported `AuditScratch` twice under both opt-ins (E0252); fixed `a0ca7d36` (alias OooAuditScratch at root only).
 
 ## The Windows default-features workspace lane — bench_mtp_metal_batch_floor platform gate (2026-09-13, 4090 session)
 
-13×E0433 — the only Metal example without `target_os = "macos"` guards; fixed with
-item cfgs on all 22 items + a loud `not(macos)` stub. The Windows default workspace
-lane hit 0 warnings for the first time here.
+bench_mtp_metal_batch_floor gets macOS item cfgs on 22 items + not(macos) stub; Windows default workspace lane hit 0 warnings.
 
 ## Issue 766 (2026-09-13, 4090 session) resolved — len_derived audit: caller tracer (HALF C) + two instrument defects found and fixed
 
-HALF A's fixed 6000-char window bled past kernels (22 of 74 false positives) →
-brace-matched body; HALF C classifies (handle, length) per caller —
-PERSISTENT-UPSTREAM is the eyes list; GUARD-ONLY re-verdicts 14 rows. Standing: 118
-UNRESOLVED — the honest floor. Heading correction: katgpt-rs owns 766 (witness
-`e4792a4b` bumps `.issues/.highwater` 765→766; the issue file was never committed).
+len_derived caller tracer (HALF C) + brace-matched body fix (22 of 74 false positives); 118 UNRESOLVED floor; witness `e4792a4b` bumps highwater 765->766.
 
 ## WeightEpoch — the KV-cache weight-identity epoch (riir-ai Issue 938; Plan 025 contract) (`49f5d245`, 2026-09-13)
 
-`LoraAdapter::weight_epoch()` — BLAKE3 over domain-separated serialization; IDENTITY,
-not an install counter (A→B→A may reuse cache; any byte difference is a new epoch).
-Motivation: the RLT staleness law (riir-train `.research/453`); riir-ai consumes it
-at `CpuInferenceBackend`, refusing mixed-epoch reads.
+`49f5d245`: `LoraAdapter::weight_epoch()` BLAKE3 identity epoch (not a counter); riir-ai consumes at CpuInferenceBackend, refusing mixed-epoch reads.
 
 ## Modelless-first mandate — original section (incl. the canonical-failure story)
 
-Pre-compaction narrative parked here (2026-09-06, from `1801c0ab`); the live rule is
-AGENTS.md §Modelless-first. Canonical failure: AC-Prefix G1 (Plan 313) was
-prematurely deferred to riir-train though the doubled-signal bias was systematic —
-the modelless fix landed bit-identically (`.benchmarks/313_ac_prefix_modelless.md`);
-`ac_prefix` re-promoted DEFAULT-ON.
+Parked narrative; live rule in AGENTS.md. AC-Prefix G1 (Plan 313) modelless fix landed bit-identically, `ac_prefix` default-on.
 
 ## Modelless-first mandate (the core principle)
 
-Parked copy of the mandate as it stood at the 2026-09-06 compaction; the live rule
-lives in AGENTS.md §Modelless-first mandate.
+Parked copy; live rule in AGENTS.md §Modelless-first mandate.
 
 ## Boundary contract — original section
 
-Parked pre-compaction narrative; the live contract pointer is AGENTS.md §Boundary
-contract.
+Parked narrative; live pointer in AGENTS.md §Boundary contract.
 
 ## Boundary contract — read `BOUNDARY.md` first
 
-Parked copy of the boundary section from the pre-compaction AGENTS.md; the live
-section lives in AGENTS.md.
+Parked copy; live section in AGENTS.md.
 
 ## The full gate — original section (narratives)
 
-Parked full-gate narratives (the axis table, the CI fire history, the Layer 6b
-landing, the mktemp BSD fix, the inverse-macOS module table); the live compressed
-rule lives in AGENTS.md §The full gate.
+Parked full-gate narratives; live rule in AGENTS.md §The full gate.
 
 ## Docs gate — original section (descriptions + narratives)
 
-Parked docs-gate descriptions and sweep narratives (check histories, the
-two-more-tiers table, the first-census results); the live rows live in AGENTS.md
-§Docs gate + drift sweeps.
+Parked docs-gate narratives; live rows in AGENTS.md §Docs gate + drift sweeps.
 
 ## cfg-gated targets — original section
 
-Parked cfg-gated narratives (the severity splits, population widenings, the
-`debug_assertions` dimension, arming side effects on binary-counting floors); the
-live rule is AGENTS.md §cfg-gated targets.
+Parked cfg-gated narratives; live rule in AGENTS.md §cfg-gated targets.
 
 ## required-features rows — original section
 
-Parked required-features narratives (UNSEEN-never-folds, the opposite-direction
-repairs, the touched-gate cost table); the live rule is AGENTS.md
-§required-features.
+Parked required-features narratives; live rule in AGENTS.md §required-features.
 
 ## Percentile index — original section (classifier history)
 
-Parked percentile classifier history (four vocabulary gaps, the TRUNC-VAR closure,
-the legitimate exclusions); the live rule is AGENTS.md §percentile.
+Parked percentile classifier history; live rule in AGENTS.md §percentile.
 
 ## Staged-set audit + shared target dir — original sections
 
-Parked staged-set narratives (the `b2527521` incident, the signal details, the
-riir-game-sdk false-red measurement); the live rules are AGENTS.md §staged-set +
-shared target dir.
+Parked staged-set narratives (`b2527521` incident); live rules in AGENTS.md.
 
 ## Feature Flag Discipline — rule histories (lossy surface, Report the Floor, Plan 467)
 
-Rule histories: the lossy-surface rule arrivals (Research 502, Bench 696, riir-ai
-Issue 750 bisection; external confirmations arXiv 2609.01962 + 2608.12700); the
-Report-the-Floor rule (Issue 010 FULLY CLOSED; K-sweep structural — pick K by
-chaotic memory, periodic data uses the floor); Plan 467 `DualLeoOracle` G5 FAIL at
-both postures — closed per riir-ai Research 322.
+Parked rule histories (lossy-surface, Report the Floor); Plan 467 DualLeoOracle G5 FAIL, closed per riir-ai Research 322.
 
 ## Substrate-First Gate — original section
 
-Parked pre-compaction copy; the live rule is AGENTS.md §Substrate-First Gate.
+Parked pre-compaction copy; live rule in AGENTS.md §Substrate-First Gate.
 
 ## Substrate-First Gate (MANDATORY before implementing)
 
-Parked copy of the gate from the pre-compaction AGENTS.md; the live section lives
-in AGENTS.md.
+Parked copy; live section in AGENTS.md.
 
 ## Research Workflow — original section
 
-Pointer to `.agents/skills/research/SKILL.md` (paper classification, 7-repo
-routing, fusion-first distillation, novelty + GOAT gates, modelless-unblock §3.5).
+Pointer to `.agents/skills/research/SKILL.md`.
 
 ## Repo count — the full original paragraph (drift history)
 
-The drift history: said 8 and 18 while membership changed; 19 → 16 on 2026-09-04
-(retirements to obsolete/, `riir-burner` last sweep `ce54122`); a count that MATCHES
-is still not a checksum over a set. The three-test rule (product / value / rate) and
-the canonical failure (game programs in riir-chain's consensus set — riir-chain
-Issues 096 + 097) live in AGENTS.md + BOUNDARY.md.
+Count drifted 8, 18, 19 -> 16 (2026-09-04); a matching count is not a checksum. Canonical failure: riir-chain Issues 096 + 097.
 
 ## Resolved issue log (verbatim from pre-compaction AGENTS.md)
 
-The pre-compaction resolved-issue log; the records are compacted to one line each
-under the heading below.
+Pre-compaction resolved-issue log; compacted to one line each under the next heading.
 
 ## Issue log (resolved)
 
-- **Issue 792** (as 776) — docs-gate CPU self-timing printed a well-formed number measuring nothing on Windows (`times` counts MSYS children, not native — 1.26s vs 19.7s wall); the gate CALIBRATES (0.25s child burn) else prints `CPU SUPPRESSED`.
-- **Issue 776** (the OTHER 776) — contrastive matched-swap + norm-matched noise interventions (Research 555, `be4ff672`+`d936b5fd`); Issue 791 adjudicated the number to this document (weight 16 vs 5).
-- **Issue 775** — `platform_dead_code_floor_gate.py` (CHECK 18) + `platform_dead_code_drift_sweep.py` landed; `--prove-fires ea4c2873`; the Windows CPU figure filed as Issue 792.
-- **Issue 765** — the `DOCS_GATE_PARTIAL_CLONE=1` marker axis: a loud DEFERRAL on the population axis, never auto-detected; gone-only disagreement reds naming BOTH hypotheses.
-- **Issue 763** — signed-graph LIF reservoir (opt-in `lif_graph`, `74fe08f1`, Bench 760: 97,285× vs dense at 3.1% active); hazards: canonical ascending spike order; ring period 1404 = 18×78.
-- **Issue 764** — `WeightEpoch` + `from_parts` + `as_bytes` (`49f5d245`+`aa163896`+`a7d6d8f0`); the optional refusal-arm gate NOT taken (the consumer lives in riir-ai).
-- **Issue 743** — `gw_alignment` (Plan 594, Bench 709): structure-only GW, G1–G4 PASS; greedy second-order init load-bearing; 2-opt polish removed.
-- **Issue 742** — the last 42 `#![cfg]`-gated targets reported a green zero; SILENT-NOW now a WALL at 0 (`2ae0d20a`).
-- **Issue 741** — alloc gates unrunnable in the shipped profile + the auditor read one of N cfgs (`da498fa6`); Issue-741-as-filed: `is_load_bearing` couldn't name threat-dialect gates (`ba26462b`, 11 ADMIT tokens; counterfactual 11 load-bearing silent under a silent wall).
-- **Issue 740** — regime-probe primitives (`regime_probe`, Bench 702); first consumer riir-clippy Issue 077 (gap −0.729 nats — corpus proximity, not the OOD label, decided the sign); stays opt-in.
-- **Issue 738** — the wasm32 lanes compile what they NAME (`wasm32_surface_audit.py`); 15 live findings in the browser crate; classifier-lessons canon (0-file walk; 17 false UNCOVERED).
-- **Issue 737** — nothing compiled for wasm32: layer 2b both simd128 arms + `wasm32_gate.yml`; follow-up: the `rust-toolchain.toml` vs CI `targets:` mismatch (`25c89432` — explicit `RUSTUP_TOOLCHAIN: stable`).
-- **Issue 734** — a shell gate that ABORTS mid-run reports exit 0: completion sentinel in 37 scripts / 10 repos; verdict + premise instruments; `riir-ai/scripts/e2e_internet.sh` PROVEN inert.
-- **Issue 736** — leakage_probe + cross-space diagnostics (opt-in); T4 Super-GOAT; consumer riir-neuron-db Bench 495 (top1 0.828 vs chance 0.086).
-- **Issue 735** — the laundering premise is bash-3.2-ONLY (11 interpreters measured); the sentinel is load-bearing IN CI (macos-26-arm64 ships 3.2.57 only); do not pin — measure.
-- **Issue 732** — FreshZ0 breadth-restart: decisive quality NEGATIVE (collapses 0.59 → 0.12–0.37; EqR's restart premise doesn't transfer); perturbation breadth pays from K=4 at every depth.
-- **Issue 731** — `LoopResidualExit` (opt-in `cadence_gate`): v4 G2 PASS at exactly 2.0× (existence-proof); P3 caught a probe defect → `with_shape_persistence`.
-- **Issue 733** — `EngramHotSwap::with_table` didn't hold the writer lock (`31bf0012`): the closure CASes and HOLDS; nested same-thread swap panics loud.
-- **Issue 730** — 256K prefill KV-offload: the wall was 4× smaller than claimed (16 of 64 blocks full-attention); premise refuted for every served lane; `scripts/gguf_header_audit.py` kept.
-- **Issue 729** — the NaN-comparator wave: ~160 legacy `partial_cmp` + 13 NaN-promoting `total_cmp` → float_order terminals / `cmp_for_max`; the closeout found ~35 more Group B sites.
-- **Issue 728** — `silent_now_load_bearing` was 0 everywhere because the classifier speaks one repo's dialect: widened 0 → 12, all armed (49/49); adding rows CAN red a gate counting green binaries.
-- **Issue 727** — SP-KV missed both T16 bars once measured at realistic length: the repaired instrument first (the "50% pruned" arm pruned 0/16); "zero-overhead gate bias" is false (+7–12%).
-- **Issue 726** — `gauge_rebalance` 3.7× its target: scalar accumulate → `simd_fused_scale_acc` (−53%); t08 re-pinned 30 → 15 µs.
-- **Issue 723** — the first full-workspace EXECUTION red: six classes; "Class A's reds are partly the box" was wrong — five were REPAIRED INSTRUMENTS; repair the instrument first, decide disposition second.
-- **Issue 725** — the numbering gate covered one repo: 35 duplicates + 7 broken allocators in the other fifteen; T4a `scripts/citation_weight.py`; riir-ai 6→0, riir-clippy 4→0, riir-train 13→0; cp874/cp1252/EOL lessons.
-- **Issue 724** — `.plans/` collisions regrew: `numbering_gate.py` + `numbering_floors.txt` + `docs_gate_paths_sync.py`; 449 resolved by citation weight (Poincaré kept; ActionBridge → 587).
-- **Issue 721** — the root crate registered a `#[global_allocator]` as a library: now `cfg(all(test, debug_assertions))`; the Issue-682 force-link pattern is dead — never reintroduce.
-- **Issue 719** — `cond_audit` PoC (G8 PASS); T2–T4 deferred (reopen on semantic-eviction PRs / riir-train Plan 343 T1.6 / Research 523 H2O).
-- **Issue 739** — no rust-toolchain.toml: pinned 1.98.1 (`87dfa778`); load-bearing half: full_gate.yml's deliberate @stable lane is now an explicit job-level `RUSTUP_TOOLCHAIN: stable`.
-- **Issue 767** — `mb_value` bounded three-factor (dopamine) plasticity value circuit (Bench 761, opt-in; r=0.9705 vs ridge floor, margin 0.029; toy 2.2 µs).
+Resolved issues 719-792 condensed (e.g. Issue 792 CPU SUPPRESSED, 742 `2ae0d20a`, 739 `87dfa778`, 733 `31bf0012`); full one-liners in git history.
 
 ## Issue 744 — HRM-Text second-pass modelless extraction queue: CLOSED as resolved-negative (2026-09-11)
 
-8 candidates closed after a consumer hunt — no graduating consumer (#1–#4 negative,
-#5 single-consumer, #6/#8 want-gated, #7 riir-ai-side). Re-file when a consumer
-materializes.
+8 candidates closed as resolved-negative: no graduating consumer; re-file when one materializes.
 
 ## Issue 745 — Margin-gated verification escalation PoC (TriSpec distill): CLOSED as resolved-split (2026-09-11)
 
-Split, all 9 gates PASS: the CASCADE mapping REFUTED (3–19% false-flag tail); the
-ACCEPT mapping VIABLE (50.5% invocation cut at 0.25% regression). Findings: the
-"margin ABSENT" reading was a vocabulary miss; trust polarity is workload geometry
-(`MarginPolarity` ships both); `margin_gate` OPT-IN.
+Resolved-split, 9 gates PASS: CASCADE refuted (3-19% false-flag), ACCEPT viable (50.5% invocation cut at 0.25% regression); `margin_gate` opt-in.
 
 ## Issue 746 — Looped-Flows modelless extraction candidates: CLOSED, split verdict (2026-09-11)
 
-Row 2 LIVE — opt-in `marginal_rewind` (calibrated beats additive-at-equal-budget
-5.71×; restart WINS clean-prior — the consumer decision rule; the mechanism is the
-de-commit shrink). Row 1 CLOSED (no time-grid consumer).
+Row 2 live as opt-in `marginal_rewind` (5.71x over additive at equal budget); row 1 closed, no time-grid consumer.
 
 ## Plan 596 — sliceTCA modelless slice-rank decomposition: COMPLETE + PROMOTED (2026-09-12)
 
-`slice_tca` (Bench 714) — G1–G4 ALL PASS → DEFAULT-ON; bit-identical factors vs the
-paper's SGD, zero hyperparameters; mixed [64,128,32] loss 0.0263 vs 0.4835 for the
-naive floors (18.4×). Held-out CV is structurally impossible for slice models.
+`slice_tca` Bench 714 G1-G4 pass, promoted default-on; loss 0.0263 vs 0.4835 for naive floors (18.4x).
 
 ## Plan 597 — BMR + EFE-over-models: COMPLETE + PROMOTED (2026-09-12)
 
-`bmr` (Bench 715) — G1–G4 ALL PASS → DEFAULT-ON; vs the brute-force oracle
-|Δ| = 7.1e-14; ablation 64/64 vs 2/64 vs 0/64; G2 513×. The Eq-7/9 sign flip
-corrected (oracle-arbitrated).
+`bmr` Bench 715 G1-G4 pass, promoted default-on; |delta| 7.1e-14 vs brute-force oracle, G2 513x.
 
 ## 2026-09-12 — the citation gate's first CI run was a blind red (promote `35ac604f`)
 
-The gate landed in a main-only window so its first CI run covered 267 commits — exit
-2 (1 contract repo < floor 15): the refusal was correct, but a check added while its
-lane never fires is deployed-but-never-exercised. `issue_citation_gate.py`
-CI-deferred under `DOCS_GATE_CI=1`; docs_gate.yml's fourth trigger-omission instance
-fixed (four checks lacked `paths:` globs).
+First CI run was a blind red (267 commits, exit 2 under floor 15); `issue_citation_gate.py` CI-deferred under `DOCS_GATE_CI=1`; four checks got `paths:` globs.
 
 ## Issue 755 — a quoted heading in a fence is not an allocation: CLOSED as resolved (2026-09-12)
 
-The allocation path only delegates to the canonical scanner: `heading_allocated()`
-0 of 57 fenced (EXCLUDE); `citations()` 57 of 2972 fenced (do NOT exclude — they
-carry sibling attributions). Unterminated fences fail SAFE (exit 2).
+Allocation path only delegates to the canonical scanner; `heading_allocated()` excludes fenced headings (0 of 57); unterminated fences fail safe (exit 2).
 
 ## Issue 756 — an unterminated fence swallows the rest of its file: CLOSED as resolved (2026-09-12)
 
-19 files / 611 swallowed lines, all repaired same day (katgpt-rs 12, riir-ai 5,
-riir-train 2); three shapes (missing closer / stray / missing opener); the reported
-line is the DANGLING fence.
+19 files / 611 swallowed lines repaired same day; three shapes (missing closer, stray, missing opener).
 
 ## Issue 749 — a cross-repo `Issue N` citation rebinds to the WRONG document: CLOSED (2026-09-12)
 
-AGENTS.md's bare `Issue 750` meant riir-ai's — resolved by
-`scripts/issue_citation_gate.py` (+ floors, `e258fdaa`); 8 rows qualified,
-revert-probed; 63 shared numbers reported, not gated.
+Resolved by `scripts/issue_citation_gate.py` (`e258fdaa`); 8 rows qualified and revert-probed; 63 shared numbers reported, not gated.
 
 ## Issue 751 — the cross-repo citation sweep (18 repos katgpt-rs cannot see): CLOSED as resolved (2026-09-12)
 
-`scripts/citation_drift_sweep.py` + floors (`d8041de5`): 19 repos / 2,939 citations;
-FP rate 7/43 = 16% (pre-752); the backlog worked to 0 CROSS same day.
+`scripts/citation_drift_sweep.py` (`d8041de5`): 19 repos / 2,939 citations, FP 7/43 = 16%; CROSS backlog worked to 0 same day.
 
 ## Issue 752 — a repo name QUALIFIES a citation even when that repo does not own the number: CLOSED as resolved (2026-09-12)
 
-Of 368 qualified, 45 unfollowable (37 WINDOW_ONLY + 8 ADJACENT); `60bc76aa`: a
-directory qualifier counts only if that repo ALLOCATED the number. The census's
-0/45 was re-rated to 1/45 by Issue 754 — a census inherits its oracle's blind spots.
+Fix `60bc76aa`: a directory qualifier counts only if that repo allocated the number; 45 of 368 unfollowable; census 0/45 re-rated to 1/45.
 
 ## Issue 753 — the citation rules' own COSTS were recorded once and never re-measured: CLOSED as resolved (2026-09-12)
 
-(a) the `\d{2,4}` width bound is LOAD-BEARING (`\d{1,4}` makes 51 false heads at 0
-true) — pinned `max_single_digit = 0`; (b) the 40-char alias LEAD: widening buys 0
-repairs and hides true findings.
+`\d{2,4}` width bound is load-bearing (`\d{1,4}` gives 51 false heads), pinned `max_single_digit = 0`; widening the 40-char alias lead buys 0 repairs.
 
 ## Issue 754 — an allocation that exists only as a HEADING is invisible to allocated(): CLOSED as resolved (2026-09-12)
 
-A file created and removed without a commit leaves only its heading;
-`heading_allocated()` (`8e0ffaa0`) recovers it — 7 numbers recovered, 123 CROSS
-retired, 752's census 0/45 → 1/45.
+`heading_allocated()` (`8e0ffaa0`) recovers heading-only allocations: 7 numbers recovered, 123 CROSS retired.
 
 ## Issue 761 — a Lean theorem can RESTATE its own definition: CLOSED as resolved (2026-09-12)
 
-Four shipped in riir-neuron-db as "the merkle_root guard" (removed by its Issue 617,
-`24957a2`); criterion: symbolic equality over LEAF constants; CROSS-DEF is not a
-finding; the oracle then found the instrument's own scoping defect (per module +
-imports now).
+Four theorems restated their definition in riir-neuron-db (removed `24957a2`); criterion is symbolic equality over leaf constants; CROSS-DEF is not a finding.
 
 ## Issue 750 — docs_gate's CHECKS array vs the AGENTS.md table documenting it: CLOSED (2026-09-12)
 
-Found drifted ("six" vs seven predicates); `scripts/docs_gate_checks_sync.py`
-(`d10202b1`): MEMBERSHIP both directions, never cardinality, plus QUANTITY WORDS;
-`MIN_ROWS = 10` floors both parses.
+Drifted (six vs seven predicates); `scripts/docs_gate_checks_sync.py` (`d10202b1`) checks membership both directions plus quantity words; `MIN_ROWS = 10`.
 
 ## Issue 760 — mmorpg-remaster joined the workspace but not `scripts/repo_set.txt`: CLOSED as resolved (2026-09-12)
 
-Fixed `bfccffea`; the 4090 reds were partial-clone topology (the M3 derives exactly
-20); `markdown_fence_drift_sweep.py` caught its unterminated fence at
-`.plans/005_layer3_reducer.md:600` (repaired `99064c5`).
+Fixed `bfccffea`; 4090 reds were partial-clone topology; fence sweep caught `.plans/005_layer3_reducer.md:600` (repaired `99064c5`).
 
 ## Issue 757 — linking_fold detector Option B (the 50 ms @ n=2×1000 remainder): CLOSED as resolved (2026-09-12)
 
-Single-pass k-NN + certified Gauss pruning: ≈31× and the ORIGINAL 50 ms budget
-restored and enforced (G2b 28.28 ms ≤ 50 ms @ n=2×1000). KEEP OPT-IN —
-`LinkingFoldCorrector` consumes the FOLD, not the detector.
+Single-pass k-NN + certified Gauss pruning: about 31x, G2b 28.28 ms <= 50 ms at n=2x1000; kept opt-in.
 
 ## Issue 747 — ASEntmax modelless mining (damping schedule, derived-k, eviction window, incremental entmax): CLOSED (2026-09-12)
 
-Four primitives behind opt-in `asentmax_schedule` (Bench 713 + the P0.7 real-model
-re-gate: NO modelless gain — σ̂ = 0.1409, far below σ ≥ 1; STAYS OPT-IN).
+Four primitives behind opt-in `asentmax_schedule` (Bench 713); real-model re-gate showed no modelless gain (sigma 0.1409 << 1); stays opt-in.
 
 ## Issue 762 — ASEntmax P4 stretch (HoldConcentration, Kamath regime detector, per-head grid, RoPE cutoff): CLOSED (2026-09-14)
 
-T4.1 HoldConcentration + T4.2 `logit_regime` DONE (Bench 759); the T0 owner call:
-`asentmax_schedule` STAYS OPT-IN (the gain is budget-confounded); T4.3/T4.4
-CLOSED-deferred (σ ≥ 1 absent at n ≤ 173).
+T4.1 HoldConcentration + T4.2 `logit_regime` done (Bench 759); `asentmax_schedule` stays opt-in (budget-confounded); T4.3/T4.4 deferred.
 
 ## Issue 772 — config-audit first pass over katgpt-rs (7 inert/assert-only knobs + orphan-report layer): CLOSED (2026-09-14)
 
-7 class-A/B knobs + 12 stillborn knobs fixed same day, wire-vs-delete per finding
-(A1/A2 wired `3c3c52ce`; S1/B2/B3 deleted — wiring would invert tested bands). FP
-record: trait-impl-internal reads are operational (riir-clippy `.distill/001` FP
-class #3).
+7 class-A/B and 12 stillborn knobs fixed same day, wire-vs-delete per finding (A1/A2 wired `3c3c52ce`; S1/B2/B3 deleted).
 
 ## Issue 777 — an instrument whose population is a FILESYSTEM walk audits code no repo owns: CLOSED (2026-09-14)
 
-A gitignored nested repo (`mmorpg/`: 1404 `.rs` credited to the outer repo — a
-correctly-shaped defect at an address where repair cannot be made) + OUT_DIR sources
-+ two fabricated floors. Repair: ONE `scripts/tracked_walk.py` (8-arm self-test);
-after: 8,694 tracked `.rs` over 16 repos; floors re-pinned at ~65%.
+Repair: one `scripts/tracked_walk.py` (8-arm self-test); a gitignored nested repo had 1404 `.rs` credited to the outer repo; after: 8,694 tracked `.rs` over 16 repos.
 
 ## Issue 778 — `subprocess.run(..., text=True)` decodes with the SYSTEM locale: CLOSED (2026-09-14)
 
-Found on cp874: the em dash reads as three wrong chars under `text=True`, or the
-decode raises in the reader THREAD (`stdout = None`, rc preserved). 28 sites repaired
-(`encoding="utf-8", errors="replace"`); the gate `scripts/subprocess_encoding_gate.py`
-scans the AST (the text scanner reported offenders in its own fixtures); the first
-run found a 28th site (`.agents/skills/doc-sync/tools/linkcheck_sweep.py`).
+28 sites repaired (`encoding="utf-8", errors="replace"`); `scripts/subprocess_encoding_gate.py` scans the AST; its first run found a 28th site.
 
 ## Issue 793 (allocated as 779; renumbered per Issue 791) — the workstation sweeps' partial-clone verdict, one copy: CLOSED (2026-09-14)
 
-Seven of eight sweeps carried a copy-pasted "pinned but ABSENT" loop and hard-red
-with every content assertion green — the remedy became `scripts/sweep_population.py`
-(UNREGISTERED / UNSEEN / DEFERRED, never pooled). Behind the reds: four live
-Issue-749-class rows, three fixed (`25b7bf6b`, `c5c30fee`, `96041bf6`), one
-deliberately untouched.
+Remedy `scripts/sweep_population.py` (UNREGISTERED / UNSEEN / DEFERRED); behind the reds, three live rows fixed (`25b7bf6b`, `c5c30fee`, `96041bf6`).
 
 ## Issue 792 (allocated as 776; renumbered per Issue 791) — the docs gate's CPU self-timing printed a well-formed number that measured nothing on Windows: CLOSED (2026-09-14)
 
-This heading exists so the number is READABLE by `heading_allocated` (which reads
-`## Issue NNN (…) — title`, not bullets); the full record is the Issue-log entry
-above. Verified both ways.
+Placeholder heading so the number is readable by `heading_allocated`; Windows CPU self-timing measured nothing; full record in the Issue-log entry.
 
 ## Issue 790 (2026-09-14) — an arm that exists and RUNS may still reach nothing: CLOSED (2026-09-15)
 
-`scripts/arm_reach_audit.py` + `scripts/arm_reach_gate.py`: mutate outside arm
-bodies, re-exec, run the arm. Nine findings in already-green instruments (a bare-dict
-exec crashed seven classifiers = 796 mutants; BASELINE missing; TIMEOUT credited
-KILLED via `except BaseException`); `--include-all` 55 of 55 (652 live = an unread
-backlog, never ratcheted). Pattern: CLASSIFIERS well armed, VERDICTS not — writing
-the reason is the adjudication.
+`scripts/arm_reach_audit.py` + `arm_reach_gate.py`: nine findings in green instruments (796 mutants via bare-dict exec); `--include-all` 55 of 55.
 
 ## Issue 791 (2026-09-15) — three numbers allocated twice across a 57-commit divergence: CLOSED
 
-Two sessions both allocated 776/779/780; rebase `max(ours, theirs)` makes it
-invisible. T1: `removed_candidates()` recovers from `git log -M --diff-filter=D`; T2
-moved all three by citation weight (779 moved anyway — coordination-free beats a
-5-site lead); T3 deferred. Headings carry "(allocated as NNN; renumbered per Issue
-791)".
+Two sessions allocated 776/779/780; recovery via `removed_candidates()` from `git log -M --diff-filter=D`; all three moved by citation weight.
 
 ## Issue 797 (allocated as 796; renumbered — the other session allocated 796 the same hour and pushed first) (2026-09-15) — a sweep reads the WORKTREE, so a finding may exist in NO commit: CLOSED
 
-The last standing CROSS row was an artifact of an uncommitted sibling edit; the
-population moved too (601 vs 607). `scripts/worktree_state.py` wired into all 16
-sweeps (ADVISORY only); the row-level split DISPLAY-worktree / PINS-HEAD; T5 the
-MEMBERSHIP gate (`scripts/sweep_advisory_membership_gate.py`) — "all sixteen" was
-stale within two hours. ⛔ `("*.rs")` is not a tuple — 8 of 15 call sites had it.
+Last CROSS row was an uncommitted sibling edit's artifact; `scripts/worktree_state.py` wired into all 16 sweeps (advisory); membership gate `sweep_advisory_membership_gate.py`.
 
 ## Issue 795 (2026-09-15) — 70 numbering collisions the gate could not see, 9 of them live: CLOSED
 
-791's "three" counted what the instrument could see — both-closed collisions leave
-nothing on disk (the MAJORITY case). Two regimes: ≥ 700 a WALL by MEMBERSHIP,
-below a RATCHET; six of nine NOT renumbered (margins on the pins). A tree-derived
-population is not the governed population (74% inflation from `.benchmarks/`
-families).
+70 numbering collisions (9 live) invisible to the gate; two regimes: wall by membership at >= 700, ratchet below; six of nine not renumbered.
 
 ## Issue 796 — the allocation-time dual-allocation gate: the FP rate measured, the gate built CLASSIFIED: RESOLVED (2026-09-15)
 
-`scripts/dual_allocation_fp_probe.py`: 7202 one-sided pairs green BY CONSTRUCTION,
-39 real incidents = 31 TWIN + 8 INDEPENDENT — fear moot, caution right.
-`scripts/dual_allocation_gate.py` CLASSIFIED (TWIN exit-neutral, INDEPENDENT exit 1);
-joined the docs-gate CHECKS.
+`dual_allocation_fp_probe.py`: 7202 one-sided pairs green, 39 incidents = 31 TWIN + 8 INDEPENDENT; classified `dual_allocation_gate.py` joined CHECKS.
 
 ## Issue 794 (allocated as 780; renumbered per Issue 791) — a wrong address reads as UNDECIDED when its number is in local range: CLOSED (2026-09-14)
 
-`⛔MISATTRIBUTED` was computed only in the CROSS bucket, so an explicitly
-misattributed citation under the citing repo's ceiling landed IN-LOCAL-RANGE, never
-gated — own class `MISATTRIBUTED-IN-RANGE`, wall 0. The hidden row was AGENTS.md's
-own example (riir-train Issue 513 written under katgpt-rs's name). Boundary
-measured: 19 of 19 locally-allocated rows are FALSE (contrast prose).
+New class `MISATTRIBUTED-IN-RANGE` walled at 0 (the check only ran in the CROSS bucket); 19 of 19 locally-allocated rows were false.
 
 ## Issue 781 — the heading oracle matches one house STYLE: CLOSED as a measured, printed blind spot (2026-09-14)
 
-64 of 152 read — split by house style (katgpt-rs's newest closes unreadable by its
-own instrument). Closed as a REPORT: the widening is unsound (`follow-up` is the
-same shape as `resolved —`, and this is the only path that can SUPPRESS); the cost
-prints every run. ⛔ The Issue-794 write-up introduced four rows of its own class —
-repair by naming the true owner in the window.
+Closed as a measured, printed blind spot (64 of 152 read by house style); widening is unsound, cost prints every run.
 
 ## The x86_64-pc-windows-msvc axis, measured: clean at all-features/all-targets (2026-09-14)
 
-A third platform axis nothing had compiled: exit 0, 32 packages, zero code findings
-(all 1,034 warnings are the NTFS hard-link message). Scope: compiles the
-`not(macos)` half; one cell added, matrix not closed.
+x86_64-pc-windows-msvc all-features/all-targets: exit 0, 32 packages, zero code findings; one cell added, matrix not closed.
 
 ## Issue 782 — a pinned repo absent from the walk is never visited: CLOSED (2026-09-14)
 
-The three sweeps Issue 793 left alone were all non-exempt — the census selected on
-symptom; `cfg_row_implication_drift_sweep` had NO absence check (confident green
-over 16 of 20). All eleven share the verdict. ⚠ A subset sweep has TWO populations;
-the hole is a per-sweep `⛔ DROPPED` check.
+`cfg_row_implication_drift_sweep` had no absence check (green over 16 of 20); all eleven share the verdict; per-sweep `DROPPED` check added.
 
 ## The executed-test gate on x86_64-pc-windows-msvc: exact floors, all three rows (2026-09-14)
 
-`scripts/test_gate.sh` measured on Windows: 203/203 · 2041/2041 · 249/249 — exact on
-every row, execution not compilation. 477 integration-test and 176 bench targets
-still executed by nothing automatic.
+`scripts/test_gate.sh` on Windows: 203/203, 2041/2041, 249/249 exact; 477 integration and 176 bench targets still unexecuted automatically.
 
 ## Issue 783 — the subprocess-encoding gate is katgpt-rs-only: CLOSED (2026-09-14)
 
-The gate shipped with no sweep half — measured 29 DECODE + 2 CHILD-ENCODER over 5
-repos; two not latent (`riir-clippy/scripts/gen_dashboard.py:552`). All 31 repaired;
-ceilings a wall at 0/0; `min_calls` is 0 in 10 of 16 repos, so `min_py_files` is the
-only blindness detector there. Standing failure mode, five times: a rule landed in
-one instrument and never generalised.
+Gate lacked a sweep half: 29 DECODE + 2 CHILD-ENCODER over 5 repos, all 31 repaired; ceilings walled 0/0.
 
 ## Issue 784 — the orphaned-attr gate's cross-repo claim was hand-run: CLOSED (2026-09-14)
 
-The first of the eight with NO new offenders — but it found a stale WARRANT: the
-docstring's hand-typed totals didn't follow the tracked-walk migration (22% / 46%
-drops; 23,026 sites in unowned trees). The structural repair:
-`orphaned_attr_drift_sweep.py` — the total is now MEASURED, not hand-typed.
+No new offenders but a stale warrant (hand-typed totals); `orphaned_attr_drift_sweep.py` now measures the total.
 
 ## Issue 785 — the wasm32 surface audit had no verdict half: CLOSED (2026-09-14)
 
-Cross-repo with NO verdict at all; standing lived as a hand-typed AGENTS.md
-sentence. UNRESOLVED walled at 0 (reached by answering, not ratcheting); UNCOVERED
-pinned by MEMBERSHIP (`scripts/wasm32_uncovered_expected.txt`); per-repo floors + a
-global TOTALS row. ⚠ Not "every cross-repo class": `suite_membership_audit.py` is
-report-only by design (1,203 load-bearing unpinned rows).
+UNRESOLVED walled at 0; UNCOVERED pinned by membership (`scripts/wasm32_uncovered_expected.txt`); per-repo floors plus a TOTALS row.
 
 ## Issue 800 Arm C complete — GraphStablePool site re-points: 1 landed, 1 N.A., 2 declined on evidence (2026-09-16)
 
-Site 1 radix_prefix RE-POINTED (`bdb1091a4`); PagedKVCache + BranchBank DECLINED
-(refill-in-place / wire pins are load-bearing); Qwen38LaneSet N.A. Lesson: a
-contract extraction earns its keep where the contract is the site's whole job.
+Site 1 radix_prefix re-pointed (`bdb1091a4`); PagedKVCache + BranchBank declined on evidence; Qwen38LaneSet N.A.
 
 ## The full gate's wasm32 layer counted NEGATIVE cfgs as surface — derivation fixed positive-only (2026-09-16)
 
-Layer 2b red on three `#![cfg(not(wasm32))]` files — the bare `git grep -l` couldn't
-see negation (the fourth instrument to meet the class). Fix `448c77f91`: count only
-compile-time non-negated cfgs. First full-gate PASS on this box.
+Fix `448c77f91`: count only compile-time non-negated cfgs; first full-gate PASS on this box.
 
 ## Issue 844 (2026-09-19) — the dot-delegation crossover measured on BOTH arches; the NEON answer refuted the filing session's own expectation: CLOSED
 
-M3 NEON: NO crossover — delegation wins at EVERY length ≥ 4 (9.06× @256), refuting
-"crossover LOWER"; aarch64 dispatch is compile-time vs x86_64's runtime CPUID.
-Per-site read: 8 CHUNKED + 10 large-D naive; dispositions filed as riir-ai Issue
-982, riir-train Issue 562, riir-neuron-db Issue 621.
+M3 NEON: no crossover, delegation wins at every length >= 4 (9.06x @256); dispositions filed as riir-ai Issue 982, riir-train Issue 562, riir-neuron-db Issue 621.
 
 ## Issue 849 (2026-09-19) — the 844 per-site dot read, katgpt-rs-own sites: four delegations landed + the full repair record-back: CLOSED
 
-Internal: `dot_f32_fma4`, `dot_chunk4`, `dot_8wide` (katgpt-core made NON-optional),
-`dot_truncated` — all delegate to `simd_dot_f32`. Sibling record-back with gates:
-riir-train `3cf49ebb`, riir-neuron-db `5d86dd3`, riir-ai `dbc5639d4`. No site had a
-bit-determinism contract; ~3e-6 @64 passed all gates.
+Four delegations to `simd_dot_f32` landed; sibling record-back riir-train `3cf49ebb`, riir-neuron-db `5d86dd3`, riir-ai `dbc5639d4`; ~3e-6 @64 passed all gates.
 
 ## Issue 848 (2026-09-19) — a rename privatised a delegation target and a rework deleted a shared fixture; both of that module's EXTERNAL callers are docs-gate CHECKS: CLOSED
 
-`6c6ca2ee` renamed `is_checkout` → `_is_checkout` updating seven in-module callers
-and neither external one — develop red 6h40m, NO verdict. T2
-`scripts/cross_module_attr_gate.py` (static, LINE-FREE keys); T3
-`scripts/import_health_gate.py` (execution; 6.238s of 6.34s was one all-top-level
-module, guarded; MISSING-DEP never flagged). ⚠ A repair that grows a population owes
-the other gates a run.
+`6c6ca2ee` privatised `is_checkout`, develop red 6h40m; added `cross_module_attr_gate.py` (T2) and `import_health_gate.py` (T3).
 
 ## Issue 856 (2026-09-19) — the green zero has TWO spellings and the audit built for it saw one: CLOSED
 
-A whole-body `#[cfg(feature)] mod tests {}` zeroes identically and the
-inner-`#![cfg]` regex never saw it — 26 targets, 175 assertions, 7 `*_goat`. The
-predicate now: gated items are the WHOLE body; runs of gated modules gated by
-`any(...)`; ⛔ the first repair read exactly like the defect (caught only by the
-summary line not moving).
+Whole-body `#[cfg(feature)] mod tests {}` zeroes like inner `#![cfg]`: 26 targets, 175 assertions, 7 `*_goat`; predicate widened to whole-body.
 
 ## Issue 860 (2026-09-20) — `successor_density_critic`: tabular discounted count-ratio goal-critic: CLOSED
 
-Modelless CRL extraction (`2c7a1f157`, Bench 818 GOAT PASS: G1a 0.00841 vs the
-Bellman fixed point — the first oracle was wrong and the gate caught it). The
-consumer pull-gate is satisfied: riir-ai Issue 991 `goal_salience`; stays opt-in.
+Modelless CRL extraction `2c7a1f157`, Bench 818 GOAT pass; consumer pull satisfied by riir-ai Issue 991 `goal_salience`; stays opt-in.
 
 ## The exact_sigmoid / dot_f32_ordered substrate promotion (2026-09-20) — the riir-chain Issue 156 T1 landing executed in this repo
 
-Ungated additive primitives (`5458dd69b` + main `5e2b730f2`): `exact_sigmoid` (2 ULP
-vs `fast_sigmoid`'s 580,601,137) and `dot_f32_ordered` (sequential fold, the
-deterministic anti-dedup pin). ⚠ The Cephes speed claim inverts on aarch64 (1.7 vs
-3.1 ns) — don't quote "~1.7× faster than libm" here.
+Ungated `exact_sigmoid` (2 ULP) and `dot_f32_ordered` landed (`5458dd69b`, main `5e2b730f2`); the Cephes speed claim inverts on aarch64 (1.7 vs 3.1 ns).
 
 ## Issue 865 T3 (2026-09-21) — the probe_guidance λ-sweep GOAT gate ran NEGATIVE; the negative verdict is the pinned gate: OPEN (lane re-opens at Bonsai scale)
 
-Guided best λ=1.25 DOMINATED by T=1.0 at matched diversity; the trained probe loses
-to the zero-logit null at every λ ≥ 1.5. Pinned: pooled unigram entropy is
-polarity-inverted on deterministic lanes; read any λ sweep against the null; G2a/G2b
-inverted into pins that red the day guidance wins.
+Guided best lambda=1.25 dominated by T=1.0; trained probe loses to the zero-logit null at every lambda >= 1.5; negative pinned as the gate; lane re-opens at Bonsai scale.
 
 ## Issue 866 (2026-09-22) — KARC D3 promotion coverage audit: VERDICT QUALIFY — the contract's passing legs live on configs nobody constructs: CLOSED
 
-Bench 849: both passing legs are `ChebyshevBasis`; every deployed shape is
-FourierBasis R=1 and fails both bars; no `karc_runtime` GOAT measures forecast
-accuracy. Not DEMOTE; riir-ai corrected Plan 332's claim.
+Bench 849: passing legs are ChebyshevBasis only, deployed FourierBasis R=1 fails both bars; verdict QUALIFY (not DEMOTE).
 
 ## Issue 865 file hygiene (2026-09-22) — issue file removed per noise-reduction, the lane's record was already durable: CLOSED (hygiene)
 
-Removed with no content change; all durable elsewhere (catalog §120, Research 578,
-riir-train recipe rows, the G2a/G2b pins).
+Issue file removed with no content change; record durable elsewhere (catalog section 120, Research 578, G2a/G2b pins).
 
 ## Issue 865 follow-up (2026-09-22) — arm (b) unblocked (DropoutHeadProbe) + the headroom study: the negative EXTENDED to every mini-lane regime (Bench 850)
 
-`DropoutHeadProbe` (a deterministic masked tap, no RNG) + the headroom rerun over
-three regimes: never beats the null (−0.13…−1.42 pts). A "+2.7 pts" pooled-unigram
-positive was RETRACTED — redistribution along the refuted axis. Only the
-Bonsai-scale lane remains.
+`DropoutHeadProbe` (Bench 850) never beats the null across three regimes (-0.13 to -1.42 pts); a +2.7 pts positive retracted; only Bonsai-scale lane remains.
 
 ## Issue 876 (2026-09-23) — the flappy render widened to v3; the decoded arm reads Δ0 vs the structured arm: CLOSED
 
-Grammar v3 (`laya-flappy-v3`: quantized OFFSET + neutral motion; v1 "rising" was the
-Bench-880 confound): structured 96/100 = decoded 96/100 (Δ0); raw ordinals read
-51/100. `515230244`, Bench 882.
+Grammar v3 `laya-flappy-v3`: structured 96/100 = decoded 96/100 (delta 0), raw ordinals 51/100; `515230244`, Bench 882.
 
 ## Issue 879 (2026-09-24) — MAttr budget primitives landed opt-in: exact mass at router-regime cost; calibrated-mass column says what the hard cut cannot: CLOSED
 
-`exact_mass_admit_into` (bisect τ so Σσ = k) + `log_frontier`; Bench 884: |Σm−k| ~1e-8
-vs the hard cut's −6.4% drift, CHEAPER than the sigmoid gate at N=1e3. ⚠
-`exact_mass_admit` ≠ `gate_sigmoid_topk` — opposite mass semantics.
+`exact_mass_admit_into` + `log_frontier` (Bench 884): |sum m - k| ~1e-8 vs the hard cut's -6.4% drift, cheaper than the sigmoid gate at N=1e3.
 
 ## Issue 892 (2026-09-25) — tetris strategy RULEBOOK (ruliology surface) + chance-node PUCT + laya head-to-head: the hybrid FSM champion out-scores laya 92–299× and Bench 891 4×: CLOSED
 
-16 rules as data + a Build/Downstack/Survive FSM; champion `ed5aa14b7d68472e`, hybrid
-`68cae9d382014662` (equal survival at 4.0–4.7× points); laya 0/60 vs hybrid 60/60.
-`chance_puct` opt-in (wins only at 19@75). Hybrid PROMOTED; Bench 891 → reference.
+16-rule rulebook + Build/Downstack/Survive FSM; hybrid `68cae9d382014662` scores 4.0-4.7x points, laya 0/60 vs hybrid 60/60; hybrid promoted.
 
 ## Issue 893 (2026-09-25) — the tetris substrate promoted from `examples/common/` into the leaf crate `katgpt-tetris`: CLOSED
 
-Leaf crate (deps rayon/blake3/fastrand) for riir-reflexer's precise-dep need;
-byte-identical migration (fixture replay 1,113,251 / 1,113,238 B; 14/14 tests);
-`Genome::champion_hybrid()` pins `68cae9d382014662`.
+Leaf crate `katgpt-tetris` (rayon/blake3/fastrand); byte-identical migration (fixture 1,113,251 / 1,113,238 B, 14/14 tests); champion pinned `68cae9d382014662`.
 
 ## Issue 919 T1 (2026-10-06) — the weight-derived spike census landed (Research 605)
 
-`crates/katgpt-attn/examples/spike_census.rs`: the offline GGUF scan of the
-dominant-rank-1 stat; the self-test caught a real asentmax precedent bug (f16
-subnormal off by one — every subnormal read 2× large). Verdicts: Bonsai-8B clean
-Table-1 shape; Bonsai-27B inject-early/cancel-late softly; gemma-2-2b weak (the
-suppression prediction). T2 next; nothing promoted.
+`spike_census.rs` offline GGUF scan landed (Research 605); self-test caught an f16 subnormal off-by-one; Bonsai-8B clean, 27B soft, gemma-2-2b weak; nothing promoted.
 
 ## Issue 927 (2026-10-09) — the SplitMix64 twin cross-pin: RESOLVED (file removed per noise-reduction)
 
-`katgpt-assign::rng::SplitMix64` duplicated `katgpt-types::rng::SplitMix64`
-(same name, one day apart, `below(n)` silently divergent: 53-bit vs 64-bit
-Lemire). Menu option 1 (the cross-pin) landed in `36823de3f`: the copy-gate
-convention fully met — the twin cited in-source + the `below` divergence named
-+ `katgpt-core/tests/splitmix64_twin_pin.rs` under `required-features =
-["assignment"]` pinning both streams bit-identical from 6 seeds × 10k draws
-(proven to fire by perturbation). Option 2 (delegate) DECLINED: it would cost
-katgpt-assign's documented zero-dep standalone posture. Filed by the 10-09
-substrate-first Mode 2 audit; same wave: riir-ai 1044, seal-remake 057.
+Cross-pin landed `36823de3f`: `splitmix64_twin_pin.rs` pins both streams bit-identical (6 seeds x 10k); delegate option declined (zero-dep posture).
 
 ## Issue 941 (2026-10-16) — the token/latent position-provenance convention lifted into the swir host contract: LANDED (file removed per noise-reduction)
 
-`crates/katgpt-transformer/src/swir/position_provenance.rs`: `PositionProvenance::{Tok(u32), Lat{span, step}}` + `ProvenanceLedger` (`record` / `materialized()` = M(L) / `latent_spans` / `clear`) — latent content is structurally unretainable (counts only, no Lat-content field). `DecodeBackend::decode_step` doc gained the position-provenance contract section: `Some(id)` MUST enter M(L), `None` (soft-embedding) MUST NOT; reference implementation = riir-ai `swir_validation/gemma2_backend.rs` (the Plan-313 host); the ledger is metadata, NEVER an attention mask. 6 contract tests green at `--features swir_switch_thinking` (51/51 swir module tests); no new flag (rides opt-in `swir_switch_thinking`). Cross-refs: riir-ai Issue 1075 (the two LIVE defects found in the same subsystem — compounding + pseudo-argmax leakage) carried in the module docs. Landed by shikuwa-4090-agent via the isolated worktree (the main worktree was wedged by a sibling's dirty Cargo.toml).
+`swir/position_provenance.rs` (`PositionProvenance`, `ProvenanceLedger`) landed under opt-in `swir_switch_thinking`; 6 contract tests, 51/51 swir tests green.
 
 ## Issue 942 (2026-10-16) — the latent pseudo-text readout + health sensors (report-only instrument): CLOSED (file removed per noise-reduction)
 
-`crates/katgpt-transformer/src/swir/pseudo_text.rs` + the example: pre-normalized embedding bank built once; `readout(v) = argmax_j cos(v/‖v‖, ê_j)` + top-k; span readability = mean max-cosine; loop + collapse health sensors for `collapse_aware_thinking` consumption; glyph-led markdown report lane, exit-0 always WITH a blindness floor (min steps inspected). Gates: G1 peaked-distribution argmax agreement, G2 armed cost = one V·D matvec per INSPECTED step, G4 bank precomputed zero per-call alloc. Landed `76d6d4fef` (module + example + gates, report-only) by shikuwa-4090-agent (claim lease honoured). Optional later leg (low readability as an abstention feature) stays out of scope — UQ-flavored, must beat the conformal-naive floor.
+`swir/pseudo_text.rs` report-only readout + health sensors landed `76d6d4fef` by shikuwa-4090-agent; G1/G2/G4 gates; abstention leg out of scope.
 
 ## Issue 929 (2026-10-18) — DiscoLoop loop-alignment probe + decode-reinject PoC: CLOSED ADJUDICATED (file removed per noise-reduction)
 
-Probe signal CONFIRMED on the league model — Bench 942 (M3, standard arm, n=180): acc 0.3667, auroc_margin peak 0.9327/0.8879 @loop2 ood — T1.3 G1 PASSES; the possessive default's label axis DEAD on both boxes (Benches 933 + 942), and loops peak at 1–2 then DECAY at loop 3 (cos_argmax 0.76 → 0.10) — the K sweep was a real Phase 2 axis. The decode-reinject leg CLOSED NEGATIVE — Bench 943: acc 0.0778 (14/180) vs stock 0.3667 (66/180) at identical probe conditions; the loop passes' state drift poisons the decode basis — the value of looping lives in the READOUT, and the stock K=1 snapshot/restore law is MEASURED-LOAD-BEARING, not just gate-pinned. Instrument: `katgpt_core::loop_alignment_probe` (feature `loop_alignment_probe`, opt-in — the flat variant plus the packed-head `probe_alignment_with_row`, which never dequantizes the 248,320×5,120 ternary head whole, bit-agreement pinned) + the riir-infer bin `issue929_bonsai2_loop_probe` (feature `issue929_bonsai2_probe`; the K=1 BIT-IDENTITY pin — a wiring drift indicts the instrument). Repairs along the way, riir-infer: the KV OOM fix `61fc36f` (`HybridCache::with_layer_types` pre-allocated 128k-class KV for ALL 64 layers → `with_layer_types_bounded`), the scoring repairs `f0ae27c` (think-aware scoring — the answer window is post-`</think>` — plus an `<|im_end|>` early stop; K=1 bit-identity preserved), and the reinject arm `8cbc2b5` (stays opt-in/inert). The queued owner decision RESOLVED 2026-10-18 (Claude verdict AGREE): `B929_PHRASE` default flipped to standard — riir-infer `c43d36b` (header prints the phrase on BOTH arms, strict env match with a loud refusal parsed pre-model-load; possessive still reachable via `B929_PHRASE=possessive` for replicating 927–934; bin-only — the katgpt-core `FixtureSpec` library default unchanged; resolution appended to `.benchmarks/942_issue929_bonsai2_full_run_m3.md`). T2.x injection tasks stay DEFERRED-UNBUILT (probe-first discipline; the 0-for-3 loop-intervention lesson honored). Reopen trigger unchanged: riir-train Plan 451's loop-trained artifact. Earlier checkpoint-era record: kimi-k3-0.40B was UNDECIDABLE for a proven reason — content-untrained text head (Benches 927 + 930: 0% accuracy, NLL ≈ uniform).
+Probe confirmed (Bench 942: auroc_margin peak 0.9327 @loop2 ood); decode-reinject closed negative (Bench 943: acc 0.0778 vs stock 0.3667); riir-infer `c43d36b` flipped default phrase; T2.x deferred.
 
 ## Issue 939 (2026-10-18) — phase-carrying belief kernel + constructed phase-code counters: LANDED (P1/P2/P4 `97a4c0ace`), P3 deferred-until-pull (file removed per noise-reduction)
 
-`crates/katgpt-sense/src/phase_belief.rs` (feature `phase_belief`, opt-in, forward chain root → core → sense, catalog §148; defer-until-pull posture — promotion requires a named consumer pull from the drive/FSM stack). arXiv:2610.13341's damping-regime framework upgrades the leaky per-NPC belief kernels (magnitude-only memory: how much, never when) with a 2×2 underdamped κ-block `z_{t+1} = ρ·R(θ_t)·z_t + write` — phase-carrying, so a channel gains memory of WHEN (last-encounter phase, cadence, periodicity); drive readout `fast_sigmoid(gain·cos φ)`. `ModularPhaseCounter`: u32 count mod m (2..=256) + precomputed cos/sin LUTs — bit-deterministic by construction, and the f32 phase-accumulation drift premise is EXECUTABLE in the gate (f32 `φ += 2π/3` over 10⁶ events decorrelates, mean |Δcos| > 0.2; the exact side reads bit-stable — the assertion guards any future "simplification" back to f32). `DampedPhaseBlock`: free run matches `ρⁿ·R(nθ)` at four (ρ,θ) shapes; `steady_state_bound`/`write_budget_for` ship the paper's C.3 accumulation bound as per-channel write budgets, with the ρ→1 θ-honesty arm executable (small-θ channels collapse to the leaky (1−ρ) scale — reviewer round 3's caveat). 11 gates `tests/phase_belief_gates.rs` + P2 parity/mod-3 fixtures incl. the timing-compensated leaky-ordering-BACKWARDS case (odd > even through any magnitude-only state) and the m=3 cos-degeneracy pinned via `readout_pair` — both quadratures ship because cos alone is injective on ℤ_m only at m=2. P3 (FSM real-boot progress gate — the house behaviour law, PROGRESS not one tick) DEFERRED-until-pull by contract: the real-boot rig (pack, respawns, real cognition + monster AI) lives riir-ai-side; the named consumer pull is the unblock — the gate runs consumer-side beside the wiring, then promotion is adjudicated.
+`phase_belief.rs` opt-in landed (P1/P2/P4 `97a4c0ace`; 11 gates): ModularPhaseCounter + DampedPhaseBlock; P3 FSM real-boot gate deferred until a consumer pull.
 
 ## Issue 945 (2026-10-18) — QRR quotient-convergence extraction (rate-aware halting, settling budgets): LANDED P1/P2/P3/P5 `f112eecaa` + P6 `8e164b339`, P4 deferred-until-pull (file removed per noise-reduction)
 
-arXiv:2610.18174's convergence laws consumed WITHOUT training: `crates/katgpt-core/src/qrr_convergence.rs` (feature `qrr_convergence`, kill-switch `KATGPT_QRR_OSC_VERDICT=0` verified byte-identical in a child process; 14 gates `crates/katgpt-core/tests/issue945_qrr_gates.rs`; catalog §150). `ModeFitter`: per-channel sliding-window second-order fit over ANY iterative loop's delta sequence, recovering the mode `(r, ω)` — two measured numerics laws discovered by the gates themselves (f32 sliding-window sums cancel catastrophically → window sums accumulate in f64; the exact-single-mode normal equations are rank-deficient → a relative-Tikhonov ridge recovers the true mode through the min-norm solution). The two-channel oscillation verdict in `GainCostLoopHalter::with_mode_verdict()` (cfg-gated): `OscillatingButSettling` (r < 1−ε — converging THROUGH the flip, NEVER halt-and-damp; the paper measured that killing this degrades the computation) vs `LimitCycle` (r ≥ 1−ε under the same direction-reversal evidence); the settling-budget predictor + `R1Certificate` are two-signal (r≈1 AND complement stagnation — one alone never acts) and ADVISORY-ONLY by contract (calibration 36/36 runs within ×2; printed floor: constant budget 151.0 vs mean predicted ≈ 27). The fp32-rotation law + bf16 canary (`crates/katgpt-sense/tests/issue945_fp32_rotation_law.rs`): the shipped f32 path drifts ~1.0e-3 over 1000 steps vs 4.0 for the bf16-RNE-emulated counterfactual — the loud-zero defense, the gate FAILS if the canary can no longer reproduce the failure. P6 Sylvester attribution + α-replay REPORT-ONLY (f64 solve by measured necessity; Kronecker shape corrected to `(Sᵀ⊗I_k − I₂⊗A)`; 6 gates + the report example `issue945_qrr_sylvester_report`; fitting a Jacobian from a captured trajectory alone stays OUT of scope). P4 (the write-residual commit law for `phase_belief`) DEFERRED-until-pull riding 939's posture; the design is preserved in the file's git history: the free-dynamics innovation `r_free = ‖u‖/(‖z‖+ε)` measured directly from the caller's write — the paper's gauge-quotient `r_G` collapses to magnitude-only on single-scalar orbits and is never wired here.
+Landed `qrr_convergence` (ModeFitter, mode_verdict, advisory settling budgets; 14 gates) f112eecaa + P6 Sylvester report 8e164b339; P4 deferred-until-pull.
+fp32 rotation law: f32 drifts ~1.0e-3 over 1000 steps vs 4.0 for the bf16 counterfactual.
 
 ## Issue 946 (2026-10-18) — formatting policy: ADOPTED + GATED (file removed per noise-reduction)
 
-The repo is rustfmt-DEFAULT-styled: the filed "832 files" was a file:line HEADER count — the audit measured 158 of 2,770 tracked `.rs` (5.7%) divergent, hand-drift not a house style, and no tuned `rustfmt.toml` collapses it (every setting wide enough to spare the 160 drifted files unpacks 2,000+ default-styled ones — the tuned-config hope REFUTED by the residual curve). Verdict option 1 (adopt + gate): one-time format commit `6760d76f5` (131 cold files, formatting only, pinned in `.git-blame-ignore-revs`; every file a commit had touched in the 48 h landing window held back), `rustfmt.toml` + the gate `scripts/fmt_gate.py` wired as `full_gate.sh` Layer 7 (LAST, so a stable-rot reflow never masks the lint verdict; not in docs_gate — that lane is toolchain-free by design; membership BOTH ways — UNPINNED new drift and STALE rows both red — with the `MIN_FILES=2500` blindness floor), policy in AGENTS.md §Formatting. All 26 held-back files drained (`c59b20d10` 19 files, `1e7cccfbe` 6 more at the `set_refine`/`phase_belief` postures, `910da575a` the last row `swir/mod.rs` — drained against a nominally-live plan-626 lease whose holding plan had been CLOSED-NEGATIVE since 2026-10-16, so the lease guarded no live work; gate green 0 unpinned / 0 stale). T5 sibling-repo fmt policy DEFERRED by verdict with the measured hazard: `cargo fmt --all` in a sibling rewrites FOREIGN files reached through `path =` deps (riir-ai 1,295 / riir-chain 2,430 / riir-reflex 138 outside the repo) — never run a bare `cargo fmt --all` in a sibling, use `rustfmt <file>`; each repo needs its own residual-curve audit first (riir-ai 48% / riir-chain 57% / riir-reflex 73% diverge; none has a `rustfmt.toml` — the "the repo IS default-styled" premise does not transfer).
+Adopted + gated: format commit `6760d76f5` (131 cold files; 158 of 2,770 .rs divergent, not 832), `scripts/fmt_gate.py` as full_gate Layer 7.
+Tuned rustfmt.toml hope refuted by the residual curve.
 
 ## Issue 947 (2026-10-18) — katgpt-core lib.rs over the 3,200-line ceiling: LANDED `474a9bfc4` (file removed per noise-reduction)
 
-lib.rs 3,894 → 1,853 lines: 252 provenance blocks / 2,036 comment lines relocated into 222 module `//!` headers (merge-never-duplicate — an existing header stays first, the provenance appended after a `//!` separator; every word preserved, only the `//`/`///` → `//!` marker changed; spun-out re-exports keep ≤2-line notes). Zero public-surface change: the non-comment line sequence of lib.rs is byte-identical to HEAD (cfg 431=431, pub mod 260=260, pub use 204=204, pub fn 5=5) and the multiset of moved comment words equals the multiset inserted module-side (script-verified); two rustfmt reorder hazards handled — 62 blank-line barriers keep the original mod/pub-use order under the default-on `reorder_modules`/`reorder_imports`, and `dllm/mod.rs` + `exact_mass_admit.rs` kept their CRLF endings (insertion-only diffs). Verified (CARGO_TARGET_DIR=/tmp/katgpt947 — sibling agents' cargo was live): full-gate clippy `--workspace --all-targets --all-features --keep-going` exit 0; `cargo doc -p katgpt-core --all-features` clean for the crate (--no-deps exit 0; 178 doc warnings vs 250 at HEAD — the move removed 72, added none; the with-deps run exits 101 on a PRE-EXISTING rustdoc error in `katgpt-assign/src/types.rs:92`, a file this change never touched — not this change); docs_gate 35/35; fmt_gate green. The fn-doc comments over the 5 lib-level `pub fn`s stayed — the residual above the ≈1,500 estimate.
+lib.rs 3,894 to 1,853 lines via `474a9bfc4`: 252 provenance blocks moved into module `//!` headers.
+Zero public-surface change (non-comment lines byte-identical to HEAD).
 
 ## Issue 960 (2026-10-24) — KV-quant behavioral-subspace diagnostic + sensitivity-guided bit allocation (modelless PoC): LANDED T0a/T0b/T1/T2, T3 design closed (file removed per noise-reduction)
 
-The paper's law (arXiv:2606.09864, Research 633) — behavioral subspaces 10²–10³× more quantization-fragile than the PPL-averaged space — translated serving-time + training-free onto the KV-quant family. **T0a `ec7d3e2af`**: `crates/katgpt-spectral/src/kv_sensitivity.rs` (opt-in `kv_sensitivity`) — the PCR diagnostic, reduction + attribution modes over one metric core (damage = 1 − mean top-k attention-target overlap, first-index ties, sigmoid-not-softmax, Issue-940 deterministic folds), 14 fixture tests incl. Sterbenz-exact provable verdicts. **T0b + T1 `3b5bc8faf`** ([Bench 954](.benchmarks/954_kv960_t0b_capture.md)): `kv_capture` sink on katgpt-forward (feature-off = compiled out) + real-forward capture — K-side half-split rank stability 0.828, V 0.671; structural weighting vs behavioral damage reads −0.038 (straddles zero) = the dissociation precondition that makes T2's weight input informative; T1 classification 9/12 behavior-in-outliers + 0/12 quiet-channels (the EXPECTED negative-control outcome on random weights) + delocalization 0.999 = DILUTED (paper mode 3: per-layer fixes fail, allocation must be cross-layer). **T2 `5f7be857c`** ([Bench 955](.benchmarks/955_kv960_t2_damage_alloc.md), GOAT PASS — stays opt-in `kv_sensitivity_alloc`): `behavioral_waterfill_weights` (D_c = damage_c·4^{b₀}) feeding the SHIPPED water-fill allocator + `BitTable` O(1) lookup (G4: 0 allocs/10 000) + `joint_key_read` (joint ≠ sum of marginals); dominance at EVERY ladder rung vs uniform + structural, max win 0.0215 damage at rung 2.5; G1 nested resample 0.840 (disjoint 0.490 disclosed); integer rungs degenerate to identical allocations — the win lives at the fractional rungs (honest finding). **T3 (design closed `08942dfe3`, closed file `4a5347905`; eval execution DEFERRED to the quiet-box/m5ultra lane — hours-class on a loaded M3, Plan-337 class, owner call 2026-10-24)**: model pin EXISTS (`katgpt-attn/examples/asentmax_p07_gen_fixture.rs` GGUF v3 reader + qwen3 forward, PPL parity 16.9778 vs llama.cpp; pins on disk `Ternary-Bonsai-8B-Q2_0.gguf` 2.18G + `Ternary-Bonsai-27B-Q2_0.gguf` 7.16G = the per-model phase-transition read); reflex-harness seam resolved NEGATIVE (no KV-cache decode surface there — the harness is a katgpt-attn example extension, pick-flip via option log-likelihood, ag_news 4-way cheapest); quant seam = per (layer, position) K/V rows through TurboQuant `store_key`/`dequantize_key_into` (`TurboQuantKVCacheConfig`, decoupled from katgpt Config) + T0a's `uniform_quant_error_into` as the paper's-ablation control, ladder {2,3,4,8} + f32. Refusal/safety axis deferred with it (needs an instruct pin; gemma-2-2b-it RETIRED). Full record: `git show 4a5347905:.issues/960_kv_quant_behavioral_subspace_diagnostic.md`.
+Landed T0a `ec7d3e2af` (kv_sensitivity diagnostic) + T0b/T1 `3b5bc8faf` (Bench 954, BitTable allocation, G1 nested 0.840); T3 design closed `08942dfe3`/`4a5347905`.
+T3 eval deferred to the quiet-box lane; full record via `git show 4a5347905`.
 
 ## Issue 961 (2026-10-25) — FlashMemory row-relative margin-to-max selection (`flashmemory_margin_select`): LANDED opt-in `c6fb48962`, forward-level G1 FAIL, NOT promoted (file removed per noise-reduction)
 
-`with_margin(δ)` on both FlashMemory selectors (select `s_b ≥ s_max − δ` on the same centroid-dot scores; one shared `select_scored_row` helper, threshold path byte-identical without a margin; 4 tests). Offline (riir-train Bench 669, Bonsai-2 PQ2_0 8K–128K, causal prefix, held-out query positions, 2 seeds) it beat the shipped absolute rule 8/8 and a held-out trained d5 indexer 7/8 on selection rate at golden-set recall 0.97. **T2 — the forward-level G1 — FAILED** (Bench 669 addendum, one 32K forward, `--d1-sweep`): at matched token retention the margin rule is never better on mean attention-output cos and is worse on worst-case cos; one δ is mis-calibrated across layers (δ 7.4 keeps 97% of layer 19, 21% of layer 51, min cos 0.51). Stays opt-in as an evaluation instrument (riir-train D1 `--d1-sweep m<δ>`). **Lesson:** golden-set recall at cum-90% mass is not a sufficient selector G1 — it does not penalise the dropped tail mass that output fidelity does; a selector claim needs the output-cos curve at matched retention.
+Landed opt-in `c6fb48962` (`with_margin(delta)`); forward-level G1 FAIL at matched retention (riir-train Bench 669), NOT promoted.
+Stays an evaluation instrument; recall at cum-90% mass is not a sufficient selector G1.
 
 ## Issue 962 (2026-10-25) — FlashMemory budget (top-ρ) block selection (`flashmemory_budget_select`): LANDED opt-in + the serving consumer via riir-infer 1117 (file removed per noise-reduction)
 
-`with_budget(ρ)` on both FlashMemory selectors (top `round(ρ·n)−1` complete causal blocks by centroid-dot + current block — equal retention by construction; one `RowRule` enum (Absolute/Margin/Budget) through the shared `select_scored_row`; `select_nth_unstable_by` on a reserved rank scratch, zero alloc steady-state, deterministic lower-index ties). **T1 `aa439587c`** (5 tests). **T2 — 128K confirms** (riir-train Bench 671): centroid top-ρ beats Quest bounds + window + sink+window at every ρ and layer (ρ 0.10 mean cos 0.980/0.990/0.991 at layers 19/35/51); the budget rule beats the shipped absolute rule at LOWER retention (layer 35: 0.9951/0.9148 @ sel 0.298 vs 0.9888/0.8763 @ sel 0.413) — one absolute threshold cannot meet per-layer, per-row logit scales; a fixed fraction per row does. **T3 — serving consumer + end-to-end gate** via riir-infer Issue 1117 (lease closed 2026-10-27): the ternary decode-lane wiring `51f52f4` + the incremental-substrate method `3d3152fbd` (this repo) + the G1 battery (ρ=1.0 bit-identical to dense over 700 synth steps, incremental ≡ rebuild, budget moves+prunes) + the teacher-forced NLL/top-1 gate on real Bonsai-2 PQ2_0 at ctx 32K, ρ ∈ {0.05,0.10,0.15,0.30} — Bench 893 v2, riir-infer `47268ea`; the 128K consumer cell rides 1117's deferral. Selector default rule stays Absolute (`flashmemory_sparse` opt-in); promotion evidence lives in the 1117 record.
+Landed opt-in `with_budget(rho)` T1 `aa439587c`; riir-train Bench 671 128K: top-rho beats Quest and window rules and the absolute rule at lower retention.
+Consumer via riir-infer Issue 1117 (`51f52f4`, `3d3152fbd`, riir-infer Bench 893 v2 `47268ea`); default stays Absolute.
 
 ## Issue 964 (2026-10-25) — katgpt-assign solver static-invariant precompute (bbtree-class audit): LANDED ungated, GOAT G1–G4 PASS (file removed per noise-reduction)
 
-The bbtree distill (Research 322) finding: the solver recomputed static invariants per heat recompute. Landed (claim lease `katgpt-rs-m3-964a`): **(a)** `Compiled.group_members` — the sorted+deduped GroupCount member lists precomputed at `specs::compile()`, consumed by `refresh_heat` + `heat_of_container` (was `members.clone()+sort+dedup` per recompute); **(b)** `heat_order` baseline (0..b in tie-permutation order) precomputed at `Solver::new` — unique tie keys make the shortened sort byte-identical; the issue's conditional radix pass measured out (the sort never dominated). **Two bonus G4 findings caught by the new gate tests, both fixed:** `leaf_deltas` under-sizing (a GroupCount member's at-leaf slice is b wide → scratch grew mid-run; now `3·max_at + dims·(b+2) + 3`) and per-container membership Vecs growing past their construction high-water (now `Vec::with_capacity(n)` each — the `member_snapshot` precedent's own law). Gates ([Bench 956](.benchmarks/956_bbtree_precompute_goat.md)): G1 the full suite 57/57 + bench quality columns AND evals identical on every row (identical trajectory); G2 targeted GroupCount class −17.0%/−22.2%, everything else ±1% noise; G3 no regression; G4 two new alloc gates assert (0,0) — canary-proven on the pre-fix code reading **50,010 allocations / 22.4 MB** per GroupCount solve and 12 allocs per 12-container explain loop. Landed ungated: byte-identical outputs, no feature surface. PROVENANCE: `power=AC Power load=4.04 swap=5.56M canary=skipped powermode=2(high)`.
+Landed ungated: precomputed `group_members` and `heat_order` at compile/new, GOAT G1-G4 PASS.
+Two bonus G4 findings (e.g. `leaf_deltas` under-sizing) caught by new gate tests and fixed.
 
 ## Issue 966 (2026-10-27 → closed negative 2026-10-28) — modelless prefix-first grid re-selection (`grid_reselect` λ sweep): G1 FAIL honest-negative, the keyed incumbent owns the available win (file removed per noise-reduction)
 
-The premise gate read ALIVE (riir-ai Bench 1012, pool 0.6174 vs 0.0625 floor) and the λ sweep ran pre-registered (plan 632, 4090 `2bc7c691b`): prose best-λ +0.00% vs the +5% both-cells bar, code +5.26% at-bar and EXACTLY TIED with the keyed incumbent — coverage ≠ conversion (pool_rate rose with λ while mean_j fell; the corpus-bigram re-picks stay in-grid but leave the target's keyed sample). Tables: riir-ai `Bench 1013`; execution record: plan 632 (all tasks closed, G2/G3/G4 PASS, G1 the deciding fail). The substrate half stays shipped opt-in (`grid_reselect` feature, λ=0 bit-identical, zero-alloc steady state) and the `TopKPoolCoverage` instrument survives as the katgpt-speculative lane's tool.
+Closed negative: G1 FAIL, `grid_reselect` lambda sweep (plan 632, 4090 `2bc7c691b`); code +5.26% exactly tied with the keyed incumbent, prose +0.00%.
+Substrate stays opt-in; `TopKPoolCoverage` instrument kept; tables in riir-ai Bench 1013.
 
 ## Issue 970 (2026-10-28/29) — the 963 floor bump hard-broke every downstream pin still reading 1.98.1: measured matrix + the T3-generalized rollout ledger (file removed per noise-reduction; the rollout is COMPLETE, 2026-10-29)
 
-The anchor bump `8d54ddb96` (963 T1) put `rust-version = 1.99.0` on 25 katgpt-rs members; every downstream workspace pinning 1.98.1 whose cargo graph reached a floored member failed fresh-resolve with `error: rustc 1.98.1 is not supported by the following package: katgpt-device-verify@0.1.0 requires rustc 1.99.0` (the same floor error in refine + reflexer first; the matrix measured the rest). The remedy was the issue's own rollout ledger — one row per repo, each landing with its own gate evidence, `RUSTUP_TOOLCHAIN=1.99.0` as the per-invocation mid-lane unblock. **Final state: every row landed** — reflexer `7a6c255`, instinct `22fb8a9`, seal-remake (pre-follow) + sge `d9f15a4db` + seal-remake guard `657e1f45` (963 T3 lane), riir-infer `31fd00a`, riir-ai `ce236e6bb` (mid-bout, adjudicated codegen-safe `41dd5c962`), riir-refine `ff91fb5f` (forced unblock past the B298 corpus window), riir-kat `46594fc`, riir-auth `4bddc86`, riir-dapps `4e40594`, riir-neuron-db `ea40d5b`, riir-chain `2261f07a`+`9988047f` (the async-trait 0.1.92 `double_must_use` root-cause fix + the γ literal), riir-train `1fea63cf`, game-sdk `43ba18d`, mmorpg-examples `dce62c2`, reflex `190f244`, dao `6f79dec`, **riir-rethink `24bf40c` (amo 2026-10-29T05:0xZ, the last row — after plan 012's executed lease folded `899d551`; validation on amo: clippy `-D` clean at default AND the combined `serve-encoder,vessel,decstat` posture — the lane that was floor-DEAD at 1.98.1 — 25/25 + 113/113 tests, zero lint fallout; cross-checked green on m3 the same hour)**. Out-of-population verification (m3 close-out): deployer + shader still pin 1.98.1 and BUILD (their graphs reach no floored member — metadata + `cargo check --workspace` green both); riir-esp32's `katgpt-device-verify` git dep pins branch **main**, which still carries `rust-version = 1.98.1` (the anchor lives on develop only), so esp32 is untouched. Acceptance rows 3/3 discharged; the floor-hold fallback stays declined (the anchor's loud error did its job). Main's lag is now the standing pointer for any branch-main consumer.
+Anchor bump `8d54ddb96` (rust-version 1.99.0) broke downstream 1.98.1 pins; rollout ledger COMPLETE 2026-10-29, last row riir-rethink `24bf40c`.
+Other rows landed per repo (e.g. riir-chain `2261f07a`, riir-train `1fea63cf`); riir-esp32 untouched (pins branch main).
 
 ## Issue 969 (2026-10-27) — mmorpg-editor was seal-game-editor: one repo double-registered under its codename and its on-disk name; codename row retired (filed + closed in one commit, file never kept per noise-reduction)
 
-The 2026-10-27 registration (`39762d55f`) added `seal-game-editor` as the 32nd repo and recorded "mmorpg-editor + mmorpg-remaster are unclonable from here", which left amo as a permanent PARTIAL box (docs gate 34/36 red: `skill_repo_set_gate` + `population_sync_gate`). Both halves of that sentence were checked and were wrong. **mmorpg-editor IS seal-game-editor**: the 4090's box-local `repo_alias.local.txt` maps `seal-game-editor=mmorpg-editor` (remote `maxion-game/seal-game-editor`), and this tree already said so in `scripts/issue_citation_gate.py` (`"mmorpg-editor": ["seal-game-editor"]`). The contract therefore counted one repo twice: the 4090 measured it as `mmorpg-editor`, amo as `seal-game-editor`, and each box's row for the other spelling was unmeasurable by construction. **mmorpg-remaster is clonable**: it is `maxion-game/seal-online-remaster` (alias `seal-online-remaster=mmorpg-remaster` on the 4090). It was cloned to amo and aliased in amo's local file; its first sweep measurements are within pins (markdown_fence 83 md / 0, python_syntax 4 / 0).
-
-Repair: retired the `mmorpg-editor` row from `repo_set.txt` and the 21 drift-floor pin files plus `instrument_reachability_floors.txt`, keeping `seal-game-editor`'s rows. Those are the newer measurement (2026-10-27 birth) and the current `seal-*` contract convention (seal-render, seal-std). AGENTS.md §Repo count 33 → 32, with the codename noted beside the `seal-game-editor` entry as plain text. A backticked name is a MEMBERSHIP claim to `agents_repo_set_gate`, which reded on the first draft of the note. Historical prose and comments that name mmorpg-editor are left as they were (they record past events), and `issue_citation_gate.spelling_aliases` keeps the codename as citation LENIENCY. Box-local half: the 4090's `seal-game-editor=mmorpg-editor` alias row was removed. ⛔ The first rewrite went through PowerShell 5.1 `Set-Content -Encoding utf8`, which writes a BOM. `repo_alias.py` reads with plain `utf-8`, so the BOM would have turned the leading `#` comment into a junk `on-disk=contract` mapping row. It was rewritten BOM-free (first bytes 35 32) before any gate read it. Verdict: docs gate 36/36 on amo with no partial-clone marker.
+mmorpg-editor was seal-game-editor: double-registered repo; codename row retired from repo_set and 21 pin files (`39762d55f` was the original registration).
+Repo count 33 to 32; codename kept as citation leniency; filed and closed in one commit.
 
 ## Issue 968 (2026-10-27) — `block` 0.1.6 future-incompat killed by a vendored `[patch.crates-io]` fork in every workspace that reaches it (file removed per noise-reduction)
 
-`block` 0.1.6 is terminal upstream (no 0.1.7; SSheldon/rust-block abandoned 2021), and every `metal` release from 0.11 to 0.33 depends on it, so no dependency bump exists. The future-incompat is `static of uninhabited type` (rust#74840) at `block-0.1.6/src/lib.rs:64`: `enum Class {}` is the type of `extern static _NSConcreteStackBlock`. The static is only used for its address, so an inhabited opaque `struct Class { _opaque: [u8; 0] }` is a behavior-identical fix. The anchor fork is katgpt-rs `vendor/block` (`5e216a761`; gates: `katgpt-backend --features gpu_inference` build + clippy, an ObjC-block liveness arm, a lock row switched from registry to path, default posture clean). `[patch]` does NOT propagate across workspaces, so every workspace that reaches `metal` needs its own row: riir-refine `e07980c4`, riir-instinct `dc1002b`, riir-reflex `e90760a`, riir-rethink `19886b2`, riir-ai `8a097d23b` (covers both metal 0.31 and 0.33 edges), riir-infer `b9ea066` (vestigial lock entry, row arms future edges), and riir-train `73c1f46e` (2026-10-28, points at the anchor fork `../katgpt-rs/vendor/block` instead of a copy; `cargo tree -i block@0.1.6 --target all --all-features` resolves to the fork; default posture does not reach `block`). **Standing rule:** any future repo that pulls `metal` or another legacy-`objc`-family crate inherits the warning until it adds the same row. The only real exit is katgpt-backend moving `metal` to `objc2-metal`.
+`block` 0.1.6 uninhabited-static future-incompat fixed by vendored fork `vendor/block` (`5e216a761`) via `[patch.crates-io]`; no upstream bump exists.
+Gates: backend gpu_inference build + clippy, ObjC-block liveness arm.
 
 ## Lessons
 
-- A rule landed in one instrument and never generalised — grep the whole family and land the repair as one shared mechanism (recorded ten+ times).
-- A census over one representation is blind to what it omits; a census is exhaustive over ROWS, not over its ORACLE.
-- A count that MATCHES is not a checksum over a set; "every" typed as a NUMBER went stale within hours, twice.
-- An uninvoked assertion is unknown, not passing; a green zero is byte-identical to a pass.
-- A platform and a profile are part of the claim — exactly like the feature set.
-- A latency number without its BOX STATE is not a measurement; a latency gate in a debug build measures an unoptimised binary.
-- Repair the instrument first, decide disposition second — three would-be re-pins were off by 5×/7×/140×.
-- A pin re-typed after every run is a diary, not a wall; writing the reason is the adjudication.
-- A handoff naming remaining work is an assignment to every reader — fetch and check before building (the twin-duplicate class).
-- A converging error fits many mechanisms — distrust closing on one; run the LOSER's fixtures through the WINNER's readout.
-- A cross-repo repair is landed only when COMMITTED in the sibling, and the record must cite the sibling commit (checked with `git cat-file -e`).
-- A CONCURRENCY defect passes alone BY CONSTRUCTION — "TRANSIENT, passed alone" is the wrong conclusion for that class.
-- Say what you CHECKED, not who you concluded; attribute by the `from=` pipe, never the signature; put `Session: <name>, <epoch>` in the commit body.
-- Consistency across runs is not reproducibility when every run shares one box and one hour.
-- Decline is a correct answer; a measured negative is a result, not a failure of nerve.
+Distilled lessons (instrument generalisation, census blindness, green-zero, box state, concurrency, attribution); details in git history.
