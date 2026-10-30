@@ -66,7 +66,7 @@ struct SyntheticView {
 
 impl SyntheticView {
     fn build(n: usize) -> Self {
-        let mut rng = Lcg(0x6170_706C_65_6D6Fu64);
+        let mut rng = Lcg(0x0061_7070_6C65_6D6F_u64);
         let mut v = Self {
             adj: StdHashMap::with_capacity(n),
             ticks: StdHashMap::with_capacity(n),

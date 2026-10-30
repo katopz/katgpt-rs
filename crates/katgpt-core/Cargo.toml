@@ -2359,7 +2359,7 @@ required-features = ["basis_split", "subspace_phase_gate"]
 
 # Issue 974 (closed `d5c7c3da8`) (the ndb 640 lift) — walk_rank GOAT: G2 latency at
 # defaults on a synthetic 100k-node view (bar ≤ 10 ms; ndb bench 517 measured
-# 0.13 ms worst cell on the real graph), the W/K sensitivity ladder, and a
+# 0.13 ms/call on its 100k branching cell), the W/K sensitivity ladder, and a
 # G1 re-run-identity group that ASSERTS byte-identical output on every timed
 # iteration. Loud-zero defense on every group.
 [[bench]]
