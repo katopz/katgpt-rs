@@ -1,6 +1,6 @@
 # Issue 951: Matched-Rate Coupled Alignment Law as a Runtime Store-Pair Invariant
 
-**Status:** Open — **PARKED-PENDING-CONSUMER (adjudicated 2026-10-30, idle-lane triage)** — the issue's own build precondition (a concrete consumer) has NOT fired: verified against the live trees, every named consumer candidate is still single-store or constructed-once — `riir-refine/src/elo.rs` is one `EloTable` per player (no paired EMA estimators of one signal), `self_evolve` is single-store EMA (478's table row 2, unchanged), `LoraPair { reader, writer }` (katgpt-types `lora.rs`) is constructed-once with no ongoing coupled updates, `mape_k.rs` carries no alignment vital sign, and no store pair with ongoing coupled updates has landed since filing (sst_cross_tail measures static delta pairs, it does not maintain one). Per the issue's own law and the 478 verdict ("filed, not built, pending a consumer that needs it"), building the G7 PoC speculatively would violate the precondition — the PoC is the ADJUDICATION step once a consumer exists, not a way to invent one. **Unblock condition:** a lane proposes or lands a real store pair with ongoing coupled updates (the certificate arm's LoraPair consolidation-time refinement, a MAPE-K monitored/actual shard pair, or paired EMA estimators actually introduced into self_evolve/elo); that lane claims this issue, runs the G1+G7 gates below, and closes it positive or 448-negative.
+**Status:** Open — **PARKED-PENDING-CONSUMER (adjudicated 2026-10-30, idle-lane triage; posture pre-measured same day — see §Pre-G1 posture probe)** — the issue's own build precondition (a concrete consumer) has NOT fired: verified against the live trees, every named consumer candidate is still single-store or constructed-once — `riir-refine/src/elo.rs` is one `EloTable` per player (no paired EMA estimators of one signal), `self_evolve` is single-store EMA (478's table row 2, unchanged), `LoraPair { reader, writer }` (katgpt-types `lora.rs`) is constructed-once with no ongoing coupled updates, `mape_k.rs` carries no alignment vital sign, and no store pair with ongoing coupled updates has landed since filing (sst_cross_tail measures static delta pairs, it does not maintain one). Per the issue's own law and the 478 verdict ("filed, not built, pending a consumer that needs it"), building the G7 PoC speculatively would violate the precondition — the PoC is the ADJUDICATION step once a consumer exists, not a way to invent one. **Unblock condition:** a lane proposes or lands a real store pair with ongoing coupled updates (the certificate arm's LoraPair consolidation-time refinement, a MAPE-K monitored/actual shard pair, or paired EMA estimators actually introduced into self_evolve/elo); that lane claims this issue, runs the G1+G7 gates below, and closes it positive or 448-negative.
 
 > **Source:** arXiv:2412.20018 — "How Biological Synapses Self-Assemble Gradient Learning" (SAM, PNAS 2026), Lemma 1. Distill home: `riir-train/.research/478_SAM_Self_Assembling_Motif_Gradient_Learning.md`.
 
@@ -27,6 +27,32 @@ Matched-rate coupled alignment — two stores updated with the SAME outer-produc
   residual band — (ii) forfeits the "certificate" framing and the G1 exact-decay gate.
 - Sizing companion: the feedback-facing side wants 5–8× the capacity (paper's downstream
   overparametrization law) — a one-line construction policy.
+
+## Pre-G1 posture probe (2026-10-30, throwaway numpy, not shipped)
+
+Re-checked the consumer precondition against live trees first: still unfired. The only
+"dual-EMA" substrate (`TemporalDerivativeKernel` fast/slow, Plan 277; `cgsp/arm_alignment`;
+`drift_segment`) is **deliberately rate-MISMATCHED** (10:1) — the opposite of Lemma 1, so it is
+not a consumer. To narrow whatever lane eventually builds this, the posture question was
+measured instead of argued (V 16×96, V̄ 96×16, γ=0.05, η=0.1, k=200, seed 951; relative error of
+observed ‖E_k‖ vs the predicted (1−γ)ᵏ‖E₀‖):
+
+| posture | rel_err | reading |
+|---|---|---|
+| f64 exact linear | 1.2e-14 | law holds to rounding |
+| f32 exact linear | 1.9e-5 | holds at f32 resolution — the certificate needs a RELATIVE band, never bit-exactness |
+| f32, k=1000 | E collapses to exactly 0 | the pair goes bit-identical below an ulp (fine, but the ratio test must handle 0) |
+| f32, η mismatch 1% | 62× | rate mismatch is loudly detectable (monitor arm is cheap and real) |
+| f32, clamp [−1,1] | 0.37 | approximate at best |
+| f32, 1/16 quantized | 54× | **the law is gone** |
+| f32, sigmoid-gated | E → 0 (not geometric) | the law's shape is gone |
+
+Verdict carried forward: the certificate arm is valid **only for unquantized, ungated, linear f32/f64
+pairs**, at a relative tolerance ≥ ~1e-4 in f32. Quantized or gated stores (the dominant posture
+under the Bridge rule) must take the reclassified-approximate branch, and quantization in particular
+breaks it by 50×+ — any LoraPair consumer must refine in f32 BEFORE quantization, never after. The
+monitor arm (rate mismatch → 62× residual) is the strongest of the three. Still PARKED: none of this
+is a task gain, and G7 remains the gate.
 
 ## Why issue, not primitive (the two kills, stated)
 
