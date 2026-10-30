@@ -1,6 +1,6 @@
 # Bench — Issue 974 (T3): walk_rank GOAT — the katgpt-core upstream copy
 
-**Status:** RECORD — G2 PASS (defaults ≈ 0.29 ms/call worst on the synthetic view, 34× under the 10 ms issue budget); G1 asserted on EVERY timed iteration; G4 alloc gate green in-module.
+**Status:** RECORD — G2 PASS (defaults ≈ 0.28 ms/call on the synthetic view, 36× under the 10 ms issue budget); G1 asserted on EVERY timed iteration; G4 alloc gate green in-module.
 **Feature:** `walk_rank` (opt-in, katgpt-core). Bench source: `crates/katgpt-core/benches/walk_rank_goat.rs` (criterion, harness=false, required-features `walk_rank`).
 **Run:** `cargo bench -p katgpt-core --features walk_rank --bench walk_rank_goat` (RELEASE, bench profile).
 
@@ -8,7 +8,7 @@
 
 - Apple M3 Max, 16 cores, macOS 27.0.1, AC power, charged (Zed session report).
 - Concurrent sibling agents active in OTHER repos (seal-render; riir-refine Batch 320); this lane built in an isolated `CARGO_TARGET_DIR=/tmp/walk_lift`. Criterion estimates over 100 samples; the fixture is deterministic (LCG construction — the unseeded-global-RNG gate discipline; the ranker's own rng is per-config seeded).
-- Synthetic view = ring backbone + 2 LCG shortcut chords per node (4–5 edges/node — HIGHER degree than the ndb graph fixtures, so per-call cost here is an upper bound on the ndb bench 517 shapes).
+- Synthetic view = ring backbone + 2 LCG shortcut chords per node (4 listed neighbors/node — HIGHER degree than the ndb graph fixtures, so per-call cost here is an upper bound on the ndb bench 517 shapes).
 
 ## G2 — latency (criterion median of the per-batch estimates; batches = 8 spread queries)
 
@@ -18,7 +18,7 @@
 | `g2_latency/sensitivity_w16_k8_n100k` | 0.97 ms | ≈ 0.12 ms | — |
 | `g2_latency/sensitivity_w8_k4_n100k` | 0.19 ms | ≈ 0.023 ms | — |
 
-**Verdict: PASS** — matches the ndb bench 517 shape (cost ≈ linear in steps; 3.6×/12× cheaper at the two smaller postures vs ndb's 3.4×/6.2× — the synthetic view's higher degree shifts the ratio slightly, same law). The upstream copy adds ZERO overhead over the ndb measurements (the trait boundary is the same static dispatch).
+**Verdict: PASS** — matches the ndb bench 517 shape (2.3×/12× cheaper at the two smaller postures — 2×/8× fewer steps — vs ndb's 3.4×/6.2×). The upstream copy adds ZERO overhead over the ndb measurements (the trait boundary is the same static dispatch).
 
 ## G1 — determinism, asserted in the timed loop
 

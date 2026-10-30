@@ -20,8 +20,9 @@
 //!
 //! # OFFLINE ONLY
 //!
-//! W×K steps of neighbor enumeration + hashing is 5–10 ms-class work, not a
-//! sub-50 µs online query. Call it from offline/batch retrieval only.
+//! W×K steps of neighbor enumeration + hashing cost 0.07–0.20 ms/call at the
+//! defaults (riir-neuron-db bench 517) — over a sub-50 µs online-query budget.
+//! Call it from offline/batch retrieval only.
 //!
 //! # Design laws carried from the ndb landing
 //!
@@ -33,8 +34,10 @@
 //!   `BLAKE3(seed ‖ walk_index)`; the rank sort is a total order
 //!   (count desc, tick desc, hash asc); same seed + same graph →
 //!   byte-identical output.
-//! - **No allocation per step**: the counts map, neighbor/candidate scratch
-//!   buffers allocate ONCE per call.
+//! - **No allocation per step**: the counts map and neighbor/candidate scratch
+//!   buffers are created once per call and reused across steps; they still
+//!   grow with the visited set (the G4 test bounds a defaults call at ≤ 16
+//!   allocations against 256 steps).
 //! - **Ranking is BY structure** (the load-bearing finding): re-scoring
 //!   visited nodes by cosine collapses the walk into pool-widening — the ndb
 //!   T1 measured that composite ≡ flat cosine exactly. This ranker ranks by
@@ -175,7 +178,7 @@ fn walk_seed(master: u64, walk_index: u32) -> u64 {
 /// `query`; rank visited nodes by count desc, tick desc, hash asc. The query
 /// itself is never returned.
 ///
-/// OFFLINE ONLY. Allocates its scratch ONCE per call, never per step.
+/// OFFLINE ONLY. Creates its scratch once per call and reuses it across steps.
 pub fn walk_rank<V: WalkGraphView>(
     view: &V,
     query: &[u8; 32],
@@ -447,8 +450,9 @@ mod tests {
         let ranked = walk_rank(&view, &query, &cfg);
         assert!(!ranked.is_empty());
 
-        // Exact: the always-reached set {B, C, D, E} is taken (F's reach is
-        // seed-dependent at this fixture scale — asserted elsewhere), once each.
+        // Exact: the always-reached set {B, C, D, E} is taken, once each. F is
+        // not asserted: its only neighbor is the query, which the stage-2 BFS
+        // skips, so F enters the context only if a walk happened to rank it.
         let budget = ContextBudget {
             max_nodes: 64,
             seed_depth: 2,

@@ -5,18 +5,16 @@
 //! - **`g2_latency`** — stage-1 `walk_rank` at the DEFAULT posture (W=32,
 //!   K=8) on a synthetic 100k-node view (the ndb bench 517 surface point,
 //!   re-run katgpt-core-side on the plain trait). Bar: ≤ 10 ms/call (the
-//!   issue budget; ndb measured 0.13 ms worst cell on the real graph —
-//!   75× headroom). A synthetic `StdHashMap` view is the worst case for the
-//!   adapter (no papaya read locks, no guard), so this isolates the MATH
-//!   cost.
-//! - **`g4_alloc`** — allocations per stage-1 call at defaults (criterion's
-//!   allocator is not instrumented here; the O(config)-not-O(steps) bar is
-//!   asserted by the in-module `alloc_per_call_is_bounded_not_per_step`
-//!   test — this group measures the latency of the sensitivity ladder
-//!   instead).
+//!   issue budget; ndb bench 517 measured 0.13 ms/call on its 100k
+//!   branching cell — 75× headroom), plus the W/K sensitivity ladder. A
+//!   plain `StdHashMap` view carries no adapter cost (no papaya reads, no
+//!   guard), so this isolates the MATH cost.
 //! - **`g1_determinism`** — byte-identical re-runs asserted on the bench
 //!   fixture itself (a bench that can't verify its own input is a bar
-//!   satisfied by absent work).
+//!   satisfied by absent work), plus stage-2 `budgeted_context` timing.
+//!
+//! Allocation (G4) is not a bench group: the in-module
+//! `alloc_per_call_is_bounded_not_per_step` test asserts it.
 //!
 //! Loud-zero defense: every group asserts a non-empty ranking before any
 //! timing.
@@ -58,9 +56,9 @@ fn h(index: u64) -> [u8; 32] {
     z
 }
 
-/// Synthetic view: a 100k-node graph with a ring backbone + deterministic
-/// shortcut chords (LCG) — every node has ≥ 3 edges, so non-backtracking
-/// walks always have a choice (the real-work shape, unlike a bare chain).
+/// Synthetic view: a ring backbone + two deterministic one-directional
+/// shortcut chords (LCG) per node — every node lists both ring neighbors, so
+/// a non-backtracking walk always has a choice (unlike a bare chain).
 struct SyntheticView {
     adj: StdHashMap<[u8; 32], Vec<[u8; 32]>>,
     ticks: StdHashMap<[u8; 32], u64>,
