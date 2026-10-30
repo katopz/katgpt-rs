@@ -156,7 +156,7 @@ pub use best_belief::{best_belief_score, best_belief_scores, select_best_belief}
 #[cfg(feature = "hint_regret")]
 pub mod hint_regret;
 
-// riir-neuron-db Issue 974 (the ndb 640 T7 ledger): the walk-proximity
+// Issue 974 (closed `d5c7c3da8`) (the ndb 640 T7 ledger): the walk-proximity
 // context ranker — embedding-free relational ranking by random-walk visit
 // count (arXiv:2610.17867). Proven ndb-side (mechanism: ndb bench 516; G2
 // latency: ndb bench 517 — defaults 0.07–0.20 ms/call, flat in N); this is

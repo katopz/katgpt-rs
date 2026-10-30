@@ -1,4 +1,4 @@
-//! walk_rank — GOAT gate benchmark (riir-neuron-db Issue 974 T3; the ndb 640
+//! walk_rank — GOAT gate benchmark (Issue 974 (closed `d5c7c3da8`) T3; the ndb 640
 //! lift).
 //!
 //! Groups:
