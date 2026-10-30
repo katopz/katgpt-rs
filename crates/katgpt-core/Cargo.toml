@@ -2033,6 +2033,12 @@ direction_bank_audit = []
 # until a consumer GOAT.
 logspace_diff = []
 
+# PLM relaxed-acceptance admit predicate (Issue 973 lift for riir-ai Issue
+# 1142): relaxed_accept::{relaxed_admit, mass_above, in_rho_nucleus} — the
+# rho-nucleus / eps terms shared by katgpt-forward NucleusAccept and the
+# riir-infer keyed spec lane. Pure fns, no deps. Opt-in.
+relaxed_accept = []
+
 # Fixed-form log-softmax (Issue 959 T5, same family): softmax_fix::
 # fixed_log_softmax(_f64) + fixed_log_softmax_target(_f64) — the
 # argmax-excluded-LSE + softplus form (arXiv:2610.31642 Eq. 5). The

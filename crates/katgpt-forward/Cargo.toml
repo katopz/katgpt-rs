@@ -334,7 +334,7 @@ flashar_consensus = ["tri_mode"]
 # step fn in `d2f_verifier.rs` and the matching Warm/Cold arm in
 # `flashar_consensus.rs`. Opt-in: deliberately lossy away from the
 # (ρ=0, ε=1) corner; ρ/ε quality calibration is riir-ai Issue 1142.
-nucleus_accept = ["dllm", "tri_mode"]
+nucleus_accept = ["dllm", "tri_mode", "katgpt-core/relaxed_accept"]
 
 # Bit-plane ternary SIMD matvec — CPU inference with a 21× smaller weight
 # footprint (Plan 148). ⚠ MEASURED (Issue 843, 2026-09-19): 1.9–3.0× slower

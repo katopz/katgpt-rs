@@ -573,30 +573,12 @@ fn exact_q_step(p: &[f32], q: &[f32], d: usize, rng: &mut Rng, residual: &mut [f
 
 // ── Issue 973: PLM relaxed acceptance (NucleusAccept) ────────────────
 
-/// Mass ranked strictly above `d` under descending-p order with the pinned
-/// first-index tie rule (`p_t > p_d`, or `p_t == p_d ∧ t < d`) — one
-/// sequential ascending fold (Issue-940 law), zero-alloc.
+// The ρ-nucleus / ε admit terms live in katgpt-core (shared with the
+// riir-infer keyed spec lane, riir-ai Issue 1142).
 #[cfg(feature = "nucleus_accept")]
-#[inline]
-pub(crate) fn mass_above(p: &[f32], d: usize) -> f32 {
-    let pd = p.get(d).copied().unwrap_or(0.0);
-    let mut above = 0.0f32;
-    for (t, &pt) in p.iter().enumerate() {
-        if pt > pd || (pt == pd && t < d) {
-            above += pt;
-        }
-    }
-    above
-}
-
-/// ρ-nucleus membership from [`mass_above`]: `d` is in the smallest top-ranked
-/// set with mass `≥ ρ` iff it carries mass and the mass ranked above it is
-/// still short of `ρ`. `rho ≤ 0` ⇒ empty nucleus.
-#[cfg(feature = "nucleus_accept")]
-#[inline]
-pub(crate) fn in_rho_nucleus(pd: f32, mass_above: f32, rho: f32) -> bool {
-    pd > 0.0 && mass_above < rho
-}
+use katgpt_core::relaxed_accept::relaxed_admit;
+#[cfg(all(feature = "nucleus_accept", test))]
+use katgpt_core::relaxed_accept::{in_rho_nucleus, mass_above};
 
 /// Inverse-CDF pick for a given `u ∈ [0, 1)`: first `t` with `u < Σ_{j≤t} p_j`
 /// (ascending fold). f32-drift fallback (u past the total): the last token
@@ -642,9 +624,7 @@ pub(crate) fn nucleus_accept_step(
 ) -> PolicyStep {
     let pd = p.get(d).copied().unwrap_or(0.0);
     let u = if greedy { 0.0 } else { verify_rng.uniform() };
-    let relaxed =
-        pd > 0.0 && (pd >= eps || (rho > 0.0 && in_rho_nucleus(pd, mass_above(p, d), rho)));
-    if relaxed {
+    if relaxed_admit(p, d, rho, eps) {
         return PolicyStep::Accept;
     }
     if greedy {

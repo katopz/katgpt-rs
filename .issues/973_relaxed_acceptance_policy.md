@@ -135,6 +135,13 @@ internal adoption.
   - Round-width sweep: the break-even E[accepted]/W needs a real model's per-width verify wall
     clock. That arithmetic rides the ai-1142 consumer lane, where a model exists.
 
+- **Admit-predicate lift (2026-10-30, for ai-1142):** the ρ-nucleus / ε terms moved to
+  `katgpt_core::relaxed_accept::{relaxed_admit, mass_above, in_rho_nucleus}` (opt-in
+  `relaxed_accept`; `nucleus_accept` enables it). `nucleus_accept_step` now calls
+  `relaxed_admit`. Second consumer: riir-infer `qwen38_spec::keyed_accept_relaxed`, the
+  keyed league lane's relaxed walk, where x̃ is the keyed-Gumbel stream sample. One nucleus
+  definition now serves both verify paths.
+
 ## Out of scope here (deliberately — modelless boundary)
 
 The **quality half** of the calibration — MAUVE-budget fitting of (ρ, ε), per-family

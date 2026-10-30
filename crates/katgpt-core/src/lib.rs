@@ -131,6 +131,9 @@ pub mod stats;
 
 pub mod softmax_fix;
 
+#[cfg(feature = "relaxed_accept")]
+pub mod relaxed_accept;
+
 #[cfg(any(feature = "probe_guidance", feature = "loop_guidance"))]
 pub mod contrast_combine;
 
