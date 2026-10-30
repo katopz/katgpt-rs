@@ -329,6 +329,13 @@ flashar_anchor = []
 # the import always resolve for direct consumers too.
 flashar_consensus = ["tri_mode"]
 
+# PLM relaxed acceptance (Issue 973, arXiv:2610.26693 Alg. 1). Gates the
+# `DraftAcceptPolicy::NucleusAccept { rho, eps, greedy }` variant + its
+# step fn in `d2f_verifier.rs` and the matching Warm/Cold arm in
+# `flashar_consensus.rs`. Opt-in: deliberately lossy away from the
+# (ρ=0, ε=1) corner; ρ/ε quality calibration is riir-ai Issue 1142.
+nucleus_accept = ["dllm", "tri_mode"]
+
 # Bit-plane ternary SIMD matvec — CPU inference with a 21× smaller weight
 # footprint (Plan 148). ⚠ MEASURED (Issue 843, 2026-09-19): 1.9–3.0× slower
 # than the f32 matvec at every served shape (L3-resident operands); the

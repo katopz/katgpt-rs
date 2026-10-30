@@ -6263,3 +6263,14 @@ and the consumer wiring rides the lane once the premise gate
 (`TopKPoolCoverage`, Issue 966) reads alive on the target posture.
 
 Issue 966 — CLOSED-NEGATIVE 2026-10-28 (file removed per noise-reduction): the premise gate read ALIVE (riir-ai Bench 1012) but the pre-registered λ sweep + GOAT G1 FAILED the bar (riir-ai `Bench 1013` — prose best-λ +0.00% vs +5% both-cells; code +5.26% at-bar, exactly tied with the keyed incumbent; coverage ≠ conversion). Execution record: plan 632. The `grid_reselect` arm stays shipped opt-in (λ=0 bit-identical); no serving promotion.
+
+### `nucleus_accept` — PLM relaxed acceptance (Issue 973)
+
+`nucleus_accept = ["tri_mode", "katgpt-forward/nucleus_accept"]` — **opt-in**.
+`DraftAcceptPolicy::NucleusAccept { rho, eps, greedy }` (arXiv:2610.26693 Alg. 1):
+accept a draft `d` iff `d == x̃ ∨ d ∈ ρ-nucleus(p) ∨ p(d) ≥ ε`, emit the
+verifier draw `x̃ ~ p` on rejection (no residual). Exact only at the
+(ρ=0, ε=1) corner (G1a TV < 0.02); greedy corner bit-identical to
+`PrefixMatch` (G1b); monotone in ρ↑/ε↓ (G1c). Fixture A/B ([Bench 973](../../.benchmarks/973_issue973_nucleus_accept_ab.md)):
+0.48 → ~5.1 accepted tokens/call at K=8. Stays opt-in: lossy away from the
+corner, and the ρ/ε quality calibration (MAUVE budget) is riir-ai Issue 1142.

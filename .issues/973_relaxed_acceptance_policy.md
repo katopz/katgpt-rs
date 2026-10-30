@@ -1,6 +1,6 @@
 # Issue 973 — Relaxed acceptance policy for speculative verification (arXiv:2610.26693 adoption)
 
-**Status:** OPEN — POC/optimization task; modelless track of riir-train Research 484; no training dependency; quality-calibration half lives in the riir-ai twin (ai-1142).
+**Status:** IMPLEMENTED 2026-10-30, opt-in `nucleus_accept`. Policy + G1a/G1b/G1c + planted arm + fixture A/B are DONE ([Bench 973](../.benchmarks/973_issue973_nucleus_accept_ab.md)). Two scope extensions are deferred (need a K×K-proposal drafter / a real-model wall clock). Not promoted: no consumer lane has adopted it yet, and the quality gate is riir-ai Issue 1142. Modelless track of riir-train Research 484.
 
 ## The finding
 
@@ -65,7 +65,7 @@ internal adoption.
 
 ## Tasks (katgpt-rs scope — modelless only)
 
-- [ ] `NucleusAccept { rho, eps }` variant on `DraftAcceptPolicy`
+- [x] `NucleusAccept { rho, eps, greedy }` variant on `DraftAcceptPolicy`
       (`crates/katgpt-forward/src/d2f_verifier.rs`) + the equivalent arm in the
       `verifier_trait`/tree verify paths it composes with; zero-alloc, single pass over
       the preallocated top-k buffer, pinned first-index tie rule (Issue-940
@@ -76,7 +76,7 @@ internal adoption.
       drafter reuses the same u, `d == x̃` holds by construction, every draft is
       accepted at the corner, and G1a fails. One doc-comment line; the G1a seeded
       fixtures are the net that catches it.
-- [ ] **G1a corner-DISTRIBUTIONAL test:** at ρ=0, ε=1 the emitted token distribution
+- [x] **G1a corner-DISTRIBUTIONAL test:** at ρ=0, ε=1 the emitted token distribution
       equals the verifier's law q (TV/χ² over seeded streams vs direct q-sampling).
       Mechanism, stated precisely: under sampled verification the corner accepts `d`
       with probability q(d) — `d` matches an independent q-draw `x̃`; `SoftmaxArgmax`
@@ -84,18 +84,18 @@ internal adoption.
       acceptance probabilities, same output distribution; **only the per-draw
       decisions differ** (inverse-CDF matching vs threshold test) — which is why no
       draw-level bit-identity claim against `SoftmaxArgmax` may be written.
-- [ ] **G1b greedy-posture bit test vs `PrefixMatch`:** under the greedy-verify
+- [x] **G1b greedy-posture bit test vs `PrefixMatch`:** under the greedy-verify
       posture (fallback x̃ = argmax q), the corner is bit-identical to `PrefixMatch`
       on **every fixture draw — accepts AND rejects** (the reject arm is the
       discriminating half; a restricted accepts-only fixture set cannot fail).
-- [ ] **G1c monotonicity property test:** loosening (ρ↑ or ε↓) never decreases the
+- [x] **G1c monotonicity property test:** loosening (ρ↑ or ε↓) never decreases the
       accepted fraction, on fixtures.
-- [ ] Planted-violation arm: a miscalibrated nucleus (off-by-one mass, overlapping
+- [x] Planted-violation arm: a miscalibrated nucleus (off-by-one mass, overlapping
       bands) must red the property test.
-- [ ] Throughput A/B on fixtures: accepted/call strict vs relaxed (no model-quality
+- [x] Throughput A/B on fixtures: accepted/call strict vs relaxed (no model-quality
       metric — that half is ai-1142); `--release`; box-state PROVENANCE line beside any
       latency figure.
-- [ ] Scope extensions (separate tasks, same seam): quadratic **salvage refill**
+- [-] Scope extensions (separate tasks, same seam): quadratic **salvage refill**
       (reuse the proposal matrix's off-diagonal entries after a rejection instead of
       prefix-restart — needs a drafter exposing its K×K proposal matrix; `dd_tree` /
       `progressive_mcgs` are the candidates); **round-width sweep law** (interior
@@ -103,6 +103,37 @@ internal adoption.
       paper's 7 is GPU-specific).
 - [ ] On gates pass: record the bench, promote per flag discipline if a consumer lane
       adopts it; the corner-exact posture ships regardless (it anchors the tests).
+
+## Landing (2026-10-30)
+
+- **Code:** `crates/katgpt-forward/src/d2f_verifier.rs`. `nucleus_accept_step` uses a cost ladder:
+  the ε term reads p(d), O(1); the ρ term runs a `mass_above` full fold only when ρ > 0; the
+  corner cell test sums the prefix `p[..d]` in the same ascending order as `inverse_cdf_pick`, so
+  the cell edges are bit-identical; the CDF walk runs only on rejection. The step is zero-alloc,
+  and the nucleus uses the pinned first-index tie rule. Greedy posture uses `PrefixMatch`'s
+  `argmax_total_cmp` (its documented last-index tie), which is what G1b needs. Seed independence:
+  `NUCLEUS_VERIFY_DOMAIN`. The verify rng is derived once per `speculate()` call, in both
+  `D2fDrafterVerifier` and the `flashar_consensus` Warm/Cold arm.
+- **Gates (all green):**
+  - G1a corner TV < 0.02, and the accept rate matches Σq·p within 0.01.
+  - G1a negative control: a shared drafter/verifier u accepts > 99%. This proves the
+    seed-independence law has teeth.
+  - G1b: 4000 draws bit-identical to `PrefixMatch`, with both arms > 1000.
+  - G1c: monotone over a 6×6 (ρ, ε) grid in both postures. Non-vacuity: the loosest setting
+    accepts ≥ 0.3 more than the corner.
+  - Calibration property: coverage ≥ ρ, minimality, rank-prefix. Planted arms (off-by-one mass,
+    overlapping tie bands, inclusive `≤ ρ` edge) each RED it. Monotonicity alone is blind to all
+    three, so the calibration property is the net.
+  - The `speculate()` shape/determinism test now covers 4 NucleusAccept configurations.
+- **A/B:** strict 0.482 → relaxed ~5.1 accepted/call on fixtures. The corner equals strict
+  (0.479), which is the expected null. The ceiling is set by the fixture drafter's junk rate, so the
+  multiple is not transferable. Latency figures are refused (load ~103–130, preflight REFUSED).
+- **Deferred scope extensions, with reasons:**
+  - Salvage refill needs a drafter that exposes its K×K proposal matrix. The current
+    `dd_tree`/`progressive_mcgs` seams don't expose one; it needs its own issue on whichever seam
+    adopts it.
+  - Round-width sweep: the break-even E[accepted]/W needs a real model's per-width verify wall
+    clock. That arithmetic rides the ai-1142 consumer lane, where a model exists.
 
 ## Out of scope here (deliberately — modelless boundary)
 

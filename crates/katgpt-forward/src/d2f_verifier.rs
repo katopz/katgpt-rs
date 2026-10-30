@@ -52,7 +52,11 @@ const TRUNC_TOPK: usize = 16;
 /// | `SoftmaxArgmax` | point mass (forced greedy drafting) | `u ≤ p(d)` | `p∖{d}` renormalized | ✓ (Eq 21) |
 /// | `TruncatedArgmax` | point mass | `u ≤ p̃(d)` (top-k) | top-k residual | ≈ (tail dropped) |
 /// | `ExactQ` | stored full q per position | `u ≤ min(1, p(d)/q(d))` | `norm(max(p−q, 0))` | ✓ (Eq 8 analog) |
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+/// | `NucleusAccept` | unused | `d == x̃ ∨ d ∈ ρ-nucleus(p) ∨ p(d) ≥ ε` | `x̃ ~ p` (no residual) | ✓ only at ρ=0, ε=1 (Issue 973) |
+///
+/// `Eq` is not derived: [`DraftAcceptPolicy::NucleusAccept`] carries `f32`
+/// knobs (the enum stays `Copy + PartialEq`).
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum DraftAcceptPolicy {
     /// Legacy Plan 089 behavior: greedy argmax prefix-match. Kept as the
     /// GOAT control/fallback — distribution-biasing by construction.
@@ -77,7 +81,49 @@ pub enum DraftAcceptPolicy {
     /// rather than FLARE's top-k (a serving-memory optimization; at
     /// library scale the `[K × V]` buffer is affordable and exact).
     ExactQ,
+    /// PLM relaxed acceptance (arXiv:2610.26693 Alg. 1, Issue 973): a
+    /// deterministic likelihood accept-gate with NO residual correction.
+    ///
+    /// Per position, draw a verifier-side sample `x̃ ~ p` (one `U(0,1)` +
+    /// inverse-CDF walk) and accept the draft `d` iff
+    /// `d == x̃ ∨ d ∈ ρ-nucleus(p) ∨ p(d) ≥ ε`. **On rejection the emitted
+    /// token is `x̃`** — the verifier draw, never a residual sample.
+    ///
+    /// - **Corner exactness:** at `rho = 0, eps = 1` every emitted token is
+    ///   `x̃` (accepted only when `d == x̃`), so the output is exactly
+    ///   p-distributed (PLM Corollary 1). Away from the corner the rule is
+    ///   deliberately lossy — the ρ/ε constants are posture-fitted by the
+    ///   consumer's quality gate (riir-ai Issue 1142), never here.
+    /// - **Greedy-verify posture (`greedy = true`):** `x̃ = argmax p`
+    ///   (the same `argmax_total_cmp` tie rule as `PrefixMatch`), so the
+    ///   corner reduces bit-identically to `PrefixMatch` — the argmax bias
+    ///   then belongs to the posture, not the policy.
+    /// - **Seed independence:** the `x̃` draw comes from a SEPARATE stream
+    ///   (domain-tagged off the caller's rng, [`NUCLEUS_VERIFY_DOMAIN`]) —
+    ///   reusing the drafter's `u` makes `d == x̃` hold by construction and
+    ///   accepts every sampled draft at the corner.
+    /// - **ρ-nucleus:** the smallest top-ranked set with mass `≥ ρ`; ranking
+    ///   is descending p with a pinned first-index tie rule, membership is
+    ///   `mass ranked strictly above d < ρ` (one sequential fold, zero-alloc,
+    ///   Issue-940 law). `rho = 0` ⇒ empty nucleus.
+    #[cfg(feature = "nucleus_accept")]
+    NucleusAccept {
+        /// Nucleus mass `ρ ∈ [0, 1]` (0 disables the term).
+        rho: f32,
+        /// Likelihood floor `ε ∈ (0, 1]` (1 disables the term for any
+        /// non-point-mass law).
+        eps: f32,
+        /// Greedy-verify posture: fallback `x̃ = argmax p`.
+        greedy: bool,
+    },
 }
+
+/// Domain tag for the [`DraftAcceptPolicy::NucleusAccept`] verifier-draw
+/// stream (Issue 973 seed-independence law): the verify rng is
+/// `Rng::new(caller.next() ^ NUCLEUS_VERIFY_DOMAIN)`, SplitMix-decorrelated
+/// from every drafter stream.
+#[cfg(feature = "nucleus_accept")]
+pub const NUCLEUS_VERIFY_DOMAIN: u64 = 0x6E75_636C_5F76_6572; // "nucl_ver"
 
 /// Outcome of one acceptance-policy step: accept the draft token, or emit a
 /// correction token sampled per-policy (and stop the verify loop).
@@ -265,6 +311,9 @@ impl SpeculativeVerifier for D2fDrafterVerifier<'_> {
         // tests d_i against p_i (aligned), matching LeviathanVerifier.
         self.accepted_buf.clear();
         let mut all_accepted = true;
+        // Issue 973: NucleusAccept's x̃ draws ride their own stream.
+        #[cfg(feature = "nucleus_accept")]
+        let mut verify_rng = Rng::new(rng.next() ^ NUCLEUS_VERIFY_DOMAIN);
 
         for i in 0..k_bounded {
             let draft_tok = token_stack[i];
@@ -281,6 +330,10 @@ impl SpeculativeVerifier for D2fDrafterVerifier<'_> {
                         .min(self.q_distributions_flat.len())
                         ..q_end.min(self.q_distributions_flat.len())];
                     exact_q_step(p_dist, q_dist, draft_tok, rng, &mut self.residual_buf)
+                }
+                #[cfg(feature = "nucleus_accept")]
+                DraftAcceptPolicy::NucleusAccept { rho, eps, greedy } => {
+                    nucleus_accept_step(p_dist, draft_tok, rho, eps, greedy, &mut verify_rng)
                 }
             };
 
@@ -515,6 +568,105 @@ fn exact_q_step(p: &[f32], q: &[f32], d: usize, rng: &mut Rng, residual: &mut [f
         PolicyStep::Accept
     } else {
         PolicyStep::Correct(sample_residual_distribution_into(p, q, residual, rng))
+    }
+}
+
+// ── Issue 973: PLM relaxed acceptance (NucleusAccept) ────────────────
+
+/// Mass ranked strictly above `d` under descending-p order with the pinned
+/// first-index tie rule (`p_t > p_d`, or `p_t == p_d ∧ t < d`) — one
+/// sequential ascending fold (Issue-940 law), zero-alloc.
+#[cfg(feature = "nucleus_accept")]
+#[inline]
+pub(crate) fn mass_above(p: &[f32], d: usize) -> f32 {
+    let pd = p.get(d).copied().unwrap_or(0.0);
+    let mut above = 0.0f32;
+    for (t, &pt) in p.iter().enumerate() {
+        if pt > pd || (pt == pd && t < d) {
+            above += pt;
+        }
+    }
+    above
+}
+
+/// ρ-nucleus membership from [`mass_above`]: `d` is in the smallest top-ranked
+/// set with mass `≥ ρ` iff it carries mass and the mass ranked above it is
+/// still short of `ρ`. `rho ≤ 0` ⇒ empty nucleus.
+#[cfg(feature = "nucleus_accept")]
+#[inline]
+pub(crate) fn in_rho_nucleus(pd: f32, mass_above: f32, rho: f32) -> bool {
+    pd > 0.0 && mass_above < rho
+}
+
+/// Inverse-CDF pick for a given `u ∈ [0, 1)`: first `t` with `u < Σ_{j≤t} p_j`
+/// (ascending fold). f32-drift fallback (u past the total): the last token
+/// carrying mass.
+#[cfg(feature = "nucleus_accept")]
+#[inline]
+fn inverse_cdf_pick(p: &[f32], u: f32) -> usize {
+    let mut cdf = 0.0f32;
+    let mut last_pos = 0usize;
+    for (t, &pt) in p.iter().enumerate() {
+        cdf += pt;
+        if pt > 0.0 {
+            last_pos = t;
+        }
+        if u < cdf {
+            return t;
+        }
+    }
+    last_pos
+}
+
+/// PLM relaxed-acceptance step (Issue 973, [`DraftAcceptPolicy::NucleusAccept`]):
+/// accept `d ⟺ d == x̃ ∨ d ∈ ρ-nucleus(p) ∨ p(d) ≥ ε`; on rejection emit `x̃`
+/// with no residual correction. `verify_rng` MUST be a stream independent of
+/// the drafter's (see [`NUCLEUS_VERIFY_DOMAIN`]).
+///
+/// Sampled posture: exactly one uniform is drawn per call, FIRST (accept or
+/// not), so a fixed seed gives the same `x̃` across (ρ, ε) settings —
+/// loosening is then monotone draw-by-draw. Cost ladder: the ε term reads
+/// `p(d)` only; the ρ term (full-vocab fold) runs only when `rho > 0`; the
+/// `d == x̃` cell test sums the prefix `p[..d]` in the SAME ascending order
+/// as [`inverse_cdf_pick`] (bit-identical cell edges); the full CDF walk for
+/// `x̃` runs only on the rejection path. Greedy posture: `x̃ = argmax p`
+/// (`PrefixMatch`'s tie rule), no uniform drawn.
+#[cfg(feature = "nucleus_accept")]
+pub(crate) fn nucleus_accept_step(
+    p: &[f32],
+    d: usize,
+    rho: f32,
+    eps: f32,
+    greedy: bool,
+    verify_rng: &mut Rng,
+) -> PolicyStep {
+    let pd = p.get(d).copied().unwrap_or(0.0);
+    let u = if greedy { 0.0 } else { verify_rng.uniform() };
+    let relaxed =
+        pd > 0.0 && (pd >= eps || (rho > 0.0 && in_rho_nucleus(pd, mass_above(p, d), rho)));
+    if relaxed {
+        return PolicyStep::Accept;
+    }
+    if greedy {
+        let am = argmax_total_cmp(p);
+        return if d == am {
+            PolicyStep::Accept
+        } else {
+            PolicyStep::Correct(am)
+        };
+    }
+    if pd > 0.0 {
+        let cdf_before: f32 = p[..d].iter().fold(0.0f32, |acc, &x| acc + x);
+        if u >= cdf_before && u < cdf_before + pd {
+            return PolicyStep::Accept;
+        }
+    }
+    let x_tilde = inverse_cdf_pick(p, u);
+    // Drift fallback can land on d itself — x̃ == d IS the match term.
+    if x_tilde == d {
+        PolicyStep::Accept
+    } else {
+        PolicyStep::Correct(x_tilde)
     }
 }
 
@@ -815,12 +967,28 @@ mod tests {
         let mut draft_rng = Rng::new(99);
         let draft_weights = TransformerWeights::new(&config, &mut draft_rng);
 
-        for policy in [
+        #[allow(unused_mut)]
+        let mut policies = vec![
             DraftAcceptPolicy::PrefixMatch,
             DraftAcceptPolicy::SoftmaxArgmax,
             DraftAcceptPolicy::TruncatedArgmax,
             DraftAcceptPolicy::ExactQ,
-        ] {
+        ];
+        // Issue 973: the relaxed policy rides the same speculate() contract.
+        #[cfg(feature = "nucleus_accept")]
+        for greedy in [false, true] {
+            policies.push(DraftAcceptPolicy::NucleusAccept {
+                rho: 0.0,
+                eps: 1.0,
+                greedy,
+            });
+            policies.push(DraftAcceptPolicy::NucleusAccept {
+                rho: 0.94,
+                eps: 2e-3,
+                greedy,
+            });
+        }
+        for policy in policies {
             let d2f_config = D2fDecodeConfig::with_block_size(4);
             let r1 = {
                 let mut v = D2fDrafterVerifier::with_accept_policy(
@@ -952,5 +1120,349 @@ mod tests {
             .tokens
         };
         assert_eq!(t1, t2, "greedy drafting must be RNG-independent");
+    }
+
+    // ── Issue 973: NucleusAccept (PLM relaxed acceptance) ───────────
+
+    #[cfg(feature = "nucleus_accept")]
+    mod nucleus {
+        use super::super::*;
+        use super::{TOY_N, TOY_V, toy_target_p, tv_distance};
+
+        /// Random normalized law over `v` tokens, a few planted ties.
+        fn rand_law(v: usize, rng: &mut Rng) -> Vec<f32> {
+            let mut raw: Vec<f32> = (0..v).map(|_| rng.uniform().powi(3) + 1e-4).collect();
+            // Planted exact ties (the first-index tie rule must hold on them).
+            raw[v - 1] = raw[0];
+            raw[v / 2] = raw[1];
+            let s: f32 = raw.iter().sum();
+            raw.iter_mut().for_each(|x| *x /= s);
+            raw
+        }
+
+        fn emit(step: PolicyStep, d: usize) -> usize {
+            match step {
+                PolicyStep::Accept => d,
+                PolicyStep::Correct(y) => y,
+            }
+        }
+
+        /// G1a: at ρ=0, ε=1 under SAMPLED verification the emitted token law
+        /// equals p, with the drafter sampling from a DIFFERENT law on its
+        /// own stream and the verifier draw on the domain-tagged stream.
+        #[test]
+        fn g1a_corner_is_exactly_p_distributed() {
+            let p = toy_target_p();
+            // Drafter law: peaked on the target's least-likely token.
+            let mut q = [0.5 / (TOY_V - 1) as f32; TOY_V];
+            q[super::toy_draft_token(&p)] = 0.5;
+            let mut draft_rng = Rng::new(9731);
+            let mut verify_rng = Rng::new(draft_rng.next() ^ NUCLEUS_VERIFY_DOMAIN);
+            let mut counts = vec![0usize; TOY_V];
+            let mut accepts = 0usize;
+            for _ in 0..TOY_N {
+                let d = sample_from_distribution(&q, &mut draft_rng);
+                let step = nucleus_accept_step(&p, d, 0.0, 1.0, false, &mut verify_rng);
+                accepts += usize::from(step == PolicyStep::Accept);
+                counts[emit(step, d)] += 1;
+            }
+            let tv = tv_distance(&counts, &p, TOY_N);
+            assert!(
+                tv < 0.02,
+                "corner TV {tv:.4} — output must be p-distributed"
+            );
+            // Acceptance probability = Σ_d q(d) p(d) (same as SoftmaxArgmax's
+            // u ≤ p(d) — only per-draw decisions differ).
+            let want: f32 = p.iter().zip(&q).map(|(a, b)| a * b).sum();
+            let got = accepts as f32 / TOY_N as f32;
+            assert!(
+                (got - want).abs() < 0.01,
+                "accept rate {got:.4} vs Σqp {want:.4}"
+            );
+        }
+
+        /// G1a negative control (the seed-independence law): reusing the
+        /// drafter's uniform as the verifier's makes `d == x̃` hold by
+        /// construction — every draft accepted, output = the DRAFTER's law.
+        #[test]
+        fn g1a_shared_stream_breaks_corner() {
+            let p = toy_target_p();
+            let mut counts = vec![0usize; TOY_V];
+            let mut accepts = 0usize;
+            for i in 0..TOY_N as u64 {
+                // Same seed on both sides = the shared-u defect: the drafter
+                // samples p with u, the verifier re-reads the same u.
+                let d = sample_from_distribution(&p, &mut Rng::new(i));
+                let step = nucleus_accept_step(&p, d, 0.0, 1.0, false, &mut Rng::new(i));
+                accepts += usize::from(step == PolicyStep::Accept);
+                counts[emit(step, d)] += 1;
+            }
+            // With the shared u every draft matches (modulo the u == 0
+            // redraw in sample_from_distribution) — acceptance ≈ 1, whereas
+            // an independent stream accepts at Σp² ≪ 1.
+            let sum_p2: f32 = p.iter().map(|x| x * x).sum();
+            let got = accepts as f32 / TOY_N as f32;
+            assert!(
+                got > 0.99 && sum_p2 < 0.1,
+                "shared-u accept {got:.4} (Σp² {sum_p2:.4})"
+            );
+        }
+
+        /// G1b: greedy-verify corner is bit-identical to PrefixMatch on EVERY
+        /// draw — accepts AND rejects, both arms exercised.
+        #[test]
+        fn g1b_greedy_corner_bit_identical_to_prefix_match() {
+            let mut rng = Rng::new(9732);
+            let mut vrng = Rng::new(1);
+            let (mut acc, mut rej) = (0usize, 0usize);
+            for i in 0..4000 {
+                let v = 8 + i % 57;
+                let p = rand_law(v, &mut rng);
+                // Half the draws propose the argmax (accept arm), half not.
+                let d = if i % 2 == 0 {
+                    argmax_total_cmp(&p)
+                } else {
+                    (rng.next() as usize) % v
+                };
+                let got = nucleus_accept_step(&p, d, 0.0, 1.0, true, &mut vrng);
+                let want = prefix_match_step(&p, d);
+                assert_eq!(got, want, "draw {i}: v={v} d={d}");
+                match want {
+                    PolicyStep::Accept => acc += 1,
+                    PolicyStep::Correct(_) => rej += 1,
+                }
+            }
+            assert!(
+                acc > 1000 && rej > 1000,
+                "both arms must fire: acc={acc} rej={rej}"
+            );
+        }
+
+        /// Accepted fraction over a FIXED (law, draft, verify-seed) stream.
+        fn accept_frac(rho: f32, eps: f32, greedy: bool) -> f64 {
+            let mut rng = Rng::new(9733);
+            let mut vrng = Rng::new(rng.next() ^ NUCLEUS_VERIFY_DOMAIN);
+            let mut acc = 0usize;
+            const N: usize = 3000;
+            for i in 0..N {
+                let p = rand_law(16 + i % 33, &mut rng);
+                let d = (rng.next() as usize) % p.len();
+                acc += usize::from(
+                    nucleus_accept_step(&p, d, rho, eps, greedy, &mut vrng) == PolicyStep::Accept,
+                );
+            }
+            acc as f64 / N as f64
+        }
+
+        /// G1c: loosening (ρ↑ or ε↓) never decreases the accepted fraction.
+        #[test]
+        fn g1c_monotone_in_rho_and_eps() {
+            const RHOS: [f32; 6] = [0.0, 0.2, 0.5, 0.8, 0.94, 1.0];
+            const EPSS: [f32; 6] = [1.0, 0.2, 0.05, 0.01, 2e-3, 1e-4];
+            for greedy in [false, true] {
+                for &eps in &EPSS {
+                    let fr: Vec<f64> = RHOS.iter().map(|&r| accept_frac(r, eps, greedy)).collect();
+                    assert!(
+                        fr.windows(2).all(|w| w[0] <= w[1]),
+                        "ρ↑ eps={eps} g={greedy}: {fr:?}"
+                    );
+                }
+                for &rho in &RHOS {
+                    let fr: Vec<f64> = EPSS.iter().map(|&e| accept_frac(rho, e, greedy)).collect();
+                    assert!(
+                        fr.windows(2).all(|w| w[0] <= w[1]),
+                        "ε↓ rho={rho} g={greedy}: {fr:?}"
+                    );
+                }
+            }
+            // Non-vacuity: the loosest setting must actually relax.
+            assert!(accept_frac(1.0, 1e-4, false) > accept_frac(0.0, 1.0, false) + 0.3);
+        }
+
+        /// Nucleus-calibration property: for every law and ρ, the member set
+        /// is (a) mass ≥ ρ (coverage) and (b) minimal — dropping its
+        /// lowest-ranked member falls below ρ; (c) members are a rank prefix.
+        /// Returns the first violation.
+        fn nucleus_violation(
+            member: &dyn Fn(&[f32], usize, f32) -> bool,
+            seed: u64,
+        ) -> Option<String> {
+            let mut rng = Rng::new(seed);
+            for i in 0..400 {
+                let p = rand_law(6 + i % 40, &mut rng);
+                // Rank: descending p, first-index tie.
+                let mut order: Vec<usize> = (0..p.len()).collect();
+                order.sort_by(|&a, &b| p[b].total_cmp(&p[a]).then(a.cmp(&b)));
+                for &rho in &[0.0f32, 0.1, 0.33, 0.5, 0.77, 0.9, 0.97] {
+                    let m: Vec<bool> = order.iter().map(|&t| member(&p, t, rho)).collect();
+                    let n = m.iter().take_while(|&&b| b).count();
+                    if m[n..].iter().any(|&b| b) {
+                        return Some(format!("law {i} ρ={rho}: members not a rank prefix"));
+                    }
+                    let mass: f32 = order[..n].iter().map(|&t| p[t]).sum();
+                    if mass < rho {
+                        return Some(format!("law {i} ρ={rho}: coverage {mass} < ρ"));
+                    }
+                    if n > 0 && mass - p[order[n - 1]] >= rho {
+                        return Some(format!("law {i} ρ={rho}: not minimal ({n} members)"));
+                    }
+                }
+            }
+            None
+        }
+
+        fn shipped_member(p: &[f32], d: usize, rho: f32) -> bool {
+            in_rho_nucleus(p[d], mass_above(p, d), rho)
+        }
+
+        #[test]
+        fn nucleus_membership_is_calibrated() {
+            assert_eq!(nucleus_violation(&shipped_member, 9734), None);
+        }
+
+        /// Planted-violation arm: a miscalibrated nucleus must RED the
+        /// calibration property (monotonicity alone is blind to these —
+        /// every planted variant is still monotone in ρ).
+        #[test]
+        fn planted_miscalibrated_nucleus_reds() {
+            // Off-by-one mass: counts d's own mass as "above".
+            let off_by_one =
+                |p: &[f32], d: usize, rho: f32| p[d] > 0.0 && mass_above(p, d) + p[d] < rho;
+            // Overlapping bands: ties counted on BOTH sides (no tie rule).
+            let overlap = |p: &[f32], d: usize, rho: f32| {
+                let above: f32 = p
+                    .iter()
+                    .enumerate()
+                    .filter(|&(t, &x)| x > p[d] || (x == p[d] && t != d))
+                    .map(|(_, &x)| x)
+                    .sum();
+                p[d] > 0.0 && above < rho
+            };
+            // Inclusive edge: `≤ ρ` admits one member too many.
+            let inclusive = |p: &[f32], d: usize, rho: f32| p[d] > 0.0 && mass_above(p, d) <= rho;
+            assert!(
+                nucleus_violation(&off_by_one, 9734).is_some(),
+                "off-by-one must red"
+            );
+            assert!(
+                nucleus_violation(&overlap, 9734).is_some(),
+                "overlapping bands must red"
+            );
+            assert!(
+                nucleus_violation(&inclusive, 9734).is_some(),
+                "inclusive edge must red"
+            );
+        }
+
+        /// Out-of-range / zero-mass drafts never pass the relaxed terms.
+        #[test]
+        fn zero_mass_draft_never_relaxed() {
+            let mut p = toy_target_p();
+            p[3] = 0.0;
+            let s: f32 = p.iter().sum();
+            p.iter_mut().for_each(|x| *x /= s);
+            let mut vrng = Rng::new(5);
+            for _ in 0..2000 {
+                for d in [3, TOY_V + 7] {
+                    let st = nucleus_accept_step(&p, d, 1.0, 0.0, false, &mut vrng);
+                    assert!(matches!(st, PolicyStep::Correct(y) if y != 3 && y < TOY_V));
+                    let st = nucleus_accept_step(&p, d, 1.0, 0.0, true, &mut vrng);
+                    assert!(matches!(st, PolicyStep::Correct(_)));
+                }
+            }
+        }
+
+        /// Throughput A/B on fixtures (Issue 973 task 6): mean accepted
+        /// tokens per speculate call, strict (`SoftmaxArgmax`) vs relaxed,
+        /// over a K-position chain with a drafter that proposes the target's
+        /// head most of the time and a junk token 10% of the time. Count metric, plus step
+        /// latency. Run: `cargo test --release -p katgpt-forward --features
+        /// nucleus_accept --lib nucleus::ab_throughput -- --ignored --nocapture`.
+        #[test]
+        #[ignore = "A/B report — run in --release with --nocapture"]
+        fn ab_throughput() {
+            const K: usize = 8;
+            const CALLS: usize = 20_000;
+            const V: usize = 4096;
+            let mut law_rng = Rng::new(9735);
+            // Fixture laws: LM-shaped peaked targets — Zipf(s) with s drawn
+            // per law in [1.2, 2.4] (peaked → flat-ish heads), head order
+            // shuffled within the top 8 only.
+            let laws: Vec<Vec<f32>> = (0..64)
+                .map(|_| {
+                    let s_exp = 1.2 + 1.2 * law_rng.uniform();
+                    let mut p: Vec<f32> =
+                        (0..V).map(|t| 1.0 / (1.0 + t as f32).powf(s_exp)).collect();
+                    for _ in 0..8 {
+                        let a = (law_rng.next() as usize) % 8;
+                        let b = (law_rng.next() as usize) % 8;
+                        p.swap(a, b);
+                    }
+                    let s: f32 = p.iter().sum();
+                    p.iter_mut().for_each(|x| *x /= s);
+                    p
+                })
+                .collect();
+            // Drafter: proposes the target's rank-r token — r = 0 w.p. .55,
+            // 1 w.p. .2, 2..7 w.p. .15, and a JUNK token (rank 64..4095) w.p.
+            // .1 — a plausible-but-imperfect drafter that sometimes misses.
+            let ranked: Vec<Vec<usize>> = laws
+                .iter()
+                .map(|p| {
+                    let mut o: Vec<usize> = (0..V).collect();
+                    o.sort_by(|&a, &b| p[b].total_cmp(&p[a]).then(a.cmp(&b)));
+                    o
+                })
+                .collect();
+            type Arm = (&'static str, Option<(f32, f32)>);
+            let arms: [Arm; 5] = [
+                ("SoftmaxArgmax (strict)", None),
+                ("Nucleus corner ρ=0 ε=1", Some((0.0, 1.0))),
+                ("Nucleus ε=2e-3", Some((0.0, 2e-3))),
+                ("Nucleus ρ=0.94", Some((0.94, 1.0))),
+                ("Nucleus ρ=0.94 ε=2e-3", Some((0.94, 2e-3))),
+            ];
+            for (name, knobs) in arms {
+                let mut chain_rng = Rng::new(1);
+                let mut rng = Rng::new(2);
+                let mut vrng = Rng::new(rng.next() ^ NUCLEUS_VERIFY_DOMAIN);
+                let mut accepted = 0usize;
+                let t0 = std::time::Instant::now();
+                let mut steps = 0usize;
+                for _ in 0..CALLS {
+                    for _ in 0..K {
+                        let li = (chain_rng.next() as usize) % laws.len();
+                        let u = chain_rng.uniform();
+                        let r = if u < 0.55 {
+                            0
+                        } else if u < 0.75 {
+                            1
+                        } else if u < 0.9 {
+                            2 + (chain_rng.next() as usize) % 6
+                        } else {
+                            64 + (chain_rng.next() as usize) % (V - 64)
+                        };
+                        let d = ranked[li][r];
+                        let p = std::hint::black_box(&laws[li][..]);
+                        let st = match knobs {
+                            None => softmax_argmax_step(p, d, &mut rng),
+                            Some((rho, eps)) => {
+                                nucleus_accept_step(p, d, rho, eps, false, &mut vrng)
+                            }
+                        };
+                        steps += 1;
+                        if std::hint::black_box(st) != PolicyStep::Accept {
+                            break;
+                        }
+                        accepted += 1;
+                    }
+                }
+                let ns = t0.elapsed().as_nanos() as f64 / steps as f64;
+                println!(
+                    "{name:<26} accepted/call {:.3}  (K={K}, V={V})  step {ns:.0} ns",
+                    accepted as f64 / CALLS as f64
+                );
+            }
+        }
     }
 }

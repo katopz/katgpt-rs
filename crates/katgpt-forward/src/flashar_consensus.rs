@@ -58,6 +58,8 @@
 
 use crate::d2f::{D2fDecodeConfig, d2f_decode_block_with_prompt_with};
 use crate::d2f_context::D2fContext;
+#[cfg(feature = "nucleus_accept")]
+use crate::d2f_verifier::nucleus_accept_step;
 use crate::d2f_verifier::{
     DraftAcceptPolicy, PolicyStep, prefix_match_step, softmax_argmax_step, truncated_argmax_step,
 };
@@ -488,6 +490,9 @@ impl SpeculativeVerifier for FlashARConsensusVerifier<'_> {
         //      the loop stops; the bonus feed covers the last position).
         let mut accepted: Vec<usize> = Vec::with_capacity(k_bounded + 1);
         let mut all_accepted = true;
+        // Issue 973: NucleusAccept's x̃ draws ride their own stream.
+        #[cfg(feature = "nucleus_accept")]
+        let mut verify_rng = Rng::new(rng.next() ^ crate::d2f_verifier::NUCLEUS_VERIFY_DOMAIN);
 
         for i in 0..k_bounded {
             // 1. H scores the aligned distribution.
@@ -523,6 +528,18 @@ impl SpeculativeVerifier for FlashARConsensusVerifier<'_> {
                         }
                         DraftAcceptPolicy::TruncatedArgmax => {
                             truncated_argmax_step(p_dist, consensus_tok, rng)
+                        }
+                        // Issue 973: same rule; x̃ on the domain-tagged stream.
+                        #[cfg(feature = "nucleus_accept")]
+                        DraftAcceptPolicy::NucleusAccept { rho, eps, greedy } => {
+                            nucleus_accept_step(
+                                p_dist,
+                                consensus_tok,
+                                rho,
+                                eps,
+                                greedy,
+                                &mut verify_rng,
+                            )
                         }
                     };
                     match step {
