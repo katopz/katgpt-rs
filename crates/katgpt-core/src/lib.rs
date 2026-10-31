@@ -1408,7 +1408,11 @@ pub use katgpt_types::depth_invariance::{
     // Plan 630: `delta_mem::rls`'s G1 batch-equivalence test consumes
     // `ridge_solve_direct_f64` (the decayed-ridge oracle) + `try_cholesky_f32`
     // (the per-step SPD assertion) — joined at birth per the same rule.
-    feature = "rls_depth_mem"
+    feature = "rls_depth_mem",
+    // Plan 449: `poincare::fit` consumes `ridge_solve_direct_f32` — joined
+    // late (Bench 975: hidden by the default set until riir-refine turned
+    // katgpt-core's defaults off and enabled only its own features).
+    feature = "poincare_navigator"
 ))]
 pub mod linalg;
 
