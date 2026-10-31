@@ -6290,6 +6290,7 @@ per tick, fixed arrays, zero alloc (G4 canary). PoC gates ALL PASS (Issue
 calibration, synthetic + DualPoolBandit causal toggles
 Learning→Thrash→Learning, **28.3 ns/observe at N=8** (bar ≤ 100 ns).
 Consumers: riir-ai engine bridge third verdict row `Thrash` — LANDED opt-in `cgsp_thrash_mode` (riir-ai `8a200929f`, Issue 1143 closed),
-riir-refine Issue 190 (elo_k_eff + readout), riir-dao Issue 009 (advisory
-evidence_scaled_budget). Stays opt-in — consumer promotion rides each
-filed issue's own gates.
+riir-refine elo_k_eff + readout — LANDED (riir-refine `280f1576`, Issue 190),
+riir-dao `evidence_budget` advisory movement budget — LANDED opt-in (riir-dao
+`6793e99`, Issue 009 closed). All three consumers landed; each stays opt-in —
+consumer promotion rides each lane's own gates.
