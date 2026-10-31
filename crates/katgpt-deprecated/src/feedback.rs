@@ -70,6 +70,10 @@ mod tests {
     #[test]
     fn test_feedback_disabled_when_no_url() {
         let config = FeedbackConfig::default();
+        #[allow(
+            clippy::needless_update,
+            reason = "fills the sr2am_configurator-gated fields; needless only when that feature is off"
+        )]
         let result = InferenceResult {
             domain: "test".into(),
             reward: 0.9,
@@ -79,10 +83,8 @@ mod tests {
             output: "hello".into(),
             timestamp: 0,
             screened: false,
-            #[cfg(feature = "sr2am_configurator")]
-            planning_decision: None,
-            #[cfg(feature = "sr2am_configurator")]
-            plan_horizon_used: 0,
+            // The sr2am-gated fields follow katgpt-types' feature, not this crate's.
+            ..Default::default()
         };
         // Should not panic or error when url is None
         send_feedback(&config, &result);
@@ -94,6 +96,10 @@ mod tests {
             url: Some("http://localhost:9999/cache/ingest".into()),
             min_reward: 0.7,
         };
+        #[allow(
+            clippy::needless_update,
+            reason = "fills the sr2am_configurator-gated fields; needless only when that feature is off"
+        )]
         let result = InferenceResult {
             domain: "test".into(),
             reward: 0.3,
@@ -103,10 +109,8 @@ mod tests {
             output: String::new(),
             timestamp: 0,
             screened: true,
-            #[cfg(feature = "sr2am_configurator")]
-            planning_decision: None,
-            #[cfg(feature = "sr2am_configurator")]
-            plan_horizon_used: 0,
+            // The sr2am-gated fields follow katgpt-types' feature, not this crate's.
+            ..Default::default()
         };
         send_feedback(&config, &result);
         // Thread spawned but reward too low — no actual POST happens

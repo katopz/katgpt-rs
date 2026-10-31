@@ -267,6 +267,10 @@ pub fn extract_best_path(tree: &[TreeNode]) -> Vec<usize> {
 ///
 /// `&str` args (caller-owned) avoid the allocation that `impl Into<String>`
 /// would force when the caller already holds a `&str`.
+#[allow(
+    clippy::needless_update,
+    reason = "fills the sr2am_configurator-gated fields; needless only when that feature is off"
+)]
 pub fn build_inference_result(
     domain: &str,
     reward: f32,
@@ -291,10 +295,8 @@ pub fn build_inference_result(
                 .as_millis() as i64
         },
         screened: reward < screening_threshold,
-        #[cfg(feature = "sr2am_configurator")]
-        planning_decision: None,
-        #[cfg(feature = "sr2am_configurator")]
-        plan_horizon_used: 0,
+        // The sr2am-gated fields follow katgpt-types' feature, not this crate's.
+        ..Default::default()
     }
 }
 

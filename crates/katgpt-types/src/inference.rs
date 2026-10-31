@@ -11,7 +11,11 @@ use super::PlanningDecision;
 ///
 /// Fields ordered by descending alignment to minimize padding:
 /// u64/i64/usize/String (8-byte) → f32 (4-byte) → Option<#[repr(u8)]> (2-byte) → u8/bool (1-byte).
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+// `Default` lets a constructor in ANOTHER crate fill the `sr2am_configurator`-gated fields with
+// `..Default::default()`: a `#[cfg(feature = "sr2am_configurator")]` on the initializer reads the
+// CONSTRUCTING crate's feature, not this one's, so any graph that enables this crate's feature
+// without the constructor's (riir-gpu via riir-engine → katgpt-core) failed with E0063.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct InferenceResult {
     // --- 8-byte aligned ---
     /// Input prompt hash (for dedup, not stored).
