@@ -1937,3 +1937,17 @@ pub mod runetrace;
 
 #[cfg(feature = "kv_sink_window")]
 pub mod kv_sink_window;
+
+#[cfg(feature = "step_noise")]
+pub mod step_noise;
+
+#[cfg(feature = "step_noise")]
+pub use step_noise::{
+    EwmaCom, Remedy, StepNoiseConfig, StepNoiseMonitor, StepNoiseRead, ddr, half_split_dispersion,
+    min_ddr_at,
+};
+
+// The guided_width interop fn is additionally gated on the substrate it
+// derives from (Issue 975: interop, never replacement).
+#[cfg(all(feature = "step_noise", feature = "guided_width_rollouts"))]
+pub use step_noise::regime_from_stagnation_counter;

@@ -2052,6 +2052,23 @@ relaxed_accept = []
 # never a serving-forward replacement. Opt-in (T5).
 fixed_log_softmax = []
 
+# step_noise (Issue 975 / riir-train Research 485, arXiv:2603.06009): the
+# modelless thrash monitor + DDR floor schedule PoC — EwmaCom (center-of-mass
+# EWMA, exact lag law (1−α)/α = N), half_split_dispersion (the labeled noise
+# PROXY: 1−cosine between half-window update directions, never claimed as a
+# gradient norm), StepNoiseMonitor (4 streaming EMAs + sigmoid-gated Regime
+# {Learning,Thrash,Stuck,Converged,CommittedWrong}; Thrash is the literal
+# σ_churn·(1−σ_progress) composition, Stuck its mirror — sigmoid, never
+# softmax) and ddr + min_ddr_at (evidence-per-divergence with the
+# zero-divergence INFINITY law + the sigmoid DDR-floor ramp). Zero-alloc,
+# O(N)/tick, fixed [f32; N] arrays. Regime::Stuck interops with (never
+# replaces) guided_width::StagnationGate — the derivation fn is additionally
+# cfg-gated guided_width_rollouts. T1 skeleton (shapes + unit tests: lag law,
+# DDR known answers, gate quadrants); T2 fixture bench / T3 causal toggles /
+# T4 perf+G4-alloc gates / T5 consumer routing are the parent lanes. Opt-in
+# — promotion rides the Issue-975 GOAT gate.
+step_noise = []
+
 # Plan 371 Phase 5 — Mean-Field Regime Classifier GOAT gate (G2/G4/G5).
 # G1 (defend-wrong PoC) ships separately in riir-poc/benches/.
 [[bench]]
