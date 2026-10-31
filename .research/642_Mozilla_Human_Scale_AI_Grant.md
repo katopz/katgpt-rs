@@ -3,7 +3,7 @@
 > **Source:** Mozilla Foundation Human-Scale AI Incubator — [overview](https://www.mozillafoundation.org/en/what-we-do/grantmaking/incubator/human-scale-ai/), [call for proposals](https://www.mozillafoundation.org/en/what-we-do/grantmaking/incubator/human-scale-ai/call-for-proposals/), [anchor projects](https://www.mozillafoundation.org/en/what-we-do/grantmaking/incubator/human-scale-ai/cohort/), [FAQs](https://www.mozillafoundation.org/en/what-we-do/grantmaking/incubator/human-scale-ai/call-for-proposals/faqs/) (FAQ last updated 2026-10-15)
 > **Date:** 2026-10-31
 > **Status:** Active — grant preparation runs in the private repos (pointer below)
-> **Classification:** Public — program facts only. Eligibility verdicts, per-repo matrices, frictions, consult questions, and timeline are **grant strategy** and live in the private repos, not here.
+> **Classification:** Public — program facts only. Grant strategy lives in the private repos, not here.
 
 ---
 
