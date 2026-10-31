@@ -90,6 +90,6 @@ refine set; anything less is recorded as "graph-only gain".
 
 ## Follow-ups
 
-- [ ] riir-ai Issue 1146 — engine inference split for game consumers.
+- [ ] riir-ai Issue 1146 — engine inference split for game consumers. **Graph half LANDED** riir-ai `517745791` (+ katgpt-rs `222edb0ae`, a pre-existing `InferenceResult` E0063 it surfaced): `riir-infer-core` optional behind `inference` (default-on); seal-remake workspace **643 → 636 pkgs** (`riir-infer-core`, `katgpt-forward`, `sentencepiece` + `sentencepiece-sys` C++/cmake, `prost`, `prost-derive`, `num-derive`). Wall-time A/B still open (first attempt refused, load 40) — graph-only gain until it runs.
 - [ ] provider-internal shear rows above (katgpt-kv, katgpt-pruners, katgpt-moka-wasm,
       riir-engine dev riir-data) — small, verify per crate.
