@@ -4708,6 +4708,15 @@ required-features = ["state_option_scoring"]
 name = "event_state_window_alloc_check"
 required-features = ["event_state_windows"]
 
+# Issue 975 T2/T3 — the step_noise fixture-classification gate (the
+# pre-registered archetype→regime mapping) + the causal toggle arms
+# (synthetic step flip + the cgsp_dual_pool bandit anti-circularity arm).
+# The bandit arm cfg-gates to nothing without cgsp_dual_pool; the target
+# still runs 3 real tests with step_noise alone (never a green zero).
+[[test]]
+name = "step_noise_gates"
+required-features = ["step_noise"]
+
 # Plan 607 T3 — the corpus-fitted head GOAT gate (G1a planted-fit ranking
 # with the near-tie redraw, G1b reflex floors, G2 p99-per-decision-SET with
 # the OPTION COUNT printed beside it, determinism digest over the WEIGHT
@@ -4933,3 +4942,12 @@ required-features = ["fixed_log_softmax"]
 name = "softmax_fix_log_softmax_goat"
 harness = false
 required-features = ["fixed_log_softmax"]
+
+# Issue 975 T4 — the step_noise perf arm: criterion over the warm
+# observe() at N=8 with the pre-registered ≤100 ns bar ASSERTED (a
+# regression fails the bench) + the G4 counting-allocator canary (zero
+# steady-state alloc). Box state via riir-reflex bench_preflight.
+[[bench]]
+name = "step_noise_perf"
+harness = false
+required-features = ["step_noise"]
