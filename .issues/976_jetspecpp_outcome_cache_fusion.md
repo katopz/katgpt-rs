@@ -1,6 +1,7 @@
 # Issue 976: JetSpec++ outcome-distribution speculation cache — modelless fusion idea (novelty TBD, posture-gated)
 
 **Status:** OPEN — fusion idea filed per Research 641 (§4 modelless track); not armed. Arming condition: a pipelined or multi-request speculative-serving posture exists in the fleet (riir-infer `disaggregated.rs`/`multi_host.rs` lane opens, or a real multi-request batch caller for Plan 339).
+**Arming adjudicated NOT MET (2026-11-01, M3 idle adjudication):** the posture's code exists — riir-infer `multi_host.rs` (636 lines, `multi_host` feature, benches 927–929, last touched 2026-10-28, BEFORE this issue was filed) and `disaggregated.rs` — but the issue's "lane opens" reads as a TRUSTED SERVING posture, not bench-real code: the filer wrote the condition knowing `multi_host.rs` was landed. The trust half is still owner-gated (riir-infer Issue 1152: detached wire cells need a SIGNED `dist_stage` before they are trusted; the lane is opt-in, foreground-chunked). Re-adjudicate when 1152 closes or a real multi-request batch caller for Plan 339 exists.
 
 > **Source:** arXiv:2610.19792v2 "JetSpec++" (Research 641, this session). Every mechanism cell is published — this issue is an ENGINEERING combination onto shipped katgpt-rs substrate, filed novelty-TBD by design; closest published cells: D2SD (arXiv:2606.04446 — k-distribution from draft confidences + second draft model), SSD (ICLR 2026 — speculation cache, fixed geometric fan-out), JetSpec++ itself (per-round adaptive selection + conformal threshold).
 
