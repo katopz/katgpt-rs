@@ -1,0 +1,118 @@
+# Research 641: JetSpec++ — Foresight Pipelined Self-Refining Drafts (the target-conditioned pipelining cell + the refinement training recipe)
+
+**Status:** GAIN — training track → riir-train Plan 376 amended (§JetSpec++ recipe, dated section, same family as the LoopUno amendments) + **riir-infer Issue 1158** (the mask-input-drafter audit, filed this session); modelless track → recorded here + katgpt-rs Issue 976 (fusion idea, novelty TBD, posture-gated). Not Super-GOAT: every mechanism cell is published; our contribution is consumption, a live mask-input audit finding, and the recipe transfer.
+
+> **Source:** [arXiv:2610.19792v2 "JetSpec++: Foresight Parallel Drafting with Self Refinements"](https://arxiv.org/abs/2610.19792) — Feng, Hu, Yuan, Qian, Yang, Zhao, Zhu, Rosing, Zhang (UCSD/UIUC/Nanjing/Meta/StepFun; hao-ai-lab), 14–15 Oct 2026.
+> **Code:** [github.com/hao-ai-lab/JetSpec](https://github.com/hao-ai-lab/JetSpec) @ `673267e4faba71a63099c258f0802c2f3aa44f8e` (MIT, "The Parallel Tree Decoding authors"; shallow-cloned to `.raw/JetSpec`, **removed at landing** — structure read: `jetspec/` package + `bench/` + `examples/`; algorithm facts cited from the paper text at v2). Models: HF collection `JetSpec/jetspec-plus-plus-releases`.
+> **Date:** 2026-10-31 (M3, research skill; adversarial panel ran: No-GD + model-based advocates, one spawn round)
+> **Related Research:** 316 (DSpark — the strongest baseline this paper dethrones), 638 (LoopUno/LoopSpec — the pipelining cell, training-free variant), 636 (DCOCO — the candidate-grid correction class, the OTHER prefix-blindness fix), 634 (FlashMap), 533 (Uno — our self-drafter training plan's base), 002 (Leviathan), 177 (Domino), 243 (Bebop), 295 (AC-Prefix)
+> **Related Plans/Issues:** riir-train [Plan 376](../riir-train/.plans/376_uno_tv_self_drafter_distillation.md) (amended this session) · katgpt-rs Plan 339 (`hardware_aware_scheduler`, DSpark §3.2.2 — Prop 2b validates its per-round shape) · katgpt-rs Issue 976 (filed this session) · riir-ai Plan 614 / Issue 1011 (the league spec-decode lane) · riir-infer Issue 717 G2 (the trained-drafter floor 1.689 tok/cyc — the report-the-floor anchor) · riir-infer `disaggregated.rs` + Issue 028 (the future pipelined consumer)
+> **Classification:** Public
+
+---
+
+## TL;DR
+
+JetSpec++ is the **third cell of the 2026 spec-decode wave to land in our corpus**, and the one that closes the loop: it takes the DSpark-family parallel drafter (Research 316's subject), fixes its prefix-blindness by **letting the drafter refine its own draft** (Jacobi passes over token inputs — trained for it), and **hides drafting entirely** by predicting the verification outcome before it exists (foresight adapter + decoder + top-B speculation cache), pipelining draft-against-verify across two GPUs. Headline: **τ 8.94 avg over seven benchmarks** (vs DSpark 6.89, T=0, budget 16), **7.45× over AR / 1.54× over DSpark** wall-clock on GB200, 92–93% cache-hit, lossless throughout. For us the payload is NOT the mechanism (all three cells are published: pipelining = SSD/LoopSpec/SwiftSpec, outcome-anticipation = SSD/D2SD/DPara/SpecBranch, self-refinement = xPress/Jacobi-forcing) — it is (1) **the drafter TRAINING recipe** (forward-KL + token inputs + clean-prefix curriculum + causal masking), which transfers directly to Plan 376's self-drafter and carries a **live audit finding**: our incumbent DSpark drafter GGUF contract carries `dspark.dspark.mask_token_id` — mask-input-shaped, exactly the class the paper's control shows collapsing at pass 1 (τ 5.86 → 2.39); (2) **league intel**: τ 8.94 is published evidence that Plan 376's ≈8 tok/cycle self-drafter bar (Bench 824 wall arithmetic) is reachable; (3) a **modelless extraction table** for the day a pipelined posture exists (outcome distribution + conformal threshold + top-B selection, consumers = Bebop/Plan-339/shipped conformal substrate — Issue 976).
+
+## 1. Paper core (compact)
+
+**The latency identity** (shared with DSpark): `L = (T_draft + T_verify)/τ`. DSpark attacked both terms with a semi-AR head + confidence scheduling. JetSpec++ attacks the same identity one level up: drive `T_draft → 0` on the critical path while **raising** τ via self-refinement that runs *inside* the verify window.
+
+| Component | Mechanism | Key numbers |
+|---|---|---|
+| **Inter-block foresight drafting** | A trained hidden-to-hidden adapter predicts the target's hidden states for the block *under verification* (one module per target layer the drafter reads, chain from token embeddings up, 12 layers, 2.32B @8B); a decoder (FROZEN target upper layers + final norm + LM head) reads the predictions and scores every outcome (k, a) = (accepted-count, bonus-token) in ONE pass: `P(k,a) = Πᵢ≤ₖ p̂ᵢ · p̂(a\|k)` (Eq 6). Top-B outcomes pre-drafted into a speculation cache; split-conformal threshold λ calibrates the scores; 6-feature logistic recalibration (draft top-1 logit, decoder logit, argmax indicator, renormalized-alternative logit, scaled position, bias) fitted by MLE on held-out rounds. Cache hit → the realized block is already drafted (92.9%/91.7% hit at B=4); miss → one-pass fallback. | Predicted states recover **95–98%** of true-state τ at every pass count (Table 6); training-free decoder ≈ CE-fine-tuned (top-1 .967 vs .968, KL .043 vs .247 — fine-tuning WORSENS calibration) |
+| **Intra-block self refinement** | The drafter attends CAUSALLY within its block over natural-language TOKENS (not mask embeddings); at inference it runs J Jacobi passes on its own draft; between passes a **context refresh** (adapter re-predicts the draft's target states) + **anchor replacement** (decoder finds first argmax disagreement, writes its own token there, fixes the prefix) correct the proposal. Trained for it: blocks pair a clean prefix (length m ~ P(0)=0.25, P(1..15)=0.05 each) with a noisy suffix copied from the sequence's own context; FORWARD KL against the target's full distribution. | J0→J3 alone: +0.42–1.27 τ; with refresh+replacement: +1.55 at J1-R1, **+2.97 at J3-R3** (Table 5); the catastrophic control — mask-input drafter trained on fully-noised blocks collapses 5.86→2.39 at J1 (never trained to read tokens); forward-KL beats SFT by +0.27 @J0 but **+2.72 @J3** (gap GROWS with refinement); causal ties bidirectional @J0, leads +0.15 @J3 |
+| **Draft-verify pipelining** | Drafter on a second GPU drafts block t+1 while t verifies; all foresight + refinement work must fit `T_draft ≤ T_verify` (Eq 3); throughput = `Σp·τ / (max(T_v,T_d) + T_comm + (1−p_hit)·T_fallback)` (Eq 4). | 8B: verify 6.2 ms, exposed draft cost **0.61–0.66 ms** vs DSpark's 3.76–3.80 (−84%); 27B (hybrid GDN target — same arch class as our league model): verify 27.7 ms, 3 refinement passes fit inside, exposed 0.71–0.77 ms vs DSpark 4.46–4.52 |
+
+**Losslessness is preserved throughout** (Appendix F.3): every committed token is the target's own draw — the draft is an argmax proposal verified under the point-mass acceptance rule; anchor replacement rewrites only the proposal. Proposition 1: with a perfect decoder, Eq 6 is the EXACT outcome distribution of speculative sampling at any temperature. Proposition 2b: **per-round posterior selection ≥ ANY fixed allocation** (SSD's geometric fan-out included) in every round — measured: served rule leads or ties every ablated selection rule at every cache size (Table 11); the draft-model-only rule trails badly (−.186/−.171 hit at B=4).
+
+## 2. The cell map — where this sits in our distilled landscape
+
+| Cell | Published occupants | Our record |
+|---|---|---|
+| Draft-verify pipelining (training-free-ish) | SwiftSpec (async tree), SpecBranch, SSD (fixed geometric fan-out), Speculative Pipeline Decoding, vLLM #36037 (SSD merged) | Research 638 §4 table (LoopSpec = the training-free looped cell); posture-gated for us (single-4090 league serving) |
+| Pipelining a TARGET-CONDITIONED drafter (this paper's niche) | **JetSpec++ (this note)** — predicts the missing hidden states; DPara (precomputes backbone per k, no hidden-state prediction); SSD App-E (draft's own activations as substitute); D2SD (k-distribution from draft confidences + second draft model, no pipelining) | Empty before this note |
+| Prefix-blindness correction | DSpark Markov head (316), Domino (177), sequential heads, DSpine (through-depth), **DCOCO/LiLiCorr candidate grids (636)**, **xPress separate refiner**, **JetSpec++ self-refinement (this note)** | 316 + 636; the correction class now has THREE shapes: sequential head / pairwise grid / self-refinement |
+| Drafter training recipe | Uno (533, TV-loss self-drafter), Jacobi forcing (clean-prefix training — this paper's stated basis), distillation family | Plan 376 (the consumer); this note's amendments |
+
+**Zero hits ≠ novelty check (honest):** the fusion our Issue 976 claims (outcome distribution from drafter confidences + conformal threshold + top-B cache + Plan-339-style adaptive selection) is an ENGINEERING combination of published cells (D2SD's k-distribution, SSD's cache, this paper's Eq 6/7/Prop-2b) onto shipped substrate — filed as novelty-TBD, never as a mechanism claim.
+
+## 3. The live finding — the incumbent drafter family is mask-input-shaped
+
+`riir-infer/crates/riir-infer-gpu/src/speculative_decode/dspark_drafter.rs:206` reads `dspark.dspark.mask_token_id` from its GGUF contract (model-based advocate grep, this session; **verdict-reviewer-verified at the pin**), and the class is WIDER than the one serving file: riir-ai `crates/riir-gpu/src/dflash_config.rs` carries `DFlashConfig.mask_token_id` (+ the DFlash2 bench lane 746/747/759/779/989 reading it), and the riir-train trainer family carries the same contract key (`dflash_trainer.rs`, `distill_tsd.rs`, `distill_gdsd.rs`, `opsd_loop.rs`, … — reviewer grep). The paper's Table 4 control is precisely this shape: **a mask-input drafter trained on fully-noised blocks collapses under refinement** (τ 5.86 → 2.39 at the first pass — it was never trained to read token inputs). Consequences, ranked:
+
+1. **Prophylactic audit (cheap, now — filed):** no surface in the mask-input class may ever be run multi-pass/refined as-is. The audit (inventory + prophylactic guard + pass-1-cliff detector note) is **riir-infer Issue 1158** (filed this session; riir-infer owns the serving file, cross-links the other repos' surfaces). The pass-1 cliff is the detector — a τ ladder J0→J1 that drops is the signature.
+2. **The recipe transfer is the fix:** token inputs + clean-prefix curriculum + forward KL is exactly the training that makes a drafter refinable — Plan 376's amendment below.
+3. **Report-the-floor discipline:** the paper's τ magnitudes are DENSE-target numbers; our PQ2_0 league target has flatter distributions — pre-register all bars against the Issue-717 floor (**1.689 tok/cyc**) and the decode league row (0.612× ctx512), never against the paper's 5.86-class numbers.
+
+## 4. Path 0 / track deltas (each row ends in exactly one disposition)
+
+### Training track (→ Plan 376 §JetSpec++ recipe)
+
+| # | Recipe item | Evidence | Disposition |
+|---|---|---|---|
+| T1 | **Forward KL vs target's full next-token distribution** (replaces/augments SFT-CE and reverse-KL) | +0.27 τ @J0 over SFT, **+2.72 @J3** — the gap grows with refinement passes; reverse-KL trails by ~2 τ with most deficit already at J0 | **Plan** — 376 loss A/B arm (TV vs fKL vs blend), teacher = deployed PQ2_0 logits, warm-start per the LK-loss caveat |
+| T2 | **On-policy data: continuations regenerated greedily by the serving target** | 800k seqs (Nemotron-PTD-v2 + CodeAlpaca), per-target greedy regeneration — same move as LoopUno's plateau fix (foreign-data ceiling 0.54) | **Plan** — corroborates 376's existing self-data arm; adds the scale constant (800k) |
+| T3 | **Token inputs, never mask embeddings** | Control collapse 5.86→2.39 @J1; token-input + clean-prefix is the refinability precondition | **Plan + Issue** — 376 amendment (the retrain arm) + **riir-infer Issue 1158** (the audit: serving drafter + riir-ai DFlash2 lane configs/benches + the riir-train trainer family) |
+| T4 | **Context-copied noise suffix** (noise tokens drawn from the sequence's own context, not random vocab) | Keeps the drafter in-distribution at J0 | **Plan** — 376 block sampler |
+| T5 | **Clean-prefix schedule** P(m=0)=0.25, P(m=1..15)=0.05 | Curriculum matches the accept-prefix distribution at inference; share 0.125–0.5 flat (±0.12 τ), shares 0 and 1 worse | **Plan** — 376 curriculum constants |
+| T6 | **Causal attention within the draft block** | Ties bidirectional @J0, +0.15 @J3 (bidirectional breaks when earlier draft tokens are revised) | **Plan** — masking config; bidirectional as comparator only |
+| T7 | **Refinement ladder as the gate axis** (τ at J0..J3; pass-1 cliff = the mask-input detector) | Tables 4/5/12 | **Plan** — 376 G-gate wording (a drafter that loses τ at J1 fails) |
+| T8 | **League intel: τ 8.94 published at budget 16, T=0** (J3-R3, Qwen3-8B; 12.35 @32 on 27B-class hybrid) | Table 1/2 | **Record** in 376's gate table — evidence the ≈8 tok/cycle self-drafter bar (Bench 824 arithmetic) is publishable; OUR bars stay pinned to 1.689 floor + decode row |
+| T9 | **Adapter training** (SmoothL1+cosine, ω^κ position weighting κ=1/2 from served verify-reach histograms, layer-copy init, 2.32B @8B / 4.47B @27B) | Appendix A | **Discard** — auditable: adapter lane extrapolates ~1,300+ GPU-h on the single 4090 and its payoff requires fused hidden-state capture in the serving forward (the capture hook today costs 5 stream-syncs + ~20 KB dtoh/token, diagnostic-only). Re-open trigger: fused capture ships in riir-gpu. The ω^κ *weighting idea* is recipe-portable to any state-prediction head and rides T1's arm if one exists |
+
+### Modelless track (→ recorded + Issue 976)
+
+| # | Extraction | Math | Disposition |
+|---|---|---|---|
+| M1 | **Outcome distribution P(k,a)** from drafter per-position confidences (chain product; all prefix products in one O(n) pass) | Eq 6 — generalizes Bebop's marginal α ≈ a−bH to the full (k, bonus) joint | **Issue 976** — fusion idea; closest published = D2SD (draft-confidence k-distribution); consumer = `AcceptanceSurrogate`/`cumprodsum` |
+| M2 | **Top-B cache selection + per-round dominance** | Eq 7 (disjoint events → hit mass additive → sort-by-score optimal); Prop 2b (per-round posterior ≥ ANY fixed allocation, SSD fan-out included) | **Issue 976** + one-line validation of Plan 339's per-round greedy shape (below) |
+| M3 | **Split-conformal threshold λ** on outcome scores (fit offline to include the realized outcome at a target rate) | Angelopoulos–Bates; calibration affects only which outcomes are pre-drafted, never the verified output | **Issue 976** — shipped `conformal_predictive_intervals` substrate consumes it |
+| M4 | **Overlap admission law** `T_draft ≤ T_verify` + throughput model Eq 4 (hit-prob-weighted) | Eq 3/4 | **Record** — posture-gated (single-4090 league serving has no second device on the critical path); consumer = riir-infer `disaggregated.rs`/`multi_host.rs` + Issue 028 when a disaggregated lane opens |
+| M5 | **Anchor replacement Eq 13** (first argmax disagreement vs a target proxy; fix prefix, write proxy token) | Pure argmax comparison GIVEN a proxy next-token distribution | **Discard as modelless** — auditable: the paper's decoder reuses the TARGET's upper layers + LM head; the only modelless proxy is the drafter's own marginal, which is circular (it proposed those tokens). Lives as a trained-track rider (T9's decoder is frozen-target — no extra training) |
+| M6 | **Staleness ladder + cost bound** (stale → predicted → true states; pipelined-vs-critical-path τ delta ≤ 0.19 @budget-16) | Tables 6/16 | **Record** — the measurement law any future pipelined posture must report (paired per-block deltas, distribution not pooled) |
+| M7 | **Bonus-token histogram p̂(a\|k)** as a freeze/thaw-legal runtime statistic (fixed-size Pod, BLAKE3-committed) | Replaces the trained decoder head's anchor distribution | **Record** — implementation note inside Issue 976; convergence gate = KL between frozen windows |
+
+**Advocate-discard audit (§3.5 discipline):** the No-GD advocate's row 5 ("teacher-forced prefix recompute as the adapter substitute", ≥0.95 recovery bar) is discarded posture-gated: the teacher-forced recompute IS a target forward pass — on the single-4090 league posture it competes with verification itself, and the ≥0.95 recovery figure is the paper's TRAINED-adapter measurement, untested for the substitute. The advocate's row 2 (deterministic offline IRLS for the 6-feature score) is retained inside Issue 976 as an implementation option, degraded gracefully to hand-prior weights + conformal λ. No other advocate finding was discarded; the model-based advocate's non-transfers (two-GPU pipelining, hot-path capture cost, adapter residency, dense-τ magnitudes) are adopted verbatim into T9/M4/§3.
+
+## 5. Verdicts (§1.5 per track, four-question gate)
+
+**Training track: GAIN → Plan 376 amended.** Q1 no prior art: n/a (consumption of a published recipe — the bar is transfer, not novelty). Q2 new behavior class: no (same lossless-verify contract). Q3 selling point: yes, engineering-grade — a refinable self-drafter attacks our weakest league row (decode 0.612×) on the axis that grows with passes. Q4 force multiplier: yes (376 + riir-gpu verify seam + the league table). Tier ceiling: GOAT-engineering via 376's gates.
+
+**Modelless track: GAIN → recorded + Issue 976 (novelty TBD, posture-gated).** Q1: the fusion combination is ours but every cell is published (D2SD/SSD/this paper) — novelty TBD by design. Q2: no new behavior class without a pipelined posture. Q3: no (single-stream batch-1 CUDA-graph serving gains nothing from an outcome cache). Q4: yes (Bebop + Plan 339 + conformal substrate). Not Super-GOAT on Q1+Q2; not a "candidate" escape — the issue names its arming condition.
+
+**MOAT gate (§1.6, katgpt-rs):** in scope (spec decode is named katgpt-rs MOAT scope). GAIN tier; no architectural guide (Super-GOAT-only output).
+
+## 6. Game-context reframe (mandatory step 4)
+
+The serving path IS the game cognition path: riir-router/riir-gpu serves NPC cognition at 20 Hz; lossless verify means a drafter can only change speed, never behavior. The training recipe's τ lever lands directly on the league's weakest row (decode 0.612× ctx512) — higher τ at equal draft depth = more NPC-cognition tokens per verification round on the same 4090, same lossless guarantee. The verify-window economics (T9's "draft fits inside verify") favor LARGE targets — the paper's own 27B row shows 3 refinement passes fitting in 27.7 ms — and our 27B PQ2_0 verify is the long half of the league cycle, so the window-exploitation shape is posture-compatible even where the two-GPU pipelining is not. The staleness ladder (M6) is the report-the-floor instrument for any future latency-hiding arm on the cognition path.
+
+## 7. Consumer-context reframe (mandatory step 4b — priority ladder, the healer)
+
+No healer mechanism consumes speculative-decode primitives directly — the fixer lane is corpus-proposer driven with a compile oracle, not a drafter/verify pair, and the honest statement is that none of Eq 6/7/13 maps onto retrieval, trajectory selection, or score-bench surfaces without violence. The transferable SHAPE is the ladder-gate discipline this paper exemplifies: pre-registered per-pass deltas (J0..J3) with a named collapse signature (the pass-1 cliff) is the same instrument shape as per-corpus-generation score-bench deltas with the AHEAD-OF-PIN registry as the detector. Recorded as discipline, not mechanism; no healer issue filed.
+
+## 8. Validation protocol (if Issue 976 or the T1 arm arms)
+
+- **Training arm (376):** G1 lossless bit-identity (greedy stream ≡ base-only, Bench-756 pattern); G2 τ ladder at fixed draft depth vs 1.689 floor + wall-clock on the 4090 league posture; G3 no-J0-regression vs incumbent DSpark drafter; pre-registered promotion bar (≥+10% wall-clock or ≥+0.3 τ) else opt-in with demote-only env. GPU-exclusivity rule applies (league box).
+- **Modelless arm (976):** only after a pipelined/multi-request posture exists — paired hit-rate vs fixed-allocation cache at equal B on a frozen trace (Prop 2b requires strict ≥), conformal coverage at nominal rate, forecast-vs-realized E[accepted] (MAE + CRPS against the conformal-naive floor per the UQ extension), G4 alloc-free, Issue-940 tie-break determinism (first-index on (k,a)).
+
+## 9. PASS-Redirects carried by this note (GAIN verdict — informational)
+
+> **Fusion lineage:** this note is the third corner of the triangle 316 (DSpark: semi-AR head + confidence scheduling) → 636 (DCOCO: pairwise grid correction) → 641 (JetSpec++: self-refinement + foresight pipelining). All three attack prefix-blindness of the DFlash-family parallel drafter; the league's drafter ranking remains checkpoint- and recipe-dependent (Research 518, the AMD-vLLM refutation datapoint in 316's redirects) — JetSpec++'s 1.54×-over-DSpark is the same-target, same-recipe-budget comparison and is the strongest single datapoint yet that the correction axis (not the backbone) decides the ranking.
+
+## 10. Provenance
+
+- Paper: arXiv:2610.19792 **v2** (15 Oct 2026); all numbers cited from the v2 HTML render fetched this session.
+- Code: `hao-ai-lab/JetSpec` @ `673267e4faba71a63099c258f0802c2f3aa44f8e`, MIT. Read limited to structure + LICENSE (algorithm facts from the paper text); no source-quote claims made beyond the pin.
+- Advocates: No-GD (`c9c3513c`) + model-based (`fa281a46`), one spawn round, 2026-10-31; coordinator merge in §4; discards audited in §4 tail.
+- Verdict gate: §11.
+
+## 11. Verdict record (§5 gate)
+
+`request_verdict` (claude-sub-agent-verdict, backend `claude_code`), session `7eb23150-d8d2-4c6c-9939-6c7910993d1b`, **2 of 3 rounds to AGREE**:
+
+- **Round 1 — REVISE**, three substantive fixes: (a) `.research/.highwater` was NOT bumped when this file was created (still 640 — the allocator could have re-issued 641); (b) the mask-input class must be widened beyond the serving file — the reviewer's own grep found the riir-train trainer family (`dflash_trainer.rs`, `distill_tsd.rs`, `distill_gdsd.rs`, `opsd_loop.rs`) plus riir-ai's DFlash2 lane; (c) the mask-input audit must be its OWN issue (riir-train or riir-infer), not a task inside an unstarted plan.
+- **Fixes landed with evidence**: highwater → 641 + `dual_allocation_gate` re-run clean (0 twin / 0 independent / 0 counter); class widened in §3 + Plan 376 T3; **riir-infer Issue 1158** filed (audit-only, OPEN, highwater 1157→1158, next-free verified against origin).
+- **Round 2 — AGREE** with two pre-push asks adopted as binding: the katgpt-rs commit body carries the README feature-count drift note (total=722 claimed vs 723 measured; the reviewer traced it to sibling commits `17dad26d8` / `d5c7c3da8` / `cc2c23d98` — the 973/974 feature landings own the fix, deliberately NOT edited here); `git fetch` + `dual_allocation_gate` re-run in **riir-infer** (the repo allocating the new number) before push. Round-3 close recorded the final restatement + three commit-time checks (named-file staging only; `Session:` lines in every commit body; sibling commit hashes cited back into this note and Issue 1158).
+- **Sibling landed hashes** (cross-repo citation rule): riir-train Plan 376 amendment — see the riir-train commit cited in the katgpt-rs landing commit body; riir-infer Issue 1158 — same. The katgpt-rs landing hash is cited in Issue 1158's Status line (the one forward reference that cannot live in this file without self-reference).
