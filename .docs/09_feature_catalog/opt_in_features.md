@@ -6289,7 +6289,7 @@ per tick, fixed arrays, zero alloc (G4 canary). PoC gates ALL PASS (Issue
 975, closed 2026-10-31): six-archetype fixture classification on DEFAULT
 calibration, synthetic + DualPoolBandit causal toggles
 Learning→Thrash→Learning, **28.3 ns/observe at N=8** (bar ≤ 100 ns).
-Consumers filed: riir-ai Issue 1143 (engine bridge third verdict row),
+Consumers: riir-ai engine bridge third verdict row `Thrash` — LANDED opt-in `cgsp_thrash_mode` (riir-ai `8a200929f`, Issue 1143 closed),
 riir-refine Issue 190 (elo_k_eff + readout), riir-dao Issue 009 (advisory
 evidence_scaled_budget). Stays opt-in — consumer promotion rides each
 filed issue's own gates.
