@@ -50,8 +50,8 @@ Human-Scale AI expression · technical viability · problem-community clarity ·
 
 | Artifact | Home |
 |---|---|
-| Code-healer application draft + readiness playbook (eligibility matrices, verdicts, frictions, evidence inventory, consult-email draft, timeline) | `riir-refine/.proposals/025` + `riir-refine/.docs/01_orientation/mozilla_grant_readiness.md` + `riir-refine/.issues/190` (private repo) |
-| Decision-stack application draft + readiness playbook | `riir-rethink/.proposals/005` + `riir-rethink/.docs/09_human_scale_ai/` + `riir-rethink/.issues/048` (private repo) |
+| Code-healer application draft + readiness playbook | `riir-refine` (private repo — proposal, issue, and playbook paths not listed publicly) |
+| Decision-stack application draft + readiness playbook | `riir-rethink` (private repo — same posture) |
 
 ## 6. Compliance notes
 
