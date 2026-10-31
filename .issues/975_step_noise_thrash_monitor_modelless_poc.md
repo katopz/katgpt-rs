@@ -1,6 +1,7 @@
 # Issue 975: `step_noise` — modelless thrash monitor + DDR gate PoC
 
 **Status:** Open — PoC scoped, awaiting implementation lane (model-based twin: riir-train Plan 479)
+**Claimed:** zed-m3-i975t1, epoch=1793413127, expires 2026-11-02T02:18:47+00:00
 
 **Source:** riir-train Research 485 (arXiv:2603.06009, "Preventing Learning Stagnation in PPO by Scaling to 1 Million Parallel Environments"). Precedent: katgpt-rs Issue 800 (the PufferLib Research-454 modelless-extraction pattern — substrate plan in riir-train, generic primitive PoC here).
 
