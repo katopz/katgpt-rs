@@ -158,6 +158,33 @@
 #    and misses the profile term entirely (Issue 741's first trap).
 #
 #    min_rows / min_with_cfg unchanged: riir-train measures 475 / 310 against
+#
+# ── 2026-10-31 (riir-train issue 658 T3): riir-train max_unresolved 3 -> 5.
+#    Two Plan 474 GPU-gate targets in riir-train-gpu, both
+#    `required-features = ["ternary_backward_cudarc"]` with bodies gated on
+#    `any(debug_assertions, feature = "alloc_tracking")` — the Issue-741
+#    profile-conditional class exactly:
+#
+#      riir-train-gpu:test:plan474_transport_tier_gates
+#      riir-train-gpu:test:plan474_recompute_tier_gates
+#
+#    Measured 2026-10-31 on the 4090 (riir-train issue 658 T1, one chain per
+#    config; counts appended to riir-train Bench 683):
+#
+#      dev     + ternary_backward_cudarc                 3 passed / 1 FAILED
+#      release-off (no alloc_tracking)                   0 passed  <- compiles away
+#      release + ternary_backward_cudarc,alloc_tracking  3 passed / 1 FAILED
+#
+#    The FAILED cell is OUT OF SCOPE for this ledger and disclosed rather than
+#    hidden: `t_g4_recompute_tier_kills_the_host_recompute` asserts recompute
+#    allocates strictly fewer host allocs than transport — true at the gate's
+#    birth (Bench 683: 564 vs 476) and false since (transport improved to
+#    338/339; recompute unchanged at 476). The gate PREMISE inverted under
+#    independent improvement of the other arm — a gate-design defect filed as
+#    riir-train issue 660, not a row-implication defect: both rows compile and
+#    run real tests in both enabled postures, and release-off compiles them to
+#    nothing (the UNRESOLVED class this ledger exists for). No alloc_tracking
+#    was added to any required-features row (the ledger's own ban).
 #    400 / 260, still inside the slack the header's ~10% rule asks for.
 #
 # ── 2026-09-09 (riir-ai .issues/906): riir-ai max_unresolved 1 -> 3, min_rows
@@ -209,7 +236,7 @@ seal-std                         0             0          0               0  # o
 riir-mmorpg-examples            22            20          0               0  # 2026-10-22: max_unresolved 1->0 measured - the reducer now drops an any(...) conjunct the row already satisfies by a plain enabled feature (any(debug_assertions, feature = "alloc_tracking") on a row naming alloc_tracking); ceiling lowered in the same change
 riir-neuron-db                  52            42          0               5  # 2026-10-27: 2->5, three G4 alloc rows measured in all three configurations (ledger above); 2026-10-22: max_unresolved 3->2 measured - the reducer now drops an any(...) conjunct the row already satisfies by a plain enabled feature (any(debug_assertions, feature = "alloc_tracking") on a row naming alloc_tracking); ceiling lowered in the same change
 riir-shader                      0             0          0               0  # observed 2026-09-12: no rows
-riir-train                     400           260          0               3  # 2026-10-22: max_unresolved 4->3 measured - the reducer now drops an any(...) conjunct the row already satisfies by a plain enabled feature (any(debug_assertions, feature = "alloc_tracking") on a row naming alloc_tracking); ceiling lowered in the same change
+riir-train                     400           260          0               5  # 2026-10-31: 3->5, +riir-train-gpu:test:plan474_transport_tier_gates, +riir-train-gpu:test:plan474_recompute_tier_gates (both `required-features = [ternary_backward_cudarc]` with `any(debug_assertions, alloc_tracking)` bodies — the Issue-741 profile-conditional class; measured 2026-10-31 in all three configurations on the 4090: dev 3/1 FAILED across the two targets, release-off 0 passed = compiled away, release+alloc_tracking 3/1 FAILED — the FAILED cell is the recompute g4 gate's premise inverted by the transport tier's improvement, riir-train issue 660, NOT a row-implication defect; the rows compile and run real tests in both enabled postures); 2026-10-22: max_unresolved 4->3 measured - the reducer now drops an any(...) conjunct the row already satisfies by a plain enabled feature (any(debug_assertions, feature = "alloc_tracking") on a row naming alloc_tracking); ceiling lowered in the same change
 riir-viewbridge                  0             0          0               0
 mmorpg-remaster              1             0          0               0  # 2026-09-16: 3 -> 2 rows. `crates/mmorpg-edge-worker/` was DELETED (d1c2fb7, migrated to mmorpg-remake by owner directive) and took its required-features row with it — a committed, upstream-visible shrink, not a walk going blind. Floored at 1 rather than 2: this repo is now the deprecated one that pulls from the canonical one, so more crates will leave, and a floor that reds on every migration is a floor nobody trusts.
 mmorpg-remake                      6             2          0               0
