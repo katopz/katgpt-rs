@@ -93,10 +93,16 @@
 //!
 //! # Scope
 //!
-//! T1 skeleton: shapes + unit tests (lag law + DDR known-answer vectors +
-//! gate quadrants). T2 fixture bench, T3 causal toggles, T4 perf/G4-alloc
-//! gates, T5 consumer routing are the parent lanes. Opt-in (`step_noise`)
-//! — promotion rides the Issue-975 GOAT gate.
+//! ISSUE-975 STATUS (2026-10-31): the PoC is COMPLETE — G1–G4 all PASS
+//! (six-archetype fixture classification on DEFAULT calibration; both
+//! causal toggle arms incl. the DualPoolBandit anti-circularity arm;
+//! 28.3 ns/observe at N=8 vs the ≤100 ns bar; zero steady-state alloc).
+//! T1 landed at `349e07ee3`, T2–T4 at `48fd0be4d`; the issue file itself is
+//! removed per noise-reduction (katgpt-rs HISTORY.md Issue 975 carries the
+//! record). Consumer follow-ups: riir-ai Issue 1143 (engine bridge third
+//! verdict row), riir-refine Issue 190 (elo_k_eff + readout), riir-dao
+//! Issue 009 (advisory evidence_scaled_budget). Stays opt-in
+//! (`step_noise`) — consumer promotion rides each filed issue's own gates.
 //!
 //! NOTE: `Regime` is deliberately NOT re-exported at the crate root —
 //! the mean-field regime classifier's `Regime`

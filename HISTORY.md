@@ -1093,6 +1093,10 @@ Repo count 33 to 32; codename kept as citation leniency; filed and closed in one
 `block` 0.1.6 uninhabited-static future-incompat fixed by vendored fork `vendor/block` (`5e216a761`) via `[patch.crates-io]`; no upstream bump exists.
 Gates: backend gpu_inference build + clippy, ObjC-block liveness arm.
 
+## Issue 975 (2026-10-31) — `step_noise` modelless thrash monitor + DDR gate PoC: G1–G4 PASS, T5 consumers filed (file removed per noise-reduction)
+
+The full PoC arc (T1–T5): `349e07ee3` (T1 module skeleton — EwmaCom lag law, half_split_dispersion labeled proxy, StepNoiseMonitor 4 streaming EMAs zero-alloc, Regime/Remedy, ddr/min_ddr_at INF law, guided_width interop), `48fd0be4d` (T2–T4 — six-archetype fixture classification ALL PASS on DEFAULT calibration, synthetic + DualPoolBandit causal toggles Learning→Thrash→Learning, 28.3 ns/observe at N=8 vs the ≤100 ns bar, G4 zero alloc; PROVENANCE powermode=2(high)). Substrate-first table + pre-registered mappings: this entry's git history. Consumer follow-ups filed: riir-ai `1143` (engine bridge third verdict row), riir-refine `190` (elo_k_eff + score-bench readout), riir-dao `009` (advisory evidence_scaled_budget); katgpt-sense deferred (not checked out). Model-based twin: riir-train Plan 479 (Phases 1+2 landed `7ca94b18` + `42707a54`). Feature `step_noise` stays opt-in (GOAT-tier integration, not Super-GOAT — Research 485's verdict); consumer promotion rides each filed issue's own gates.
+
 ## Lessons
 
 Distilled lessons (instrument generalisation, census blindness, green-zero, box state, concurrency, attribution); details in git history.
