@@ -6274,3 +6274,22 @@ verifier draw `x̃ ~ p` on rejection (no residual). Exact only at the
 `PrefixMatch` (G1b); monotone in ρ↑/ε↓ (G1c). Fixture A/B ([Bench 973](../../.benchmarks/973_issue973_nucleus_accept_ab.md)):
 0.48 → ~5.1 accepted tokens/call at K=8. Stays opt-in: lossy away from the
 corner, and the ρ/ε quality calibration (MAUVE budget) is riir-ai Issue 1142.
+
+### `step_noise` — modelless thrash monitor + DDR gate (Issue 975)
+
+`step_noise = []` — **opt-in**.
+`StepNoiseMonitor<const N>::observe(&state, objective)` — 4 streaming EMAs
+(churn ‖Δstate‖, objective slope, half-split dispersion noise proxy,
+anchor divergence) + the sigmoid-gated five-regime classification
+`Regime::{Learning, Thrash, Stuck, Converged, CommittedWrong}` with typed
+disjoint remedies; `ddr(evidence, divergence)` (zero-divergence ⇒ +INFINITY)
++ `min_ddr_at(budget_frac, …)` sigmoid ramp — the step-vs-noise control law
+distilled from arXiv:2603.06009 (riir-train Research 485 / Plan 479). O(N)
+per tick, fixed arrays, zero alloc (G4 canary). PoC gates ALL PASS (Issue
+975, closed 2026-10-31): six-archetype fixture classification on DEFAULT
+calibration, synthetic + DualPoolBandit causal toggles
+Learning→Thrash→Learning, **28.3 ns/observe at N=8** (bar ≤ 100 ns).
+Consumers filed: riir-ai Issue 1143 (engine bridge third verdict row),
+riir-refine Issue 190 (elo_k_eff + readout), riir-dao Issue 009 (advisory
+evidence_scaled_budget). Stays opt-in — consumer promotion rides each
+filed issue's own gates.
