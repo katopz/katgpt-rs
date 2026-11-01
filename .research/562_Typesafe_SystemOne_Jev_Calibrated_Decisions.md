@@ -189,3 +189,16 @@ instinct `riir-instinct/.issues/018_rethink_encoder_lean_goat.md` Lane D now wir
 - **Absolute-floor failure** (a G1 raw-FAILS-the-floor read against the conformal-naive floor — the 562/576 tripwire verbatim) on ANY gradient-trained head, F16 or quantized, is the calibration-aware-loss trigger, scoped by where the fix can live: for the head Lane C retrains, CE+λ·Brier is C's pre-declared loss option (no separate filing — C retrains it anyway; Raschka's supervised form per 576's PASS-Redirect line — "modest gain, may not generalize"; the RL-family scoring-rule recipes are 576 §3's log/spherical/RPS, the loss form chosen from that family at filing time); for any OTHER seated head, the tripwire applies verbatim — the narrow riir-train calibration-aware-loss issue files THAT DAY for that head's own retrain. The reward-shaped twin already ships in `svr.rs::r_verify` `λ_cal`.
 
 The refit-first posture is the INDEPENDENT consensus (S2); until a raw-FAILS reading exists the CE+λ·Brier option stays undeclared and C trains plain CE. This addendum records the wiring, not a firing.
+
+---
+
+> **PASS-Redirects (2026-11-01):** Shoham, David, Akrabi, Bilgory, Levy,
+> Marreed, Zeltyn, Shlomov [arXiv:2610.38620 "Think Before You Act: Decision
+> Gate for LLM Agents"] — the first PUBLISHED runtime consumer of the
+> decision-model class this note distilled: JevAct gates agent write-calls
+> and hand-offs with a prefill-only judge (Kev = open Jev-type, Qwen3.8-27B
+> fine-tune, used without further training) + compiled executable state
+> checks + bounded revision; third independent validation of the one-pass
+> typed-probability serving posture (judge cost $0.0003–0.0017/task vs
+> $0.0127–0.0231 API judges). Distill + the placebo-arm / judge-replay
+> adoption items: `../riir-reflex/.research/013_JevAct_Decision_Gate_Agent_Runtime.md`.

@@ -90,3 +90,18 @@ This synthesis's **decision-model half is already ours**: Jev's typed choice/sco
 ## 7. Verdict
 
 **Verdict:** **Gain (narrow).** Files created: riir-reflex `.issues/004_jev_harness_decision_point_map.md` (the six-point map → arena task families). No katgpt-rs primitive, no plan, no guide — the decision layer ships, the harness patterns are covered-or-external, and the one actionable artifact is the consumer map. **Implementation landed same day (2026-09-22, riir-reflex `6759a79`):** the six families live as `src/harness/families.rs` — five modelless synthetic suites + `harness_cache_reuse` LLM-only — with T6 gates measured (G2 per-set p99 59–79 µs tail support 11/1000, G4 alloc-free ×5, canary-first) and the verdict round 3's degenerate-pick finding fixed at the root (Issue 004 T7): the engine now blends the drafter delta with the state-alone centroid cosine, a discrimination floor (distinct picks ≥ 2, distinct vectors ≥ 2) pins it in the gates, and every family reads above chance (0.375–0.500) — banking77 0.040 → 0.446, ag_news 0.258 → 0.510 dataset-side; per-suite deltas (two small regressions included) published in Bench 001 Addendum 5, never gated. Reopen triggers: (a) Issue 004 T3's laya-lane measurement on a weights-present harness run; (b) the hosted plane (Phase 4) ever routes across lanes — the priced-per-rebuild arithmetic becomes binding then; (c) Jev/TypeSafe ships a real harness product that measures the six decision points — compare then.
+
+---
+
+> **PASS-Redirects (2026-11-01):** Shoham, David, Akrabi, Bilgory, Levy,
+> Marreed, Zeltyn, Shlomov [arXiv:2610.38620 "Think Before You Act: Decision
+> Gate for LLM Agents"] — the runtime-gate half of this note's map, now
+> PUBLISHED with ablations: policy → (executable checks + yes/no questions +
+> Boolean rules + hand-off checklist) compiled offline, selective trigger
+> (write calls + hand-offs only), prefill-only judge (Kev, Qwen3.8-27B
+> fine-tune), bounded revision with temporary feedback. Its placebo ablation
+> (random flags at the gate's rate reproduced the full gate's gain for one
+> agent) is the missing evaluation law for every gate-shaped feature —
+> distilled at `../riir-reflex/.research/013_JevAct_Decision_Gate_Agent_Runtime.md`;
+> the policy→check compiler this class implies stays adjacent-only here
+> (no stack consumer today).
