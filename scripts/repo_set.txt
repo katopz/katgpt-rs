@@ -23,6 +23,7 @@ riir-game-sdk
 riir-infer
 riir-instinct
 riir-kat
+riir-ledger
 riir-llm
 riir-mmorpg-examples
 riir-neuron-db
