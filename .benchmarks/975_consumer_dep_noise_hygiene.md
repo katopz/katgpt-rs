@@ -1,5 +1,5 @@
 # Bench 975 — consumer dependency noise from katgpt-rs / riir-ai (build-hygiene pass)
-**Status:** LANDED 2026-10-31 — riir-ai `a9b116faf`, seal-remake `c387482f`, riir-refine `29323e2b`, seal-game-editor (inside `ac520c54b`), katgpt-core linalg gate fix (this commit); compile-time A/B not yet run — graph-only gain recorded.
+**Status:** LANDED 2026-10-31 — riir-ai `a9b116faf`, seal-remake `c387482f`, riir-refine `29323e2b`, seal-game-editor (inside `ac520c54b`), katgpt-core linalg gate fix (this commit); compile-time A/B MEASURED 2026-11-02 (below) — katgpt-core refine-set build 88% less wall time, bar PASS.
 
 Skill: `.agents/skills/build-hygiene/SKILL.md`. Instruments: `cargo tree -e normal --workspace`
 (unique package count), `cargo shear` 1.14.0 (unused / misplaced deps, every finding
@@ -80,13 +80,43 @@ its own features hit E0433. Fixed in `katgpt-core/src/lib.rs` by joining the gat
 poincare_navigator,subspace_phase_gate`. Lesson: `default-features = false` in a
 consumer is also an audit of the provider's feature closure.
 
-## Compile time — not run
+## Compile time — MEASURED 2026-11-02 (bar PASS)
 
-Pre-registered bar (not run — no quiet box this session; the verdict above is the
-graph count, never a wall-time claim): katgpt-core `cargo build -p katgpt-core --lib` dev, refine
-feature set vs default, interleaved A→B ×3, isolated target dirs, deps warm,
-`cargo clean -p katgpt-core` between rows. Want ≥ 30 % less wall time for the
-refine set; anything less is recorded as "graph-only gain".
+Pre-registered protocol executed verbatim: katgpt-core `cargo build -p katgpt-core
+--lib` dev, refine feature set (`entropic_tilt,rating,best_belief,plasma_path`,
+riir-refine's `[dependencies]` row) vs default, interleaved A→B ×3, isolated
+target dirs (`/tmp/ab_a`, `/tmp/ab_b`), deps warm, `cargo clean -p katgpt-core`
+between rows, artifact-existence check per row. Bar: refine set ≥ 30 % less wall
+time.
+
+| row | A default | B refine set |
+|---|---:|---:|
+| 1 | 4.06 s | 0.49 s |
+| 2 | 4.05 s | 0.49 s |
+| 3 | 4.04 s | 0.49 s |
+| **median** | **4.05 s** | **0.49 s** |
+
+**Verdict: PASS — 0.49 / 4.05 = 12 % of default wall time (88 % less; 8.3×), far
+past the ≥ 30 % bar.** Corroborated by clean sizes: A's katgpt-core artifacts
+201.7 MiB / 526 files vs B's 31.1 MiB / 396 files — the 4-feature gate compiles a
+fraction of the crate. The "graph-only gain" caveat is retired: the consumer
+feature-set discipline buys a measured, large, stable compile-time win on the
+provider's biggest crate.
+
+**Provenance (box state is part of the claim):** amo (Mac17,15, M5 Ultra),
+`rig run --exclusive` (quiet-box lane), `load averages: 1.78 6.99 6.61` at start
+(the 5-min tail is the prior shared job decaying; the 1-min is the quiet box), AC
+Power, swap 0.00M, `cargo 1.99.0` (the rust-toolchain.toml pin), measured SHA
+`e667b253b` (= this record's pushed develop HEAD). Rows stable to ±0.01 s across
+pairs — no drift, no re-read needed.
+
+**Run note (loud-zero incident):** the first rig attempt returned "DONE exit 0"
+with a ZERO-byte log — the heredoc→`bash -s` script never reached the remote
+(rig-run does not forward stdin; `bash -s` on empty stdin exits 0 doing nothing;
+`/tmp/ab_*` artifacts absent on the box proved nothing executed). Re-run passes
+the script as an argv/base64 payload and carries an in-band `SCRIPT-START`
+marker. Lesson for every future `rig run`: argv-pass the script, never heredoc
+stdin; a run whose log has no in-band start marker is VOID, never a pass.
 
 ## Follow-ups
 
