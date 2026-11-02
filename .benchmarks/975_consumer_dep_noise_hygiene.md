@@ -91,5 +91,15 @@ refine set; anything less is recorded as "graph-only gain".
 ## Follow-ups
 
 - [x] riir-ai Issue 1146 — engine inference split for game consumers, **CLOSED** (riir-ai `517745791` + `0261a0802`, HISTORY row `96d4d14a3`; katgpt-rs `222edb0ae` fixed a pre-existing `InferenceResult` E0063 it surfaced). `riir-infer-core` is optional behind `inference` (default-on). seal-remake workspace **643 → 636 pkgs** (`riir-infer-core`, `katgpt-forward`, `sentencepiece` + `sentencepiece-sys` C++/cmake, `prost`, `prost-derive`, `num-derive`). Wall-time A/B on bmo (M5 Ultra, clean dev riir-engine with the cognition set, interleaved × 3, preflight `load=0.63`): **125 → 115 units, median 12 s → 10 s**, 3/3 pairs, 1 s resolution. Next possible cut: `katgpt-pruners` → `katgpt-speculative`. **Measured 2026-10-31, NOT taken.** `cargo tree` on riir-engine with the game cognition set, riir-ai `origin/develop`: 114 crates. `katgpt-speculative`'s only parent is `katgpt-pruners`, and its dependencies (`katgpt-core`, `katgpt-types`, `rayon`, `katgpt-transformer`) are all needed elsewhere. `katgpt-transformer` stays regardless: riir-engine binds it directly, and `katgpt-spectral` reaches it via `katgpt-kv`. So the cut removes exactly ONE crate (27k lines). The price: moving `ScreeningPruner`/`NoScreeningPruner`/`ConstraintPruner` (implemented across 55 of 147 pruner files) plus the `dd_tree` builders down to katgpt-types/core, with re-exports. A cross-crate trait move for one compile unit is not worth it. Re-open only if a game build profile shows `katgpt-speculative` on the critical path.
-- [ ] provider-internal shear rows above (katgpt-kv, katgpt-pruners, katgpt-moka-wasm,
-      riir-engine dev riir-data) — small, verify per crate.
+- [x] provider-internal shear rows above (katgpt-kv, katgpt-pruners, katgpt-moka-wasm,
+      riir-engine dev riir-data) — LANDED 2026-11-02: katgpt-rs `406e06362`
+      (kv `bytemuck`/`rayon`/`serde` · pruners `half` · moka-wasm `katgpt-types`;
+      `katgpt-nn` KEPT — used by `src/moka.rs`; kv `half` KEPT — `still_kv` uses it),
+      riir-ai `303e0b256` (engine dev `riir-data`). Verified per crate: clippy
+      `--all-targets` default + `--all-features` (kv, pruners),
+      `cargo check --target wasm32-unknown-unknown` (moka-wasm), consumer pass
+      `-p katgpt-speculative -p katgpt-attn-match -p katgpt-forward`, and on the
+      riir-ai side `-p riir-engine` + `-p riir-games --all-targets`
+      (`npc_mind_reading` is a riir-games default, so the katgpt-kv
+      `default-features = false` consumer edge compiles through it).
+      `cargo shear 1.14.0` + hand grep agree on every row.
