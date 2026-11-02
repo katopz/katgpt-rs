@@ -1970,14 +1970,11 @@ name = "katgpt-kv"
 version = "0.1.0"
 dependencies = [
  "blake3",
- "bytemuck",
  "fastrand",
  "half",
  "katgpt-core",
  "katgpt-spectral",
  "katgpt-types",
- "rayon",
- "serde",
 ]
 
 [[package]]
@@ -1997,7 +1994,6 @@ version = "0.1.0"
 dependencies = [
  "katgpt-core",
  "katgpt-nn",
- "katgpt-types",
  "serde",
  "serde_json",
  "wasm-bindgen",
@@ -2048,7 +2044,6 @@ dependencies = [
  "coreml-native",
  "coreml-proto",
  "fastrand",
- "half",
  "katgpt-core",
  "katgpt-percepta",
  "katgpt-speculative",

@@ -20,12 +20,6 @@ katgpt-types = { path = "../katgpt-types" }
 katgpt-spectral = { path = "../katgpt-spectral" }
 # f16 KV cache storage (still_kv, shard_kv).
 half = "2"
-# Zero-copy Pod layout for KV structs.
-bytemuck = "1"
-# KV cache parallel dequant kernels.
-rayon = "1.10"
-# serde for KV config structs.
-serde = { version = "1", features = ["derive"] }
 # Deterministic RNG (cs_kv_probe).
 fastrand = "2"
 # Hashing (cs_kv_probe masks).
