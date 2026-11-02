@@ -6,7 +6,6 @@
 # scripts/repo_alias.local.txt translations writes the contract side of each
 # mapping (Issue 842: every tracked pin is keyed on contract names).
 # scripts/skill_repo_set_gate.py FAILS on the workstation if this drifts.
-jup-tool
 katgpt-rs
 katgpt-web
 mmorpg-remake

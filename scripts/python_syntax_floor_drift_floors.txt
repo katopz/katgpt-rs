@@ -50,7 +50,6 @@
 #
 #                    min_py  min_parsed  max_syntax
 katgpt-rs               60          60           0
-jup-tool                 0           0           0  # not on the landing box (22 of 31 measured); unmeasured zero, re-pin at first measure
 katgpt-web               0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
 mmorpg-remake            6           6           0  # measured 11/11
 mmorpg-remaster          0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
@@ -94,7 +93,7 @@ seal-std                 1           1           0  # measured 1/1 at MEASURED (
 #
 #   totals: 391 tracked .py · 391 parsed · 1 live finding (fixed same day)
 #
-# Absent from the landing box (9): jup-tool, katgpt-web, mmorpg-editor,
+# Absent from the landing box (8): katgpt-web, mmorpg-editor,
 # mmorpg-remaster, riir-dao, riir-deployer, riir-esp32, riir-refab,
 # riir-viewbridge — they ride the shared population verdict as DEFERRED under
 # DOCS_GATE_PARTIAL_CLONE=1 (Issues 793 + 782) and their zero rows are

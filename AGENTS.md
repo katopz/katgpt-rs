@@ -822,8 +822,9 @@ distillation, novelty + GOAT gates, modelless-unblock protocol §3.5):
 > `katgpt-web`, `riir-dao`, `riir-deployer`, `riir-esp32`, `riir-llm`,
 > `mmorpg-remake`, `mmorpg-remaster`, `riir-kat`, `riir-shader`,
 > `riir-reflex`, `riir-infer`, `riir-reflexer`, `reflex-site`,
-> `riir-instinct`, `riir-rethink`, `seal-std`, `riir-refab`, `jup-tool`,
-> `seal-render`, `seal-game-editor`, `zed`).
+> `riir-instinct`, `riir-rethink`, `seal-std`, `riir-refab`, `riir-ledger`,
+> `seal-render`, `seal-game-editor`, `zed`). `jup-tool` RETIRED 2026-11-02
+> (obsolete per owner call; the repo archives to `git/obsolete/`).
 >
 > Read a count in prose as a claim, not a fact — a count that MATCHES is not a
 > checksum over a set. Per-repo birth/registration notes and drift history: HISTORY.md.
