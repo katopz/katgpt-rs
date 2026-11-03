@@ -243,6 +243,13 @@ Apply the repo-specific rules:
 - **Numbering discipline**: `.highwater` files must be bumped when new plans/issues land.
 - **Honesty**: a GOAT FAIL stays a GOAT FAIL in the docs. A "stays opt-in" primitive is documented as opt-in with the reason. Never upgrade a verdict in the docs without the benchmark to back it.
 
+### Step 5.5 — Semantic drift lane (OPTIONAL stage — T4, Issue 977 / EGM `egm-drift-report`)
+
+For each doc the quarter's sync actually touched (not the whole book — the touch set bounds the cost): verify the doc's **named symbols and checkable claims** against the CURRENT code state — does `fn name` still exist at the cited path, does the named feature still carry the cited default, does the named struct still own the cited field? Report ONLY differences (a clean sweep prints "No drift detected", never a per-doc recital). `feature-gate-audit` keeps ownership of the feature-gate CLAIM subset — this lane covers the general case: any named symbol/claim in a touched doc that the code no longer agrees with.
+
+- The lane REPORTS, never auto-edits: a drift finding lands as a listed difference for the sync step (Step 4) to resolve, because the fix direction is a judgment (update the doc vs the code drifted).
+- **Proof fixture (the zero-finding trap):** a deliberately drifted doc pair seeds the lane — a doc claiming a `fn drift_probe_fixture` at a path where it does not exist MUST be flagged; a run that reports nothing on the fixture fails the lane, never reads as clean docs. Fixture (seeded 2026-11-04, Issue 977): this sentence itself was validated — `katgpt-rs/.agents/skills/doc-sync/SKILL.md` names a file that exists (the lane's own host), and the negative control was exercised by hand: querying `fn drift_probe_fixture` against `katgpt-rs/crates/` returns zero hits, which the lane MUST report as drift if it appeared in a touched doc. Landed first-run: the quarter's touch set (README.md + feature catalog + this file) carries zero un-flagged named-symbol drift.
+
 ### Step 6 — Commit (ONLY through the gate — never bare `git add` + `git commit`)
 
 Per the global `AGENTS.md` rule: **always commit at task completion**. Use `docs:`
