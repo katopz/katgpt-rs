@@ -1,6 +1,7 @@
 # Issue 977: EGM fresh-context review adoption set (paraphrase gate, not-run disclosure, plan readiness, semantic drift)
 
-**Status:** Open — Research 645 verdict Gain; four unshipped, grep-proven adoption deltas from google/elephant-goldfish-model @ `5ba5afa0`
+**Status:** Open — claimed (T1–T4 workflow edits in progress)
+**Claimed:** zed-agent@amo, 2026-11-04, expires 2026-11-06T00:00Z (48 h)
 
 Source note: `.research/645_EGM_Elephant_Goldfish_Fresh_Context_Review.md` (cousin map + signal-diffs there). All four are workflow-layer edits, independently revertible, no runtime code.
 
