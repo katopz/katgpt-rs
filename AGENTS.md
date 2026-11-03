@@ -696,9 +696,9 @@ package). Format commit is in `.git-blame-ignore-revs`. Verdict:
 `scripts/fmt_pending_expected.txt`, a drain list that only shrinks (format a
 pinned file, delete its row; never add a row).
 
-## Lint healing — `cargo refine` before manual fixes (adopted 2026-08-24)
+## Lint fixing — `cargo refine` before manual fixes (adopted 2026-08-24)
 
-Mechanical clippy findings are fixed by the riir-refine healer FIRST:
+Mechanical clippy findings are fixed by the riir-refine rulewright FIRST:
 
 ```bash
 cargo refine <paths>                                        # DRY RUN (zero edits)
