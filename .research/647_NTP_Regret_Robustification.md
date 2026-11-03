@@ -1,0 +1,86 @@
+# Research 647: NTP × Regret Minimization — the Adversary-Aware Serving Gate
+
+**Status:** Done — verdict Gain (modelless gate PoC filed katgpt-rs Issue 979; training recipe filed riir-train Issue 664, consumer-gated)
+**Source:** [arXiv:2603.28499](https://arxiv.org/abs/2603.28499) — *Next-Token Prediction and Regret Minimization*, Mehryar Mohri, Clayton Sanford, Jon Schneider, Kiran Vodrahalli, Yifan Wu (Google Research / Google DeepMind / MSR), 2026-03-30, ICML 2026 (PMLR v306)
+**Date:** 2026-11-03
+**Related Research:** 089 (OPUS — Boltzmann selection under *stochastic* pseudo-regret; this paper is its adversarial companion), 079 (EqR equilibrium reasoners), 006 (Raven — the gate→adversarial-fallback *shape* without a theorem), 646 (same-week theory companion — representation side; this is the decision side)
+**Related Plans:** katgpt-rs Plan 030 (bandit) — its documented "Out of scope: non-stationary (adversarial)" exclusion is the gap this paper's decision layer speaks to
+**Classification:** Public
+
+---
+
+## TL;DR
+
+A next-token predictor used for decisions (best-respond to its predictions) is NOT automatically regret-low against an adaptive adversary — but it is *ε-robustifiable*: a deterministic, training-free, stopping-time HARD SWITCH to a closed-form Polya-urn (≡ Hedge) reference whenever the realized adversarial-regret gap crosses an Azuma confidence band turns ANY black-box predictor into a low-regret one while moving its output distribution by at most |A|·T^(−α) in TV (one knob α trades fidelity vs robustness). The bounded-context mirror is the strategic result: same-window robustification is **provably impossible** on de Bruijn-class streams, while Δ extra context buys O(1/√Δ) worst-case regret — the first theory-grounded necessity certificate + sizing law for any cheap→strong escalation ladder. Verdict **Gain**: the extractions are all closed-form and modelless, but no shipped lane currently faces a sequential adaptive adversary, so both tracks file consumer-gated (Issue 979 PoC, Issue 664 recipe record). Super-GOAT re-gate trigger named in §5.
+
+**Distilled for katgpt-rs (modelless, inference-time):**
+`RegretGapGate` — run a frozen predictor leg and a zero-training Polya-urn/Hedge reference leg on the realized stream; latch to the reference the first time `gap ≥ (log|A|)/√T + √(8(1+α)(log T)/s)` (Azuma band, union-bound tail T^(−(1+α)) = the TV budget). Plus three satellites: the **V-regret drift detector** (decision-problem-agnostic OOD scalar for binary predictors: max over a V-shaped proper-score grid of prefix regret vs its √(log(N/t²δ)/t) concentration threshold), the **de Bruijn impossibility certificate** (offline: for a frozen L-window predictor, sample windows, compute α = fraction with M(DB(θ_L)|θ_L) ≥ 2/3; guarantee (1−α)/3 TV-farness ⊕ α/3−¼ regret under the complement model, sum ≥ 1/12), and the **Δ-context law** (regret 1/√Δ; Δ=0 impossible).
+
+---
+
+## 1. Paper Core Findings
+
+| Result | Content |
+|---|---|
+| **Lem 2.2 (deterministic BR fails)** | Any *deterministic* best-responder to predictions admits an adversary (θ_t = 1 − a_t) with Ω(1) regret — randomization (quantal response) is mandatory, not optional. |
+| **Lem 2.3 (Polya ≡ Hedge)** | QBR(M_Polya(h), 1/√T) is exponential-weights with decaying schedule λ_t = √T/(\|Θ\|+t−1) ⇒ regret O((log T + log\|A\|)/√T) against ANY adversary. M_Polya(θ\|h) = (1+Σ I[θ_s=θ])/(\|Θ\|+t−1) — pure incremental counts. |
+| **Alg 1 + Thm 3.1 (unbounded robustification)** | One-way switch: predict M_Polya from the first prefix s where the frozen model's realized regret gap vs the Polya leg crosses the Azuma band; else pass through. Worst-case regret O((log(\|A\|T)+√((1+α)log T))/√T); TV(D, D₀) ≤ \|A\|·T^(−α). NOT a mixture — a stopping-time hard switch; α is the single fidelity/robustness knob. |
+| **Thm 4.1 (same-window impossibility)** | For L = T/2 binary prediction there exists an L-bounded M₀ (de Bruijn successor) such that every L-bounded M suffers dTV > 1/24 OR Ω(1)-class regret (1/24) on the complement family (de Bruijn successor vs its bitwise complement — same uniform window marginals, doubly-stochastic chains, indistinguishable to any L-window model). |
+| **Alg 2 + Thm 4.2 (Δ-context robustification)** | With L′ > L, Δ = L′−L extra tokens run Alg 1 over random suffixes (AverageRestartHedge, Schneider–Vodrahalli) and average the Δ shadow responses in action space; regret (1+Δ/T)[√2/√Δ + √(8logT+8(α+1)logΔ)/√Δ], TV ≤ Δ^(−α). **Δ is a pre-deployment architecture decision** — with Δ=0 nothing nontrivial is possible. |
+| **Thm 5.1 + §7 (layer construction)** | +4 constant-weight attention layers, m+O(\|A\|³+\|Θ\|) dims: rolling-count head (exact BOS trick K_BOS=log(\|Θ\|−1), V_BOS=1/(\|Θ\|−1)), loss-retrieval heads, an attention softmax that literally computes the QBR, fixed-weight regret-threshold MLP, OR-switch head. No capacity barrier; the construction doubles as an exact code spec. |
+| **§5.2 (training evidence)** | Robustification enters ONLY through data construction: 50/50 mixture of original distribution + Polya sequences *kept only where the frozen teacher's regret > α√t*, with **prefix loss masking** up to the firing position, consumed by vanilla NTP cross-entropy. No regret-shaped loss anywhere. NanoDO (2.4M params, 500 steps) learns the switch; in-distribution regret preserved (−0.16-class), 8/8 ground-truth distributions vanishing regret. |
+| **§8 (unknown decision problem)** | Binary states, unknown U: proper scores decompose over a V-shaped family ℓ_v(p)=−\|p−v\| (ε-grid, cover error ≤ 2ε); switch when max_v prefix-V-regret crosses √(log(N_ε t²/δ)/t). Same TV budget. \|Θ\| ≥ 4: the additive decomposition FAILS (Kleinberg et al.) — universal detector is binary-only. |
+| **Metric law (§5.2.2)** | Full-sequence TV is brutally strict (two same-distribution different-seed models read 0.42; Polya vs anything reads 1.0). The faithful local axis is **Next-Token TV** d_NT = E_θ[(1/T)Σ_s dTV(M₁(·\|θ_s), M₂(·\|θ_s))] — reads 0.016–0.03 for the robustified model. Never quote full-seq TV alone. |
+
+## 2. Distillation (modelless inventory — the load-bearing rows)
+
+All 17 advocate rows are training-free; the five worth shipping:
+
+1. **RegretGapGate (Alg 1)** — per-round O(1) incremental: running utility sums for the frozen leg (QBR = temperature-η readout of its distribution) and the urn leg; per-round averages; OR-latch on the band crossing (sticky switch, never unlatches — matches the theorem's analysis). Band index pin (Alg 1 verbatim): the Azuma root term runs over the switch-prefix length **s**, the log\|A\| term over **T** (Lem 6.1's per-round quantal price; Thm 7.1 restates the same band). Zero-alloc scratch. Signal class: **realized external regret vs a no-regret floor** — no shipped gate in the workspace consumes it.
+2. **Hedge reference leg** — exp-weights with λ_t = √T/(\|Θ\|+t−1). ⛔ **The exp-family here is LOAD-BEARING, on BOTH legs**: the reference leg *is* Hedge by Lemma 2.3's algebra, and the frozen leg's QBR readout (temperature-η action distribution — mandatory per Lemma 2.2, since deterministic best response is Ω(1)-exploitable) is exp-family by definition, as is the §7 attention softmax that computes it. "Sigmoidifying" either leg's action distribution silently voids the regret bounds. Documented exception class: exp weights appear ONLY as the two legs' QBR action distributions + the Hedge weights; every gate, threshold, projection and mixing in our implementation stays sigmoid/closed-form.
+3. **V-drift detector (Alg 3)** — decision-problem-agnostic drift/OOD scalar for binary predictors with a closed-form concentration threshold; pure forecast-vs-outcome bookkeeping, no U table.
+4. **De Bruijn certificate (Thm 4.1)** — offline red-team probe: *pre-flight* instrument proving a bounded-context predictor CANNOT be retargeted into a low-regret one (existence over a family), distinct from the runtime gate (detection that it IS being beaten now). **Conflation forbidden** — certificate answers "is robustification even possible at this context width", gate answers "am I being exploited this window".
+5. **Δ-context law (Thm 4.2)** — escalation sizing: extra context Δ buys 1/√Δ worst-case regret; the necessity direction (Δ=0 impossible) is the theory behind "the cheap lane cannot always be fixed in place — sometimes you must escalate".
+
+**Scope laws:** universal detector binary-only (\|Θ\|≥4 open in the paper itself); gate needs realized outcomes + a known utility table U (the U-free escape is binary-only); QBR-average pullback in Alg 2 asserted via convexity for \|A\|=2; certificate enumerates/samples the uniform window distribution (2^L infeasible, sampling correct since windows are stationary-uniform under the de Bruijn chains).
+
+## 3. Fusion (cousins, signal-diffs, reframes)
+
+**Closest cousins (code + notes, vocabulary-translated):**
+
+| Cousin | What it ships | Signal diff (why it does not cover) |
+|---|---|---|
+| reflex `CorpusDistanceGate` + `SigmoidGateCalibrator`; rethink ESC rate guard + VoI readout | abstention/escalation gate bits + rate latch | Geometry (embedding distance) and rate (escalations per window) — neither consumes *realized adversarial regret vs a no-regret reference*; both are blind to an adversary that stays in-geometry and in-rate while exploiting the predictor. |
+| OPUS (Research 089) / EqR (079) / BanditPruner | Boltzmann selection, regret tracking | *Stochastic* pseudo-regret under reward uncertainty (Plan 030 documents "Out of scope: adversarial"). The paper's object is adversarial EXTERNAL regret under state uncertainty with known U — a different adversary and a different signal. The QBR map is the same Boltzmann shape at the readout, which is the fusion point, not a collision. |
+| Raven (Research 006) | "adaptive adversarial fallback" shape (hull_valid → Percepta; else → Raven) | The SHAPE (gate bit → robust fallback lane) exists; the gate's signal (hull validity) has no theorem. This paper supplies the theorem + the closed-form reference + the band. |
+| Game opponent tracking (Plan 033 P4 Bomberman, Research 47 T16 Go style embeddings) | opponent models as features for template selection | No regret guarantee, no exploitability bound, no necessity certificate. |
+| `causal_id` "hedge" | bow-arc graph diagnostics | Pure vocabulary collision (causal-identification hedge ≠ Hedge algorithm) — recorded so future greps don't false-positive. |
+
+**Novel combination:** paper's switch gate × reflex fused-abstain = a **third abstention signal that is adversary-aware** (fires exactly when the cheap leg is being beaten relative to the no-regret floor — the regime corpus-distance provably cannot see). Paper's Thm 4.1/4.2 × rethink ESC = the escalation ladder's first **theory-grounded necessity instrument**: pre-flight certificate (is the cheap lane robustifiable at all at this context width?) + sizing law (how much think-context Δ does a target regret buy). Neither pairing exists in the workspace or in the published routing/escalation literature (§4).
+
+**Game-context reframe:** hero/monster policies facing adaptive humans are genuine repeated games. The two-brain model maps directly: info brain = raw synced state; think brain = bounded-window belief (fog-of-war, confidence decay) — Thm 4.1 says memory-bounded responders are Θ(1)-exploitable by de Bruijn-class play, which is the principled argument for the memory substrate (episodic sightings, KG triples) as the Δ-context store, and the anti-cheat corollary: any fixed-window detector admits provably exploitable blind distributions. **Consumer reframe (healer):** the fixer loop is a sequential decision process with realized outcomes (`EvolveRecorder::record_outcome` already fires per applied fix) — a Hedge reference leg over fix outcomes is the U-free-adjacent candidate, candidate-only. **Stationary-surface check:** the gate bit is a static function of the realized window, but the reference leg carries *mutated state per round* (urn counts, exp weights) — the regret-gap readout is dynamics-eligible on this surface, unlike exact gates over stationary scorers.
+
+## 4. Novelty gate
+
+**Pinned claim (ours, not the paper's):** a deterministic training-free robustification shell for any black-box sequential predictor — stopping-time switch to a closed-form Polya/Hedge reference on an Azuma regret-gap band — wired as a per-decision gate onto serving lanes. The robustification theorems are the paper's own (novel as published per the sweep below); what WE add is the **signal class** (realized external regret vs a no-regret floor — no shipped gate consumes it) and the **escalation wiring** (pre-flight certificate + Δ sizing onto the escalation ladder) — distinct from reflex's CorpusDistanceGate and rethink's ESC rate guard by that signal class, and from published routing/cascades (practice-only, no impossibility theory) by grounding escalation in the paper's theorems rather than learned uncertainty.
+
+**Published prior art (web sweep, ~14 productive queries, zero PRIOR-ART-KILLs):** claims (1) exponential-closeness robustification, (2) bounded-context Θ(1)-farness, (3) layer-implementable robustification are all **NOVEL as published** — nearest neighbors are Hu & Wu FOCS 2024 (arXiv:2404.13503, calibration ⇒ downstream regret, same-coauthor lineage), Schneider & Vodrahalli ICML 2023 (arXiv:2205.14519, bounded-recall machinery Alg 2 builds on), Kleinberg et al. U-calibration (2302.02670), Park et al. (2403.16843, empirical LLM-agent regret — the predecessor framing), Cover 1965 (missed classical ancestor of Lem 2.2). Concurrent partial overlap: PCGS-TF (2603.28198, same-day — external Hedge-controller transformer, not internal layers). The escalation-neighborhood (FrugalGPT 2305.05176, 2610.22695 chance-constrained routing, 2610.07816 STEPGATE step-level escalation, 2607.05438 value-of-escalation) is crowded on PRACTICE and empty on impossibility theory — any consumer doc must cite these and differentiate "provably impossible to retarget ⇒ must escalate" from "learned uncertainty routing".
+
+**Internal:** grep clean on paper vocabulary AND codebase translations (regret/adversarial/opponent/polya/quantal across all `src/`; `.research`/`.plans`/`.docs` sweeps) — adversarial external regret, Polya/Hedge reference legs, Azuma-band switching, and impossibility certificates ship nowhere. Plan 030's adversarial exclusion is the documented gap.
+
+## 5. Verdict
+
+**Track A (modelless serving gate): Gain.** Q1 clean (internal + published). Q2 yes (new signal class for the gate family). Q3 — the selling-point sentence finishes ("serving lanes provably unexploitable beyond O(1/√Δ) by any adaptive adversary, escalating only when provably necessary") but **no shipped lane currently faces a sequential adaptive adversary**, so the capability is prospective, not shipped behavior. Q4 yes (≥2 pillars: reflex abstention, rethink ESC, game cognition, healer trajectories). 3.5/4 ⇒ **Gain, not Super-GOAT**, with the re-gate trigger named: wire the gate onto ONE lane with a measured adversary (reflex comparison lane, ESC flag, or a duel/PvP cognition lane) and re-run this gate — a firing gate that incumbents stay silent on (the T3 arms) IS the proof path.
+**Track B (training recipe): Gain, SECONDARY.** Serving-envelope law: the modelless gate runs inside the hot path; the masked-mixture recipe trains outside it, and its consumer (a trained predictor facing adversarial sequences) does not exist — quest-grammar LoRA is next-token-shaped but faces no adversary; laya is frozen third-party. Filed consumer-gated (riir-train Issue 664, mirroring Issue 663's gate-the-GPU-spend shape).
+
+**MOAT gate:** base primitive (urn + gate + certificate + Δ law are repo-agnostic math) → katgpt-rs note + `katgpt-core` PoC issue; consumers recorded in the issue, wired only owner-gated in their own repos (reflex public comparison lane = owner-gated per its MOAT; rethink ESC flag = promotion decision; ESC gate is EXACT/stationary — a new flag is a deliberate addition, byte-identical when unfired).
+
+**Filed artifacts:** katgpt-rs `.research/647` (this note) · katgpt-rs `.issues/979_regret_gap_gate_poc.md` (Track A proof path) · riir-train `.issues/664_ntp_regret_masked_mixture_recipe.md` (Track B record).
+
+## 6. Disclosures
+
+- The gate needs realized outcomes and a known utility table U per decision problem; the U-free universal detector is binary-only (\|Θ\|≥4 decomposition fails — open in the paper).
+- The certificate is an existence instrument over a family, not a per-stream classifier — it proves "no L-window fix exists on de Bruijn-class streams", never "this stream is adversarial".
+- The paper's training evidence is binary match-the-bit, one architecture, 500 steps; transfer beyond it is unproven (that is exactly what Issue 664's gate would adjudicate, <1 GPU-hour class — order-of-magnitude, the paper reports no wall-clock).
+- The exp-family exception covers BOTH legs' QBR action distributions + the Hedge weights (Lem 2.3 is an exp-family theorem AND Lem 2.2 makes the quantal response mandatory); all gates/thresholds stay sigmoid/closed-form.
+- Full-sequence TV is a dead metric for this family — d_NT is the fidelity axis in every future gate (the 0.42 same-seed law).
