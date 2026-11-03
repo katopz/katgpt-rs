@@ -4,6 +4,7 @@
 > **Date:** 2026-07-11
 > **Status:** Done — Pass (inference) + → riir-train (training)
 > **Related Research:** 202 (QAT Infusion — same principles explored), 020 (TurboQuant — online quantization), 265 (b-posit — alternative precision format), 200 (quant outlier collapse), 085 (riir-ai multi-precision NPC switching), riir-infer 017 (CroissAttn — the re-evaluation this note's trigger called for, landed 2026-10-27)
+> **Sibling distill (same team, later):** riir-infer/.research/022 — GPU-accelerated Weight Teleportation (humans&, 2026-11-02): delta weight-sync TRANSPORT (XOR masks + double compression + versioned delta chains) — the transport half of the same trainer-sampler contract this note records the numerics half of; transport PoC riir-infer issue 1169, checkpoint recipe riir-train issue 667.
 > **Classification:** Public
 
 ---
