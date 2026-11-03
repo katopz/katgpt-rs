@@ -1,6 +1,6 @@
 ---
 name: build-hygiene
-description: Generic Rust build-hygiene gate for compile time, binary size and the dev-edit loop. Use when adding deps or features or crates, touching cargo profiles, when a build/link/boot loop feels slow, when target dirs bloat, when choosing a dev-loop driver (plain cargo vs framework dynamic-linking vs blaze), before quoting any build-time or size or perf number, or quarterly as a hygiene pass. Enforces the profile discipline (dev line-tables-only + opt-3 deps, a shared opt-0 gate tree, dist fat-LTO strip), the determinism law against profile pins, isolated target dirs, the pre-registered A/B bar, and lint-healing before any perf claim.
+description: Generic Rust build-hygiene gate for compile time, binary size and the dev-edit loop. Use when adding deps or features or crates, touching cargo profiles, when a build/link/boot loop feels slow, when target dirs bloat, when choosing a dev-loop driver (plain cargo vs framework dynamic-linking vs blaze), before quoting any build-time or size or perf number, or quarterly as a hygiene pass. Enforces the profile discipline (dev line-tables-only + opt-3 deps, a shared opt-0 gate tree, dist fat-LTO strip), the determinism law against profile pins, isolated target dirs, the pre-registered A/B bar, and lint-fixing before any perf claim.
 ---
 
 # build-hygiene
@@ -86,7 +86,7 @@ Rules:
   run without the feature prints `ok. 0 passed`, exit 0 — byte-identical to a
   pass. `required-features` rows protect the reader. After any clean clippy sweep,
   check the blind spot: which gated targets did the sweep never compile? (the
-  `cargo refine --oracle-census` report does this where the healer is installed;
+  `cargo refine --oracle-census` report does this where the rulewright is installed;
   otherwise grep your own `[[test]]`/`[[bench]]` rows).
 - **A wrong `required-features` row is worse than a missing one** — `cargo test
   --workspace` silently SKIPS the target; only `--all-features` builds it. Audit
@@ -116,10 +116,10 @@ Rules:
 - Content/artifact size (compressed bundles, dataset archives) is a separate
   lane — compression at the artifact boundary, not profile flags.
 
-## 5. The perf law (heal before you measure)
+## 5. The perf law (fix before you measure)
 
-1. **Heal mechanical lints FIRST** — `cargo refine --fix` where the workspace
-   healer is installed (compile-gated writes: `--fix --write --verify`, and
+1. **Fix mechanical lints FIRST** — `cargo refine --fix` where the workspace
+   rulewright is installed (compile-gated writes: `--fix --write --verify`, and
    `--verify-args "--features <set>"` for gated code), else `cargo clippy --fix`.
    A perf number taken over lint noise is not comparable to a clean baseline.
 2. **Pre-register the bar BEFORE data** — write the want-faster threshold and
