@@ -1,6 +1,7 @@
 # Issue 979: Adversary-aware serving gate — regret-gap switch + V-drift detector + de Bruijn certificate PoC (arXiv:2603.28499)
 
 **Status:** Open — PoC pending; promotion consumer-gated
+**Claimed:** zed-agent@amo, 2026-11-04, expires 2026-11-06T00:00Z (48 h)
 **Date:** 2026-11-03
 **Research:** [katgpt-rs/.research/647_NTP_Regret_Robustification.md](../.research/647_NTP_Regret_Robustification.md)
 **Source:** [arXiv:2603.28499](https://arxiv.org/abs/2603.28499) Alg 1 + Thm 3.1, Alg 3 + §8, Thm 4.1/4.2 (Mohri, Sanford, Schneider, Vodrahalli, Wu; ICML 2026)
