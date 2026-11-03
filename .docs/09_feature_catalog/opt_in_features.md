@@ -6336,3 +6336,52 @@ demote to the SparseErrorBypass representation. Gate battery:
 `tests/issue980_weight_edit_overlay_gates.rs` (12 tests); bench:
 `benches/issue980_weight_edit_overlay_goat.rs`; record:
 [Bench 976](../../.benchmarks/976_issue980_weight_edit_overlay_goat.md).
+
+### `regret_guard` — adversary-aware serving gate (Issue 979)
+
+`regret_guard = []` — **opt-in** (zero new deps).
+`RegretGapGate` — arXiv:2603.28499 "NTP and Regret Minimization" (Mohri,
+Sanford, Schneider, Vodrahalli, Wu; ICML 2026) Algorithm 1 as a runtime
+sticky-OR latch: a frozen (incumbent) predictor leg and a Polya-urn
+reference leg are scored on the SAME realized outcome stream; the gap
+`avg-regret(frozen) − avg-regret(urn) = (S_urn − S_frozen)/s` crossing
+`η·ln|A| + √(8(1+α)·ln T/s)` switches the served prediction source to the
+urn from the next round on (Azuma root over the switch-prefix length s,
+quantal price over T — index-pinned; η = 1/√T issue-pinned → the urn leg's
+Hedge rate λ_t = √T/(|Θ|+t−1), Lemma 2.3). The urn leg IS Hedge (Lemma
+2.3's QBR derivation) and the frozen leg's action distribution is a quantal
+best response — **the exp family is load-bearing on both legs** (the
+documented softmax exception class; sigmoid on every gate/threshold — there
+are none: band and gap are raw arithmetic). `VDriftDetector` = the U-free
+BINARY escape (§8 Algorithm 3): V-shaped proper scores ℓ_v(p) = −|p−v| over
+the ε-grid in their piecewise-constant closed form (constant-p minimizer
+`min{0, −vZ+(1−v)O, vZ+(v−1)O}` — brute-force spec-matched), threshold
+`B·√(ln(N_ε·t²/δ)/t)` with B = 2 the V-loss range (load-bearing: at t = 1
+the B-less bound is vacuous) + the L_min warmup floor. **Binary only** —
+the |Θ| ≥ 4 decomposition fails (Kleinberg et al.); no wider-alphabet
+surface by construction. `suffix_average_pullback` = Alg 2's indicator-form
+averaging identity. Loud refusals: no U (the U-free escape is the
+V-detector only), malformed U/frozen dist, degenerate alphabets —
+fail-closed. f64 accumulators, sequential folds (Issue-940), O(|A|·|Θ|)
+per round (the paper's own cost), zero-alloc steady state. GOAT G1–G4 PASS
+(Bench 977): deterministic-BR probe (Lem 2.2) frozen 0.9995 → served 0.158;
+8-distribution battery (Ber(1/3), Ber(2/3), both switch orders, sine drifts
+φ ∈ {T/2,T/5,T/10,T/20}) honest mode NEGATIVE-class regrets (−0.12..−0.19 —
+the paper Fig-1 BERNOULLI −0.16 shape) with served==frozen bit-parity when
+unswitched, adversarial mode all-fire → sublinear; TV-budget arm 0 switches
+≤ |A|·T^(−α) over 128 seeded draws; de Bruijn certificate (Thm 4.1) holds
+as the pre-registered DISJUNCTION (successor: regret leg 0.5 ≥ 1/24;
+constants: TV leg 0.50 ≥ 1/24 — the un-escalated arm's red IS the theorem);
+Δ-context arm endpoint dominance (0.319 → 0.193 across Δ 8→128, mid-point
+0.162 at Δ=32 recorded — the staggered-restart interaction, honest note).
+G2: 23–40 ns/round at --release (bar µs-class, 25–43× under); G4: 0 allocs
+over 50k rounds (canary'd). Opt-in — promotion consumer-gated: the gate is
+real when a lane shows the firing case with an incumbent-silent ground
+truth (reflex third fused-abstain signal / rethink ESC flag / seal duel
+lane are the recorded candidate consumers, Issue 979 T5; the public
+comparison-lane change is owner-gated per reflex's MOAT). The certificate
+is pre-flight, the gate is runtime — never conflate. Stochastic-regret
+bandit lanes (Plan 030 scope) unchanged. Gate battery:
+`tests/issue979_regret_guard_gates.rs` (9 tests); bench:
+`benches/issue979_regret_guard_goat.rs`; record:
+[Bench 977](../../.benchmarks/977_issue979_regret_guard_goat.md).

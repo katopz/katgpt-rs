@@ -1725,6 +1725,18 @@ pub use weight_edit_overlay::{
     WeightEditOverlay, WeightEditSpec, arm_from_telemetry, blake3_seed,
     norm_matched_random_direction, paired_lcb95,
 };
+
+// Issue 979 — regret-guard: adversary-aware serving gate (arXiv:2603.28499
+// Alg 1 as a runtime latch + the §8 V-drift binary escape). The two legs'
+// QBR action distributions are exp-family by theorem (Lem 2.3) — the
+// documented softmax exception class; sigmoid on every gate/threshold.
+#[cfg(feature = "regret_guard")]
+pub mod regret_guard;
+#[cfg(feature = "regret_guard")]
+pub use regret_guard::{
+    RegretGapConfig, RegretGapGate, RegretGuardError, RegretStep, VDriftConfig,
+    VDriftDetector, VDriftStep, suffix_average_pullback,
+};
 #[cfg(all(feature = "manifold_erasure", feature = "subspace_phase_gate"))]
 pub use manifold_erasure::{
     ManceConfig, ManceError, ManceScratch, ManceStepInfo, ManceTangentCache,
