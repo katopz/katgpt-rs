@@ -6294,3 +6294,45 @@ riir-refine elo_k_eff + readout — LANDED (riir-refine `280f1576`, Issue 190),
 riir-dao `evidence_budget` advisory movement budget — LANDED opt-in (riir-dao
 `6793e99`, Issue 009 closed). All three consumers landed; each stays opt-in —
 consumer promotion rides each lane's own gates.
+
+### `weight_edit_overlay` — reasoning-authored, gate-gated weight-edit lane (Issue 980)
+
+`weight_edit_overlay = ["gain_cost_halt"]` — **opt-in**.
+`WeightEditOverlay` — an authored, deterministic weight-edit spec compiled by
+a fixed applier: `DirectionSubtraction` (`ΔW[:, S] = −k·d`, rank-1
+column-masked — the "Sparks of Weight-Space Programming" blog's Exp-8 loop
+fix, Research 648) + `BypassRows` (an `exact_sigmoid`-gated pathway through
+existing units — the Exp-4 ramp fix ported to the FSM-doctrine sigmoid drive,
+never the blog's hard switch-off). **The arming condition is obstacle
+telemetry**: the lane arms from `GainCostLoopHalter` `Halt{Oscillation}`
+episode rate and REFUSES "no obstacle found" below threshold
+(`arm_from_telemetry`) — the obstacle-vs-ability law built into the arming
+logic (a model with no single failing component is out of scope; the blog's
+Gemma control as the falsifier arm). Two apply postures: dense
+`compose_layer_into`/`revert_layer` (bit-identical f32 revert via backup —
+`W−=k·d` then `W+=k·d` is NOT bit-exact; the fix_verify-shaped revert) and
+`forward_delta_into` (rank-1 dequant-domain delta at forward, `Δy[i] =
+−k·d[i]·Σ_{j∈S} h[j]`, O(|S|+out), zero matrix traffic — the QuantErrorLora
+posture for packed/PQ bases, never requantize). `WeightEditArtifact` =
+mint-once-then-freeze BLAKE3 envelope + optional provenance trailer
+(prompt digest / seed / author — all optional except the artifact BLAKE3);
+tamper refusal at thaw. GOAT G1–G4 PASS on the seeded-degeneracy MLP fixture
+(InjectedDegeneracyMlp 128→64→64→4, rates degenerate 1.0 / twin 0.0;
+dose-response non-increasing over k ∈ {1,2,4,8} + strictly-decreasing
+vertical-pull probe; neighbor-column isolation null ≈ base; 16-arm
+norm-matched BLAKE3-seeded random control beaten with paired LCB95 > 0
+against the once-picked best arm; k=k₀ repair restores the no-degeneracy
+twin's trajectory bit-exactly; int8 dequant twin repaired with packed bytes
+BLAKE3-unchanged; G4 0-alloc apply). G2: compose wins on cache-resident
+tensors (1.67× at 64×64); at LLM scale the row-major column-stride penalty
+flips it (compose 2.5 ms vs bake 238 µs at 4096×1024) — the forward-delta
+posture is the designed serving path there (281 ns, 0 allocs). Stays opt-in
+per the no-default-consumer rule (metabolic_gate precedent): serving-rung
+wiring is veto-gated (Research 648 §4 — a consumer needs a documented loop
+class + a WSP-capable author); hosted-author + weight-egress policy is
+riir-train `.issues/665`'s scope. Demotion law pre-registered (Issue-565
+precedent): if the battery fails on a real consumer, record the negative and
+demote to the SparseErrorBypass representation. Gate battery:
+`tests/issue980_weight_edit_overlay_gates.rs` (12 tests); bench:
+`benches/issue980_weight_edit_overlay_goat.rs`; record:
+[Bench 976](../../.benchmarks/976_issue980_weight_edit_overlay_goat.md).

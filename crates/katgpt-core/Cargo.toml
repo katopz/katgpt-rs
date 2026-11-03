@@ -1581,6 +1581,7 @@ gdn_hola_tree_verify = ["gdn_tree_verify", "hippocampal_cache"]  # Dual-Path Rol
 tilr_invariant_subspace = []  # TILR — Trajectory-Invariant Latent Refinement (Plan 425, Research 408, arXiv:2606.29164). Alignment-gated subspace-projected correction: projects a contrastive direction onto a frozen SVD basis, modulates step size by γ = ‖Πd‖/‖d‖ so γ→0 bit-recovers the input (strict no-harm). Pure linear algebra (flat &[f32] + SIMD dot), zero crate:: deps. Consumes a pre-computed SVD basis (Plan 301); does not compute it. DEFAULT-ON: G1–G4 GOAT gate ALL PASS. See .benchmarks/425_tilr_goat.md.
 manifold_erasure = []  # MANCE — Manifold-Aware Concept Erasure (Plan 426, Research 409, arXiv:2607.03973). Local tangent + spectral weighting + trust-bounded erasure. k-NN natural neighbors → local tangent SVD → σ^α-weighted direction projection → ε·r_i trust region. Pure modelless linear algebra. Consumes a pre-computed erasure direction (probe is a consumer concern — MAG/CNA/EmotionDirections). Gated on subspace_phase_gate for Plan 301 thin_svd_into. DEFAULT-ON (2026-07-11): G1–G6 GOAT gate ALL PASS. See .benchmarks/426_manifold_erasure_goat.md.
 quant_error_lora = []  # Issue 565 / Research 463: Quantization-Error Compensating Reader-LoRA — deterministically-constructed low-rank (weight-space SVD, output-space data-aware SVD) or sparse (top-K COO bypass) correction for quantized weight matrices. At inference: y = W_q·x + α·correction(x). Pure modelless (closed-form SVD / partial-sort; no gradient descent). Gated on subspace_phase_gate for Plan 301's thin_svd_into. Opt-in — the Issue 565 defend-wrong PoC tests whether it helps on the 105K-param Moka CNN (predicted FAIL: the Small-Kernel Parameter Paradox means rank-8 LoRA is 27.8% overhead on a 32×288 conv vs 0.39% on an LLM linear layer; the error matrix is likely near-full-rank). Ships regardless as reusable substrate for larger models (LLM weights, future game networks) where the error manifold is genuinely low-rank.
+weight_edit_overlay = ["gain_cost_halt"]  # Issue 980 / Research 648 ("Sparks of Weight-Space Programming", GOAT fusion): reasoning-authored, gate-gated weight-edit lane — DirectionSubtraction (ΔW[:,S] = −k·d, rank-1 column-masked, the blog's Exp-8 loop fix) + BypassRows (exact_sigmoid-gated pathway, the Exp-4 ramp fix ported to the FSM-doctrine sigmoid drive — never the hard switch-off). The arming condition IS the obstacle telemetry: GainCostLoopHalter Halt{Oscillation} rate above threshold arms; below refuses "no obstacle found" (the obstacle-vs-ability falsifier — hence the gain_cost_halt implication). PQ/ternary posture: forward_delta_into applies the rank-1 delta in the dequant domain at forward (QuantErrorLora posture — never requantize a packed base); compose_layer_into/revert_layer is the dense pinned-exact path with BIT-IDENTICAL f32 revert (backup, not re-negation — W−=k·d then W+=k·d is not bit-exact). WeightEditArtifact = mint-once-then-freeze BLAKE3 envelope with optional provenance trailer (FrozenDirectionBank pattern). Implies gain_cost_halt (the arming telemetry). Opt-in (POC; promotion needs a real consumer lane — metabolic_gate no-default-consumer precedent); demotion law pre-registered (Issue-565: battery fails → record negative, carrier demotes to the SparseErrorBypass representation).
 rim_slots = ["katgpt-types/rim_slots"]  # RiM Reasoning Buffer Slots — fixed latent workspace for DDTree (Plan 172, Research 192)
 loop_stability_fix = ["katgpt-types/loop_stability_fix"]  # Loop stability mode for weight-shared looped inference (Plan 428)
 wall_attention = ["katgpt-types/wall_attention"]  # Wall Attention — diagonal forget gates replacing RoPE (Plan 173, Research Wall Attention)
@@ -4952,3 +4953,25 @@ required-features = ["fixed_log_softmax"]
 name = "step_noise_perf"
 harness = false
 required-features = ["step_noise"]
+
+# Issue 980 T1–T5 — the WeightEditOverlay gate battery (Research 648 modelless
+# half): the seeded-degeneracy MLP fixture (InjectedDegeneracyMlp, 128→64→64→4,
+# obstacle rate pinned) + the pre-registered control battery — dose-response
+# monotone non-increasing over k ∈ {1,2,4,8}, neighbor-column isolation null,
+# norm-matched random control (≥16 BLAKE3-seeded arms, paired LCB95 vs the
+# once-picked best arm), obstacle pre-screen refusal on the no-degeneracy
+# twin, bit-identical retention outside the pinned region, PQ dequant-domain
+# apply arm (packed base BLAKE3 unchanged), mint-once freeze envelope with
+# tamper refusal, and the G4 zero-alloc apply canary. Green-zero rule:
+# required-features + whole-file #![cfg] pairing.
+[[test]]
+name = "issue980_weight_edit_overlay_gates"
+required-features = ["weight_edit_overlay"]
+
+# Issue 980 T4 — G2 apply-at-load compose cost vs full bake at --release
+# (interleaved A/B, Issue-723 treatment) + the G4 alloc-count canary +
+# box-state line printed. harness = false (the DEC GOAT convention).
+[[bench]]
+name = "issue980_weight_edit_overlay_goat"
+harness = false
+required-features = ["weight_edit_overlay"]

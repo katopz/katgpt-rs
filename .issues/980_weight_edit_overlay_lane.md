@@ -1,6 +1,6 @@
 # Issue 980: WeightEditOverlay — reasoning-authored, gate-gated weight-edit lane (Research 648 modelless half)
 
-**Status:** OPEN — claimed (in progress)
+**Status:** DONE 2026-11-04 — T1–T6 LANDED, GOAT G1–G4 PASS ([Bench 976](../.benchmarks/976_issue980_weight_edit_overlay_goat.md)); opt-in per the no-default-consumer rule (metabolic_gate precedent), promotion consumer-gated (serving rung is veto-gated, Research 648 §4)
 **Claimed:** zed-agent@m3, 2026-11-03, expires 2026-11-05T00:00Z (48 h)
 
 > **Research:** [`.research/648_Weight_Space_Programming.md`](../.research/648_Weight_Space_Programming.md) — "Sparks of Weight-Space Programming" (Takehi/Teoh/Zhang/Khattab, MIT CSAIL blog, 2026-11-02; blog-only, no arXiv). Verdict: GOAT (fusion). Cousins: Plan 121 RandOpt (control arm), Issue 565 QuantErrorLora (sparse carrier + G5-negative precedent), `gain_cost_halt`/`saddle_escape` (obstacle telemetry), Plan 025 LoraPair (overlay dispatch shape).
@@ -22,12 +22,12 @@ Weight edits remove obstacles that hide abilities; they do not add abilities. Th
 
 Fixture: small dense MLP with an INJECTED degenerate direction (seeded: pick unit `d`, add `k₀·d` to a pinned column set so a two-action oscillation attractor forms in a pinned input region) — no LLM needed; the POC proves the overlay + gate machinery. Plus a no-degeneracy control fixture.
 
-- [ ] **T1** Fixture: `InjectedDegeneracyMlp` (128→64→64→4, seeded degenerate direction, pinned oscillation region; deterministic rollout) + no-degeneracy twin. Measure base obstacle rate (oscillation counter ≥ N consecutive opposite actions).
-- [ ] **T2** Overlay carrier: edit spec type (direction form + bypass form) → deterministic applier; apply-in-dequant-domain arm for a quantized twin of the fixture; untouched columns bit-identical assert.
-- [ ] **T3** Gate battery (G1): (a) dose-response monotone non-increasing over pinned k ∈ {1,2,4,8}; (b) neighbor-layer isolation null (same edit at an uninvolved column set ≈ no change); (c) norm-matched random control, ≥16 BLAKE3-seeded arms (RandOpt posture); the statistic is the **paired LCB95 on (targeted − best random)** — the best random arm is selected ONCE on its mean over the eval protocol, then paired per-seed deltas are computed against that single arm (reading (i), not per-seed max-over-arms — the stricter reading is likely unreachable at 16 arms on a small fixture; the once-picked form still cannot produce a false win since the null is biased conservative); beating only the ensemble MEAN fails; (d) **pre-screen refusal arm**: no-degeneracy fixture ⇒ lane refuses, zero fake gain; (e) retention: clean-region accuracy held within ε (paired).
-- [ ] **T4** G2/G3/G4: apply-at-load compose cost vs full bake; flag-off byte-identical boot; alloc-free apply (bounded scratch); rejected-edit revert leaves θ bit-identical (BLAKE3 before/after).
-- [ ] **T5** Mint-once freeze: committed artifact envelope with provenance trailer (prompt digest / seed / author id, all optional except artifact BLAKE3); tamper refusal at load.
-- [ ] **T6** Feature gate `weight_edit_overlay` (opt-in); GOAT verdict recorded in `.benchmarks/`; on gate failure: record negative (Issue-565 precedent) and demote — the carrier stays only as the SparseErrorBypass representation.
+- [x] **T1** Fixture: `InjectedDegeneracyMlp` (128→64→64→4, seeded degenerate direction, pinned oscillation region; deterministic rollout) + no-degeneracy twin. Measure base obstacle rate (oscillation counter ≥ N consecutive opposite actions). — rates 1.0/0.0, halter cross-agreement 16/16 seeds (`tests/issue980_weight_edit_overlay_gates.rs`)
+- [x] **T2** Overlay carrier: edit spec type (direction form + bypass form) → deterministic applier; apply-in-dequant-domain arm for a quantized twin of the fixture; untouched columns bit-identical assert. — int8 twin repaired with packed bytes BLAKE3-unchanged
+- [x] **T3** Gate battery (G1): (a) dose-response monotone non-increasing over pinned k ∈ {1,2,4,8} — {1,1,1,0} + strictly-decreasing vertical-pull probe; (b) neighbor-layer isolation null ✓; (c) norm-matched random control, 16 BLAKE3-seeded arms, paired LCB95 > 0 vs the once-picked best arm ✓; (d) pre-screen refusal arm ✓; (e) retention: bit-identical out-of-region + k=k₀ trajectory == twin ✓
+- [x] **T4** G2/G3/G4: compose-vs-bake recorded at 3 shapes (fixture 1.67× compose; LLM-scale strided-column penalty → forward-delta posture 281 ns, the designed serving path); flag-off byte-identical; alloc-free apply 0 allocs (canary'd; fixed a real alloc — touched_count's Vec inside the apply path); rejected-edit revert θ bit-identical (BLAKE3, backup-based)
+- [x] **T5** Mint-once freeze: `WeightEditArtifact` envelope + provenance trailer (all optional except artifact BLAKE3); tamper refusal at thaw + payload verification
+- [x] **T6** Feature gate `weight_edit_overlay` (opt-in, implies gain_cost_halt); GOAT verdict recorded ([Bench 976](../.benchmarks/976_issue980_weight_edit_overlay_goat.md)); battery passed so no demotion — but promotion stays consumer-gated
 
 ## Non-goals
 

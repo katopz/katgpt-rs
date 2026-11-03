@@ -1713,6 +1713,18 @@ pub mod manifold_erasure;
 
 #[cfg(all(feature = "quant_error_lora", feature = "subspace_phase_gate"))]
 pub mod quant_error_lora;
+
+// Issue 980 — WeightEditOverlay (Research 648 modelless half): implies
+// gain_cost_halt because the arming condition IS the halter's obstacle
+// telemetry (HaltReason::Oscillation rate).
+#[cfg(feature = "weight_edit_overlay")]
+pub mod weight_edit_overlay;
+#[cfg(feature = "weight_edit_overlay")]
+pub use weight_edit_overlay::{
+    ArmRefusal, ArmVerdict, EditForm, ObstacleArmConfig, ProvenanceTrailer, WeightEditArtifact,
+    WeightEditOverlay, WeightEditSpec, arm_from_telemetry, blake3_seed,
+    norm_matched_random_direction, paired_lcb95,
+};
 #[cfg(all(feature = "manifold_erasure", feature = "subspace_phase_gate"))]
 pub use manifold_erasure::{
     ManceConfig, ManceError, ManceScratch, ManceStepInfo, ManceTangentCache,
