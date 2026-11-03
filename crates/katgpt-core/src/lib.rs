@@ -786,6 +786,9 @@ pub mod latent_confounder_audit;
 #[cfg(feature = "leakage_probe")]
 pub mod leakage_probe;
 
+#[cfg(feature = "nuisance_fraction")]
+pub mod nuisance_fraction;
+
 #[cfg(feature = "interpolation_geometry")]
 pub mod interpolation_geometry;
 
@@ -873,6 +876,11 @@ pub use swe_trajectory_freeze::{
 
 #[cfg(feature = "latent_confounder_audit")]
 pub use latent_confounder_audit::{AuditScratch, LatentConfounderAudit, audit_confounders};
+
+#[cfg(feature = "nuisance_fraction")]
+pub use nuisance_fraction::{
+    RhoError, RhoReport, RhoScratch, RHO_CONVENTION, alignment_floor, rho_fraction,
+};
 
 #[cfg(feature = "interpolation_geometry")]
 pub use interpolation_geometry::{
@@ -1412,7 +1420,12 @@ pub use katgpt_types::depth_invariance::{
     // Plan 449: `poincare::fit` consumes `ridge_solve_direct_f32` — joined
     // late (Bench 975: hidden by the default set until riir-refine turned
     // katgpt-core's defaults off and enabled only its own features).
-    feature = "poincare_navigator"
+    feature = "poincare_navigator",
+    // Issue 978: `nuisance_fraction` consumes `symmetric_eig` for the
+    // population whitening basis and the corrected between-group spectrum —
+    // joined at birth per the same rule (the crate must compile when only
+    // this feature is on).
+    feature = "nuisance_fraction"
 ))]
 pub mod linalg;
 
