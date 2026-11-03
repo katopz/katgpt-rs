@@ -1,7 +1,7 @@
 # Issue 980: WeightEditOverlay — reasoning-authored, gate-gated weight-edit lane (Research 648 modelless half)
 
 **Status:** DONE 2026-11-04 — T1–T6 LANDED, GOAT G1–G4 PASS ([Bench 976](../.benchmarks/976_issue980_weight_edit_overlay_goat.md)); opt-in per the no-default-consumer rule (metabolic_gate precedent), promotion consumer-gated (serving rung is veto-gated, Research 648 §4)
-**Claimed:** zed-agent@m3, 2026-11-03, expires 2026-11-05T00:00Z (48 h)
+**Lease closed:** zed-agent@m3, 2026-11-03, expired 2026-11-05T00:00Z (48 h) — landed `b0f1ed615` well inside the window
 
 > **Research:** [`.research/648_Weight_Space_Programming.md`](../.research/648_Weight_Space_Programming.md) — "Sparks of Weight-Space Programming" (Takehi/Teoh/Zhang/Khattab, MIT CSAIL blog, 2026-11-02; blog-only, no arXiv). Verdict: GOAT (fusion). Cousins: Plan 121 RandOpt (control arm), Issue 565 QuantErrorLora (sparse carrier + G5-negative precedent), `gain_cost_halt`/`saddle_escape` (obstacle telemetry), Plan 025 LoraPair (overlay dispatch shape).
 
