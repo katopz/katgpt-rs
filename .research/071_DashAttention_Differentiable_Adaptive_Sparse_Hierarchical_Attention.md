@@ -358,3 +358,4 @@ Depth:    Delta routing (cross-layer info flow)
 - InfLLM-v2: Zhao et al. (ICLR 2026) — Dense-sparse switchable attention
 - MoBA: Lu et al. (NeurIPS 2025) — Mixture of Block Attention
 - FlashAttention-3: Shah et al. (NeurIPS 2024)
+- Zyphra ZHA: Lufkin et al. [arXiv:2610.42112 "Subquadratic Attention with a Hierarchical Tree-Structured Indexer"] — the multi-level generalization of this note's single-level α-entmax router: recursive compressed-summary tree + per-level top-p mass routing (vs entmax α-support) + KL-distilled reference queries (vs zero-init head_cls mean-pool); distill record + riir-train PoC issue 666: riir-infer `.research/021_ZHA_Hierarchical_Tree_Indexer.md`.
