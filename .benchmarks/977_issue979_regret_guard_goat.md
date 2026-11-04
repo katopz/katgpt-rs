@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-04
 **Feature:** `regret_guard` (katgpt-core, zero new deps), root forwarder in the root manifest
-**Issue:** [`.issues/979_regret_gap_gate_poc.md`](../.issues/979_regret_gap_gate_poc.md)
+**Issue:** `.issues/979_regret_gap_gate_poc.md`
 **Research:** [`.research/647_NTP_Regret_Robustification.md`](../.research/647_NTP_Regret_Robustification.md)
 **Source:** arXiv:2603.28499 "Next-Token Prediction and Regret Minimization" (Mohri, Sanford, Schneider, Vodrahalli, Wu; ICML 2026) — Alg 1 + Thm 3.1, Alg 3 + §8, Thm 4.1/4.2, fetched and read in full this session
 **Verdict: GOAT G1–G4 PASS — stays OPT-IN, promotion consumer-gated** (the gate is real when a lane shows the firing case with an incumbent-silent ground truth; candidate consumers recorded in Issue 979 T5)

@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-04
 **Feature:** `weight_edit_overlay` (katgpt-core, implies `gain_cost_halt`), root forwarder in the root manifest
-**Issue:** [`.issues/980_weight_edit_overlay_lane.md`](../.issues/980_weight_edit_overlay_lane.md)
+**Issue:** `.issues/980_weight_edit_overlay_lane.md`
 **Research:** [`.research/648_Weight_Space_Programming.md`](../.research/648_Weight_Space_Programming.md) — "Sparks of Weight-Space Programming" (Takehi/Teoh/Zhang/Khattab, MIT CSAIL blog, 2026-11-02)
 **Verdict: GOAT G1–G4 PASS — stays OPT-IN** (no-default-consumer rule, metabolic_gate / Bench-716 precedent; promotion to default requires a real consumer lane)
 

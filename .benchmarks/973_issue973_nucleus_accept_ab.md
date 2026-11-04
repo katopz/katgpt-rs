@@ -1,7 +1,7 @@
 # Bench 973 — NucleusAccept (PLM relaxed acceptance): accepted/call A/B on fixtures
 
 **Status:** DONE 2026-10-30. Counts are valid. Latency is NOT a measurement (box refused, see below).
-**Issue:** [973](../.issues/973_relaxed_acceptance_policy.md) · **Feature:** `nucleus_accept` (opt-in)
+**Issue:** `973` · **Feature:** `nucleus_accept` (opt-in)
 
 ## Command
 
