@@ -346,6 +346,9 @@ their rethink-side rungs).
   numbering unchanged and confirmed. One pre-commit fix directed and applied: the two
   PASS-Redirects titles at the foot of this note were corrected to the canonical §6
   forms (ORBIT, DRAGO) — the block future greps hit now carries the verified titles.
+  Closing round confirmed the fix on disk; commits: katgpt-rs `e7a746274` (this note
+  + highwater), riir-refine `52126109` (issues 205+206 + highwater, both referencing
+  this note's hash in their headers).
 
 ## PASS-Redirects (synthesis)
 
