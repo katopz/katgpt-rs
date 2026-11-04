@@ -1,7 +1,7 @@
 # Issue 978: ρ alignability gate — planted-ρ fixture + pre-registered falsification arms (arXiv:2610.39302 Thm 3 distillation PoC)
 
 **Status:** Open — T1–T4 LANDED (katgpt-rs `e572a2281`); promotion consumer-gated (T4) + cross-repo consumers pending (T5)
-**Claimed:** zed-agent@m3, 2026-11-03, expires 2026-11-05T00:00Z (48 h)
+**Lease closed:** zed-agent@m3, claimed 2026-11-03, released 2026-11-04 (scope discharged by `e572a2281` — T1–T4 landed) before its 2026-11-05T00:00:00Z expiry; T5 rides its own repos' issue discipline. (Reshaped 2026-11-04 from a malformed **Claimed:** line — date spelled where epoch digits belong — that the landing never retired.)
 **Date:** 2026-11-03
 **Research:** [katgpt-rs/.research/646_Platonic_Representation_Good_Views_PRH.md](../.research/646_Platonic_Representation_Good_Views_PRH.md)
 **Source:** [arXiv:2610.39302](https://arxiv.org/abs/2610.39302) Thm 3 + Prop 2 (Balestriero & LeCun)
