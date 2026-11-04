@@ -38,6 +38,14 @@
 //! carrier feature rides input `carrier_col` gated by `|y| ≤ band`, and the
 //! vertical readout routes through `h2[gap_row]`.
 //!
+//! P4 extends the SAME fixture to the Research-650 §4.1 smallest step: TWO
+//! disjoint band-gates in TWO half-space regions (region A `x ≤ split`,
+//! region B `x > split`), each with its own carrier column / band / k₀, the
+//! region classifier keying the per-region pools, and the per-region
+//! pipeline recovering BOTH constants exactly. The regions share the gap
+//! row (the shipped parse reads ONE readout surface — a region-conditional
+//! gap row is out of scope for the smallest step and recorded as such).
+//!
 //! Green-zero rule: whole-file `#![cfg]` + `required-features` row pair.
 
 #![cfg(feature = "probe_circuit_grammar")]
@@ -134,9 +142,148 @@ const ALL_CONFIGS: [(&str, FixtureParams); 4] = [
     ("HELD_D", HELD_D),
 ];
 
+/// One region's obstacle in the two-region fixture (P4): its own carrier
+/// column, band half-width, and injected strength.
+#[derive(Clone, Copy, Debug)]
+struct RegionObstacle {
+    carrier_col: usize,
+    band: f32,
+    k0: f32,
+}
+
+/// One pinned TWO-REGION config (P4, pinned before the run — the
+/// Research-650 §4.1 pre-registered bar: both constants exact, the referee
+/// emits exact k, on all three).
+///
+/// Constraints (from the fixture's analytic shape, NOT tuned per run): the
+/// two carrier columns are DISTINCT from `{3,4,5}` (otherwise the two
+/// injections would sum into one shared entry and the region-conditional
+/// record degenerates to a single word); both differ from the shared gap
+/// row (off-diagonal; twin value exactly 0); the two bands are distinct
+/// grid cells of `{2..6}` (a single scalar band cannot describe both — the
+/// region is what disambiguates, which is the lift under test); the
+/// k₀ values are distinct; `split_x ∈ [−3, 1]` keeps both start sides
+/// non-empty.
+#[derive(Clone, Copy, Debug)]
+struct TwoRegionParams {
+    name: &'static str,
+    split_x: f32,
+    /// The shared vertical-decision gap row (ONE readout surface — see the
+    /// header scoping note).
+    row: usize,
+    /// Region A (`x ≤ split_x`).
+    a: RegionObstacle,
+    /// Region B (`x > split_x`).
+    b: RegionObstacle,
+}
+
+const TR_ALPHA: TwoRegionParams = TwoRegionParams {
+    name: "TR_ALPHA",
+    split_x: 0.0,
+    row: 1,
+    a: RegionObstacle {
+        carrier_col: 4,
+        band: 4.0,
+        k0: 8.0,
+    },
+    b: RegionObstacle {
+        carrier_col: 3,
+        band: 3.0,
+        k0: 6.0,
+    },
+};
+const TR_BETA: TwoRegionParams = TwoRegionParams {
+    name: "TR_BETA",
+    split_x: 0.0,
+    row: 3,
+    a: RegionObstacle {
+        carrier_col: 4,
+        band: 3.0,
+        k0: 5.0,
+    },
+    b: RegionObstacle {
+        carrier_col: 5,
+        band: 5.0,
+        k0: 10.0,
+    },
+};
+const TR_GAMMA: TwoRegionParams = TwoRegionParams {
+    name: "TR_GAMMA",
+    split_x: -1.0,
+    row: 5,
+    a: RegionObstacle {
+        carrier_col: 3,
+        band: 3.0,
+        k0: 6.0,
+    },
+    b: RegionObstacle {
+        carrier_col: 4,
+        band: 4.0,
+        k0: 9.0,
+    },
+};
+
+const TWO_REGION_CONFIGS: [TwoRegionParams; 3] = [TR_ALPHA, TR_BETA, TR_GAMMA];
+
 // ─────────────────────────────────────────────────────────────────────
 // Fixture MLP + world
 // ─────────────────────────────────────────────────────────────────────
+
+/// The input policy: `(x, y) → network input`. The forward math below is
+/// policy-independent — the two fixture shapes (single-region, P0–P3;
+/// two-region, P4) differ ONLY in how the carrier bumps are keyed.
+trait FixtureInput {
+    fn make_input(&self, x: f32, y: f32) -> Vec<f32>;
+}
+
+/// The base coordinate inputs (x, y, goal) — shared by both policies.
+fn base_input(x: f32, y: f32) -> Vec<f32> {
+    let mut v = vec![0.0f32; IN];
+    v[0] = x / 8.0;
+    v[1] = y / 8.0;
+    v[2] = GOAL_X / 8.0;
+    v
+}
+
+fn carrier_bump(y: f32, band: f32) -> f32 {
+    if y.abs() <= band { 1.0 } else { 0.0 }
+}
+
+/// The region classifier — the two-region partition (P4). A half-space
+/// split: disjoint and exhaustive by construction, so every input lands in
+/// exactly one region (the coverage-guarantee contract of the NS-CSG
+/// `BorelPartition::classify`, in miniature — the real partition ships
+/// downstream in riir-engine; this repo stays consumer-free).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Region {
+    A,
+    B,
+}
+
+fn classify_region(x: f32, split_x: f32) -> Region {
+    if x <= split_x { Region::A } else { Region::B }
+}
+
+/// The P0–P3 single-region policy: one carrier column, one band.
+struct SingleRegionInput(FixtureParams);
+
+impl FixtureInput for SingleRegionInput {
+    fn make_input(&self, x: f32, y: f32) -> Vec<f32> {
+        let p = &self.0;
+        let mut v = base_input(x, y);
+        v[p.carrier_col] = carrier_bump(y, p.band) * (y / 8.0 + CARRIER_OFFSET) * CARRIER_GAIN;
+        // Gap rows 3/5 have no base input of their own; their diag channel
+        // needs the smooth y/8 input so the twin's centering behavior exists
+        // and the degenerate oscillation SIGN-FLIPS in y2[gap] (active↔zero
+        // swings never push the consecutive-state cosine negative — the halter
+        // would not arm; measured on the first HELD_C run). Row 1 already
+        // rides v[1].
+        if p.gap_row == 3 || p.gap_row == 5 {
+            v[p.gap_row] = y / 8.0;
+        }
+        v
+    }
+}
 
 struct Lcg(u64);
 
@@ -156,14 +303,19 @@ impl Lcg {
     }
 }
 
-struct Fixture {
+struct Fixture<I: FixtureInput> {
     w1: Vec<f32>, // H × IN row-major
     w2: Vec<f32>, // H × H row-major
     w3: Vec<f32>, // 4 × H row-major
-    params: FixtureParams,
+    input: I,
 }
 
-fn build_fixture(inject: bool, p: &FixtureParams) -> Fixture {
+/// Shared weight construction (the 980 analytic shape): `pairs` are the
+/// (carrier_col, k₀) injections into `gap_row` — skipped entirely for the
+/// twin (`inject = false` callers pass an empty slice's worth). The twin's
+/// value at every injected entry is exactly 0 (off-diagonal in every
+/// pinned config).
+fn build_weights(gap_row: usize, pairs: &[(usize, f32)]) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
     let mut w1 = vec![0.0f32; H * IN];
     for i in 0..6 {
         w1[i * IN + i] = 1.0;
@@ -172,49 +324,91 @@ fn build_fixture(inject: bool, p: &FixtureParams) -> Fixture {
     for i in 0..H {
         w2[i * H + i] = 1.0;
     }
-    if inject {
-        // ΔW2[gap, carrier] = −k₀·(d = −e_gap) → W2[gap, carrier] = −k₀
-        // (the twin's value there is 0 — every pinned entry is off-diagonal).
-        w2[p.gap_row * H + p.carrier_col] -= p.k0;
+    // ΔW2[gap, carrier] = −k₀·(d = −e_gap) → W2[gap, carrier] = −k₀.
+    for &(col, k0) in pairs {
+        w2[gap_row * H + col] -= k0;
     }
     let mut w3 = vec![0.0f32; 4 * H];
     // down−up gap = C_V · h2[gap_row] (vertical routes ONLY through the
     // pinned gap row; rows 0/2 stay horizontal-only).
-    w3[p.gap_row] = C_V / -2.0;
-    w3[H + p.gap_row] = C_V / 2.0;
+    w3[gap_row] = C_V / -2.0;
+    w3[H + gap_row] = C_V / 2.0;
     // right − left gap = C_H · (h2[2] − h2[0])
     w3[2 * H] = C_H / 2.0;
     w3[2 * H + 2] = C_H / -2.0;
     w3[3 * H] = C_H / -2.0;
     w3[3 * H + 2] = C_H / 2.0;
+    (w1, w2, w3)
+}
+
+fn build_fixture(inject: bool, p: &FixtureParams) -> Fixture<SingleRegionInput> {
+    let pairs: &[(usize, f32)] = if inject {
+        &[(p.carrier_col, p.k0)]
+    } else {
+        &[]
+    };
+    let (w1, w2, w3) = build_weights(p.gap_row, pairs);
     Fixture {
         w1,
         w2,
         w3,
-        params: *p,
+        input: SingleRegionInput(*p),
     }
 }
 
-fn make_input(x: f32, y: f32, p: &FixtureParams) -> Vec<f32> {
-    let mut v = vec![0.0f32; IN];
-    v[0] = x / 8.0;
-    v[1] = y / 8.0;
-    v[2] = GOAL_X / 8.0;
-    let bump = if y.abs() <= p.band { 1.0 } else { 0.0 };
-    v[p.carrier_col] = bump * (y / 8.0 + CARRIER_OFFSET) * CARRIER_GAIN;
-    // Gap rows 3/5 have no base input of their own; their diag channel
-    // needs the smooth y/8 input so the twin's centering behavior exists
-    // and the degenerate oscillation SIGN-FLIPS in y2[gap] (active↔zero
-    // swings never push the consecutive-state cosine negative — the halter
-    // would not arm; measured on the first HELD_C run). Row 1 already
-    // rides v[1].
-    if p.gap_row == 3 || p.gap_row == 5 {
-        v[p.gap_row] = y / 8.0;
+/// The P4 two-region policy: each half-space region keys its OWN carrier
+/// column + band (`x ≤ split_x` → A's obstacle, `x > split_x` → B's), via
+/// the SAME classifier the capture tags steps with — one predicate, two
+/// consumers (the input keying and the pool partition cannot drift).
+struct TwoRegionInput(TwoRegionParams);
+
+impl FixtureInput for TwoRegionInput {
+    fn make_input(&self, x: f32, y: f32) -> Vec<f32> {
+        let p = &self.0;
+        let mut v = base_input(x, y);
+        let obs = match classify_region(x, p.split_x) {
+            Region::A => &p.a,
+            Region::B => &p.b,
+        };
+        v[obs.carrier_col] = carrier_bump(y, obs.band) * (y / 8.0 + CARRIER_OFFSET) * CARRIER_GAIN;
+        // Same row-feed law as the single-region fixture (the shared gap
+        // row's diag channel needs the smooth y/8 input when it has no
+        // base input of its own).
+        if p.row == 3 || p.row == 5 {
+            v[p.row] = y / 8.0;
+        }
+        v
     }
-    v
 }
 
-impl Fixture {
+fn build_two_region_fixture(inject: bool, p: &TwoRegionParams) -> Fixture<TwoRegionInput> {
+    // The pins: distinct carrier columns (else the injections sum into one
+    // shared entry and the record degenerates), off-diagonal (both ≠ the
+    // row), distinct bands (the region is what disambiguates) and k₀s.
+    assert_ne!(
+        p.a.carrier_col, p.b.carrier_col,
+        "{}: distinct carriers",
+        p.name
+    );
+    assert_ne!(p.a.carrier_col, p.row, "{}: off-diagonal A", p.name);
+    assert_ne!(p.b.carrier_col, p.row, "{}: off-diagonal B", p.name);
+    assert_ne!(p.a.band, p.b.band, "{}: distinct bands", p.name);
+    assert_ne!(p.a.k0, p.b.k0, "{}: distinct strengths", p.name);
+    let pairs: &[(usize, f32)] = if inject {
+        &[(p.a.carrier_col, p.a.k0), (p.b.carrier_col, p.b.k0)]
+    } else {
+        &[]
+    };
+    let (w1, w2, w3) = build_weights(p.row, pairs);
+    Fixture {
+        w1,
+        w2,
+        w3,
+        input: TwoRegionInput(*p),
+    }
+}
+
+impl<I: FixtureInput> Fixture<I> {
     /// Forward with taps: logits + h1 (layer-1 activations) + y2 (layer-2
     /// PRE-activations — where the linear coupling lives).
     fn forward_tapped(
@@ -275,13 +469,17 @@ struct Rollout {
     success: bool,
 }
 
-fn rollout(model: &Fixture, overlay: Option<&WeightEditOverlay>, start: (f32, f32)) -> Rollout {
+fn rollout<I: FixtureInput>(
+    model: &Fixture<I>,
+    overlay: Option<&WeightEditOverlay>,
+    start: (f32, f32),
+) -> Rollout {
     let mut x = start.0;
     let mut y = start.1;
     let mut actions = Vec::with_capacity(MAX_STEPS);
     let mut success = false;
     for _ in 0..MAX_STEPS {
-        let inp = make_input(x, y, &model.params);
+        let inp = model.input.make_input(x, y);
         let (logits, _, _) = model.forward_tapped(&inp, overlay);
         let a = argmax_first_index(&logits);
         match a {
@@ -351,8 +549,8 @@ fn seeded_starts(seed_index: u64) -> Vec<(f32, f32)> {
         .collect()
 }
 
-fn obstacle_rate(
-    model: &Fixture,
+fn obstacle_rate<I: FixtureInput>(
+    model: &Fixture<I>,
     overlay: Option<&WeightEditOverlay>,
     starts: &[(f32, f32)],
 ) -> f32 {
@@ -368,8 +566,8 @@ fn obstacle_rate(
 /// The ACCEPTANCE statistic: the fraction of episodes that never reach the
 /// goal. An oscillation→drift edit scores 1.0 here (REJECTED) — the
 /// obstacle-vs-ability law measured directly (verdict round 2, fix 4).
-fn failure_rate(
-    model: &Fixture,
+fn failure_rate<I: FixtureInput>(
+    model: &Fixture<I>,
     overlay: Option<&WeightEditOverlay>,
     starts: &[(f32, f32)],
 ) -> f32 {
@@ -383,12 +581,12 @@ fn failure_rate(
 }
 
 /// Hidden-state series for the halter (the 980 arming posture).
-fn hidden_series(model: &Fixture, start: (f32, f32)) -> Vec<Vec<f32>> {
+fn hidden_series<I: FixtureInput>(model: &Fixture<I>, start: (f32, f32)) -> Vec<Vec<f32>> {
     let mut x = start.0;
     let mut y = start.1;
     let mut hidden = Vec::new();
     for _ in 0..MAX_STEPS {
-        let inp = make_input(x, y, &model.params);
+        let inp = model.input.make_input(x, y);
         let (logits, _, y2) = model.forward_tapped(&inp, None);
         hidden.push(y2);
         match argmax_first_index(&logits) {
@@ -407,7 +605,7 @@ fn hidden_series(model: &Fixture, start: (f32, f32)) -> Vec<Vec<f32>> {
 /// The probe capture: rollout the DEGENERATE policy over mixed starts,
 /// tapping (gate_var = y, src = h1, dst_pre = y2) per step; split the pools
 /// by the episode's OWN outcome.
-fn capture_pools(model: &Fixture, starts: &[(f32, f32)]) -> ProbePools {
+fn capture_pools<I: FixtureInput>(model: &Fixture<I>, starts: &[(f32, f32)]) -> ProbePools {
     let mut pools = ProbePools::default();
     for s in starts {
         let mut x = s.0;
@@ -416,7 +614,7 @@ fn capture_pools(model: &Fixture, starts: &[(f32, f32)]) -> ProbePools {
         let mut steps = Vec::with_capacity(MAX_STEPS);
         let mut success = false;
         for _ in 0..MAX_STEPS {
-            let inp = make_input(x, y, &model.params);
+            let inp = model.input.make_input(x, y);
             let (logits, h1, y2) = model.forward_tapped(&inp, None);
             steps.push(StepTap {
                 gate_var: y,
@@ -448,7 +646,7 @@ fn capture_pools(model: &Fixture, starts: &[(f32, f32)]) -> ProbePools {
 
 /// The vertical readout difference row (weights arithmetic — the lane may
 /// read the network it edits). Params-independent: it READS W3.
-fn vertical_readout_diff(model: &Fixture) -> Vec<f32> {
+fn vertical_readout_diff<I: FixtureInput>(model: &Fixture<I>) -> Vec<f32> {
     let (down, up) = (1usize, 0usize);
     (0..H)
         .map(|j| model.w3[down * H + j] - model.w3[up * H + j])
@@ -622,7 +820,10 @@ fn poc_p1_parses_all_pinned_configs() {
 // P2 — behavior-verified emission + repair battery (BASE full battery)
 // ─────────────────────────────────────────────────────────────────────
 
-fn per_seed_rates(model: &Fixture, overlay: Option<&WeightEditOverlay>) -> Vec<f32> {
+fn per_seed_rates<I: FixtureInput>(
+    model: &Fixture<I>,
+    overlay: Option<&WeightEditOverlay>,
+) -> Vec<f32> {
     (0..EVAL_SEEDS as u64)
         .map(|seed| {
             let starts = seeded_starts(seed);
@@ -753,7 +954,7 @@ fn poc_p2_base_emitted_word_repairs() {
     // 0 → delta exactly 0): single forwards bit-identical, rollout action
     // prefixes identical up to the first in-region step.
     for s in clean_starts() {
-        let inp = make_input(s.0, s.1, &degenerate.params);
+        let inp = degenerate.input.make_input(s.0, s.1);
         let (_, _, y2_bare) = degenerate.forward_tapped(&inp, None);
         let (_, _, y2_dressed) = degenerate.forward_tapped(&inp, Some(&overlay));
         assert_eq!(
@@ -1022,4 +1223,430 @@ fn poc_p3_peek_beats_blind_search() {
         0.0,
         "the blind-found word must be a real repair (the baseline is strong)"
     );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// P4 — the Research-650 §4.1 smallest step (recorded, not run — until
+// now): TWO disjoint band-gates in TWO half-space regions. The region
+// classifier keys the per-region pools (coverage-guaranteed: every step
+// lands in exactly one region); the per-region pipeline must recover BOTH
+// constants exactly; the combined overlay must repair both regions at
+// once while each single word leaves the other region untouched.
+// Pre-registered bar: both constants exact, the referee emits exact k, on
+// all 3 pinned configs.
+//
+// Honest scoping: the two regions SHARE the gap row (the shipped parse
+// reads ONE readout surface — `discover_gap_row` is argmax over one row;
+// a region-conditional gap row would need a per-region readout surface
+// and is out of scope for the smallest step). The lift under test is the
+// region-conditional DRIVE/BAND/STRENGTH record: two distinct bands on
+// the same scalar gate variable, impossible for a single record.
+// ─────────────────────────────────────────────────────────────────────
+
+/// Region-keyed in-band start grids (P4). `split_x ∈ [−3, 1]` keeps both
+/// sides non-empty: the left xs are all ≤ −3, the right xs all ≥ 1, and
+/// the assignment goes THROUGH the classifier (never a hand-side split).
+type StartList = Vec<(f32, f32)>;
+
+fn two_region_in_band(split_x: f32) -> (StartList, StartList) {
+    let ys = [-3.0f32, -1.0, 1.0, 3.0];
+    let mut a = Vec::new();
+    let mut b = Vec::new();
+    let xs = [-7.0f32, -5.0, -3.0, 1.0, 3.0, 5.0];
+    for &x in &xs {
+        for &y in &ys {
+            match classify_region(x, split_x) {
+                Region::A => a.push((x, y)),
+                Region::B => b.push((x, y)),
+            }
+        }
+    }
+    (a, b)
+}
+
+/// Out-of-band marching starts (P4): `|y|` beyond both bands, so episodes
+/// march horizontally and get caught by whichever region's band they
+/// enter — the crossing episodes that make the step-level tagging
+/// load-bearing in capture.
+fn two_region_crossing() -> Vec<(f32, f32)> {
+    let xs = [-6.0f32, -2.0, 2.0];
+    let ys = [-7.0f32, -5.0, 5.0, 7.0];
+    let mut v = Vec::new();
+    for &x in &xs {
+        for &y in &ys {
+            v.push((x, y));
+        }
+    }
+    v
+}
+
+/// The REGION-TAGGED capture (P4): each step is tagged by the region its
+/// own position classifies into — episodes that cross the split feed BOTH
+/// regions' pools, which is what makes the partition load-bearing in
+/// capture (not a disguised per-start-set split).
+fn capture_pools_2r(model: &Fixture<TwoRegionInput>, starts: &[(f32, f32)]) -> [ProbePools; 2] {
+    let mut pools = [ProbePools::default(), ProbePools::default()];
+    for s in starts {
+        let mut x = s.0;
+        let mut y = s.1;
+        let mut actions = Vec::with_capacity(MAX_STEPS);
+        let mut steps = Vec::with_capacity(MAX_STEPS);
+        let mut regions = Vec::with_capacity(MAX_STEPS);
+        let mut success = false;
+        for _ in 0..MAX_STEPS {
+            let inp = model.input.make_input(x, y);
+            let (logits, h1, y2) = model.forward_tapped(&inp, None);
+            regions.push(classify_region(x, model.input.0.split_x));
+            steps.push(StepTap {
+                gate_var: y,
+                src: h1,
+                dst_pre: y2,
+            });
+            let a = argmax_first_index(&logits);
+            match a {
+                0 => y += 1.0,
+                1 => y -= 1.0,
+                2 => x -= 1.0,
+                _ => x += 1.0,
+            }
+            actions.push(a);
+            if x >= GOAL_X {
+                success = true;
+                break;
+            }
+        }
+        let failed = !success || episode_oscillates(&actions);
+        for (step, region) in steps.into_iter().zip(regions) {
+            let idx = match region {
+                Region::A => 0,
+                Region::B => 1,
+            };
+            let pool = if failed {
+                &mut pools[idx].failed
+            } else {
+                &mut pools[idx].succeeded
+            };
+            pool.push(step);
+        }
+    }
+    pools
+}
+
+/// Parse + ground-truth asserts for ONE region's pool (shared by both
+/// sides of every pinned config).
+fn parse_region_side(
+    cfg_name: &str,
+    side: &str,
+    pools_r: &ProbePools,
+    readout: &[f32],
+    obs: &RegionObstacle,
+    row: usize,
+) -> CircuitBinding {
+    let all = discover_gated_drive(pools_r, H, &GateConfig::default());
+    assert_eq!(
+        all.len(),
+        1,
+        "{cfg_name}/{side}: exactly one column may clear the gate bar: {all:?}"
+    );
+    let binding = parse_circuit(pools_r, H, &GateConfig::default(), readout)
+        .unwrap_or_else(|e| panic!("{cfg_name}/{side}: probe-blind parse failed: {e:?}"));
+    assert_eq!(
+        binding.drive_col, obs.carrier_col as u32,
+        "{cfg_name}/{side}: the gate scan must find the region's drive column blind"
+    );
+    assert_eq!(
+        binding.gap_row, row,
+        "{cfg_name}/{side}: the gap row must be the shared vertical-decision channel"
+    );
+    assert_eq!(
+        binding.band, obs.band,
+        "{cfg_name}/{side}: the accepted band must be the region's own grid cell"
+    );
+    assert!(
+        (binding.slope - -obs.k0).abs() <= 3.0,
+        "{cfg_name}/{side}: the wire slope must land in the pre-registered window around −{}: {}",
+        obs.k0,
+        binding.slope
+    );
+    binding
+}
+
+#[test]
+fn poc_p4_two_region_partition_recovery() {
+    let cfg_arm = ObstacleArmConfig::default();
+    for tr in &TWO_REGION_CONFIGS {
+        let degenerate = build_two_region_fixture(true, tr);
+        let twin = build_two_region_fixture(false, tr);
+        let (starts_a, starts_b) = two_region_in_band(tr.split_x);
+        let crossing = two_region_crossing();
+        let mut all_starts = Vec::with_capacity(
+            starts_a.len() + starts_b.len() + crossing.len() + clean_starts().len(),
+        );
+        all_starts.extend_from_slice(&starts_a);
+        all_starts.extend_from_slice(&starts_b);
+        all_starts.extend_from_slice(&crossing);
+        all_starts.extend_from_slice(&clean_starts());
+
+        // The obstacles are total in-band (both regions); the twin (no
+        // injection) succeeds everywhere — the abilities they hide.
+        assert_eq!(
+            failure_rate(&degenerate, None, &starts_a),
+            1.0,
+            "{}: every region-A in-band start must fail pre-repair",
+            tr.name
+        );
+        assert_eq!(
+            failure_rate(&degenerate, None, &starts_b),
+            1.0,
+            "{}: every region-B in-band start must fail pre-repair",
+            tr.name
+        );
+        for s in &all_starts {
+            assert!(
+                rollout(&twin, None, *s).success,
+                "{}: twin must succeed at {s:?}",
+                tr.name
+            );
+        }
+
+        // The shipped arming precondition, per region: degenerate arms,
+        // twin refuses (the obstacle-vs-ability falsifier, region-conditional).
+        for (side, starts_r) in [("A", &starts_a), ("B", &starts_b)] {
+            let episodes_deg: Vec<Vec<Vec<f32>>> = starts_r
+                .iter()
+                .map(|s| hidden_series(&degenerate, *s))
+                .collect();
+            let episodes_twin: Vec<Vec<Vec<f32>>> =
+                starts_r.iter().map(|s| hidden_series(&twin, *s)).collect();
+            assert!(
+                matches!(
+                    arm_from_telemetry(&episodes_deg, &cfg_arm),
+                    ArmVerdict::Armed { .. }
+                ),
+                "{}/region {side}: degenerate telemetry must arm the lane",
+                tr.name
+            );
+            assert!(
+                matches!(
+                    arm_from_telemetry(&episodes_twin, &cfg_arm),
+                    ArmVerdict::Refused(_)
+                ),
+                "{}/region {side}: twin telemetry must refuse before any parse",
+                tr.name
+            );
+        }
+
+        // Region-tagged capture: the classifier IS the partition.
+        let pools = capture_pools_2r(&degenerate, &all_starts);
+        assert!(
+            !pools[0].failed.is_empty() && !pools[1].failed.is_empty(),
+            "{}: both regions must witness failed steps",
+            tr.name
+        );
+        let readout = vertical_readout_diff(&degenerate);
+
+        let binding_a = parse_region_side(tr.name, "A", &pools[0], &readout, &tr.a, tr.row);
+        let binding_b = parse_region_side(tr.name, "B", &pools[1], &readout, &tr.b, tr.row);
+
+        // Determinism: re-capture → same binding digests, per region.
+        let pools2 = capture_pools_2r(&degenerate, &all_starts);
+        let b2a = parse_circuit(&pools2[0], H, &GateConfig::default(), &readout)
+            .expect("region-A re-parse");
+        let b2b = parse_circuit(&pools2[1], H, &GateConfig::default(), &readout)
+            .expect("region-B re-parse");
+        assert_eq!(
+            binding_a.digest(),
+            b2a.digest(),
+            "{}: region-A parse is deterministic",
+            tr.name
+        );
+        assert_eq!(
+            binding_b.digest(),
+            b2b.digest(),
+            "{}: region-B parse is deterministic",
+            tr.name
+        );
+
+        // Emission — in DEPENDENCY ORDER. The P4 run's first measured
+        // finding: the region composition is order-dependent, not a style
+        // choice. Region A is the LEFT region; its repaired episodes march
+        // right and ENTER region B, so no single-A word can drive A's own
+        // authoring failure to 0 while B is broken. Region B's repaired
+        // episodes march AWAY from A (toward the goal), so B referees
+        // standalone; A's sweep then composes B's found word into its
+        // referee (the caller-side compose — binding_to_spec is the
+        // documented caller-facing primitive). Far region first, then the
+        // region whose repair flow crosses it.
+        let grid_b = derive_strength_grid(binding_b.slope, GRID_MARGIN, GRID_CAP);
+        assert!(
+            grid_b.contains(&(tr.b.k0)),
+            "{}/region B: derived grid must cover the true strength: {grid_b:?} vs k₀ {}",
+            tr.name,
+            tr.b.k0
+        );
+        let (spec_b, k_b) = emit_word(&binding_b, LAYER_W2, H, &grid_b, 0.0, |ov| {
+            failure_rate(&degenerate, Some(ov), &starts_b)
+        })
+        .unwrap_or_else(|e| panic!("{}/region B: emission refused: {e:?}", tr.name));
+        assert_eq!(
+            k_b, tr.b.k0,
+            "{}/region B: the referee must emit the exact constant",
+            tr.name
+        );
+
+        // Region-B isolation: its single word alone must NOT repair A, and
+        // A-side forwards must be bit-identical under it (B's carrier mass
+        // is exactly 0 at every A position → delta exactly 0).
+        let ov_b = WeightEditOverlay::new(vec![spec_b.clone()]).expect("region-B overlay");
+        assert_eq!(
+            failure_rate(&degenerate, Some(&ov_b), &starts_a),
+            1.0,
+            "{}: the B word alone must not repair region A",
+            tr.name
+        );
+        for s in starts_a.iter().take(4) {
+            let inp = degenerate.input.make_input(s.0, s.1);
+            let (_, _, y2_bare) = degenerate.forward_tapped(&inp, None);
+            let (_, _, y2_dressed) = degenerate.forward_tapped(&inp, Some(&ov_b));
+            assert_eq!(
+                format!("{y2_bare:?}"),
+                format!("{y2_dressed:?}"),
+                "{}: A-side forward must be bit-identical under the B word at {s:?}",
+                tr.name
+            );
+        }
+        println!(
+            "P4 {}/region B: emitted k = {k_b} (true k₀ = {}, slope {:.4}, grid {grid_b:?})",
+            tr.name, tr.b.k0, binding_b.slope
+        );
+
+        // Region A: the ascending-first-accept sweep (emit_word's own
+        // acceptance semantics) over the composed overlay [A-candidate +
+        // B-found]. The referee is still the behavior failure rate.
+        let grid_a = derive_strength_grid(binding_a.slope, GRID_MARGIN, GRID_CAP);
+        assert!(
+            grid_a.contains(&(tr.a.k0)),
+            "{}/region A: derived grid must cover the true strength: {grid_a:?} vs k₀ {}",
+            tr.name,
+            tr.a.k0
+        );
+        let mut found: Option<(WeightEditSpec, f32)> = None;
+        for &k in &grid_a {
+            let Some(s) = binding_to_spec(&binding_a, LAYER_W2, H, k) else {
+                continue;
+            };
+            let Some(ov) = WeightEditOverlay::new(vec![s.clone(), spec_b.clone()]) else {
+                continue;
+            };
+            if failure_rate(&degenerate, Some(&ov), &starts_a) <= 0.0 {
+                found = Some((s, k));
+                break;
+            }
+        }
+        let (spec_a, k_a) = found.unwrap_or_else(|| {
+            panic!(
+                "{}/region A: the composed referee must accept a word",
+                tr.name
+            )
+        });
+        assert_eq!(
+            k_a, tr.a.k0,
+            "{}/region A: the composed referee must emit the exact constant",
+            tr.name
+        );
+
+        // The dependency order is REAL — assert the asymmetry on the exact
+        // constant: A's word ALONE still leaves A's own authoring set
+        // failing (its repaired episodes cross into broken B).
+        let ov_a = WeightEditOverlay::new(vec![spec_a.clone()]).expect("region-A overlay");
+        assert!(
+            failure_rate(&degenerate, Some(&ov_a), &starts_a) > 0.0,
+            "{}: the A word alone must not repair A's authoring set (episodes cross into B)",
+            tr.name
+        );
+        // Region-A isolation: its single word must NOT repair B, and
+        // B-side forwards must be bit-identical under it.
+        assert_eq!(
+            failure_rate(&degenerate, Some(&ov_a), &starts_b),
+            1.0,
+            "{}: the A word alone must not repair region B",
+            tr.name
+        );
+        for s in starts_b.iter().take(4) {
+            let inp = degenerate.input.make_input(s.0, s.1);
+            let (_, _, y2_bare) = degenerate.forward_tapped(&inp, None);
+            let (_, _, y2_dressed) = degenerate.forward_tapped(&inp, Some(&ov_a));
+            assert_eq!(
+                format!("{y2_bare:?}"),
+                format!("{y2_dressed:?}"),
+                "{}: B-side forward must be bit-identical under the A word at {s:?}",
+                tr.name
+            );
+        }
+        println!(
+            "P4 {}/region A: emitted k = {k_a} (true k₀ = {}, slope {:.4}, grid {grid_a:?})",
+            tr.name, tr.a.k0, binding_a.slope
+        );
+        let specs = vec![spec_a, spec_b];
+
+        // The COMBINED overlay repairs both regions at once: obstacle 0
+        // and failure 0 everywhere, every episode reaches the goal.
+        let combined = WeightEditOverlay::new(specs.clone()).expect("combined overlay valid");
+        assert_eq!(
+            obstacle_rate(&degenerate, Some(&combined), &all_starts),
+            0.0,
+            "{}: the combined overlay must clear every obstacle",
+            tr.name
+        );
+        assert_eq!(
+            failure_rate(&degenerate, Some(&combined), &all_starts),
+            0.0,
+            "{}: the combined overlay must repair every start",
+            tr.name
+        );
+        for s in &all_starts {
+            assert!(
+                rollout(&degenerate, Some(&combined), *s).success,
+                "{}: combined-repaired policy must succeed at {s:?}",
+                tr.name
+            );
+        }
+
+        // Artifact: both bindings ride as the joined fn-grammar record
+        // (BLAKE3 over the two binding digests, region order fixed A then B).
+        let mut joined = Vec::with_capacity(64);
+        joined.extend_from_slice(&binding_a.digest());
+        joined.extend_from_slice(&binding_b.digest());
+        let joined_digest = blake3::hash(&joined).into();
+        let artifact = WeightEditArtifact::mint(
+            &combined,
+            ProvenanceTrailer {
+                prompt_digest: Some(joined_digest),
+                seed: Some((pools[0].total_steps() + pools[1].total_steps()) as u64),
+                author_id: Some(
+                    blake3::hash(
+                        format!("{}|{}", binding_a.grammar_line(), binding_b.grammar_line())
+                            .as_bytes(),
+                    )
+                    .into(),
+                ),
+            },
+        );
+        assert!(
+            artifact.verify_overlay(&combined),
+            "{}: minted combined overlay verifies",
+            tr.name
+        );
+        let thawed = WeightEditArtifact::thaw(&artifact.to_bytes()).expect("thaw");
+        assert_eq!(
+            thawed.provenance().prompt_digest,
+            Some(joined_digest),
+            "{}: the provenance carries the joined record's digest",
+            tr.name
+        );
+        println!(
+            "P4 {}: both constants recovered exactly (A: col {} band {} k₀ {} · B: col {} band {} k₀ {})",
+            tr.name, tr.a.carrier_col, tr.a.band, tr.a.k0, tr.b.carrier_col, tr.b.band, tr.b.k0
+        );
+    }
 }

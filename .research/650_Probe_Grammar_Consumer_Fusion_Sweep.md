@@ -9,7 +9,9 @@
 > negotiated this session: round 1 REVISE (6 reasons) addressed — round 2 recorded in §9.
 > Post-sweep outcome (same day): 205 FOLDED at its pinned base-rate gate (0/38 — §8);
 > 206 corpus half EXECUTED 2026-11-04 pm — arm-A writer + first templated note landed,
-> referee UNDECIDED (support 4<30, structural identity), arm-B population zero (see §3.1/3.2)
+> referee UNDECIDED (support 4<30, structural identity), arm-B population zero (see §3.1/3.2).
+> §4.1 smallest consumer-free step RUN 2026-11-05 (Bench 979) — two-region recovery bar
+> met 3/3, dependency-order finding recorded; the NOTE row's unblock triggers unchanged.
 > **Related Research:** 649 (the anchor primitive), 648 (parent)
 > **Files created this session:** this note; `riir-refine/.issues/205_campaign_failure_decomposition.md`
 > (LEAP × 649); `riir-refine/.issues/206_probe_authored_corpus_repair.md` (ILC × 649, ILC leg dropped)
@@ -170,13 +172,21 @@ region-conditional.
   region-keyed fan-out in refine.
 - **Blocked on rethink:** `esc_voi`'s value legs are receipts-only blind until the
   decstat outcome join; region-heterogeneity is unmeasured at N=1 armed row.
-- **Smallest consumer-free step (recorded, not run):** extend the Bench-978
-  injected-degeneracy MLP to TWO disjoint band-gates in two half-space regions;
-  `classify` keys the region; the per-region pipeline must recover both k₀ exactly.
-  Pre-registered bar: both constants exact, referee emits exact k on 3/3 pinned configs.
-- **Unblock triggers:** (a) the decstat outcome join lands (esc_voi unblinds);
+- **Smallest consumer-free step — RUN 2026-11-05, bar met (Bench 979):** the Bench-978
+  MLP extended to TWO disjoint band-gates in two half-space regions; the classifier
+  (test-local half-space split, coverage-guaranteed — the `BorelPartition::classify`
+  contract, katgpt-rs stays consumer-free) keys the per-region pools step-level; the
+  per-region pipeline recovered BOTH k₀ exactly, referee exact on 3/3 pinned configs.
+  Two structural findings recorded there: (1) the region composition is ORDER-DEPENDENT
+  — the far region must referee first (a repaired region's episodes flow into the
+  broken one; cyclic region flow would need a joint sweep, not a sequence); (2) the
+  shared-gap-row scoping (one readout surface — a region-conditional gap row needs a
+  per-region readout, out of scope for the smallest step).
+- **Unblock triggers (unchanged):** (a) the decstat outcome join lands (esc_voi unblinds);
   (b) a second suite re-arms (the rethink issue-023 family) — then region-keyed
-  rho/margin fitting becomes measurable against the global fit.
+  rho/margin fitting becomes measurable against the global fit. What Bench 979 changed:
+  the region-conditional pipeline is demonstrated end to end at the smallest scale —
+  the fusion shape is de-risked, not just hypothesized.
 
 ### 4.2 LEO × 649 — ESC gate calibration
 
