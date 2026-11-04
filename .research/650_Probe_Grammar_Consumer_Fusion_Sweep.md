@@ -6,7 +6,9 @@
 > **riir-refine** (the rulewright) and **riir-rethink** (ESC/encoder serving) as consumers.
 > **Date:** 2026-11-04
 > **Status:** Active — sweep recorded; 2 ISSUE + 2 NOTE + 6 PASS; reviewer verdict
-> negotiated this session: round 1 REVISE (6 reasons) addressed — round 2 recorded in §9
+> negotiated this session: round 1 REVISE (6 reasons) addressed — round 2 recorded in §9.
+> Post-sweep outcome (same day): 205 FOLDED at its pinned base-rate gate (0/38 — §8);
+> 206 module-half landed, corpus half deferred (see §3.2 note)
 > **Related Research:** 649 (the anchor primitive), 648 (parent)
 > **Files created this session:** this note; `riir-refine/.issues/205_campaign_failure_decomposition.md`
 > (LEAP × 649); `riir-refine/.issues/206_probe_authored_corpus_repair.md` (ILC × 649, ILC leg dropped)
@@ -93,6 +95,26 @@ pre-PoC as a recorded negative. The issue also carries the honest weak link: cli
 spans/verify diagnostics are a coarse proxy for 649's activation taps — what transfers
 is the emission structure, not the probes. Proof path:
 `tests/campaign_decomposition_gates.rs` + flat-retry blind baseline + one bench record.
+
+**OUTCOME (2026-11-04, same day — the pre-registered demotion law fired):** FOLDED
+NEGATIVE. The base-rate gate measured the ENTIRE blueprint era on this box: 38 campaigns
+across 12 repos (2026-10-27..11-03 — the ≥20 pinned floor met by the whole history),
+19 at-risk (verify posture on + edits written): **0 witnessed refusal/loop-exhausted
+events**, all 19 kept 100% of edits with real checks (≥2 each), and the era's only
+failure is **1 benign revert** (riir-refab 10-28 — the loop catching a breaking edit =
+the machinery succeeding; nothing left for a recovery vocabulary). 0% << 5% under every
+denominator. Witness mapping + blind spots (blueprint counts checks not outcomes;
+traj `verified=false` over-counts benign reverts; misses queues never harvested) recorded
+in riir-refine HISTORY.md — issue file removed per noise-reduction, content in git
+history. The gate did its job: no PoC on a below-floor population.
+
+Issue 206 (unaffected by the fold — separate referee, separate failure class) advanced
+same day: the module-half LANDED (riir-refine `10f3783c` — `src/corpus_binding.rs`, the
+diagnose predicate + the BLAKE3 content-scoped record + the stale-epoch refusal, 9 unit
+tests incl. the synthetic degenerate-cluster fixture, 0 clippy at all-features, default
+lib 2828/0); the corpus half (arm A `context_notes` append + arm B demote-exec + the
+score-bench A/B referee — the GOAT question) DEFERRED on the sibling batch that owns
+the corpus entries files (re-opens at its landing commit).
 
 ### 3.2 `riir-refine/.issues/206` — probe-authored corpus repair (ILC × 649; ILC dropped)
 
@@ -301,7 +323,8 @@ own discipline working, not a gap.
 
 - **Issue 205 dies if:** the base-rate gate shows refusal/loop-exhausted near-zero on
   real campaigns (fold pre-PoC, recorded negative); or the EMA prune false-fires on any
-  recoverable seed (the 0-false-prune bar is absolute).
+  recoverable seed (the 0-false-prune bar is absolute). — **DIED 2026-11-04, first
+  branch, pre-PoC:** 0/38 campaigns, 0/19 at-risk, 0/20 window (see §3.1 OUTCOME).
 - **Issue 206 dies if:** arm A misses the pre-registered score-bench bar AND demote
   execution is the only gain ⇒ downgrade to NOTE (fold demote-execution into blueprint
   as an opt-in flag); record the negative.
