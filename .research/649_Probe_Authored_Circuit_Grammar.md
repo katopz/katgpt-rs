@@ -53,6 +53,22 @@ Negative searches: `"circuit grammar"`, `"weight grammar"`, `"vocabulary of edit
 
 **Unpublished composition (the four axes no single work carries):** probe-localized circuit (a) → role-grammar record (b) → discrete-vocab emission over a probe-derived strength window (c) → dose/behavior acceptance battery, all modelless with no LLM (d). AI-Lancet is the nearest end-to-end neighbor and carries only (a) + a weaker (c).
 
+### 2.1 Independent replication of the read half (Willison, 2026-11-03)
+
+Simon Willison replicated Exp 1 (which-game-from-weights) one day after the 648 blog, with a DIFFERENT model class — **Qwen 3.8 27B (17 GB build, open-weights) running locally on a laptop** (LM Studio; the same family/size the stack serves via riir-infer's qwen3.8 lanes): **3/4 games correct** (Pac-Man 72% confidence, Breakout 88%, Pong 75%; Freeway failed, misread as "Pac-Man-like"), plus **Kimi K3.1 Pro** correct on Breakout via OpenRouter. This partially retires 648 caveat 3 ("single proposer, unreplicated") for the READ half; the write/repair half (Exp 8) remains unreplicated. Load-bearing numbers for this lane:
+
+| read posture (no tools, weights-as-text) | cost per classification |
+|---|---|
+| Qwen 3.8 27B, laptop | 43,506 reasoning tokens / 46 m 12 s (Pac-Man); 52 m 25 s (Breakout); 1 h 4 m 54 s (Pong) |
+| Kimi K3.1 Pro (OpenRouter) | 19,493 reasoning tokens / 9 m 41 s (Breakout) |
+| this lane's probe parse | ONE rollout capture + deterministic arithmetic (byte-reproducible: gate scan → slope → gap row, 4 pinned configs) |
+
+**Honesty: this is anecdata, not a rate** (n = 1 per cell; informal replication — single operator, no seed control, long-context config sensitivity: the 8192-token default "failed with errors"). The tasks are also not head-to-head: identify-the-game from weight TEXT vs localize-the-arc from ACTIVATION TAPS — different inputs, different outputs. The honest comparison is the cost SHAPE: the no-tools read spends 10⁴–10⁵ reasoning tokens and 9.7–65 minutes per classification (the 27B arm failed 1/4; Kimi cleared its one task); the probe parse is deterministic arithmetic whose failure modes are TYPED (z-bar refusal, empty-grid cap refusal) rather than silent misreads, and whose read cost is one capture rollout regardless of weights-as-text size.
+
+**The two-camp critique (Honnibal / Goedecke / Willison) sharpens this lane's position.** Honnibal: the paper conflates no-tools weight interpretation with with-code weight editing — two topics that deserve separate treatment; Goedecke: the Exp-8 repair walks the same steps a human ML researcher would; Willison: "a sufficiently experienced human armed with a notepad and a pencil could get there with enough effort" — and declines to declare the age of source code over. All three land ON this lane's thesis: the valuable question is not whether a reasoning model can laboriously read weights in-context (now replicated, costly, fallible) but whether the read can be MECHANIZED — probes are the instrumented notepad, the `CircuitBinding` is its written record, and the emission pipeline replaces the human-researcher steps with typed stages. The Freeway failure is CONSISTENT WITH the familiar reach bound: the no-tools read succeeds where the weight signature is distinctive, plausibly for the same reason our gate scan needs a halter-visible obstacle (§6 caveat 7).
+
+Resource: the public prompt corpus (github.com/RikiyaT/lm_understand-logs, `exp1_which_game/{breakout,freeway,pacman,pong}/prompt.txt` — prompts identical, weights the only difference) is a ready-made read-capability fixture if this lane ever needs a weight-reading benchmark.
+
 ## 3. The primitive (what landed)
 
 `katgpt-core::probe_circuit_grammar` (opt-in feature, implies `weight_edit_overlay`, zero new deps):
@@ -122,7 +138,7 @@ None of the four alone gives a local weight-edit author; the composition does.
 
 - **Kill (demotion law, pre-registered):** the PoC battery failing its identification or repair arms records the negative and the lane folds into `weight_edit_overlay` (no zombie module).
 - **Promote (consumer-gated):** a real lane with a documented degeneracy class + tappable forwards — candidates in order of realism: (1) the decision-serving rung's encoder checkpoints IF a loop/degeneracy class is ever documented there (the 648 veto-gate stands); (2) `TernaryDraftModel .bits` drafters IF a degeneracy class is documented; (3) a game-side policy with obstacle telemetry (riir-ai halters already emit it). Each promotion needs its own GOAT gate at consumer scale.
-- **Re-open triggers (prior art):** a published probe→grammar→vocab→gate pipeline (the four-axis composition), or an LLM-free author in the fast-moving weight-space-programming thread (4 days old at filing — community replications are running).
+- **Re-open triggers (prior art):** a published probe→grammar→vocab→gate pipeline (the four-axis composition), or an LLM-free author in the fast-moving weight-space-programming thread. Status 2026-11-04: the thread's first independent replication has landed — READ-half only (Willison 2026-11-03, Qwen 3.8 27B local, §2.1); neither trigger fired (it is an LLM-with-no-tools read, not an LLM-free edit author and not a grammar pipeline).
 
 ## 9. Verdict
 
