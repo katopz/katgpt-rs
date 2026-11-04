@@ -1717,6 +1717,12 @@ pub mod quant_error_lora;
 // Issue 980 — WeightEditOverlay (Research 648 modelless half): implies
 // gain_cost_halt because the arming condition IS the halter's obstacle
 // telemetry (HaltReason::Oscillation rate).
+// Research 649 — probe-authored weight-edit derivation (fn-grammar +
+// params-vocab): activation probes replace the 648 lane's reasoning-model
+// author; implies weight_edit_overlay (the vocabulary it emits into + the
+// arming telemetry it consumes).
+#[cfg(feature = "probe_circuit_grammar")]
+pub mod probe_circuit_grammar;
 #[cfg(feature = "weight_edit_overlay")]
 pub mod weight_edit_overlay;
 #[cfg(feature = "weight_edit_overlay")]
