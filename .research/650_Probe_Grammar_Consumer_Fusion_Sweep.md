@@ -8,7 +8,8 @@
 > **Status:** Active — sweep recorded; 2 ISSUE + 2 NOTE + 6 PASS; reviewer verdict
 > negotiated this session: round 1 REVISE (6 reasons) addressed — round 2 recorded in §9.
 > Post-sweep outcome (same day): 205 FOLDED at its pinned base-rate gate (0/38 — §8);
-> 206 module-half landed, corpus half deferred (see §3.2 note)
+> 206 corpus half EXECUTED 2026-11-04 pm — arm-A writer + first templated note landed,
+> referee UNDECIDED (support 4<30, structural identity), arm-B population zero (see §3.1/3.2)
 > **Related Research:** 649 (the anchor primitive), 648 (parent)
 > **Files created this session:** this note; `riir-refine/.issues/205_campaign_failure_decomposition.md`
 > (LEAP × 649); `riir-refine/.issues/206_probe_authored_corpus_repair.md` (ILC × 649, ILC leg dropped)
@@ -112,9 +113,21 @@ Issue 206 (unaffected by the fold — separate referee, separate failure class) 
 same day: the module-half LANDED (riir-refine `10f3783c` — `src/corpus_binding.rs`, the
 diagnose predicate + the BLAKE3 content-scoped record + the stale-epoch refusal, 9 unit
 tests incl. the synthetic degenerate-cluster fixture, 0 clippy at all-features, default
-lib 2828/0); the corpus half (arm A `context_notes` append + arm B demote-exec + the
-score-bench A/B referee — the GOAT question) DEFERRED on the sibling batch that owns
-the corpus entries files (re-opens at its landing commit).
+lib 2828/0); the corpus half executed 2026-11-04 pm when its trigger fired (Batch 329
+landed): live-telemetry harvest across blueprint strata (37 campaigns, 0 candidates)
++ the four trajectory stores (1096 rows, 46 rules) → the pinned predicate flags ONE
+rule all-time (`hashmap-with-capacity`, 9/18 all-W-class, 15 d stale) and ZERO in the
+recent-14 d window; the arm-A writer (FailureClass + the templated note + the
+compose_context_note gate) LANDED with the first telemetry-context corpus edit on that
+one rule (riir-refine `bec6ac51` — 16/16 module tests, default lib 2835/0); the
+referee leg MEASURED, verdict **UNDECIDED** (gen-5 support 4 < 30 — structural for
+single-rule arms; atom tables + the healed spec byte-identical baseline vs
+note-spliced: the gen-5 heal dispatch is compile-time, so the bench axis is
+structurally identity; the note's real surface — consumer advisory + latent-index
+corpus text — is not bench-measurable). Kill criteria NOT fired; arm B population =
+ZERO C-class candidates (nothing to demote). §3.2's remaining open questions: the
+n≥30 bar may need re-pricing for single-rule edits (referee-design, owner-adjacent),
+and the harvest→bind→note CLI verb re-opens when a recent-window candidate exists.
 
 ### 3.2 `riir-refine/.issues/206` — probe-authored corpus repair (ILC × 649; ILC dropped)
 
