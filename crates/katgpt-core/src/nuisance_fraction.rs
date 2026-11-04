@@ -1125,19 +1125,20 @@ mod tests {
     /// {0.2, 0.5, 0.8}: resid/floor·(1−slack) ≈ 1.53 / 1.84 / 1.38.
     ///
     /// ⚠ APPLICABILITY (consumer feedback, Issue 978 T5 / riir-reflex Issue
-    /// 106, measured 2026-11-04): this fixture's noises are drawn
-    /// INDEPENDENTLY per view — the regime where the floor is a true bound.
-    /// Real SAME-INPUT cross-embedder pairs (both spaces functions of the
-    /// same x) are the CORRELATED-NUISANCE regime: the x-level shared signal
-    /// is invisible to class-ρ yet alignable by the rotation, and the
-    /// measured post-RMS² landed 46–74% BELOW the class-grouped floor on all
-    /// three reflex suites. The grouping that would bound such a transport
-    /// (state = the input itself) is single-view per space, where the
-    /// primitive refuses loud — the correct behavior, per the single-view
-    /// law. A class-grouped floor must therefore NOT be sold as a gate on
-    /// paired cross-embedder transports; the gate use is consumer-shape-bound
-    /// (the refine lane's companion negative: 8-D transports are too cheap
-    /// to gate at all).
+    /// 106, measured + verdict-revised 2026-11-04): the floor bounds the
+    /// POPULATION optimal rotation. An in-sample Procrustes optimum — fit
+    /// and scored on the same points — is NOT an estimate of that object:
+    /// at k/n ≈ 0.5–0.6 the in-sample residual reads deep below the floor
+    /// on PURE NOISE (an independent-Gaussian null reproduces exactly this;
+    /// the reflex lane's first "floor violated 46–74%" was the artifact and
+    /// was retracted). Any consumer comparing a solve against this floor
+    /// MUST score held-out (split-half fit/score, permutation null as the
+    /// calibration); under held-out scoring the bound HELD in all 4
+    /// estimable arms of the reflex measurement. Whether real same-input
+    /// cross-embedder pairs additionally sit in a correlated-nuisance regime
+    /// (which would need a different grouping to bound) remains an
+    /// unverified hypothesis — the shipped single-view refusal law is the
+    /// correct behavior wherever no multi-view grouping exists.
     #[test]
     fn bound_arm_respects_alignment_floor() {
         const SLACK: f64 = 0.2;
