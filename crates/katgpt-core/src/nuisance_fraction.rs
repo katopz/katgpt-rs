@@ -182,7 +182,10 @@ impl core::fmt::Display for RhoError {
                 "rho needs >= 2 groups (state-explained variance is undefined on single-view data); got {got}"
             ),
             Self::GroupTooSmall { group, len } => {
-                write!(f, "group {group} has {len} member(s); rho needs >= 2 views per group")
+                write!(
+                    f,
+                    "group {group} has {len} member(s); rho needs >= 2 views per group"
+                )
             }
             Self::DimMismatch {
                 group,
@@ -351,10 +354,7 @@ impl RhoScratch {
 /// hold — every failure is a loud [`RhoError`], never a zero (see the
 /// module docs). Zero-alloc in steady state: all work buffers are
 /// scratch-owned.
-pub fn rho_fraction(
-    groups: &[&[f32]],
-    scratch: &mut RhoScratch,
-) -> Result<RhoReport, RhoError> {
+pub fn rho_fraction(groups: &[&[f32]], scratch: &mut RhoScratch) -> Result<RhoReport, RhoError> {
     // ── validation (loud, cheapest first) ─────────────────────────────────
     let n_groups = groups.len();
     if n_groups < 2 {
@@ -374,7 +374,10 @@ pub fn rho_fraction(
         }
         let members = g.len() / k;
         if members < 2 {
-            return Err(RhoError::GroupTooSmall { group: gi, len: members });
+            return Err(RhoError::GroupTooSmall {
+                group: gi,
+                len: members,
+            });
         }
         if g.iter().any(|v| !v.is_finite()) {
             return Err(RhoError::NonFinite { group: gi });
@@ -382,7 +385,10 @@ pub fn rho_fraction(
     }
     let n_total: usize = groups.iter().map(|g| g.len() / k).sum();
     if n_total < k {
-        return Err(RhoError::RankDeficient { rows: n_total, dim: k });
+        return Err(RhoError::RankDeficient {
+            rows: n_total,
+            dim: k,
+        });
     }
     scratch.ensure(k);
 
@@ -417,8 +423,7 @@ pub fn rho_fraction(
         let cov = &mut scratch.cov[..k * k];
         for i in 0..k {
             for j in 0..k {
-                cov[i * k + j] =
-                    cov[i * k + j] / n_total as f64 - pop_mean[i] * pop_mean[j];
+                cov[i * k + j] = cov[i * k + j] / n_total as f64 - pop_mean[i] * pop_mean[j];
             }
         }
     }
@@ -436,7 +441,9 @@ pub fn rho_fraction(
         .copied()
         .fold(f64::NEG_INFINITY, f64::max);
     if !lam_max.is_finite() || lam_max <= 0.0 {
-        return Err(RhoError::DegeneratePopulation { lambda_max: lam_max });
+        return Err(RhoError::DegeneratePopulation {
+            lambda_max: lam_max,
+        });
     }
     // ZCA map W = V Λ̃^{-1/2} Vᵀ with the pseudo-inverse floor. Fixed p-order
     // sequential fold — deterministic (Issue 940 posture).
@@ -450,8 +457,7 @@ pub fn rho_fraction(
             for j in i..k {
                 let mut acc = 0.0;
                 for p in 0..k {
-                    acc += vec_a[i * k + p] * vec_a[j * k + p]
-                        / vals[p].max(floor).sqrt();
+                    acc += vec_a[i * k + p] * vec_a[j * k + p] / vals[p].max(floor).sqrt();
                 }
                 whiten[i * k + j] = acc;
                 whiten[j * k + i] = acc;
@@ -564,8 +570,7 @@ pub fn rho_fraction(
         let mbar = &scratch.pop_mean[..k];
         for i in 0..k {
             for j in 0..k {
-                cov[i * k + j] =
-                    mgt_w[i * k + j] - mbar[i] * mbar[j] - corr[i * k + j] / nf;
+                cov[i * k + j] = mgt_w[i * k + j] - mbar[i] * mbar[j] - corr[i * k + j] / nf;
             }
         }
     }
@@ -980,7 +985,9 @@ mod tests {
             for seed in 0..3u64 {
                 let mut rng = fastrand::Rng::with_seed(0x9781 + (li as u64) * 100 + seed);
                 let groups = planted(rho, K, 8, 4, &mut rng);
-                acc += rho_fraction(&refs(&groups), &mut RhoScratch::new(K)).unwrap().rho;
+                acc += rho_fraction(&refs(&groups), &mut RhoScratch::new(K))
+                    .unwrap()
+                    .rho;
             }
             let mean = acc / 3.0;
             assert!(
@@ -1020,10 +1027,14 @@ mod tests {
         for seed in 0..SEEDS {
             let mut rng = fastrand::Rng::with_seed(0x9782 + seed);
             let naive = planted_naive(0.5, K, G, VIEWS, &mut rng);
-            naive_sum += rho_fraction(&refs(&naive), &mut RhoScratch::new(K)).unwrap().rho;
+            naive_sum += rho_fraction(&refs(&naive), &mut RhoScratch::new(K))
+                .unwrap()
+                .rho;
             let mut rng = fastrand::Rng::with_seed(0x9783 + seed);
             let correct = planted(0.5, K, G, VIEWS, &mut rng);
-            correct_sum += rho_fraction(&refs(&correct), &mut RhoScratch::new(K)).unwrap().rho;
+            correct_sum += rho_fraction(&refs(&correct), &mut RhoScratch::new(K))
+                .unwrap()
+                .rho;
         }
         let naive = naive_sum / SEEDS as f64;
         let correct = correct_sum / SEEDS as f64;
@@ -1051,7 +1062,9 @@ mod tests {
             let mut rng = fastrand::Rng::with_seed(0x9784 + seed);
             let groups = planted(0.5, K, G, VIEWS, &mut rng);
             let sh = shuffle_rows(&groups, K, &mut rng);
-            let corrected = rho_fraction(&refs(&sh), &mut RhoScratch::new(K)).unwrap().rho;
+            let corrected = rho_fraction(&refs(&sh), &mut RhoScratch::new(K))
+                .unwrap()
+                .rho;
             let uncorrected = uncorrected_rho(&sh, K);
             corr_sum += corrected;
             unc_sum += uncorrected;
@@ -1082,8 +1095,12 @@ mod tests {
             let groups = planted(0.6, K, 8, 4, &mut rng);
             let q = orthogonal(K, &mut rng);
             let rot = rotate(&groups, &q, K);
-            let r1 = rho_fraction(&refs(&groups), &mut RhoScratch::new(K)).unwrap().rho;
-            let r2 = rho_fraction(&refs(&rot), &mut RhoScratch::new(K)).unwrap().rho;
+            let r1 = rho_fraction(&refs(&groups), &mut RhoScratch::new(K))
+                .unwrap()
+                .rho;
+            let r2 = rho_fraction(&refs(&rot), &mut RhoScratch::new(K))
+                .unwrap()
+                .rho;
             assert!(
                 (r1 - r2).abs() <= 1e-6,
                 "seed {seed}: rho(X)={r1:.9} vs rho(X·Q)={r2:.9}"
@@ -1106,12 +1123,29 @@ mod tests {
     /// needs a well-posed Procrustes. With M ≈ nρ²D²(ρ²D²+(1−ρ²)I)⁻² —
     /// diagonal, distinct values — R* is unique; analytic margins at planted
     /// {0.2, 0.5, 0.8}: resid/floor·(1−slack) ≈ 1.53 / 1.84 / 1.38.
+    ///
+    /// ⚠ APPLICABILITY (consumer feedback, Issue 978 T5 / riir-reflex Issue
+    /// 106, measured 2026-11-04): this fixture's noises are drawn
+    /// INDEPENDENTLY per view — the regime where the floor is a true bound.
+    /// Real SAME-INPUT cross-embedder pairs (both spaces functions of the
+    /// same x) are the CORRELATED-NUISANCE regime: the x-level shared signal
+    /// is invisible to class-ρ yet alignable by the rotation, and the
+    /// measured post-RMS² landed 46–74% BELOW the class-grouped floor on all
+    /// three reflex suites. The grouping that would bound such a transport
+    /// (state = the input itself) is single-view per space, where the
+    /// primitive refuses loud — the correct behavior, per the single-view
+    /// law. A class-grouped floor must therefore NOT be sold as a gate on
+    /// paired cross-embedder transports; the gate use is consumer-shape-bound
+    /// (the refine lane's companion negative: 8-D transports are too cheap
+    /// to gate at all).
     #[test]
     fn bound_arm_respects_alignment_floor() {
         const SLACK: f64 = 0.2;
         const LEVELS: [f64; 3] = [0.2, 0.5, 0.8];
         // Fixed anisotropic signal spectrum, identical for both spaces.
-        let spread: Vec<f64> = (0..K).map(|d| 0.5 + 1.5 * d as f64 / (K - 1) as f64).collect();
+        let spread: Vec<f64> = (0..K)
+            .map(|d| 0.5 + 1.5 * d as f64 / (K - 1) as f64)
+            .collect();
         for (li, &rho) in LEVELS.iter().enumerate() {
             for seed in 0..3u64 {
                 let mut rng = fastrand::Rng::with_seed(0x978A + (li as u64) * 10 + seed);
@@ -1133,8 +1167,12 @@ mod tests {
                     ga.push(fa);
                     gb.push(fb);
                 }
-                let ra = rho_fraction(&refs(&ga), &mut RhoScratch::new(K)).unwrap().rho;
-                let rb = rho_fraction(&refs(&gb), &mut RhoScratch::new(K)).unwrap().rho;
+                let ra = rho_fraction(&refs(&ga), &mut RhoScratch::new(K))
+                    .unwrap()
+                    .rho;
+                let rb = rho_fraction(&refs(&gb), &mut RhoScratch::new(K))
+                    .unwrap()
+                    .rho;
                 let n = BOUND_G * BOUND_VIEWS;
                 let mut flat_a = Vec::with_capacity(n * K);
                 let mut flat_b = Vec::with_capacity(n * K);
@@ -1291,7 +1329,13 @@ mod tests {
     #[cfg(not(debug_assertions))] // release-only posture; never a dev-profile assert
     fn g2_report_latency_at_d256() {
         let cells = [
-            (256usize, 16usize, 32usize, 0x978Eu64, "d=256 N=512 (G=16x32)"),
+            (
+                256usize,
+                16usize,
+                32usize,
+                0x978Eu64,
+                "d=256 N=512 (G=16x32)",
+            ),
             (256, 8, 32, 0x978F, "d=256 N=256 (G=8x32, N=k floored)"),
         ];
         for (d, g, views, seed, label) in cells {
@@ -1310,7 +1354,10 @@ mod tests {
             }
             times.sort();
             let median = times[reps / 2];
-            println!("g2 {label}: median {median} ns ({:.1} ms)", median as f64 / 1e6);
+            println!(
+                "g2 {label}: median {median} ns ({:.1} ms)",
+                median as f64 / 1e6
+            );
             assert!(
                 median <= 300_000_000,
                 "g2 {label}: {median} ns exceeds the 300 ms regression tripwire"
@@ -1335,9 +1382,7 @@ mod tests {
         let _sentinel: Vec<u8> = vec![0u8; 256];
         let (sent_count, _) = get_alloc_stats();
         if sent_count == 0 {
-            eprintln!(
-                "g4_zero_alloc_steady_state: TrackingAllocator not installed — SKIPPED"
-            );
+            eprintln!("g4_zero_alloc_steady_state: TrackingAllocator not installed — SKIPPED");
             return;
         }
         drop(_sentinel);
