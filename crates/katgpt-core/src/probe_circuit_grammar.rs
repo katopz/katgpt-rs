@@ -501,12 +501,14 @@ where
 /// margin]`, `margin ≥ 1`, intersected with the hard ceiling `cap`. The
 /// slope LOCALIZES the window; the dose sweep inside it is the referee.
 /// Never trusts `|ŝ|` alone (Research 649: the estimate is confounded —
-/// the fixture's k=7-at-slope-7.52 negative).
+/// the fixture's floor negative k=7-at-ŝ−7.52 oscillates 8/8).
 ///
-/// An EMPTY return is the loud cap refusal: when the window's floor lies
-/// above `cap`, no allowed strength can reach the anomaly — the caller's
-/// `emit_word` sweep sees an empty grid and refuses `NoViableStrength`,
-/// never a silently-truncated sweep.
+/// Cap semantics: an EMPTY return is the loud refusal (window floor above
+/// `cap` — no allowed strength can reach the anomaly, the caller's sweep
+/// refuses `NoViableStrength`). A window whose TOP reaches `cap` may have
+/// been TRUNCATED there — the caller sees the grid but not the truncation
+/// (no marker on the bare `Vec<f32>`); if that ambiguity matters, pass a
+/// larger `cap`.
 pub fn derive_strength_grid(slope: f32, margin: usize, cap: f32) -> Vec<f32> {
     if !slope.is_finite() || slope == 0.0 || margin == 0 {
         return Vec::new();
@@ -727,9 +729,9 @@ mod tests {
         assert!(derive_strength_grid(f32::NAN, 2, 64.0).is_empty());
         assert!(derive_strength_grid(-7.0, 0, 64.0).is_empty());
         // The cap is a HARD ceiling: a window whose floor lies above it is
-        // refused EMPTY (the caller's sweep refuses NoViableStrength —
-        // never a silently-truncated sweep); a window that only EXCEEDS
-        // the cap at its top is truncated at the cap.
+        // refused EMPTY (the caller's sweep refuses NoViableStrength); a
+        // window whose TOP reaches the cap is truncated there — silently
+        // (the grid is a bare Vec; see the fn docs for the semantics).
         assert!(derive_strength_grid(-50.0, 2, 12.0).is_empty());
         let g_trunc = derive_strength_grid(-11.0, 2, 12.0);
         assert_eq!(g_trunc, vec![9.0, 10.0, 11.0, 12.0]);

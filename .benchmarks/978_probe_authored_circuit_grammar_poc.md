@@ -1,6 +1,6 @@
 # Bench 978: probe-authored weight-edit derivation PoC — fn-grammar + params-vocab (Research 649)
 
-**Date:** 2026-11-04 (verdict round 2 revised: probe-derived grids, matched blind baseline, held-out configs, failure-rate acceptance)
+**Date:** 2026-11-04 (verdict round 2 revised: probe-derived grids, matched blind baseline, held-out configs, failure-rate acceptance; round 3 wording fixes: floor-vs-roundup, cap semantics, blind-sweep arithmetic)
 **Feature:** `probe_circuit_grammar` (katgpt-core, implies `weight_edit_overlay`), opt-in, no default consumer
 **Research:** [`.research/649_Probe_Authored_Circuit_Grammar.md`](../.research/649_Probe_Authored_Circuit_Grammar.md) — the user-idea fusion: activation probes as the Research-648 lane's author (peek at what activates → fn-grammar parse → params-vocab emission)
 **Carrier:** the shipped Issue-980 `WeightEditOverlay` (GOAT G1–G4 PASS, Bench 976) — consumed, not forked
@@ -11,9 +11,9 @@
 
 Research 648's weight-edit lane had a reasoning model (or a hand that knew the fixture) as its author. This lane replaces that author with **activation probes**: peek at which neurons activate during failing episodes, parse the failing circuit into a **fn-grammar** record (drive → wire → gap with the band gate), emit the repair as a **params-vocab** sentence over the shipped `EditForm` words — the strength GRID derived from the probe, the WORD chosen by behavior verification. No LLM, no gradient, no fixture knowledge at runtime — the injected constants exist per-config as ground-truth assertions only.
 
-## The pinned config set (four, pinned before the run)
+## The pinned config set (constants pinned before the run)
 
-`FixtureParams { carrier_col, gap_row, k0, band }` — design constraints from the fixture's analytic shape (never tuned per run): carrier ∈ {3,4,5}, gap ∈ {1,3,5}, carrier ≠ gap (off-diagonal injections; twin value 0).
+`FixtureParams { carrier_col, gap_row, k0, band }` — design constraints from the fixture's analytic shape (never tuned per run): carrier ∈ {3,4,5}, gap ∈ {1,3,5}, carrier ≠ gap (off-diagonal injections; twin value 0). Qualification (verdict round 2): the CONSTANTS were pinned before the run; the fixture INPUTS for gap rows 3/5 (the smooth y/8 diag channel) were repaired after the first held-out run — see the design-stability note below.
 
 | config | carrier | gap | band | k₀ |
 |---|---|---|---|---|
@@ -41,10 +41,12 @@ Twin telemetry refuses at the SHIPPED arming precondition before any parse, on a
 
 | config | derived grid | emitted k | verdict |
 |---|---|---|---|
-| BASE | {4..11} | **8** (5 authoring evals) | exact k₀ — the naive slope round-up (k=7) provably FAILS 8/8 (recorded negative) |
+| BASE | {4..11} | **8** (5 authoring evals) | exact k₀ — the slope FLOOR (k=7) provably fails 8/8 (recorded negative) |
 | HELD_B | {1..8} | **5** | exact k₀ |
-| HELD_C | {6..12} | **10** | exact k₀ |
+| HELD_C | {6..12} | **10** | exact k₀ (the window top was silently capped: the un-truncated window is {6..13}) |
 | HELD_D | {2..9} | **6** | exact k₀ |
+
+**The slope-bias fact (verdict round 3, stated plainly):** ⌈|ŝ|⌉ = k₀ in ALL FOUR configs — the single-regressor slope UNDERESTIMATES by 0.40–0.55 every time (−7.52→8, −4.60→5, −9.45→10, −5.60→6). So floor fails 4/4 and nearest-rounding fails 1/4 (HELD_C: 9.45 → 9 ≠ 10), while round-UP would have hit 4/4 — but only with the bias direction known in advance, which a real lane never has. **The sweep's job is verification: it picks the rounding without prior knowledge of which way the bias runs**, and its dose arms double as the dose-response evidence. The BASE k=7 word is the FLOOR negative (recorded: oscillates 8/8).
 
 BASE full battery (all PASS): full-eval obstacle 0.0 AND failure 0.0 (16×12 seeded starts) · success parity with the twin · dose-response `{1,1,1,0}` monotone (oscillation statistic, the 980 G1a arm) · neighbor-column isolation null (rate ≥ 0.95) · out-of-region forwards bit-identical + action prefixes identical · provenance digest (the fn-grammar record) round-trips the freeze envelope.
 
@@ -53,7 +55,7 @@ P2b held-outs (all PASS): authoring failure 0 → full-eval obstacle 0 + failure
 ## P3 — peek vs blind search (verdict round 2 framing)
 
 - **Reachability control:** 16 norm-matched random-direction arms at the RIGHT column + 16 blind column×direction arms, each dose-sweeping the same grid with the same acceptance: NONE repairs (mean failure rate 1.0); probe 0.0; paired **LCB95(best random − probe) = +1.0 > 0** (every per-seed delta +1). A random 64-dim unit direction reaches `|d[gap]| ≥ 0.875` with probability ≈ 0.
-- **Matched blind baseline (the strongest blind searcher):** ±e_gap words at every column, same grid, same acceptance, gap row given free: first-found repair after **69 authoring evals vs the probe's 5 — 13.8×** for parse-and-verify over enumeration. The blind first-found lands at the TRUE column (4, −, 8): the failure-rate acceptance killed the plausible compensating edits before they cleared, so the locus difference did not materialize — the honest claim is the eval saving + attribution (the probe names the anomalous column from ONE capture; the sweep tested 69 words to find it).
+- **Matched blind baseline (the strongest blind searcher):** ±e_gap words at every column, same grid, same acceptance, gap row given free: first-found repair after **69 authoring evals vs the probe's 5 — 13.8×** for parse-and-verify over enumeration (≈ **6 vs 69 counting the probe's one capture rollout**). **The 69 is arithmetic of the search order, not a measurement**: ascending columns, sign − first, 8 strengths → `16·carrier_col + 5` (= 64 failures at cols 0–3 + 5 at col 4). 13.8× is therefore an ORDER-DEPENDENT LOWER BOUND measured on BASE only; under a uniformly random column order the expected cost is ≈ 16·31.5 + 5 ≈ 510 (≈ 100×), worst case ≈ 1,029. The blind first-found lands at the TRUE column (4, −, 8): the failure-rate acceptance killed the plausible compensating edits before they cleared, so the locus difference did not materialize — the honest claim is the eval saving + attribution (the probe names the anomalous column from ONE capture; the sweep tested 69 words to find it).
 
 ## Design-stability note (the fixture iteration, recorded honestly)
 

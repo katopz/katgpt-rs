@@ -75,7 +75,9 @@ const STARTS_PER_SEED: usize = 12;
 /// grid is probe-derived below).
 const DOSE_GRID: [f32; 4] = [1.0, 2.0, 4.0, 8.0];
 /// Derived-grid parameters (pinned before any run): the slope CENTERS the
-/// window, `margin` extends it on both sides, `cap` truncates loud.
+/// window, `margin` extends it on both sides, `cap` truncates the top
+/// (silently — the grid is a bare Vec; empty = the loud floor-above-cap
+/// refusal).
 const GRID_MARGIN: usize = 3;
 const GRID_CAP: f32 = 12.0;
 
