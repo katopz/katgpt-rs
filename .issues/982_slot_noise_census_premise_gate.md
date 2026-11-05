@@ -1,6 +1,7 @@
 # Issue 982 — Cross-path delta census + long-horizon byte-exactness soak (the premise gate from arXiv:2611.05345)
 
 **Status:** OPEN — premise-gate experiment, T0 runnable now in minutes (numerics measurement on the existing verify path, NOT acceptance work — the 746/747 acceptance-work closure is untouched); the acceptance-gate arm of this issue (T7/T8) is additionally owner-gated behind the riir-ai Plan 614 kernel bar AND closes as unmotivated if T0 reads structural zero.
+**Claimed:** zed-m3-i983consumer, 1762341002, expires 2026-11-07T20:00:00+00:00 (T0 — the census harness + the exclusive-4090 run; the T0 DEFER line below is this lane's own prior session and is superseded on landing)
 
 **Source:** [Research 652](../.research/652_Adversarial_Speculative_Reasoning_Precision_Allocator.md) — arXiv:2611.05345 "Adversarial Speculative Reasoning Improves Long Horizon Agents" (Luo et al., 3 Nov 2026, CC BY 4.0). The paper measures: verification blocks are lossless in distribution but noise grows ~4%/slot (slot 0 == decode; >2-nat tails ~2× by block end), and verify-written context shows 10–20% excess >4-nat deviations after ~30 turns. Closed form: `Pr[reject] = TV(p,q)` — the draft controls where blocks end.
 
