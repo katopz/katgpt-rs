@@ -1,5 +1,19 @@
 //! probe_circuit_grammar — probe-authored weight-edit derivation.
 //!
+//! **FOLDED (2026-11-05): the first consumer PoC failed its value gate.** The
+//! twinarm linear-head consumer (riir-instinct Issue 028 / Research 653) ran
+//! the pre-registered battery on the corrupted-teacher fixture: the repair beat
+//! its unrepaired base (Δ +0.2400, LCB95 +0.1902) but LOST to fair b1
+//! continue-train-on-gold (eval 0.9950 vs 1.0000, Δ −0.0050, LCB95 −0.0132) —
+//! the fold law the feature row pre-registered fires. Record:
+//! `../riir-instinct/.benchmarks/0064_g1_probe_repair_fixture/G1.md` (plus the
+//! class-2 census negative, record 0063). The lane folds into
+//! [`crate::weight_edit_overlay`] per this module's own demotion law; the code
+//! stays (opt-in, no default consumer, the RL-lane machinery + tests are the
+//! attribution record's implementation) until that housekeeping merge lands.
+//! A revival is a NEW pre-registration with a fixture design that separates
+//! the repair from continue-train (scarcer gold, broader poison).
+//!
 //! Research 649 (fusion on Research 648 / Issue 980): the 648 lane's author
 //! was a reasoning model (or a hand that already knew the fixture); this
 //! module replaces that author with **activation probes** — the lane peeks
