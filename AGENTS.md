@@ -750,6 +750,32 @@ REPORT-ONLY cross-tail interference (CKA + cos² spectra; refusal classes mirror
 `.proofs/KatgptProof/Sst/`. Consumers: riir-neuron-db Issue 629, riir-ai Issue
 1116, riir-ai Issue 1141; producer riir-train Plan 470.
 
+## Coverage-manifested memory + gap-check protocol — `katgpt-core/src/coverage_manifest.rs` (Issue 983)
+
+Opt-in `coverage_manifest` (DEFAULT-OFF, report-only first; Research 654 §5
+modelless track). The memory builder stamps per-section rows ONCE at build
+time — counts + BLAKE3 digests over the sorted source/covered/GAP key sets;
+the gap set-difference is computed at STAMP time, never per query (F2);
+optional gap-key retention, compact posture decision-capable. Three
+deterministic suspicion predicates read O(1) over PINNED per-query-class
+expectations — (a) count-vs-census, (b) truncation at the pinned cap, (c)
+coverage-deficit — and `gap_event` carries the action.
+`verify_live_section_census` refuses a stale census LOUD (F4). F1
+two-derivation agreement + dangling-gap-key loud refusal. F3 precision is
+PER-PREDICATE, never pooled, and the ordering laws carry the pre-data
+verdict correction (issue-recorded; delegated-owner AGREE, closed): (a)
+monotone non-decreasing in 1 − c and 0 at c = 1; (b) monotone
+non-decreasing in `covered_tokens/cap` on its OWN axis — at c = 0 it never
+triggers, so the original "monotone in 1 − c" scope was unsatisfiable for
+it; (c) by construction. Gap events = 0 at c = 1 for ALL predicates.
+**Blind spot (docs + the TraceLinter coverage note):** (b) cannot detect
+gaps in sparse memory — low-coverage detection belongs to (a) alone. GOAT
+cell (synthetic, disclosed): lookup-anomaly posture 1/1 > full-trigger 1/2
+> the static coverage-report cousin 1/3 (the full-trigger margin is the F4
+gate alone). Consumer: the riir-refine heal-lane corpus-gap event
+(UNWIRED — that wiring + a real-corpus cell + (b)'s covered==cap boundary
+pin are the promotion preconditions; promotion is NOT claimed).
+
 ## Feature Flag Discipline
 
 Every new primitive ships behind a feature flag (opt-in). Promotion to
