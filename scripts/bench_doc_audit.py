@@ -87,6 +87,7 @@ OPTIN_DEFAULT_PHRASES = (
     "off-by-default",
     "not default",
     "not in default",
+    "no default",
     "not promoted",
     "stays opt-in",
     "stays off",
@@ -779,6 +780,21 @@ def pure_rule_arms() -> list[str]:
     eq("parse_status_phrase: leading `not ` negates",
        parse_status_phrase("not default-on"), "opt-in")
     eq("parse_status_phrase: unnegated default-on still reads default",
+       parse_status_phrase("default-on"), "default")
+    # The "no default X" family (bench 979's live false-positive): "no"
+    # is not in has_not's disjuncts, so the bare "default" word-boundary
+    # match read a true opt-in label as DEFAULT. The OPTIN_DEFAULT_PHRASES
+    # guard owns it — and the arm goes through widened_status, the
+    # production path the mismatch actually took.
+    eq("parse_status_phrase: 'no default consumer' reads opt-in",
+       parse_status_phrase("katgpt-core, opt-in, no default consumer — unchanged"), "opt-in")
+    eq("widened_status: the bench-979 label reads opt-in, not default",
+       (widened_status(
+           "**Feature:** `probe_circuit_grammar` (katgpt-core, opt-in, no default consumer — unchanged)",
+           38,
+       ) or (None, None))[0],
+       "opt-in")
+    eq("parse_status_phrase: a plain default-on phrase is untouched by the guard",
        parse_status_phrase("default-on"), "default")
 
     # ── the closure walk. `default -> a -> b` with every hop DEFINED as a
