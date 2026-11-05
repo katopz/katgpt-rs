@@ -26,6 +26,14 @@
 
 ## TL;DR
 
+> **Status delta 2026-11-05 (T1 executed):** the G0 census ran (riir-instinct `86a8de2`,
+> record `0063_g0_collision_census`) — 7 suites, incumbent arm exactly reproducing the
+> Bench-608 table, oracle deltas immaterial on every suite (ag_news −1.00 pt — the merged
+> columns acted as useful co-occurrence features; emotion +1.50 pt fails the one-sided
+> LCB95 at n=200; the rest 0.00). **Class 2 folded as a recorded negative per the fold
+> law**; the class-1 repair leg proceeds to T2. §3's census verdict above is now
+> measured, not just predicted.
+
 The twinarm lane is the consumer Research 649's §8 promotion gate was waiting for, and the
 one surface Research 650's sweep did not cover. The specialist heads are **linear one-vs-all
 logistic heads over the floor's own FNV-1a hashed n-gram bags** (`VOCAB = 1<<17`,
