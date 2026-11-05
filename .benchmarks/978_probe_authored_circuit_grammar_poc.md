@@ -7,6 +7,12 @@
 **Test:** `crates/katgpt-core/tests/probe_circuit_grammar_poc.rs` (P0–P3 + P2b, 5 tests, `--features probe_circuit_grammar`)
 **Verdict: PoC PASS on FOUR pinned configs — the probe-blind parse recovers every injected constant on all four, and the behavior-verified emission emits the EXACT k₀ on all four.** Stays opt-in (no-default-consumer rule); promotion consumer-gated like 980.
 
+> **Fold note (2026-11-06):** the lane's own pre-registered demotion law has FIRED — the first
+> consumer PoC (the twinarm fixture, riir-instinct record 0064) lost its G1 value claim to fair
+> continue-train. The lane merged into the carrier: `weight_edit_overlay::probe_circuit_grammar`
+> (no separate feature; katgpt-rs `abbb22d57`). This record's PoC-PASS verdict stands as the
+> identification/repair record only — never as a value claim.
+
 ## The claim this proves
 
 Research 648's weight-edit lane had a reasoning model (or a hand that knew the fixture) as its author. This lane replaces that author with **activation probes**: peek at which neurons activate during failing episodes, parse the failing circuit into a **fn-grammar** record (drive → wire → gap with the band gate), emit the repair as a **params-vocab** sentence over the shipped `EditForm` words — the strength GRID derived from the probe, the WORD chosen by behavior verification. No LLM, no gradient, no fixture knowledge at runtime — the injected constants exist per-config as ground-truth assertions only.

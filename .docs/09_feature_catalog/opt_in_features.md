@@ -6337,6 +6337,15 @@ demote to the SparseErrorBypass representation. Gate battery:
 `benches/issue980_weight_edit_overlay_goat.rs`; record:
 [Bench 976](../../.benchmarks/976_issue980_weight_edit_overlay_goat.md).
 
+**Fold (2026-11-06):** the Research-649 `probe_circuit_grammar` probe-authored derivation lane
+(Bench 978 PoC PASS on 4 pinned configs) folded INTO this module — its own pre-registered
+demotion law fired when the first consumer PoC lost its G1 value claim to fair
+continue-train (the twinarm fixture, riir-instinct record 0064). The probe-parse machinery
++ the PoC battery (`tests/probe_circuit_grammar_poc.rs`, re-keyed to `weight_edit_overlay`)
+stay as the submodule `weight_edit_overlay::probe_circuit_grammar` — the attribution record;
+no separate feature (728 → 727 total flags). A revival is a NEW pre-registration
+(katgpt-rs `abbb22d57`).
+
 ### `regret_guard` — adversary-aware serving gate (Issue 979)
 
 `regret_guard = []` — **opt-in** (zero new deps).

@@ -50,8 +50,10 @@
 > the warm-start continuation). **The katgpt-core substrate's own pre-registered
 > demotion law has now fired** ("the PoC battery failing its identification/repair arms
 > records the negative and the lane folds into weight_edit_overlay") — `probe_circuit_grammar`
-> is due to fold into `weight_edit_overlay` as katgpt-rs housekeeping (opt-in, no default
-> consumer, inert until then). A future revival is a NEW pre-registration with a fixture
+> HAS FOLDED into `weight_edit_overlay` (the katgpt-rs housekeeping merge landed 2026-11-06,
+> `abbb22d57`: the module is now the carrier submodule `weight_edit_overlay::probe_circuit_grammar`,
+> the feature row is gone, the PoC battery re-keyed to `weight_edit_overlay` as the attribution
+> record; 728 → 727 total flags). A future revival is a NEW pre-registration with a fixture
 > design that actually separates the repair from continue-train (scarcer gold, broader
 > poison) — this fold is evidence about the value claim on THIS fixture, not about the
 > mechanism's existence.

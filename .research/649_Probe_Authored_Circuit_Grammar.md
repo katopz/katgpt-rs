@@ -2,7 +2,7 @@
 
 > **Source:** user-idea fusion (2026-11-04), executed as PoC + proof this session. Parent distillations: [Research 648 — Weight-Space Programming](648_Weight_Space_Programming.md) (Takehi/Teoh/Zhang/Khattab, MIT CSAIL blog 2026-11-02) + the landed Issue-980 `WeightEditOverlay` lane (`b0f1ed615`, Bench 976 GOAT). The idea: *648's author was an LLM reading weights — cheat by PEEKING instead: probe which neurons activate, use that as the learning guide, and structure the result like quest grammar's topologam+vocab but at neuron level (fn-grammar + params-vocab).*
 > **Date:** 2026-11-04
-> **Status:** Active — PoC PASS on 4 pinned configs (Bench 978, verdict round 2 revised), opt-in primitive landed
+> **Status:** FOLDED 2026-11-06 — the pre-registered demotion law fired (the first consumer PoC lost its G1 value claim to fair continue-train; riir-instinct record 0064) and the lane merged into the carrier as `weight_edit_overlay::probe_circuit_grammar` (no separate feature; katgpt-rs `abbb22d57`). PoC PASS on 4 pinned configs (Bench 978) stands as the identification/repair record; the value claim is refuted on the twinarm fixture. A revival is a NEW pre-registration.
 > **Related Research:** 648 (the parent), 287 (probe/steering claim-evidence ladder), 301 (probe bank), 094 (2D probing)
 > **Related Plans/Issues:** katgpt-rs `.benchmarks/978` (the PoC record); Issue 980 (the carrier lane, closed `b0f1ed615`); katgpt_core::tpr (the binding-algebra cousin)
 > **Files created this session:** `crates/katgpt-core/src/probe_circuit_grammar.rs` + feature `probe_circuit_grammar`; `crates/katgpt-core/tests/probe_circuit_grammar_poc.rs` (P0–P3 + P2b); `.benchmarks/978_probe_authored_circuit_grammar_poc.md`
