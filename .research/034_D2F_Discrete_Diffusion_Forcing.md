@@ -4,6 +4,7 @@
 > Shanghai Jiao Tong University & UC San Diego, Aug 2025
 
 > **PASS-Redirects (synthesis):** Lai/Song/Kim/Mitsufuji/Ermon [arXiv:2510.21890v3 "The Principles of Diffusion Models"] — definitive diffusion monograph (MIT Press 2027); its discrete-diffusion "Road Ahead" chapter and flow-map chapter are reference formalizations of what D2F already ships (block-AR + intra-block denoising). Crosswalk rows: katgpt-rs/.research/271 §6.
+> **PASS-Redirects (synthesis):** Saied, Sheebaelhamd, Vernade, Fleuret [arXiv:2610.40271 "Gaussian Distillation of Flow Policies"](https://arxiv.org/abs/2610.40271) — PASS. GAR's readout pattern (tiny head on frozen teacher features, 6k fitting contexts = 0.02% of states) is the continuous-action cousin of this lane's trained DiffusionSampler predictor — signal-diff kept explicit: DiffusionSampler predicts per-position STOPPING-CONFIDENCE (logistic, ~7 params over 6 logits features: top1_prob/margin/top3_mass/entropy/step_norm/pos_norm) while GAR predicts the teacher's OUTPUT-distribution moments (μ, Σ) with closed-form likelihood; discrete token denoising has no Gaussian-moment analog, and no continuous flow sampler ships in the workspace to accelerate, so nothing is filed (head-recipe upgrades to DiffusionSampler graded could-inform-tier, not actionable).
 
 ## 1. What D2F Actually Does (Verified by Reading)
 
