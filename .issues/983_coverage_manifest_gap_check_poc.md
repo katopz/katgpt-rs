@@ -1,7 +1,7 @@
 # Issue 983: PoC — Coverage-Manifested Memory + Suspicion-Triggered Gap-Check (modelless protocol)
 
 **Status:** LANDED 2026-11-05 (zed-m3-i983poc, epoch 1793953746) — T1–T4 substrate + gates in one landing (katgpt-rs commit below); **opt-in `coverage_manifest`, DEFAULT-OFF, report-only first** — the consumer wiring (refine heal-lane corpus-gap event) is the named next lane; promotion only via a wired consumer + a real-corpus GOAT cell. F1–F4 ALL PASS (11 in-lane tests); the F3 ordering laws carry the pre-data verdict correction (session 5c33f8b4-a47f-427a-ae5a-f9e7dcabf261, REVISE → Option 2 + three additions; amendment recorded in this issue BEFORE the harness ran).
-**Claimed:** zed-m3-i983poc, 1793953746, expires 2026-11-07T20:00:00+00:00
+**Lease closed:** zed-m3-i983poc, 1793953746 — T1–T4 LANDED in the lease window (katgpt-rs `0f86f6f21` + the bench_doc_audit repair `8f41f4d5b`): the substrate opt-in `coverage_manifest` (default-off, report-only first), F1–F4 all pass (11 lane tests), the amended ordering laws asserted per the pre-data verdict, the GOAT cell disclosed synthetic, promotion NOT claimed (waits on a wired consumer + a real-corpus cell). (claim record: zed-m3-i983poc, epoch 1793953746, was expires 2026-11-07T20:00:00+00:00)
 **Date:** 2026-11-05
 **Source:** `../.research/654_Engram_Notes_RL_Strategy_Not_Content.md` — Engram blog "Learning in a world of notes" (2026-11-04); the trained model's learned gap-check behavior, extracted modelless. Training-track sibling: `../riir-train/.plans/486_notes_usage_rl_cost_sweep_drift_curriculum.md`.
 
