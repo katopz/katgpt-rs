@@ -6,7 +6,7 @@
 > **Code:** [github.com/al-jshen/flashmap](https://github.com/al-jshen/flashmap) — MIT (code) / Apache-2.0 (weights, following Qwen3). Python (torch + transformers) + SGLang/vLLM plugins; training recipes in speculators + SpecForge forks; drafters `j-shen/FlashMap-Qwen3-8B` (500M) / `-4B` (475M). Paper implemented in DeepSpec (deepseek-ai, MIT) @ `005e03b`. **NOT cloned** — pure Python, no Rust surface to mine (distill axis: corpus NO).
 > **Date:** 2026-10-25 (zed-m3max/M3, research + distill skills)
 > **Related Research:** 366 (Self-Conditioned FMLM★ — the family check this note performs per R366 §5's standing instruction), 265 (CoFRe, direct FMLM sibling), 407 (DFlash-TfM — Weaver + the factorized acceptance ceiling + GDN tree-verify), 316 (DSpark — confidence-scheduled semi-AR post-processing), 002 (speculative decoding, original), 344 (Implicit FP RNN — closed the FP-for-LM design space)
-> **Related Plans:** [riir-ai Plan 614](../riir-ai/.plans/614_dflash2_spec_lane_m5_ultra.md) (the DFlash2 spec lane this note feeds), 424 (dd_tree deep argmax), 200 (correlation budget), 108/136 (LoopMode FP blocks), [riir-ai Issue 1011](../riir-ai/.issues/1011_league_spec_decode_stance_tensorfold_watch.md) (the lane-intel issue — watch note appended this session)
+> **Related Plans:** [riir-ai Plan 614](../riir-ai/.plans/614_dflash2_spec_lane_m5_ultra.md) (the DFlash2 spec lane this note feeds), 424 (dd_tree deep argmax), 200 (correlation budget), 108/136 (LoopMode FP blocks), `riir-ai Issue 1011` (the lane-intel issue — watch note appended this session)
 > **Classification:** Public
 
 ---

@@ -6,7 +6,7 @@
 > **Date:** 2026-10-01
 > **Classification:** Public
 > **Related Research:** 086 (RTPurbo — convergent multi-key-retrieval bottleneck signal), 362 (HydraHead causal head-importance — the documented "future head-mixing runtime" gap this paper's mechanism fills)
-> **Related Issues:** `katgpt-rs .issues/914` (deterministic mixing runtime, BLOCKED-ON evidence), [riir-train `.issues/606`](../../riir-train/.issues/606_iha_relation_composition_micro_rung.md) (MHA-vs-IHA micro falsification)
+> **Related Issues:** `katgpt-rs .issues/914` (deterministic mixing runtime, BLOCKED-ON evidence), riir-train `.issues/606` (MHA-vs-IHA micro falsification)
 
 ---
 
