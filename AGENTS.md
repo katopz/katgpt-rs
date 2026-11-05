@@ -772,9 +772,21 @@ it; (c) by construction. Gap events = 0 at c = 1 for ALL predicates.
 gaps in sparse memory — low-coverage detection belongs to (a) alone. GOAT
 cell (synthetic, disclosed): lookup-anomaly posture 1/1 > full-trigger 1/2
 > the static coverage-report cousin 1/3 (the full-trigger margin is the F4
-gate alone). Consumer: the riir-refine heal-lane corpus-gap event
-(UNWIRED — that wiring + a real-corpus cell + (b)'s covered==cap boundary
-pin are the promotion preconditions; promotion is NOT claimed).
+gate alone). **Boundary pin (verdict note i, `f0e6cddf3`): (b) fires AT
+covered == cap by construction** — the observation carries returned_tokens
+only, "exactly fills" is indistinguishable from "was cut"; the narrowed
+re-issue (F3's TP criterion) adjudicates, never a suppression. **Digest
+integrity fix (same commit, v2):** `manifest_digest_of` folded only the
+census digest per row — two stamps differing only in covered/gap state
+collided (found by the consumer's epoch test); the fold now binds counts,
+all three digests, the retention flag, and the retained gap keys;
+`MANIFEST_FORMAT_VERSION` 1→2 (nothing persisted in the wild; v1 refuses
+loud at the version check). **Consumer WIRED:** the riir-refine heal-lane
+corpus-gap event (`riir-refine` `494f70e96` — `--corpus-gap`, report-only,
+content-addressed intake rows at `.refine/misses/corpus-gap/`, the
+`--misses` queue prints them; freshness anchors never queued). Promotion
+preconditions remaining: the real-corpus GOAT cell ((b)'s boundary pin +
+the wiring are done); promotion NOT claimed.
 
 ## Feature Flag Discipline
 
