@@ -1,6 +1,7 @@
 # Issue 981: Sink-Audit KV Policy Switch — one-time per-position census selects SinkWindowPolicy posture
 
 **Status:** Filed 2026-11-05 — POC, pre-registered gates below; from katgpt-rs Research 651 §3.3 (arXiv:2505.06708 "Gated Attention for LLMs", NeurIPS 2025 Best Paper). Revised same day after verdict round 1: the served flagship's full-attention layers are ALREADY gated (riir-infer Issue 594), so the audit is runnable NOW — Bonsai is the leading SinkFree candidate, not a contingency.
+**Claimed:** zed-m3-i981sinkaudit, 1793849627, expires 2026-11-07T03:33:47+00:00
 
 ## Problem
 
