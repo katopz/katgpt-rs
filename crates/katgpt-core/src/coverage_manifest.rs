@@ -92,7 +92,7 @@ use std::fmt;
 
 /// The manifest wire-format version. Bumped on ANY canonical-encoding change;
 /// [`CoverageManifest::from_canonical`] refuses every other version loud.
-pub const MANIFEST_FORMAT_VERSION: u32 = 1;
+pub const MANIFEST_FORMAT_VERSION: u32 = 2;
 
 /// The canonical-form magic line token.
 pub const MANIFEST_MAGIC: &str = "katgpt-coverage-manifest";
@@ -153,16 +153,28 @@ impl fmt::Display for StampRefusal {
                 write!(f, "stamp: duplicate section id '{id}'")
             }
             Self::DuplicateSourceKey { section, key } => {
-                write!(f, "stamp: duplicate source key '{key}' in section '{section}'")
+                write!(
+                    f,
+                    "stamp: duplicate source key '{key}' in section '{section}'"
+                )
             }
             Self::DuplicateCoveredKey { section, key } => {
-                write!(f, "stamp: duplicate covered key '{key}' in section '{section}'")
+                write!(
+                    f,
+                    "stamp: duplicate covered key '{key}' in section '{section}'"
+                )
             }
             Self::CoveredKeyNotInSource { section, key } => {
-                write!(f, "stamp: covered key '{key}' is not in the source inventory of section '{section}'")
+                write!(
+                    f,
+                    "stamp: covered key '{key}' is not in the source inventory of section '{section}'"
+                )
             }
             Self::DanglingGapKey { section, key } => {
-                write!(f, "stamp: dangling gap key '{key}' in section '{section}' — no executable lookup (F1 refuses loud)")
+                write!(
+                    f,
+                    "stamp: dangling gap key '{key}' in section '{section}' — no executable lookup (F1 refuses loud)"
+                )
             }
         }
     }
@@ -233,9 +245,7 @@ fn hex_decode(s: &str) -> Result<String, String> {
     }
     let mut out = Vec::with_capacity(s.len() / 2);
     for i in (0..s.len()).step_by(2) {
-        out.push(
-            u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| format!("bad hex: {e}"))?,
-        );
+        out.push(u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| format!("bad hex: {e}"))?);
     }
     String::from_utf8(out).map_err(|e| format!("hex field is not UTF-8: {e}"))
 }
@@ -411,9 +421,7 @@ impl CoverageManifest {
         if r.gap_count == 0 {
             return None;
         }
-        Some(GapEvent {
-            row: r,
-        })
+        Some(GapEvent { row: r })
     }
 
     /// The deterministic suspicion predicates over one lookup observation,
@@ -425,18 +433,16 @@ impl CoverageManifest {
     ///   the natural full-read pin; scoped classes pin subsets).
     /// - (b) fires iff `returned_tokens == cap` — the read may not be
     ///   evidence for a final answer; re-issue narrow. Blind spot:
-    ///   [`SPARSE_MEMORY_BLIND_SPOT`].
+    ///   [`SPARSE_MEMORY_BLIND_SPOT`]. Boundary pin: AT `covered == cap` the
+    ///   predicate fires (the boundary is the top of (b)'s own axis and the
+    ///   read is ambiguous exactly there) — the suspicion is adjudicated by
+    ///   the narrowed re-issue (F3's TP criterion), never suppressed.
     /// - (c) fires iff the section's coverage ratio < 1 (recorded
     ///   by-construction; never a precision finding).
     ///
     /// Unknown sections produce NO suspicion (the manifest scopes the
     /// protocol to stamped sections).
-    pub fn suspicions_into(
-        &self,
-        obs: &LookupObservation<'_>,
-        cap: u64,
-        out: &mut Vec<Suspicion>,
-    ) {
+    pub fn suspicions_into(&self, obs: &LookupObservation<'_>, cap: u64, out: &mut Vec<Suspicion>) {
         let Some(r) = self.rows.get(obs.section_id) else {
             return;
         };
@@ -500,7 +506,10 @@ impl CoverageManifest {
     pub fn canonical_bytes(&self) -> Vec<u8> {
         let mut s = String::new();
         s.push_str(&format!("{MANIFEST_MAGIC} {}\n", self.format_version));
-        s.push_str(&format!("manifest_cd {}\n", digest_hex(&self.manifest_digest)));
+        s.push_str(&format!(
+            "manifest_cd {}\n",
+            digest_hex(&self.manifest_digest)
+        ));
         s.push_str(&format!("sections {}\n", self.rows.len()));
         for r in self.rows.values() {
             let gk = if r.gap_keys.is_some() { "1" } else { "0" };
@@ -549,7 +558,9 @@ impl CoverageManifest {
                 "unsupported manifest format version {version} (this build reads {MANIFEST_FORMAT_VERSION})"
             ));
         }
-        let cd_line = lines.next().ok_or_else(|| "missing manifest_cd".to_string())?;
+        let cd_line = lines
+            .next()
+            .ok_or_else(|| "missing manifest_cd".to_string())?;
         let cd = cd_line
             .strip_prefix("manifest_cd ")
             .ok_or_else(|| "bad manifest_cd line".to_string())?;
@@ -563,7 +574,9 @@ impl CoverageManifest {
 
         let mut rows = BTreeMap::new();
         for _ in 0..n {
-            let s_line = lines.next().ok_or_else(|| "truncated: missing s line".to_string())?;
+            let s_line = lines
+                .next()
+                .ok_or_else(|| "truncated: missing s line".to_string())?;
             let f: Vec<&str> = s_line.split_whitespace().collect();
             if f.len() != 9 || f[0] != "s" {
                 return Err(format!("bad s line: '{s_line}'"));
@@ -605,9 +618,13 @@ impl CoverageManifest {
                 }
                 gap_keys = Some(keys);
             } else {
-                let e_line = lines.next().ok_or_else(|| "truncated: missing e line".to_string())?;
+                let e_line = lines
+                    .next()
+                    .ok_or_else(|| "truncated: missing e line".to_string())?;
                 if e_line != "e" {
-                    return Err(format!("compact row must terminate with 'e', got '{e_line}'"));
+                    return Err(format!(
+                        "compact row must terminate with 'e', got '{e_line}'"
+                    ));
                 }
             }
             rows.insert(
@@ -641,13 +658,39 @@ impl CoverageManifest {
 }
 
 fn manifest_digest_of(version: u32, rows: &BTreeMap<String, SectionRow>) -> [u8; 32] {
+    // The whole-manifest identity: EVERY stamped field, in the sorted row
+    // order. (v1 folded only the census digest per row — a manifest whose
+    // covered/gap state moved without the census moving kept the same
+    // digest, which broke epoch identity for consumers and let a canonical
+    // tamper of the covered/gap digest lines pass the F4 cross-check.
+    // Found by the riir-refine Issue-983 consumer lane's epoch test:
+    // two stamps differing only in covered state collided. v1 artifacts
+    // refuse loud at the version check — none shipped.)
     let mut h = blake3::Hasher::new();
     h.update(&version.to_le_bytes());
     h.update(&(rows.len() as u64).to_le_bytes());
     for (id, r) in rows {
         h.update(&(id.len() as u64).to_le_bytes());
         h.update(id.as_bytes());
+        h.update(&r.census_count.to_le_bytes());
         h.update(&r.census_digest);
+        h.update(&r.covered_count.to_le_bytes());
+        h.update(&r.covered_digest);
+        h.update(&r.gap_count.to_le_bytes());
+        h.update(&r.gap_digest);
+        match &r.gap_keys {
+            Some(keys) => {
+                h.update(&1u64.to_le_bytes());
+                h.update(&(keys.len() as u64).to_le_bytes());
+                for k in keys {
+                    h.update(&(k.len() as u64).to_le_bytes());
+                    h.update(k.as_bytes());
+                }
+            }
+            None => {
+                h.update(&0u64.to_le_bytes());
+            }
+        }
     }
     h.finalize().into()
 }
@@ -670,37 +713,42 @@ pub enum Suspicion {
     /// (a) count-vs-census — the lookup returned fewer entries than the
     /// pinned expectation for its query class. The ordering-law predicate:
     /// firing rate monotone non-decreasing in 1 − c, ≈ 0 at c = 1.
-    CountVsCensus {
-        expected: u64,
-        returned: u64,
-    },
+    CountVsCensus { expected: u64, returned: u64 },
     /// (b) truncation — returned tokens hit the pinned cap; the read may not
     /// be evidence for a final answer; re-issue narrow. Its OWN ordering law
     /// rides `covered_tokens / cap` (the amended F3 scope). **Blind spot:**
-    /// [`SPARSE_MEMORY_BLIND_SPOT`].
-    Truncation {
-        cap: u64,
-        returned_tokens: u64,
-    },
+    /// [`SPARSE_MEMORY_BLIND_SPOT`]. **Boundary pin (covered == cap): the
+    /// predicate FIRES** — by construction, since the observation carries
+    /// `returned_tokens` only and "content exactly fills the cap" is
+    /// indistinguishable from "content was cut"; the fire is a suspicion,
+    /// never a verdict, and F3's TP criterion (the narrowed re-issue) is
+    /// what adjudicates it. Suppressing at the boundary would need the
+    /// covered count inside the observation (an API change) and would
+    /// silence the one point of the axis where the read is ambiguous — the
+    /// wrong direction for a gap detector.
+    Truncation { cap: u64, returned_tokens: u64 },
     /// (c) section-coverage deficit — coverage ratio < 1. Fires ∝ deficit by
     /// definition (recorded as by-construction, never a precision finding).
-    CoverageDeficit {
-        covered: u64,
-        census: u64,
-    },
+    CoverageDeficit { covered: u64, census: u64 },
 }
 
 impl fmt::Display for Suspicion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::CountVsCensus { expected, returned } => {
-                write!(f, "(a) count-vs-census: returned {returned} < expected {expected}")
+                write!(
+                    f,
+                    "(a) count-vs-census: returned {returned} < expected {expected}"
+                )
             }
             Self::Truncation {
                 cap,
                 returned_tokens,
             } => {
-                write!(f, "(b) truncation: returned {returned_tokens} tokens == cap {cap}")
+                write!(
+                    f,
+                    "(b) truncation: returned {returned_tokens} tokens == cap {cap}"
+                )
             }
             Self::CoverageDeficit { covered, census } => {
                 write!(f, "(c) coverage-deficit: {covered}/{census} covered")
@@ -875,8 +923,14 @@ mod tests {
         // Leak into 'static: test-only helper; ids/keys are all 'static
         // literals shaped at runtime. Box::leak keeps the test honest about
         // the borrow without a lifetime-parameterized fixture type.
-        let src: Vec<&'static str> = src.into_iter().map(|s| &*Box::leak(s.into_boxed_str())).collect();
-        let cov: Vec<&'static str> = cov.into_iter().map(|s| &*Box::leak(s.into_boxed_str())).collect();
+        let src: Vec<&'static str> = src
+            .into_iter()
+            .map(|s| &*Box::leak(s.into_boxed_str()))
+            .collect();
+        let cov: Vec<&'static str> = cov
+            .into_iter()
+            .map(|s| &*Box::leak(s.into_boxed_str()))
+            .collect();
         SectionInput {
             section_id: Box::leak(id.to_string().into_boxed_str()),
             source_keys: Box::leak(src.into_boxed_slice()),
@@ -885,6 +939,75 @@ mod tests {
     }
 
     const GATE_ALL: fn(&str) -> bool = |_| true;
+
+    /// The digest-semantics regression (found by the riir-refine Issue-983
+    /// consumer lane): the whole-manifest identity binds EVERY stamped
+    /// field, so two stamps whose covered/gap state moved keep DIFFERENT
+    /// digests even when the census does not move — and a canonical tamper
+    /// of a covered/gap digest line refuses the F4 cross-check.
+    #[test]
+    fn manifest_digest_binds_covered_and_gap_state() {
+        // Same census, different covered state: DIFFERENT digests (v1
+        // collided here).
+        let wide = [section("a", 10, 6)];
+        let narrow = [section("a", 10, 4)];
+        let mw = CoverageManifest::stamp(&wide, StampPolicy::default(), &GATE_ALL).expect("stamps");
+        let mn =
+            CoverageManifest::stamp(&narrow, StampPolicy::default(), &GATE_ALL).expect("stamps");
+        assert_ne!(
+            mw.manifest_digest(),
+            mn.manifest_digest(),
+            "covered-state movement must move the whole-manifest digest"
+        );
+        // Same content, different retention: different digests too (the
+        // retention flag is stamped state).
+        let compact = [section("a", 10, 6)];
+        let mc = CoverageManifest::stamp(
+            &compact,
+            StampPolicy {
+                retain_gap_keys: false,
+            },
+            &GATE_ALL,
+        )
+        .expect("stamps");
+        assert_ne!(mc.manifest_digest(), mw.manifest_digest());
+
+        // A canonical TAMPER of the covered digest line (same counts, same
+        // census digest — only the covered digest moved) refuses the
+        // cross-check. v1 recomputed over the census digest alone and
+        // accepted exactly this corruption.
+        let bytes = mw.canonical_bytes();
+        let text = String::from_utf8(bytes).expect("canonical is text");
+        // The section id hex-encodes: 'a' -> "61".
+        const S_LINE: &str = "s 61 ";
+        let mut tampered: Option<String> = None;
+        for line in text.lines() {
+            if line.starts_with(S_LINE) {
+                // Field layout: s <id-hex> <census> <census-digest>
+                // <covered> <covered-digest> <gap> <gap-digest> <retain>
+                let mut f: Vec<&str> = line.split_whitespace().collect();
+                assert_eq!(f.len(), 9);
+                let mut d = f[5].to_string();
+                d.replace_range(0..2, if d.starts_with("ff") { "ee" } else { "ff" });
+                f[5] = Box::leak(d.into_boxed_str());
+                tampered = Some(f.join(" "));
+                break;
+            }
+        }
+        let tampered = tampered.expect("the section line");
+        let mut corrupted = Vec::new();
+        for line in text.lines() {
+            if line.starts_with(S_LINE) {
+                corrupted.push(tampered.clone());
+            } else {
+                corrupted.push(line.to_string());
+            }
+        }
+        assert!(
+            CoverageManifest::from_canonical(corrupted.join("\n").as_bytes()).is_err(),
+            "a covered-digest tamper must refuse the F4 cross-check"
+        );
+    }
 
     #[test]
     fn stamp_is_deterministic_and_counts_are_consistent() {
@@ -915,15 +1038,20 @@ mod tests {
         let r = m.row("a").expect("row a");
 
         // Independent derivation: BTreeSet difference over the same inputs.
-        let source: std::collections::BTreeSet<&str> =
-            (0..12).map(|i| &*Box::leak(format!("a_k{i}").into_boxed_str())).collect();
-        let covered: std::collections::BTreeSet<&str> =
-            (0..5).map(|i| &*Box::leak(format!("a_k{i}").into_boxed_str())).collect();
+        let source: std::collections::BTreeSet<&str> = (0..12)
+            .map(|i| &*Box::leak(format!("a_k{i}").into_boxed_str()))
+            .collect();
+        let covered: std::collections::BTreeSet<&str> = (0..5)
+            .map(|i| &*Box::leak(format!("a_k{i}").into_boxed_str()))
+            .collect();
         let independent: Vec<&str> = source.difference(&covered).copied().collect();
         assert_eq!(independent.len() as u64, r.gap_count);
         assert_eq!(keys_digest(&independent), r.gap_digest);
         let retained = r.gap_keys.as_ref().expect("retained");
-        assert_eq!(keys_digest(&retained.iter().map(|s| s.as_str()).collect::<Vec<_>>()), r.gap_digest);
+        assert_eq!(
+            keys_digest(&retained.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
+            r.gap_digest
+        );
 
         // Dangling gap key: the gate denies one key that lands in the gap.
         let secs2 = [section("d", 4, 1)];
@@ -944,8 +1072,14 @@ mod tests {
     #[test]
     fn f2_compact_manifest_still_decides() {
         let secs = [section("a", 10, 4)];
-        let m = CoverageManifest::stamp(&secs, StampPolicy { retain_gap_keys: false }, &GATE_ALL)
-            .expect("stamps");
+        let m = CoverageManifest::stamp(
+            &secs,
+            StampPolicy {
+                retain_gap_keys: false,
+            },
+            &GATE_ALL,
+        )
+        .expect("stamps");
         let r = m.row("a").expect("row a");
         assert_eq!(r.gap_count, 6);
         assert!(r.gap_keys.is_none(), "compact: gap keys dropped");
@@ -970,7 +1104,8 @@ mod tests {
         //    census; FP = the fire is a stale-manifest artifact (the source
         //    itself shrank; fresh census == returned). ──
         let live_ok = [section("a", 100, 60)];
-        let m_tp = CoverageManifest::stamp(&live_ok, StampPolicy::default(), &GATE_ALL).expect("stamps");
+        let m_tp =
+            CoverageManifest::stamp(&live_ok, StampPolicy::default(), &GATE_ALL).expect("stamps");
         let obs_tp = LookupObservation {
             section_id: "a",
             returned_count: 60,
@@ -982,14 +1117,20 @@ mod tests {
             .iter()
             .any(|s| matches!(s, Suspicion::CountVsCensus { .. }));
         // Fresh census: the source still holds 100 keys — the deficit is real.
-        let fresh: Vec<&str> = (0..100).map(|i| &*Box::leak(format!("a_k{i}").into_boxed_str())).collect();
-        m_tp.verify_live_section_census("a", keys_digest(&fresh)).expect("census current");
+        let fresh: Vec<&str> = (0..100)
+            .map(|i| &*Box::leak(format!("a_k{i}").into_boxed_str()))
+            .collect();
+        m_tp.verify_live_section_census("a", keys_digest(&fresh))
+            .expect("census current");
         assert!(fired_tp, "(a) fires on the real deficit — TP");
 
         // Stale-manifest FP: the source SHRANK after stamping.
-        let shrunk_source: Vec<&str> = (0..60).map(|i| &*Box::leak(format!("s_k{i}").into_boxed_str())).collect();
+        let shrunk_source: Vec<&str> = (0..60)
+            .map(|i| &*Box::leak(format!("s_k{i}").into_boxed_str()))
+            .collect();
         let stamped_world = [section("s", 100, 60)];
-        let m_fp = CoverageManifest::stamp(&stamped_world, StampPolicy::default(), &GATE_ALL).expect("stamps");
+        let m_fp = CoverageManifest::stamp(&stamped_world, StampPolicy::default(), &GATE_ALL)
+            .expect("stamps");
         let obs_fp = LookupObservation {
             section_id: "s",
             returned_count: 60,
@@ -1002,13 +1143,17 @@ mod tests {
             .any(|s| matches!(s, Suspicion::CountVsCensus { .. }));
         assert!(fired_fp, "(a) fires on the stale manifest");
         let fp = m_fp.verify_live_section_census("s", keys_digest(&shrunk_source));
-        assert!(fp.is_err(), "the staleness gate names the false fire (F4 aids F3(a))");
+        assert!(
+            fp.is_err(),
+            "the staleness gate names the false fire (F4 aids F3(a))"
+        );
         let precision_a: f64 = 1.0 / 2.0; // 1 TP of 2 fires — measured alone, never pooled
 
         // ── (b) truncation: TP = the narrow re-issue RECOVERS cut-off
         //    content; FP = the section genuinely ends at the cap. ──
         let deep = [section("d", 100, 100)];
-        let m_deep = CoverageManifest::stamp(&deep, StampPolicy::default(), &GATE_ALL).expect("stamps");
+        let m_deep =
+            CoverageManifest::stamp(&deep, StampPolicy::default(), &GATE_ALL).expect("stamps");
         let cap = 40u64;
         let obs_deep = LookupObservation {
             section_id: "d",
@@ -1017,12 +1162,19 @@ mod tests {
             expected_count: 100,
         };
         let sus = m_deep.suspicions(&obs_deep, cap);
-        assert!(sus.iter().any(|s| matches!(s, Suspicion::Truncation { .. })));
+        assert!(
+            sus.iter()
+                .any(|s| matches!(s, Suspicion::Truncation { .. }))
+        );
         let recovered = m_deep.row("d").unwrap().covered_count.saturating_sub(cap); // re-issue (2×cap read) recovers 60
-        assert!(recovered > 0, "(b) TP: the re-issue recovers cut-off content");
+        assert!(
+            recovered > 0,
+            "(b) TP: the re-issue recovers cut-off content"
+        );
 
         let ends_at_cap = [section("t", 40, 40)];
-        let m_end = CoverageManifest::stamp(&ends_at_cap, StampPolicy::default(), &GATE_ALL).expect("stamps");
+        let m_end = CoverageManifest::stamp(&ends_at_cap, StampPolicy::default(), &GATE_ALL)
+            .expect("stamps");
         let obs_end = LookupObservation {
             section_id: "t",
             returned_count: 40,
@@ -1030,7 +1182,11 @@ mod tests {
             expected_count: 40,
         };
         let sus_end = m_end.suspicions(&obs_end, cap);
-        assert!(sus_end.iter().any(|s| matches!(s, Suspicion::Truncation { .. })));
+        assert!(
+            sus_end
+                .iter()
+                .any(|s| matches!(s, Suspicion::Truncation { .. }))
+        );
         let recovered_fp = m_end.row("t").unwrap().covered_count.saturating_sub(cap);
         assert_eq!(recovered_fp, 0, "(b) FP: the re-issue recovers nothing");
         let precision_b: f64 = 1.0 / 2.0;
@@ -1049,8 +1205,17 @@ mod tests {
         // FP: a fire on a section whose gold is in the COVERED set.
         let gold_outside = m.row("x").unwrap().covered_count == 4
             && m.gap_event("x").is_some()
-            && !m.gap_event("x").unwrap().gap_keys().unwrap().iter().any(|k| k == "x_k1");
-        assert!(gold_outside, "(c) FP constructible: 'x_k1' is covered, the fire is gold-irrelevant");
+            && !m
+                .gap_event("x")
+                .unwrap()
+                .gap_keys()
+                .unwrap()
+                .iter()
+                .any(|k| k == "x_k1");
+        assert!(
+            gold_outside,
+            "(c) FP constructible: 'x_k1' is covered, the fire is gold-irrelevant"
+        );
         let precision_c: f64 = 1.0 / 2.0;
 
         // The three precisions are reported SEPARATELY — pooling them would
@@ -1058,6 +1223,29 @@ mod tests {
         assert!((precision_a - 0.5).abs() < 1e-12);
         assert!((precision_b - 0.5).abs() < 1e-12);
         assert!((precision_c - 0.5).abs() < 1e-12);
+    }
+
+    /// The covered == cap boundary pin (the closing verdict's note (i),
+    /// landed with the Issue-983 consumer): predicate (b) FIRES at the
+    /// boundary — by construction (the observation carries returned_tokens
+    /// only), with the narrowed re-issue as the adjudicator.
+    #[test]
+    fn truncation_boundary_covered_equals_cap_fires() {
+        let world = [section("bnd", 40, 40)];
+        let m = CoverageManifest::stamp(&world, StampPolicy::default(), &GATE_ALL).expect("stamps");
+        let cap = 40u64;
+        let obs = LookupObservation {
+            section_id: "bnd",
+            returned_count: 40,
+            returned_tokens: 40,
+            expected_count: 40,
+        };
+        let sus = m.suspicions(&obs, cap);
+        assert!(
+            sus.iter()
+                .any(|s| matches!(s, Suspicion::Truncation { .. })),
+            "covered == cap: the fire is BY CONSTRUCTION — adjudicated by the re-issue, never suppressed"
+        );
     }
 
     /// F3's amended ordering laws: (a) monotone non-decreasing in 1 − c and
@@ -1075,15 +1263,23 @@ mod tests {
         let mut rates_a = Vec::new();
         for covered in [100usize, 90, 80, 70, 60, 50] {
             let id = "law_a";
-            let m = CoverageManifest::stamp(&[section(id, 100, covered)], StampPolicy::default(), &GATE_ALL)
-                .expect("stamps");
+            let m = CoverageManifest::stamp(
+                &[section(id, 100, covered)],
+                StampPolicy::default(),
+                &GATE_ALL,
+            )
+            .expect("stamps");
             let mut fired = 0u32;
             for q in 0..8 {
                 let full_read = q < 4;
                 let obs = LookupObservation {
                     section_id: id,
                     returned_count: if full_read { covered as u64 } else { 10 },
-                    returned_tokens: if full_read { covered.min(40) as u64 } else { 10 },
+                    returned_tokens: if full_read {
+                        covered.min(40) as u64
+                    } else {
+                        10
+                    },
                     expected_count: if full_read { 100 } else { 10 },
                 };
                 if m.suspicions(&obs, cap)
@@ -1097,9 +1293,15 @@ mod tests {
         }
         // Monotone non-decreasing along 1 − c (c decreasing along the sweep).
         for w in rates_a.windows(2) {
-            assert!(w[1] >= w[0], "(a) rate must not decrease as coverage falls: {rates_a:?}");
+            assert!(
+                w[1] >= w[0],
+                "(a) rate must not decrease as coverage falls: {rates_a:?}"
+            );
         }
-        assert_eq!(rates_a[0], 0.0, "(a) ≈ 0 (exactly 0 on well-formed lookups) at c = 1");
+        assert_eq!(
+            rates_a[0], 0.0,
+            "(a) ≈ 0 (exactly 0 on well-formed lookups) at c = 1"
+        );
 
         // (b): trigger rate monotone non-decreasing in covered/cap, exactly
         // 0 while the covered content fits under the cap.
@@ -1133,19 +1335,30 @@ mod tests {
         for (i, r) in rates_b.iter().enumerate() {
             let covered = [10usize, 20, 30, 40, 60, 80][i];
             if covered < cap as usize {
-                assert_eq!(*r, 0.0, "(b) exactly 0 while covered ({covered}) fits under the cap");
+                assert_eq!(
+                    *r, 0.0,
+                    "(b) exactly 0 while covered ({covered}) fits under the cap"
+                );
             }
         }
 
         // (c): by-construction — the ratio is exact and the fire is the
         // deficit itself (RECORDED, never asserted as a finding).
-        let m = CoverageManifest::stamp(&[section("law_c", 10, 3)], StampPolicy::default(), &GATE_ALL)
-            .expect("stamps");
+        let m = CoverageManifest::stamp(
+            &[section("law_c", 10, 3)],
+            StampPolicy::default(),
+            &GATE_ALL,
+        )
+        .expect("stamps");
         assert!((m.coverage_ratio("law_c").unwrap() - 0.3).abs() < 1e-12);
 
         // ALL predicates: gap events = 0 at c = 1 — even when (b) triggers.
-        let full = CoverageManifest::stamp(&[section("full", 100, 100)], StampPolicy::default(), &GATE_ALL)
-            .expect("stamps");
+        let full = CoverageManifest::stamp(
+            &[section("full", 100, 100)],
+            StampPolicy::default(),
+            &GATE_ALL,
+        )
+        .expect("stamps");
         let obs = LookupObservation {
             section_id: "full",
             returned_count: 100,
@@ -1153,12 +1366,20 @@ mod tests {
             expected_count: 100,
         };
         let sus = full.suspicions(&obs, cap);
-        assert!(sus.iter().any(|s| matches!(s, Suspicion::Truncation { .. })), "(b) triggers at c=1");
         assert!(
-            !sus.iter().any(|s| matches!(s, Suspicion::CountVsCensus { .. })),
+            sus.iter()
+                .any(|s| matches!(s, Suspicion::Truncation { .. })),
+            "(b) triggers at c=1"
+        );
+        assert!(
+            !sus.iter()
+                .any(|s| matches!(s, Suspicion::CountVsCensus { .. })),
             "(a) silent at c = 1"
         );
-        assert!(full.gap_event("full").is_none(), "c = 1 endpoint: the gap set is EMPTY for every predicate");
+        assert!(
+            full.gap_event("full").is_none(),
+            "c = 1 endpoint: the gap set is EMPTY for every predicate"
+        );
     }
 
     /// F4 — staged replay: three growth stages, byte-identical protocol
@@ -1169,8 +1390,8 @@ mod tests {
         let mut manifests = Vec::new();
         for (stage, (n, c)) in [(1usize, (20usize, 10usize)), (2, (40, 20)), (3, (60, 30))].iter() {
             let secs = [section("facts", *n, *c)];
-            let m = CoverageManifest::stamp(&secs, StampPolicy::default(), &GATE_ALL)
-                .expect("stamps");
+            let m =
+                CoverageManifest::stamp(&secs, StampPolicy::default(), &GATE_ALL).expect("stamps");
             manifests.push((*stage, m, *n));
         }
 
@@ -1187,7 +1408,11 @@ mod tests {
                 out.push_str(&format!("{s}\n"));
             }
             if let Some(ev) = m.gap_event("facts") {
-                out.push_str(&format!("gap:{}:{}\n", ev.gap_count(), digest_hex(&ev.gap_digest())));
+                out.push_str(&format!(
+                    "gap:{}:{}\n",
+                    ev.gap_count(),
+                    digest_hex(&ev.gap_digest())
+                ));
             }
             out
         };
@@ -1196,17 +1421,29 @@ mod tests {
             let a = protocol_output(m, *n);
             let b = protocol_output(m, *n);
             assert_eq!(a, b, "stage {stage}: replay must be byte-identical");
-            let live: Vec<&str> = (0..*n).map(|i| &*Box::leak(format!("facts_k{i}").into_boxed_str())).collect();
+            let live: Vec<&str> = (0..*n)
+                .map(|i| &*Box::leak(format!("facts_k{i}").into_boxed_str()))
+                .collect();
             m.verify_live_section_census("facts", keys_digest(&live))
                 .unwrap_or_else(|e| panic!("stage {stage}: live census must validate: {e}"));
         }
 
         // Cross-stage: a stale census refuses loud (never silently validates).
-        let live_stage3: Vec<&str> = (0..60).map(|i| &*Box::leak(format!("facts_k{i}").into_boxed_str())).collect();
-        let err = manifests[0].1.verify_live_section_census("facts", keys_digest(&live_stage3));
-        assert!(err.is_err(), "stage-1 manifest against the stage-3 census must refuse");
+        let live_stage3: Vec<&str> = (0..60)
+            .map(|i| &*Box::leak(format!("facts_k{i}").into_boxed_str()))
+            .collect();
+        let err = manifests[0]
+            .1
+            .verify_live_section_census("facts", keys_digest(&live_stage3));
+        assert!(
+            err.is_err(),
+            "stage-1 manifest against the stage-3 census must refuse"
+        );
         // And the digests are all distinct (growth is observable).
-        assert_ne!(manifests[0].1.manifest_digest(), manifests[2].1.manifest_digest());
+        assert_ne!(
+            manifests[0].1.manifest_digest(),
+            manifests[2].1.manifest_digest()
+        );
     }
 
     /// Canonical form: strict round-trip, corruption refusal, and the
@@ -1222,17 +1459,20 @@ mod tests {
         assert_eq!(m2.row("a").unwrap().gap_keys, m.row("a").unwrap().gap_keys);
 
         // Tampered version refuses loud.
-        let bad = String::from_utf8(bytes.clone())
-            .unwrap()
-            .replacen(&format!("{MANIFEST_MAGIC} {MANIFEST_FORMAT_VERSION}"), &format!("{MANIFEST_MAGIC} 99"), 1);
+        let bad = String::from_utf8(bytes.clone()).unwrap().replacen(
+            &format!("{MANIFEST_MAGIC} {MANIFEST_FORMAT_VERSION}"),
+            &format!("{MANIFEST_MAGIC} 99"),
+            1,
+        );
         let err = CoverageManifest::from_canonical(bad.as_bytes()).unwrap_err();
         assert!(err.contains("unsupported manifest format version"), "{err}");
 
         // Tampered COUNT breaks the digest cross-check (row-consistency or
         // manifest-digest refusal — either is loud).
-        let tampered = String::from_utf8(bytes.clone())
-            .unwrap()
-            .replacen("sections 2", "sections 3", 1);
+        let tampered =
+            String::from_utf8(bytes.clone())
+                .unwrap()
+                .replacen("sections 2", "sections 3", 1);
         assert!(CoverageManifest::from_canonical(tampered.as_bytes()).is_err());
 
         // Tampered gap-count breaks the row-consistency check (field 7 of
@@ -1268,13 +1508,33 @@ mod tests {
     #[test]
     fn trace_linter_metrics_and_coverage_note() {
         let trace = vec![
-            TraceEvent::Query { section: "a".into() },
-            TraceEvent::Lookup { section: "a".into(), returned_count: 5, returned_tokens: 40 },
-            TraceEvent::GapCheck { section: "a".into(), fired: true },
-            TraceEvent::GapKeyLookup { section: "a".into() },
-            TraceEvent::Query { section: "b".into() },
-            TraceEvent::Lookup { section: "b".into(), returned_count: 3, returned_tokens: 12 },
-            TraceEvent::GapCheck { section: "b".into(), fired: false },
+            TraceEvent::Query {
+                section: "a".into(),
+            },
+            TraceEvent::Lookup {
+                section: "a".into(),
+                returned_count: 5,
+                returned_tokens: 40,
+            },
+            TraceEvent::GapCheck {
+                section: "a".into(),
+                fired: true,
+            },
+            TraceEvent::GapKeyLookup {
+                section: "a".into(),
+            },
+            TraceEvent::Query {
+                section: "b".into(),
+            },
+            TraceEvent::Lookup {
+                section: "b".into(),
+                returned_count: 3,
+                returned_tokens: 12,
+            },
+            TraceEvent::GapCheck {
+                section: "b".into(),
+                fired: false,
+            },
         ];
         let m = TraceLinter::over(&trace);
         assert_eq!(m.queries, 2);
@@ -1346,14 +1606,29 @@ mod tests {
         let gold_b = "b_k61"; // B's gold is a gap key; C's gold is covered.
         let gold_c = "c_k3";
         let sections = [
-            SectionInput { section_id: "b", source_keys: b_source.as_slice(), covered_keys: b_covered.as_slice() },
-            SectionInput { section_id: "c", source_keys: c_source.as_slice(), covered_keys: c_covered.as_slice() },
-            SectionInput { section_id: "s", source_keys: s_source.as_slice(), covered_keys: s_covered.as_slice() },
+            SectionInput {
+                section_id: "b",
+                source_keys: b_source.as_slice(),
+                covered_keys: b_covered.as_slice(),
+            },
+            SectionInput {
+                section_id: "c",
+                source_keys: c_source.as_slice(),
+                covered_keys: c_covered.as_slice(),
+            },
+            SectionInput {
+                section_id: "s",
+                source_keys: s_source.as_slice(),
+                covered_keys: s_covered.as_slice(),
+            },
         ];
-        let m = CoverageManifest::stamp(&sections, StampPolicy::default(), &GATE_ALL).expect("stamps");
+        let m =
+            CoverageManifest::stamp(&sections, StampPolicy::default(), &GATE_ALL).expect("stamps");
 
         // The live world: S's source shrank to 60 keys; B and C unchanged.
-        let live_s: Vec<&str> = (0..60).map(|i| &*Box::leak(format!("s_k{i}").into_boxed_str())).collect();
+        let live_s: Vec<&str> = (0..60)
+            .map(|i| &*Box::leak(format!("s_k{i}").into_boxed_str()))
+            .collect();
 
         // ── The static coverage-report cousin: fire iff coverage < 1.
         //    Adjudication (gold ∈ gap AND the deficit is real against the
@@ -1363,15 +1638,39 @@ mod tests {
             .iter()
             .filter(|&&s| m.coverage_ratio(s).is_some_and(|r| r < 1.0))
             .count();
-        assert_eq!(static_fires, 3, "the static report flags every under-covered section");
+        assert_eq!(
+            static_fires, 3,
+            "the static report flags every under-covered section"
+        );
         let static_precision = 1.0 / 3.0;
 
-        let obs_b = LookupObservation { section_id: "b", returned_count: 60, returned_tokens: 60, expected_count: 100 };
-        let obs_c = LookupObservation { section_id: "c", returned_count: 1, returned_tokens: 1, expected_count: 1 };
-        let obs_s = LookupObservation { section_id: "s", returned_count: 60, returned_tokens: 60, expected_count: 100 };
-        m.verify_live_section_census("b", keys_digest(b_source.as_slice())).expect("b current");
-        m.verify_live_section_census("c", keys_digest(c_source.as_slice())).expect("c current");
-        assert!(m.verify_live_section_census("s", keys_digest(live_s.as_slice())).is_err(), "s is stale — the F4 gate names it");
+        let obs_b = LookupObservation {
+            section_id: "b",
+            returned_count: 60,
+            returned_tokens: 60,
+            expected_count: 100,
+        };
+        let obs_c = LookupObservation {
+            section_id: "c",
+            returned_count: 1,
+            returned_tokens: 1,
+            expected_count: 1,
+        };
+        let obs_s = LookupObservation {
+            section_id: "s",
+            returned_count: 60,
+            returned_tokens: 60,
+            expected_count: 100,
+        };
+        m.verify_live_section_census("b", keys_digest(b_source.as_slice()))
+            .expect("b current");
+        m.verify_live_section_census("c", keys_digest(c_source.as_slice()))
+            .expect("c current");
+        assert!(
+            m.verify_live_section_census("s", keys_digest(live_s.as_slice()))
+                .is_err(),
+            "s is stale — the F4 gate names it"
+        );
 
         // The adjudicator: a fire is a TP iff the section's gap set carries
         // the gold key AND the deficit is real against the fresh census (the
@@ -1390,7 +1689,15 @@ mod tests {
                 (&obs_s, "s_k99", false), // stale: the gate refuses; no live adjudication
             ] {
                 let gate_ok = if live_ok {
-                    m.verify_live_section_census(obs.section_id, keys_digest(if obs.section_id == "b" { b_source.as_slice() } else { c_source.as_slice() })).is_ok()
+                    m.verify_live_section_census(
+                        obs.section_id,
+                        keys_digest(if obs.section_id == "b" {
+                            b_source.as_slice()
+                        } else {
+                            c_source.as_slice()
+                        }),
+                    )
+                    .is_ok()
                 } else {
                     false
                 };
@@ -1398,6 +1705,8 @@ mod tests {
                     continue; // the F4 gate: refuse to fire on a stale census
                 }
                 let sus = m.suspicions(obs, 40);
+                #[allow(clippy::redundant_closure)]
+                // `triggers` is a &dyn Fn — the fn-pointer suggestion does not coerce
                 if sus.iter().any(|s| triggers(s)) {
                     if adjudicate(obs.section_id, gold) {
                         tp += 1;
@@ -1410,14 +1719,20 @@ mod tests {
         };
         let any_suspicion = |_s: &Suspicion| -> bool { true };
         let lookup_anomaly = |s: &Suspicion| -> bool {
-            matches!(s, Suspicion::CountVsCensus { .. } | Suspicion::Truncation { .. })
+            matches!(
+                s,
+                Suspicion::CountVsCensus { .. } | Suspicion::Truncation { .. }
+            )
         };
 
         // Full-trigger posture, ARMED: b fires (TP), c fires via (c) (FP),
         // s is gate-suppressed → 1/2 — the F4 gate alone beats the cousin.
         let (tp_full, fp_full) = measure(&any_suspicion);
         assert_eq!(tp_full, 1);
-        assert_eq!(fp_full, 1, "c fires via (c) even with the gate armed — the honest cost of the full-trigger posture");
+        assert_eq!(
+            fp_full, 1,
+            "c fires via (c) even with the gate armed — the honest cost of the full-trigger posture"
+        );
         let full_armed_precision = f64::from(tp_full) / f64::from(tp_full + fp_full);
         assert!(full_armed_precision > static_precision);
 
@@ -1437,8 +1752,14 @@ mod tests {
         // The gate's contribution is separable: with the gate DISARMED, s
         // fires falsely in both postures.
         let sus_s = m.suspicions(&obs_s, 40);
-        assert!(!sus_s.is_empty(), "disarmed, the stale manifest still fires");
-        assert!(sus_s.iter().any(lookup_anomaly), "(a) fires on the stale census");
+        assert!(
+            !sus_s.is_empty(),
+            "disarmed, the stale manifest still fires"
+        );
+        assert!(
+            sus_s.iter().any(lookup_anomaly),
+            "(a) fires on the stale census"
+        );
     }
 
     /// Refusals: duplicate keys, covered-not-in-source, duplicate section
@@ -1468,7 +1789,11 @@ mod tests {
             CoverageManifest::stamp(&dup_section, StampPolicy::default(), &GATE_ALL),
             Err(StampRefusal::DuplicateSectionId { id }) if id == "a"
         ));
-        let empty = [SectionInput { section_id: "", source_keys: &["x"], covered_keys: &[] }];
+        let empty = [SectionInput {
+            section_id: "",
+            source_keys: &["x"],
+            covered_keys: &[],
+        }];
         assert!(matches!(
             CoverageManifest::stamp(&empty, StampPolicy::default(), &GATE_ALL),
             Err(StampRefusal::EmptySectionId)
