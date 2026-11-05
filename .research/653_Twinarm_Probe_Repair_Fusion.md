@@ -31,8 +31,30 @@
 > Bench-608 table, oracle deltas immaterial on every suite (ag_news −1.00 pt — the merged
 > columns acted as useful co-occurrence features; emotion +1.50 pt fails the one-sided
 > LCB95 at n=200; the rest 0.00). **Class 2 folded as a recorded negative per the fold
-> law**; the class-1 repair leg proceeds to T2. §3's census verdict above is now
-> measured, not just predicted.
+> law.**
+>
+> **Status delta 2026-11-05 (T2 executed — THE LANE FOLDED):** the G1 fixture gate ran
+> (riir-instinct `b98e759`, record `0064_g1_probe_repair_fixture`). The machinery passed
+> its structural gates — proportional-alternation split, corrupted-teacher collapse (Arm
+> B 0.7550 on both slices), the within-gold pool-contrast parse recovered all 4 planted
+> arcs exactly (the CROSS-gold contrast is confounded by the topical signal — measured
+> on the first cut; the within-gold contrast + positive-slope filter is the recorded
+> correction for any future lane), zero-strength bit-identity, isolation — and the
+> repair beat its unrepaired base (Δ +0.2400, LCB95 +0.1902). **The value claim FAILED:
+> fair b1 continue-train-on-gold (k=1 epoch, warm-started) reached eval 1.0000 vs the
+> repair's 0.9950 — Δ −0.0050, LCB95 −0.0132.** On a linear fixture with adequate clean
+> gold, the generic move toward the gold optimum wins — §3's documented boundary, now
+> measured. The fold law executed: the lane module + bins + feature REMOVED from
+> riir-instinct (no zombie module); the trainer-side primitives stayed as tested
+> capabilities (source-granularity tokenizer projection, the un-collided oracle remap,
+> the warm-start continuation). **The katgpt-core substrate's own pre-registered
+> demotion law has now fired** ("the PoC battery failing its identification/repair arms
+> records the negative and the lane folds into weight_edit_overlay") — `probe_circuit_grammar`
+> is due to fold into `weight_edit_overlay` as katgpt-rs housekeeping (opt-in, no default
+> consumer, inert until then). A future revival is a NEW pre-registration with a fixture
+> design that actually separates the repair from continue-train (scarcer gold, broader
+> poison) — this fold is evidence about the value claim on THIS fixture, not about the
+> mechanism's existence.
 
 The twinarm lane is the consumer Research 649's §8 promotion gate was waiting for, and the
 one surface Research 650's sweep did not cover. The specialist heads are **linear one-vs-all
