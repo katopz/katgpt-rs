@@ -1985,6 +1985,9 @@ pub mod runetrace;
 #[cfg(feature = "kv_sink_window")]
 pub mod kv_sink_window;
 
+#[cfg(feature = "coverage_manifest")]
+pub mod coverage_manifest;
+
 #[cfg(feature = "step_noise")]
 pub mod step_noise;
 

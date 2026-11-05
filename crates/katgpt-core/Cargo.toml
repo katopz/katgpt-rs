@@ -1520,6 +1520,26 @@ legal_token_set = []
 # to take the policy WITHOUT the scorer it is defined against.
 kv_sink_window = ["usage_rate_eviction"]
 
+# coverage_manifest (katgpt-rs Issue 983, Research 654 §5 modelless track):
+# the Coverage-Manifested Memory + Suspicion-Triggered Gap-Check protocol —
+# the memory builder stamps per-section rows ONCE at build time (counts +
+# BLAKE3 digests over the sorted source/covered/GAP key sets; the gap
+# set-difference is computed at STAMP time, never per query — F2; optionally
+# retains the gap keys for targeted lookups), three deterministic suspicion
+# predicates (count-vs-census / truncation / coverage-deficit) read in O(1),
+# gap events carry the action, verify_live_section_census refuses a stale
+# census LOUD (F4). F1 two-derivation agreement + dangling-gap-key refusal;
+# F3 per-predicate precision + the AMENDED ordering laws ((a) monotone in
+# 1−c; (b) monotone in covered_tokens/cap on its OWN axis — the pre-data
+# verdict correction recorded in the issue; (c) by construction) + gap
+# events = 0 at c=1 for ALL predicates; TraceLinter emits the four behavior
+# metrics with the sparse-memory blind-spot note. Opt-in, DEFAULT-OFF,
+# report-only first — no consumer wired yet (T1's first consumer is the
+# refine heal-lane corpus-gap event); promotion only via a wired consumer +
+# the precision-per-fire GOAT vs the static coverage-report cousin. Cost +
+# coverage-accounting axes only, never accuracy parity (Research 654 W1–W6).
+coverage_manifest = []
+
 # rls_depth_mem (Plan 630, 2026-10-21): exact-online recursive least-squares
 # associative memory — the paper's RLS write (κ = Pk̃/(λ+k̃ᵀPk̃), u = v−Mk̃,
 # M += uκᵀ, symmetric-by-construction P downdate), M-only unwind + P-triangle

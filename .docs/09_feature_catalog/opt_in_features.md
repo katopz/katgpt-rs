@@ -6385,3 +6385,44 @@ bandit lanes (Plan 030 scope) unchanged. Gate battery:
 `tests/issue979_regret_guard_gates.rs` (9 tests); bench:
 `benches/issue979_regret_guard_goat.rs`; record:
 [Bench 977](../../.benchmarks/977_issue979_regret_guard_goat.md).
+
+## 161. coverage_manifest — Coverage-Manifested Memory + Suspicion-Triggered Gap-Check (Issue 983 / Research 654 §5)
+
+The Engram-blog agent's deterministic gap-check, extracted modelless: the
+memory builder stamps per-section rows ONCE at build time — counts + BLAKE3
+digests over the sorted source/covered/GAP key sets, the gap set-difference
+computed at STAMP time (F2: never a per-query re-enumeration), optionally
+retaining the gap keys for targeted lookups. Three deterministic suspicion
+predicates read in O(1) over pinned expectations — (a) count-vs-census (the
+lookup returned fewer entries than the caller's pinned per-query-class
+expectation), (b) truncation (returned tokens hit the pinned cap; re-issue
+narrow), (c) coverage-deficit (ratio < 1) — and `gap_event` carries the
+action (targeted lookup / escalate / `--misses`-style intake event).
+
+- `CoverageManifest::stamp` refuses ambiguity loud: duplicate keys,
+  covered-not-in-source, duplicate/empty section ids, and — F1 — a DANGLING
+  gap key (no executable lookup). Two-derivation agreement is gate-tested.
+- `verify_live_section_census` refuses a stale census LOUD (F4); staged
+  replay is byte-identical given identical inputs.
+- F3 precision is PER-PREDICATE, never pooled, and the ordering laws carry
+  the pre-data verdict correction (issue-recorded): (a) monotone non-
+  decreasing in 1 − c and exactly 0 at c = 1; (b) monotone non-decreasing in
+  `covered_tokens/cap` on its OWN axis — at c = 0 it never triggers (no
+  content to truncate), so the original "monotone in 1 − c" scope was
+  unsatisfiable for it; (c) by construction. Gap events = 0 at c = 1 for
+  ALL predicates (asserted).
+- **Blind spot (predicate docs + the TraceLinter coverage note):** (b)
+  cannot detect gaps in sparse memory — low-coverage detection belongs to
+  (a) alone.
+- `TraceLinter` reads a decision trace into the four behavior metrics
+  (checks/query, lookups/query, tokens/lookup, link-follow share).
+
+🔧 Feature flag: `coverage_manifest` (katgpt-core). **OPT-IN, DEFAULT-OFF,
+report-only first** — no consumer wired yet (T1's first consumer is the
+riir-refine heal-lane corpus-gap event). GOAT cell (in-lane synthetic eval,
+disclosed): lookup-anomaly posture 1/1 > full-trigger 1/2 > static
+coverage-report cousin 1/3 — the full-trigger margin is the F4 staleness
+gate alone; the lookup-anomaly posture adds the per-class pinned
+expectation. Cost + coverage-accounting axes only, never accuracy parity
+with a trained reader (Research 654 W1–W6). Promotion only via a wired
+consumer + a real-corpus cell.
