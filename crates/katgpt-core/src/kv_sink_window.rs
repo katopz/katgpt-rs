@@ -61,11 +61,17 @@
 
 use crate::float_order;
 
+pub mod audit;
 pub mod policy;
 
 #[cfg(test)]
 mod tests;
 
+pub use audit::{
+    AUDIT_N_SINK_FLOOR, AUDIT_PROFILE_SINK_MIN, AuditedSinkPolicy, SINKFREE_F_ATTN_MAX,
+    SINKHEAVY_F_ATTN_MIN, SinkAuditProfile, SinkAuditVerdict,
+};
+pub use audit::{accumulate_head_mass_into, finalize_profile};
 pub use policy::{SinkWindowPolicy, SlotClass, WindowFidelity};
 
 /// Eviction-priority order under a sink + window policy, reusing `out`.

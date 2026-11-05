@@ -210,6 +210,7 @@ sp_kv = ["katgpt-kv/sp_kv"]  # SP-KV self-pruned key-value attention (Plan 070).
 tiled_attention = ["katgpt-core/tiled_attention", "katgpt-forward/tiled_attention"]  # Tiled online-softmax flash attention for CPU SIMD (Plan 115). Forwarded to katgpt-forward so ForwardContext's tiled_* repacking buffers compile (Issue 007 Phase F).
 parallax_attn = ["tiled_attention", "newton_schulz", "katgpt-core/parallax_attn"]  # Parallax parameterized local linear attention — R projection + covariance correction (Plan 135, Research 135) — opt-in, requires Muon-trained weights
 sink_aware_attn = ["data_probe"]  # Sink-Aware Attention — dual-policy sigmoid gate (Plan 287 Phase 3, Research 258, arxiv 2606.08105). Implies data_probe for the classifier primitive. Opt-in — Plan 287 GOAT gate RAN (.plans/287_sink_aware_attention.md status 'Complete (Phases 1–5)' 2026-06-XX): G1 ✅ PASS (8 unit tests in sink_classify.rs), synthetic G2 ✅ PASS (Broadcast head unchanged + NOP head scaled), **G3 ❌ FAIL (latency)** — 1671% overhead at n=128, d_h=64 (target ≤5%) per .benchmarks/059_sink_aware_goat.md. NOT promoted to default — demoted to opt-in diagnostic only. Standalone apply_dual_policy_gate ships; direct wiring into parallax_attn / funcattn forward paths deferred.
+kv_sink_window = ["katgpt-core/kv_sink_window"]  # Permanent attention sinks + a bounded KV window (Issue 841, Research 571 §B-8) + the Issue-981 sink-audit policy switch (accumulate_head_mass_into / SinkAuditVerdict / from_audit). Pure-local root forward for the bench lane (bench_981_sink_audit_switch_goat); opt-in — the census is a once-per-checkpoint offline pass, the policy selector is a constructor.
 ssmax_temperature = ["katgpt-core/ssmax_temperature"]  # SSMax — length-aware log-N attention temperature (Plan 411, Research 392, arxiv 2607.01538 Gollapudi et al.). Multiplicative pre-attention logit rescaling `s̃ = s_L · log(N) · s` that cancels the (N−1) denominator growth in the attention dilution bound. Default `s_L = 1.0` is truly modelless (zero training). Composes with `parallax_attn` (sigmoid) and `attention.rs` (SDPA); does NOT apply to `funcattn` (Research 261 closed negative). DEFAULT-ON via katgpt-core default (Plan 411 Phase 5, 2026-07-07): G1+G2+G3+G4+G5 ALL PASS. Zero runtime cost unless invoked (ParallaxConfig.ssmax defaults None; apply_ssmax_to_row is a no-op when None; ssmax_none_is_bit_identical_to_base test verifies zero default-behavior change). This root-level flag remains a forwarding shim for explicit opt-in by external consumers.
 ssmax_adaptive = ["katgpt-core/ssmax_adaptive"]  # SSMax built-in rolling-Δ estimator (Plan 411 S2). `RollingDeltaEstimator` forwarding shim — lock-free EMA of max-mean proxy for the gold-distractor gap Δ. Opt-in — S2 GOAT gate G1-G5 ALL PASS (2026-07-07, .benchmarks/411_ssmax_adaptive_goat.md — G2 headline: estimator *beats* analytical oracle cos 0.975 vs 0.972); stays opt-in pending riir-ai runtime PoC on real (non-synthetic) attention distributions.
 gold_share_probe = ["data_probe", "katgpt-core/gold_share_probe"]  # GoldShare — content-specific output-fraction diagnostic `‖a^G_L‖ / ‖a_L‖` (Plan 411, Research 392, arxiv 2607.01538 Gollapudi et al.). Decomposes a layer's attention output into gold-derived vs distractor-derived fractions; detects when output has been rewritten from gold-content to aggregate-noise at comparable magnitude (the paper's recall-generation gap diagnostic). Complements `effective_rank` (content-agnostic) and `stable_rank_update` (per-sink). Opt-in diagnostic; implies data_probe + sink_aware_attn.
@@ -3724,6 +3725,21 @@ required-features = ["go"]
 name = "bench_841_legal_token_set_goat"
 path = "benches/bench_841_legal_token_set_goat.rs"
 required-features = ["legal_token_set"]
+harness = false
+
+# Issue 981 T3 — the sink-audit policy-switch GOAT (extends the kv_sink_window
+# module's gate surface): G2 discrimination on synthetic planted-sink vs
+# sink-free surfaces (the paper's cluster ordering by construction; the REAL
+# gated-vs-ungated checkpoint pair is the census lane's fixture, riir-infer
+# side), G3 the verdict→posture switch grid, the planted-sink canaries MUST
+# trip, a population floor on scanned observations, G1 determinism, and G4
+# alloc-free census pass (alloc_tracking profile). "bench_841" is TAKEN by the
+# legal-token-set bench (a different Issue 841) — this one carries its own
+# issue number instead.
+[[bench]]
+name = "bench_981_sink_audit_switch_goat"
+path = "benches/bench_981_sink_audit_switch_goat.rs"
+required-features = ["kv_sink_window"]
 harness = false
 
 # Issue 871 — strict IEEE ordered-reduction dot vs Rust 1.98 algebraic_*
