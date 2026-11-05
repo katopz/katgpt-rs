@@ -1,6 +1,7 @@
 # Issue 983: PoC — Coverage-Manifested Memory + Suspicion-Triggered Gap-Check (modelless protocol)
 
 **Status:** Open — fusion idea, novelty TBD pending the PoC precision gate (F3)
+**Claimed:** zed-m3-i983poc, 1793953746, expires 2026-11-07T20:00:00+00:00
 **Date:** 2026-11-05
 **Source:** `../.research/654_Engram_Notes_RL_Strategy_Not_Content.md` — Engram blog "Learning in a world of notes" (2026-11-04); the trained model's learned gap-check behavior, extracted modelless. Training-track sibling: `../riir-train/.plans/486_notes_usage_rl_cost_sweep_drift_curriculum.md`.
 
