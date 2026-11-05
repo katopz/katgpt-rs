@@ -1076,6 +1076,17 @@ pub fn norm_matched_random_direction(seed: u64, dim: usize, out: &mut [f32]) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Folded lane: the Research-649 probe-authored derivation
+// ─────────────────────────────────────────────────────────────────────
+
+// The probe_circuit_grammar lane FOLDED into this module (2026-11-06): its
+// own pre-registered demotion law fired — the twinarm consumer PoC's G1
+// value claim failed (the repair lost to fair continue-train-on-gold;
+// riir-instinct record 0064). The probe-parse machinery + its PoC battery
+// stay as the attribution record, compiled whenever this feature is on.
+pub mod probe_circuit_grammar;
+
+// ─────────────────────────────────────────────────────────────────────
 // Unit tests
 // ─────────────────────────────────────────────────────────────────────
 

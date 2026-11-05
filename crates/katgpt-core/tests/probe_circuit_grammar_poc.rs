@@ -46,13 +46,18 @@
 //! row (the shipped parse reads ONE readout surface — a region-conditional
 //! gap row is out of scope for the smallest step and recorded as such).
 //!
+//! Fold (2026-11-06): the lane folded into `weight_edit_overlay` — its own
+//! pre-registered demotion law fired (the twinarm consumer PoC's G1 value
+//! claim failed; riir-instinct record 0064). This battery stays as the
+//! attribution record, now keyed to the carrier feature.
+//!
 //! Green-zero rule: whole-file `#![cfg]` + `required-features` row pair.
 
-#![cfg(feature = "probe_circuit_grammar")]
+#![cfg(feature = "weight_edit_overlay")]
 
 use std::cell::Cell;
 
-use katgpt_core::probe_circuit_grammar::{
+use katgpt_core::weight_edit_overlay::probe_circuit_grammar::{
     CircuitBinding, GateConfig, ProbePools, StepTap, binding_to_spec, derive_strength_grid,
     discover_gated_drive, emit_word, parse_circuit,
 };

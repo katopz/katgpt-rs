@@ -1717,12 +1717,12 @@ pub mod quant_error_lora;
 // Issue 980 — WeightEditOverlay (Research 648 modelless half): implies
 // gain_cost_halt because the arming condition IS the halter's obstacle
 // telemetry (HaltReason::Oscillation rate).
-// Research 649 — probe-authored weight-edit derivation (fn-grammar +
-// params-vocab): activation probes replace the 648 lane's reasoning-model
-// author; implies weight_edit_overlay (the vocabulary it emits into + the
-// arming telemetry it consumes).
-#[cfg(feature = "probe_circuit_grammar")]
-pub mod probe_circuit_grammar;
+// Research 649 — the probe-authored derivation lane (fn-grammar +
+// params-vocab) FOLDED into this module 2026-11-06: its own pre-registered
+// demotion law fired (the twinarm consumer PoC's G1 value claim failed —
+// riir-instinct record 0064). The probe-parse machinery + its PoC battery
+// stay as the submodule `weight_edit_overlay::probe_circuit_grammar`
+// (attribution record, no separate feature).
 #[cfg(feature = "weight_edit_overlay")]
 pub mod weight_edit_overlay;
 #[cfg(feature = "weight_edit_overlay")]

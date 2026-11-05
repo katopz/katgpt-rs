@@ -7,12 +7,13 @@
 //! continue-train-on-gold (eval 0.9950 vs 1.0000, Δ −0.0050, LCB95 −0.0132) —
 //! the fold law the feature row pre-registered fires. Record:
 //! `../riir-instinct/.benchmarks/0064_g1_probe_repair_fixture/G1.md` (plus the
-//! class-2 census negative, record 0063). The lane folds into
-//! [`crate::weight_edit_overlay`] per this module's own demotion law; the code
-//! stays (opt-in, no default consumer, the RL-lane machinery + tests are the
-//! attribution record's implementation) until that housekeeping merge lands.
-//! A revival is a NEW pre-registration with a fixture design that separates
-//! the repair from continue-train (scarcer gold, broader poison).
+//! class-2 census negative, record 0063). The lane has FOLDED into
+//! [`crate::weight_edit_overlay`] per its own demotion law: this is now a
+//! submodule of the carrier, compiled whenever `weight_edit_overlay` is on —
+//! there is no separate feature (the 2026-11-06 housekeeping merge). The
+//! machinery + tests stay as the attribution record. A revival is a NEW
+//! pre-registration with a fixture design that separates the repair from
+//! continue-train (scarcer gold, broader poison).
 //!
 //! Research 649 (fusion on Research 648 / Issue 980): the 648 lane's author
 //! was a reasoning model (or a hand that already knew the fixture); this
@@ -99,9 +100,11 @@
 //!   (the apply path's G4 already ships in 980). Determinism still binds:
 //!   sequential folds, first-index tie rules, no hash iteration.
 //!
-//! Feature: `probe_circuit_grammar` (implies `weight_edit_overlay`).
+//! No feature of its own: compiled whenever `weight_edit_overlay` is on
+//! (the 2026-11-06 fold — there is no separate `probe_circuit_grammar`
+//! feature anymore).
 
-use crate::weight_edit_overlay::{EditForm, WeightEditOverlay, WeightEditSpec};
+use super::{EditForm, WeightEditOverlay, WeightEditSpec};
 
 // ─────────────────────────────────────────────────────────────────────
 // Capture types
