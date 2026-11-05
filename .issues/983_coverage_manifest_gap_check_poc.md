@@ -1,6 +1,6 @@
 # Issue 983: PoC — Coverage-Manifested Memory + Suspicion-Triggered Gap-Check (modelless protocol)
 
-**Status:** Open — fusion idea, novelty TBD pending the PoC precision gate (F3)
+**Status:** Open — fusion idea, novelty TBD pending the PoC precision gate (F3). F3 ordering-law scope AMENDED pre-data 2026-11-05 (see **F3 amendment (verdict correction, pre-data)** below) — the amendment is recorded before the harness ran; no precision/ordering numbers existed when it landed.
 **Claimed:** zed-m3-i983poc, 1793953746, expires 2026-11-07T20:00:00+00:00
 **Date:** 2026-11-05
 **Source:** `../.research/654_Engram_Notes_RL_Strategy_Not_Content.md` — Engram blog "Learning in a world of notes" (2026-11-04); the trained model's learned gap-check behavior, extracted modelless. Training-track sibling: `../riir-train/.plans/486_notes_usage_rl_cost_sweep_drift_curriculum.md`.
@@ -43,3 +43,15 @@ Self-RAG (arXiv:2310.11511 — *trained* when-to-retrieve/critique), Evidence Tr
 - [ ] T2 Implement the manifest stamp + trigger predicates behind an opt-in feature flag (default-off; report-only first — annotate, never block).
 - [ ] T3 F1–F4 as tests; the four behavior metrics (checks/query, lookups/query, tokens/lookup, link-follow share) as a report-only trace linter.
 - [ ] T4 Staged-replay harness on the corpus-lease epoch machinery; GOAT gate vs the static coverage-report cousin on precision-per-fire.
+
+**F3 amendment (verdict correction, pre-data) — 2026-11-05, delegated-owner Claude verdict round 1 (session 5c33f8b4-a47f-427a-ae5a-f9e7dcabf261, REVISE → Option 2 + three additions; landed BEFORE any harness/precision/ordering number existed — a correction from analysis, never from data):**
+
+- **Original wording, quoted:** "Ordering-law assertion (firing rate monotone in 1 − coverage, ≈ 0 at complete coverage) is scoped to predicates (a) and (b) — for (c) monotonicity holds by construction (it fires ∝ deficit by definition) and is RECORDED as such, never asserted as a finding."
+- **The c=0 proof (why the original scope is unsatisfiable for (b)):** under any model where returned content scales with what the memory holds, at coverage c=0 the lookup returns 0 tokens — below every positive cap — so predicate (b) (truncation: returned tokens == cap) NEVER triggers at the largest deficit. A law reading "monotone in 1 − c, ≈ 0 at c = 1" cannot hold for (b): its rate is 0 at BOTH endpoints (no trigger at c=0 for lack of content, no fire at c=1 for lack of gap). No measurement design satisfies the original wording for (b); the pre-registration contained a mistake.
+- **Revised scopes (per predicate, never pooled, never the union (a ∨ b)):**
+  - **(a) count-vs-census:** asserts the ordering law — firing rate monotone non-decreasing in 1 − c, ≈ 0 (exactly 0 on well-formed lookups) at c = 1.
+  - **(b) truncation:** asserts its OWN ordering law on its own axis — trigger rate monotone non-decreasing in `covered_tokens / cap`, ≈ 0 (exactly 0) when the covered content fits under the cap; precision still measured per F3's TP criterion (the narrow re-issue recovers cut-off content).
+  - **(c) coverage-deficit:** unchanged — monotonicity holds by construction and is RECORDED, never asserted as a finding.
+  - **ALL THREE predicates:** the c=1 endpoint is asserted across the board — at complete coverage the gap set is empty and the difference was computed once at stamp time (F2), so gap events = 0 at c = 1 for every predicate. Only the "monotone in 1 − c" half is narrowed to (a).
+- **Blind spot this exposes (predicate docs + TraceLinter coverage notes carry it):** (b) CANNOT detect gaps in sparse memory — a truncation suspicion requires covered content ≥ cap, so low-coverage detection belongs to (a) alone. A deployment relying on (b) for gap discovery reads silence where the memory is thinnest.
+- **Rejected alternatives (recorded):** asserting the law on the union (a ∨ b) would pass empirically only because (a) dominates at low c, hiding (b)'s non-monotone behavior; asserting on TP-qualified (confirmed) firing would hold by definition — the Lean-restatement class (a check that holds whatever the inputs).
