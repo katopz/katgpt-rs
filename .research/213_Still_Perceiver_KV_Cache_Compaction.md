@@ -1,5 +1,7 @@
 # Research 213: Still — Perceiver-Based KV Cache Compaction for Modelless Inference
 
+> **Cousin (synthesis):** Fallahpour et al. [arXiv:2610.21375 "Memorilla: Latent Semantic Memory for LLMs"] — the query-conditioned PERSISTENT-STORE sibling of this note's in-forward KV-cache compaction: learned slots read a document-collection store per query into a frozen consumer. StillKV's heuristic query banks are the modelless floor form of the same Perceiver skeleton; the delta + follow-ups are distilled in Research 656 (Issues 984/985).
+
 **Date:** 2026-06-10 (Updated 2026-06-11 — repo alignment audit)
 **Source:** [Still: Amortized KV Cache Compaction in a Single Forward Pass](https://arxiv.org/pdf/2606.07878v1) (O'Neill et al., Baseten, 2026)
 **Repo:** [shreyansh26/STILL-Towards-Infinite-Context-Windows](https://github.com/shreyansh26/STILL-Towards-Infinite-Context-Windows)

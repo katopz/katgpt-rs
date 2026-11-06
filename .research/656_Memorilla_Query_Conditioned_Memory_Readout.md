@@ -1,0 +1,69 @@
+# Research 656: Memorilla — Query-Conditioned Latent Semantic Memory Readout
+
+**Status:** RECORD — distillation complete 2026-11-06. Track (a) modelless: GAIN → katgpt-rs Issues 984 + 985. Track (c) model-based: GAIN → riir-train Plan 488. The paper's class is occupied by Memorilla itself (published 2026-10-15) — every claim herein is delta-over-Memorilla on the five unclaimed axes, never class novelty. Verdict: delegated-owner AGREE ×2 (claude_code reviewer session `9aff8189-73a6-45b9-a347-180a98900675`, 2026-11-06; round 2 added the ε-semantics + Issue-940 determinism amendments to Issue 985).
+
+**Paper:** arXiv:2610.21375 "Memorilla: Latent Semantic Memory for LLMs" — Fallahpour, Idehpour, Kothapalli, Mounier, Wu, Pardis, Leskovec (snap-stanford; COLM 2026 workshop *Context Beyond the Window*; code Apache-2.0 at `snap-stanford/memorilla` @ release `3649ec8d`, checkpoints + data on HF `memorilla/*`). Full text read from arXiv HTML v2 (2026-10-27) including Appendices E/G. No `.raw/` clone taken — abstract + HTML + README sufficed (no source mining; all training-config numbers below are quoted from the paper's tables).
+
+## TL;DR
+
+A frozen encoder embeds a document collection ONCE into a persistent store `Z_D ∈ R^{N×h_e}` (the same store dense retrieval builds — encoding adds no cost over retrieval). A **trained** memory module reads the whole store per query and emits K=16 query-conditioned soft tokens **directly into a frozen LLM's input embedding space**: learned slots → query conditioning (cross-attn on `z_q`, residual preserves slot identity) → 2 Perceiver-style cross-attention blocks over ALL N embeddings (continuous read, not top-k) → linear projection to the decoder dim. Beats Mem0/MemoRAG/RAG/full-context on 5/8 benchmarks; FactKG 84.33% vs 80.43% full-context at 108× fewer tokens; read cost flat (2.01 ms → 1.96 ms as the store grows 1→512 docs; full-context goes 749 ms → 19,932 ms). A TextWorld variant trains the memory module ONLY by GRPO on environment reward (encoder + decoder + policy frozen): avg@3 0.186 → 0.242, pass@3 0.250 → 0.375 vs full-history ICL.
+
+Three ablations carry all the transferable science:
+
+1. **Query-conditioning is the mechanism** (+15.1 pts over query-independent pooling: 44.04 vs 28.94; hard cosine top-16 captures only +4.9 of it; a 269M-parameter query-BLIND Q-Former buys just +5.8). Capacity is NOT the lever (K=128 ≥ K=16 helps nothing, personalization drops) and neither is adaptation budget (matched-param LoRA without documents loses on every primary metric).
+2. **Untrained memory is worse than no memory** (TextWorld random-init 0.153 vs 0.186 ICL) — learned placement is load-bearing; naive latent summaries are poison.
+3. **The noise-store falsification arm is a calibrated instrument** — under a Gaussian store, Memorilla −5.93, Q-Former −5.11, but documents-only +0.04: a read that ignores evidence is noise-INVARIANT, so the noise delta measures evidence-dependence in both directions.
+
+## Path 0 inventory (training-target decomposition)
+
+| Component | Paper form | Coverage in our stack (signal-diff checked) | Outcome |
+|---|---|---|---|
+| Persistent doc-embedding store (write-once read-many, shared with retrieval) | `Z_D` computed once, 5 KB/doc, store 7,266× smaller than the equivalent KV cache | riir-rag `DenseEmbedIndex`/`ItemEmbedIndex` (neuron-db), reflex corpora, refine `RuleIndex` — store half covered; no named store-epoch law for derived artifacts | Extraction (design law, note-level; fold into future store work) |
+| Query-conditioned aggregate readout over the whole store | Trained Perceiver-style, K=16 slots | **NOT covered** — `corpus_centroid` (riir-instinct `arsenal_ops.rs`) consumes NO query (boot-time, admission-only, 1 slot); `CorpusDistanceGate` (katgpt-core `distance_abstain.rs`) emits a max-sim scalar for ABSTAIN, no aggregate, no conditioning output; StillKV (Plan 245) is in-forward KV-cache compaction with heuristic banks, no persistent collection; episodic ring (riir-games-shared, Plan 621) is lossless raw with closed-form single-target consumers (rederive/intercept/need-gate), no multi-sighting aggregate conditioned on drive/context | **Gap → katgpt-core primitive (Issue 985) + riir-train Plan 488 R1** |
+| Trained memory module (194M, 3-stage NLL curriculum) | Module-only training, frozen encoder+decoder | **NOT covered** — quest_grammar trains policy LoRAs; npc_brain trains the brain against observations; no lane trains a state/readout module | **Gap → riir-train Plan 488 R1/R3** |
+| GRPO trains memory, policy frozen | G=16, group-normalized advantage, PPO clip 0.2, no critic/KL/entropy, reward = env score | `nf_grpo::group_normalize` ships (riir-train-engine/src/nf_grpo.rs, coordinator-verified) but EVERY shipped GRPO lane points the gradient at policy weights (bonsai_clippy_l4_rlvr, clippy_l4_rlvr, plan328_svr_grpo, DASD) | **Gap → riir-train Plan 488 R2** |
+| Noise-store falsification | −5.93 / −5.11 / +0.04 instrument | **NOT shipped as a standing gate pattern** — bench_845 has OOD arms + a W2 negative-control world, but no noise/shuffled/empty store arms | **Gap → katgpt-rs Issue 984** |
+| Fixed-K flat-cost consumption contract | 16 tokens flat, decoder cost constant in N | Reflex G2 p99 ≤ 1 ms + instinct 1 ms tetris budget exist as BUDGETS, not as a store-read API contract | Extraction (API law; rides Issue 985's contract) |
+| K-capacity law (K tracks integration demand) | K=128 null; personalization climbs to K=16; PubMedQA (4 docs) flat | npc_brain_anchors precedent (OBS 8→10, dims earn their keep) matches | Free design rule: cap K=16 (Plan 488 R6) |
+| Supplement-not-replace + context parity + complementarity census | Memory ADDED beside full text under identical budgets; union(memory, RAG) beats either on every benchmark; alone-rates 15.9%/27.1% price fusion headroom | Hybrid KNN+BM25 ships in refine fan-out (discrete union) | Extraction (injection posture law + census as harness readout; note-level) |
+| Threshold-bias / calibration axis | Jointly-wrong claims are 89.5% TRUE (polarity-biased threshold, not missing evidence) | `SigmoidGateCalibrator` fits per-suite; per-lane polarity offset not a named surface | Extraction (note-level; cheap future harness diagnostic) |
+
+## Internal cousins (read before claiming anything novel here)
+
+- **Research 006 Raven Routing Slot Memories** — fixed 256-slot latent working memory, O(256) slot attention for the draft model. Signal-diff: working-set memory for ONE model's draft loop, no per-query conditioning of a persistent collection. Cousin, not coverage.
+- **Research 213 / Plan 245 StillKV (landed)** — Perceiver-style compaction with heuristic query banks (TF-IDF clusters, attention-sink patterns, BFCF centroids), MODELLESS. Signal-diff: compacts the KV CACHE within one forward; no persistent store, no cross-query collection readout. The modelless-floor precedent this paper's floor form builds on (one-line cousin ref appended to Research 213).
+- **Research 069 / Plan 107 AutoDreamer** — offline memory consolidation for agents, Bomber win-rate GOAT. Signal-diff: consolidation/scheduling of memory items, not a query-conditioned readout.
+- **Research 606 HyperThink — recorded NEGATIVE** (query-conditioned amortization into bias-delta overlays; T1 premise failed: the constant component is front-loaded). Different mechanism (parameter deltas, not store readout) — recorded as a caution against assuming query-conditioned latent features transfer automatically.
+- **`corpus_centroid` (riir-instinct)** — SIGNED simhash fold, boot-time, hoard-gate admission. Query-independent by construction; the paper's own ablation convicts query-independent pooling FOR ANSWER PRODUCTION (−15 pts) but the centroid's job is admission, not answers — not indicted, and the query-conditioned floor (Issue 985) is its per-query sibling.
+- **`CorpusDistanceGate` (katgpt-core, Bench 845)** — max-sim over K exemplars → sigmoid → abstain confidence. Emits a scalar; Issue 985 names it the FIRST consumer (aggregate read beside max-sim, re-run through W1/W2).
+- **`episodic_sighting` (riir-games-shared Plan 621 / Bench 966 GOAT)** — lossless sighting ring (cap 256, ~6 KB), closed-form consumers. Deliberately lossless; the trained compressor (Plan 488 R1) is the LEARNED-read sibling whose GOAT floor is exactly these closed-form consumers.
+
+## External prior art (subagent sweep, ~45 papers checked, Oct–Nov 2026)
+
+- **Class occupancy:** the composite (frozen-encoder store + trained query-conditioned slot readout over the whole store + soft-token injection into a frozen consumer + GRPO-trained-memory-only) was unoccupied pre-2026-10-15 and is occupied by Memorilla itself since. Nearest named baselines verified with IDs: xRAG 2405.13792 (single retrieved doc → one soft token), ICAE 2307.06945 (query-agnostic slots), gist 2304.08467 (KV-side, trains consumer), 500xCompressor 2408.03094, ComMer 2501.03276 (query-independent merge), MemoRAG 2409.05591 (memory guides text retrieval), Mem0 2504.19413 (textual), Cartridges 2506.06266 (per-corpus KV, model-internal), PISCO 2501.16075 / COCOM 2407.09252 / CLaRa 2511.18659 (adapted generators), TokMem 2510.00444 (one token per procedure), USER-LLM 2402.13598, E2P 2505.17051.
+- **"Query-dependent compression" is separately occupied** by OSCAR 2504.07109 ("first online query-dependent") and SeleCom 2602.15856 — both compress the RETRIEVED subset with adapted/decoder-side machinery. Memorilla's novelty is exactly the store-wide/encoder-side/frozen-consumer scoping; nothing broader is claimable.
+- **RL-memory-frozen-policy is separately occupied** (Memory-R1 2508.19828 discrete ops; MemGen 2509.24704 generated latents, no store; MemRL 2601.03192 textual utility scores). Memorilla's sliver: RL over a latent STORE READOUT. Our R2 recipe (state trained, policy frozen, game-sim reward) cites this line as prior art, not as novelty.
+- **Five unclaimed deltas (the honest ledger, all named-or-implied by Memorilla's own future work):**
+  1. Latent-memory × text-RAG hybrid router (their union-oracle shows headroom; nobody built the router).
+  2. **Non-LLM consumers of the query-conditioned aggregate — ranking/rerank, calibration, abstention, code-fix — surveyed essentially empty. ← our lane.**
+  3. Small/ternary consumers (Bonsai-class; "cheap module + tiny frozen consumer" unclaimed).
+  4. Cross-model transfer (Qwen↔Qwen only, by their admission).
+  5. NPC/game-agent memory (Generative-Agents lineage still text retrieval; TextWorld is the only existence proof, toy env).
+
+## What was filed (the outputs)
+
+- **katgpt-rs Issue 984** — noise/shuffled/empty store falsification arms as a standing GOAT-gate pattern for every memory-input primitive (proof path: `crates/katgpt-core/benches/bench_845_distance_abstain_goat.rs` — cited by full path because katgpt-attn carries an unrelated `bench_845_channel_aware_dot_dispatch.rs`; W2 negative-control world credited as existing partial coverage, the three arms are ADDITIONAL controls).
+- **katgpt-rs Issue 985** — sigmoid-gated NORMALIZED fixed-K soft-read primitive with deterministic slot banks; first consumer `CorpusDistanceGate` via Bench 845 W1/W2; bar = ≥ hard top-16 AND > empty-memory floor; store-size arm N ∈ {1, 16, 512}; ε pinned 1e-6 relative to gate scale; local-only determinism decision recorded at the code site (Issue 940 law); opt-in + byte-identity demotion.
+- **riir-train Plan 488** — R1 trained query-conditioned sighting compressor → npc_brain (two-brain input contract as a GATE: fog-gated ring entries only, never `MapPos`; sigmoid-bounded scalars out, never synced); R2 env-reward GRPO with state trained / policy frozen on `group_normalize`; R3 3-stage curriculum; three falsification controls as standing gate convention; K≤16 rule; honest 24GB + Bonsai-scale negatives.
+
+## Honest negatives (recorded so nobody re-learns them)
+
+1. **The unlearned floor may only reach hard-top-k quality.** The paper never ran an untrained FIXED read; hard cosine top-16 captured +4.9 of +15.1; a sigmoid-gated untrained read could lose to hard selection by diffusing gate mass. Issue 985's bar is set exactly there, and losing is loud (opt-in, byte-identity, empty-memory floor).
+2. **Paper-verbatim training does not fit 24 GB** (frozen 4B encoder + 8B decoder = 24 GB before optimizer states or activations). Smallest viable LLM-scale variant: frozen 1B decoder (MiniCPM5-1B-F16 is the LOCAL-KEEP pin; gemma-2-2b is RETIRED per riir-train Issue 617 — never reach for it). The stack-native variant (npc_brain scale) fits 10× over.
+3. **Bonsai-27B-scale memory lane ≈ 1,000 4090-h** — recorded negative; only a 50–100M-token reconstruction probe is sane, and only after R1/R2 prove the mechanism at game scale.
+4. **The TextWorld absolute effect is modest** (+0.056 avg@3, one env, 800 prompts). Plan 488's gates use paired relative-magnitude bars with tail support, never pooled wins.
+5. **Reflex corpus-cap accuracy levers measured NEGATIVE previously** (Issue 013) — corpus-summary features have a bad track record on this stack; Issue 985 is written with that prior disclosed.
+
+## Provenance
+
+Paper fetched via arXiv HTML v2 + GitHub README this session (2026-11-06); no `.raw/` clone (nothing mined from source). Reviewer verified independently: counters free (research 655→656, issues 983→985, riir-train plans 487→488), workspace grep for `2610.21375|Memorilla` empty before this note, `nf_grpo::group_normalize` at riir-train-engine/src/nf_grpo.rs, `SightingRing` cap 256 in think_brain.rs, npc_brain OBS widening at riir-game-sdk AGENTS.md, bench_845 arms as described. `dual_allocation_gate` clean pre-write; re-run post-write.
