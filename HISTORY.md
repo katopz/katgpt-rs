@@ -1127,6 +1127,10 @@ The full arc: T1–T4 landed `e572a2281` (the ρ estimator with the finite-group
 
 **981 — sink-audit KV policy switch** (T1 decision half + T2 + T3 landed `923aef6a4`, all synthetic GOAT gates PASS; G2 planted 0.4716 vs free 0.0236): `SinkAuditProfile`/`SinkAuditVerdict::classify` (cuts 0.10/0.25, stated as chosen) + `SinkWindowPolicy::from_audit` (never grows the incumbent pin, floor ≥ 1). Real reads in riir-infer: Qwen3.5-0.8B gated 0.0764 → SinkFree → pin 4→1 (bench 947); Bonsai-2-27B-PQ2_0 0.1297 → UNDECIDED → pin 4 stands (bench 948, `7b427684`). Reduced T4 cell neutral at 25% budget. The real ungated G2 arm and the full-scale 64k T4 cell run on the riir-infer census lane, so they moved to riir-infer Issue 1180 (`c4068aea`).
 
+## Issue 983 (2026-11-05 → closed 2026-11-06) — coverage-manifested memory + gap-check protocol: landed opt-in, consumer wired, promotion NOT claimed (file removed per noise-reduction)
+
+Substrate `0f86f6f21` (+ bench_doc_audit repair `8f41f4d5b`): opt-in `coverage_manifest`, F1–F4 all PASS (11 lane tests), F3 ordering laws amended pre-data (delegated-owner AGREE). Consumer lane: riir-refine `494f70e96` (`--corpus-gap`, report-only intake rows); (b)'s covered == cap boundary pin + the digest-fold integrity fix (format v1→2) `f0e6cddf3`. **Real-corpus GOAT cell judged NOT runnable honestly** (`f3b993f49`): the wired consumer never calls `suspicions()`, so (a) and (b) have no real lookups to grade; (c) on the single always-deficit `clippy` section ties the static coverage report by construction; a fresh-census oracle re-reads the same corpus list (circular); and no repo has any real fires on disk. **Re-open trigger:** a consumer that runs the predicates on REAL lookups (the suggest lane's leased-corpus lookup with expected count = the compiled rule count per lint, graded by whether `cargo refine fix` heals the span; or the riir-reflex readout / riir-rethink ESC trigger). Until then the feature stays opt-in.
+
 ## Lessons
 
 Distilled lessons (instrument generalisation, census blindness, green-zero, box state, concurrency, attribution); details in git history.
