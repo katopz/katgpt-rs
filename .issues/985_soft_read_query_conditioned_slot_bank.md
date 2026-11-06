@@ -1,6 +1,6 @@
 # Issue 985 — Sigmoid-gated query-conditioned fixed-K soft read with deterministic slot banks (katgpt-core primitive)
 
-**Status:** CLOSED NEGATIVE — landed + struck 2026-11-06, commit `<this>`; delegated verdict AGREE (claude_code session `a842c972-dfca-4189-9108-244817f2d5b3`). T1–T7 all executed; the preregistered bar FAILED at the amended cell; the grade is struck and the feature stays opt-in for replication. The two mechanism hypotheses are filed separately as Issue 986.
+**Status:** CLOSED NEGATIVE — landed + struck 2026-11-06, commit `23dba2e25`; delegated verdict AGREE (claude_code session `a842c972-dfca-4189-9108-244817f2d5b3`). T1–T7 all executed; the preregistered bar FAILED at the amended cell; the grade is struck and the feature stays opt-in for replication. The two mechanism hypotheses are filed separately as Issue 986.
 **Lease closed:** zed-m3-agent (T1–T7), 1793929810, expires 2026-11-08T01:50:10Z — completed within lease.
 
 ## Mechanism (modelless floor form of Memorilla's read)
