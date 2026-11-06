@@ -1121,6 +1121,12 @@ The full arc: T1–T4 landed `e572a2281` (the ρ estimator with the finite-group
 
 **986 — slot placement + conditioning strength** (landed `81106ecab`, CLOSED NEGATIVE, one cell per the preregistration, no tuning passes): both hypotheses FALSIFIED on the committed fixture — `SlotMode::KMeansPlusPlus` (k-means++-seeded row anchors, deterministic per store epoch) + `SoftRead::with_head_cos_target` (fixed-length residual posture, default byte-identical) kept opt-in for replication; `benches/bench_986_slot_placement_goat.rs` is the record posture. The query-conditioned aggregate axis closes at the floor level — NOT an amendment to 985 (985 closed; this tested its two recorded hypotheses on a NEW preregistration).
 
+## Issue 952 + 981 (closed 2026-11-06) — calc-brain bet search + sink-audit KV policy switch: katgpt-rs work complete, remainders handed to their owners (files removed per noise-reduction)
+
+**952 — Fathom calculation brain, MCTS-budgeted variant-bet search** (T1–T4 + T6 landed `703e8dd3f`, percentile-gate repair `7383a68f9`; [Bench 952](.benchmarks/952_issue952_bet_search_goat.md)): `bet_search` (exhaustive + floor demotion) GOAT PASS → katgpt-extract DEFAULT; `bet_search_puct` demoted opt-in (PUCT loses to exhaustive at equal budget on held-out). wasm32 compile proof 2026-10-30. The EstimateHead → BetSearchHead swap went to Plan 628's assembly note (2026-10-24). T5 (pack export ABI + riir-instinct A7/R5 residency) is not katgpt-rs work and was owner-parked to Proposal 016 §7 (2026-11-04); it is now item 6 of that list, with the residency law and the compile prerequisite.
+
+**981 — sink-audit KV policy switch** (T1 decision half + T2 + T3 landed `923aef6a4`, all synthetic GOAT gates PASS; G2 planted 0.4716 vs free 0.0236): `SinkAuditProfile`/`SinkAuditVerdict::classify` (cuts 0.10/0.25, stated as chosen) + `SinkWindowPolicy::from_audit` (never grows the incumbent pin, floor ≥ 1). Real reads in riir-infer: Qwen3.5-0.8B gated 0.0764 → SinkFree → pin 4→1 (bench 947); Bonsai-2-27B-PQ2_0 0.1297 → UNDECIDED → pin 4 stands (bench 948, `7b427684`). Reduced T4 cell neutral at 25% budget. The real ungated G2 arm and the full-scale 64k T4 cell run on the riir-infer census lane, so they moved to riir-infer Issue 1180 (`c4068aea`).
+
 ## Lessons
 
 Distilled lessons (instrument generalisation, census blindness, green-zero, box state, concurrency, attribution); details in git history.
