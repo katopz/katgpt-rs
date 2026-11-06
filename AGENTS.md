@@ -787,8 +787,9 @@ loud at the version check). **Consumer WIRED:** the riir-refine heal-lane
 corpus-gap event (`riir-refine` `494f70e96` — `--corpus-gap`, report-only,
 content-addressed intake rows at `.refine/misses/corpus-gap/`, the
 `--misses` queue prints them; freshness anchors never queued). Promotion
-preconditions remaining: the real-corpus GOAT cell ((b)'s boundary pin +
-the wiring are done); promotion NOT claimed.
+NOT claimed: the real-corpus GOAT cell is not honestly runnable until a
+consumer calls `suspicions()` on REAL lookups (Issue 983 closed
+`f3b993f49`; re-open trigger in HISTORY.md).
 
 ## Feature Flag Discipline
 
