@@ -1,6 +1,7 @@
 # Issue 985 — Sigmoid-gated query-conditioned fixed-K soft read with deterministic slot banks (katgpt-core primitive)
 
-**Status:** OPEN — fusion idea with preregistered proof path, filed from Research 656 (arXiv:2610.21375 Memorilla distillation, delegated-owner AGREE 2026-11-06). Claimed: nobody yet. NOT a Super-GOAT claim — the floor's quality is unproven (see Prior odds); this issue exists to make the bet cheap and the losing loud.
+**Status:** OPEN — fusion idea with preregistered proof path, filed from Research 656 (arXiv:2610.21375 Memorilla distillation, delegated-owner AGREE 2026-11-06). NOT a Super-GOAT claim — the floor's quality is unproven (see Prior odds); this issue exists to make the bet cheap and the losing loud.
+**Claimed:** zed-m3-agent (T1–T7), 1793929810, expires 2026-11-08T01:50:10Z
 
 ## Mechanism (modelless floor form of Memorilla's read)
 
