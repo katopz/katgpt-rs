@@ -879,7 +879,7 @@ pub use latent_confounder_audit::{AuditScratch, LatentConfounderAudit, audit_con
 
 #[cfg(feature = "nuisance_fraction")]
 pub use nuisance_fraction::{
-    RhoError, RhoReport, RhoScratch, RHO_CONVENTION, alignment_floor, rho_fraction,
+    RHO_CONVENTION, RhoError, RhoReport, RhoScratch, alignment_floor, rho_fraction,
 };
 
 #[cfg(feature = "interpolation_geometry")]
@@ -1738,17 +1738,17 @@ pub use weight_edit_overlay::{
 // documented softmax exception class; sigmoid on every gate/threshold.
 #[cfg(feature = "regret_guard")]
 pub mod regret_guard;
-#[cfg(feature = "regret_guard")]
-pub use regret_guard::{
-    RegretGapConfig, RegretGapGate, RegretGuardError, RegretStep, VDriftConfig,
-    VDriftDetector, VDriftStep, suffix_average_pullback,
-};
 #[cfg(all(feature = "manifold_erasure", feature = "subspace_phase_gate"))]
 pub use manifold_erasure::{
     ManceConfig, ManceError, ManceScratch, ManceStepInfo, ManceTangentCache,
     covmatch_second_moment_into, leace_first_moment_into, mance_plus_plus_step_into,
     mance_plus_step_into, manifold_erasure_loop_cached_into, manifold_erasure_loop_into,
     manifold_erasure_step, manifold_erasure_step_cached_into, manifold_erasure_step_into,
+};
+#[cfg(feature = "regret_guard")]
+pub use regret_guard::{
+    RegretGapConfig, RegretGapGate, RegretGuardError, RegretStep, VDriftConfig, VDriftDetector,
+    VDriftStep, suffix_average_pullback,
 };
 
 #[cfg(feature = "multi_agent_path")]
