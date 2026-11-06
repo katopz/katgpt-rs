@@ -1,6 +1,7 @@
 # Issue 984 — Noise/shuffled/empty store falsification arms as a standing GOAT-gate pattern for memory-input primitives
 
-**Status:** OPEN — poc/proof task filed from Research 656 (arXiv:2610.21375 Memorilla distillation, delegated-owner AGREE 2026-11-06). Claimed: nobody yet.
+**Status:** OPEN — poc/proof task filed from Research 656 (arXiv:2610.21375 Memorilla distillation, delegated-owner AGREE 2026-11-06).
+**Claimed:** zed-m3-agent (katgpt-rs T1–T5), 1793928266, expires 2026-11-08T01:24:26Z
 
 ## Motivation
 
