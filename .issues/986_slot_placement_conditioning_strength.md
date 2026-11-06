@@ -1,6 +1,6 @@
 # Issue 986 — Deterministic interior slot placement + effective conditioning strength (the Issue 985 negative's hypothesis test)
 
-**Status:** OPEN — preregistered follow-up, filed from Issue 985's MEASURED NEGATIVE (delegated verdict AGREE, session `a842c972-dfca-4189-9108-244817f2d5b3`, 2026-11-06). Claimed: nobody yet. NOT an amendment to 985 — 985 is closed; this tests its two recorded hypotheses on a NEW preregistration.
+**Status:** OPEN — preregistered follow-up, filed from Issue 985's MEASURED NEGATIVE (delegated verdict AGREE, session `a842c972-dfca-4189-9108-244817f2d5b3`, 2026-11-06). **Claimed:** zed-488-memorilla@m3, epoch=1793940783, expires 2026-11-08T04:53:03+00:00. NOT an amendment to 985 — 985 is closed; this tests its two recorded hypotheses on a NEW preregistration.
 
 ## The hypotheses (labeled as such — neither is tested yet)
 
