@@ -103,6 +103,10 @@ ahash = { version = "0.8", optional = true, default-features = false, features =
 
 [dev-dependencies]
 serde_json = "1"
+# Issue 984: the store-falsification harness (tests/common/store_falsification.rs)
+# seeds its noise/shuffle transforms with BLAKE3 over the store's bit pattern.
+# Already a normal non-optional dep — zero new tree.
+blake3 = "1"
 # Phase 10 (2026-07-04): trigger_gate's from_toml/to_toml are test-only.
 toml = "0.8"
 # Plan 388 Phase 1: freeze module's save/load roundtrip tests.
@@ -4498,6 +4502,16 @@ required-features = ["sigmoid_calibration", "action_bridge"]
 [[bench]]
 name = "bench_845_distance_abstain_goat"
 harness = false
+required-features = ["distance_abstain"]
+
+# Issue 984 — memory-store falsification gate (the T3 named row): the four
+# store arms (real / BLAKE3-seeded noise / basis-shuffled / score-only empty)
+# + the store-blind canary over CorpusDistanceGate at test scale. Run:
+# cargo test -p katgpt-core --features distance_abstain --no-default-features
+# --test memory_store_falsification_gate
+# Executed by scripts/test_gate.sh row katgpt-core:<N>:distance_abstain.
+[[test]]
+name = "memory_store_falsification_gate"
 required-features = ["distance_abstain"]
 
 # Plan 618 — gmm_support GOAT gate (G1 determinism, G2 request+layer

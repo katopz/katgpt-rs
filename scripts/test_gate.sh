@@ -169,6 +169,7 @@ katgpt-types:139
 # See the PERF_ROWS comment above (Issue 858 T3) for why these exist.
 PERF_ROWS="
 katgpt-rs:12:belief_drafter_goat
+katgpt-core:4:memory_store_falsification_gate:distance_abstain
 katgpt-core:1:compression_drafter_alloc_gate:compression_drafter
 katgpt-core:1:state_option_scoring_alloc_check:state_option_scoring
 katgpt-core:1:state_option_head_alloc_check:state_option_scoring

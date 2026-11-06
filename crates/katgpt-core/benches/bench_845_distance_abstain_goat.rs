@@ -53,6 +53,16 @@
 //!   (measured spread on this M3: ~2.2 µs quiet-ish vs ~14.9 µs under
 //!   sibling cargo load — the AGENTS.md box-state rule; the print is the
 //!   measurement, the budget only catches gross de-optimization).
+//! - **G6** memory-store falsification arms (Issue 984, the standing
+//!   convention for NEW memory-input primitives): the four store
+//!   conditions — real / BLAKE3-seeded matched-statistics noise /
+//!   basis-shuffled (binding) / score-only empty floor — with the
+//!   preregistered inequalities real-beats-noise, noise-never-beats-empty,
+//!   shuffled-never-beats-real, plus the store-blind canary that must
+//!   FAIL (a stub that passes proves the arms blind). The shared harness
+//!   (`tests/common/store_falsification.rs`) is what every future
+//!   memory-input primitive's GOAT gate inherits; W2 above remains the
+//!   fixture-level control, G6 the store-level one.
 //!
 //! # Run
 //!
@@ -66,10 +76,16 @@
 
 #[path = "../tests/common/mod.rs"]
 mod common;
+#[path = "../tests/common/store_falsification.rs"]
+mod store_falsification;
 counting_allocator!();
 
 use katgpt_core::distance_abstain::CorpusDistanceGate;
 use std::hint::black_box;
+use store_falsification::{
+    StoreArmMargins, StoreWorld, aurc, canary_holds, print_verdict_table, run_store_arms,
+    selective_accuracy_at,
+};
 
 /// Deterministic `SplitMix64` (the workspace-bench idiom — no rand dep).
 struct SplitMix64(u64);
@@ -222,39 +238,10 @@ fn ranks(values: &[f32]) -> Vec<f32> {
     out
 }
 
-/// Risk–coverage AURC: order by signal DESCENDING (most confident retained
-/// first), average the prefix error rate over every coverage level. Lower
-/// is better. O(n log n), one alloc — bench-side only.
-fn aurc(signals: &[f32], errors: &[bool]) -> f32 {
-    let mut idx: Vec<usize> = (0..signals.len()).collect();
-    idx.sort_by(|a, b| signals[*b].total_cmp(&signals[*a]));
-    let mut err_sum = 0usize;
-    let mut total = 0.0f32;
-    for (k, i) in idx.iter().enumerate() {
-        err_sum += usize::from(errors[*i]);
-        total += err_sum as f32 / (k + 1) as f32;
-    }
-    total / signals.len() as f32
-}
-
-/// Selective accuracy at matched abstain rate ρ: abstain the ρ-fraction of
-/// LOWEST signal, return accuracy on the retained set.
-fn selective_accuracy_at(signals: &[f32], errors: &[bool], rate: f32) -> f32 {
-    let mut sorted: Vec<f32> = signals.to_vec();
-    sorted.sort_by(f32::total_cmp);
-    let cut = ((rate * signals.len() as f32) as usize).min(signals.len() - 1);
-    let threshold = sorted[cut];
-    let mut ok = 0usize;
-    let mut kept = 0usize;
-    for (s, e) in signals.iter().zip(errors) {
-        if *s >= threshold {
-            ok += usize::from(!*e);
-            kept += 1;
-        }
-    }
-    ok as f32 / kept as f32
-}
-
+/// Risk–coverage AURC and selective accuracy live in the shared
+/// store-falsification harness (`tests/common/store_falsification.rs`,
+/// moved there at Issue 984) — one metric implementation for the T1.6
+/// gates and the G6 store arms.
 /// Per-arm metric row for one world replicate.
 #[derive(Clone, Copy)]
 struct ArmRow {
@@ -533,10 +520,59 @@ fn main() {
         if g5 { "OK" } else { "FAIL" }
     );
 
+    // ── G6 — memory-store falsification arms (Issue 984; the T2 arms) ──
+    // Does the gate actually CONSUME its store? Four conditions (real /
+    // BLAKE3-seeded matched noise / basis-shuffled / score-only empty
+    // floor) + the store-blind canary that must FAIL. AURC lower-is-better.
+    let margins = StoreArmMargins::default();
+    let worlds: Vec<StoreWorld<D>> = (0..N_REPS)
+        .map(|rep| {
+            let w1 = build_world(0x845_0100 + rep as u64, &corpus, w1_true_p);
+            StoreWorld {
+                queries: w1.iter().map(|a| a.q).collect(),
+                errors: w1.iter().map(|a| !a.correct).collect(),
+                empty_signals: w1.iter().map(|a| a.p).collect(),
+            }
+        })
+        .collect();
+    let gate_reader = |store: &[[f32; D]]| -> store_falsification::StoreReader<D> {
+        let gate = CorpusDistanceGate::<D>::new(store, MID, SCALE);
+        Box::new(move |queries: &[[f32; D]]| {
+            queries.iter().map(|q| gate.abstain_confidence(q)).collect()
+        })
+    };
+    let stub_reader = |_store: &[[f32; D]]| -> store_falsification::StoreReader<D> {
+        Box::new(|queries: &[[f32; D]]| vec![0.5f32; queries.len()])
+    };
+    let arms = run_store_arms(&corpus, &worlds, gate_reader, &margins);
+    let stub = run_store_arms(&corpus, &worlds, stub_reader, &margins);
+    println!();
+    println!(
+        "G6 — memory-store falsification arms (Issue 984; AURC lower-is-better, sel30 = selective accuracy at ρ=30%):"
+    );
+    println!("  CorpusDistanceGate under four store conditions:");
+    print_verdict_table("gate", &arms);
+    println!(
+        "  noise deltas: sel30 {:+.4} · AURC {:+.4} (the Memorilla +0.04-style readout)",
+        arms.noise_delta_sel30, arms.noise_delta_aurc
+    );
+    println!("  canary — store-blind stub (must FAIL the arms):");
+    print_verdict_table("stub", &stub);
+    let g6_canary = canary_holds(arms.pass, stub.pass);
+    println!(
+        "  canary polarity (real pass ∧ stub fail): {}",
+        if g6_canary {
+            "OK"
+        } else {
+            "FAIL — gate blind"
+        }
+    );
+    let g6 = arms.pass && g6_canary;
+
     // ── Verdict ─────────────────────────────────────────────────────────
     println!();
-    let all = g1 && g2 && g3 && g4 && g5;
-    println!("GATES: G1 {g1} · G2 {g2} · G3 {g3} · G4 {g4} · G5 {g5}");
+    let all = g1 && g2 && g3 && g4 && g5 && g6;
+    println!("GATES: G1 {g1} · G2 {g2} · G3 {g3} · G4 {g4} · G5 {g5} · G6 {g6}");
     println!(
         "{}",
         if all {
