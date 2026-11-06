@@ -19,6 +19,16 @@
 //! Feature gate: `dash_attn` (Plan 106, Research 68).
 
 pub mod chunk_summary;
+// Issue 666 T2 (riir-train; arXiv:2610.42112 ZHA reference-query lane) — the
+// trained head_cls sidecar: v1 binary artifact + BLAKE3 digest file, loaded
+// via KATGPT_HEAD_CLS_VARIANT (the LAYA_WEIGHTS_VARIANT pattern — fail-loud,
+// never auto-derived). Freeze/thaw consumption of riir-train's trained bytes
+// (the repo's allowed mutation class); sidecar-absent serving is
+// byte-identical to the incumbent (the free G3 anchor). Opt-in until the
+// Issue 666 T4/T5 GOAT gates; NEVER default-on (trained weights;
+// modelless-first mandate).
+#[cfg(feature = "zha_chunk_sidecar")]
+pub mod chunk_summary_sidecar;
 // ASEntmax length-adaptive damping schedule (Issue 747 P0, Research 549 —
 // arXiv:2506.16640 Eq 10): the entmax-side mirror of katgpt-core's SSMax
 // socket. Opt-in until the Issue 747 GOAT gate.
@@ -69,7 +79,16 @@ pub mod vortex_flow;
 
 #[cfg(feature = "asentmax_schedule")]
 pub use asentmax::{AsentmaxSchedule, RollingSigmaEstimator, apply_asentmax_inplace};
-pub use chunk_summary::{ChunkSummaryCache, ChunkSummaryQuery, summarize_chunk_with_entropy};
+pub use chunk_summary::{
+    ChunkSummaryCache, ChunkSummaryQuery, summarize_chunk_with_entropy, tangent_logit_max_r,
+    tangent_logit_max_r_indexed,
+};
+// Issue 666 T2 — gated with its module above.
+#[cfg(feature = "zha_chunk_sidecar")]
+pub use chunk_summary_sidecar::{
+    SidecarError, VARIANT_ENV, artifact_path, load_sidecar, resolve_query_for_variant,
+    resolve_sidecar_query, serialize, sidecar_path, write_sidecar,
+};
 pub use entmax::{entmax_1p5, entmax_gqa_aggregate, entmax_support};
 // Issue 747 P3: Lemma-1 incremental decode entmax.
 #[cfg(feature = "asentmax_schedule")]

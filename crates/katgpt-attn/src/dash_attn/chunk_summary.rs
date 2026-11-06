@@ -1,9 +1,17 @@
 //! Learned chunk summaries via head_cls vectors.
 //!
-//! Each KV-head has a learnable `head_cls` query vector used to summarize a
-//! chunk of keys via local SDPA: k̄_c = softmax(q̄ · K_chunk / √d) · K_chunk.
+//! Each KV-head carries `R` learnable `head_cls` reference queries (ZHA
+//! reference-query shape, arXiv:2610.42112 — riir-train Issue 666) used to
+//! summarize a chunk of keys via local SDPA:
+//! `k̂_r = softmax(q̂_r · K_chunk / √d) · K_chunk` per reference `r`, with
+//! the chunk's routing tangent `max_r(q · k̂_r/√d · γ + b̂_r)`
+//! ([`tangent_logit_max_r`]). The default `R = 1` layout is the original
+//! single-query form byte-for-byte (additive layout law, Issue 666 T2).
 //! When `head_cls` is zero-initialized (default), this degenerates to mean
-//! pooling for backward compatibility.
+//! pooling for backward compatibility. Trained reference values arrive via
+//! the `zha_chunk_sidecar` feature (BLAKE3-verified sidecar file); a build
+//! without the feature (or a boot without the sidecar) serves the incumbent
+//! byte-identically.
 
 // ---------------------------------------------------------------------------
 // ChunkSummaryQuery
@@ -11,16 +19,30 @@
 
 /// Per-KV-head learned query for chunk summarization.
 ///
-/// `head_cls` layout: `[n_kv_head * head_dim]`.
-/// Zero-initialized by default → mean pooling (backward-compatible).
-/// After training, these vectors learn to attend to the most informative
-/// positions within each chunk.
+/// `head_cls` layout: `[n_refs][n_kv_head][head_dim]`, **ref-major** — at the
+/// default `R = 1` this is the original `[n_kv_head * head_dim]` layout
+/// byte-for-byte (the additive-layout law, riir-train Issue 666 T2). Each
+/// reference query `q̂_r` summarizes a chunk independently
+/// (`k̂_r = softmax(q̂_r · K_chunk / √d) · K_chunk`); the ZHA routing tangent
+/// for the chunk is `max_r(q · k̂_r/√d · γ + b̂_r)` — see
+/// [`tangent_logit_max_r`].
+///
+/// Zero-initialized by default → mean pooling (backward-compatible); after
+/// training, the references learn to attend to the most informative
+/// positions within each chunk. Trained values arrive via the
+/// `zha_chunk_sidecar` feature (BLAKE3-verified sidecar file); sidecar-absent
+/// serving is byte-identical to the incumbent (the free G3 anchor).
 #[derive(Clone)]
 pub struct ChunkSummaryQuery {
-    /// Learned class token embeddings: flat `[n_kv_head * head_dim]`.
+    /// Learned class token embeddings: flat `[n_refs * n_kv_head * head_dim]`,
+    /// ref-major.
     pub head_cls: Vec<f32>,
     pub n_kv_head: usize,
     pub head_dim: usize,
+    /// Reference-query count `R` (the ZHA indexer's per-KV-group shared
+    /// queries; arXiv:2610.42112). Private — every constructor pins it; read
+    /// via [`Self::n_refs`].
+    n_refs: usize,
     /// Cached result of scanning `head_cls` for all-zeros.
     /// Updated on construction; call [`recompute_zero_init_cache`] after any
     /// direct mutation of `head_cls`.
@@ -28,17 +50,40 @@ pub struct ChunkSummaryQuery {
 }
 
 impl ChunkSummaryQuery {
-    /// Create with zero-initialized `head_cls` (mean-pooling mode).
+    /// Create with zero-initialized `head_cls` (mean-pooling mode), `R = 1`.
     pub fn new(n_kv_head: usize, head_dim: usize) -> Self {
         Self {
             head_cls: vec![0.0; n_kv_head * head_dim],
             n_kv_head,
             head_dim,
+            n_refs: 1,
             zero_init_cache: true,
         }
     }
 
-    /// Create with random initialization for training.
+    /// Create with `R` zero-initialized reference queries per KV head
+    /// (mean-pooling mode; every reference produces the same mean-pool
+    /// summary and the same `ln(chunk_size)` entropy, so `R > 1` at zero-init
+    /// is route-equivalent to `R = 1` — the tangent max over identical refs
+    /// is the incumbent's own logit).
+    ///
+    /// # Panics
+    /// Panics if `n_refs == 0` (an empty reference set has no tangent).
+    pub fn with_n_refs(n_refs: usize, n_kv_head: usize, head_dim: usize) -> Self {
+        assert!(
+            n_refs >= 1,
+            "n_refs must be >= 1 (an empty reference set has no tangent logit)"
+        );
+        Self {
+            head_cls: vec![0.0; n_refs * n_kv_head * head_dim],
+            n_kv_head,
+            head_dim,
+            n_refs,
+            zero_init_cache: true,
+        }
+    }
+
+    /// Create with random initialization for training (`R = 1`).
     pub fn new_random(
         n_kv_head: usize,
         head_dim: usize,
@@ -53,14 +98,64 @@ impl ChunkSummaryQuery {
             head_cls,
             n_kv_head,
             head_dim,
+            n_refs: 1,
             zero_init_cache: false,
         }
     }
 
-    /// Get query slice for a specific head.
+    /// Reference-query count `R`.
+    #[inline]
+    pub fn n_refs(&self) -> usize {
+        self.n_refs
+    }
+
+    /// Crate-internal assembly from raw ref-major parts (the sidecar lane's
+    /// post-verification constructor). `head_cls.len()` must equal
+    /// `n_refs * n_kv_head * head_dim` — the caller verified the wire shape
+    /// before calling.
+    pub(crate) fn from_ref_major(
+        head_cls: Vec<f32>,
+        n_refs: usize,
+        n_kv_head: usize,
+        head_dim: usize,
+    ) -> Self {
+        debug_assert_eq!(head_cls.len(), n_refs * n_kv_head * head_dim);
+        let mut query = Self {
+            head_cls,
+            n_kv_head,
+            head_dim,
+            n_refs,
+            zero_init_cache: false,
+        };
+        query.recompute_zero_init_cache();
+        query
+    }
+
+    /// Get the reference-0 query slice for a specific head (the incumbent
+    /// single-query reading; every `R = 1` caller keeps its exact layout and
+    /// values).
     #[inline]
     pub fn head_query(&self, head_idx: usize) -> &[f32] {
         let start = head_idx * self.head_dim;
+        &self.head_cls[start..start + self.head_dim]
+    }
+
+    /// Get reference `ref_idx`'s query slice for a specific head.
+    ///
+    /// Ref-major addressing: `(ref_idx * n_kv_head + head_idx) * head_dim`.
+    ///
+    /// # Panics
+    /// Panics if the computed range is out of bounds (a caller mixing `R`,
+    /// `n_kv_head` or `head_dim` across construction and consumption is a
+    /// contract violation, not a degenerate input).
+    #[inline]
+    pub fn ref_query(&self, ref_idx: usize, head_idx: usize) -> &[f32] {
+        let start = (ref_idx * self.n_kv_head + head_idx) * self.head_dim;
+        debug_assert!(
+            ref_idx < self.n_refs,
+            "ref_query({ref_idx}) out of range (n_refs = {})",
+            self.n_refs
+        );
         &self.head_cls[start..start + self.head_dim]
     }
 
@@ -287,14 +382,121 @@ pub fn summarize_chunk_into_with_entropy(
     scores_buf: &mut [f32],
     entropy_out: &mut f32,
 ) {
-    let hd = head_dim;
     let q = query.head_query(head_idx);
+    summarize_ref_into(
+        query.is_zero_init(),
+        q,
+        chunk_keys,
+        chunk_size,
+        head_dim,
+        out,
+        scores_buf,
+        entropy_out,
+    );
+}
+
+/// Summarize one chunk with EVERY reference query of a head
+/// (`k̂_r = Attn(q̂_r, K_C)` for `r ∈ 0..R` — the ZHA reference-query shape,
+/// riir-train Issue 666 T2).
+///
+/// Writes each reference's summary into `outs` (flat `[R * head_dim]`,
+/// ref-major: reference `r`'s key at `outs[r * head_dim..]`) and each
+/// reference's entropy bias into `entropies_out` (`[R]`). Zero-alloc.
+///
+/// At a zero-init query every reference produces the same mean-pool summary
+/// and the same `ln(chunk_size)` entropy — the tangent max over identical
+/// refs ([`tangent_logit_max_r`]) is then exactly the `R = 1` incumbent's
+/// logit, so the multi-ref reading never perturbs the untrained route.
+///
+/// Prefer [`summarize_chunk_into_with_entropy`] when `query.n_refs() == 1`
+/// (the same arithmetic, one indirection less).
+#[allow(
+    clippy::too_many_arguments,
+    reason = "hot-path summarizer; args are distinct query/chunk/out/scratch buffers"
+)]
+pub fn summarize_chunk_refs_into_with_entropy(
+    query: &ChunkSummaryQuery,
+    chunk_keys: &[f32],
+    chunk_size: usize,
+    head_idx: usize,
+    head_dim: usize,
+    outs: &mut [f32],
+    entropies_out: &mut [f32],
+    scores_buf: &mut [f32],
+) {
+    let n_refs = query.n_refs();
+    debug_assert_eq!(
+        outs.len(),
+        n_refs * head_dim,
+        "outs must be [R * head_dim], ref-major"
+    );
+    debug_assert_eq!(entropies_out.len(), n_refs, "entropies_out must be [R]");
+    let is_zero = query.is_zero_init();
+    for (ref_idx, entropy_out) in entropies_out.iter_mut().enumerate() {
+        let out_off = ref_idx * head_dim;
+        summarize_ref_into(
+            is_zero,
+            query.ref_query(ref_idx, head_idx),
+            chunk_keys,
+            chunk_size,
+            head_dim,
+            &mut outs[out_off..out_off + head_dim],
+            scores_buf,
+            entropy_out,
+        );
+    }
+}
+
+/// Allocating twin of [`summarize_chunk_refs_into_with_entropy`].
+/// Returns `(flat refs summaries [R * head_dim] ref-major, entropies [R])`.
+pub fn summarize_chunk_refs_with_entropy(
+    query: &ChunkSummaryQuery,
+    chunk_keys: &[f32],
+    chunk_size: usize,
+    head_idx: usize,
+    head_dim: usize,
+) -> (Vec<f32>, Vec<f32>) {
+    let n_refs = query.n_refs();
+    let mut outs = vec![0.0f32; n_refs * head_dim];
+    let mut entropies = vec![0.0f32; n_refs];
+    let mut scores_buf = vec![0.0f32; chunk_size.max(1)];
+    summarize_chunk_refs_into_with_entropy(
+        query,
+        chunk_keys,
+        chunk_size,
+        head_idx,
+        head_dim,
+        &mut outs,
+        &mut entropies,
+        &mut scores_buf,
+    );
+    (outs, entropies)
+}
+
+/// One reference's chunk summary + entropy bias (the shared body of every
+/// summarizer variant). `query_is_zero` selects the mean-pool fallback;
+/// `q` is the caller's query slice (reference `r`'s, head `head_idx`).
+#[allow(
+    clippy::too_many_arguments,
+    reason = "hot-path summarizer body; args are distinct query/chunk/out/scratch buffers"
+)]
+fn summarize_ref_into(
+    query_is_zero: bool,
+    q: &[f32],
+    chunk_keys: &[f32],
+    chunk_size: usize,
+    head_dim: usize,
+    out: &mut [f32],
+    scores_buf: &mut [f32],
+    entropy_out: &mut f32,
+) {
+    let hd = head_dim;
 
     // Check if query is zero → mean pooling fallback.
     // Entropy of the uniform distribution over `chunk_size` elements is
     // `ln(chunk_size)` — constant across chunks, so routing rankings are
     // unchanged at zero-init (the "dormant" guarantee, Issue 044 T4).
-    if query.is_zero_init() {
+    if query_is_zero {
         mean_pool_keys_into(chunk_keys, chunk_size, hd, out);
         *entropy_out = (chunk_size.max(1) as f32).ln();
         return;
@@ -351,6 +553,91 @@ pub fn summarize_chunk_into_with_entropy(
     {
         katgpt_core::simd::simd_fused_scale_acc(&mut out[..hd], key_chunk, *score, hd);
     }
+}
+
+/// The ZHA routing tangent logit for ONE chunk: `s = max_r(q · k̂_r/√d · γ +
+/// b̂_r)` (research 021 / riir-train Issue 666 — the tiny reference-query
+/// score the KL distillation trains against).
+///
+/// `chunk_refs` is the chunk's flat reference-summary block `[R * head_dim]`
+/// (ref-major, exactly what [`summarize_chunk_refs_into_with_entropy`] writes);
+/// `chunk_ref_entropies` carries the per-reference entropy biases `b̂_r`
+/// (`[R]`; a shorter slice disables the bias for the missing tail, mirroring
+/// the router's own entropy handling). The scale mirrors the router's chunk
+/// logit `z = q · k̄/√d · γ + b'_c` (`routing::compute_chunk_logits_into`),
+/// so at `R = 1` this is that logit read back bit-for-bit.
+///
+/// NaN propagation: a NaN ref logit POISONS the chunk (returns NaN) — never
+/// silently dropped by the max (a corrupted trained sidecar must be visible
+/// in the route, not laundered by the selection).
+///
+/// # Panics
+/// Panics on `chunk_refs.is_empty()` or `head_dim == 0` — scoring an empty
+/// reference set is a caller contract violation, not a degenerate input.
+#[inline]
+pub fn tangent_logit_max_r(
+    query: &[f32],
+    chunk_refs: &[f32],
+    chunk_ref_entropies: &[f32],
+    head_dim: usize,
+    scaling_factor: f32,
+) -> f32 {
+    tangent_logit_max_r_indexed(
+        query,
+        chunk_refs,
+        chunk_ref_entropies,
+        head_dim,
+        scaling_factor,
+    )
+    .0
+}
+
+/// [`tangent_logit_max_r`] plus the winning reference index. The max is a
+/// strict `>` walk, so ties keep the FIRST index — the determinism law's
+/// fixed strict tie rule (the trainer's subgradient consumes this same
+/// first-index argmax).
+///
+/// # Panics
+/// Panics on `chunk_refs.is_empty()` or `head_dim == 0`.
+#[inline]
+pub fn tangent_logit_max_r_indexed(
+    query: &[f32],
+    chunk_refs: &[f32],
+    chunk_ref_entropies: &[f32],
+    head_dim: usize,
+    scaling_factor: f32,
+) -> (f32, usize) {
+    assert!(
+        !chunk_refs.is_empty(),
+        "tangent logit over an empty reference set"
+    );
+    assert!(head_dim >= 1, "tangent logit needs head_dim >= 1");
+    let n_refs = chunk_refs.len() / head_dim;
+    debug_assert_eq!(
+        chunk_refs.len(),
+        n_refs * head_dim,
+        "chunk_refs must be a whole number of head_dim rows"
+    );
+    let scale = 1.0 / (head_dim as f32).sqrt() * scaling_factor;
+    let mut best_idx = 0usize;
+    let mut best = f32::NEG_INFINITY;
+    for r in 0..n_refs {
+        let k_hat = &chunk_refs[r * head_dim..(r + 1) * head_dim];
+        let mut logit = katgpt_core::simd::simd_dot_f32(query, k_hat, head_dim) * scale;
+        if r < chunk_ref_entropies.len() {
+            logit += chunk_ref_entropies[r];
+        }
+        // NaN poisoning: a NaN logit must SURFACE, never be skipped by the
+        // strict-> selection (f32::max semantics would launder it).
+        if logit.is_nan() {
+            return (logit, r);
+        }
+        if logit > best {
+            best = logit;
+            best_idx = r;
+        }
+    }
+    (best, best_idx)
 }
 
 /// Mean pooling over chunk keys (zero-init fallback).
@@ -675,5 +962,167 @@ mod tests {
         for (i, (&a, &b)) in plain.iter().zip(entropy_summary.iter()).enumerate() {
             assert!((a - b).abs() < 1e-6, "dim {i}: plain={a}, entropy={b}");
         }
+    }
+
+    // ── Issue 666 T2 — the R reference-query layout ─────────────────────
+
+    /// Additive-layout law, part 1: `R = 1` reference addressing is the
+    /// original flat layout byte-for-byte.
+    #[test]
+    fn test_ref_layout_r1_is_the_incumbent_layout() {
+        let mut query = ChunkSummaryQuery::new(N_KV_HEAD, HEAD_DIM);
+        assert_eq!(query.n_refs(), 1);
+        query.head_cls[0..HEAD_DIM].copy_from_slice(&[1.0, 2.0, 3.0, 4.0]);
+        query.head_cls[HEAD_DIM..2 * HEAD_DIM].copy_from_slice(&[5.0, 6.0, 7.0, 8.0]);
+        for h in 0..N_KV_HEAD {
+            assert_eq!(query.ref_query(0, h), query.head_query(h));
+        }
+    }
+
+    /// Additive-layout law, part 2: the multi-ref summarizer at `R = 1` is
+    /// the single-ref path BIT-FOR-BIT (summary + entropy).
+    #[test]
+    fn test_summarize_refs_r1_bit_identical_to_single_ref() {
+        let mut query = ChunkSummaryQuery::new(1, HEAD_DIM);
+        query.head_cls[0..HEAD_DIM].copy_from_slice(&[0.0, 100.0, 0.0, 0.0]);
+        query.recompute_zero_init_cache();
+        let chunk_keys: Vec<f32> = vec![1.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0];
+        let (single, single_e) = summarize_chunk_with_entropy(&query, &chunk_keys, 3, 0, HEAD_DIM);
+        let (refs, refs_e) = summarize_chunk_refs_with_entropy(&query, &chunk_keys, 3, 0, HEAD_DIM);
+        assert_eq!(refs.len(), HEAD_DIM);
+        assert_eq!(
+            single.iter().map(|f| f.to_bits()).collect::<Vec<_>>(),
+            refs.iter().map(|f| f.to_bits()).collect::<Vec<_>>(),
+            "R=1 refs summary must be bit-identical to the single-ref path"
+        );
+        assert_eq!(single_e.to_bits(), refs_e[0].to_bits());
+    }
+
+    /// Each reference row of the multi-ref summarizer equals the single-ref
+    /// summarizer run with that reference's query.
+    #[test]
+    fn test_summarize_refs_r4_matches_per_ref_single() {
+        let mut query = ChunkSummaryQuery::with_n_refs(4, 1, HEAD_DIM);
+        assert_eq!(query.n_refs(), 4);
+        assert_eq!(query.head_cls.len(), 4 * HEAD_DIM);
+        // Ref 0 stays zero (mean-pool anchor); refs 1..3 peak at different
+        // tokens.
+        query.head_cls[HEAD_DIM..2 * HEAD_DIM].copy_from_slice(&[100.0, 0.0, 0.0, 0.0]);
+        query.head_cls[2 * HEAD_DIM..3 * HEAD_DIM].copy_from_slice(&[0.0, 100.0, 0.0, 0.0]);
+        query.head_cls[3 * HEAD_DIM..4 * HEAD_DIM].copy_from_slice(&[0.0, 0.0, 100.0, 0.0]);
+        query.recompute_zero_init_cache();
+        assert!(!query.is_zero_init());
+
+        let chunk_keys: Vec<f32> = vec![1.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0];
+        let (refs, ref_entropies) =
+            summarize_chunk_refs_with_entropy(&query, &chunk_keys, 3, 0, HEAD_DIM);
+        assert_eq!(ref_entropies.len(), 4);
+        for r in 0..4 {
+            // Single-ref oracle: a fresh R=1 query carrying ref r's slice.
+            let mut oracle = ChunkSummaryQuery::new(1, HEAD_DIM);
+            oracle.head_cls.copy_from_slice(query.ref_query(r, 0));
+            oracle.recompute_zero_init_cache();
+            let (expect, expect_e) =
+                summarize_chunk_with_entropy(&oracle, &chunk_keys, 3, 0, HEAD_DIM);
+            let got = &refs[r * HEAD_DIM..(r + 1) * HEAD_DIM];
+            assert_eq!(
+                expect.iter().map(|f| f.to_bits()).collect::<Vec<_>>(),
+                got.iter().map(|f| f.to_bits()).collect::<Vec<_>>(),
+                "ref {r} row must match its single-ref oracle"
+            );
+            assert_eq!(expect_e.to_bits(), ref_entropies[r].to_bits());
+        }
+        // Ref 0 (zero) is the mean-pool anchor.
+        let mean = [1.0 / 3.0, 2.0 / 3.0, 1.0, 0.0];
+        for (i, (&got, &exp)) in refs[0..HEAD_DIM].iter().zip(mean.iter()).enumerate() {
+            assert!(
+                (got - exp).abs() < 1e-6,
+                "ref 0 mean-pool dim {i}: {got} vs {exp}"
+            );
+        }
+    }
+
+    /// Zero-init `R > 1`: every reference is the same mean-pool summary with
+    /// the same `ln(chunk_size)` entropy — route-equivalent to `R = 1`.
+    #[test]
+    fn test_summarize_refs_zero_init_all_refs_mean_pool() {
+        let query = ChunkSummaryQuery::with_n_refs(3, N_KV_HEAD, HEAD_DIM);
+        assert!(query.is_zero_init());
+        let chunk_keys: Vec<f32> = vec![1.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0];
+        let (refs, ref_entropies) =
+            summarize_chunk_refs_with_entropy(&query, &chunk_keys, 3, 0, HEAD_DIM);
+        let mean = [1.0 / 3.0, 2.0 / 3.0, 1.0, 0.0];
+        for r in 0..3 {
+            let got = &refs[r * HEAD_DIM..(r + 1) * HEAD_DIM];
+            for (i, (&g, &exp)) in got.iter().zip(mean.iter()).enumerate() {
+                assert!((g - exp).abs() < 1e-6, "ref {r} dim {i}: {g} vs {exp}");
+            }
+            assert!((ref_entropies[r] - 3.0_f32.ln()).abs() < 1e-6);
+        }
+    }
+
+    /// `tangent_logit_max_r` picks the max of the manual per-ref logits and
+    /// the indexed twin keeps the FIRST index on ties.
+    #[test]
+    fn test_tangent_logit_max_r_manual_and_first_index_tie() {
+        let query = [1.0, 0.0, 0.0, 0.0];
+        let hd = 4_usize;
+        // Refs: dot products 1.0, 3.0, 3.0 (γ=1 → logits 0.5, 1.5, 1.5 at
+        // scale 1/√4 = 0.5; entropies add +0.0, +1.0, +1.0 → 0.5, 2.5, 2.5).
+        let refs = [1.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0];
+        let ent = [0.0, 1.0, 1.0];
+        let (logit, idx) = tangent_logit_max_r_indexed(&query, &refs, &ent, hd, 1.0);
+        assert_eq!(idx, 1, "tie between refs 1 and 2 must keep the FIRST index");
+        assert!((logit - 2.5).abs() < 1e-6, "max logit: got {logit}");
+        assert!((tangent_logit_max_r(&query, &refs, &ent, hd, 1.0) - logit).abs() < 1e-6);
+    }
+
+    /// Zero-init `R > 1` tangent identity: max over identical refs + equal
+    /// `ln(n)` biases is exactly the `R = 1` incumbent logit.
+    #[test]
+    fn test_tangent_logit_zero_init_identity_with_r1_incumbent() {
+        let query = [0.5, -0.25, 1.0, 2.0];
+        let mean: Vec<f32> = vec![1.0 / 3.0, 2.0 / 3.0, 1.0, 0.0];
+        let ln3 = 3.0_f32.ln();
+        let hd = 4_usize;
+        let r1 = tangent_logit_max_r(&query, &mean, &[ln3], hd, 1.0);
+        let mut r3_refs = Vec::new();
+        r3_refs.extend_from_slice(&mean);
+        r3_refs.extend_from_slice(&mean);
+        r3_refs.extend_from_slice(&mean);
+        let r3 = tangent_logit_max_r(&query, &r3_refs, &[ln3, ln3, ln3], hd, 1.0);
+        assert_eq!(
+            r1.to_bits(),
+            r3.to_bits(),
+            "zero-init R>1 tangent must equal the R=1 incumbent"
+        );
+    }
+
+    /// NaN propagation: one NaN ref poisons the chunk logit (never silently
+    /// skipped by the max — a corrupted sidecar must surface).
+    #[test]
+    fn test_tangent_logit_nan_ref_poisons() {
+        let query = [1.0, 0.0, 0.0, 0.0];
+        let nan = f32::NAN;
+        let refs = [1.0, 0.0, 0.0, 0.0, nan, 0.0, 0.0, 0.0];
+        let (logit, idx) = tangent_logit_max_r_indexed(&query, &refs, &[], 4, 1.0);
+        assert!(
+            logit.is_nan(),
+            "NaN ref must poison the tangent, not be skipped"
+        );
+        assert_eq!(idx, 1);
+    }
+
+    #[should_panic(expected = "empty reference set")]
+    #[test]
+    fn test_tangent_logit_empty_refs_panics() {
+        let query = [1.0, 0.0, 0.0, 0.0];
+        let _ = tangent_logit_max_r(&query, &[], &[], 4, 1.0);
+    }
+
+    #[should_panic(expected = "n_refs must be >= 1")]
+    #[test]
+    fn test_with_n_refs_zero_panics() {
+        let _ = ChunkSummaryQuery::with_n_refs(0, N_KV_HEAD, HEAD_DIM);
     }
 }

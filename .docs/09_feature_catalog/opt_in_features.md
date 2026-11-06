@@ -6435,3 +6435,45 @@ gate alone; the lookup-anomaly posture adds the per-class pinned
 expectation. Cost + coverage-accounting axes only, never accuracy parity
 with a trained reader (Research 654 W1–W6). Promotion only via a wired
 consumer + a real-corpus cell.
+
+## 162. zha_chunk_sidecar — the trained head_cls reference-query sidecar (riir-train Issue 666 T2 / Research 021)
+
+The serving-side consumption half of riir-train's ZHA chunk-KL lane
+(arXiv:2610.42112, Zyphra ZHA — research 021 is the distill; riir-train
+Issue 666 is the PoC gate): a v1 binary artifact + BLAKE3 digest file
+carrying `R` trained reference queries per KV head for `dash_attn`'s
+`ChunkSummaryQuery`. This repo CONSUMES the frozen snapshot (the freeze/thaw
+mutation class — the only runtime weight mutation this repo allows);
+riir-train's trainer (`zha_chunk_kl` there, T1 `348c4a9b`) owns the bytes.
+
+- **Layout law (additive, `R = 1` byte-identical):** `head_cls` becomes
+  `[R][n_kv_head][head_dim]` ref-major; at `R = 1` it is the original flat
+  layout byte-for-byte, and the multi-ref summarizer
+  (`summarize_chunk_refs_into_with_entropy`) is bit-identical to the
+  single-ref path (pinned by `to_bits` tests, not tolerance bands).
+- **Tangent law:** the ZHA routing score is
+  `s = max_r(q · k̂_r/√d · γ + b̂_r)` (`tangent_logit_max_r(_indexed)`) with
+  the FIRST-index tie rule; at zero-init every ref is the mean-pool summary
+  with the same `ln(chunk_size)` entropy, so `R > 1` is route-equivalent to
+  the incumbent (identity pinned bit-exactly). NaN propagation: a NaN ref
+  logit poisons the chunk — never silently skipped by the selection.
+- **Sidecar law (the `LAYA_WEIGHTS_VARIANT` pattern, riir-infer
+  `q8_artifact::resolve_weights_variant`):** `KATGPT_HEAD_CLS_VARIANT` —
+  unset/empty/`zero` = the incumbent (`Ok(None)`; sidecar-absent serving is
+  byte-identical, the free G3 anchor), `trained` =
+  `<dir>/derived/head_cls_trained.bin` + `.blake3` (digest-verified before
+  parse; strict length, magic, version, zero-dimension refusals), anything
+  else refuses naming the expected set. NOTHING is auto-derived — the
+  missing-artifact refusal names the writer.
+- **Warm-start anchor:** an all-zero payload loads to `is_zero_init() ==
+  true` → mean-pool branch → byte-identical serving; the T3 trainer
+  warm-starts R1 from zero-init, so the trained R1 arm can only improve on
+  mean-pool (monotone by construction).
+
+🔧 Feature flag: `zha_chunk_sidecar` (katgpt-attn, implies `dash_attn` +
+`dep:blake3`). **OPT-IN, DEFAULT-OFF, NEVER default-on** (trained weights;
+modelless-first mandate). T1 + T2 landed (36 tests green at the
+`zha_chunk_sidecar` posture); T3 (gate corpus) + T4/T5 (GOAT G1 per-family
+conditional retention + G2 decode-read reduction) are riir-train Issue 666
+owner-gated; T7's verdict (promote / opt-in coexist / recorded negative)
+rides those gates.

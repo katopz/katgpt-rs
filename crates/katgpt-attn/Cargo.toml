@@ -66,6 +66,17 @@ diagonal_gate = []
 # module comment. The token-level decode_vortex variant lives in root
 # src/dash_attn/tests.rs (needs root transformer glue).
 dash_attn = ["dep:katgpt-forward", "dep:katgpt-transformer", "dep:katgpt-pruners", "katgpt-pruners/bandit", "dep:katgpt-kv", "katgpt-kv/cache_prune", "dep:serde"]
+# Issue 666 T2 (riir-train; arXiv:2610.42112 ZHA reference-query lane): the
+# trained head_cls sidecar — v1 binary artifact + BLAKE3 digest file, loaded
+# via KATGPT_HEAD_CLS_VARIANT (the riir-infer LAYA_WEIGHTS_VARIANT pattern:
+# fail-loud refusals, never auto-derived). This is the repo's freeze/thaw
+# mutation class (consuming riir-train's trained bytes); sidecar-absent
+# serving is byte-identical to the incumbent. Opt-in until the Issue 666
+# T4/T5 GOAT gates; NEVER default-on (trained weights; modelless-first
+# mandate). Adds blake3 to the dash_attn surface (the R-layout + tangent
+# helpers live in chunk_summary.rs ungated; only the sidecar file lane is
+# gated here).
+zha_chunk_sidecar = ["dash_attn", "dep:blake3"]
 # VortexFlow composable sparse routing (Plan 196). Sub-feature of dash_attn —
 # gates the vortex_flow.rs/block_topk.rs/channel_aware.rs/entmax_router.rs/
 # meta_router.rs/value_energy.rs primitives. Phase 12 (2026-07-04): these moved
