@@ -15,8 +15,8 @@
 > PoC-local proportional alternation (the shipped round-robin laws take a budget only,
 > no seed; and their balanced-eval/skewed-tune output is a distribution shift the
 > prior-sensitive baseline must not face)
-> **Status:** Active — fusion filed; PoC issue `riir-instinct/.issues/028_twinarm_probe_repair_poc.md`
-> carries the proof path with pre-registered gates; tier FINALIZES with the PoC (fold law pre-registered)
+> **Status:** PoC FOLDED NEGATIVE 2026-11-06 — the tier FINALIZED with the fold law (T1 G0 census: every suite immaterial at 2¹⁷, record `0063`; T2 G1: the repair beat its base but LOST to fair b1, LCB95 −0.0132, record `0064`; fold `b98e759`, instinct HISTORY 2026-11-06); the trainer-side primitives stayed as tested capabilities
+> PoC issue `riir-instinct/.issues/028_twinarm_probe_repair_poc.md` (removed per noise-reduction; the arc lives in instinct HISTORY + records 0063/0064)
 > **Related Research:** 649 (the anchor primitive), 650 (the prior sweep + rethink blockers), 648 (parent)
 > **Related Issues/Plans:** `riir-instinct/.issues/028` (the PoC); katgpt-rs Issue 980 /
 > Bench 978 (the landed substrate); Bench 979 (the two-region smallest step)
