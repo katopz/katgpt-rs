@@ -5092,3 +5092,17 @@ required-features = ["regret_guard"]
 name = "issue979_regret_guard_goat"
 harness = false
 required-features = ["regret_guard"]
+
+# Issue 986 — slot placement × effective conditioning (the 985 negative's
+# two preregistered hypotheses, ONE cell, no tuning passes). Arms:
+# k-means++ placement / fixed-length conditioning (head-cos target 0.90) /
+# both; mechanism-liveness gate (head-cos ≤ 0.95 AND unique ≥ K/2) as the
+# interpretation precondition; the 985 bar verbatim per arm + the 984
+# store arms at the deepest level. Report posture (gates print, exit 0,
+# ONE live assert on fixture validity). Run:
+# cargo bench -p katgpt-core --features soft_read,distance_abstain --no-default-features
+# --bench bench_986_slot_placement_goat
+[[bench]]
+name = "bench_986_slot_placement_goat"
+harness = false
+required-features = ["soft_read", "distance_abstain"]

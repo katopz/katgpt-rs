@@ -89,13 +89,19 @@ pub(crate) fn gate(cos: f32, tau: f32, b: f32) -> f32 {
 
 /// Slot construction mode (preregistered: the GOAT cell gates on
 /// [`SlotMode::FarthestPoint`]; [`SlotMode::Orthonormal`] prints as the
-/// comparison arm).
+/// comparison arm). [`SlotMode::KMeansPlusPlus`] is Issue 986 Arm A — the
+/// placement hypothesis test (985's FPS spreads to the store's outskirts;
+/// density-aware seeding puts anchors where reads need them).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SlotMode {
     /// Farthest-point anchors over the store rows (on-manifold).
     FarthestPoint,
     /// BLAKE3-seeded orthonormal directions (geometry-partitioning).
     Orthonormal,
+    /// k-means++-seeded row anchors: seeded farthest-first over a
+    /// D²-weighted init (density-aware, deterministic given the store
+    /// digest). Issue 986 Arm A.
+    KMeansPlusPlus,
 }
 
 /// K deterministic slots over a store, plus the per-slot conditioning
@@ -127,6 +133,7 @@ impl<const D: usize> SlotBank<D> {
         let mut slots = match mode {
             SlotMode::FarthestPoint => farthest_point_anchors(rows, k),
             SlotMode::Orthonormal => seeded_orthonormal(&digest, k),
+            SlotMode::KMeansPlusPlus => kmeans_pp_anchors(rows, k, &digest),
         };
         // K > N fill: the manifold anchors are the first N; the remainder
         // is seeded Gram-Schmidt fill against the accepted set (distinct
@@ -288,6 +295,77 @@ fn farthest_point_anchors<const D: usize>(rows: &[[f32; D]], k: usize) -> Vec<[f
             let d = dist(r, last);
             if d < *md {
                 *md = d;
+            }
+        }
+    }
+    chosen.into_iter().map(|i| normalized[i]).collect()
+}
+
+/// k-means++-seeded anchors (Issue 986 Arm A — the placement hypothesis).
+///
+/// The classic k-means++ seeding law, on the store's own rows: the first
+/// anchor is the row at a BLAKE3-digest-derived index (deterministic —
+/// never a fixed row 0, which would key placement on store order), then
+/// each next anchor is drawn with probability proportional to the squared
+/// cosine-distance to the nearest chosen anchor. Density-aware BY
+/// CONSTRUCTION: a cluster holding a mass-m of the store's rows contributes
+/// m·d² to the draw weight, so dense mid-store regions get anchors in
+/// proportion to their mass — the property FPS lacks (it maximizes
+/// min-distance, which pushes every pick to the outskirts regardless of
+/// density; Issue 985's measured failure).
+///
+/// Determinism: the BLAKE3(store) digest seeds one SplitMix64 stream; the
+/// same store reproduces the same anchors across runs and platforms.
+/// O(K·N·D) — construction-time only.
+fn kmeans_pp_anchors<const D: usize>(
+    rows: &[[f32; D]],
+    k: usize,
+    digest: &[u8; 32],
+) -> Vec<[f32; D]> {
+    let n = rows.len();
+    let normalized: Vec<[f32; D]> = rows.iter().map(|r| unit(*r)).collect();
+    let seed = u64::from_le_bytes(digest[..8].try_into().expect("8 bytes"));
+    let mut rng = SplitMix64::new(seed ^ 0x9EE5_9EE5_9EE5_9EE5);
+    let dist2 = |a: &[f32; D], b: &[f32; D]| {
+        let d: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum::<f32>();
+        let e = (1.0 - d).max(0.0);
+        e * e
+    };
+    // First anchor: the digest-derived draw (uniform over rows).
+    let mut chosen: Vec<usize> = Vec::with_capacity(k.min(n));
+    chosen.push((rng.next_u64() as usize) % n);
+    // Squared-distance-to-nearest-chosen cache, updated per pick.
+    let mut d2: Vec<f32> = (0..n)
+        .map(|i| dist2(&normalized[i], &normalized[chosen[0]]))
+        .collect();
+    while chosen.len() < k.min(n) {
+        let total: f32 = d2.iter().sum();
+        if total <= 1e-12 {
+            break; // every row claimed — the k>n fill tops up later
+        }
+        // Draw r ∈ [0, total) and walk the cumulative weights — the
+        // k-means++ D² sampling step, on the seeded stream.
+        let r = rng.next_unit() * total;
+        let mut acc = 0.0f32;
+        let mut pick = n - 1;
+        for (i, w) in d2.iter().enumerate() {
+            acc += w;
+            if acc >= r {
+                pick = i;
+                break;
+            }
+        }
+        // A zero-weight pick means the draw landed in the (numerically)
+        // exhausted tail — skip, never double-claim a row.
+        if d2[pick] <= 1e-12 || chosen.contains(&pick) {
+            continue;
+        }
+        chosen.push(pick);
+        let last = &normalized[pick];
+        for (w, row) in d2.iter_mut().zip(&normalized) {
+            let nd = dist2(row, last);
+            if nd < *w {
+                *w = nd;
             }
         }
     }

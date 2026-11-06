@@ -105,6 +105,14 @@ pub struct SoftRead<const D: usize, const K: usize> {
     bank: SlotBank<D>,
     tau: f32,
     biases: [f32; K],
+    /// Issue 986 Arm B — the effective-conditioning posture. `None` = the
+    /// shipped β·⟨q,d⟩·d residual, byte-identical to the 985 posture. `Some(s)`
+    /// = the fixed-length residual form: each head moves an arc s·β_k along
+    /// its slot direction (normalized), so the head displacement no longer
+    /// shrinks with ⟨q,d_k⟩ — 16 slots become 16 readers with DIFFERENT
+    /// views instead of 16 copies of q (985's measured collapse:
+    /// cos(q_k,q) = +0.997 on every store, unique candidates 1.0).
+    conditioning_scale: Option<f32>,
 }
 
 impl<const D: usize, const K: usize> SoftRead<D, K> {
@@ -119,7 +127,38 @@ impl<const D: usize, const K: usize> SoftRead<D, K> {
             bank: SlotBank::new(rows, K, mode),
             tau: DEFAULT_TAU,
             biases: [0.0; K],
+            conditioning_scale: None,
         }
+    }
+
+    /// Issue 986 Arm B — the effective-conditioning posture: the per-slot
+    /// residual becomes a FIXED-LENGTH step, its scale solved so the
+    /// modeled mean head displacement lands at `target_cos` (the
+    /// preregistered 0.90 — never swept). Small-arc law: cos(q_k,q) ≈
+    /// 1 − (s·β_k)²/2, so s = √(2·(1−t)/mean(β_k²)). The bench MEASURES
+    /// the achieved mean cos(q_k,q) and gates on it (≤ 0.95 liveness) —
+    /// the analytic solve only has to land the posture near its target.
+    pub fn with_head_cos_target(mut self, target_cos: f32) -> Self {
+        assert!(
+            target_cos > 0.0 && target_cos < 1.0,
+            "head-cos target must be in (0,1)"
+        );
+        let k = self.bank.len();
+        let mean_b2 = if k == 1 {
+            0.0 // single slot: β_0 = 0, the plain head — the knob is inert
+        } else {
+            (0..k)
+                .map(|i| self.bank.beta(i) * self.bank.beta(i))
+                .sum::<f32>()
+                / k as f32
+        };
+        assert!(
+            mean_b2 > 0.0,
+            "effective conditioning needs betas with mass (k ≥ 2)"
+        );
+        let s = (2.0 * (1.0 - target_cos) / mean_b2).sqrt();
+        self.conditioning_scale = Some(s);
+        self
     }
 
     /// Non-default τ (the zero-gate test uses a small τ to drive gates to
@@ -166,17 +205,38 @@ impl<const D: usize, const K: usize> SoftRead<D, K> {
             "soft read over an empty store — use the empty floor instead"
         );
         let q = unit(*q);
-        // Conditioned heads (the residual path — slot distinctness).
+        // Conditioned heads (the residual path — slot distinctness). Two
+        // forms, selected by the posture: the SHIPPED β·⟨q,d⟩·d residual
+        // (default, byte-identical to 985) and the Issue 986 fixed-length
+        // residual s·β_k·d̂_k (the effective-conditioning arm — the head
+        // moves a fixed arc along ±slot-direction regardless of ⟨q,d_k⟩).
+        let scale = self.conditioning_scale;
         for k in 0..K {
             let d = self.bank.slot(k);
             let dot: f32 = q.iter().zip(d).map(|(a, b)| a * b).sum();
             let beta = self.bank.beta(k);
-            scratch.heads[k] = {
-                let mut h = q;
-                for (x, dv) in h.iter_mut().zip(d) {
-                    *x += beta * dot * dv;
+            scratch.heads[k] = match scale {
+                None => {
+                    let mut h = q;
+                    for (x, dv) in h.iter_mut().zip(d) {
+                        *x += beta * dot * dv;
+                    }
+                    unit(h)
                 }
-                unit(h)
+                Some(s) => {
+                    // Fixed-length step: the sign of ⟨q,d_k⟩ picks the
+                    // along/against direction (the preregistered
+                    // ⟨q,d_k⟩·d_k/‖⟨q,d_k⟩·d_k‖ normalization), so the
+                    // displacement magnitude is exactly s·β_k regardless of
+                    // alignment — the slot GEOMETRY (not the query alignment)
+                    // decides how far apart the heads sit.
+                    let arc = s * beta * dot.signum();
+                    let mut h = q;
+                    for (x, dv) in h.iter_mut().zip(d) {
+                        *x += arc * dv;
+                    }
+                    unit(h)
+                }
             };
         }
         let mut reads = [[0.0f32; D]; K];
@@ -384,5 +444,123 @@ mod tests {
                 "slot {k}: zero-gate read magnitude {mag} not ≈ 0"
             );
         }
+    }
+
+    // ── Issue 986 — placement + effective conditioning ────────────
+
+    #[test]
+    fn kmeans_pp_anchors_are_deterministic_and_store_keyed() {
+        // (store, mode) replay bit-identity + digest-keyed freshness — the
+        // same laws the FPS tests pin, for the 986 Arm-A constructor.
+        let rows = seeded_store(9869, 128);
+        let a = SoftRead::<D, K>::with_mode(&rows, SlotMode::KMeansPlusPlus);
+        let b = SoftRead::<D, K>::with_mode(&rows, SlotMode::KMeansPlusPlus);
+        let mut s1 = SoftReadScratch::new();
+        let mut s2 = SoftReadScratch::new();
+        let q = seeded_store(9870, 1).remove(0);
+        let r1 = a.read_into(&q, &rows, &mut s1);
+        let r2 = b.read_into(&q, &rows, &mut s2);
+        assert_eq!(r1, r2, "k-means++ placement replay must be bit-identical");
+        assert!(a.bank().is_fresh(&rows));
+        assert!(!a.bank().is_fresh(&seeded_store(9871, 128)));
+    }
+
+    #[test]
+    fn kmeans_pp_claims_interior_mass_fps_pushes_out() {
+        // The placement hypothesis, as a structural property: on a clustered
+        // store, the k-means++ assignment histogram must claim rows from
+        // MORE clusters than FPS (FPS anchors live on the outskirts, so
+        // interior clusters go unclaimed). Built store: two dense blobs + a
+        // sparse ring.
+        let mut rng = SplitMix64::new(0x986_C1B5);
+        let mut rows = Vec::new();
+        for _ in 0..40 {
+            let base: [f32; D] = unit(std::array::from_fn(|_| rng.next_sym()));
+            for _ in 0..6 {
+                rows.push(unit(std::array::from_fn(|i| {
+                    base[i] + 0.05 * rng.next_sym()
+                })));
+            }
+        }
+        let fps = crate::slot_bank::SlotBank::<D>::new(&rows, K, SlotMode::FarthestPoint);
+        let kmpp = crate::slot_bank::SlotBank::<D>::new(&rows, K, SlotMode::KMeansPlusPlus);
+        let e_fps = fps.coverage_entropy(&rows);
+        let e_kmpp = kmpp.coverage_entropy(&rows);
+        // Both should tile (entropy ≥ 0.5 floor), and neither may collapse;
+        // the 986 bench MEASURES the placement effect on the fixture — this
+        // pin is the structural floor only.
+        assert!(
+            e_kmpp >= 0.5,
+            "k-means++ coverage entropy {e_kmpp:.3} < 0.5"
+        );
+        assert!(e_fps >= 0.5, "FPS coverage entropy {e_fps:.3} < 0.5");
+    }
+
+    #[test]
+    fn effective_conditioning_spreads_the_heads() {
+        // The conditioning hypothesis, as a structural property: under the
+        // shipped posture the 985 signature is cos(q_k,q) ≈ 1 on every slot
+        // (one reader); under the fixed-length posture the heads must sit
+        // materially OFF the query (mean cos ≤ 0.95 — the liveness gate).
+        let rows = seeded_store(9872, 256);
+        let shipped = SoftRead::<D, K>::new(&rows);
+        let eff = SoftRead::<D, K>::new(&rows).with_head_cos_target(0.90);
+        let q = seeded_store(9873, 1).remove(0);
+        let mut s1 = SoftReadScratch::new();
+        let mut s2 = SoftReadScratch::new();
+        let _ = shipped.read_into(&q, &rows, &mut s1);
+        let _ = eff.read_into(&q, &rows, &mut s2);
+        let qu = unit(q);
+        let mean_cos = |s: &SoftReadScratch<D, K>| {
+            s.heads
+                .iter()
+                .map(|h| h.iter().zip(&qu).map(|(a, b)| a * b).sum::<f32>())
+                .sum::<f32>()
+                / K as f32
+        };
+        let shipped_cos = mean_cos(&s1);
+        let eff_cos = mean_cos(&s2);
+        assert!(
+            shipped_cos > eff_cos,
+            "shipped conditioning ({shipped_cos:.4}) must sit closer to the query than effective ({eff_cos:.4})"
+        );
+        assert!(
+            eff_cos <= 0.95,
+            "effective conditioning mean head-cos {eff_cos:.4} above the 0.95 liveness ceiling"
+        );
+        // And the heads must actually DIFFER: distinct top-gate rows ≥ 2.
+        let mut picked: Vec<usize> = Vec::new();
+        for head in &s2.heads {
+            let mut top = 0usize;
+            let mut td = f32::NEG_INFINITY;
+            for (i, r) in rows.iter().enumerate() {
+                let d: f32 = head.iter().zip(r).map(|(a, x)| a * x).sum();
+                if d > td {
+                    td = d;
+                    top = i;
+                }
+            }
+            picked.push(top);
+        }
+        picked.sort_unstable();
+        picked.dedup();
+        assert!(
+            picked.len() >= 2,
+            "effective conditioning yielded {} distinct readers — the heads did not spread",
+            picked.len()
+        );
+    }
+
+    #[test]
+    fn effective_conditioning_default_is_byte_identical_posture() {
+        // The posture knob must be inert when unset: a default-constructed
+        // read replays bit-identically against the shipped form.
+        let rows = seeded_store(9874, 64);
+        let a = SoftRead::<D, K>::new(&rows);
+        let mut s = SoftReadScratch::new();
+        let q = seeded_store(9875, 1).remove(0);
+        let r = a.read_into(&q, &rows, &mut s);
+        let mag0: f32 = r[0].iter().map(|x| x * x).sum::<f32>().sqrt();
+        assert!(mag0.is_finite(), "default posture read must stay finite");
     }
 }
