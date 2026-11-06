@@ -14,12 +14,11 @@
 //!
 //! 1. **real** — the store as shipped.
 //! 2. **noise** — BLAKE3-seeded iid Gaussian matched to the store's GLOBAL
-//!    entry scale (mean/std over all entries), each row re-normalized to
-//!    the store's row norm (unit rows in the Bench 845 vocabulary).
-//!    Destroys internal structure AND the query binding; preserves overall
-//!    energy. No RNG drift: the seed is BLAKE3 over a domain label + the
-//!    store's own bit pattern, so the same store reproduces the same noise
-//!    across runs and platforms.
+//!    entry scale, rows unit-normalized (see
+//!    `store_transforms::noise_store`). Destroys internal structure AND the
+//!    query binding; preserves overall energy. No RNG drift: the seed is
+//!    BLAKE3 over a domain label + the store's own bit pattern, so the same
+//!    store reproduces the same noise across runs and platforms.
 //!    ⚠ Measured lesson (Issue 984, first catch — the arms caught
 //!    THEMSELVES): an earlier arm matched PER-DIMENSION marginals instead.
 //!    Per-dim std is dominated by between-cluster variance, so the noise
@@ -29,17 +28,16 @@
 //!    fine). For max-similarity reads, per-dim marginal matching is NOT
 //!    structure destruction; match global energy only.
 //! 3. **shuffled** — one fixed BLAKE3-seeded coordinate permutation applied
-//!    to EVERY row. For a set-max read with no per-exemplar provenance
-//!    emission (the CorpusDistanceGate max-cosine confidence, for example), a ROW
+//!    to EVERY row (see `store_transforms::shuffled_store`). For a set-max
+//!    read with no per-exemplar provenance emission (the
+//!    CorpusDistanceGate max-cosine confidence, for example), a ROW
 //!    permutation is the identity on the read — the observable binding is
 //!    the shared basis. A coordinate permutation is orthogonal, so it
 //!    conserves every pairwise store cosine exactly (internal geometry
 //!    intact) while destroying the query↔store channel. This is the honest
 //!    instantiation of Memorilla's "permuted embedding↔provenance binding"
 //!    for scalar-confidence reads; a primitive that EMITS per-exemplar
-//!    provenance should override with a true binding shuffle (see
-//!    `shuffled_store`'s doc for the row-permutation twin when that day
-//!    comes).
+//!    provenance should override with a true binding shuffle.
 //! 4. **empty** — no primitive / no store: the caller supplies the
 //!    no-memory floor signals (for Bench 845, the model's reported score —
 //!    the score-only arm). Memorilla's 0.153-vs-0.186 lesson: a bad memory
@@ -81,159 +79,31 @@
 //! }, &StoreArmMargins::default());
 //! assert!(verdict.pass, "real read must consume its store");
 //! let stub = run_store_arms(&real_store, &worlds, |_| {
-//!     |_queries: &[[f32; D]]| vec![0.5; _queries.len()]  // store-blind
-//! }, StoreArmMargins::default());
+//!     let stub: StoreReader<D> = Box::new(|queries| vec![0.5; queries.len()]);
+//!     stub
+//! }, &StoreArmMargins::default());
 //! assert!(canary_holds(verdict.pass, stub.pass), "gate is live");
 //! ```
 //!
 //! Feature-neutral: generic over the reader, std + blake3 (dev-dep) only.
+//! The metric fns here are PRIVATE twins of `bench845_worlds`' public ones:
+//! this module is included by consumers that never include the worlds
+//! module (the Issue 984 named row), and `#[path]` double-includes are
+//! duplicate-symbol errors — one home per include graph, not per codebase.
 
-use blake3::Hasher;
+#[path = "store_transforms.rs"]
+mod transforms;
+// Re-exported: consumers of THIS module reach the transforms through it
+// (a direct transforms include alongside this module would double-load the
+// file — module-file includes must be single per crate).
+pub use transforms::{noise_store, shuffled_store};
 
-/// Deterministic `SplitMix64` (the workspace-bench idiom — no rand dep).
-struct SplitMix64(u64);
-impl SplitMix64 {
-    fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-        z ^ (z >> 31)
-    }
-    fn next_unit(&mut self) -> f32 {
-        (self.next_u64() >> 40) as f32 / (1u64 << 24) as f32
-    }
-}
-
-/// Unit-normalize (bench-side twin of `distance_abstain::unit`; harness
-/// code is feature-neutral, so it cannot call the lib's `pub(crate)` fn).
-fn unit<const D: usize>(v: [f32; D]) -> [f32; D] {
-    let n = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if n > 0.0 {
-        let inv = 1.0 / n;
-        v.map(|x| x * inv)
-    } else {
-        v
-    }
-}
-
-/// BLAKE3 domain seed over a label + the store's bit pattern. Same store +
-/// same label → same seed across runs and platforms; a different store (or
-/// a single flipped bit) → an unrelated seed.
-fn store_seed<const D: usize>(label: &str, rows: &[[f32; D]]) -> u64 {
-    let mut h = Hasher::new();
-    h.update(label.as_bytes());
-    h.update(&(rows.len() as u64).to_le_bytes());
-    for r in rows {
-        for x in r {
-            h.update(&x.to_bits().to_le_bytes());
-        }
-    }
-    let out = h.finalize();
-    u64::from_le_bytes(out.as_bytes()[..8].try_into().expect("8 bytes"))
-}
-
-/// Gaussian draw via Box-Muller from the seeded stream. `u1` is clamped
-/// into (0, 1] so `ln` is finite (the stream's 24-bit grid guarantees a
-/// bounded |z|; no NaN can enter the store).
-fn next_gauss(rng: &mut SplitMix64) -> f32 {
-    let min_u = 1.0 / (1u64 << 24) as f32;
-    let u1 = (rng.next_unit() + min_u).min(1.0);
-    let u2 = rng.next_unit();
-    (-2.0 * u1.ln()).sqrt() * (2.0 * std::f32::consts::PI * u2).cos()
-}
-
-/// The noise store: BLAKE3-seeded iid Gaussian at the store's GLOBAL entry
-/// scale (the per-dim marginal variant leaks the between-cluster subspace
-/// through a max-sim read — see the module doc), each row re-normalized to
-/// unit length (matching the real store's row norms). Deterministic: same
-/// store → byte-identical output across runs (G1).
-pub fn noise_store<const D: usize>(rows: &[[f32; D]]) -> Vec<[f32; D]> {
-    let k = rows.len();
-    if k == 0 {
-        return Vec::new();
-    }
-    let mut seed_rng = SplitMix64(store_seed("bench984:noise:v1", rows));
-    let _ = seed_rng.next_u64(); // decouple the noise stream from the seed fold
-    // GLOBAL entry statistics (energy match; structure-free by design).
-    let n_entries = (k * D) as f32;
-    let mut mean = 0.0f32;
-    let mut dev = 0.0f32;
-    for r in rows {
-        for x in r {
-            mean += x;
-        }
-    }
-    mean /= n_entries;
-    for r in rows {
-        for x in r {
-            let d = x - mean;
-            dev += d * d;
-        }
-    }
-    dev = (dev / n_entries).sqrt();
-    (0..k)
-        .map(|_| {
-            let mut row = [0.0f32; D];
-            for x in row.iter_mut() {
-                *x = mean + dev * next_gauss(&mut seed_rng);
-            }
-            unit(row)
-        })
-        .collect()
-}
-
-/// The shuffled store: one fixed BLAKE3-seeded permutation of the
-/// DIMENSION axis applied to every row (see the module doc for why the
-/// permutation is over coordinates, not rows, for set-max reads).
-pub fn shuffled_store<const D: usize>(rows: &[[f32; D]]) -> Vec<[f32; D]> {
-    let mut seed_rng = SplitMix64(store_seed("bench984:shuffle:v1", rows));
-    // Fisher-Yates over the dimension axis.
-    let mut perm: Vec<usize> = (0..D).collect();
-    for i in (1..D).rev() {
-        let j = (seed_rng.next_u64() as usize) % (i + 1);
-        perm.swap(i, j);
-    }
-    rows.iter()
-        .map(|r| std::array::from_fn(|i| r[perm[i]]))
-        .collect()
-}
-
-/// Risk–coverage AURC: order by signal DESCENDING (most confident retained
-/// first), average the prefix error rate over every coverage level. Lower
-/// is better. O(n log n), one alloc — measurement-side only. (Moved here
-/// from Bench 845 at Issue 984 so the store arms and the T1.6 gates share
-/// one metric implementation.)
-pub fn aurc(signals: &[f32], errors: &[bool]) -> f32 {
-    let mut idx: Vec<usize> = (0..signals.len()).collect();
-    idx.sort_by(|a, b| signals[*b].total_cmp(&signals[*a]));
-    let mut err_sum = 0usize;
-    let mut total = 0.0f32;
-    for (k, i) in idx.iter().enumerate() {
-        err_sum += usize::from(errors[*i]);
-        total += err_sum as f32 / (k + 1) as f32;
-    }
-    total / signals.len() as f32
-}
-
-/// Selective accuracy at matched abstain rate ρ: abstain the ρ-fraction of
-/// LOWEST signal, return accuracy on the retained set. (Moved from Bench
-/// 845 — same reason as [`aurc`].)
-pub fn selective_accuracy_at(signals: &[f32], errors: &[bool], rate: f32) -> f32 {
-    let mut sorted: Vec<f32> = signals.to_vec();
-    sorted.sort_by(f32::total_cmp);
-    let cut = ((rate * signals.len() as f32) as usize).min(signals.len() - 1);
-    let threshold = sorted[cut];
-    let mut ok = 0usize;
-    let mut kept = 0usize;
-    for (s, e) in signals.iter().zip(errors) {
-        if *s >= threshold {
-            ok += usize::from(!*e);
-            kept += 1;
-        }
-    }
-    ok as f32 / kept as f32
-}
+/// A store-parameterized reader: queries → confidence signals. Boxed so
+/// callers can return owned-state readers (a gate built from the store) or
+/// store-blind stubs without the `impl Fn` opaque-type identity friction
+/// (a generic `R: Fn` param will not unify with an `impl Fn` opaque —
+/// found while landing Issue 984).
+pub type StoreReader<const D: usize> = Box<dyn Fn(&[[f32; D]]) -> Vec<f32>>;
 
 /// The deep-abstention rate the readouts quote (Bench 845's ρ=30% — the
 /// regime where the OOD mass is reachable).
@@ -266,6 +136,42 @@ impl Default for StoreArmMargins {
             binding: 0.005,
         }
     }
+}
+
+/// Risk–coverage AURC: order by signal DESCENDING (most confident retained
+/// first), average the prefix error rate over every coverage level. Lower
+/// is better. O(n log n), one alloc — measurement-side only. (Moved here
+/// from Bench 845 at Issue 984; private twin of `bench845_worlds::aurc` —
+/// see the module doc for why there are two homes.)
+fn aurc(signals: &[f32], errors: &[bool]) -> f32 {
+    let mut idx: Vec<usize> = (0..signals.len()).collect();
+    idx.sort_by(|a, b| signals[*b].total_cmp(&signals[*a]));
+    let mut err_sum = 0usize;
+    let mut total = 0.0f32;
+    for (k, i) in idx.iter().enumerate() {
+        err_sum += usize::from(errors[*i]);
+        total += err_sum as f32 / (k + 1) as f32;
+    }
+    total / signals.len() as f32
+}
+
+/// Selective accuracy at matched abstain rate ρ: abstain the ρ-fraction of
+/// LOWEST signal, return accuracy on the retained set. (Private twin of
+/// `bench845_worlds::selective_accuracy_at`.)
+fn selective_accuracy_at(signals: &[f32], errors: &[bool], rate: f32) -> f32 {
+    let mut sorted: Vec<f32> = signals.to_vec();
+    sorted.sort_by(f32::total_cmp);
+    let cut = ((rate * signals.len() as f32) as usize).min(signals.len() - 1);
+    let threshold = sorted[cut];
+    let mut ok = 0usize;
+    let mut kept = 0usize;
+    for (s, e) in signals.iter().zip(errors) {
+        if *s >= threshold {
+            ok += usize::from(!*e);
+            kept += 1;
+        }
+    }
+    ok as f32 / kept as f32
 }
 
 /// Per-arm replicate-mean metrics under one store condition.
@@ -317,13 +223,6 @@ pub struct ArmOut {
     pub aurc: f64,
     pub sel30: f64,
 }
-
-/// A store-parameterized reader: queries → confidence signals. Boxed so
-/// callers can return owned-state readers (a gate built from the store) or
-/// store-blind stubs without the `impl Fn` opaque-type identity friction
-/// (a generic `R: Fn` param will not unify with an `impl Fn` opaque —
-/// found while landing Issue 984).
-pub type StoreReader<const D: usize> = Box<dyn Fn(&[[f32; D]]) -> Vec<f32>>;
 
 /// Run the four store arms over `worlds` with a store-parameterized reader.
 ///

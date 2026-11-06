@@ -1919,6 +1919,15 @@ pub mod sigmoid_calibration;
 #[cfg(feature = "distance_abstain")]
 pub mod distance_abstain;
 
+// Issue 985 — sigmoid-gated query-conditioned fixed-K soft read with
+// deterministic slot banks (the Research 656 Memorilla modelless floor;
+// opt-in, quality bet under test — NOT a promoted claim).
+#[cfg(feature = "soft_read")]
+pub mod slot_bank;
+
+#[cfg(feature = "soft_read")]
+pub mod soft_read;
+
 #[cfg(feature = "gmm_support")]
 pub mod gmm_support;
 

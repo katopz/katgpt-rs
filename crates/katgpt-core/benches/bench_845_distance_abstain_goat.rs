@@ -83,141 +83,21 @@ counting_allocator!();
 use katgpt_core::distance_abstain::CorpusDistanceGate;
 use std::hint::black_box;
 use store_falsification::{
-    StoreArmMargins, StoreWorld, aurc, canary_holds, print_verdict_table, run_store_arms,
-    selective_accuracy_at,
+    StoreArmMargins, StoreWorld, canary_holds, print_verdict_table, run_store_arms,
 };
 
-/// Deterministic `SplitMix64` (the workspace-bench idiom — no rand dep).
-struct SplitMix64(u64);
-impl SplitMix64 {
-    fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-        z ^ (z >> 31)
-    }
-    fn next_unit(&mut self) -> f32 {
-        (self.next_u64() >> 40) as f32 / (1u64 << 24) as f32
-    }
-    fn next_sym(&mut self) -> f32 {
-        self.next_unit() * 2.0 - 1.0
-    }
-}
+// The W1/W2 worlds moved to the shared module at Issue 985 T6 (the
+// soft-read second-signal cell re-runs the SAME worlds — never a fork).
+// Moved functions, byte-identical behavior: same seeds, same draws.
+#[path = "../tests/common/bench845_worlds.rs"]
+mod worlds;
+use worlds::{
+    Arrival, D, K_EXEMPLARS, MID, N_TEST, OOD_SHARE, SCALE, aurc, build_corpus, build_world,
+    selective_accuracy_at, w1_true_p, w2_true_p,
+};
 
-#[inline]
-fn sigmoid(x: f32) -> f32 {
-    1.0 / (1.0 + (-x).exp())
-}
-
-#[inline]
-fn logit(p: f32) -> f32 {
-    (p / (1.0 - p)).ln()
-}
-
-const D: usize = 64;
-const N_CLUSTERS: usize = 4;
-const PER_CLUSTER: usize = 32;
-const K_EXEMPLARS: usize = N_CLUSTERS * PER_CLUSTER; // 128
-const N_TEST: usize = 4096;
 const N_REPS: usize = 8;
-/// The OOD query share — the fraction of arrivals from outside the corpus.
-const OOD_SHARE: f32 = 0.30;
-/// Cluster spread (angular jitter around the cluster center).
-const CLUSTER_SIGMA: f32 = 0.12;
-/// The sigmoid operating point on the max-similarity axis: the corpus
-/// geometry puts in-corpus queries near ~0.7-0.9 max-sim and OOD queries
-/// near ~0.1-0.3; the midpoint sits in the gap. Production calibrates it
-/// from outcomes via `SigmoidGateCalibrator`; this is the bench's fixed
-/// operating point, the same standing as bench 808's τ=0.75.
-const MID: f32 = 0.45;
-const SCALE: f32 = 12.0;
 const RATES: [f32; 4] = [0.05, 0.10, 0.20, 0.30];
-
-/// One decision arrival: the latent query, the model's reported confidence,
-/// the OOD flag, and the drawn outcome.
-struct Arrival {
-    q: [f32; D],
-    p: f32,
-    ood: bool,
-    correct: bool,
-}
-
-fn unit(v: [f32; D]) -> [f32; D] {
-    let n = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let inv = 1.0 / n;
-    v.map(|x| x * inv)
-}
-
-/// The corpus: `N_CLUSTERS` tight clusters in R^D (built once; replicates
-/// vary arrivals + outcomes, not geometry).
-fn build_corpus() -> Vec<[f32; D]> {
-    let mut rng = SplitMix64(0x845_0001);
-    let mut rows = Vec::with_capacity(K_EXEMPLARS);
-    for c in 0..N_CLUSTERS {
-        // Cluster center: a unit vector biased into one quadrant so clusters
-        // separate (random ±1 draws at D=64 are near-orthogonal; the
-        // quadrant bias gives centers ~0.2-0.4 mutual cosine).
-        let sign = |i: usize| if (c >> (i % 3)) & 1 == 1 { 1.0 } else { -1.0 };
-        let center = unit(std::array::from_fn(|i| sign(i) * (0.5 + rng.next_unit())));
-        for _ in 0..PER_CLUSTER {
-            let row = unit(center.map(|x| x + CLUSTER_SIGMA * rng.next_sym()));
-            rows.push(row);
-        }
-    }
-    rows
-}
-
-/// In-corpus query: a cluster member with jitter.
-fn in_corpus_query(rng: &mut SplitMix64, corpus: &[[f32; D]]) -> [f32; D] {
-    let idx = (rng.next_u64() as usize) % corpus.len();
-    unit(corpus[idx].map(|x| x + 2.0 * CLUSTER_SIGMA * rng.next_sym()))
-}
-
-/// OOD query: a fresh random direction — near-orthogonal to everything
-/// registered (E[cos] ≈ 0 at D=64).
-fn ood_query(rng: &mut SplitMix64) -> [f32; D] {
-    unit(std::array::from_fn(|_| rng.next_sym()))
-}
-
-/// The model's reported confidence — deliberately OOD-blind: the same
-/// confident distribution everywhere (this is the failure mode under test).
-fn reported_confidence(rng: &mut SplitMix64) -> f32 {
-    0.5 + 0.49 * rng.next_unit()
-}
-
-/// W1 true accuracy: in-corpus follows a mildly overconfident calibration;
-/// OOD collapses toward coin-flip regardless of the reported score.
-fn w1_true_p(p: f32, ood: bool) -> f32 {
-    if ood {
-        0.5 + 0.05 * (p - 0.5)
-    } else {
-        sigmoid(1.2 * logit(p) - 0.2)
-    }
-}
-
-/// W2 true accuracy: the score drives correctness EVERYWHERE (distance is
-/// error-irrelevant by construction).
-fn w2_true_p(p: f32, _ood: bool) -> f32 {
-    sigmoid(1.2 * logit(p) - 0.2)
-}
-
-fn build_world(seed: u64, corpus: &[[f32; D]], true_p_fn: fn(f32, bool) -> f32) -> Vec<Arrival> {
-    let mut rng = SplitMix64(seed);
-    (0..N_TEST)
-        .map(|_| {
-            let ood = rng.next_unit() < OOD_SHARE;
-            let q = if ood {
-                ood_query(&mut rng)
-            } else {
-                in_corpus_query(&mut rng, corpus)
-            };
-            let p = reported_confidence(&mut rng);
-            let correct = rng.next_unit() < true_p_fn(p, ood);
-            Arrival { q, p, ood, correct }
-        })
-        .collect()
-}
 
 /// Empirical quantile of each value within its own batch (rank / n, in the
 /// value's original order). Rank fusion puts the two signals on ONE scale

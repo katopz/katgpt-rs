@@ -1106,6 +1106,31 @@ sigmoid_calibration = []
 # is the Proposal 014 Phase-1 engine's abstain arm (owner-gated).
 distance_abstain = []
 
+# soft_read (Issue 985, 2026-11-06, from Research 656 / arXiv:2610.21375
+# Memorilla): sigmoid-gated query-conditioned fixed-K soft read with
+# deterministic slot banks — the modelless floor form of Memorilla's
+# memory-as-modality read. FPS or seeded-orthonormal slots (BLAKE3(store)-
+# keyed, full recompute on append — never incremental); conditioned heads
+# q_k = normalize(z_q + β_k·⟨z_q,d_k⟩·d_k); gates σ(⟨q_k,z_i⟩/τ + b_k);
+# NORMALIZED read M_k = Σg·z/(Σg+ε), ε=1e-6 (gated weighted AVERAGE —
+# bounded by the longest stored row; flat-cost-in-N). The aggregate is
+# LOCAL-ONLY (Issue 940 decision recorded at the code site — never commit/
+# sync without pinning the fold at that point).
+# ⚠ MEASURED NEGATIVE (2026-11-06, bench_985 amended GOAT cell): the
+# preregistered bar (≥ hard top-16 AND > empty floor) FAILED — soft16
+# loses to hard16 at every non-trivial level; the noise store BEATS the
+# real store on the deep-level metric; W1 soft AURC worse than score-only.
+# Mechanism: FPS anchors spread to the store's outskirts — deterministic
+# placement does not put slots at the interior rows the conditioning
+# needs. Distinct slots without LEARNED placement do not suffice (the
+# paper's slots are trained). Grade struck; feature stays opt-in for
+# replication; bench_985 is the report-only instrument. The TRAINED lane
+# (riir-train Plan 488 R1) is NOT indicted — its bar compares to hard
+# top-16, the standing champion. OPT-IN; the CorpusDistanceGate second
+# signal (soft_read::distance_soft) is replication code, NOT a consumer
+# landing.
+soft_read = []
+
 # gmm_support (Plan 618 / Research 604, 2026-10-05): the density-ratio
 # support gate — the continuous-latent two-density member of the gate
 # family (arXiv:2610.02126 "Local Support Learning" extraction).
@@ -4503,6 +4528,27 @@ required-features = ["sigmoid_calibration", "action_bridge"]
 name = "bench_845_distance_abstain_goat"
 harness = false
 required-features = ["distance_abstain"]
+
+# Issue 985 — soft-read GOAT cell (T7): the composition-synthetic fixture
+# (multi-hop chain, distractors in the top-16 similarity band), hard top-16
+# baseline + empty floor, store-size arms N ∈ {1,16,512}, Issue 984 store
+# arms, and the T6 CorpusDistanceGate second-signal cell over the shared
+# Bench 845 W1/W2 worlds. Bar: soft ≥ hard top-16 at every level AND >
+# empty; demote-on-fail (grade struck in the same commit). Run:
+# cargo bench -p katgpt-core --features soft_read,distance_abstain
+# --no-default-features --bench bench_985_soft_read_goat -- --nocapture
+[[bench]]
+name = "bench_985_soft_read_goat"
+harness = false
+required-features = ["soft_read", "distance_abstain"]
+
+# Issue 985 — soft-read gate tests (determinism replay, zero-alloc read
+# path, zero-gate ε semantics, boundedness at N ∈ {1,16,512}). Run:
+# cargo test -p katgpt-core --features soft_read --no-default-features
+# --test soft_read_gates
+[[test]]
+name = "soft_read_gates"
+required-features = ["soft_read"]
 
 # Issue 984 — memory-store falsification gate (the T3 named row): the four
 # store arms (real / BLAKE3-seeded noise / basis-shuffled / score-only empty)

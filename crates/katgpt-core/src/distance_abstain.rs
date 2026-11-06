@@ -140,6 +140,13 @@ impl<const D: usize> CorpusDistanceGate<D> {
         self.rows.len()
     }
 
+    /// The registered (unit-normalized) exemplar rows — read-only access
+    /// for composing signals over the same store (Issue 985 T6's
+    /// DistanceSoftGate reads THIS slice; the max-sim path is untouched).
+    pub fn rows(&self) -> &[[f32; D]] {
+        &self.rows
+    }
+
     /// True when no corpus is registered (abstains at every threshold).
     pub fn is_empty(&self) -> bool {
         self.rows.is_empty()

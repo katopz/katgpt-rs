@@ -6477,3 +6477,40 @@ modelless-first mandate). T1 + T2 landed (36 tests green at the
 conditional retention + G2 decode-read reduction) are riir-train Issue 666
 owner-gated; T7's verdict (promote / opt-in coexist / recorded negative)
 rides those gates.
+
+## 163. soft_read — query-conditioned fixed-K soft read with deterministic slot banks (Issue 985 / Research 656, arXiv:2610.21375 Memorilla)
+
+The modelless floor form of Memorilla's memory-as-modality read: K=16
+deterministic store-derived slots (farthest-point anchors ON the manifold, or
+BLAKE3-seeded orthonormal directions; `BLAKE3(store)`-keyed, full recompute on
+append — never incremental), conditioned heads
+`q_k = normalize(z_q + β_k·⟨z_q,d_k⟩·d_k)` (β spans [0,1] — slot distinctness
+lives in the residual path), gates `σ(⟨q_k,z_i⟩/τ + b_k)` (sigmoid, never
+softmax), and a NORMALIZED read `M_k = Σg·z/(Σg+ε)`, ε=1e-6 — a gated weighted
+AVERAGE, bounded by the longest stored row (flat-cost-in-N). The aggregate is
+LOCAL-ONLY (Issue 940 decision at the code site — never commit/sync without
+pinning the fold there). Mechanics all gate green: replay bit-identity,
+zero-alloc steady state, zero-gate ε→0, boundedness at N ∈ {1,16,512}
+(`soft_read_gates` named row).
+
+⚠ **MEASURED NEGATIVE (2026-11-06, bench_985 amended GOAT cell; delegated
+verdict AGREE `a842c972`):** the preregistered bar (≥ hard cosine top-16 AND >
+empty floor) FAILED — soft16 loses to hard16 at every non-trivial level on the
+composition fixture (0.377/0.194/0.242 vs 0.398/0.227/0.323 at c=2/3/4); the
+noise store beats the real store at the deep level; the second signal
+(best-slot reconstruction confidence) makes W1 ranking WORSE than score-only.
+Measured mechanism: head-alignment cos(q_k,q) = +0.997 — the residual
+conditioning moves each head ~0.3%, all 16 heads are the same head,
+unique-candidate count 1.0 (a 1-candidate read vs 16). Learning buys effective
+conditioning magnitude + placement, not distinctness alone. Grade struck; the
+feature stays opt-in for replication; `bench_985_soft_read_goat` is the
+report-only instrument (one live assert: fixture validity). Hypotheses carry
+to Issue 986 (density-aware placement + effective conditioning strength). The
+trained lane (riir-train Plan 488 R1) is NOT indicted — its bar is hard
+top-16, the standing champion.
+
+🔧 Feature flag: `soft_read` (katgpt-core; the
+`soft_read::distance_soft::DistanceSoftGate` composition adds the second
+signal over an untouched `CorpusDistanceGate`). **OPT-IN, DEFAULT-OFF,
+MEASURED NEGATIVE — no consumer, no promotion path until Issue 986's cell
+clears the same bar.**
