@@ -698,19 +698,21 @@ pinned file, delete its row; never add a row).
 
 ## Lint fixing — `cargo refine` before manual fixes (adopted 2026-08-24)
 
-Mechanical clippy findings are fixed by the riir-refine rulewright FIRST:
+Mechanical clippy findings are fixed by the riir-refine rulewright FIRST
+(issue 210's verb-first law: bare `cargo refine` IS the dry run; `fix` is
+the verb):
 
 ```bash
-cargo refine <paths>                                        # DRY RUN (zero edits)
-cargo refine --fix <paths>                                  # REAL fix: writes + compile-gates
-cargo refine --fix --write --verify <paths>                 # compile-gated apply
-cargo refine --fix --write --verify --verify-args "--features <set>" <paths>  # gated code
+cargo refine <paths>                                        # DRY RUN (bare IS the dry run — zero edits)
+cargo refine fix <paths>                                    # REAL fix: writes + compile-gates (release builds)
+cargo refine fix --no-verify <paths>                        # write without the compile gate
+cargo refine fix --verify-args "--features <set>" <paths>   # gated code
 ```
 
 - `~/.cargo/bin/cargo-refine` → sibling `riir-refine/target/release/cargo-refine`
   (RELEASE feature set; `--version` prints the truth). Missing → manual +
   `cargo clippy --fix`.
-- `--verify` auto-REVERTS breaking edits; gated code needs `--verify-args`.
+- The fix lane auto-REVERTS breaking edits; gated code needs `--verify-args`.
 - Fixes only what THIS repo's clippy reports (no pedantic/nursery here);
   silent on documented divergence classes — those stay manual (see the
   `cargo-refine` skill). Misses → session record / riir-refine issue.
