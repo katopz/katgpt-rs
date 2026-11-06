@@ -1,6 +1,6 @@
 # Issue 984 — Noise/shuffled/empty store falsification arms as a standing GOAT-gate pattern for memory-input primitives
 
-**Status:** CLOSED — landed 2026-11-06, commit `<this>` (T1–T3 + T5 done; T4 deferred `- [-]` with reason).
+**Status:** CLOSED — landed 2026-11-06, commit `105e0ac05` (T1–T3 + T5 done; T4 deferred `- [-]` with reason).
 **Lease closed:** zed-m3-agent (katgpt-rs T1–T5), 1793928266, expires 2026-11-08T01:24:26Z — completed within lease.
 
 ## Motivation
