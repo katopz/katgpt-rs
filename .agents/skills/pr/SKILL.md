@@ -48,6 +48,47 @@ the cadence.
   (Failure: maintainer flagged the hardcoded literal + manual read in the
   product; we fixed the flagged lines but 4 more literals + the same dance
   survived in the test 20 lines below — one more round.)
+- **Do acknowledge an existing claimant before sending.** Read the issue's
+  comments for "I'd like to work on this" — a PR over an unacknowledged
+  open claim reads as sniping. One plain sentence naming the earlier offer
+  ("X offered to pick this up; if you've started, glad to fold this into
+  yours"), or take the design-comment-first lane on contested issues:
+  post the shape on the issue, open the PR after a reply. (Caught by the
+  hard verdict on our second sccache PR — darshpatel1052 had claimed the
+  work two days before; our body answered his design question but never
+  acknowledged the claim.)
+- **Do ship the docs row in the same PR.** A new env knob, flag, or config
+  surface gets its entry in THEIR docs file in the same change, in the
+  file's own voice. The docs file is a reader of your surface — an
+  undocumented knob is a near-certain review round (and the FC10 class:
+  the sibling knobs were documented; ours weren't).
+- **Do sweep the composite layers that route through your seam.** Every
+  wrapper/composite/dispatch that calls what you changed is a reader — a
+  gate added at a storage seam skips the healthy local tier of a
+  multilevel wrapper too (the M3 catch: `MultiLevelStorage`'s read loop,
+  three files from the diff, no tree-walk grep finds a call-graph edge).
+  Grep for CALLERS of the modified functions, not just walkers of trees.
+- **Do name the workload shape beside every number.** "Sequential" vs the
+  issue's parallel repro changes the result (in-flight probes multiply
+  under -j); if the issue ships a repro script, run it before/after or
+  state explicitly that its workload was not measured. A ratio that
+carries over only in one shape is scoped to that shape IN THE BODY.
+- **Do answer every requirement the issue states.** The issue's stated
+  requirements are a checklist — each gets a body answer or an explicit
+  "not addressed". (Miss: the issue said "avoid overreacting to transient
+  slowness"; our body never said how correlated timeouts under parallelism
+  don't trip the gate at once.)
+- **Do verify a zero before claiming it.** A "clean / 0 findings" claim
+  carries its completion marker — the tool's build-finished/success line,
+  a non-empty capture, stderr collected (never /dev/null). A command that
+  dies before compiling (wrong flag order: lint `-A` flags before `--`)
+  produces an empty capture that reads as a green zero. The pre-existing
+  baseline is adjudicated FIRST: same command on pristine main, failures
+  named, then read your tree as a delta against it.
+- **Do count the staleness.** Before reusing any earlier pin, `git
+  rev-list --count <pin>..origin/main` — never eyeball. The readiness
+  verdict caught "two commits" that were 21, three of them
+  bench-load-bearing. Re-run the gates whose inputs moved.
 - **Do grep EVERY walk/scan of any tree your new file lands in.** Adding a
   file to a repo means every recursive iteration over that tree now sees
   your file — find them all before pushing, not in someone's CI. (Failure:
@@ -85,13 +126,21 @@ the cadence.
   posture is the OWNER's call (what counts as evidence, what we send into).
   Surface the options and wait if the scan came back empty.
 - **Don't fix only the flagged lines.** (See the re-grep DO.)
-- **Don't trust your first root-cause read of a CI failure.** Reproduce
+- **Don't trust your first root-cause read of a CI failure.**
+  Reproduce
   locally, read the actual log lines (the failing stderr usually names the
   file — one freebsd log line contained the whole answer), and check whether
   the failure reproduces on a clean checkout of their main BEFORE writing
   "reproduces on main" in any reply. (Failure: we misattributed an
   `entry format 53` failure to their preprocessor rework; it was our file;
   the reply had to own it a round later.)
+- **Don't expect their CI to be green, or to run at all.** First-contribution
+  CI is maintainer-triggered (`action_required`) — zero runs for days is
+  normal, and when runs appear, main's own pre-existing reds ride along
+  (13 red jobs on our PR's first CI, all ONE upstream test broken by their
+  own commit). Classify reds by grepping their logs for YOUR artifact
+  names, never by job name; say so in the reply rather than re-pushing to
+  trigger it.
 - **Don't diagnose lockfile/dependency failures from the error text alone.**
   `--locked` failures: read the manifests of the involved crates in the
   registry (pinned reqs vs resolved versions) and check whether MAIN's lock
@@ -124,12 +173,23 @@ the cadence.
 
 ## The pre-push checklist (60 seconds, every push)
 
-1. `pwd` is the repo you intend; branch is yours; base is current main.
+1. `pwd` is the repo you intend; branch is yours; base is current main — and
+   the staleness is COUNTED (`git rev-list --count <base-pin>..origin/main`),
+   with the gates whose inputs moved re-run.
 2. Every factual claim in body/reply has a primary-source check this session.
-3. Body agrees with the diff; no attribution block; no unearned numbers.
-4. Re-grep the touched files for the patterns already flagged in review.
-5. Their MSRV: tests green, their CI clippy flags clean, fmt clean.
-6. Diff contains only intended hunks (`git diff` read top to bottom).
-7. If perf claim: bench exists, box provenance recorded.
-8. If review response: every inline comment answered, reply is short/plain,
+3. Body agrees with the diff; no attribution block; no unearned numbers; the
+   workload shape is named beside every number; every requirement the issue
+   states is answered or explicitly not addressed.
+4. Re-grep the touched files for the patterns already flagged in review; the
+   composite layers routing through your changed seams are adjudicated; new
+   env knobs have their docs rows.
+5. Their MSRV: tests green, their CI clippy flags clean, fmt clean — every
+   zero carries its completion marker (build-finished/success + non-empty
+   capture + stderr collected), and the pristine-main baseline was
+   adjudicated first so reds read as a delta.
+6. The issue's comments checked for claimants; any claim acknowledged in the
+   body.
+7. Diff contains only intended hunks (`git diff` read top to bottom).
+8. If perf claim: bench exists, box provenance recorded.
+9. If review response: every inline comment answered, reply is short/plain,
    commit shas in the reply match what you're pushing.
