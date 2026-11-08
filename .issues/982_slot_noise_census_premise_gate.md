@@ -1,8 +1,7 @@
 # Issue 982 — Cross-path delta census + long-horizon byte-exactness soak (the premise gate from arXiv:2611.05345)
 
 **Status:** OPEN — premise-gate experiment, T0 runnable now in minutes (numerics measurement on the existing verify path, NOT acceptance work — the 746/747 acceptance-work closure is untouched); the acceptance-gate arm of this issue (T7/T8) is additionally owner-gated behind the riir-ai Plan 614 kernel bar AND closes as unmotivated if T0 reads structural zero.
-**Claimed:** zed-m3-i983consumer, 1762341002, expires 2026-11-07T20:00:00+00:00
-**Claim note:** T0 — the census harness + the exclusive-4090 run; the T0 DEFER line below is this lane's own prior session and is superseded on landing.
+**Lease closed:** zed-m3-i983consumer, 1762341002 (epoch typo — decodes 2025-11-05; the explicit expiry string governed), expired 2026-11-07T20:00:00+00:00 unworked — checked 2026-11-08T11:10Z: no T0 landing anywhere (katgpt-rs log; riir-ai Plan 614 + the stance doc; riir-infer Plan 623 T5.1 sentence intact; riir-train 672 untouched). T0 stays `- [-]` deferred; the prior session's DEFER line below still holds; unblock unchanged — exclusive-4090 window + quiet riir-ai tree. Re-claim before running.
 
 **Source:** [Research 652](../.research/652_Adversarial_Speculative_Reasoning_Precision_Allocator.md) — arXiv:2611.05345 "Adversarial Speculative Reasoning Improves Long Horizon Agents" (Luo et al., 3 Nov 2026, CC BY 4.0). The paper measures: verification blocks are lossless in distribution but noise grows ~4%/slot (slot 0 == decode; >2-nat tails ~2× by block end), and verify-written context shows 10–20% excess >4-nat deviations after ~30 turns. Closed form: `Pr[reject] = TV(p,q)` — the draft controls where blocks end.
 
@@ -37,4 +36,4 @@ riir-ai Bench 973 proved byte-exactness at a **2048-token horizon** (incl. force
 ## Refs
 
 - [Research 652](../.research/652_Adversarial_Speculative_Reasoning_Precision_Allocator.md) — the full distillation + family check + verdict.
-- riir-ai Plan 614 (the DFlash2 lane; Bench 973 Phase-2 closeout — the 2048-token byte-exact record), riir-infer Plan 623 T5.1 (the exact-verify sentence this issue unpacks), riir-ai Issue 1011 (the stance issue — watch row appended), katgpt-rs Issue 959 (`softmax_fix.rs`), katgpt-rs Plan 200 (`correlation_budget.rs`), riir-train Issue 672 (the training track; its T0/T1 triggers consume this issue's T5 verdict).
+- riir-ai Plan 614 (the DFlash2 lane; Bench 973 Phase-2 closeout — the 2048-token byte-exact record), riir-infer Plan 623 T5.1 (the exact-verify sentence this issue unpacks), riir-ai stance doc `../riir-ai/.docs/09_performance/spec_decode_stance.md` (Issue 1011's removal home, `f5e1b6dd6` 2026-11-05), katgpt-rs Issue 959 (`softmax_fix.rs`), katgpt-rs Plan 200 (`correlation_budget.rs`), riir-train Issue 672 (the training track; its T0/T1 triggers consume this issue's T5 verdict).
