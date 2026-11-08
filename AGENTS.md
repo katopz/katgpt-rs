@@ -858,13 +858,15 @@ distillation, novelty + GOAT gates, modelless-unblock protocol §3.5):
 > **Repo count:** the **product/distillation set is 7** — `katgpt-rs` (public) +
 > `riir-ai`, `riir-chain`, `riir-neuron-db`, `riir-train`, `riir-game-sdk`,
 > `riir-dapps` (private). That is NOT the repo total: the
-> workspace is **32 repos**, all of which carry a root `BOUNDARY.md`
+> workspace is **34 repos**, all of which carry a root `BOUNDARY.md`
 > (add `riir-mmorpg-examples`, `riir-refine`, `riir-viewbridge`, `riir-auth`,
 > `katgpt-web`, `riir-dao`, `riir-deployer`, `riir-esp32`, `riir-llm`,
 > `mmorpg-remake`, `mmorpg-remaster`, `riir-kat`, `riir-shader`,
 > `riir-reflex`, `riir-infer`, `riir-reflexer`, `reflex-site`,
 > `riir-instinct`, `riir-rethink`, `seal-std`, `riir-refab`, `riir-ledger`,
-> `seal-render`, `seal-game-editor`, `zed`). `jup-tool` RETIRED 2026-11-02
+> `seal-render`, `seal-game-editor`, `zed`, `riir-grams` (the gram-family
+> generic home, riir-ai Proposal 061), `seal-sprints` (the fleet's
+> sprint-tracking repo)). `jup-tool` RETIRED 2026-11-02
 > (obsolete per owner call; the repo archives to `git/obsolete/`).
 >
 > Read a count in prose as a claim, not a fact — a count that MATCHES is not a

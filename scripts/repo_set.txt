@@ -19,6 +19,7 @@ riir-dapps
 riir-deployer
 riir-esp32
 riir-game-sdk
+riir-grams
 riir-infer
 riir-instinct
 riir-kat
@@ -36,5 +37,6 @@ riir-train
 riir-viewbridge
 seal-game-editor
 seal-render
+seal-sprints
 seal-std
 zed
