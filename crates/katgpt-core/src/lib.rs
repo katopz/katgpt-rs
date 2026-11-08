@@ -1864,12 +1864,17 @@ pub mod cond_audit;
 pub mod tpr;
 
 // special_fn — shared Lanczos ln_gamma substrate (Plan 597 T1.1): the one
-// ln_gamma in the crate, consumed by best_belief + bmr. pub(crate), gated
-// to its consumer set (2026-09-13): under --no-default-features both
+// ln_gamma in the crate, consumed by best_belief + bmr + certified_frontier
+// (the last since Issue 989's cp_upper export, 2026-11-09). pub(crate),
+// gated to its consumer set (2026-09-13): under --no-default-features all
 // consumers compile away and the ungated module tripped dead_code — it now
 // compiles to nothing with them (the cfg-gated-target discipline, not an
 // #[allow(dead_code)] blanket).
-#[cfg(any(feature = "best_belief", feature = "bmr"))]
+#[cfg(any(
+    feature = "best_belief",
+    feature = "bmr",
+    feature = "certified_frontier"
+))]
 pub(crate) mod special_fn;
 
 #[cfg(feature = "slice_tca")]
