@@ -6273,7 +6273,9 @@ verifier draw `x̃ ~ p` on rejection (no residual). Exact only at the
 (ρ=0, ε=1) corner (G1a TV < 0.02); greedy corner bit-identical to
 `PrefixMatch` (G1b); monotone in ρ↑/ε↓ (G1c). Fixture A/B ([Bench 973](../../.benchmarks/973_issue973_nucleus_accept_ab.md)):
 0.48 → ~5.1 accepted tokens/call at K=8. Stays opt-in: lossy away from the
-corner, and the ρ/ε quality calibration (MAUVE budget) is riir-ai Issue 1142.
+corner, and the ρ/ε quality calibration closed measured-negative 2026-11-09
+(riir-ai Issue 1142: best admissible ρ=0.8/ε=∞ +23.9% accepted/call, under the
++25% G2 floor, math-family-vetoed above — riir-ai Bench 1169).
 
 ### `step_noise` — modelless thrash monitor + DDR gate (Issue 975)
 
