@@ -37,7 +37,7 @@ from a guideline 7-bag, and recorded demo replays are untouched.
 | v2 oracle fixture sha256 | `12c46035a7f6b5416c4ce34c86bc9b0b890975aff57944739a24c5869b8fc259` |
 | v2 fixture shape | 120 states / 2660 options, grammar `laya-tetris-v2` |
 | v3 fixture | `tests/fixtures/tetris_oracle_laya_en_v3.jsonl`, blake3 `12035ebf…` / sha256 `eb67bc16…` (Issue 885, `6a35cde32`; see `tests/fixtures/tetris_oracle_v3_README.md`) |
-| Byte-identical copies | THIS repo `tests/fixtures/` · `../riir-reflex/assets/game_heads/` · `gist-rs/reflex-site` `tests/fixtures/` (sha256-pinned by its golden test) |
+| Byte-identical copies | THIS repo `tests/fixtures/` · `../riir-reflex/assets/game_heads/` · `riir-ai/reflex-site` `tests/fixtures/` (sha256-pinned by its golden test) |
 | Downstream | riir-reflex fitted tetris head (boot-fitted; now the v3 refit, riir-reflex `ca1483c`) · reflex-site wasm head artifact + recorded demo walks · the bench page tables |
 
 Swapping the substrate means all of this: regenerate the fixture here, then re-fit the

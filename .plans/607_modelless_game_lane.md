@@ -1027,7 +1027,7 @@ two-instance sgemm pick + `a51ea42` narrow-BK64/xwide), the three-board
 serving was on develop (`d1eda08`), and v0.2.3 tagged the develop head
 at `a386119`.
 
-- **The release surface**: GitHub release v0.2.3 on `gist-rs/reflex`
+- **The release surface**: GitHub release v0.2.3 on `riir-ai/reflex`
   (the DIST repo — NOT the private source checkout; the wrong-repo
   trap recorded in reflex HISTORY) — 6 assets, leak-scan PASS ×5,
   SHA256SUMS v0.2.3-only. Homebrew tap `3054310` + scoop bucket
@@ -1049,7 +1049,7 @@ at `a386119`.
 - **Release-process traps** (reflex HISTORY, both paid for this
   release): the wrong-repo trap (`gh release create` from the source
   checkout creates on the PRIVATE repo — the dist surface is
-  `gist-rs/reflex`; the mistaken release deleted, tag kept) and the
+  `riir-ai/reflex`; the mistaken release deleted, tag kept) and the
   `--clobber` renamed-asset trap (a renamed upload file creates a NEW
   asset instead of replacing; the CDN serves pre-replacement bytes for
   minutes — verify via the API route, not the page).
