@@ -1,6 +1,8 @@
 # Issue 989 — export the one-sided Clopper–Pearson UPPER bound from katgpt-core (the reflex Issue 112 T3a consumer ask)
 
 **Status:** OPEN — filed 2026-11-08 from riir-reflex Issue 112 T3a (the substrate-first consumed-as-issue row; reflex currently carries a TEMPORARY local bisection marked `// TEMPORARY: superseded by the katgpt-core export (T3a)` at `src/engine/threshold.rs::cp_upper_bound`).
+**Claimed:** zed-m3-i989-cpexport (mac m3), epoch=1794158329, expires 2026-11-10T17:18:49Z
+
 
 ## What exists (the seeds, verified 2026-11-08)
 
