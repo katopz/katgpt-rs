@@ -980,7 +980,7 @@ fn betacf(a: f64, b: f64, x: f64) -> f64 {
     for m in 1..=MAX_IT {
         let mf = m as f64;
         let m2 = 2.0 * mf;
-        let mut aa = mf * (b - mf) * x / ((qam + m2) * (a + mf));
+        let mut aa = mf * (b - mf) * x / ((qam + m2) * (a + m2));
         d = 1.0 + aa * d;
         if d.abs() < FPMIN {
             d = FPMIN;
@@ -991,7 +991,7 @@ fn betacf(a: f64, b: f64, x: f64) -> f64 {
         }
         d = 1.0 / d;
         h *= d * c;
-        aa = -(a + mf) * (qab + mf) * x / ((a + qap) * (qap + m2));
+        aa = -(a + mf) * (qab + mf) * x / ((a + m2) * (qap + m2));
         d = 1.0 + aa * d;
         if d.abs() < FPMIN {
             d = FPMIN;
@@ -1028,6 +1028,21 @@ fn betainc(x: f64, a: f64, b: f64) -> f64 {
 
 /// One-sided 95% Clopper–Pearson UPPER bound on the error probability given
 /// `e` errors in `n` trials: the p with I_p(e+1, n−e) = 0.95.
+// PROVENANCE + DEFECT FIX (Issue 989, 2026-11-09): the promoted home of
+// this primitive is `katgpt_core::certified_frontier::cp_upper`
+// (level-parametrized, E=0 closed form, the same bisection family).
+// ⚠ THIS COPY'S `betacf` carried defective continued-fraction denominators
+// (`(a+m)` / `(a+qap)` where the standard Lentz terms are
+// `(a+2m−1)(a+2m)` / `(a+2m)(a+2m+1)`) that read the CP upper bound HIGH —
+// measured +0.9–1.3% relative at this bench's shapes (cp_upper(1, 100):
+// 0.04699 defective vs 0.04656 correct; the independent binomial-CDF root
+// identity fails at 1e-9 under the defect, holds exactly under the
+// standard form). CONSERVATIVE direction for every `u <= DELTA` gate arm
+// here — a pass under the defective bound passes a fortiori under the
+// correct one, so the landed Bench-615 verdicts STAND — but a real
+// defect. FIXED to the standard form (best_belief's f32 kernel and
+// reflex's validated f64 block both carry it); the Bench-615 RECORD's
+// printed CP95 values predate the fix and read ~1% high.
 fn cp_upper(e: u64, n: u64) -> f64 {
     if e >= n {
         return 1.0;

@@ -318,6 +318,146 @@ pub fn beta_union_bound(cells: usize, rounds: u32, delta: f32) -> f32 {
     (2.0 * (m / delta).ln()).max(0.0).sqrt()
 }
 
+// ── Exact Clopper–Pearson quantile (Issue 989 — the reflex Issue 112 T3a export) ──
+// Provenance (the honest line): the PRIMITIVE's precedent is Bench 615's
+// private `cp_upper` (Plan 615 / Bench 615's one-sided PAC gate), but the
+// seed's private `betacf` carried defective continued-fraction
+// denominators (`(a+m)` / `(a+qap)` where the standard Lentz terms are
+// `(a+2m−1)(a+2m)` / `(a+2m)(a+2m+1)`) that read the CP upper bound HIGH —
+// measured +0.9–1.3% relative at the Bench-615 shapes (cp_upper(1, 100,
+// 0.05): 0.04699 defective vs 0.04656 correct; the independent
+// binomial-CDF root identity fails at the 1e-9 level under the defect and
+// holds exactly under this form). Conservative direction for every
+// `u <= delta` gate arm — the landed Bench-615 verdicts pass a fortiori —
+// but a real defect, fixed in the bench copy in this same family. The
+// form that ships here is the STANDARD Lentz fraction (best_belief's f32
+// kernel and riir-reflex's validated f64 block both carry it).
+// [`beta_union_bound`]'s own doc names this exact quantile as its
+// rigorous small-`n` upgrade path.
+
+/// One-sided Clopper–Pearson UPPER bound on an error rate: the smallest `p`
+/// with `P(X <= errors | p) = delta` — the `(1 − delta)`-quantile of
+/// `Beta(errors + 1, n − errors)`. The exact finite-sample bound behind the
+/// Learn-then-Test certified-abstention posture (arXiv:2110.01052; the
+/// typed-decision recipe is ThinkJev arXiv:2610.37732 §3.6; the consumer is
+/// riir-reflex's fused-gate `RiskTarget` posture).
+///
+/// * `errors >= n` → `1.0` (the data cannot rule out `p = 1`);
+/// * `errors == 0` → the E=0 closed form `1 − delta^(1/n)` (pinned by test);
+/// * otherwise a bounded deterministic bisection (200 fixed iterations,
+///   f64 sequential folds) on the regularized incomplete beta — same
+///   inputs → bit-identical output (the Issue 940 determinism law).
+///
+/// # Panics
+/// `n == 0` or `delta` outside `(0, 1)` — a caller asking for a bound with
+/// no trials or a degenerate level is a bug, not a corner.
+#[must_use]
+pub fn cp_upper(errors: usize, n: usize, delta: f64) -> f64 {
+    assert!(n >= 1, "cp_upper needs n >= 1");
+    assert!(delta > 0.0 && delta < 1.0, "delta in (0, 1)");
+    if errors >= n {
+        return 1.0;
+    }
+    if errors == 0 {
+        return 1.0 - delta.powf(1.0 / n as f64);
+    }
+    let a = (errors + 1) as f64;
+    let b = (n - errors) as f64;
+    // f(p) = I_{1−p}(b, a) is the binomial CDF at `errors` under `p`,
+    // strictly decreasing on (0, 1) from 1 to 0; bisect f(p) = delta.
+    let (mut lo, mut hi) = (0.0_f64, 1.0_f64);
+    for _ in 0..200 {
+        let mid = 0.5 * (lo + hi);
+        if cp_inc_beta(b, a, 1.0 - mid) > delta {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
+/// Regularized incomplete beta `I_x(a, b)`, f64 — continued fraction with
+/// the symmetry split (the Numerical Recipes shape), consuming the shared
+/// Lanczos [`crate::special_fn::ln_gamma`] kernel (one ln_gamma per crate).
+/// Module-private until a second consumer justifies the special_fn
+/// extraction (the Plan 597 T1.1 precedent).
+fn cp_inc_beta(a: f64, b: f64, x: f64) -> f64 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    if x >= 1.0 {
+        return 1.0;
+    }
+    let ln_front = crate::special_fn::ln_gamma(a + b)
+        - crate::special_fn::ln_gamma(a)
+        - crate::special_fn::ln_gamma(b)
+        + a * x.ln()
+        + b * (-x).ln_1p();
+    let front = ln_front.exp();
+    if x < (a + 1.0) / (a + b + 2.0) {
+        front * cp_betacf(a, b, x) / a
+    } else {
+        1.0 - front * cp_betacf(b, a, 1.0 - x) / b
+    }
+}
+
+/// The continued fraction for the incomplete beta (Lentz's method, the
+/// Numerical Recipes `betacf` shape), f64, bounded-iteration deterministic.
+/// The denominators are the STANDARD Lentz terms `(a+2m−1)(a+2m)` /
+/// `(a+2m)(a+2m+1)` — the form best_belief's f32 kernel and riir-reflex's
+/// validated f64 block both carry, and the form the independent
+/// binomial-CDF root identity adjudicates at 1e-9. (The Bench-615 seed's
+/// private copy carries `(a+m)` / `(a+qap)` spellings here — a transcription
+/// defect that read the bound HIGH, conservative-but-real; filed in Issue
+/// 989 and fixed there too — this module never carried it.)
+fn cp_betacf(a: f64, b: f64, x: f64) -> f64 {
+    const MAX_IT: usize = 300;
+    const EPS: f64 = 3.0e-12;
+    const FPMIN: f64 = 1.0e-300;
+    let qab = a + b;
+    let qap = a + 1.0;
+    let qam = a - 1.0;
+    let mut c = 1.0;
+    let mut d = 1.0 - qab * x / qap;
+    if d.abs() < FPMIN {
+        d = FPMIN;
+    }
+    d = 1.0 / d;
+    let mut h = d;
+    for m in 1..=MAX_IT {
+        let mf = m as f64;
+        let m2 = 2.0 * mf;
+        let mut aa = mf * (b - mf) * x / ((qam + m2) * (a + m2));
+        d = 1.0 + aa * d;
+        if d.abs() < FPMIN {
+            d = FPMIN;
+        }
+        c = 1.0 + aa / c;
+        if c.abs() < FPMIN {
+            c = FPMIN;
+        }
+        d = 1.0 / d;
+        h *= d * c;
+        aa = -(a + mf) * (qab + mf) * x / ((a + m2) * (qap + m2));
+        d = 1.0 + aa * d;
+        if d.abs() < FPMIN {
+            d = FPMIN;
+        }
+        c = 1.0 + aa / c;
+        if c.abs() < FPMIN {
+            c = FPMIN;
+        }
+        d = 1.0 / d;
+        let del = d * c;
+        h *= del;
+        if (del - 1.0).abs() < EPS {
+            break;
+        }
+    }
+    h
+}
+
 /// The halting law: a certified hop is guaranteed once `sigma <= eps / (2 beta)`.
 ///
 /// Answers *when do I stop looking at this cell* — the counterpart to

@@ -1356,3 +1356,95 @@ mod t53_dual {
         assert!(LinearPosterior::posterior_variance_linear(&dual, &feats[0], &mut []).is_finite());
     }
 }
+
+// Issue 989 — the exported one-sided Clopper–Pearson UPPER bound (the
+// reflex Issue 112 T3a consumer ask; the Bench-615 private fn is the seed,
+// now one home). The reflex test trio is the template, ported verbatim:
+// the E=0 closed-form canary, monotonicity/bracketing, and the
+// INDEPENDENT direct-binomial-CDF root identity (an independent method
+// from the bisection — the elementary pmf sum).
+mod cp_upper_export {
+    use katgpt_core::certified_frontier::cp_upper;
+
+    /// Binomial CDF P(X <= k | p) via the elementary pmf recurrence — the
+    /// independent oracle (no incomplete beta involved).
+    fn binom_cdf(k: usize, n: usize, p: f64) -> f64 {
+        let q = 1.0 - p;
+        let mut pmf = q.powi(n as i32);
+        let mut cdf = pmf;
+        for i in 0..k {
+            pmf *= (n - i) as f64 / (i + 1) as f64 * p / q;
+            cdf += pmf;
+        }
+        cdf.min(1.0)
+    }
+
+    #[test]
+    fn e0_closed_form_canary() {
+        // cp_upper(0, n, delta) = 1 − delta^(1/n), pinned at 1e-15 across a
+        // small sweep (the Bench-615 canary identity).
+        for n in [16usize, 29, 59, 120, 299] {
+            for d in [0.01f64, 0.05, 0.10, 0.25] {
+                let want = 1.0 - d.powf(1.0 / n as f64);
+                let got = cp_upper(0, n, d);
+                assert!((got - want).abs() < 1e-15, "n={n} d={d}");
+            }
+        }
+        // All-wrong answers 1.0; the k = n convention.
+        assert_eq!(cp_upper(10, 10, 0.05), 1.0);
+        assert_eq!(cp_upper(11, 10, 0.05), 1.0);
+    }
+
+    #[test]
+    fn monotone_never_undercuts_brackets() {
+        for n in [16usize, 59, 120] {
+            let mut prev = 0.0f64;
+            for k in 0..=n {
+                let u = cp_upper(k, n, 0.05);
+                assert!(u >= prev - 1e-12, "monotone n={n} k={k}");
+                assert!(u >= k as f64 / n as f64 - 1e-12, ">= rate n={n} k={k}");
+                if k < n {
+                    assert!(u < 1.0, "below 1 n={n} k={k}");
+                }
+                prev = u;
+            }
+        }
+    }
+
+    #[test]
+    fn matches_the_independent_binomial_cdf_root() {
+        // P(X <= k | cp_upper) must EQUAL delta at 1e-9 — the bound is the
+        // root of the exact binomial CDF (validated by the elementary pmf
+        // sum, an independent method from the bisection).
+        for &(k, n, d) in &[
+            (1usize, 100, 0.05),
+            (3, 59, 0.05),
+            (7, 299, 0.05),
+            (2, 30, 0.10),
+            (5, 200, 0.01),
+            (11, 500, 0.05),
+        ] {
+            let u = cp_upper(k, n, d);
+            let cdf = binom_cdf(k, n, u);
+            assert!((cdf - d).abs() < 1e-9, "k={k} n={n} d={d}: cdf(p_u)={cdf}");
+        }
+    }
+
+    #[test]
+    fn determinism_bit_identical_and_refusals_loud() {
+        // The Issue 940 law: same inputs → bit-identical output (fixed
+        // iteration bisection, fixed fold order).
+        let a = cp_upper(3, 59, 0.05);
+        let b = cp_upper(3, 59, 0.05);
+        assert_eq!(a.to_bits(), b.to_bits());
+        // Degenerate callers refuse loud, never guess (n = 0 is the only
+        // n-side refusal; errors >= n is the 1.0 convention, not an error).
+        let r = std::panic::catch_unwind(|| cp_upper(1, 0, 0.05));
+        assert!(r.is_err(), "n=0 must refuse");
+        assert_eq!(cp_upper(2, 1, 0.05), 1.0, "errors >= n answers 1.0");
+        for &d in &[0.0f64, 1.0, -0.5] {
+            let r = std::panic::catch_unwind(|| cp_upper(1, 59, d));
+            assert!(r.is_err(), "delta={d} must refuse");
+        }
+    }
+}
