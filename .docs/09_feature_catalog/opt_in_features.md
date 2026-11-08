@@ -6514,3 +6514,16 @@ top-16, the standing champion.
 signal over an untouched `CorpusDistanceGate`). **OPT-IN, DEFAULT-OFF,
 MEASURED NEGATIVE — no consumer, no promotion path until Issue 986's cell
 clears the same bar.**
+
+## 164. adoption_gate — Adoption/Retention Regression Gate (Plan 633 / issue 987 priority-1, 2026-11-08)
+
+The AGCL adoption gate (Research 657 §A5, fixture-first per the ungoat discipline): a modelless regression gate for PROMOTION SWAPS (active-set changes, head/epoch swaps) — the gate scores a candidate against the incumbent's recent outcome window and keeps the incumbent on any regression.
+
+- **`OutcomeDigest`**: BLAKE3 newtype over `[u8; 32]` (an accepted outcome or a produced output).
+- **`DedupRing`**: fixed 32-slot FIFO membership set (1064 bytes, layout-pinned); `insert` returns NEW-or-seen, oldest evicted at capacity. The local mirror of riir-neuron-db's `RingRow<T,32>` shape (not deppable — this repo is upstream).
+- **`Decontaminator`**: never-double-file splitter — every `stride`-th accepted outcome files to a held-out audit sink, the rest to the gate window; index-deterministic; filing to both is unrepresentable by construction.
+- **`score_adoption` / `AdoptionGate::decide`**: score `= (1−α)·retained + α·(1−repeated)` over f64 sequential folds; ties→challenger (`TIE_GOES_TO_CHALLENGER`); an empty evidence window declines (`NoEvidence` → keep incumbent — decline-first); the verdict consumes rings + slices only (always-from-base, purity pinned bit-for-bit by test).
+
+Fixture gates (T0, Plan 633): degraded-challenger red / genuine-improvement green + exact-tie challenger / never-double-file over ≥500 outcomes / ring eviction / purity replay. **OPT-IN, DEFAULT-OFF** — T1 (riir-refine + instinct consumers) and the real-store GOAT cell (T3: gate-on vs gate-off on fix trajectories + oracle verdicts; α under judge noise) are preconditions for any promotion talk.
+
+🔧 Feature flag: `adoption_gate` (katgpt-core).

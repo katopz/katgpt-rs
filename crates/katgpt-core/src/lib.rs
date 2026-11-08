@@ -2010,3 +2010,14 @@ pub use step_noise::{
 // derives from (Issue 975: interop, never replacement).
 #[cfg(all(feature = "step_noise", feature = "guided_width_rollouts"))]
 pub use step_noise::regime_from_stagnation_counter;
+
+// Plan 633 T0 / issue 987 priority-1: the adoption/retention regression
+// gate (AGCL form, Research 657 §A5) — opt-in decision machinery beside
+// rating/step_noise.
+#[cfg(feature = "adoption_gate")]
+pub mod adoption_gate;
+
+#[cfg(feature = "adoption_gate")]
+pub use adoption_gate::{
+    AdoptionDecision, AdoptionGate, AdoptionVerdict, DedupRing, OutcomeDigest,
+};

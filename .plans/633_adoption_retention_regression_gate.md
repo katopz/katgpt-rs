@@ -1,11 +1,11 @@
 # Plan 633 — Adoption/retention regression gate (AGCL form; issue 987 priority-1, fixture-first)
 
-**Status:** ACTIVE — T0 (fixture + primitive) this session; T3 GOAT cells gated on T0 per the ungoat discipline (no GOAT plan opens until its proof path has a runnable fixture — the fixture IS T0).
+**Status:** ACTIVE — T0 LANDED (fixture + primitive; landing commit recorded below). T1–T4 stay unchecked pending their preconditions (ungoat discipline: the fixture IS the proof path; the real-store GOAT cell opens only after a consumer names its store).
 **Claimed:** zed-86011726@m3, 1794136639, expires 2026-11-10T11:20:00+00:00
 
 Source: `.issues/987_cactus_neurips2026_follow_ups.md` priority-1 lead — [P] gate form from AGCL (Research 657 §A5) + [ours] consumers + judge-noise handling. **Substrate-first verdict (2026-11-08, vocabulary translation run):** NO existing outcome-retention gate substrate in katgpt-rs — every `retention` hit is KV/attention-side (`dash_attn` eviction windows, needle retention), every `dedup` hit is AC-prefix attention masking or ARG ontology `RegistryDedup`; `RingRow<T,32>` lives in riir-neuron-db, which this upstream repo cannot dep (BOUNDARY law). A new primitive is justified; it mirrors the ring shape locally.
 
-## What ships (T0 — the runnable fixture + primitive)
+## What ships (T0 — the runnable fixture + primitive) — LANDED
 
 `katgpt-core/src/adoption_gate.rs` behind the opt-in feature `adoption_gate` (modelless, zero new deps — blake3 is already non-optional):
 
@@ -22,6 +22,8 @@ Fixture tests (the proof path — synthetic outcome streams, LABELED synthetic g
 3. never-double-file: ≥500-outcome stream at stride 5 → no digest in both T and A.
 4. ring bound: >32 distinct digests → oldest evicted, membership correct.
 5. purity/determinism: same inputs → identical verdict bits, replayed ×2.
+
+**T0 landing (2026-11-08):** module 715 lines + 9 tests (the five fixture gates + size/dedup/no-evidence/incumbent-equivalence pins); clippy `-D warnings` green at BOTH feature postures; rustfmt per-file clean. Pinned `size_of::<DedupRing>()` = 1064 B (parallel-arrays layout — `Option<[u8;32]>` has no niche, parallel `occupied: [bool; 32]` + `slots: [[u8; 32]; 32]` beats it). Documented deviations, all test-pinned: `Decontaminator::file` is content-free (returns the destination enum; sinks consume digests — never-double-file unrepresentable); cross-ring ingest dedup keeps accepted/rejected T-rings disjoint by construction; incumbent score derived from the rings alone (`retained ≡ 1` over its own window, `repeated = |rej|/(|acc|+|rej|)`) with bit-for-bit equivalence pinned vs `score_adoption` over ring-derived slices; `TIE_GOES_TO_CHALLENGER` is a real `pub const` read by `decide` (flip demotes ties to Keep); `NoEvidence` verdict carries informational score (== α). Lint path: cargo-refine's auto-oracle sees cfg-gated code as nothing at default features (0 findings, 0 edits) → the two armed-posture mechanicals (`filter_map_bool_then`, `manual_is_multiple_of` — the latter on the full-gate `-D` list) fixed manually, the documented fallback. Docs: feature census 729→730 (README ×4 sites + examples/README + catalog §164).
 
 ## Gates after T0 (leave UNCHECKED until their precondition lands)
 
