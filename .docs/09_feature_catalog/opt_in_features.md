@@ -6529,3 +6529,16 @@ The AGCL adoption gate (Research 657 §A5, fixture-first per the ungoat discipli
 Fixture gates (T0, Plan 633): degraded-challenger red / genuine-improvement green + exact-tie challenger / never-double-file over ≥500 outcomes / ring eviction / purity replay. **OPT-IN, DEFAULT-OFF** — T1 (riir-refine + instinct consumers) and the real-store GOAT cell (T3: gate-on vs gate-off on fix trajectories + oracle verdicts; α under judge noise) are preconditions for any promotion talk.
 
 🔧 Feature flag: `adoption_gate` (katgpt-core).
+
+## 165. pick_latch — Selection Hysteresis Latch (issue 987 Temporal-MoE lead, 2026-11-09)
+
+The scored-candidate selection stabilizer (Research 657 §A1; ours, not a paper claim): a bare argmax over a re-scored candidate table re-decides every call, and near-ties flip the pick back and forth on scoring noise. `PickLatch::decide` keeps the previous pick unless the challenger's score beats the held pick's by a sigmoid margin, and an abstain probe REUSES the held pick instead of re-deciding on noise.
+
+- **Decision rule**: challenger = argmax (`float_order::cmp_for_max` + first-index tie — the `pick_domain` comparator, so a cold latch seats exactly what `pick_domain` would); switch iff `exact_sigmoid((challenger − held)/temperature) ≥ threshold`. `exact_sigmoid` (the bit-stable reference form, not the fast approximation) per the committed-value-path law in its own doc — and it makes the additive margin exact: `temperature·lnit(threshold)` (ln 3 ≈ 1.099 score units at the defaults). Sigmoid, never softmax — a one-vs-held comparison has nothing to normalize.
+- **Abstain ⇒ reuse**: `decide(None)` / `decide(Some(&[]))` never re-decides — held pick returned unchanged, `NoPick` only on a cold abstain. The abstention signal arrives from the caller's admission/distance gate; the latch never second-guesses it.
+- **State surface**: the ONLY mutated field is the held index (the lead's "per-session last-pick + margin") — finite state + deterministic transitions, so every stream has a fixed point. Stationary-surface fixtures pin the fixed point, the noise band, and byte-identical replay of a mixed stream.
+- **Contract edges**: positional tables (a shrunken table re-seats fresh; id-keyed callers map ids→positions per probe); NaN holds (a NaN held score cannot be compared; `cmp_for_max` never elects a NaN challenger); clamped construction, no panic path (threshold pinned into the open (0.5, 1) band — ≤ 0.5 would switch on a non-positive advantage, ≥ 1 is a dead latch).
+
+15 synthetic gate-mechanics fixtures (T0). Named consumers (T1, not wired): reflex `pick_domain` routing, instinct LRU eviction path. **OPT-IN, DEFAULT-OFF, byte-identical off** — GOAT = flip-rate reduction vs bare argmax on a real consumer stream, gated on the T0 fixture.
+
+🔧 Feature flag: `pick_latch` (katgpt-core).

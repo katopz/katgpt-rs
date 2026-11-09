@@ -2026,3 +2026,12 @@ pub mod adoption_gate;
 pub use adoption_gate::{
     AdoptionDecision, AdoptionGate, AdoptionVerdict, DedupRing, OutcomeDigest,
 };
+
+// selection hysteresis latch (issue 987 Temporal-MoE lead, Research 657
+// §A1) — keep the previous pick unless the challenger clears a sigmoid
+// margin; abstain ⇒ reuse. Beside adoption_gate in the 987 decision lane.
+#[cfg(feature = "pick_latch")]
+pub mod pick_latch;
+
+#[cfg(feature = "pick_latch")]
+pub use pick_latch::{LatchDecision, PickLatch};
