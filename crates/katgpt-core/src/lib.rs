@@ -1546,7 +1546,11 @@ pub use paired_loss::{
     PairedLossGap, TokenClass, TokenTagger,
 };
 
-#[cfg(feature = "temp_loss_fingerprint")]
+// The mod gate is EITHER child feature (Plan 634 T1.1's `diffusion_diversity`
+// was added under a `temp_loss_fingerprint`-only gate — a consumer enabling
+// only `diffusion_diversity` failed to compile, found by the reflex Issue-115
+// consumer lane 2026-11-10; the temp rows keep their own narrower gates).
+#[cfg(any(feature = "temp_loss_fingerprint", feature = "diffusion_diversity"))]
 pub mod diversity;
 #[cfg(feature = "temp_loss_fingerprint")]
 pub use diversity::temp::{
