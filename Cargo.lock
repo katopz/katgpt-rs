@@ -1879,7 +1879,7 @@ dependencies = [
 
 [[package]]
 name = "katgpt-core"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "ahash",
  "arrayvec",
@@ -1913,7 +1913,7 @@ dependencies = [
 
 [[package]]
 name = "katgpt-dec"
-version = "0.1.3"
+version = "0.1.4"
 
 [[package]]
 name = "katgpt-deprecated"
@@ -1959,7 +1959,7 @@ dependencies = [
 
 [[package]]
 name = "katgpt-hla"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "katgpt-types",
  "serde",
@@ -1979,7 +1979,7 @@ dependencies = [
 
 [[package]]
 name = "katgpt-micro-belief"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "blake3",
  "fastrand",
@@ -2018,7 +2018,7 @@ dependencies = [
 
 [[package]]
 name = "katgpt-personality"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "blake3",
  "katgpt-types",
@@ -2136,7 +2136,7 @@ dependencies = [
 
 [[package]]
 name = "katgpt-sense"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "fastrand",
@@ -2146,7 +2146,7 @@ dependencies = [
 
 [[package]]
 name = "katgpt-sleep"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "blake3",
  "katgpt-types",
@@ -2233,7 +2233,7 @@ dependencies = [
 
 [[package]]
 name = "katgpt-types"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "fastrand",
