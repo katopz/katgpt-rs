@@ -26,6 +26,7 @@ MSAR extends Attention Residuals (AttnRes — softmax retrieval over network *de
 |---|---|---|---|---|
 | Single-state recurrence | Vanilla / ReZero / Highway | fixed / static / dynamic | `h_{l-1}` | every shipped model |
 | Multi-state recurrence | HC / mHC / xHC / DDL | dynamic | persistent m-stream state | **xHC** (`riir-train xhc_pretraining`, Issue 383) |
+| Multi-state recurrence (minimal + shared-access) | **identityHC / SimpleHC** (arXiv:2611.05984) | dynamic gates, identity transitions, K=4 group-entry gate conditioning + deferred writes/corrections | group-entry state | **SimpleHC** (`riir-train` Plan 493; distill: [661](661_SimpleHC_Minimal_Gated_Residual_Execution.md)) |
 | Cross-layer access | DenseNet / DenseFormer / **Block AttnRes** / MoDA / MUDDFormer | static / static / dynamic / dynamic | source list `[b_0..b_n]` | **AttnRes** (`katgpt-transformer::attn_res`, Kimi-K3 native) |
 | Multi-stream cross-layer | DAR (2 streams) / **Block MSAR** (m streams) | dynamic | conv-expanded source views | — (this paper → Plan 458 / Issue 933) |
 
