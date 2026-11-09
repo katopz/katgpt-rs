@@ -1,6 +1,7 @@
 # Issue 990: PoC — closed-form fact-write as a deterministic rank-r pair on a ≥2-layer toy decoder
 
 **Status:** open — Research 659 (`areu01or00/qwen0.8B-wsp` @ `39265dbc`, NO LICENSE — decision-content only: Rust re-implementation from the math, ZERO code import; outbound-PR fail-closed).
+**Claimed:** zed-amo-i990cfw@amo, 1794223768, expires 2026-11-11T18:00:00+00:00
 
 A fact is written into a toy decoder's MLP weights in closed form (MEMIT-style: teacher-forced keys, out-embedding×final-norm targets, protected covariance, ridge solve, bottom-up spread, ≤6 IRLS refinement rounds — every step a forward pass or a linear solve, no gradients), shipped as a **rank-r pair** under a NEW opt-in feature.
 
