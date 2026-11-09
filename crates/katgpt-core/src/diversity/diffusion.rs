@@ -195,6 +195,59 @@ impl SimGraph {
         }
         d
     }
+
+    /// Distribution-level diversity scalar (paper Def 5.2, plan T1.4):
+    /// `div_tau(μ) = 1/‖μᵀP^τ‖²_{ℓ2(1/π)}` — the effective spread of a
+    /// distribution under τ-step graph diffusion, stationary-measure
+    /// weighted.
+    ///
+    /// `μ` is the distribution over nodes (length n; the caller owns its
+    /// normalization — the value is invariant to μ's total scale only
+    /// through the norm, so the plan's Δ(N(x)) simplex users pass their
+    /// simplex vector as-is). `q`/`r` are caller scratch, length ≥ n;
+    /// `q` carries `μᵀP^τ` on return (the caller may reuse it — e.g. the
+    /// frontier readout beside the scalar).
+    ///
+    /// Fold order (Issue-940 pin): each matvec accumulates per-output in
+    /// the row's ascending column order ([`SimGraph::diffuse_transpose`]);
+    /// the two norm reductions fold in ascending node-index order,
+    /// sequential `+=` — the emitted scalar is bit-reproducible.
+    ///
+    /// τ compositions of the matvec; τ small by construction. Zero alloc.
+    pub fn div_tau(&self, mu: &[f32], tau: usize, q: &mut [f32], r: &mut [f32]) -> f32 {
+        debug_assert_eq!(mu.len(), self.n);
+        debug_assert_eq!(q.len(), self.n);
+        debug_assert_eq!(r.len(), self.n);
+        q[..self.n].copy_from_slice(mu);
+        for _ in 0..tau {
+            // r[x] = Σ_{z ~ x} w(x,z)/deg(z) · q[z] — reads q wholly,
+            // writes r wholly (no aliasing), per-output ascending-column
+            // fold (the Issue-940 pin, same order as diffuse_transpose).
+            for (x, slot) in r.iter_mut().enumerate().take(self.n) {
+                let mut acc = 0.0_f32;
+                let (cols, ws) = self.row(x);
+                for (&z, &w) in cols.iter().zip(ws.iter()) {
+                    acc += (w / self.degree(z)) * q[z];
+                }
+                *slot = acc;
+            }
+            q.swap_with_slice(r);
+        }
+        // ‖q‖²_{ℓ2(1/π)} = Σ_x q(x)² / π(x) — π is the NORMALIZED
+        // stationary measure, so 1/π(x) = total_weight / degree(x). The
+        // constant factor cancels in 1/‖·‖² only if π sums to 1; it does
+        // (build normalizes), so the fold uses inv_stationary_unnorm ·
+        // total_weight to keep the normalized 1/π exactly.
+        let mut norm_sq = 0.0_f32;
+        for (&qv, &inv) in q[..self.n].iter().zip(self.inv_stationary_unnorm.iter()) {
+            let one_over_pi = inv * self.total_weight as f32;
+            norm_sq += qv * qv * one_over_pi;
+        }
+        if norm_sq <= 0.0 {
+            return 0.0; // a zero μ diffuses to zero — the honest scalar is 0 (undefined mathematically; 0 reads "no spread" and never divides by an epsilon silently)
+        }
+        1.0 / norm_sq
+    }
 }
 
 /// Local diffusion similarity — paper Alg. 5 + Lemma B.13: exact on the
