@@ -5,6 +5,8 @@
 **Source paper:** [arXiv:2606.01861](https://arxiv.org/abs/2606.01861) — Chen & Li, "A Theoretical Framework for Self-Play Theorem Proving Algorithms"
 **Target:** `crates/katgpt-core/src/diversity/diffusion.rs` (new; the `diversity/` module doc already names itself the home for future diversity selectors) + a pluggable embedding/dimension seam in `set_admission` (same crate — see T1.6) + Cargo feature `diffusion_diversity`
 **Status:** Active — Phase 1 not started
+**Claimed:** amo-idle-634p1, 1794239250, expires 2026-11-11T15:47:30+00:00
+(amo idle lane, 2026-11-09T15:47Z — fresh engagement per the idle-loop continuation: Phase 1 core primitive T1.1–T1.4 + the feature/gate scaffolding; T1.5/T1.6 + Phase 2 batteries follow. Build-dependent compile/test phases ride the quiet-box window — the i1191 Metal decode rig holds amo right now, so zero-contention phases (scaffold authoring, fixture constants, plan/claim bookkeeping) land first, cargo gates when the rig clears. No foreign claim existed; file mtime Nov 9 18:22 +52 is the filing session, nothing since.)
 
 ---
 
