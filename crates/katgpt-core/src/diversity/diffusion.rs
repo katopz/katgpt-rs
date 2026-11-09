@@ -452,3 +452,203 @@ impl DiffusionEmbedding {
         out
     }
 }
+
+/// Walk-time diversity-maximizing neighbor selector — paper Alg. 4 (plan
+/// T1.5). At the current walk node `x`: assemble the diffusion kernel
+/// `M′[y,y′] = φ_τ(y,y′)` over `|N(x)|` neighbors (the local posture,
+/// exact), then solve the floor-constrained simplex QP
+///
+/// `argmin_{μ ∈ Δ(N(x)), μ ≥ η/deg} μᵀ M′ μ`
+///
+/// whose optimum upweights INTER-cluster transitions (the kernel is small
+/// within a cluster, so mass moves to the frontier — Prop 5.6's Θ(M/r²)
+/// spectral-gap enlargement on clique-cluster graphs).
+///
+/// Solver: deterministic active-set KKT loop — all-free equality solve,
+/// then clip the LOWEST-INDEX floor violator and re-solve over the free
+/// set, repeated until no violator remains (at most k iterations, k =
+/// |N(x)|; monotone because each pass pins one more coordinate). The
+/// equality solve is Gaussian elimination with partial pivoting, tie =
+/// first-max index; a 1e-12 ridge discloses the degenerate-PSD case
+/// instead of dividing by a zero pivot silently. Same (graph, x, τ, η)
+/// ⇒ bit-identical `out` (the Issue-940 tie law).
+///
+/// `out` is caller-provided, length = |N(x)|; `out[i]` pairs with
+/// neighbor i in the graph's ascending column order. Zero per-call
+/// allocation beyond the solver's small fixed work (O(k²) f64 cells,
+/// k ≤ 64 asserted — a node with more neighbors refuses loud; the
+/// paper's walk nodes are small-degree).
+///
+/// # Panics
+/// Panics if `out.len() != |N(x)|`, a neighbor degree > 64, or the
+/// active-set loop fails to converge in k passes (a broken solver is a
+/// bug, never a silent fallback).
+pub fn neighbor_diversity_pick(
+    g: &SimGraph,
+    x: usize,
+    tau: usize,
+    eta: f32,
+    scratch: &mut LocalScratch,
+    out: &mut [f32],
+) {
+    let (cols, _) = g.row(x);
+    let k = cols.len();
+    assert_eq!(out.len(), k, "out must pair with |N(x)| in column order");
+    assert!(k <= 64, "neighbor degree {k} > 64 (solver work bound)");
+    if k == 0 {
+        return; // a dead node picks nothing
+    }
+    // Kernel row-by-row: M′[i][j] = φ_τ(y_i, y_j) — the local posture
+    // with ONE scratch (queries are sequential; each result lands in the
+    // f64 kernel cells immediately).
+    let mut kernel = [[0.0_f64; 64]; 64];
+    for (i, &yi) in cols.iter().enumerate() {
+        for (j, &yj) in cols.iter().enumerate().skip(i) {
+            let phi = diffusion_similarity_local(g, yi, yj, tau, scratch) as f64;
+            kernel[i][j] = phi;
+            kernel[j][i] = phi; // symmetric kernel
+        }
+    }
+    // Floor: μ_y ≥ η/deg(y).
+    let mut floor = [0.0_f64; 64];
+    for (i, &yi) in cols.iter().enumerate() {
+        floor[i] = (eta as f64) / (g.degree(yi) as f64);
+    }
+    // Active-set loop.
+    let mut pinned = [false; 64];
+    let mut mu = [0.0_f64; 64];
+    for _pass in 0..k {
+        solve_equality_qp(&kernel, &floor, &pinned, k, &mut mu);
+        // Find the LOWEST-index violator (deterministic pin order).
+        let mut violator: Option<usize> = None;
+        for i in 0..k {
+            if !pinned[i] && mu[i] < floor[i] {
+                violator = Some(i);
+                break;
+            }
+        }
+        match violator {
+            Some(i) => pinned[i] = true,
+            None => break, // converged: all free coords ≥ floor
+        }
+    }
+    // Emit: pinned coords carry their floor exactly; free coords carry
+    // the solved value (re-clamped defensively — the loop converged, so
+    // this is a no-op by construction, never a silent fix).
+    let mut sum = 0.0_f64;
+    for i in 0..k {
+        mu[i] = if pinned[i] {
+            floor[i]
+        } else {
+            mu[i].max(floor[i])
+        };
+        sum += mu[i];
+    }
+    for (slot, &m) in out.iter_mut().zip(mu.iter().take(k)) {
+        *slot = (m / sum) as f32; // renormalize the numerical drift off 1
+    }
+}
+
+/// The equality-constrained QP over the currently-free set:
+/// min μᵀKμ s.t. Σμ = 1, μ_pinned = floor. KKT: 2(Kμ)_i = λ for free i
+/// ⇒ K_ff μ_f = (λ/2)·1 − K_fp μ_p; augmented system with λ as the last
+/// unknown. Gaussian elimination, partial pivoting, first-max tie rule;
+/// 1e-12 ridge on the diagonal (the disclosed degenerate-PSD fallback).
+fn solve_equality_qp(
+    kernel: &[[f64; 64]; 64],
+    floor: &[f64; 64],
+    pinned: &[bool; 64],
+    k: usize,
+    mu_out: &mut [f64; 64],
+) {
+    let free: Vec<usize> = (0..k).filter(|&i| !pinned[i]).collect();
+    let f = free.len();
+    if f == 0 {
+        // All pinned: μ = floor (the sum constraint is the caller's
+        // renormalization; an all-pinned pass means every coordinate sits
+        // at its floor).
+        for (i, slot) in mu_out.iter_mut().enumerate().take(k) {
+            *slot = floor[i];
+        }
+        return;
+    }
+    // K_fp μ_p term (zero when nothing is pinned).
+    let mut rhs_fp = [0.0_f64; 64];
+    for (fi, &i) in free.iter().enumerate() {
+        let mut acc = 0.0_f64;
+        for p in 0..k {
+            if pinned[p] {
+                acc += kernel[i][p] * floor[p];
+            }
+        }
+        rhs_fp[fi] = acc;
+    }
+    // Augmented matrix rows: [2·K_ff | -1]·[μ_f; λ/2] = -2·K_fp·μ_p,
+    // plus the sum row [1…1 | 0]·[μ_f; λ/2] = 1.
+    let dim = f + 1;
+    let mut a = [[0.0_f64; 65]; 65];
+    let mut b = [0.0_f64; 65];
+    for (fi, &i) in free.iter().enumerate() {
+        for (fj, &j) in free.iter().enumerate() {
+            a[fi][fj] = 2.0 * kernel[i][j] + if fi == fj { 1e-12 } else { 0.0 };
+        }
+        a[fi][f] = -1.0;
+        b[fi] = -2.0 * rhs_fp[fi];
+    }
+    for (fj, _) in free.iter().enumerate() {
+        a[f][fj] = 1.0;
+    }
+    b[f] = 1.0;
+    // Gaussian elimination with partial pivoting (first-max tie).
+    let mut solution = [0.0_f64; 65];
+    for col in 0..dim {
+        let mut piv = col;
+        let mut piv_val = a[col][col].abs();
+        for (r, row) in a.iter().enumerate().take(dim).skip(col + 1) {
+            let v = row[col].abs();
+            if v > piv_val {
+                piv = r;
+                piv_val = v;
+            }
+        }
+        if piv != col {
+            a.swap(col, piv);
+            b.swap(col, piv);
+        }
+        let diag = a[col][col];
+        assert!(diag.abs() > 1e-300, "singular KKT system at col {col}");
+        // Copy the pivot row once so the elimination can iterate `a`
+        // mutably without aliasing the read. The b update rides the SAME
+        // fused pass (the factor is read from the row BEFORE it is
+        // eliminated — the split form would re-read a zeroed cell).
+        let pivot_row = a[col];
+        let pivot_b = b[col];
+        for (r, row) in a.iter_mut().enumerate().take(dim).skip(col + 1) {
+            let factor = row[col] / diag;
+            if factor == 0.0 {
+                continue;
+            }
+            for (cc, pv) in pivot_row.iter().enumerate().take(dim).skip(col) {
+                row[cc] -= factor * pv;
+            }
+            b[r] -= factor * pivot_b;
+        }
+    }
+    for r in (0..dim).rev() {
+        let mut acc = b[r];
+        for c in (r + 1)..dim {
+            acc -= a[r][c] * solution[c];
+        }
+        solution[r] = acc / a[r][r];
+    }
+    // Copy μ_f into place; pinned slots keep their floor (the caller
+    // overwrites them anyway — this keeps mu_out a complete vector).
+    for (fi, &i) in free.iter().enumerate() {
+        mu_out[i] = solution[fi];
+    }
+    for (i, slot) in mu_out.iter_mut().enumerate().take(k) {
+        if pinned[i] {
+            *slot = floor[i];
+        }
+    }
+}
