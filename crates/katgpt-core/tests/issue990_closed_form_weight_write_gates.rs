@@ -661,6 +661,10 @@ fn t5b_scrambled_pair_at_or_below_baseline() {
             n <= baseline,
             "scrambled outperformed the baseline: {n} > {baseline}"
         );
+    } else {
+        println!(
+            "issue 990 T5b VACUOUS: real {real_n} <= baseline {baseline} — the arm tests nothing at this posture"
+        );
     }
 }
 
