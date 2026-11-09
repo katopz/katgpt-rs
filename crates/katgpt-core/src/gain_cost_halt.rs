@@ -138,7 +138,13 @@ pub enum HaltReason {
 /// `step_size` is the ABSOLUTE `‖h^(r) − h^(r−1)‖₂` and `angular_change`
 /// is a DIRECTION (cos θ) — neither divides by ‖h‖. Preserve that property;
 /// a future "normalized gain" that divides by the current state norm would
-/// read fake convergence off a diverging trajectory.
+/// read fake convergence off a diverging trajectory. Boundary condition
+/// (Research 663 §2.4, EBR arXiv:2611.08977): a relative residual becomes
+/// a VALID convergence signal only on norm-pinned states — a loop that
+/// projects its state to constant norm every step (e.g. per-token unit-RMS)
+/// makes the denominator constant by construction, so `‖Δz‖/√d` is a
+/// scaled ABSOLUTE step and the trap cannot fire. Free-norm recurrences
+/// (this model class) never qualify; use the absolute/angular forms above.
 ///
 /// # Halt ≠ classification (Issue 720 T4a; evidence: riir-poc `b18b7b2bb`)
 ///

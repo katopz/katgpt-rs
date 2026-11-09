@@ -504,3 +504,4 @@ PTRM independently validates our existing design:
 | `tests/bench_elf_modelless.rs` | SDE noise benchmarks (diversity + overhead) |
 | `examples/bandit_02_ddtree.rs` | BanditPruner + DDTree integration example |
 | `examples/bandit_03_slot.rs` | BanditPruner proof-of-value example |
+> **PASS-Redirects (synthesis):** Chen, Gladstone, Li, Ji, Du [arXiv:2611.08977 "Energy-Based Reasoners: Your Recurrent Reasoner Should Be an Energy-Based Model"] — modelless PASS (this note's noise+K-rollouts+Q-head territory is corroborated at benchmark scale by EBR, which additionally replaces the learned transition with gradient descent on a learned energy and the Q-head with a trained converged⇒correct coupling); the defensible deltas are training-side → riir-train Issue 682 beside Plan 373; full census + law refinement (relative residual valid only on norm-pinned states) in katgpt-rs Research 663.
