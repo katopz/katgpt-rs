@@ -1,6 +1,6 @@
 [package]
 name = "katgpt-core"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2024"
 license = "MIT"
 description = "Shared types and SIMD kernels for katgpt-rs and riir-engine"
@@ -44,7 +44,7 @@ ahash = { version = "0.8", optional = true, default-features = false, features =
 # katgpt-core::dec (Issue 007 Phase E Tier 1). Optional — pulled in by the
 # `dec_operators` feature and re-exported as `katgpt_core::dec` for backwards
 # compatibility.
-katgpt-dec = { path = "../katgpt-dec", version = "0.1.3", optional = true }
+katgpt-dec = { path = "../katgpt-dec", version = "0.1.4", optional = true }
 # katgpt-assign houses the spec-driven constrained assignment solver
 # (Plan 620, Research 607 — OSDI'24 Rebalancer distilled). Optional — pulled
 # in by the `assignment` feature and re-exported as `katgpt_core::assign`
@@ -55,31 +55,31 @@ katgpt-assign = { path = "../katgpt-assign", version = "0.1.0", optional = true 
 # types/simd modules are foundational substrate that every other katgpt-core
 # module consumes. Re-exported as `katgpt_core::types` and `katgpt_core::simd`
 # for backwards compatibility.
-katgpt-types = { path = "../katgpt-types", version = "0.2.1" }
+katgpt-types = { path = "../katgpt-types", version = "0.3.0" }
 # katgpt-micro-belief houses the micro-recurrent belief-state kernel spun out
 # of katgpt-core::micro_belief (Issue 007 Phase E Tier 1 #3). Optional — pulled
 # in by the `micro_belief` feature and re-exported as `katgpt_core::micro_belief`
 # for backwards compatibility.
-katgpt-micro-belief = { path = "../katgpt-micro-belief", version = "0.2.1", optional = true }
+katgpt-micro-belief = { path = "../katgpt-micro-belief", version = "0.2.2", optional = true }
 # katgpt-hla houses the Higher-order Linear Attention substrate (cache types +
 # streaming kernels) AND the composition layer (forward_hla / forward_ahla,
 # Issue 007 Phase F.4b) spun out of katgpt-core::hla. Always-on — re-exported
 # as `katgpt_core::hla` for backwards compatibility. The composition layer
 # moved from root `src/hla/forward.rs` into katgpt-hla now that ForwardContext
 # lives in katgpt-forward.
-katgpt-hla = { path = "../katgpt-hla", version = "0.1.3" }
+katgpt-hla = { path = "../katgpt-hla", version = "0.1.4" }
 # katgpt-personality houses the Personality-Weighted Latent Layer Composition
 # substrate (sigmoid + kernel + snapshot + types) spun out of
 # katgpt-core::personality_composition (Issue 007 Phase E Tier 2 #5). Optional
 # — pulled in by the `personality_composition` feature and re-exported as
 # `katgpt_core::personality_composition` for backwards compatibility.
-katgpt-personality = { path = "../katgpt-personality", version = "0.1.3", optional = true }
+katgpt-personality = { path = "../katgpt-personality", version = "0.1.4", optional = true }
 # katgpt-sleep houses the Sleep-Time Query Anticipator substrate (anticipator
 # + consume + cost_model + predictability + types) spun out of
 # katgpt-core::sleep_time (Issue 007 Phase E Tier 2 #6). Optional — pulled in
 # by the `sleep_time_anticipation` feature and re-exported as
 # `katgpt_core::sleep_time` for backwards compatibility.
-katgpt-sleep = { path = "../katgpt-sleep", version = "0.1.3", optional = true }
+katgpt-sleep = { path = "../katgpt-sleep", version = "0.1.4", optional = true }
 # katgpt-sense houses the KG Latent Octree Sense substrate (octree,
 # reconstruction, bake, lod, schema_centroid, sector, serialize) spun out of
 # katgpt-core::sense (Issue 007 Phase E Tier 2 #7, Plan 338). Optional —
@@ -87,7 +87,7 @@ katgpt-sleep = { path = "../katgpt-sleep", version = "0.1.3", optional = true }
 # `katgpt_core::sense::*` for backwards compatibility. `spectral_threat`
 # stays local in katgpt-core (depends on `linoss`) and is re-exported through
 # the `sense::spectral_threat` shim path.
-katgpt-sense = { path = "../katgpt-sense", version = "0.2.1", optional = true }
+katgpt-sense = { path = "../katgpt-sense", version = "0.3.0", optional = true }
 # Plan 299 T4.3: tokenizer compression (NFKC + lowercase collapse) for the
 # `engram` feature. Small dep, only compiled when `engram` is on.
 unicode-normalization = { version = "0.1", optional = true }

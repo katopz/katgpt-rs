@@ -1,6 +1,6 @@
 [package]
 name = "katgpt-types"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
 description = "Shared configuration, RNG, math utilities, LoRA, domain embeddings, and inference types for katgpt-rs / riir-engine. Pure substrate leaf — no katgpt-* deps."

@@ -1,6 +1,6 @@
 [package]
 name = "katgpt-dec"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 license = "MIT"
 description = "Discrete Exterior Calculus substrate — exterior derivative, codifferential, Hodge Laplacian/decomposition, Stokes calculus, lattice utility. Pure math, no app semantics."

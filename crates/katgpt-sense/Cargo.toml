@@ -1,6 +1,6 @@
 [package]
 name = "katgpt-sense"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
 description = "KG Latent Octree Sense substrate — octree construction, reconstruction, BAKE precision-gated update, LOD routing, serialization. Spun out of katgpt-core::sense (Issue 007 Phase E Tier 2 #7). Depends only on katgpt-types (the leaf)."
@@ -11,7 +11,7 @@ categories = ["data-structures", "science", "algorithms"]
 # Published to crates.io (katgpt-core dependency)
 
 [dependencies]
-katgpt-types = { path = "../katgpt-types", version = "0.2.1" }
+katgpt-types = { path = "../katgpt-types", version = "0.3.0" }
 blake3 = "1"
 fastrand = "2"
 # papaya is needed by schema_centroid + bake_precision (BakePrecisionStore,

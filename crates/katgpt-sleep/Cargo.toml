@@ -1,6 +1,6 @@
 [package]
 name = "katgpt-sleep"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 license = "MIT"
 description = "Sleep-Time Query Anticipator — offline query anticipation substrate (arXiv:2504.13171 Lin et al.). SleepTimeAnticipator orchestrates per-direction sleep-time compute, emits reusable AnticipatedQuerySet (c' artifact, BLAKE3-committed); wake-time consume() does cheap dot-product + sigmoid-gated lookup. Pure substrate, sigmoid (never softmax), modelless."
@@ -16,7 +16,7 @@ readme = "README.md"
 # hot paths use `simd_dot_f32` + `fast_sigmoid` from katgpt-types; the c'
 # artifact uses `blake3` for the commitment root. No katgpt-core dependency
 # — the whole crate compiles standalone.
-katgpt-types = { path = "../katgpt-types", version = "0.2.1" }
+katgpt-types = { path = "../katgpt-types", version = "0.3.0" }
 blake3 = "1"
 
 [features]

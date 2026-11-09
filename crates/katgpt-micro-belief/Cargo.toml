@@ -1,6 +1,6 @@
 [package]
 name = "katgpt-micro-belief"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 license = "MIT"
 description = "Micro-recurrent belief-state kernel — implicit per-entity state tracking. Single-paper distillation (arXiv:2604.17121). Depends only on katgpt-types (SIMD kernels) + blake3 + fastrand."
@@ -11,7 +11,7 @@ categories = ["algorithms", "science"]
 # Published to crates.io (katgpt-core dependency)
 
 [dependencies]
-katgpt-types = { path = "../katgpt-types", version = "0.2.1" }
+katgpt-types = { path = "../katgpt-types", version = "0.3.0" }
 blake3 = "1"
 fastrand = "2"
 serde = { version = "1", features = ["derive"] }

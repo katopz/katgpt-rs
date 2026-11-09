@@ -1,6 +1,6 @@
 [package]
 name = "katgpt-personality"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 license = "MIT"
 description = "Personality-Weighted Latent Layer Composition — sigmoid-gated N-layer latent direction composition + reward-surprise drift + BLAKE3-committed snapshot. Entity-agnostic, modelless, sigmoid (never softmax)."
@@ -17,7 +17,7 @@ categories = ["algorithms", "science"]
 # scale-accumulate inner loop; the snapshot uses `blake3` directly for the
 # commitment hash. No katgpt-core dependency — the whole crate compiles
 # standalone.
-katgpt-types = { path = "../katgpt-types", version = "0.2.1" }
+katgpt-types = { path = "../katgpt-types", version = "0.3.0" }
 blake3 = "1"
 serde = { version = "1", features = ["derive"] }
 
