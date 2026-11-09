@@ -1557,6 +1557,11 @@ pub use diversity::temp::{
 #[cfg(all(feature = "temp_loss_fingerprint", feature = "qmc_sampling"))]
 pub use diversity::temp::extrapolated_snapshot_schedule_qmc;
 
+#[cfg(feature = "diffusion_diversity")]
+pub use diversity::diffusion::{
+    DiffusionEmbedding, LocalScratch, SPECTRAL_N_CAP, SimGraph, diffusion_similarity_local,
+};
+
 #[cfg(feature = "manifold_bandit")]
 pub mod manifold_bandit;
 

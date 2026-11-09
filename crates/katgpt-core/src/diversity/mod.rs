@@ -18,3 +18,6 @@
 //! Requires both TEMP substrate and the QMC source trait.
 
 pub mod temp;
+
+#[cfg(feature = "diffusion_diversity")]
+pub mod diffusion;
