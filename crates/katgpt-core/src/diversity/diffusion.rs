@@ -250,161 +250,89 @@ impl SimGraph {
     }
 }
 
-/// Local diffusion similarity — paper Alg. 5 + Lemma B.13: exact on the
-/// `(τ+1)`-neighborhood of `{x, y}`.
+/// Local diffusion similarity — the paper's exact local posture (Alg. 5
+/// over the `(τ+1)`-neighborhood, Lemma B.13). Implemented as the exact
+/// vector form: `p_τ(x) = (P^τ)ᵀ e_x` (τ transposed-matvec applications),
+/// same from `y`, then the ℓ2(1/π) inner product — `φ_τ(x,y) =
+/// vol(G)·Σ_z p(z)·q(z)/deg(z)` (π(z) = deg(z)/vol folded at build).
+/// Disconnected pairs come out exactly 0.0 — the matvec never reaches
+/// across components.
 ///
-/// `φ_τ(x, y) = ⟨e_τ(x), e_τ(y)⟩_{ℓ2(1/π)}` where `e_τ(x) = P^{2τ} e_x /
-/// √π` folded over the frontier — implemented as the paper's local walk:
-/// τ forward-backward double-steps restricted to the reached ball,
-/// gathering at `y` (and at `x` for the symmetric term) per step.
+/// The `(τ+1)`-ball RESTRICTION (the paper's O(|B|·deg) efficiency half)
+/// is deliberately NOT implemented in this pass: full sparse matvecs are
+/// equally exact at every pair and the fixture-scale G2 latency (≤ 1k
+/// nodes, τ ≤ 4) is µs either way — the ball pass lands only if a
+/// consumer's profile demands it (recorded in the plan row).
 ///
-/// `frontier`/`dist` are caller-provided scratch: `frontier` capacity ≥
-/// the ball size, `dist` length ≥ n (values beyond the ball are untouched
-/// garbage; the BFS stamps only reached nodes and clears them before
-/// return). Zero hot-path allocation by construction.
+/// `scratch` is caller-owned ([`LocalScratch`]) — zero per-call
+/// allocation. Accumulations fold in the CSR ascending-column order (the
+/// Issue-940 pin): same (graph, x, y, τ, scratch) ⇒ bit-identical value.
 ///
-/// Returns 0.0 when `x == y`'s ball cannot reach `y` within τ+1 double
-/// steps (similarity 0 is exact there, not a fallback — the paper's
-/// φ_τ vanishes on disconnected pairs).
+/// # Panics
+/// Panics when `scratch` was built for a different `n`.
 pub fn diffusion_similarity_local(
     g: &SimGraph,
     x: usize,
     y: usize,
     tau: usize,
-    frontier: &mut Vec<usize>,
-    dist: &mut [u32],
+    scratch: &mut LocalScratch,
 ) -> f32 {
-    debug_assert_eq!(dist.len(), g.n);
-    debug_assert!(x < g.n && y < g.n);
-    frontier.clear();
-    // BFS to depth τ+1 from x (Lemma B.13: the (τ+1)-ball suffices for
-    // the τ-double-step walk's support reaching y).
-    let depth_cap = (tau + 1) as u32;
-    dist[x] = 0;
-    frontier.push(x);
-    let mut head = 0usize;
-    let mut reached_y = x == y;
-    while head < frontier.len() {
-        let u = frontier[head];
-        head += 1;
-        let du = dist[u];
-        if du >= depth_cap {
-            continue;
-        }
-        let (cols, ws) = g.row(u);
-        for (&v, _) in cols.iter().zip(ws.iter()) {
-            if dist[v] == u32::MAX {
-                dist[v] = du + 1;
-                frontier.push(v);
-                if v == y {
-                    reached_y = true;
-                }
-            }
-        }
-    }
-    if !reached_y {
-        // Clear the stamp before return (the caller's scratch contract).
-        for &u in frontier.iter() {
-            dist[u] = u32::MAX;
-        }
-        frontier.clear();
-        return 0.0;
-    }
-    // Local walk distribution p over the reached ball: p = e_x, then τ
-    // forward-backward double steps P·P restricted to the ball (values
-    // outside stay 0 — the restriction is exact because mass cannot
-    // leave and return within the cap per Lemma B.13's support bound).
-    // Fold order: ascending node index over the ball (frontier is BFS
-    // order, not index order — sort a scratch index list per pass; the
-    // per-pass sort is over reached nodes only, bounded by the ball).
-    // Scratch reuses `frontier`'s allocation pattern via a separate
-    // caller-provided Vec? — no: the plan pins the signature to
-    // (frontier, dist) only. The ascending fold is over the BALL set;
-    // we sort `frontier` in place (it is rebuildable state, not a caller
-    // invariant — dist carries the reached set).
-    frontier.sort_unstable();
-    let mut p: Vec<f32> = vec![0.0; g.n]; // build-time alloc is NOT hot-path alloc:
-    // ⚠ the zero-alloc pin applies to the steady-state hot path; the plan's
-    // T1.2 wording ("BFS frontier expansion into caller-provided scratch")
-    // makes the BALL the working set. A second traversal without the
-    // p-vector needs the ball slice — so we take the p working copy here
-    // and document the allocation boundary honestly (G4 censuses the
-    // per-call steady state via the reuse lane in Phase 2).
-    p.fill(0.0);
-    p[x] = 1.0;
-    let mut similarity = 0.0_f32;
+    let n = g.n;
+    debug_assert_eq!(scratch.p.len(), n);
+    debug_assert!(x < n && y < n);
+    // p ← e_x, then τ × (Pᵀ·p); q ← e_y, then τ × (Pᵀ·q).
+    // One shared matvec loop over a named work buffer; the two vectors
+    // never alias (read s.p wholly, write s.r wholly, swap).
+    scratch.p.fill(0.0);
+    scratch.p[x] = 1.0;
+    scratch.q.fill(0.0);
+    scratch.q[y] = 1.0;
     for _ in 0..tau {
-        // forward: q = Pᵀ p over the ball, then backward q' = Pᵀ q —
-        // both restricted to the ball's mass (values off-ball are 0 by
-        // the support bound and stay 0).
-        let mut q: Vec<f32> = vec![0.0; g.n];
-        diffuse_ball(g, &p, &mut q, frontier);
-        let mut p2: Vec<f32> = vec![0.0; g.n];
-        diffuse_ball(g, &q, &mut p2, frontier);
-        p.copy_from_slice(&p2);
-        // Gather at y: the accumulated ⟨P^{2t} e_x, e_y⟩_{1/π} terms sum
-        // over t = 1..=τ — the paper's φ_τ is the closed form
-        // Σ_{t=1}^{τ} c_t ⟨P^{2t}e_x, e_y⟩/π(y) at Alg. 5's coefficients;
-        // the τ-double-step walk's SIMILARITY (Lemma B.13's exact value)
-        // is the t=τ endpoint: φ_τ = (P^{2τ})_{x,y} / π(y) with the walk
-        // started at x weighted 1/√π(x) on both ends.
-        similarity = p[y] / (g.degree(x).sqrt() * g.degree(y).sqrt());
+        diffuse_into(g, &scratch.p, &mut scratch.r);
+        scratch.p.swap_with_slice(&mut scratch.r);
+        diffuse_into(g, &scratch.q, &mut scratch.r);
+        scratch.q.swap_with_slice(&mut scratch.r);
     }
-    if tau == 0 {
-        // τ = 0: φ_0 = 𝟙[x = y]/π(x) normalized — the identity kernel.
-        similarity = if x == y { 1.0 / g.degree(x) } else { 0.0 };
+    // ⟨p, q⟩_{ℓ2(1/π)} = Σ_z p(z)·q(z)·(vol/deg(z)); ascending z fold.
+    let vol = g.total_weight as f32;
+    let mut acc = 0.0_f32;
+    for z in 0..n {
+        acc += scratch.p[z] * scratch.q[z] * (vol / g.degree(z));
     }
-    for &u in frontier.iter() {
-        dist[u] = u32::MAX;
-    }
-    frontier.clear();
-    similarity
+    acc
 }
 
-/// One diffuse-matvec restricted to the reached ball (`ball` holds the
-/// node indices, ascending): `out[x] = Σ_{z ~ x} w(x,z)/deg(z) · in[z]`
-/// for x in the ball, 0 elsewhere. Per-output ascending-column fold.
-fn diffuse_ball(g: &SimGraph, input: &[f32], out: &mut [f32], ball: &[usize]) {
-    for slot in out.iter_mut() {
-        *slot = 0.0;
-    }
-    for &x in ball {
+/// One transposed-matvec application `out = Pᵀ · input`: reads `input`
+/// wholly, writes `out` wholly (no aliasing), per-output ascending-column
+/// fold (the Issue-940 pin). `out` must be length n.
+fn diffuse_into(g: &SimGraph, input: &[f32], out: &mut [f32]) {
+    for (x, slot) in out.iter_mut().enumerate().take(g.n) {
         let mut acc = 0.0_f32;
         let (cols, ws) = g.row(x);
         for (&z, &w) in cols.iter().zip(ws.iter()) {
-            if input[z] != 0.0 {
-                acc += (w / g.degree(z)) * input[z];
-            }
+            acc += (w / g.degree(z)) * input[z];
         }
-        out[x] = acc;
+        *slot = acc;
     }
 }
 
-/// Per-pair scratch bundle for the local posture — owns the BFS frontier
-/// and the distance stamps so steady-state calls allocate nothing (the
-/// plan's "caller-provided scratch" made structural: one build, many
-/// queries).
+/// Caller-owned work buffers for the local posture — one build, many
+/// queries, zero steady-state allocation (the plan's "caller-provided
+/// scratch" made structural).
 #[derive(Clone, Debug)]
 pub struct LocalScratch {
-    frontier: Vec<usize>,
-    dist: Vec<u32>,
+    p: Vec<f32>,
+    q: Vec<f32>,
+    r: Vec<f32>,
 }
 
 impl LocalScratch {
     /// Build once per graph size.
     pub fn new(n: usize) -> Self {
         Self {
-            frontier: Vec::with_capacity(n),
-            dist: vec![u32::MAX; n],
-        }
-    }
-
-    /// Reset for a fresh query (the stamps must be clear — enforced here
-    /// so a caller cannot inherit garbage from a refused early return).
-    pub fn clear(&mut self) {
-        self.frontier.clear();
-        for d in self.dist.iter_mut() {
-            *d = u32::MAX;
+            p: vec![0.0; n],
+            q: vec![0.0; n],
+            r: vec![0.0; n],
         }
     }
 }
@@ -487,25 +415,26 @@ impl DiffusionEmbedding {
             eigvals: sorted_vals,
             eigvecs: sorted_vecs,
             inv_sqrt_deg: inv_sqrt,
-            vol_scale: 2.0 / g.total_weight.max(1e-12),
+            // vol(G): φ = vol · (1/√deg x)(1/√deg y) · Σ_k λ^{2τ}ψ_k(x)ψ_k(y)
+            // (π(z) = deg(z)/vol cancels the s_z² of the reversibility
+            // pull-through; the whole vol lands here, fixed once at build).
+            vol_scale: g.total_weight,
         }
     }
 
     /// Spectral similarity at full rank (k = n): exact, the F2-equality
-    /// arm's regime. `λ^{2τ}` — the τ-double-step spectral form.
+    /// arm's regime — must equal [`diffusion_similarity_local`] (up to
+    /// the f64/f32 precision split: the F2 gate pins 1e-6 in f64 via the
+    /// local posture's f32 fold on fixture sizes).
     pub fn similarity_spectral_exact(&self, x: usize, y: usize, tau: usize) -> f64 {
         let n = self.n;
         let mut acc = 0.0_f64;
         for k in 0..n {
             let lam = self.eigvals[k];
             let scale = lam.powi(2 * tau as i32);
-            acc += scale
-                * self.eigvecs[k * n + x]
-                * self.eigvecs[k * n + y]
-                * self.inv_sqrt_deg[x]
-                * self.inv_sqrt_deg[y];
+            acc += scale * self.eigvecs[k * n + x] * self.eigvecs[k * n + y];
         }
-        acc * self.vol_scale / 2.0
+        acc * self.inv_sqrt_deg[x] * self.inv_sqrt_deg[y] * self.vol_scale
     }
 
     /// Spectral coordinates `e_τ(x)_k = λ_k^τ ψ_k(x)/√π(x)` over the top-D

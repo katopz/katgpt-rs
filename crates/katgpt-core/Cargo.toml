@@ -5166,3 +5166,10 @@ required-features = ["soft_read", "distance_abstain"]
 [[test]]
 name = "issue990_closed_form_weight_write_gates"
 required-features = ["closed_form_weight_write", "subspace_phase_gate"]
+
+# Plan 634 T1.2/T1.3: the F2 core identity — local == spectral at k = n on
+# small fixtures (the normalization-validation run for the local/spectral
+# postures; the standing Phase-2 battery extends this file).
+[[test]]
+name = "plan634_t12_spectral_local_identity"
+required-features = ["diffusion_diversity"]
