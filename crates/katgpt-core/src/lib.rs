@@ -1714,6 +1714,9 @@ pub mod manifold_erasure;
 #[cfg(all(feature = "quant_error_lora", feature = "subspace_phase_gate"))]
 pub mod quant_error_lora;
 
+#[cfg(all(feature = "closed_form_weight_write", feature = "subspace_phase_gate"))]
+pub mod closed_form_weight_write;
+
 // Issue 980 — WeightEditOverlay (Research 648 modelless half): implies
 // gain_cost_halt because the arming condition IS the halter's obstacle
 // telemetry (HaltReason::Oscillation rate).

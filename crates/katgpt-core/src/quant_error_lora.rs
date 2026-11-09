@@ -68,6 +68,7 @@ use crate::subspace_phase_gate::{SvdResultScratch, SvdScratch, thin_svd_into};
 /// intermediate; `b` is `[out_dim × rank]` so `b · (intermediate)` produces
 /// `[out_dim]`. Both are row-major to match the conv/linear weight convention
 /// (`weight[oc * in_dim + ic]`).
+#[derive(Clone, Debug)]
 pub struct QuantErrorLora {
     /// Down-projection `[rank × in_dim]`, row-major. Row `r` dotted with `x`
     /// yields intermediate `r`.
