@@ -37,7 +37,7 @@ How to read this:
   models with real drafters.
 - No quality metric is reported here, by design. The (ρ, ε) MAUVE-budget calibration is riir-ai
   Issue 1142 (closed 2026-11-09: best admissible ρ=0.8/ε=∞ fails the +25% floor at +23.9% —
-  [Bench 1169](../../../riir-ai/.benchmarks/1169_issue1142_relaxed_accept_calibration.md)).
+  [Bench 1169](../../riir-ai/.benchmarks/1169_issue1142_relaxed_accept_calibration.md)).
 
 ## Latency (NOT a measurement)
 
