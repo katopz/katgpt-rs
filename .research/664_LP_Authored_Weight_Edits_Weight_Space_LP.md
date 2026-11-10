@@ -1,0 +1,96 @@
+# Research 664: LP-Authored Weight Edits — weight-space-lp addresses 648's local-authoring fault line (loop-repair class, external evidence)
+
+> **Source:** Barry, Nathan. "Can a Linear Program Do Weight-Space Programming?" — nathan.rs/posts/weight-space-lp, 2026-11-09 (fetched in full this session). Repo: github.com/nathanrs/weight-space-lp (MIT; code NOT cloned — the LP formulation and all numbers are quoted from the blog itself; the repo's `scripts/fetch_exp8.sh` pulls the SAME released logs the CSAIL paper shipped, `RikiyaT/lm_understand-logs`, CC BY 4.0). Upstream: "Sparks of Weight-Space Programming" (Takehi/Teoh/Zhang/Khattab, MIT CSAIL, blog-only 2026-11-02).
+> **Date:** 2026-11-10
+> **Status:** Active — **Gain** (on the existing GOAT lane `weight_edit_overlay`, Issue 980 / Bench 976). PoC filed: katgpt-rs Issue 993 (proof path + falsifiers pre-registered inside).
+> **Related Research:** 648 (**the parent** — the CSAIL paper distillation + the carrier's origin note + the obstacle-vs-ability law + the proposer-layer fault line this note addresses in principle; local satisfaction pending Issue 993 T1–T3), 659 (the MEMIT-family sibling — rank-r supervised FACT-write, closed-form ridge solve; same base model Qwen3.5-0.8B; its PoC Issue 990 CLOSED NEGATIVE 2026-11-10 — the family's measured tempering precedent), 658 (sampling-time logit-bias overlays — the frozen-model quadrant), 655 (zoo-hygiene lens for overlay populations).
+> **Related substrate (shipped, verified this session):** katgpt-core `weight_edit_overlay` (Issue 980, Bench 976 GOAT G1–G4 PASS, opt-in; `forward_delta_into` dequant-domain apply; arming = `GainCostLoopHalter` oscillation telemetry), `latent_field_steering` (Plan 309, DEFAULT-ON, CAA-family direction injection with sigmoid falloff; α ≤ 0.3 caveat), CNA steering (Bench 015 — neuron-level attribution vs CAA residual-stream, the direction-extraction cousin), `cce/lp.rs` (the stack's ONE LP solver — BFS vertex enumeration for the CCE program, exact only at N·A+|D| ≤ ~25; signal-diff §3).
+> **Classification:** Public — open-primitive layer (generic closed-form math; blog mechanism only, never code import).
+
+---
+
+## TL;DR
+
+Barry read the CSAIL agent's 8-hour loop-repair search and recognized it was solving a linear program by trial and error: given the loop direction u, choosing which MLP `down_proj` columns to edit and by how much is `min ‖v‖₁` subject to linear push/keep constraints on recorded activations — one PDHG solve (~1 min, GPU) replaces the agent's search and MATCHES its benchmark numbers (GSM8K 69.6 vs 68.2, MATH-500 51.7 vs 50.9) while changing **8× fewer weights** (16,291 vs 130,188). A **heuristic direction** — auto-detected loops in the model's own traces (16-token repetition detector), diff-of-means residual streams, **no LLM anywhere** — gets ~93% of the way (GSM8K 65.4 / MATH 47.8). And the kicker: a **constant steering vector** (the LP edit's average push along u, added at inference) recovers essentially the whole fix at 1× — so for THIS behavior the LP's per-token selectivity machinery was not load-bearing; what the LP bought was a deterministic, sparse, optimal-ish strength finder in one solve.
+
+**Distilled for katgpt-rs (modelless, authoring-time):**
+The transferable primitive is the **LP as a deterministic authoring instrument for correction overlays**: paired labeled activation traces (behavior-positive / behavior-negative) + a direction u → one convex first-order solve (PDHG/ADMM — matrix-vector products only, no GD through the model) → sparse per-neuron coefficients v → rank-1 overlay `ΔW = u vᵀ` riding the EXISTING `weight_edit_overlay` carrier (dequant-domain apply, freeze envelope, BLAKE3-committed). Determinism is the authoring law: same pinned traces → bit-identical v → same artifact digest. This addresses Research 648 §4's proposer-layer fault line **in principle for the loop-repair class** (external evidence; local satisfaction pending Issue 993 T1–T3): the author no longer needs to be a frontier model — the whole pipeline (loop detector → diff-of-means → LP → overlay) is local, closed-form, and modelless. The remaining veto condition on the 976 promotion is unchanged: a documented loop class in a served model.
+
+---
+
+## 1. The mechanism (blog-verbatim numbers)
+
+**The edit class (unchanged from 648):** loop direction u = normalized difference of average residual streams on looping vs productive texts (layers 15/19 of Qwen3.5-0.8B, residual dim 1024); edit = `w_j → w_j − α(uᵀw_j)u` on `down_proj` columns → rank-1 `ΔW = u vᵀ`; at each token the edit adds `(v·h_t)·u` — a push along u that is LINEAR in v.
+
+**The LP (Barry's formulation, quoted):**
+
+```text
+min_v  Σ_j |v_j|  +  C · Σ slack
+s.t.   v · h_t ≤ −δ     t ∈ R    (push looping tokens away from u)
+       |v · h_t| ≤ ε    t ∈ P    (barely move productive tokens)
+```
+
+Token labels R (looping, ≥64 tokens into a detected loop) / P (productive, ≥256 tokens before any loop or in finished answers) come from the base model's own traces via a repetition detector (16-token repeat window, 80% loop-density onset). L1 minimization makes v sparse (the LP picks the columns AND the amounts) — final edits use 8 columns per layer. Each constraint gets a penalized slack (no exact feasible v exists). Solver: PDHG (the algorithm behind PDLP) on MPS/CUDA — matrix-vector products only, all token constraints on GPU at once, within 0.2% of HiGHS' optimum in ~1 min (HiGHS: >20 min).
+
+**Results (held-out; dev set used only for LP tuning):**
+
+| | Changed weights | GSM8K test | MATH-500 | IFEval |
+|---|---|---|---|---|
+| Base model | 0 | 14.1 | 7.0 | 22.9 |
+| Astra's edit (agent) | 130,188 | 68.2 | 50.9 | 61.9 |
+| LP, agent's direction | 16,291 | 69.6 | 51.7 | 59.7 |
+| LP, heuristic direction (no LLM) | 16,271 | 65.4 | 47.8 | 60.4 |
+
+- **The search mattered, and the LP replaces it:** reusing the agent's recipe (top-64 columns, α=6) on the heuristic direction WITHOUT re-searching scores 44.5 on the dev set; the LP scores 54.7. Same direction, same layers — only the coefficient selection differs.
+- **Many sparse solutions work:** the LP's 8 columns share only 3 (L15) and 1 (L19) with the agent's 64; what matters is the total push along u.
+- **Random direction does nothing** (dev 10.2 vs base 10.9) — the 648 norm-matched-control law holds again.
+- **Steering equivalence:** the LP's layer-15 columns are active on 89% of tokens with barely-varying push → the edit ≈ a constant push along u; a steering vector at 1× the LP edit's average push recovers it (dev 57.8 vs LP edit 62.5; MATH-500 50.8 vs 53.2). Window is NARROW: 0.5× → loops return; 2× → loops stop but reasoning falls apart. A linear probe separates looping from productive tokens well once a loop is underway (AUC 0.93) but poorly at onset (0.73) — which is WHY per-token selectivity couldn't help here.
+- Barry's own open piece: whether the LP's per-token constraints matter for behaviors that NEED selectivity (refusal/sycophancy hypothesized, untested). Single model; layers still taken from the agent.
+
+---
+
+## 2. The delta vs the shipped lane
+
+1. **Addresses 648's proposer-layer fault line in principle for this class** (external evidence; local satisfaction pending Issue 993 T1–T3). Research 648 §4: "Local authoring (Bonsai-27B PQ2) is nowhere near the demonstrated capability class — no local path today." Barry's heuristic-direction pipeline IS a local path for loop-repair: repetition detector (closed-form) → diff-of-means u (closed-form) → LP solve (convex, deterministic) → sparse v → overlay. Zero LLM, zero GD, zero hosted dependency. The 976 promotion veto had two conjuncts — documented loop class ∧ WSP-capable author. The author conjunct is **addressed in principle by external evidence** (one model, layers inherited from the agent, repo not cloned — caveats §4); **local satisfaction pending Issue 993 T1–T3**. The loop-class conjunct is unchanged (no documented loop class in any served model — verified again this session).
+2. **Formulation-level novelty (prior-art search, 2026-11-10, 6 threads, 16 works adjudicated): NO published LP/L1-based per-neuron v-selection.** Nearest cousins, each mechanism-distinct: arXiv 2604.12359 (ACL 2026) compiles steering into weights via **null-space constraints + closed-form solve** (dense, no sparsity objective, backdoor application); arXiv 2603.00425 derives the **activation-shift ⇄ weight-update equivalence** (dense derived edits, no constrained selection); ROME/MEMIT = constrained **least-squares with quadratic penalty** (dense coefficient vectors, fact-editing); ITI (NeurIPS 2023) = logistic probes + head ranking + **swept α** (inference-time, no weights); abliteration (Arditi 2024) = dense orthogonalization, zero per-neuron selection; 2602.02712 = analytic steering-strength theory (no optimizer, no weights). The ingredients (rank-1 steering→weights, constrained rank-1 edit, L1-under-linear-constraints, PDHG) are each published — **the encoding is not**. Barry's framing survives the published record as formulation-level, not algorithmic (PDHG and L1 are standard tooling).
+3. **The steering-equivalence decision law** — new-to-stack as a GATE arm: probe the constant-push (steering) arm BEFORE baking any direction edit; bake only when (a) inference-time injection is unacceptable (an overlay artifact rides as ordinary weights — no serving-code delta, freeze-envelope provenance) or (b) the behavior demonstrably needs per-token selectivity (unvalidated in the literature for any behavior as of this blog). Corroborates Plan 309's shipped α-window caveat (α ≤ 0.3 for argmax stability) — narrow viable strength bands are a family trait, not a quirk.
+4. **What the LP is NOT:** not a quality-parity claim generator. Barry's own framing + the 648 obstacle law both hold: gains ≈ loop suppression (576/579 newly-correct MATH-500 answers were token-limit truncations), the edit un-hides an ability. And the family's first measured PoC — Issue 990's closed-form fact-write — **CLOSED NEGATIVE** (G1 0/8 < the 5/8 floor, `da5b21f50`) the day before this note. Weight-write PoCs have a measured failure precedent; any real-model arm in Issue 993 would be out of scope by construction.
+
+---
+
+## 3. Path 0 inventory (component table, per-track outcomes)
+
+| Component | Coverage (analog ships?) | Extraction (computable without GD?) | Signal-diff verdict | Outcome |
+|---|---|---|---|---|
+| u extraction (diff-of-means on labeled traces) | **YES** — `latent_field_steering` (Plan 309) direction extraction; CNA (Bench 015) neuron-level attribution; LatentConfounderAudit guards mined directions | Closed-form (mean difference, normalized) | Ours extracts game-latent/behavior directions + neuron attributions, not residual-stream trace directions with loop-detector labels — the labeling recipe (16-token repeat window, 80% onset) is new-to-stack but trivial closed-form detector code | Covered + trivial extraction; no separate filing (rides Issue 993's fixture as the labeling step) |
+| v selection (min-L1 LP over per-neuron coefficients) | **NO direct reuse** — three LP-family modules ship, none reusable as-is: `cce/lp.rs` (BFS **vertex enumeration** for the CCE program, exact ≤ ~25 vars — wrong family for ~10³-constraint min-L1), `cce/primal_dual.rs` (Plan 295 **first-order primal-dual LP iterator — the same family as PDHG**, but bound to the CCE program: simplex constraints, const-generic N×A), `katgpt-dec/src/sheaf_admm/` (Plan 407 prox/ADMM skeleton — graph consensus). Substrate-first verdict: **reuse the pinned 1/√n-schedule + averaged-iterate determinism pattern, never the code**; Issue 993 T1 names `primal_dual.rs` the pattern source | YES — PDHG/ADMM, convex, matrix-vector only; deterministic given pinned input under the Issue-940 sequential-fold law | Different program shape, same solver family (primal_dual.rs), different purpose (equilibrium computation vs correction authoring) | **EXTRACTED — the strong finding.** Filed: katgpt-rs Issue 993 (solver + fixture + battery fit + matched-K incumbent + steering probe) |
+| Steering-equivalence probe (constant push vs baked edit, window width) | **NO as a gate arm** — Plan 309's α caveat is the same family but there is no pre-bake probe law connecting the two lanes | Closed-form (mean push along u, strength sweep) | 309 injects into mutable game latent state; 980 bakes overlays; nothing probes equivalence between the arms before choosing | **EXTRACTED** — rides Issue 993 T3 as a gate arm + decision law |
+| PDHG GPU solver | No (solvers above) | implementation | — | Implementation detail inside 993 T1 (zero-dep, fixture-scale; GPU optional — authoring is offline, latency not load-bearing) |
+
+**Track verdicts:** Track A (modelless LP authoring primitive): **Gain → filed** (Issue 993). No training-track row exists — the LP is convex optimization over recorded activations, not gradient descent; nothing defers to riir-train (Path 0.5 not reached; documented for the record).
+
+**Fusion:** Barry's LP authoring (A) × the 980 overlay carrier + halter arming (B) × CNA attribution (C, open) = a repair lane whose authoring is fully local and deterministic. Open composition (not filed): CNA ranks candidate columns by attribution; the LP then solves coefficients over that reduced set — Barry's own ranking (`|v_j|·std(h_j)`) is a first approximation of the same idea.
+
+**Two-sided check (fusion priority #1):** *Rulewright* — no consumer: the LP is batch-constrained coefficient selection over activation traces; rulewright selection is online Elo/Beta over fix outcomes — different signals, different cadence; no rulewright surface consumes activation traces (verified: grep LP/constraint-solver/activation-trace across riir-refine src → zero authoring-shaped hits). *Decision-serving family* — rethink's LAYA rung remains single-question encoder serving with no autoregressive surface and no documented loop class (648's verification stands; re-verified this session) → veto unchanged. *League (riir-infer #3)* — qwen3.8 dense Metal serving is ours, but no documented loop class in any served lane → the 976 promotion veto stands byte-identical.
+
+---
+
+## 4. Honest caveats (must ride any filing)
+
+1. **One model; layers inherited from the agent.** Heuristic layer selection is untested (Barry names it the other open piece). Our fixture is layer-agnostic by construction; no real-model claim exists to inherit this caveat.
+2. **The LP's constraint structure is UNVALIDATED as selectivity.** Constant push ≈ full edit for this behavior; the per-token constraints' value on a selectivity-needing behavior is open in the literature. Issue 993's fixture therefore pre-registers the honest comparison — LP vs a pinned α-grid sweep authored the same way (Barry's own fair-incumbent shape: same direction, recipe-reuse scored 44.5 vs LP 54.7) — on separation-per-sparsity, and treats "LP wins" as a claim about DETERMINISTIC SELECTION, not about selectivity.
+3. **The family's PoC record is 0/1.** Issue 990 (fact-write, closed-form ridge) closed NEGATIVE per T6. This note files an authoring-instrument PoC (synthetic fixture), not a model-quality PoC, precisely to stay clear of that graveyard; if any arm drifts toward needing a real model, the issue is out of scope and closes as such.
+4. **Gains ≈ obstacle removal** — the 648 obstacle-vs-ability law carries forward unchanged; the halter-telemetry arming condition (Refused(NoObstacleFound) on clean twins) remains the lane's refusal precondition.
+5. **Egress posture unchanged** (648 caveat 6): the heuristic pipeline removes the LLM from the loop entirely, so the loop-repair class now has a ZERO-egress authoring path — strictly better than 648's reasoning-authored posture on this axis.
+
+---
+
+## 5. Verdict
+
+**Pinned novelty claim (one sentence):** *a deterministic, fully-local LP authoring arm for the shipped `weight_edit_overlay` lane — min-L1 per-neuron coefficients under push/keep activation constraints (PDHG/ADMM, no GD, no LLM) yielding a sparse rank-1 correction overlay — distinguished from the published steering→weights class (2604.12359 null-space closed-form; 2603.00425 equivalence; ROME ridge; ITI sweep) by the L1-under-linear-constraints encoding that selects columns and amounts in one solve.*
+
+**Novelty gate:** Q1 — formulation-level YES (prior-art search above; the encoding is unclaimed), component-level NO (every ingredient published) → fails Super-GOAT on Q1 as in 648. Q2 behavior class — no (extends an existing lane's authoring half). Q3 selling point — partial ("loop-class biases repairable with zero LLM in the loop, deterministic authoring, artifact-committed"). Q4 force multiplier — yes (overlay carrier + steering lane + confounder audit + halter arming, ≥2 pillars). **⇒ Gain (on the GOAT lane), not GOAT, not Super-GOAT.**
+
+**MOAT gate:** note + issue in katgpt-rs (base-primitive authoring math; correct public home; zero game/chain/shard IP; no rethink-class content — the serving posture appears only as the unchanged veto-gated consumer). Public-safe throughout.
+
+**Files:** this note; katgpt-rs `.issues/993_lp_authored_overlay_arm.md` (proof path + falsifiers + demotion law pre-registered inside; the arm ships UNGATED inside the existing `weight_edit_overlay` feature — the Issue-992/Plan-635 feature budget merged single-parent additive children and katgpt-core sits under the crates.io 300-feature ceiling, so no `lp_authored_overlay` child flag); Research 648 §4 follow-up pointer. **Demotion law (pre-registered):** if LP-authored v fails battery arms that hand/reasoning-authored edits pass, record the negative and demote the LP authoring arm (strike it from the lane's docs — no feature flag exists to remove); the lane's reasoning-authored path is untouched either way.
