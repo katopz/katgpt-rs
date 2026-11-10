@@ -2,10 +2,10 @@
 //! (Issue 841, Research 571 §B-8).
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features kv_sink_window \
+//! cargo bench -p katgpt-core --features usage_rate_eviction \
 //!     --bench bench_841_kv_sink_window_goat
 //! # G4 needs an allocator in the profile:
-//! cargo bench -p katgpt-core --features kv_sink_window,alloc_tracking \
+//! cargo bench -p katgpt-core --features usage_rate_eviction,alloc_tracking \
 //!     --bench bench_841_kv_sink_window_goat
 //! ```
 //!

@@ -12,7 +12,6 @@
 //! See Plan 570 + `.research/469_collective_intelligence_payoff_schemes.md` §PoC
 //! Addendum for the full rationale + raw PoC numbers.
 
-#![cfg(feature = "clr_weighted_set_attention")]
 #![allow(clippy::too_many_lines)]
 
 use katgpt_core::set_attention::{

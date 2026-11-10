@@ -43,10 +43,7 @@
 //!   --features conformal_predictive_intervals,heat_kernel_trajectory -- --nocapture
 //! ```
 
-#![cfg(all(
-    feature = "conformal_predictive_intervals",
-    feature = "heat_kernel_trajectory"
-))]
+#![cfg(feature = "heat_kernel_trajectory")]
 #![allow(clippy::needless_range_loop)]
 
 use katgpt_core::dec::{CellComplex, CochainField, DecEigendecomposition, near_harmonic_indices};

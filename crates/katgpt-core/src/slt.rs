@@ -148,7 +148,6 @@ pub fn bic_overpenalty_nats(n: u64, a: usize, b: usize, r: usize) -> f64 {
 
 /// The noise-sweep λ̂ estimator surface (Issue 782). Zero-alloc via
 /// caller-owned [`NoiseSweepScratch`]; bit-reproducible from a seed.
-#[cfg(feature = "slt_sweep")]
 pub mod sweep {
     /// Deterministic xorshift64* + Box–Muller stream (module-canonical —
     /// identical to the test RNG so shipped and test draws agree).
@@ -1157,7 +1156,6 @@ mod tests {
     }
 
     // ── Issue 782: the noise-sweep λ̂ estimator (slt_sweep) ─────────────
-    #[cfg(feature = "slt_sweep")]
     mod sweep_tests {
         use super::super::sweep::*;
 
@@ -1359,7 +1357,7 @@ mod tests {
 
         /// Diagnostics (not a gate): print every anchor's measured λ̂ and
         /// relative error for bench recording / re-calibration.
-        /// `cargo test -p katgpt-core --features slt_sweep --lib
+        /// `cargo test -p katgpt-core --lib
         /// sweep_diagnostics -- --ignored --nocapture`
         #[test]
         #[ignore = "diagnostics: prints the measured ladder values"]

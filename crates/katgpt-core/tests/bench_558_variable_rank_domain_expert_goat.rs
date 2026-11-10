@@ -5,13 +5,13 @@
 //!
 //! Run with:
 //! ```sh
-//! cargo test -p katgpt-core --features variable_rank_domain_expert \
+//! cargo test -p katgpt-core --features committed_field_blend \
 //!   --test bench_558_variable_rank_domain_expert_goat -- --nocapture --test-threads=1
 //! ```
 //!
 //! For accurate latency numbers (G2), run in **release** mode:
 //! ```sh
-//! cargo test -p katgpt-core --features variable_rank_domain_expert \
+//! cargo test -p katgpt-core --features committed_field_blend \
 //!   --test bench_558_variable_rank_domain_expert_goat --release -- --nocapture --ignored
 //! ```
 //!

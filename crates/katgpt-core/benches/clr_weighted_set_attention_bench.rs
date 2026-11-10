@@ -14,11 +14,9 @@
 //!
 //! Run:
 //! ```bash
-//! cargo bench -p katgpt-core --features clr_weighted_set_attention \
+//! cargo bench -p katgpt-core \
 //!   --bench clr_weighted_set_attention_bench -- --nocapture
 //! ```
-
-#![cfg(feature = "clr_weighted_set_attention")]
 
 use katgpt_core::set_attention::{
     SetAttentionConfig, clr_weighted_set_attention_into, identity_projection,

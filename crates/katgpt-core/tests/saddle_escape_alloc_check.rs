@@ -11,7 +11,7 @@
 //! Separate test binary (the `subspace_phase_gate_alloc_check` convention):
 //! `#[global_allocator]` is crate-binary-unique.
 
-#![cfg(feature = "saddle_escape")]
+#![cfg(feature = "gain_cost_halt")]
 
 use katgpt_core::gain_cost_halt::GainCostLoopHalter;
 use katgpt_core::saddle_escape::{GateDecision, SaddleEscapeGate, TrapConfig, TrapObservables};

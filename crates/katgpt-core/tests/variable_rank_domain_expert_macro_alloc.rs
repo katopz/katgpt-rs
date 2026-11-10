@@ -7,7 +7,7 @@
 //!
 //! Run with:
 //! ```sh
-//! cargo test -p katgpt-core --features variable_rank_domain_expert \
+//! cargo test -p katgpt-core --features committed_field_blend \
 //!   --test variable_rank_domain_expert_macro_alloc -- --nocapture
 //! ```
 

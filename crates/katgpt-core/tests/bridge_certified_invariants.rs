@@ -1,4 +1,4 @@
-#![cfg(feature = "bridge_certified")]
+#![cfg(feature = "closure_instrument")]
 //! `BridgeCertified` invariants — the audit half of Proposal 005 (Plan 604).
 //!
 //! Complements `examples/bridge_determinism_check.rs` (the G1 harness) and

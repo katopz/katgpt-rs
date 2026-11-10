@@ -372,7 +372,7 @@ impl DepthTieredMerkleOctree {
     /// depth-2; consistency of depth-0 with depth-1 follows transitively.)
     ///
     /// Use [`RTDC_SUBTREE_DEFAULT_K`] as the default sample count.
-    #[cfg(feature = "rtdc_subtree_inclusion")]
+    #[cfg(feature = "rtdc")]
     pub fn prove_subtree_inclusion(
         &self,
         shallow: usize,
@@ -416,7 +416,7 @@ impl DepthTieredMerkleOctree {
     ///
     /// Returns `false` if the proof's `(shallow, deep)` pair is unsupported,
     /// if the deep root doesn't match `roots[2]`, or if any check fails.
-    #[cfg(feature = "rtdc_subtree_inclusion")]
+    #[cfg(feature = "rtdc")]
     pub fn verify_subtree_inclusion(proof: &SubtreeProof, roots: &DepthTieredRoots) -> bool {
         use crate::merkle::{
             MERKLE_OCTREE_BRANCHING, MERKLE_OCTREE_INTERNAL, MERKLE_OCTREE_LEAVES,
@@ -554,7 +554,7 @@ fn recompute_parent(
 ///
 /// `state` is mutated in place so successive calls yield distinct samples.
 /// Returns a leaf index in `[0, n)`.
-#[cfg(feature = "rtdc_subtree_inclusion")]
+#[cfg(feature = "rtdc")]
 #[inline]
 fn next_sample_index(state: &mut u64, n: usize) -> usize {
     // splitmix64 step.
@@ -637,7 +637,7 @@ impl RtdcProof {
 ///   (one full region of 8 leaves tampered) is `1 − (1 − 1/8)^8 ≈ 65.6%`.
 ///   The deterministic check still catches the literal CG6 test
 ///   ("flipped internal hash, roots not updated") with 100% confidence.
-#[cfg(feature = "rtdc_subtree_inclusion")]
+#[cfg(feature = "rtdc")]
 #[derive(Clone, Debug)]
 pub struct SubtreeProof {
     /// Shallow depth being proven consistent (0 = global or 1 = regional).
@@ -673,7 +673,7 @@ pub const RTDC_SUBTREE_DEFAULT_K: usize = 8;
 /// `ln(0.05) ≈ −2.9957`.
 /// Returns `usize::MAX` if `f <= 0` (no tamper → impossible to detect by
 /// sampling) or `f >= 1` (full tamper → K=1 suffices).
-#[cfg(feature = "rtdc_subtree_inclusion")]
+#[cfg(feature = "rtdc")]
 #[inline]
 pub fn min_k_for_95pct_confidence(f: f64) -> usize {
     if f <= 0.0 {
@@ -691,7 +691,7 @@ pub fn min_k_for_95pct_confidence(f: f64) -> usize {
 /// Probability of catching a cheater who tampered fraction `f` of leaves,
 /// given `k` samples. Returns `0.0` for `f <= 0` (no tamper) and `1.0` for
 /// `f >= 1` (full tamper, always caught on first sample).
-#[cfg(feature = "rtdc_subtree_inclusion")]
+#[cfg(feature = "rtdc")]
 #[inline]
 pub fn tamper_detection_probability(k: usize, f: f64) -> f64 {
     if f <= 0.0 {
@@ -1034,7 +1034,7 @@ mod tests {
     //   - cost ratio (CG6 cost gate)
     //   - tamper_detection_probability / min_k_for_95pct_confidence helpers
 
-    #[cfg(feature = "rtdc_subtree_inclusion")]
+    #[cfg(feature = "rtdc")]
     mod subtree {
         use super::*;
         use std::time::Instant;
@@ -1269,7 +1269,7 @@ mod tests {
         /// `content_store::goat::g3_inclusion_proof_cost_under_10us` /
         /// `g5_hot_path_read_p99_under_200ns` pattern.
         #[test]
-        #[ignore = "CG6.1 cost PASSES in release (4.60× per .benchmarks/303 criterion bench). This inline timing test flakes under parallel test load in debug mode. Canonical measurement: cargo bench -p katgpt-core --features rtdc_subtree_inclusion --bench rtdc_subtree_bench. Run: cargo test --release --features rtdc_subtree_inclusion --lib -- --ignored cg6_verify_cost_within_5x_of_depth_2 --nocapture"]
+        #[ignore = "CG6.1 cost PASSES in release (4.60× per .benchmarks/303 criterion bench). This inline timing test flakes under parallel test load in debug mode. Canonical measurement: cargo bench -p katgpt-core --features rtdc --bench rtdc_subtree_bench. Run: cargo test --release --features rtdc --lib -- --ignored cg6_verify_cost_within_5x_of_depth_2 --nocapture"]
         fn cg6_verify_cost_within_5x_of_depth_2() {
             const ITERS: u32 = 20_000;
 

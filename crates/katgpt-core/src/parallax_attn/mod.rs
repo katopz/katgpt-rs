@@ -172,7 +172,6 @@ pub struct ParallaxConfig {
     /// attention dilution bound at large N (Plan 411, Research 392,
     /// arXiv:2607.01538). Default `None` — no change to existing behavior.
     /// Only present when the `ssmax_temperature` feature is enabled.
-    #[cfg(feature = "ssmax_temperature")]
     pub ssmax: Option<crate::ssmax::SsmaxMode>,
     /// Optional per-key additive prior-logit lane `ℓ_j = logit π_j`
     /// (Issue 819 T2, Research 566 — the sigmoid/softmax counterpart of
@@ -224,7 +223,6 @@ impl Default for ParallaxConfig {
         Self {
             gate_scale: 1.0,
             activation: ParallaxActivation::default(),
-            #[cfg(feature = "ssmax_temperature")]
             ssmax: None,
             #[cfg(feature = "prior_logit_lane")]
             prior_logits: None,
@@ -273,7 +271,6 @@ fn normalize_attention_weights(row: &mut [f32], activation: ParallaxActivation) 
 /// This is the SSMax intervention point in the parallax forward path:
 /// scores are computed, then SSMax rescales them by `s_L · log(N)` before
 /// normalization (sigmoid/softmax). Plan 411, Research 392.
-#[cfg(feature = "ssmax_temperature")]
 #[inline]
 fn apply_ssmax_to_row(row: &mut [f32], ssmax: Option<&crate::ssmax::SsmaxMode>) {
     if let Some(mode) = ssmax {
@@ -571,7 +568,7 @@ pub fn tiled_attention_parallax_forward_retaining(
     // ORDERING LAW (Plan 622, Research 610): scale_invariant and ssmax are
     // BOTH length temperatures — arming both stacks two sharpeners and
     // double-sharpens attention. Loud config error in both profiles.
-    #[cfg(all(feature = "scale_invariant_attn", feature = "ssmax_temperature"))]
+    #[cfg(feature = "scale_invariant_attn")]
     assert!(
         parallax_config.scale_invariant.is_none() || parallax_config.ssmax.is_none(),
         "scale_invariant_attn and ssmax_temperature are both length temperatures — \
@@ -622,7 +619,6 @@ pub fn tiled_attention_parallax_forward_retaining(
             Some(&mut scratch.scores),
             parallax_config.activation,
             attn_matrix.as_deref_mut(),
-            #[cfg(feature = "ssmax_temperature")]
             parallax_config.ssmax.as_ref(),
             #[cfg(feature = "prior_logit_lane")]
             parallax_config.prior_logits.as_deref(),
@@ -663,7 +659,6 @@ pub fn tiled_attention_parallax_forward_retaining(
 
         // SSMax: rescale scores by s_L · log(N) before normalization.
         // No-op when ssmax is None (the default).
-        #[cfg(feature = "ssmax_temperature")]
         apply_ssmax_to_row(&mut scratch.scores[..n], parallax_config.ssmax.as_ref());
 
         // Per-key additive prior-logit lane (Issue 819 T2). Applied AFTER the
@@ -1007,11 +1002,7 @@ pub fn tiled_attention_parallax_forward_sink_aware(
 ///
 /// Requires all three features: `parallax_attn`, `sink_aware_attn`,
 /// `ssmax_temperature`.
-#[cfg(all(
-    feature = "parallax_attn",
-    feature = "sink_aware_attn",
-    feature = "ssmax_temperature"
-))]
+#[cfg(all(feature = "parallax_attn", feature = "sink_aware_attn"))]
 #[allow(clippy::too_many_arguments)]
 pub fn tiled_attention_parallax_forward_sink_aware_ssmax(
     q: &[f32],
@@ -1083,7 +1074,7 @@ fn tiled_attention_core(
     scores: Option<&mut [f32]>,
     activation: ParallaxActivation,
     mut attn_matrix: Option<&mut [f32]>,
-    #[cfg(feature = "ssmax_temperature")] ssmax: Option<&crate::ssmax::SsmaxMode>,
+    ssmax: Option<&crate::ssmax::SsmaxMode>,
     #[cfg(feature = "prior_logit_lane")] prior_logits: Option<&[f32]>,
     #[cfg(feature = "scale_invariant_attn")] si: Option<&crate::scale_invariant::ScaleInvariantLut>,
 ) {
@@ -1124,7 +1115,6 @@ fn tiled_attention_core(
 
         // SSMax: rescale scores by s_L · log(N) before normalization.
         // No-op when ssmax is None (the default).
-        #[cfg(feature = "ssmax_temperature")]
         apply_ssmax_to_row(&mut scores[..n], ssmax);
 
         // Per-key additive prior-logit lane (Issue 819 T2). Applied AFTER the

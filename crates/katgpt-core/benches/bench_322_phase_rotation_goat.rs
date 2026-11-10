@@ -35,17 +35,16 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features phase_rotation_coupling --bench bench_322_phase_rotation_goat -- --nocapture
+//! cargo bench -p katgpt-core --bench bench_322_phase_rotation_goat -- --nocapture
 //! ```
 //!
 //! Or (working around the dyld/trustd stall on macOS):
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features phase_rotation_coupling --bench bench_322_phase_rotation_goat --no-run
+//! cargo bench -p katgpt-core --bench bench_322_phase_rotation_goat --no-run
 //! target/release/deps/bench_322_phase_rotation_goat-<hash>
 //! ```
 
-#![cfg(feature = "phase_rotation_coupling")]
 #![allow(clippy::doc_lazy_continuation)] // bench doc: prose continuation in a list item
 
 use katgpt_core::{

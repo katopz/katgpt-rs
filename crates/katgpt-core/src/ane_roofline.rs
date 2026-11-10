@@ -694,7 +694,6 @@ pub fn ane_conv3x3_cost(
 // traffic + single dispatch floor.
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "ane_fused_chain")]
 impl AneCost {
     /// Zero cost — the identity element for [`std::ops::Add`].
     ///
@@ -712,7 +711,6 @@ impl AneCost {
     }
 }
 
-#[cfg(feature = "ane_fused_chain")]
 impl std::ops::Add for AneCost {
     type Output = Self;
 
@@ -747,7 +745,6 @@ impl std::ops::Add for AneCost {
 /// traffic in the fused estimate.
 ///
 /// Part of Plan 439's fused-chain cost model (GTSim distillation).
-#[cfg(feature = "ane_fused_chain")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AneDataDep {
     /// Index into the `ops` slice passed to [`ane_fused_estimate`].
@@ -758,7 +755,6 @@ pub struct AneDataDep {
     pub intermediate_bytes: u64,
 }
 
-#[cfg(feature = "ane_fused_chain")]
 impl AneDataDep {
     /// Build a linear chain of data deps: `op[0] → op[1] → ... → op[n-1]`.
     ///
@@ -806,7 +802,6 @@ impl AneDataDep {
 /// The one exception: if the fused op is [`AneBound::FamilyGated`],
 /// `fusion_savings_ms` is set to 0.0 (the chip can't run the chain at all,
 /// so fusion benefit is meaningless).
-#[cfg(feature = "ane_fused_chain")]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AneFusedCost {
     /// The fused-chain cost (treated as one aggregate op).
@@ -839,7 +834,6 @@ pub struct AneFusedCost {
 ///
 /// Zero-allocation, `#[inline(always)]`, <=1 µs CPU on M1 Pro for <=8-op
 /// chains (same budget as [`ane_estimate`]).
-#[cfg(feature = "ane_fused_chain")]
 #[inline(always)]
 pub fn ane_fused_estimate(
     ops: &[AneOpShape],
@@ -1235,7 +1229,7 @@ mod tests {
 // Fused-chain estimator tests (Plan 439 T1.8)
 // ---------------------------------------------------------------------------
 
-#[cfg(all(test, feature = "ane_fused_chain"))]
+#[cfg(test)]
 mod fused_tests {
     use super::*;
 

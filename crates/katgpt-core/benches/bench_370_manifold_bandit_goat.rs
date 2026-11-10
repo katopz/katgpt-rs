@@ -26,7 +26,7 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features manifold_bandit \
+//! cargo bench -p katgpt-core \
 //!     --bench bench_370_manifold_bandit_goat -- --nocapture
 //! ```
 //!
@@ -37,8 +37,6 @@
 //!     --features manifold_bandit --bench bench_370_manifold_bandit_goat
 //! /tmp/manifold_bandit_370/release/bench_370_manifold_bandit_goat-* --nocapture
 //! ```
-
-#![cfg(feature = "manifold_bandit")]
 
 use katgpt_core::manifold_bandit::{
     BayesianFilterArm, LatentTaskTree, LatentTaskTreeConfig, TreeNode,

@@ -9,7 +9,7 @@
 //! `timed_region_guard` law). Deterministic: arithmetic patterns, no RNG.
 //!
 //! ```sh
-//! cargo bench -p katgpt-core --features dying --bench bench_874_dying_goat
+//! cargo bench -p katgpt-core --features usage_rate_eviction --bench bench_874_dying_goat
 //! ```
 
 use std::hint::black_box;

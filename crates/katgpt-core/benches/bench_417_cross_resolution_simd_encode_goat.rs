@@ -37,8 +37,6 @@
 //! CARGO_TARGET_DIR=/tmp/xres417 /tmp/xres417/release/deps/bench_417_cross_resolution_simd_encode_goat-* --nocapture
 //! ```
 
-#![cfg(feature = "cross_resolution_transport")]
-
 use katgpt_core::cross_resolution::{CrossResolutionBases, CrossResolutionError};
 use std::hint::black_box;
 use std::time::Instant;

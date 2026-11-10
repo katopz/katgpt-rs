@@ -1554,7 +1554,6 @@ impl<const MAX_CELLS: usize, const D: usize> CertifiedFrontier<MAX_CELLS, D> {
 /// frontier, plus the mapping back.
 ///
 /// Only compiled when both features are on.
-#[cfg(feature = "viable_manifold_graph")]
 #[derive(Debug)]
 pub struct CertifiedManifoldGraph {
     /// The navigable graph. Node ids are **graph-local** and dense.
@@ -1597,7 +1596,6 @@ pub struct CertifiedManifoldGraph {
 ///
 /// `f` must be `Copy` because both the volume field and the builder consume it;
 /// pass `&closure` if the closure itself is not `Copy`.
-#[cfg(feature = "viable_manifold_graph")]
 pub fn certified_manifold_graph<const MAX_CELLS: usize, const D: usize, F>(
     frontier: &CertifiedFrontier<MAX_CELLS, D>,
     f: F,

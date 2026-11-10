@@ -207,7 +207,7 @@ where
     /// As [`tilt_logits`](Self::tilt_logits), plus:
     /// - `threshold` — confidence at which guidance is half-maximal (typical: `0.5`).
     /// - `steepness` — transition sharpness (typical: `4.0` to `8.0`).
-    #[cfg(feature = "qgf_adaptive")]
+    #[cfg(feature = "qgf")]
     #[inline]
     #[allow(clippy::too_many_arguments)] // QGF adaptive-tilt hot path; all params consumed
     pub fn tilt_logits_adaptive(
@@ -269,7 +269,7 @@ where
     ///
     /// `true` if guidance was applied; `false` if skipped (period mismatch,
     /// zero weight, or signal-driven low confidence).
-    #[cfg(feature = "qgf_adaptive")]
+    #[cfg(feature = "qgf")]
     #[inline]
     #[allow(clippy::too_many_arguments)] // QGF adaptive-tilt hot path; all params consumed
     pub fn tilt_logits_adaptive_with_signal<S: crate::qgf::QgfVarianceSignal + ?Sized>(
@@ -698,9 +698,9 @@ mod tests {
     // ── Plan 268 T7: tilt_logits_adaptive_with_signal (Thicket bridge) ──────
 
     // Mock variance signal — stands in for Thicket's `TvpSignal`.
-    #[cfg(feature = "qgf_adaptive")]
+    #[cfg(feature = "qgf")]
     struct MockSignal(f32);
-    #[cfg(feature = "qgf_adaptive")]
+    #[cfg(feature = "qgf")]
     impl crate::qgf::QgfVarianceSignal for MockSignal {
         fn normalized_disagreement(&self) -> f32 {
             self.0
@@ -708,7 +708,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "qgf_adaptive")]
+    #[cfg(feature = "qgf")]
     fn test_tilt_with_signal_high_agreement_applies_guidance() {
         let drafter = make_drafter(1.0, 1); // weight ignored by adaptive path
         let mut logits = [0.0f32; 3];
@@ -731,7 +731,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "qgf_adaptive")]
+    #[cfg(feature = "qgf")]
     fn test_tilt_with_signal_high_disagreement_skips_guidance() {
         let drafter = make_drafter(1.0, 1);
         let mut logits = [0.0f32; 3];
@@ -757,7 +757,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "qgf_adaptive")]
+    #[cfg(feature = "qgf")]
     fn test_tilt_with_signal_full_disagreement_zero_weight() {
         let drafter = make_drafter(1.0, 1);
         let mut logits = [0.0f32; 3];
@@ -784,7 +784,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "qgf_adaptive")]
+    #[cfg(feature = "qgf")]
     fn test_tilt_with_signal_respects_period() {
         let drafter = make_drafter(1.0, 2);
         let mut logits = [0.0f32; 3];
@@ -805,7 +805,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "qgf_adaptive")]
+    #[cfg(feature = "qgf")]
     fn test_tilt_with_signal_matches_oracle_confidence_path() {
         // When signal-derived confidence equals the oracle's own confidence,
         // both adaptive paths must produce the same tilt.

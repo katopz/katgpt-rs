@@ -22,11 +22,9 @@
 //! # Run
 //!
 //! ```bash
-//! cargo run -p katgpt-core --features ane_roofline \
+//! cargo run -p katgpt-core \
 //!   --bench bench_379_ane_roofline_goat --release -- --nocapture
 //! ```
-
-#![cfg(feature = "ane_roofline")]
 
 use katgpt_core::ane_roofline::{
     AneBound, AneCost, AneFamily, AneOpShape, AnePeaks, Device, Dtype, ane_estimate,

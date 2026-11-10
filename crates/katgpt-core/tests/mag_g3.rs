@@ -5,8 +5,6 @@
 //! - Zero shift → ϵ_Q = 1.0 (by convention)
 //! - Overshoot (predicted shift > actual shift) → ϵ_Q > 1.0
 
-#![cfg(feature = "mag_mining")]
-
 use katgpt_core::mag::{mine_direction, reconstruction_error};
 
 const D: usize = 64;

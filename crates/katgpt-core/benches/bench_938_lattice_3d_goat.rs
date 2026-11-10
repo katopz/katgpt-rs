@@ -26,13 +26,13 @@
 //! Run:
 //!
 //! ```sh
-//! cargo bench -p katgpt-core --features lattice_memory_3d,engram \
+//! cargo bench -p katgpt-core --features lattice_memory,engram \
 //!     --bench bench_938_lattice_3d_goat
 //! # G4 cell:
-//! cargo bench -p katgpt-core --features lattice_memory_3d,engram,alloc_tracking \
+//! cargo bench -p katgpt-core --features lattice_memory,engram,alloc_tracking \
 //!     --bench bench_938_lattice_3d_goat -- --g4-only
 //! ```
-#![cfg(feature = "lattice_memory_3d")]
+#![cfg(feature = "lattice_memory")]
 
 use std::hint::black_box;
 use std::time::Instant;

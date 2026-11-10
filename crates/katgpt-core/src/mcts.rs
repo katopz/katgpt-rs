@@ -502,7 +502,7 @@ pub fn mcts_search_informed<S: GameState>(
 /// Honest scope: the seam EXISTS for the T4 defend-wrong PoC to measure;
 /// whether MCTS visit patterns actually trigger the structural policies
 /// productively is exactly what T4 measures — this wrapper makes no claim.
-#[cfg(feature = "structural_cot_halt")]
+#[cfg(feature = "ict_branching")]
 #[allow(clippy::too_many_arguments)]
 pub fn mcts_search_structural_halted<S: GameState>(
     state: &S,

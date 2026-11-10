@@ -43,11 +43,6 @@
 //!   --features kinematic_rollout,conformal_predictive_intervals -- --nocapture
 //! ```
 
-#![cfg(all(
-    feature = "kinematic_rollout",
-    feature = "conformal_predictive_intervals"
-))]
-
 use katgpt_core::conformal::{
     PredictiveInterval, PredictiveOutput, UqPrimitiveUnderTest, run_floor_comparison,
 };

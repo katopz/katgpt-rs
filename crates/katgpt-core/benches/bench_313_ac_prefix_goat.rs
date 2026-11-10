@@ -27,10 +27,8 @@
 //! # Run
 //!
 //! ```bash
-//! cargo run -p katgpt-core --features ac_prefix --bench bench_313_ac_prefix_goat --release -- --nocapture
+//! cargo run -p katgpt-core --bench bench_313_ac_prefix_goat --release -- --nocapture
 //! ```
-
-#![cfg(feature = "ac_prefix")]
 
 use katgpt_core::ac_prefix::{AcPrefix, AcPrefixMask};
 use katgpt_core::{Config, matmul, matmul_relu, rmsnorm, softmax};

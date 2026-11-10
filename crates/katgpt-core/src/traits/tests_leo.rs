@@ -4,7 +4,6 @@ use super::*;
 // -- T5: sigmoid_bounded_q --
 
 #[test]
-#[cfg(feature = "leo_all_goals")]
 fn test_sigmoid_bounded_q_bounds() {
     // Raw Q = 0 → sigmoid(0) = 0.5
     assert!((sigmoid_bounded_q(0.0) - 0.5).abs() < 1e-6);
@@ -25,7 +24,6 @@ struct DummyLeoHead {
     actions: usize,
 }
 
-#[cfg(feature = "leo_all_goals")]
 impl LeoHead for DummyLeoHead {
     fn all_goals_q(&self, _state: &[f32]) -> Vec<f32> {
         vec![0.5; self.goals * self.actions]
@@ -41,7 +39,6 @@ impl LeoHead for DummyLeoHead {
 }
 
 #[test]
-#[cfg(feature = "leo_all_goals")]
 fn test_leo_head_q_for_goal() {
     let head = DummyLeoHead {
         goals: 3,
@@ -63,11 +60,9 @@ fn test_leo_head_q_for_goal() {
 
 #[allow(dead_code)]
 struct Updater;
-#[cfg(feature = "leo_all_goals")]
 impl AllGoalsUpdate for Updater {}
 
 #[test]
-#[cfg(feature = "leo_all_goals")]
 fn test_all_goals_td_target() {
     let upd = Updater;
     let rewards = vec![1.0, 0.0, 0.5]; // 3 goals
@@ -85,7 +80,6 @@ fn test_all_goals_td_target() {
 }
 
 #[test]
-#[cfg(feature = "leo_all_goals")]
 fn test_all_goals_loss() {
     let predicted = vec![vec![0.8], vec![0.2], vec![0.5]];
     let target = vec![1.0, 0.0, 0.5];
@@ -99,11 +93,9 @@ fn test_all_goals_loss() {
 
 #[allow(dead_code)]
 struct Mixer;
-#[cfg(feature = "dual_leo")]
 impl DualLeoMixer for Mixer {}
 
 #[test]
-#[cfg(feature = "dual_leo")]
 fn test_dual_leo_mix() {
     let mixer = Mixer;
     let q_leo = vec![0.4, 0.6, 0.2];
@@ -119,20 +111,17 @@ fn test_dual_leo_mix() {
 }
 
 #[test]
-#[cfg(feature = "dual_leo")]
 fn test_dual_leo_default_alpha() {
     let mixer = Mixer;
     assert!((mixer.default_alpha() - 0.3).abs() < 1e-6);
 }
 
 #[test]
-#[cfg(feature = "dual_leo")]
 fn test_acting_mode_default() {
     assert_eq!(Mixer.acting_mode(), ActingMode::Lc);
 }
 
 #[test]
-#[cfg(feature = "dual_leo")]
 fn test_acting_mode_combine_lc() {
     let mixer = Mixer;
     let q_leo = vec![0.4, 0.6];
@@ -144,7 +133,6 @@ fn test_acting_mode_combine_lc() {
 }
 
 #[test]
-#[cfg(feature = "dual_leo")]
 fn test_alpha_schedule_fixed() {
     assert!(matches!(Mixer.alpha_schedule(), AlphaSchedule::Fixed(0.3)));
     assert!((Mixer.alpha_at_progress(0.0) - 0.3).abs() < 1e-6);
@@ -153,7 +141,6 @@ fn test_alpha_schedule_fixed() {
 }
 
 #[test]
-#[cfg(feature = "dual_leo")]
 fn test_alpha_schedule_linear_anneal() {
     struct AnnealingMixer;
     impl DualLeoMixer for AnnealingMixer {
@@ -171,13 +158,11 @@ fn test_alpha_schedule_linear_anneal() {
 }
 
 #[test]
-#[cfg(feature = "dual_leo")]
 fn test_bc_config_default() {
     assert!(Mixer.bc_config().is_none());
 }
 
 #[test]
-#[cfg(feature = "dual_leo")]
 fn test_bc_config_values() {
     let bc = BcConfig::default();
     assert!((bc.policy_coef - 0.1).abs() < 1e-6);
@@ -192,7 +177,6 @@ struct SimpleAutocurriculum {
     observed: Vec<bool>,
 }
 
-#[cfg(feature = "dual_leo")]
 impl SimpleAutocurriculum {
     #[allow(dead_code)]
     fn new(total: usize) -> Self {
@@ -202,7 +186,6 @@ impl SimpleAutocurriculum {
     }
 }
 
-#[cfg(feature = "dual_leo")]
 impl AutocurriculumSampler for SimpleAutocurriculum {
     fn sample_goal(&self, rng: &mut Rng) -> usize {
         let observed: Vec<_> = self
@@ -231,7 +214,6 @@ impl AutocurriculumSampler for SimpleAutocurriculum {
 }
 
 #[test]
-#[cfg(feature = "dual_leo")]
 fn test_autocurriculum_observe_and_count() {
     let mut ac = SimpleAutocurriculum::new(5);
     assert_eq!(ac.observed_count(), 0);
@@ -247,7 +229,6 @@ fn test_autocurriculum_observe_and_count() {
 }
 
 #[test]
-#[cfg(feature = "dual_leo")]
 fn test_autocurriculum_sample_from_observed() {
     let mut ac = SimpleAutocurriculum::new(10);
     ac.observe_goal(3);
@@ -265,7 +246,6 @@ fn test_autocurriculum_sample_from_observed() {
 // -- T9d: Q(λ) tests --
 
 #[test]
-#[cfg(feature = "leo_all_goals")]
 fn test_td_target_lambda_no_done() {
     let upd = Updater;
     let rewards = vec![1.0, 0.0];
@@ -280,7 +260,6 @@ fn test_td_target_lambda_no_done() {
 }
 
 #[test]
-#[cfg(feature = "leo_all_goals")]
 fn test_td_target_lambda_with_done() {
     let upd = Updater;
     let rewards = vec![1.0, 0.5];
@@ -296,7 +275,6 @@ fn test_td_target_lambda_with_done() {
 }
 
 #[test]
-#[cfg(feature = "leo_all_goals")]
 fn test_td_target_lambda_with_future_return() {
     let upd = Updater;
     let rewards = vec![0.0];
@@ -316,7 +294,6 @@ fn test_td_target_lambda_with_future_return() {
 // -- T9e: AutocurriculumSampler refinements --
 
 #[test]
-#[cfg(feature = "dual_leo")]
 fn test_update_goals_seen() {
     let ac = SimpleAutocurriculum::new(3);
     let obs_batch = vec![vec![1.0, 0.0, 0.0]];
@@ -333,7 +310,6 @@ fn test_update_goals_seen() {
 }
 
 #[test]
-#[cfg(feature = "dual_leo")]
 fn test_update_goals_seen_union() {
     let ac = SimpleAutocurriculum::new(3);
     let obs_batch = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0]];
@@ -350,7 +326,6 @@ fn test_update_goals_seen_union() {
 }
 
 #[test]
-#[cfg(feature = "dual_leo")]
 fn test_autocurriculum_default_methods() {
     let ac = SimpleAutocurriculum::new(5);
     assert_eq!(ac.goals_completed_this_episode(), 0);

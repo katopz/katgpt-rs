@@ -1,4 +1,3 @@
-#![cfg(feature = "subspace_phase_gate")]
 //! Plan 625 T0.3 — the TILR-first arm (the substrate comparison row).
 //!
 //! Runs [`katgpt_core::tilr::discover_invariant_subspace`] on planted-block

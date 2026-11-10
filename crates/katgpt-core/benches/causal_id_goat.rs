@@ -21,8 +21,6 @@
 //! additionally prints whether G2 (≤100µs) passes. The G4 section prints
 //! the per-call allocation delta on the 32-node scenario.
 
-#![cfg(feature = "causal_identification")]
-
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use katgpt_core::causal_id::{Admg, NodeId, identify};
 

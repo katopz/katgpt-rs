@@ -24,8 +24,6 @@
 //! Box state: latency numbers are REGRESSION CEILINGS on a shared box —
 //! quote the box state beside any reuse (the AGENTS.md G2 box-state law).
 
-#![cfg(feature = "ac_prefix")]
-
 use katgpt_core::ac_prefix::{keyed_gumbel_max_sample, keyed_posterior_gumbel_noise};
 use std::hint::black_box;
 

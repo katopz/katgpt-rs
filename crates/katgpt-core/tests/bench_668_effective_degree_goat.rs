@@ -19,8 +19,6 @@
 //! isolated binary `effective_degree_alloc_check.rs` — a `CountingAllocator`
 //! here would perturb the `Instant::now()` timing loops.
 
-#![cfg(feature = "effective_degree")]
-
 use katgpt_core::effective_degree::{
     EdConfig, EdScratch, MAX_ED_TERMS, ed_from_coeff_norms, ed_over_pairs,
     effective_degree_along_path, randomized_cosine_nodes,

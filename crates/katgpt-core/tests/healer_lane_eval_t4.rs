@@ -11,8 +11,6 @@
 //! The engine lives in `common/plan621_healer_sim.rs` (`#[path]`-included by
 //! this suite and the bench — eval-only, never a shipped API).
 
-#![cfg(feature = "escalation_probe_gate")]
-
 #[path = "common/plan621_healer_sim.rs"]
 mod sim;
 

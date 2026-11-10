@@ -32,20 +32,18 @@ pub mod ridge_solve;
 // under the `karc_householder_eig` feature gate.
 pub mod symmetric_eig;
 
-#[cfg(feature = "geometric_product")]
 pub mod geometric_product;
 
 // Plan 326 — Tucker / HOSVD N-mode tensor factorization (the N-mode
 // generalization of `thin_svd_into`). Distilled from TFNO §6.1 as the third
 // and final FNO gap (Research 307 §3 candidate plan #3).
-#[cfg(feature = "tucker_factorization")]
 pub mod tucker;
 
 // Issue 839 — Kronecker-factored tile apply `(A ⊗ B) · x = A Z Bᵀ` as two small
 // GEMMs, plus the delegating Walsh–Hadamard fast path. The arbitrary-factor
 // generalization of `katgpt-kv::kvarn::hadamard`'s fixed-H tile machinery
 // (Research 569, Cactus Needle 3).
-#[cfg(feature = "kron_tile")]
+#[cfg(feature = "meld")]
 pub mod kron_tile;
 
 pub use ridge_solve::{
@@ -59,14 +57,12 @@ pub use symmetric_eig::{SymmetricEigScratch, symmetric_eig};
 
 // Plan 319 — Channel-wise Clifford Geometric Product (coherence + wedge).
 // Re-exported alongside the ridge kernels as a peer linear-algebra primitive.
-#[cfg(feature = "geometric_product")]
 pub use geometric_product::{
     cyclic_shift_into, geometric_product_into, geometric_product_wedge_into,
 };
 
 // Plan 326 — Tucker / HOSVD factorization re-exports. Peer to the SVD
 // primitives in `subspace_phase_gate`; this is their N-mode generalization.
-#[cfg(feature = "tucker_factorization")]
 pub use tucker::{
     MAX_MODES, TuckerConfig, TuckerError, TuckerResult, TuckerResultScratch, TuckerScratch,
     tucker_decompose, tucker_decompose_into, tucker_reconstruct_into,
@@ -74,7 +70,7 @@ pub use tucker::{
 
 // Issue 839 — Kronecker-factored tile apply, re-exported alongside the other
 // linear-algebra kernels.
-#[cfg(feature = "kron_tile")]
+#[cfg(feature = "meld")]
 pub use kron_tile::{
     KronScratch, WHT_TILE_WIDTHS, dense_matvec_into, is_permutation, kron_apply,
     kron_apply_tile_into, kron_dense_into, permute_into, wht_apply_tiles, wht_factor_into,

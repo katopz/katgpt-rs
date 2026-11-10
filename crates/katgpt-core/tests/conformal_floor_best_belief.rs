@@ -50,8 +50,6 @@
 //!   --features conformal_predictive_intervals,best_belief -- --nocapture
 //! ```
 
-#![cfg(all(feature = "conformal_predictive_intervals", feature = "best_belief"))]
-
 use katgpt_core::select_best_belief;
 
 /// SplitMix64 — deterministic, seedable, no external dep. Matches the floor

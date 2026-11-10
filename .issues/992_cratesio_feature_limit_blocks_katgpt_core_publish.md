@@ -1,6 +1,6 @@
 # Issue 992 — crates.io refuses katgpt-core: 414 features > the 300 limit (P1 cascade blocker, 8/9 landed)
 
-**Status:** BLOCKED on the crates.io 300-feature limit — ROAD DECIDED 2026-11-10: **ROAD 2 (limit-increase email)**, via the delegated-owner Claude verdict (round 1 REVISE → round 2 AGREE); the email is drafted below, 👤 owner sends it from the publishing account; interim = wait (riir-refine Issue 221 stays sibling-mode, nothing degrades per its G8); fallback = leaf extraction at the **2026-11-24 decision gate**; in-repo reduction is **INFEASIBLE** — the corrected census below shows 391/414 features are spelled somewhere and CUT = 0 under the recorded cut rule. 8/9 cascade crates PUBLISHED; katgpt-core alone refused.
+**Status:** UNBLOCKING — 2026-11-10 owner order superseded ROAD 2 ("we won't mail and wait forever — bake or group"): Plan 635 Tranche 1 (BAKE 74 default-closure features flagless + GROUP 62 single-parent additive children into their parent) takes katgpt-core **414 → 278** features (< 300). Next: land the path-dep sibling rewrites, re-run the P1 publish cascade (kat-secret lane); riir-chain/riir-dapps (git `branch = "main"`) rewrite at the develop→main merge. Previous status (ROAD 2 email, delegated verdict) kept below as history.
 
 ## What happened
 

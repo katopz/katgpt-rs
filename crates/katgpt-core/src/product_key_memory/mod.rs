@@ -108,9 +108,7 @@
 // leaf-clean retrieval primitive stays usable without pulling in the
 // `Arc<RwLock<Arc<...>>>` + BLAKE3 commitment machinery. The wrapper re-uses
 // the Phase 1/2 retrieval kernel unchanged.
-#[cfg(feature = "product_key_memory_freeze")]
 pub mod freeze;
-#[cfg(feature = "product_key_memory_freeze")]
 pub use freeze::FrozenProductKeyMemory;
 
 // Phase 5 — δ-rule write gate (Plan 408 T5.1, F1 fusion: PKM × δ-Mem).
@@ -119,9 +117,7 @@ pub use freeze::FrozenProductKeyMemory;
 // Modelless: one δ-rule step per call (not iterated); the curiosity `gate`
 // is sourced externally. Gated on the freeze wrapper (the publish path
 // delegates to `FrozenProductKeyMemory::commit`).
-#[cfg(feature = "product_key_memory_episodic")]
 pub mod episodic;
-#[cfg(feature = "product_key_memory_episodic")]
 pub use episodic::{BackgroundAccessStats, PkmEpisodicStore};
 
 pub mod kernel;

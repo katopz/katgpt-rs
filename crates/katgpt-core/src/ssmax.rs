@@ -380,7 +380,6 @@ pub fn apply_ssmax_inplace(logits: &mut [f32], mode: &SsmaxMode, log_n: f32) {
 /// let log_n = (logits.len() as f32).ln();
 /// apply_ssmax_inplace(&mut logits, &mode, log_n);
 /// ```
-#[cfg(feature = "ssmax_adaptive")]
 pub struct RollingDeltaEstimator {
     /// EMA of observed `max − mean` gap, stored as `f64::to_bits` in an
     /// `AtomicU64` for lock-free updates.
@@ -390,7 +389,6 @@ pub struct RollingDeltaEstimator {
     alpha: f64,
 }
 
-#[cfg(feature = "ssmax_adaptive")]
 impl RollingDeltaEstimator {
     /// Construct with a custom EMA decay factor.
     ///
@@ -488,7 +486,6 @@ impl RollingDeltaEstimator {
     }
 }
 
-#[cfg(feature = "ssmax_adaptive")]
 impl Default for RollingDeltaEstimator {
     /// Default: `α = 0.99` (slow adaptation, ~100-step effective memory),
     /// warm-start `Δ = 1.0` (gives `s_L = 1.0`, matching [`SsmaxMode::Fixed { s_l: 1.0 }`]).
@@ -813,7 +810,7 @@ mod tests {
 // Rolling-Δ estimator tests (Plan 411 S2)
 // ──────────────────────────────────────────────────────────────────────────
 
-#[cfg(all(test, feature = "ssmax_adaptive"))]
+#[cfg(test)]
 mod estimator_tests {
     use super::RollingDeltaEstimator;
     use crate::ssmax::SsmaxMode;

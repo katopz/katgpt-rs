@@ -16,7 +16,7 @@ publish = false  # depends on katgpt-spectral (private) — not part of the katg
 # in katgpt-core (Plan 301 Phase 5) so the substrate is always compiled; we
 # still spell it out so a future katgpt-core default-off flip can't silently
 # break the canon crate.
-katgpt-core = { path = "../katgpt-core", features = ["subspace_phase_gate"] }
+katgpt-core = { path = "../katgpt-core", features = [] }
 # katgpt-spectral: orthogonal_procrustes (Issue 001 / Plan 152) for the
 # ProcrustesAdapter + the k-dim alignment step inside SubspaceAdapter.
 # Always-on — both adapters depend on it. Forwards the `orthogonal_procrustes`

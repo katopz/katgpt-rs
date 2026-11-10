@@ -11,7 +11,7 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features best_belief --bench best_belief_bench \
+//! cargo bench -p katgpt-core --bench best_belief_bench \
 //!   -- --warm-up-time 0.5 --measurement-time 1.5 --sample-size 30
 //! ```
 

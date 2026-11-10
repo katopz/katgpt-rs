@@ -70,7 +70,6 @@ use crate::simd::{simd_dot_f32, simd_fused_scale_acc};
 // The local tangent SVD needs Plan 301's thin_svd. Gated on both features.
 // In the default build, `subspace_phase_gate` is transitively enabled via
 // `viable_manifold_graph` / `tucker_factorization` (both default-on).
-#[cfg(feature = "subspace_phase_gate")]
 use crate::subspace_phase_gate::{SvdResultScratch, SvdScratch, thin_svd_into};
 
 // ─── Errors ──────────────────────────────────────────────────────────────────
@@ -264,10 +263,8 @@ pub struct ManceTangentCache {
     /// The r dimension this cache is sized for.
     r: usize,
     /// Debug: number of cache hits (for benchmark diagnostics).
-    #[cfg(feature = "manifold_erasure")]
     pub cache_hits: u64,
     /// Debug: number of cache misses (for benchmark diagnostics).
-    #[cfg(feature = "manifold_erasure")]
     pub cache_misses: u64,
 }
 
@@ -283,9 +280,7 @@ impl ManceTangentCache {
             d,
             k,
             r,
-            #[cfg(feature = "manifold_erasure")]
             cache_hits: 0,
-            #[cfg(feature = "manifold_erasure")]
             cache_misses: 0,
         }
     }
@@ -345,7 +340,6 @@ impl ManceTangentCache {
 /// via the identity `‖a-b‖² = ‖a‖² - 2<a,b> + ‖b‖²`.
 ///
 /// Returns the k neighbor distances slice.
-#[cfg(feature = "subspace_phase_gate")]
 fn knn_distances_into<'s>(
     x: &[f32],
     natural_pool: &[f32], // flat N×d, row-major
@@ -462,7 +456,6 @@ fn knn_distances_into<'s>(
 /// Returns `(tangent_basis, singular_values)` where:
 /// - `tangent_basis` is `d×r` column-major (column j = j-th right singular vector)
 /// - `singular_values` is length `r` (descending)
-#[cfg(feature = "subspace_phase_gate")]
 #[allow(clippy::too_many_arguments)] // buffer-passing API: natural_pool, neighbor_indices, d, r, + 5 output slices
 fn estimate_local_tangent_into(
     natural_pool: &[f32],
@@ -557,7 +550,6 @@ fn estimate_local_tangent_into(
 /// If the gradient is zero or orthogonal to the tangent basis (‖d‖ ≈ 0),
 /// the direction is set to all-zeros and alignment = 0.0. The caller should
 /// check alignment and skip the step (λ=0).
-#[cfg(feature = "subspace_phase_gate")]
 #[allow(clippy::too_many_arguments)] // buffer-passing API: gradient, basis, sigma, 2 scalars, 2 output slices
 pub fn tangent_erasure_direction_into(
     gradient: &[f32],
@@ -703,7 +695,6 @@ fn local_radius_step(
 /// # Returns
 ///
 /// [`ManceStepInfo`] with diagnostics, or [`ManceError`] on invalid input.
-#[cfg(feature = "subspace_phase_gate")]
 pub fn manifold_erasure_step_into(
     x: &[f32],
     gradient: &[f32],
@@ -836,7 +827,6 @@ pub fn manifold_erasure_step_into(
 ///
 /// Allocates a fresh [`ManceScratch`] internally. For hot paths, use
 /// [`manifold_erasure_step_into`] with a reused scratch.
-#[cfg(feature = "subspace_phase_gate")]
 pub fn manifold_erasure_step(
     x: &[f32],
     gradient: &[f32],
@@ -872,7 +862,6 @@ pub fn manifold_erasure_step(
 ///
 /// Zero allocations on the hot path. The cache is pre-allocated via
 /// [`ManceTangentCache::with_capacity`].
-#[cfg(feature = "subspace_phase_gate")]
 #[allow(clippy::too_many_arguments)] // buffer-passing API: x, gradient, pool, 2 scalars/config, scratch, cache, out
 pub fn manifold_erasure_step_cached_into(
     x: &[f32],
@@ -923,14 +912,12 @@ pub fn manifold_erasure_step_cached_into(
     // Cache check: skip SVD if neighbor indices match.
     let cache_hit = cache.is_valid_for(&scratch.neighbor_indices[..k]);
     if cache_hit {
-        #[cfg(feature = "manifold_erasure")]
         {
             cache.cache_hits += 1;
         }
         // Reuse cached B/σ — copy into scratch.
         cache.copy_to(&mut scratch.tangent_basis, &mut scratch.singular_values);
     } else {
-        #[cfg(feature = "manifold_erasure")]
         {
             cache.cache_misses += 1;
         }
@@ -1029,7 +1016,6 @@ pub fn manifold_erasure_step_cached_into(
 /// The output `out` is updated in-place each round, and the gradient function
 /// receives the current state. If the caller wants a static direction (no
 /// refit), pass a closure that ignores its input.
-#[cfg(feature = "subspace_phase_gate")]
 #[allow(clippy::too_many_arguments)] // buffer-passing API: x, gradient_fn, pool, n, config, n_rounds, scratch, out
 pub fn manifold_erasure_loop_into<F>(
     x: &[f32],
@@ -1100,7 +1086,6 @@ where
 /// The per-call `grad_buf` and `current` buffers are hoisted outside the
 /// round loop (one alloc each, not `n_rounds` allocs each). The SVD-skip
 /// (the optimization) adds zero allocations.
-#[cfg(feature = "subspace_phase_gate")]
 #[allow(clippy::too_many_arguments)] // buffer-passing API: x, gradient_fn, pool, n, config, n_rounds, scratch, cache, out
 pub fn manifold_erasure_loop_cached_into<F>(
     x: &[f32],
@@ -1160,7 +1145,6 @@ where
 ///
 /// This is a zero-alloc operation using the provided scratch for the direction
 /// buffer.
-#[cfg(feature = "subspace_phase_gate")]
 pub fn leace_first_moment_into(
     x: &[f32],
     class_mean_pos: &[f32], // μ₊
@@ -1204,7 +1188,6 @@ pub fn leace_first_moment_into(
 ///
 /// `delta_sigma_top2_eigvecs` should contain 2 eigenvectors, each of length `d`,
 /// flattened as `[v1_0, v1_1, ..., v1_{d-1}, v2_0, v2_1, ..., v2_{d-1}]`.
-#[cfg(feature = "subspace_phase_gate")]
 pub fn covmatch_second_moment_into(
     x: &[f32],
     delta_sigma_top2_eigvecs: &[f32], // 2×d, row-major
@@ -1263,7 +1246,6 @@ pub fn covmatch_second_moment_into(
 ///
 /// First applies LEACE rank-1 erasure, then runs the MANCE iterative loop
 /// on the preprocessed state.
-#[cfg(feature = "subspace_phase_gate")]
 #[allow(clippy::too_many_arguments)] // buffer-passing API: x, 2 class means, gradient_fn, pool, n, config, n_rounds, scratch, out
 pub fn mance_plus_step_into<F>(
     x: &[f32],
@@ -1316,7 +1298,6 @@ where
 ///
 /// First applies LEACE rank-1 erasure, then CovMatch rank-2 erasure,
 /// then runs the MANCE iterative loop on the doubly-preprocessed state.
-#[cfg(feature = "subspace_phase_gate")]
 #[allow(clippy::too_many_arguments)] // buffer-passing API: x, 2 class means, eigvecs, gradient_fn, pool, n, config, n_rounds, scratch, out
 pub fn mance_plus_plus_step_into<F>(
     x: &[f32],
@@ -1380,7 +1361,6 @@ where
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[cfg(feature = "subspace_phase_gate")]
 mod tests {
     use super::*;
 

@@ -24,7 +24,7 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features "qgf,qgf_drafter,qgf_adaptive" --bench qgf_goat
+//! cargo bench -p katgpt-core --features "qgf" --bench qgf_goat
 //! ```
 //!
 //! For a quick (non-statistical) GOAT check, use `--bench` with `--profile=dev`

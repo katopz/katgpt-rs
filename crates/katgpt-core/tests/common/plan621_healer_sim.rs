@@ -36,7 +36,6 @@
 //! Eval-only harness code: never a shipped API, never compiled outside the
 //! gated targets that include it.
 
-#![cfg(feature = "escalation_probe_gate")]
 // Each harness consumes a subset (the plan437_stage0_common convention):
 // the test suite reads the per-state results/kinds; the bench asserts on
 // the aggregates only.

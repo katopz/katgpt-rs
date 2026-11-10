@@ -4,8 +4,6 @@
 //! and `mine_contrast_direction` recovers a known inter-class contrast to
 //! cos ≥ 0.95, on synthetic data in ℝ^64.
 
-#![cfg(feature = "mag_mining")]
-
 use katgpt_core::mag::{mine_contrast_direction, mine_direction};
 
 const D: usize = 64;

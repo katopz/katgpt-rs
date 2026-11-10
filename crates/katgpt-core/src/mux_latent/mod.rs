@@ -16,11 +16,11 @@ mod inject;
 mod prefill;
 mod spectral_lod;
 
-#[cfg(feature = "mux_latent_wire")]
+#[cfg(feature = "mux_latent_context")]
 mod octree_bridge;
-#[cfg(feature = "mux_latent_wire")]
+#[cfg(feature = "mux_latent_context")]
 mod patcher;
-#[cfg(feature = "mux_latent_wire")]
+#[cfg(feature = "mux_latent_context")]
 mod wire;
 
 pub use buffer::{BufferStats, EvictionPolicy, LatentContextBuffer};
@@ -32,12 +32,12 @@ pub use inject::{CompressionSummary, LatentPrefillAdapter, MixedPrefillSequence,
 pub use prefill::{CompressedPrefillPlan, CompressionMetadata, forward_prefill_with_compression};
 pub use spectral_lod::SpectralLOD;
 
-#[cfg(feature = "mux_latent_wire")]
+#[cfg(feature = "mux_latent_context")]
 pub use patcher::{DirtyTracker, LatentPatcher};
-#[cfg(feature = "mux_latent_wire")]
+#[cfg(feature = "mux_latent_context")]
 pub use wire::{LatentPatch, LatentPatchBatch, PatchReceipt, PatchRejection};
 
-#[cfg(feature = "mux_latent_wire")]
+#[cfg(feature = "mux_latent_context")]
 pub use octree_bridge::{
     MortonCode, OctreeLod, TernaryDir, TernaryValue, octree_leaf_to_patch_weights,
     patch_weights_to_octree_leaf,

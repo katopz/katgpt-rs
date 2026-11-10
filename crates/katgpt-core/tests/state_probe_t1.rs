@@ -6,8 +6,6 @@
 //! (formula drift detector), not a correctness oracle — correctness lives
 //! in the math fixtures below.
 
-#![cfg(feature = "state_probe")]
-
 use katgpt_core::hint_regret::wilson_score_ci;
 use katgpt_core::state_probe::{ProbeInput, miller_madow_entropy, probe};
 

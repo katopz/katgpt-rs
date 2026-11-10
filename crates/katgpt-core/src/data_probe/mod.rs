@@ -139,7 +139,7 @@ pub mod entropy;
 /// reporting only — never a controller. Gated `imbalance_monitor`
 /// (implies `knn_entropy`); first consumer surface: the `population_collapse`
 /// advisory latch on katgpt-pruners' `S2FCollapseDetector`.
-#[cfg(feature = "imbalance_monitor")]
+#[cfg(feature = "knn_entropy")]
 pub mod imbalance;
 
 // ── Re-exports (always-on items) ────────────────────────────────────────

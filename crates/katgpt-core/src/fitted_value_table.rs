@@ -444,10 +444,8 @@ pub fn v_from_k_plus(k: &[f32], row: Option<&[f32]>, lambda: f32, out: &mut [f32
 
 // ── P3 — V-cache halving by reconstruction ────────────────────────────────
 
-#[cfg(feature = "fitted_v_reconstruct")]
 pub use reconstruct::{VReadPath, read_v, reconstruct_v_from_rope_k};
 
-#[cfg(feature = "fitted_v_reconstruct")]
 mod reconstruct {
     use super::add_scaled_row_inplace;
     use crate::position_group_action::PositionGroupAction;
@@ -667,7 +665,6 @@ mod tests {
         let _ = FittedTokenTable::from_rows(1, 1, vec![0], vec![f32::NAN]);
     }
 
-    #[cfg(feature = "fitted_v_reconstruct")]
     #[test]
     fn reconstruct_inverts_the_cache_rotation() {
         use crate::position_group_action::{PositionGroupAction, RopeAction};

@@ -72,7 +72,7 @@ quant_mode_override = ["kvarn"]
 # Issue 883 P1 (Research 587): forwards katgpt-core's fitted_value_tables so
 # the token-mean-removed V-quant decorator can be gated against the REAL
 # KVarN backend (Bench 895 G1/G2/G3/G4 — tests/bench_895_mean_removed_v_quant_goat.rs).
-fitted_value_tables = ["katgpt-core/fitted_value_tables"]
+fitted_value_tables = []
 
 # Targeted Precision Budget — per-head bit allocation (Plan 227 Phase 2).
 # Used only by kvarn; promoted to top-level module here for visibility.
@@ -134,7 +134,7 @@ radix_prefix_cache = ["katgpt-core/graph_stable_pool"]
 # through the shipped KVarN round-trip alongside the reconstruction metrics.
 # Implies `kvarn` (the probed surface). Test-support only — no production
 # consumer, never a default.
-mi_probe = ["kvarn", "katgpt-core/mi_est"]
+mi_probe = ["kvarn", "katgpt-core/gaussianity_probe"]
 
 [[test]]
 name = "bench_694_mi_quant_fidelity_probe"

@@ -12,11 +12,11 @@
 //! Run:
 //!
 //! ```sh
-//! cargo test -p katgpt-core --features lattice_memory_3d --test lattice_memory_3d_gates
-//! cargo test -p katgpt-core --features lattice_memory_3d,alloc_tracking \
+//! cargo test -p katgpt-core --features lattice_memory --test lattice_memory_3d_gates
+//! cargo test -p katgpt-core --features lattice_memory,alloc_tracking \
 //!     --release --test lattice_memory_3d_gates
 //! ```
-#![cfg(feature = "lattice_memory_3d")]
+#![cfg(feature = "lattice_memory")]
 
 #[cfg(any(debug_assertions, feature = "alloc_tracking"))]
 #[global_allocator]

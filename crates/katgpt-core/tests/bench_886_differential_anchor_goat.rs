@@ -13,7 +13,7 @@
 //!
 //! Harness = false, std::time::Instant (the bench_411/813 pattern), exit 1
 //! on any gate failure. Run:
-//!   cargo test -p katgpt-core --features differential_anchor \
+//!   cargo test -p katgpt-core \
 //!     --test bench_886_differential_anchor_goat -- --nocapture --release
 //!
 //! Box state (the G2 law — recorded beside any published figure):

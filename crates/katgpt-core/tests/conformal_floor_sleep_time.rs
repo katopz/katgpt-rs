@@ -56,10 +56,7 @@
 //!   --features conformal_predictive_intervals,sleep_time_anticipation -- --nocapture
 //! ```
 
-#![cfg(all(
-    feature = "conformal_predictive_intervals",
-    feature = "sleep_time_anticipation"
-))]
+#![cfg(feature = "sleep_time_anticipation")]
 #![allow(clippy::needless_range_loop)]
 
 use katgpt_core::{

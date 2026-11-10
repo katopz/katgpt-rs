@@ -53,11 +53,9 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features margin_gate \
+//! cargo bench -p katgpt-core \
 //!   --bench bench_711_margin_gate_escalation_poc -- --nocapture
 //! ```
-
-#![cfg(feature = "margin_gate")]
 
 use katgpt_core::pruners::indicator_cascade::IndicatorVerifier;
 use katgpt_core::pruners::indicator_probe_bank::{IndicatorLabel, IndicatorProbeBank};

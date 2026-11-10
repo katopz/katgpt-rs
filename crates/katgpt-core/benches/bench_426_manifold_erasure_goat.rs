@@ -20,10 +20,8 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features manifold_erasure --bench bench_426_manifold_erasure_goat -- --nocapture
+//! cargo bench -p katgpt-core --bench bench_426_manifold_erasure_goat -- --nocapture
 //! ```
-
-#![cfg(feature = "manifold_erasure")]
 
 use katgpt_core::simd::simd_dot_f32;
 use katgpt_core::{

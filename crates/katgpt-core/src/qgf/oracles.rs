@@ -33,7 +33,6 @@ pub use crate::traits::NoGuidanceOracle;
 // LeoHeadOracle — Hot tier (feature: leo_all_goals)
 // ──────────────────────────────────────────────────────────────────────────
 
-#[cfg(feature = "leo_all_goals")]
 mod leo_head_oracle {
     use super::*;
     use crate::traits::LeoHead;
@@ -253,7 +252,6 @@ mod leo_head_oracle {
     }
 }
 
-#[cfg(feature = "leo_all_goals")]
 pub use leo_head_oracle::LeoHeadOracle;
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -414,7 +412,6 @@ pub use flow_field_oracle::FlowFieldOracle;
 // DualLeoOracle — Hot tier (feature: leo_all_goals + dual_leo)
 // ──────────────────────────────────────────────────────────────────────────
 
-#[cfg(all(feature = "leo_all_goals", feature = "dual_leo"))]
 mod dual_leo_oracle {
     use super::*;
     use crate::traits::{DualLeoMixer, LeoHead};
@@ -1031,7 +1028,6 @@ mod dual_leo_oracle {
     }
 }
 
-#[cfg(all(feature = "leo_all_goals", feature = "dual_leo"))]
 pub use dual_leo_oracle::DualLeoOracle;
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -1041,7 +1037,6 @@ pub use dual_leo_oracle::DualLeoOracle;
 // Issue 188's three failure modes of average-then-argmax.
 // ──────────────────────────────────────────────────────────────────────────
 
-#[cfg(all(feature = "leo_all_goals", feature = "dual_leo"))]
 mod commit_dual_leo_oracle {
     use super::*;
     use crate::sigmoid;
@@ -1479,14 +1474,12 @@ mod commit_dual_leo_oracle {
     }
 }
 
-#[cfg(all(feature = "leo_all_goals", feature = "dual_leo"))]
 pub use commit_dual_leo_oracle::CommitDualLeoOracle;
 
 // ──────────────────────────────────────────────────────────────────────────
 // ActionBridgeOracle — Plasma tier (feature: action_bridge)
 // ──────────────────────────────────────────────────────────────────────────
 
-#[cfg(feature = "action_bridge")]
 mod action_bridge_oracle {
     use super::*;
     use crate::bridge::ActionBridge;
@@ -1704,7 +1697,6 @@ mod action_bridge_oracle {
     }
 }
 
-#[cfg(feature = "action_bridge")]
 pub use action_bridge_oracle::ActionBridgeOracle;
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -1903,7 +1895,7 @@ mod no_guidance_tests {
 // dispatch.
 // ───────────────────────────────────────────────────────────────────────────
 
-#[cfg(feature = "qgf_drafter")]
+#[cfg(feature = "qgf")]
 mod warm_tier_oracle {
     use super::*;
     use crate::qgf::dispatch::QgfGpuDelegate;
@@ -2007,7 +1999,7 @@ mod warm_tier_oracle {
         }
     }
 
-    #[cfg(all(test, feature = "qgf_drafter"))]
+    #[cfg(all(test, feature = "qgf"))]
     mod tests {
         use super::*;
         use crate::qgf::dispatch::SealedForTests;
@@ -2298,5 +2290,5 @@ mod cold_tier_oracle {
 
 // Re-export the Warm / Cold tier oracle types.
 pub use cold_tier_oracle::{ColdTierOracle, QTableLoader};
-#[cfg(feature = "qgf_drafter")]
+#[cfg(feature = "qgf")]
 pub use warm_tier_oracle::WarmTierOracle;

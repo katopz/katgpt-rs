@@ -24,8 +24,6 @@
 //! /tmp/plan584_t3/release/deps/bench_584_hebbian_karc_readout_goat-<hash> --nocapture
 //! ```
 
-#![cfg(feature = "karc_hebbian_readout")]
-
 use katgpt_core::hebbian_kernel_memory::{HebbianMlpConfig, HebbianVariant};
 use katgpt_core::karc::hebbian_readout::{HEBBIAN_KARC_DIM, HebbianKarcReadout};
 use katgpt_core::karc::{ChebyshevBasis, KarcForecaster};

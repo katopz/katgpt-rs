@@ -24,8 +24,6 @@
 //!   --features ssmax_temperature --bench bench_411_ssmax_goat -- --nocapture
 //! ```
 
-#![cfg(feature = "ssmax_temperature")]
-
 use katgpt_core::ssmax::{SsmaxMode, apply_ssmax_inplace};
 use std::hint::black_box;
 use std::time::Instant;

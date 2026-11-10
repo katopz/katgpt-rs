@@ -92,7 +92,6 @@ fn test_parallax_recovers_softmax_gate_zero() {
         None,
         ParallaxActivation::Softmax,
         None,
-        #[cfg(feature = "ssmax_temperature")]
         None,
         #[cfg(feature = "prior_logit_lane")]
         None,
@@ -158,7 +157,6 @@ fn test_parallax_recovers_softmax_zero_r() {
         None,
         ParallaxActivation::Softmax,
         None,
-        #[cfg(feature = "ssmax_temperature")]
         None,
         #[cfg(feature = "prior_logit_lane")]
         None,
@@ -266,7 +264,6 @@ fn test_parallax_sigmoid_recovers_base() {
         None,
         ParallaxActivation::Sigmoid,
         None,
-        #[cfg(feature = "ssmax_temperature")]
         None,
         #[cfg(feature = "prior_logit_lane")]
         None,
@@ -1014,7 +1011,7 @@ mod sink_aware_tests {
 // is a bit-identical no-op when ssmax is None. The SSMax primitive's own
 // numerics are tested in ssmax.rs; here we test the parallax integration.
 
-#[cfg(all(feature = "parallax_attn", feature = "ssmax_temperature"))]
+#[cfg(feature = "parallax_attn")]
 mod ssmax_composition_tests {
     use super::*;
     use crate::ssmax::SsmaxMode;
@@ -1302,11 +1299,7 @@ mod ssmax_composition_tests {
 
 // ── SSMax + Sink-Aware 3-way composition tests (Plan 411 T2.3) ────
 
-#[cfg(all(
-    feature = "parallax_attn",
-    feature = "sink_aware_attn",
-    feature = "ssmax_temperature"
-))]
+#[cfg(all(feature = "parallax_attn", feature = "sink_aware_attn"))]
 mod ssmax_sink_aware_tests {
     use super::*;
     use crate::data_probe::{SinkAwarePolicy, SinkClassifierConfig};
@@ -1795,7 +1788,6 @@ mod scale_invariant_tests {
 
     /// The ordering law, loud form: arming scale_invariant AND ssmax in one
     /// config is a config error the forward refuses in both profiles.
-    #[cfg(feature = "ssmax_temperature")]
     #[test]
     #[should_panic(expected = "ordering law")]
     fn si_and_ssmax_armed_is_a_loud_config_error() {

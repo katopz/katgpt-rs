@@ -43,17 +43,15 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features spherical_steering --bench bench_405_spherical_steering_goat -- --nocapture
+//! cargo bench -p katgpt-core --bench bench_405_spherical_steering_goat -- --nocapture
 //! ```
 //!
 //! Or (working around the dyld/trustd stall on macOS):
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features spherical_steering --bench bench_405_spherical_steering_goat --no-run
+//! cargo bench -p katgpt-core --bench bench_405_spherical_steering_goat --no-run
 //! target/release/deps/bench_405_spherical_steering_goat-<hash>
 //! ```
-
-#![cfg(feature = "spherical_steering")]
 
 use katgpt_core::{
     SlerpScratch, slerp_steering_into, spherical_steering_into, vmf_confidence_gate,

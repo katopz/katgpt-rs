@@ -10,11 +10,9 @@
 //! # Run
 //!
 //! ```bash
-//! cargo test -p katgpt-core --features contrastive_scope \
+//! cargo test -p katgpt-core \
 //!     --test contrastive_scope_alloc_check --release -- --nocapture
 //! ```
-
-#![cfg(feature = "contrastive_scope")]
 
 use katgpt_core::contrastive_scope::{
     ContrastiveScoreBuilder, ScopeGate, oos_probe_battery, scope_score, scope_score_from_pairs,

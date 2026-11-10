@@ -59,8 +59,6 @@
 //! /tmp/vfe_376/release/bench_376_velocity_field_ensemble_poc-* --nocapture
 //! ```
 
-#![cfg(feature = "velocity_field_ensemble")]
-
 use katgpt_core::linalg::ridge_solve::ridge_solve_direct_f32;
 use katgpt_core::velocity_field_ensemble::{
     ClosureField, EnsembleFitScratch, VelocityFieldEnsemble,

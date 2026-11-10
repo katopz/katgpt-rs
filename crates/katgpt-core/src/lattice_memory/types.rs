@@ -97,7 +97,7 @@ pub type LatticeConfig = LatticeConfigG<2>;
 /// The 3-axis configuration — Issue 938 T2's second capacity remedy
 /// (`N_max ≈ 0.35·d_k·(3.76/R)^AXES` gains the exponent). Opt-in behind
 /// `lattice_memory_3d`; the GOAT gates live in the bench, never here.
-#[cfg(feature = "lattice_memory_3d")]
+#[cfg(feature = "lattice_memory")]
 pub type LatticeConfig3D = LatticeConfigG<3>;
 
 impl<const A: usize> LatticeConfigG<A> {

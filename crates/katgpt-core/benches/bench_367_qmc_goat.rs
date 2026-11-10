@@ -46,8 +46,6 @@
 //! target/release/deps/bench_367_qmc_goat-<hash>
 //! ```
 
-#![cfg(feature = "qmc_sampling")]
-
 use katgpt_core::speculative::qmc::{
     LatticeQmc, QmcSource, SobolQmc, StratifiedQmc, fill_noise_queries_gaussian_qmc,
 };
@@ -701,10 +699,10 @@ fn main() {
     );
     println!("╚══════════════════════════════════════════════════════════════════════╝");
     println!("\n  G6 (feature isolation) is verified via the cargo check matrix:");
-    println!("    cargo check -p katgpt-core --features qmc_sampling");
+    println!("    cargo check -p katgpt-core");
     println!("    cargo check -p katgpt-core --all-features");
-    println!("    cargo check -p katgpt-core --no-default-features --features qmc_sampling");
-    println!("    cargo test  -p katgpt-core --features qmc_sampling --lib");
+    println!("    cargo check -p katgpt-core --no-default-features");
+    println!("    cargo test  -p katgpt-core --lib");
     println!("\n  This bench itself only compiles under --features qmc_sampling, which");
     println!("  demonstrates the isolation by construction.");
 }

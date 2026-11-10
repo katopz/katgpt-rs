@@ -156,8 +156,8 @@ katgpt-core:2074:decision_wire
 katgpt-core:2074:compression_drafter
 katgpt-core:2076:rate_control
 katgpt-core:2079:pool_admission
-katgpt-core:2097:dying
-katgpt-core:2085:state_option_scoring
+katgpt-core:2097:usage_rate_eviction
+katgpt-core:2085:distance_abstain
 katgpt-core:2074:template_decode
 katgpt-core:2161:runetrace
 katgpt-core:2158:escalation_guard
@@ -171,8 +171,8 @@ PERF_ROWS="
 katgpt-rs:12:belief_drafter_goat
 katgpt-core:4:memory_store_falsification_gate:distance_abstain
 katgpt-core:1:compression_drafter_alloc_gate:compression_drafter
-katgpt-core:1:state_option_scoring_alloc_check:state_option_scoring
-katgpt-core:1:state_option_head_alloc_check:state_option_scoring
+katgpt-core:1:state_option_scoring_alloc_check:distance_abstain
+katgpt-core:1:state_option_head_alloc_check:distance_abstain
 "
 
 canary=0

@@ -11,7 +11,6 @@
 
 use super::{SymmetricEigScratch, symmetric_eig};
 
-#[cfg(feature = "karc_forecaster")]
 use crate::karc::jacobi_eigen;
 
 /// A simple deterministic PRNG (xorshift64) so the tests are bit-reproducible
@@ -213,7 +212,6 @@ fn identity_matrix() {
 // Only compiled when `karc_forecaster` is on (the feature gating `jacobi_eigen`).
 // The rest of the test suite is independent of `karc`.
 
-#[cfg(feature = "karc_forecaster")]
 #[test]
 fn parity_vs_jacobi_random_spd() {
     // 10 random SPD matrices at n = 4, 8, 16. Householder+QL and Jacobi must
@@ -705,7 +703,6 @@ fn infinite_input_refuses_loudly() {
 // along with the speedup ratio. The Issue 186 T4 gate requires ≥5× at
 // n = 256+; this test exists to confirm that gate empirically.
 
-#[cfg(feature = "karc_forecaster")]
 #[test]
 #[ignore]
 fn timing_householder_vs_jacobi() {

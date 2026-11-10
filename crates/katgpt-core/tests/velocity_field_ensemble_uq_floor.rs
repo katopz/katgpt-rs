@@ -29,14 +29,9 @@
 //!
 //! Prints a verdict table. Capture to `.benchmarks/376_uq_floor.md` via:
 //! ```sh
-//! cargo test -p katgpt-core --features velocity_field_ensemble,conformal_predictive_intervals \
+//! cargo test -p katgpt-core \
 //!   --test velocity_field_ensemble_uq_floor -- --nocapture --ignored
 //! ```
-
-#![cfg(all(
-    feature = "velocity_field_ensemble",
-    feature = "conformal_predictive_intervals"
-))]
 
 use katgpt_core::conformal::{
     PredictiveOutput, TrajectoryCorpus, UqPrimitiveUnderTest, run_floor_comparison,

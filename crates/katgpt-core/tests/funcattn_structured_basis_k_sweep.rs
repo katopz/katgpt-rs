@@ -16,8 +16,6 @@
 //! to `.benchmarks/332_structured_basis_k_sweep.md` (T3.4) by the human /
 //! agent running the test, NOT auto-generated.
 
-#![cfg(feature = "funcattn_structured_basis")]
-
 use katgpt_core::funcattn::{
     FuncAttnBasis, FuncAttnConfig, FuncAttnScratch, funcattn_forward, make_dct_log_basis,
     make_haar_packet_basis,

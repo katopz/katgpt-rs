@@ -81,12 +81,10 @@
 // exists under either sub-feature (see lib.rs).
 // ═══════════════════════════════════════════════════════════════════════════
 
-#[cfg(feature = "linking_fold_fold")]
 pub mod fold;
 #[cfg(feature = "linking_fold_detector")]
 pub mod linking_detector;
 
-#[cfg(feature = "linking_fold_fold")]
 pub use fold::{fold_gelu_into, fold_projection_into, gelu_smoothed_abs};
 #[cfg(feature = "linking_fold_detector")]
 pub use linking_detector::{

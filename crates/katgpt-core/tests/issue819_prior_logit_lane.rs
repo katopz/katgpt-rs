@@ -228,7 +228,6 @@ fn per_key_lane_beats_constant_bias_at_low_signal_selectivity() {
 
 // ── G5: lane + SSMax composition (all-features build) ────────────────────
 
-#[cfg(feature = "ssmax_temperature")]
 #[test]
 fn lane_composes_with_ssmax() {
     use katgpt_core::ssmax::SsmaxMode;

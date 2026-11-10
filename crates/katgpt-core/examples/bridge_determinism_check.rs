@@ -12,9 +12,9 @@
 //! promotion decision needs the Phase-3 wiring too):
 //!
 //! ```sh
-//! cargo run --release -p katgpt-core --features bridge_certified \
+//! cargo run --release -p katgpt-core --features closure_instrument \
 //!   --example bridge_determinism_check                 # aarch64 (native)
-//! cargo run --release -p katgpt-core --features bridge_certified \
+//! cargo run --release -p katgpt-core --features closure_instrument \
 //!   --target x86_64-apple-darwin --example bridge_determinism_check  # Rosetta
 //! ```
 //!

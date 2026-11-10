@@ -46,7 +46,7 @@
 //! on a gated axis, the feature stays opt-in and the verdict is demoted —
 //! not silently revised.
 
-#![cfg(feature = "saddle_escape")]
+#![cfg(feature = "gain_cost_halt")]
 
 use katgpt_core::gain_cost_halt::{GainCostLoopHalter, HaltDecision};
 use katgpt_core::saddle_escape::{

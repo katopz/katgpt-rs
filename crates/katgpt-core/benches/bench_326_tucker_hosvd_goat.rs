@@ -26,10 +26,8 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features tucker_factorization --bench bench_326_tucker_hosvd_goat -- --nocapture
+//! cargo bench -p katgpt-core --bench bench_326_tucker_hosvd_goat -- --nocapture
 //! ```
-
-#![cfg(feature = "tucker_factorization")]
 
 use katgpt_core::linalg::{
     TuckerConfig, TuckerResultScratch, TuckerScratch, tucker_decompose_into,

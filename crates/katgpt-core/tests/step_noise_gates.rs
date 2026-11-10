@@ -331,7 +331,7 @@ fn t2_six_archetypes_classify_per_the_pre_registered_mapping() {
     assert_eq!(tail.regime, Regime::Thrash, "oscillation tail: {tail:?}");
     // (The co-fire half needs `saddle_escape`; with `step_noise` alone the
     // Thrash classification above is the load-bearing arm that still runs.)
-    #[cfg(feature = "saddle_escape")]
+    #[cfg(feature = "gain_cost_halt")]
     {
         let mut flip = katgpt_core::saddle_escape::FlipDetector::new(8);
         let mut last_rate = None;
@@ -429,7 +429,7 @@ fn t3a_synthetic_step_flip_moves_learning_thrash_learning() {
 
 /// The bandit arm needs `cgsp_dual_pool`; with only `step_noise` the rest
 /// of this target still runs 3 real tests (never a green zero).
-#[cfg(feature = "cgsp_dual_pool")]
+#[cfg(feature = "cgsp")]
 mod bandit_toggle {
     use super::{Lcg, unit_vec};
     use katgpt_core::ReachableDualPoolRouter;

@@ -243,7 +243,6 @@ pub fn blake3_noise_fill(seed: u64, sigma: f32, out: &mut [f32]) {
 /// `uniforms_scratch.len() >= out.len()`.
 ///
 /// [`LatticeQmc::new`]: crate::speculative::qmc::LatticeQmc::new
-#[cfg(feature = "qmc_sampling")]
 pub fn extrapolated_snapshot_schedule_qmc(
     s0: &[f32],
     s1: &[f32],
@@ -972,7 +971,6 @@ mod tests {
 
     // ── Plan 367 Fusion C: extrapolated_snapshot_schedule_qmc ─────────────
 
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn qmc_extrapolated_no_noise_linear_interpolation() {
         // noise_sigma=0 → pure linear extrapolation; QMC source not drawn.
@@ -1010,7 +1008,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn qmc_extrapolated_noise_within_bounds() {
         // With noise_sigma=0.1, coeff = lambda*(1+xi) where |xi| <= 0.1.
@@ -1038,7 +1035,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn qmc_extrapolated_deterministic_same_seed() {
         // Same QMC seed → bit-identical output (G4 quorum-reproducibility).
@@ -1075,7 +1071,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn qmc_extrapolated_different_seed_different_output() {
         // Different QMC seeds → different noise → different snapshots
@@ -1116,7 +1111,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn qmc_extrapolated_panics_on_short_scratch() {
         // uniforms_scratch.len() < k → panic.
@@ -1141,7 +1135,6 @@ mod tests {
         assert!(result.is_err(), "should panic on short scratch");
     }
 
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn qmc_extrapolated_lattice_low_discrepancy_vs_iid() {
         // The headline QMC advantage: with K=4 LatticeQmc points, the noise

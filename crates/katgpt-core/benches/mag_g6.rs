@@ -16,8 +16,6 @@
 //!   --features mag_mining --bench mag_g6 -- --nocapture
 //! ```
 
-#![cfg(feature = "mag_mining")]
-
 use katgpt_core::mag::{
     DataSet, TransferMetric, mine_contrast_direction, mine_direction, rank_candidates,
     reconstruction_error,

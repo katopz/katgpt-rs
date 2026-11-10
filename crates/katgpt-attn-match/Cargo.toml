@@ -53,7 +53,7 @@ maxsim = ["dep:katgpt-core"]
 # — per-token-pair cosine aggregation via `smooth_min_similarity` instead of plain
 # mean. Requires `maxsim` (for the rerank module) + `katgpt-core/smooth_min_similarity`.
 # The first real consumer of the smooth-min primitive.
-smooth_min_rerank = ["maxsim", "katgpt-core/smooth_min_similarity"]
+smooth_min_rerank = ["maxsim", "dep:katgpt-core"]
 
 # RoVE-aware value-side compaction (Plan 557 Phase 4). When active, the
 # chunked compactor un-rotates RoVE-rotated values before compaction and
@@ -61,7 +61,7 @@ smooth_min_rerank = ["maxsim", "katgpt-core/smooth_min_similarity"]
 # Uses katgpt-core's RoVE primitives directly (f32, no f16 round-trip) so it
 # composes independently with `still_kv` (keys) + `rotary_value_embedding`
 # (values). Requires `maxsim` or any feature that already pulls katgpt-core.
-rotary_value_embedding = ["dep:katgpt-core", "katgpt-core/rotary_value_embedding"]
+rotary_value_embedding = ["dep:katgpt-core"]
 
 # Opt-in reassociated dot (Issue 871 T4, Bench 871, owner verdict ADOPT
 # 2026-09-22): 1.77-8.8x vs strict on x86_64-pc-windows-msvc (rustc 1.98.1,

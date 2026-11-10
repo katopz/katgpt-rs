@@ -17,7 +17,7 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features phase_separation \
+//! cargo bench -p katgpt-core \
 //!     --bench bench_571_phase_separation_goat -- --nocapture
 //! ```
 //!
@@ -28,8 +28,6 @@
 //!     --features phase_separation --bench bench_571_phase_separation_goat
 //! /tmp/katgpt-plan-571/release/bench_571_phase_separation_goat-* --nocapture
 //! ```
-
-#![cfg(feature = "phase_separation")]
 
 use katgpt_core::phase_separation::{from_speeds_and_tick, phase_separation_sorted};
 use std::hint::black_box;
@@ -265,12 +263,10 @@ fn main() {
     if all_pass {
         println!("  ── G2/G4 ALL PASS ──");
         println!("  G1 (determinism + LRC bound) verified in lib tests:");
-        println!(
-            "    cargo test -p katgpt-core --features phase_separation --lib phase_separation"
-        );
+        println!("    cargo test -p katgpt-core --lib phase_separation");
         println!("  G3 (no-regression) verified externally:");
         println!("    cargo test -p katgpt-core --lib                          (feature off)");
-        println!("    cargo test -p katgpt-core --lib --features phase_separation (feature on)");
+        println!("    cargo test -p katgpt-core --lib (feature on)");
     } else {
         println!("  ── SOME GATES FAILED ──");
         std::process::exit(1);

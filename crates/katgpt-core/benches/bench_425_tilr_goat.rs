@@ -27,17 +27,15 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features tilr_invariant_subspace --bench bench_425_tilr_goat -- --nocapture
+//! cargo bench -p katgpt-core --bench bench_425_tilr_goat -- --nocapture
 //! ```
 //!
 //! Or (working around the dyld/trustd stall on macOS):
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features tilr_invariant_subspace --bench bench_425_tilr_goat --no-run
+//! cargo bench -p katgpt-core --bench bench_425_tilr_goat --no-run
 //! target/release/deps/bench_425_tilr_goat-<hash>
 //! ```
-
-#![cfg(feature = "tilr_invariant_subspace")]
 
 use katgpt_core::tilr::{TilrScratch, tilr_refine_into};
 use std::hint::black_box;

@@ -39,7 +39,7 @@
 //! shared box — quote the box state (load, power) beside any reuse (the
 //! AGENTS.md G2 box-state law).
 
-#![cfg(feature = "gmm_support")]
+#![cfg(feature = "factorized_action")]
 
 use katgpt_core::gmm_support::{
     CertifyConfig, LinearDiscriminatorGate, SupportGate, bound_acceptance, canary_fire_rate,

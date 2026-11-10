@@ -65,8 +65,6 @@
 //! (no parallelism, fixed iteration order). Two runs on the same input
 //! produce bit-identical Wout.
 
-#![cfg(feature = "karc_forecaster")]
-
 use katgpt_core::{
     ChebyshevBasis, chunked_gram_into, feature_expand_higher_order, higher_order_feature_count,
     linalg::ridge_solve_direct_f64,

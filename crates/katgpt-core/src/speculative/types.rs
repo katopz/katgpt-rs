@@ -352,7 +352,6 @@ pub struct DraftResult {
     pub marginals: Vec<Vec<f32>>,
     pub sampled_tokens: Vec<usize>,
     /// Raven slot routing overlap diagnostic (Plan 096)
-    #[cfg(feature = "domain_latent")]
     pub routing_overlap: Option<RoutingOverlapSnapshot>,
     /// Amdahl cost model snapshot (Plan 096)
     #[cfg(feature = "spec_cost_model")]
@@ -380,7 +379,6 @@ impl DraftResult {
         Self {
             marginals,
             sampled_tokens,
-            #[cfg(feature = "domain_latent")]
             routing_overlap: None,
             #[cfg(feature = "spec_cost_model")]
             cost_snapshot: None,
@@ -870,7 +868,6 @@ pub enum ScoreReduction {
     SoftmaxSum,
     /// MaxSim: max per query token, then sum over query tokens.
     /// `score = Σ_i max_j dot(q_i, d_j)` — ColBERT/PyLate late-interaction.
-    #[cfg(feature = "maxsim")]
     MaxSim,
 }
 
@@ -1186,7 +1183,6 @@ fn compute_entropy(probs: &[f32]) -> f32 {
 /// Trait is passive — zero behavior change unless consumers implement it.
 /// Both consumer impls pass GOAT: `ShardConflictDetector` (riir-neuron-db, 30ns),
 /// `HlaConflictDetector` (riir-games, 2ns), both < 50ns target.
-#[cfg(feature = "heal_validation")]
 pub trait HealConflictDetector: Send + Sync {
     /// Check if the healed state is semantically conflicted.
     ///
@@ -1205,7 +1201,6 @@ pub trait HealConflictDetector: Send + Sync {
 /// Diagnostic: Raven slot routing overlap across K+1 tokens.
 /// Analogous to Cohere's "expert overlap" metric.
 /// Only collected when `domain_latent` feature is active.
-#[cfg(feature = "domain_latent")]
 #[derive(Clone, Debug, Default)]
 pub struct RoutingOverlapSnapshot {
     /// Per-step overlap ratio: shared slots / top_k

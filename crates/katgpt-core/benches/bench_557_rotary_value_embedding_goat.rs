@@ -15,11 +15,9 @@
 //! # Run
 //!
 //! ```bash
-//! cargo run -p katgpt-core --features rotary_value_embedding \
+//! cargo run -p katgpt-core \
 //!   --bench bench_557_rotary_value_embedding_goat --release -- --nocapture
 //! ```
-
-#![cfg(feature = "rotary_value_embedding")]
 
 use katgpt_core::position_group_action::PositionGroupAction;
 use katgpt_core::rotary_value_embedding::{

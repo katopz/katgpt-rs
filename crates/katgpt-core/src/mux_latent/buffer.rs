@@ -82,7 +82,7 @@ impl LatentContextBuffer {
     }
 
     /// Create a buffer with adaptive SLoD compression.
-    #[cfg(feature = "lclm_adaptive_lod")]
+    #[cfg(feature = "mux_latent_context")]
     pub fn new_adaptive(tokens: &[u32], config: MuxLatentConfig, slod: SpectralLOD) -> Self {
         let _span_size = config.compression_ratio.span_size();
 
@@ -498,7 +498,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "lclm_adaptive_lod")]
+    #[cfg(feature = "mux_latent_context")]
     fn test_buffer_adaptive_compression() {
         let config = MuxLatentConfig {
             window_size: 8,
@@ -530,7 +530,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "lclm_adaptive_lod")]
+    #[cfg(feature = "mux_latent_context")]
     fn test_buffer_adaptive_default_window_size_zero_no_panic() {
         // Issue 723 Class E regression: `MuxLatentConfig::default()` carries
         // `window_size: 0`, and `new_adaptive` used to feed that straight

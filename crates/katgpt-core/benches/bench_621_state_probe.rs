@@ -6,11 +6,9 @@
 //! constant (the absent-work class — a deleted loop reports a fictional
 //! sub-ns time and a well-formed pass).
 //!
-//! Run: `cargo bench -p katgpt-core --features state_probe --bench
+//! Run: `cargo bench -p katgpt-core --bench
 //! bench_621_state_probe` (cargo bench is release by construction — the bar
 //! is a release-profile claim, never gated on `debug_assertions`).
-
-#![cfg(feature = "state_probe")]
 
 use katgpt_core::state_probe::{ProbeInput, miller_madow_entropy, probe};
 use std::hint::black_box;

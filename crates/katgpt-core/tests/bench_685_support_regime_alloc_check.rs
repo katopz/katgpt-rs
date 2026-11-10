@@ -7,7 +7,7 @@
 //! serial by construction. (The lib-test TrackingAllocator check for the
 //! module's own push loop lives in the module's unit tests.)
 
-#![cfg(feature = "support_regime")]
+#![cfg(feature = "functional_substitution_gate")]
 
 #[path = "common/mod.rs"]
 mod common;

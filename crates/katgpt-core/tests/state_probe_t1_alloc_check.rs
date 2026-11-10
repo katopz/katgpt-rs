@@ -3,8 +3,6 @@
 //! tests share the counting allocator — `bench_576_hint_regret_alloc_check.rs`
 //! pattern).
 
-#![cfg(feature = "state_probe")]
-
 use katgpt_core::state_probe::{ProbeInput, probe};
 
 #[path = "common/mod.rs"]

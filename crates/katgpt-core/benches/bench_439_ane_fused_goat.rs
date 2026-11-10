@@ -22,11 +22,9 @@
 //! # Run
 //!
 //! ```bash
-//! cargo run -p katgpt-core --features ane_fused_chain \
+//! cargo run -p katgpt-core \
 //!   --bench bench_439_ane_fused_goat --release -- --nocapture
 //! ```
-
-#![cfg(feature = "ane_fused_chain")]
 
 use katgpt_core::ane_roofline::{
     AneBound, AneDataDep, AneFusedCost, AneOpShape, AnePeaks, Dtype, ane_estimate,

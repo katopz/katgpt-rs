@@ -175,7 +175,7 @@ gaussianity_agreement = ["katgpt-core/gaussianity_probe"]
 # but the spectral concentration assumption (G1b) does NOT hold at NPC scale (≤64×64)
 # — verified via riir-train Issue 374 (trained LoRA deltas produce on_manifold_fraction
 # in [0.27, 0.58], far below the SAR threshold > 0.8). Stays cold-tier only.
-spectral_rewire = ["katgpt-core/subspace_phase_gate"]
+spectral_rewire = []
 
 # affinity_deflation (Issue 882 P4 rider (b) / Research 586, 2026-09-25):
 # rank-1 spectral deflation A′ = A − λ·σ₁·u₁·v₁ᵀ = A − λ(A v₁)v₁ᵀ on a

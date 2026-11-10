@@ -42,7 +42,7 @@
 //! ≥ full − ε) is riir-infer Issue 012, not claimed here.
 //!
 //! Run:
-//!   cargo test -p katgpt-core --release --features differential_kv_eviction \
+//!   cargo test -p katgpt-core --release --features usage_rate_eviction \
 //!     --test bench_894_differential_kv_eviction_goat -- --nocapture
 
 use std::alloc::{GlobalAlloc, Layout, System};

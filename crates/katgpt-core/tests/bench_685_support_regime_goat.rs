@@ -42,7 +42,7 @@
 //!   --features support_regime --release -- --nocapture
 //! ```
 
-#![cfg(feature = "support_regime")]
+#![cfg(feature = "functional_substitution_gate")]
 
 use katgpt_core::functional_substitution::support_instability::{
     DetectorState, SupportInstabilityDetector, THETA_CALM, THETA_FIRE, support_instability,
@@ -612,7 +612,7 @@ fn g2_support_regime_under_100ns_per_entity_tick() {
 // the global counter).
 // ──────────────────────────────────────────────────────────────────────────
 
-#[cfg(all(feature = "karc_forecaster", not(debug_assertions)))]
+#[cfg(not(debug_assertions))]
 mod cousin {
     use super::*;
     use katgpt_core::{FourierBasis, KarcForecaster};

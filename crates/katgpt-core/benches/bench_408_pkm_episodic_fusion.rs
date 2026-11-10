@@ -34,8 +34,6 @@
 //! CARGO_TARGET_DIR=/tmp/pkm_phase5 target/release/deps/bench_408_pkm_episodic_fusion-* --nocapture
 //! ```
 
-#![cfg(feature = "product_key_memory_episodic")]
-
 use katgpt_core::delta_mem::{DeltaMemoryConfig, DeltaMemoryState};
 use katgpt_core::product_key_memory::{PkmEpisodicStore, PkmScratch, ProductKeyMemory, ScoreFn};
 use std::hint::black_box;

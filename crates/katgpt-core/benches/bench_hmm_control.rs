@@ -33,7 +33,7 @@
 //!   --features hmm_homeostasis,mop_path_entropy --bench bench_hmm_control -- --nocapture
 //! ```
 
-#![cfg(all(feature = "hmm_homeostasis", feature = "mop_path_entropy"))]
+#![cfg(feature = "cgsp")]
 
 use katgpt_core::hmm_control::{HmmControlSolver, invariant_emission};
 use katgpt_core::mop::arenas::{RING_A, RING_N, ring_world_noisy, ring_world_terminal};

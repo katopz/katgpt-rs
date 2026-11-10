@@ -1,4 +1,3 @@
-#![cfg(feature = "velocity_field_ensemble")]
 //! Velocity-Field Ensemble zero-allocation test — GOAT gate G3 (Plan 376).
 //!
 //! `eval_into` and `eval_batch_into` must not allocate heap memory after the

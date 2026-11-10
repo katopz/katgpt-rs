@@ -20,10 +20,8 @@
 //! # Run
 //!
 //! ```bash
-//! cargo test -p katgpt-core --features renoise_ce --test bench_406_renoise_ce_goat -- --nocapture
+//! cargo test -p katgpt-core --test bench_406_renoise_ce_goat -- --nocapture
 //! ```
-
-#![cfg(feature = "renoise_ce")]
 
 use katgpt_core::{RenoiseCeConfig, RenoiseCeProbe, renoise_ce_score};
 use std::hint::black_box;

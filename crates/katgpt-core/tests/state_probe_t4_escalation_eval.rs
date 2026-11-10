@@ -5,10 +5,8 @@
 //! run (`--nocapture`); `.benchmarks/621_escalation_eval_goat.md` freezes
 //! the recorded read.
 //!
-//! Run: `cargo test -p katgpt-core --features escalation_probe_gate --test
+//! Run: `cargo test -p katgpt-core --test
 //! state_probe_t4_escalation_eval -- --nocapture`.
-
-#![cfg(feature = "escalation_probe_gate")]
 
 use katgpt_core::state_probe_eval::{
     ArmReport, C_ESC, PlantedClass, ProbeArmConfig, arm_incumbent, arm_never_escalate,

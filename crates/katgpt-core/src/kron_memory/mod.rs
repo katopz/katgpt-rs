@@ -58,9 +58,9 @@ pub use types::{
 
 use crate::simd::dot_f32_ordered;
 
-#[cfg(feature = "kron_chunk_wy")]
+#[cfg(feature = "kron_memory")]
 mod chunk_wy;
-#[cfg(feature = "kron_chunk_wy")]
+#[cfg(feature = "kron_memory")]
 pub use chunk_wy::{ChunkItem, ChunkRefusal, write_chunk_wy};
 
 /// The pinned read reduction order (Issue 940 determinism law): per-row
@@ -565,7 +565,7 @@ impl<const DK: usize, const DV: usize, const N: usize> KronCell<DK, DV, N> {
     /// Mutable state rows — the chunk kernel's fused-application walk
     /// (pub(crate): the chunk lane is the only external writer).
     #[inline]
-    #[cfg(feature = "kron_chunk_wy")]
+    #[cfg(feature = "kron_memory")]
     pub(crate) fn state_rows_mut(&mut self) -> &mut [[f32; DV]; DK] {
         &mut self.s
     }
@@ -581,7 +581,7 @@ impl<const DK: usize, const DV: usize, const N: usize> KronCell<DK, DV, N> {
     /// EMA, health moments, applied count. The composite chunk is NOT
     /// rank-1-invertible, so the undo record is cleared (undo_last returns
     /// false until the next single write) — the documented posture.
-    #[cfg(feature = "kron_chunk_wy")]
+    #[cfg(feature = "kron_memory")]
     pub(crate) fn note_chunk_applied(
         &mut self,
         k: &[f32; DK],

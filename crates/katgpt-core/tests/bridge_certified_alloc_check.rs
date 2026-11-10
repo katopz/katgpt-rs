@@ -1,4 +1,4 @@
-#![cfg(feature = "bridge_certified")]
+#![cfg(feature = "closure_instrument")]
 //! Plan 604 G4 — zero-allocation steady state for
 //! `certified_ptg_to_motif_embedding_into` (Proposal 005 Phase 1).
 //!
@@ -12,7 +12,7 @@
 //!
 //! Run with:
 //! ```sh
-//! cargo test -p katgpt-core --features bridge_certified \
+//! cargo test -p katgpt-core --features closure_instrument \
 //!   --test bridge_certified_alloc_check -- --nocapture
 //! ```
 

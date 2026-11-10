@@ -11,7 +11,6 @@
 //! - G4 — zero allocations in steady state (dense path)
 //! - G5 — sigmoid-not-softmax correctness (lonely query → identity output)
 
-#![cfg(feature = "set_attention")]
 #![allow(clippy::float_cmp)]
 
 use katgpt_core::set_attention::{

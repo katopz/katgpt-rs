@@ -1,7 +1,7 @@
 //! Plan 607 T1 — `state_option_scoring` GOAT gate (G1 floors + G2 latency +
 //! determinism digest).
 //!
-//! Gates (run: `cargo bench -p katgpt-core --features state_option_scoring
+//! Gates (run: `cargo bench -p katgpt-core --features distance_abstain
 //! --bench bench_876_state_option_scoring_goat` at `--release` — the profile
 //! AGENTS.md mandates for gates):
 //!
@@ -39,7 +39,7 @@
 //!
 //! Loud-zero defense: every timed loop's outputs feed `black_box` sinks so
 //! LTO cannot delete the work it timed (the timed-region rule).
-#![cfg(feature = "state_option_scoring")]
+#![cfg(feature = "distance_abstain")]
 
 use katgpt_core::state_option_scoring::CentroidTable;
 use std::hint::black_box;

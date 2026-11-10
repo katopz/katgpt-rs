@@ -14,8 +14,6 @@
 //!   once the caller's [`EdScratch`] exists. `EdScratch::new` is cold-path
 //!   construction and is explicitly outside the gate.
 
-#![cfg(feature = "effective_degree")]
-
 use katgpt_core::effective_degree::{
     EdConfig, EdScratch, ed_over_pairs, effective_degree_along_path,
     effective_degree_along_path_multi, randomized_cosine_nodes,

@@ -29,7 +29,7 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features kron_memory,kron_chunk_wy,conformal_predictive_intervals \
+//! cargo bench -p katgpt-core --features kron_memory \
 //!     --bench bench_951_kron_memory_goat -- --nocapture
 //! ```
 

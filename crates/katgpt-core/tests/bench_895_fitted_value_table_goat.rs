@@ -31,7 +31,7 @@
 //!   FLOP- or byte-shaped?). Storage dial + cache fraction printed.
 //!
 //! Run:
-//!   cargo test -p katgpt-core --release --features fitted_v_reconstruct \
+//!   cargo test -p katgpt-core --release \
 //!     --test bench_895_fitted_value_table_goat -- --nocapture
 
 use std::alloc::{GlobalAlloc, Layout, System};

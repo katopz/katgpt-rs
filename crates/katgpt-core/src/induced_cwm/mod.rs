@@ -81,16 +81,16 @@ pub mod hot_swap;
 pub mod kernel;
 pub mod unit_test;
 
-#[cfg(feature = "induced_cwm_ismcts")]
+#[cfg(feature = "induced_cwm")]
 pub mod ismcts;
 
-#[cfg(feature = "induced_cwm_tournament")]
+#[cfg(feature = "induced_cwm")]
 pub mod tournament;
 
 #[cfg(test)]
 mod tests;
 
-#[cfg(all(test, feature = "induced_cwm_ismcts"))]
+#[cfg(all(test, feature = "induced_cwm"))]
 mod ismcts_tests;
 
 // ── Public API re-exports ─────────────────────────────────────────────────
@@ -114,7 +114,7 @@ pub use unit_test::{
 // Gated by `induced_cwm_ismcts` so callers can write
 // `katgpt_core::induced_cwm::ismcts_search_with_inference` instead of
 // `katgpt_core::induced_cwm::ismcts::ismcts_search_with_inference`.
-#[cfg(feature = "induced_cwm_ismcts")]
+#[cfg(feature = "induced_cwm")]
 pub use ismcts::{InformationSet, NodeStats, ismcts_search_with_inference};
 
 // ── Phase 3 (Tournament) re-exports ────────────────────────────────────────
@@ -122,5 +122,5 @@ pub use ismcts::{InformationSet, NodeStats, ismcts_search_with_inference};
 // Gated by `induced_cwm_tournament` so callers can write
 // `katgpt_core::induced_cwm::ValueFnTournament` instead of
 // `katgpt_core::induced_cwm::tournament::ValueFnTournament`.
-#[cfg(feature = "induced_cwm_tournament")]
+#[cfg(feature = "induced_cwm")]
 pub use tournament::{PlayerStats, TournamentWinner, ValueFnTournament};

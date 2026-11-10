@@ -30,10 +30,8 @@
 //! # Run
 //!
 //! ```bash
-//! cargo run --release -p katgpt-core --bench bench_596_slice_tca_goat --features slice_tca -- --nocapture
+//! cargo run --release -p katgpt-core --bench bench_596_slice_tca_goat -- --nocapture
 //! ```
-
-#![cfg(feature = "slice_tca")]
 
 use katgpt_core::slice_tca::{
     ENERGY_FLOOR_TAU, SliceClass, SliceDecomposition, SliceTcaConfig, SliceTcaScratch, Tensor3,

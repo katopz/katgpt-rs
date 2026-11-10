@@ -14,11 +14,9 @@
 //! # Run
 //!
 //! ```bash
-//! cargo run -p katgpt-core --features grapem_rodrigues \
+//! cargo run -p katgpt-core \
 //!   --bench bench_457_grapem_rodrigues_goat --release -- --nocapture
 //! ```
-
-#![cfg(feature = "grapem_rodrigues")]
 
 use katgpt_core::grapem::{Rank2Plane, grapem_apply_into};
 use std::hint::black_box;

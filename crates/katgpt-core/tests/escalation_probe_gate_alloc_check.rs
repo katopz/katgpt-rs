@@ -4,8 +4,6 @@
 //! single-fn binary (the bench-655 convention: parallel tests share the
 //! global counting allocator).
 
-#![cfg(feature = "escalation_probe_gate")]
-
 #[path = "common/mod.rs"]
 mod common;
 counting_allocator!();

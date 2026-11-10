@@ -19,7 +19,7 @@
 //!   --features saddle_escape --bench saddle_escape_bench -- --nocapture
 //! ```
 
-#![cfg(feature = "saddle_escape")]
+#![cfg(feature = "gain_cost_halt")]
 
 use katgpt_core::gain_cost_halt::GainCostLoopHalter;
 use katgpt_core::saddle_escape::{

@@ -24,7 +24,7 @@
 //!
 //! Run with: `cargo run --example qgf_03_tier_routing --features qgf_drafter --release`
 
-#![cfg(feature = "qgf_drafter")]
+#![cfg(feature = "qgf")]
 
 use katgpt_core::qgf::{QgfComputeRoute, route_for};
 use katgpt_core::traits::{NoGuidanceOracle, QGradientOracle};

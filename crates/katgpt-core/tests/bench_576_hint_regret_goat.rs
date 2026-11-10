@@ -21,8 +21,6 @@
 //! Determinism: SplitMix64, fixed seeds, no wall-clock inputs to any
 //! verdict (timing reports only).
 
-#![cfg(feature = "hint_regret")]
-
 use katgpt_core::hint_regret::{
     HintRegretEstimator, Regime, ReturnBounds, hoeffding_half_width, hoeffding_k,
     learnable_band_gate, triage,

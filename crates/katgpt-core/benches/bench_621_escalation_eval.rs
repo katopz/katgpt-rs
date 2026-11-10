@@ -15,10 +15,8 @@
 //! defence); the bar is a release-profile claim (`cargo bench` is release
 //! by construction).
 //!
-//! Run: `cargo bench -p katgpt-core --features escalation_probe_gate --bench
+//! Run: `cargo bench -p katgpt-core --bench
 //! bench_621_escalation_eval`.
-
-#![cfg(feature = "escalation_probe_gate")]
 
 use katgpt_core::state_probe_eval::{
     C_ESC, PROBE_BUDGET_FRACTION, PROBE_EVAL_COST_UNITS, ProbeArmConfig, arm_probe_gated,

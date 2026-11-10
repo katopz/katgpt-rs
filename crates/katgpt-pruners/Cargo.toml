@@ -12,7 +12,7 @@ publish = false  # dev/examples aggregator; only katgpt-core ships to crates.io
 
 [dependencies]
 # ScreeningPruner / NoScreeningPruner / ConstraintPruner traits (Plan 107 Phase 0).
-katgpt-core = { path = "../katgpt-core", features = ["rating"] }
+katgpt-core = { path = "../katgpt-core", features = [] }
 # Config, Rng, LoraAdapter, matmul, rmsnorm, kv_dim, etc.
 katgpt-types = { path = "../katgpt-types" }
 # TransformerWeights, DecodeStage, ForwardContext (for non-bomber pruners that
@@ -269,7 +269,7 @@ three_mode_router = ["and_or_dtree", "bandit"]
 and_or_dtree = ["proof_sketch_evolution", "bandit", "katgpt-core/and_or_dtree"]
 partial_scoring = ["bandit", "katgpt-core/partial_scoring"]
 problem_mutator = ["bandit", "katgpt-core/problem_mutator"]
-idea_divergence = ["bandit", "partial_scoring", "katgpt-core/idea_divergence"]
+idea_divergence = ["bandit", "partial_scoring", "katgpt-core/partial_scoring"]
 speculative_generator = ["katgpt-core/speculative_generator"]
 fol_constraints = []
 rule_extraction = []
@@ -339,7 +339,7 @@ advantage_freeze_thaw = []
 domino_correction = []
 
 # Substrate
-substrate_gate = ["katgpt-core/sparse_mlp", "cna_steering"]
+substrate_gate = ["cna_steering"]
 belief_drafter = ["katgpt-core/belief_drafter", "papaya"]
 
 # TED-Lite / CoExplain
@@ -387,7 +387,7 @@ thicket_variance_probe = ["rv_gated_routing"]
 # `thicket_variance_probe.rs`), so a `&TvpSignal` can be passed directly to
 # `QGuidedDrafter::tilt_logits_adaptive_with_signal`. Forwards the QGF
 # adaptive feature into katgpt-core (which owns the trait + the math).
-qgf_adaptive = ["katgpt-core/qgf_adaptive"]
+qgf_adaptive = ["katgpt-core/qgf"]
 
 # Soft reject
 sigmoid_graded_reject = []
@@ -396,7 +396,7 @@ sigmoid_graded_reject = []
 four_regime_router_dep = []   # internal: re-exported under regime_transition
 
 # Coverage helpers / misc
-domain_latent = ["katgpt-core/domain_latent"]
+domain_latent = []
 
 # ── Internal-only / aliases ──
 
@@ -405,7 +405,7 @@ domain_latent = ["katgpt-core/domain_latent"]
 expression_pruner = ["symbolic_distill"]
 
 # Chain / KV / spectral feature forwards that pruners need.
-sparse_mlp = ["katgpt-core/sparse_mlp"]
+sparse_mlp = []
 
 # Mux latent context (re-exported via insight_explain).
 mux_latent_context = []

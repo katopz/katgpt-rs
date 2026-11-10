@@ -560,7 +560,6 @@ fn wasserstein1d<S: AsRef<[f32]>>(x: &[S], y: &[S], d: usize) -> f32 {
 /// state is allocation-free once capacity covers the larger slice.
 /// Bit-identical to `wasserstein1d` on `&[[f32; 1]]` views of the same data
 /// (pinned by `scalar_into_matches_multidim_substrate_bit_exactly` below).
-#[cfg(feature = "numeric_stability")]
 pub(crate) fn wasserstein1d_scalar_into(
     x: &[f32],
     y: &[f32],
@@ -640,7 +639,7 @@ mod tests {
     // wrapper used by `numeric_stability` must stay bit-identical to the
     // multi-dim metric on the same data. Compiled only when the consumer
     // feature is on (the wrapper is feature-gated to stay dead-code-free).
-    #[cfg(all(test, feature = "numeric_stability"))]
+    #[cfg(test)]
     #[test]
     fn scalar_into_matches_multidim_substrate_bit_exactly() {
         let mut s = 0x1234_5678_9ABC_DEF0u64;

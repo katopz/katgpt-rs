@@ -613,7 +613,6 @@ pub fn pre_rotate_basis_weights_into(
 ///
 /// Private helper shared by the structured-basis constructors. Not on the
 /// forward hot path (init-time only).
-#[cfg(feature = "funcattn_structured_basis")]
 fn gram_schmidt_rows(w: &mut [f32], k: usize, d: usize) {
     for i in 0..k {
         // Subtract projections onto all previous (already-orthonormal) rows.
@@ -660,7 +659,6 @@ fn gram_schmidt_rows(w: &mut [f32], k: usize, d: usize) {
 /// Debug-build panics on `k == 0` or `d == 0`. For `k > d` the resulting rows
 /// cannot all be orthonormal (rank-deficient); Gram-Schmidt still produces a
 /// valid row-orthogonal matrix but later rows are numerically tiny.
-#[cfg(feature = "funcattn_structured_basis")]
 pub fn make_dct_log_basis(k: usize, d: usize) -> Vec<f32> {
     debug_assert!(k > 0, "k must be > 0");
     debug_assert!(d > 0, "d must be > 0");
@@ -746,7 +744,6 @@ pub fn make_dct_log_basis(k: usize, d: usize) -> Vec<f32> {
 /// # Panics
 ///
 /// Debug-build panics on `k == 0`, `d == 0`, or `d` not a power of two.
-#[cfg(feature = "funcattn_structured_basis")]
 pub fn make_haar_packet_basis(k: usize, d: usize) -> Vec<f32> {
     debug_assert!(k > 0, "k must be > 0");
     debug_assert!(d > 0, "d must be > 0");

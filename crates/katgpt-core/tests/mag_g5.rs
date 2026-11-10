@@ -10,8 +10,6 @@
 //! convenience APIs — they allocate per call for the result artifact. The G5
 //! gate tests the zero-alloc hot-path variants only.
 
-#![cfg(feature = "mag_mining")]
-
 use katgpt_core::mag::{DataSet, TransferMetric, mine_direction_into, transfer_score_into};
 use std::sync::atomic::Ordering;
 

@@ -787,7 +787,6 @@ fn topk_accumulate(
 /// # Panics (release-checked)
 ///
 /// Panics if `output.len() < n`, `directions.len() < m_exp * d`, or `m_exp == 0`.
-#[cfg(feature = "clr_weighted_set_attention")]
 pub fn clr_reliability_scores(
     states: &[f32],
     directions: &[f32],
@@ -863,7 +862,6 @@ pub fn clr_reliability_scores(
 ///
 /// Same scratch discipline as [`set_sigmoid_attention_into`] — zero heap
 /// allocations in steady state.
-#[cfg(feature = "clr_weighted_set_attention")]
 #[inline]
 pub fn clr_weighted_set_attention_into(
     states: &[f32],
@@ -1009,7 +1007,6 @@ pub fn clr_weighted_set_attention_into(
 /// The residual update is normalised by `R = Σ_j r_j` (the total reliability
 /// weight) so γ is invariant to the reliability scale:
 /// `h_i' = h_i + (γ/R) · Σ_j α_ij · r_j · (v_j − h_i)`.
-#[cfg(feature = "clr_weighted_set_attention")]
 #[inline]
 fn dense_accumulate_weighted(
     output: &mut [f32],
@@ -1130,7 +1127,6 @@ fn dense_accumulate_weighted(
 ///
 /// Normalises by `R_k = Σ_{j∈topk} r_j` (the total reliability weight of the
 /// selected peers) per query — matching the dense path's γ-invariance property.
-#[cfg(feature = "clr_weighted_set_attention")]
 #[inline]
 fn topk_accumulate_weighted(
     output: &mut [f32],
@@ -1682,7 +1678,6 @@ mod tests {
     ///
     /// IEEE 754 guarantees `x * 1.0 == x` for all finite x, so the extra multiply
     /// in the weighted path introduces zero rounding error when r_j = 1.0.
-    #[cfg(feature = "clr_weighted_set_attention")]
     #[test]
     fn g1_clr_weighted_uniform_reliability_is_bit_identical_to_plain() {
         let n = 16;
@@ -1763,7 +1758,6 @@ mod tests {
     }
 
     /// G1 (topk path): same bit-identical guarantee for the sparse top-k variant.
-    #[cfg(feature = "clr_weighted_set_attention")]
     #[test]
     fn g1_clr_weighted_uniform_reliability_topk_bit_identical() {
         let n = 16;
@@ -1834,7 +1828,6 @@ mod tests {
 
     /// G1 helper test: clr_reliability_scores with uniform-zero directions
     /// (all sigmoid = 0.5) gives mean 0.5, ^M = 0.5^M — a known value.
-    #[cfg(feature = "clr_weighted_set_attention")]
     #[test]
     fn clr_reliability_scores_known_values() {
         let n = 4;
@@ -1855,7 +1848,6 @@ mod tests {
 
     /// G4 (dense path): no allocation primitives in the weighted dense path by
     /// construction. The actual alloc-count perf gate lives in the bench file.
-    #[cfg(feature = "clr_weighted_set_attention")]
     #[test]
     fn g4_clr_weighted_dense_path_by_construction_no_alloc() {
         let n = 64;
@@ -1891,7 +1883,6 @@ mod tests {
     }
 
     /// Sanity: all-zero reliability → output = states (no-op).
-    #[cfg(feature = "clr_weighted_set_attention")]
     #[test]
     fn clr_weighted_zero_reliability_is_noop() {
         let n = 8;
@@ -1925,7 +1916,6 @@ mod tests {
     }
 
     /// Sanity: error when reliability.len() != n.
-    #[cfg(feature = "clr_weighted_set_attention")]
     #[test]
     fn clr_weighted_reliability_len_error() {
         let n = 8;
@@ -1970,7 +1960,6 @@ mod tests {
     ///
     /// This test runs WITHOUT the CountingAllocator (which creates a false ~3.5×
     /// ratio in the bench binary due to thread_local cache interference).
-    #[cfg(feature = "clr_weighted_set_attention")]
     #[test]
     fn g2_clr_weighted_latency_ratio() {
         use std::hint::black_box;

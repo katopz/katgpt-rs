@@ -43,7 +43,6 @@
 //!   specialized 1D-periodic case where DEC `exterior_derivative` is
 //!   overkill. DEFAULT-ON (Plan 323, 2026-06-25): G1–G4 ALL PASS.
 
-#[cfg(feature = "fourier_continuation")]
 pub mod continuation;
 
 #[cfg(feature = "spectral_differentiation")]

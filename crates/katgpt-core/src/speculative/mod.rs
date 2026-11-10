@@ -46,7 +46,6 @@ pub mod types;
 // QMC uniform sources (Plan 367, Research 367 — QuasiMoTTo). Opt-in behind
 // `qmc_sampling`. Produces correlated-but-marginally-exact k-point batches that
 // are a drop-in for i.i.d. `rng.uniform()` in K-rollout paths.
-#[cfg(feature = "qmc_sampling")]
 pub mod qmc;
 
 // Plan 367 Fusion E — QmcHalter: sample-efficiency-aware halting for QMC
@@ -54,7 +53,6 @@ pub mod qmc;
 // The sample-efficiency-aware analog of `GainCostLoopHalter` (Plan 304) —
 // decides whether to draw more QMC rollouts based on the union-bound ceiling
 // `min(1, k·p)` vs the empirical coverage from the actual point set.
-#[cfg(feature = "qmc_sampling")]
 pub mod qmc_halter;
 
 // Re-export the substrate API at `katgpt_core::speculative::*` for ergonomic
@@ -74,11 +72,9 @@ pub use sampling::{
 // Gated on `qmc_sampling` for feature isolation (G6). Drop-in per-step
 // descend operator that turns any `qmc::QmcSource` into a token-sequence
 // sampler; bit-identical to `sample_from_distribution` on fresh i.i.d. draws.
-#[cfg(feature = "qmc_sampling")]
 pub use sampling::sample_from_distribution_qmc;
 // Plan 367 Phase 3 — K-rollout QMC sampler (draws K correlated-but-
 // marginally-exact sequences from a per-position distribution array).
-#[cfg(feature = "qmc_sampling")]
 pub use sampling::sample_k_from_distribution_qmc;
 
 // Plan 367 Phase 4 — QMC → Gaussian noise query fill (Fusion A: QmcBoMSampler).
@@ -88,7 +84,6 @@ pub use sampling::sample_k_from_distribution_qmc;
 //
 // Plan 370 — `fill_noise_queries_gaussian_qmc_by_method` is the QmcMethod-tag
 // convenience entry point used by MultiHypothesisBoMMinimaxPlanner.
-#[cfg(feature = "qmc_sampling")]
 pub use qmc::{
     BootstrapEstimate, QmcSource, contiguous_block_bootstrap_pass_at_m,
     dyadic_bootstrap_pass_at_m_lattice, fill_noise_queries_gaussian_qmc,
@@ -97,9 +92,8 @@ pub use qmc::{
 
 // Plan 367 Fusion E — QmcHalter re-exports. Sample-efficiency-aware halting
 // for QMC rollout budgets (R367 §2.3 Fusion E + R205 §1 union bound).
-#[cfg(all(feature = "qmc_sampling", feature = "bom_sampling"))]
+#[cfg(feature = "bom_sampling")]
 pub use qmc::{fill_noise_queries_gaussian_qmc_by_method, sample_k_states_qmc};
-#[cfg(feature = "qmc_sampling")]
 pub use qmc_halter::{
     QmcHaltDecision, QmcHaltReason, QmcHalter, count_hits_1d, iid_at_least_one, union_bound_ceiling,
 };

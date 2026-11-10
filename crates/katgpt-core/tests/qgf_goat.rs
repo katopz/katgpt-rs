@@ -32,10 +32,10 @@
 //! # Run
 //!
 //! ```bash
-//! cargo test -p katgpt-core --features "qgf,qgf_drafter,qgf_adaptive" --test qgf_goat
+//! cargo test -p katgpt-core --features "qgf" --test qgf_goat
 //! ```
 
-#![cfg(all(feature = "qgf_drafter", feature = "qgf_adaptive"))]
+#![cfg(feature = "qgf")]
 
 use katgpt_core::qgf::QGuidedDrafter;
 use katgpt_core::qgf::adaptive::adaptive_guidance_weight;

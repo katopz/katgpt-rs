@@ -22,7 +22,7 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features "indicator_probe_bank indicator_similarity indicator_cascade" --bench bench_320_indicator_probe_bank_goat -- --nocapture
+//! cargo bench -p katgpt-core --bench bench_320_indicator_probe_bank_goat -- --nocapture
 //! ```
 //!
 //! If the dyld/trustd stall hits, run the compiled binary directly:
@@ -30,8 +30,6 @@
 //! ```bash
 //! DYLD_PRINT_STATISTICS=1 target/release/bench_320_indicator_probe_bank_goat-* --nocapture
 //! ```
-
-#![cfg(feature = "indicator_probe_bank")]
 
 use katgpt_core::pruners::indicator_cascade::{IndicatorCascade, IndicatorVerifier};
 use katgpt_core::pruners::indicator_probe_bank::{

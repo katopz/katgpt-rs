@@ -56,7 +56,6 @@
 //!
 //! Run with `--nocapture` to see the summary table; `TB_TRACE=1` traces
 //! seed-wise actions (stderr).
-#![cfg(feature = "bmr")]
 
 use katgpt_core::bmr::{
     self, Counts, EfeScratch, FactorLayout, ModelSpace, enumerate_isomorphic_rules,

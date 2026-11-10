@@ -24,7 +24,7 @@
 //! Requires `basis_split` (Phase 1 primitive) + `subspace_phase_gate`
 //! (the TILR comparison row + thin_svd for the principal angles).
 
-#![cfg(all(feature = "basis_split", feature = "subspace_phase_gate"))]
+#![cfg(feature = "basis_split")]
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use katgpt_core::basis_split::{

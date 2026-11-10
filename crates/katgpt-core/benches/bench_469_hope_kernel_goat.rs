@@ -29,7 +29,7 @@
 //! katgpt-core dev-dep on wasm32; this mirrors the bench_370 / bench_377
 //! convention).
 //! - **G3 (no-regression)** — verified externally via the lib test suite
-//!   (`cargo test -p katgpt-core --features hope_capacity --lib` → 1796 green)
+//!   (`cargo test -p katgpt-core --lib` → 1796 green)
 //!   + `cargo check --all-features`. This bench prints the gate as informational.
 //! - **G4 (alloc-free)** — `CountingAllocator` audit over 100 steady-state
 //!   calls per hot-path kernel (after a warmup pass). Target: 0 allocations
@@ -53,8 +53,6 @@
 //!     --features hope_capacity --bench bench_469_hope_kernel_goat
 //! /tmp/hope_goat/release/bench_469_hope_kernel_goat-* --nocapture
 //! ```
-
-#![cfg(feature = "hope_capacity")]
 
 use katgpt_core::hope::{
     Rank1Operator, hope_block_eviction_cost, hope_capacity, hope_greedy_select, hope_merge_cost,

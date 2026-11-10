@@ -65,7 +65,6 @@ use crate::simd::{simd_dot_f32, simd_fused_scale_acc};
 // core primitive (tilr_refine_into) stays zero-`crate::`-dep. In the default
 // build, `subspace_phase_gate` is transitively enabled via `tucker_factorization`
 // / `viable_manifold_graph` (both default-on).
-#[cfg(feature = "subspace_phase_gate")]
 use crate::subspace_phase_gate::{SvdResultScratch, SvdScratch, thin_svd_into};
 
 // ── Errors ──────────────────────────────────────────────────────────────────
@@ -517,7 +516,6 @@ fn sqrt_dot(a: &[f32], b: &[f32]) -> f32 {
 /// assert_eq!(r, 1);
 /// assert_eq!(basis.len(), 4); // 1 vector × d=4
 /// ```
-#[cfg(feature = "subspace_phase_gate")]
 pub fn discover_invariant_subspace(
     differences: &[&[f32]],
     tau: f32,
@@ -1173,7 +1171,6 @@ mod tests {
 
     // ── Phase 3: discover_invariant_subspace ──────────────────────────────
 
-    #[cfg(feature = "subspace_phase_gate")]
     #[test]
     fn t3_2_recovers_known_2d_subspace() {
         // Two non-axis-aligned orthonormal vectors in ℝ⁶.
@@ -1227,14 +1224,12 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "subspace_phase_gate")]
     #[test]
     fn discover_rejects_empty_differences() {
         let err = discover_invariant_subspace(&[], 0.9).unwrap_err();
         assert_eq!(err, TilrError::DimensionMismatch);
     }
 
-    #[cfg(feature = "subspace_phase_gate")]
     #[test]
     fn discover_rejects_invalid_tau() {
         let diffs: Vec<&[f32]> = vec![&[1.0, 0.0]];
@@ -1252,7 +1247,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "subspace_phase_gate")]
     #[test]
     fn discover_rejects_mismatched_lengths() {
         let diffs: Vec<&[f32]> = vec![&[1.0, 0.0], &[1.0, 0.0, 0.0]];
@@ -1262,7 +1256,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "subspace_phase_gate")]
     #[test]
     fn discover_rejects_zero_variance() {
         let diffs: Vec<&[f32]> = vec![&[0.0, 0.0, 0.0], &[0.0, 0.0, 0.0]];
@@ -1272,7 +1265,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "subspace_phase_gate")]
     #[test]
     fn discover_rank1_collinear_differences() {
         let diffs: Vec<&[f32]> = vec![&[2.0, 0.0, 0.0], &[3.0, 0.0, 0.0], &[-1.0, 0.0, 0.0]];
@@ -1284,7 +1276,6 @@ mod tests {
         assert!(v[0].abs() > 0.99, "basis not aligned with e_0: {v:?}");
     }
 
-    #[cfg(feature = "subspace_phase_gate")]
     #[test]
     fn discover_tau_controls_rank() {
         // δ1 = (10, 0, 0), δ2 = (0, 1, 0) → σ₁²=100, σ₂²=1, total=101.
@@ -1297,7 +1288,6 @@ mod tests {
         assert_eq!(r2, 2, "tau=0.999 should give r=2");
     }
 
-    #[cfg(feature = "subspace_phase_gate")]
     #[test]
     fn discover_then_refine_round_trip() {
         // Discover a subspace, then use it with tilr_refine_into.

@@ -16,7 +16,6 @@ use crate::types::Rng;
 // Plan 367 Phase 3 — QMC K-rollout sampler needs the QmcSource trait.
 // Gated on `qmc_sampling` for feature isolation (G6). No circular dep:
 // `qmc.rs` imports only `crate::types::Rng`, never anything from `sampling`.
-#[cfg(feature = "qmc_sampling")]
 use super::qmc::QmcSource;
 
 // Uses strict `r < cdf` (not `<=`) so zero-probability leading bins are never selected.
@@ -92,7 +91,6 @@ pub fn sample_from_distribution(probs: &[f32], rng: &mut Rng) -> usize {
 /// rescales to `0.0` again (deterministic walk). Unlike
 /// [`sample_from_distribution`], there is no redraw — the caller provided
 /// the coordinate and owns its distribution.
-#[cfg(feature = "qmc_sampling")]
 #[inline]
 pub fn sample_from_distribution_qmc(probs: &[f32], u: &mut f32) -> usize {
     // Largest f32 < 1.0 (0x3F7FFFFF = 1.0 − 2^−24 ≈ 0.99999994). Upper bound
@@ -144,7 +142,6 @@ pub fn sample_from_distribution_qmc(probs: &[f32], u: &mut f32) -> usize {
 /// # Panics
 ///
 /// Panics if `uniforms_scratch.len() < k` or `out.len() < k`.
-#[cfg(feature = "qmc_sampling")]
 pub fn sample_k_from_distribution_qmc(
     probs: &[&[f32]],
     source: &mut dyn QmcSource,
@@ -338,7 +335,6 @@ mod tests {
     /// T2.2 — G3 no-regression floor. For any `u ∈ (0, 1)`, the QMC descend
     /// returns the same token as `sample_from_distribution`'s CDF walk. The
     /// rescale write-back does not affect token selection.
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn test_qmc_descend_matches_iid_cdf_walk() {
         let probs = [0.1f32, 0.2, 0.5, 0.2];
@@ -371,7 +367,6 @@ mod tests {
     /// T2.3 — marginal exactness. Sweep `u` uniformly over `[0,1)` (fresh draw
     /// per call, no carry). The empirical token frequency must match `probs` —
     /// arithmetic coding maps a uniform to the target marginal.
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn test_qmc_descend_marginal_exactness() {
         let probs = [0.1f32, 0.25, 0.15, 0.5];
@@ -404,7 +399,6 @@ mod tests {
     /// rounding can flip the cell assignment at exact partition boundaries
     /// (the descend's strict `u < cdf` vs the reference's `u >= cell_lo` make
     /// different choices at the boundary). Interior points avoid this.
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn test_qmc_descend_carry_associativity() {
         let p = [0.3f32, 0.7]; // 2 bins
@@ -448,7 +442,6 @@ mod tests {
 
     /// The carried coordinate after any descend must stay in `[0, 1)` — the
     /// arithmetic-coding invariant that keeps the next descend valid.
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn test_qmc_descend_carried_coordinate_in_unit_interval() {
         let probs = [0.1f32, 0.2, 0.3, 0.4];
@@ -463,7 +456,6 @@ mod tests {
 
     /// `u == 0.0` selects the first bin with nonzero mass and rescales to
     /// `0.0` again (deterministic walk). Measure-zero edge case.
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn test_qmc_descend_zero_u_selects_first_nonzero_bin() {
         let probs = [0.0f32, 0.0, 1.0, 0.0];
@@ -475,7 +467,6 @@ mod tests {
 
     /// Empty distribution: consistent with `sample_from_distribution`
     /// (returns 0 via `saturating_sub`). Carried `u` is unmodified.
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn test_qmc_descend_empty_probs_returns_zero() {
         let probs: [f32; 0] = [];
@@ -486,11 +477,9 @@ mod tests {
     }
 
     // ── Plan 367 Phase 3: K-rollout QMC sampler ───────────────────────────
-    #[cfg(feature = "qmc_sampling")]
     use crate::speculative::qmc::LatticeQmc;
 
     /// T3.1 basic — K rollouts, each of length T, tokens in valid range.
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn test_sample_k_basic() {
         let p0 = [0.1f32, 0.2, 0.3, 0.4];
@@ -515,7 +504,6 @@ mod tests {
     }
 
     /// T3.1 determinism — same source state → same output.
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn test_sample_k_deterministic() {
         let p0 = [0.3f32, 0.7];
@@ -542,7 +530,6 @@ mod tests {
     /// The arithmetic-coding descend preserves marginal exactness at every
     /// position (linearity of expectation), so K=10000 lattice points should
     /// reproduce the target distribution at each position.
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn test_sample_k_marginal_exactness() {
         let p0 = [0.1f32, 0.2, 0.3, 0.4];
@@ -583,7 +570,6 @@ mod tests {
     }
 
     /// T3.1 K=0 — no-op.
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn test_sample_k_zero_is_noop() {
         let probs: &[&[f32]] = &[&[0.5f32, 0.5]];
@@ -595,7 +581,6 @@ mod tests {
     }
 
     /// T3.1 K=1 — single rollout.
-    #[cfg(feature = "qmc_sampling")]
     #[test]
     fn test_sample_k_single_rollout() {
         let probs: &[&[f32]] = &[&[1.0f32]];

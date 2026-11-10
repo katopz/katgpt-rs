@@ -102,9 +102,9 @@ pub mod iou;
 // + mode-factored state accessors (SupportMask / magnitudes). Opt-in behind
 // `support_regime` (which implies this crate's own feature gate — the
 // module lives beside `iou`).
-#[cfg(feature = "support_regime")]
+#[cfg(feature = "functional_substitution_gate")]
 pub mod support_instability;
-#[cfg(feature = "support_regime")]
+#[cfg(feature = "functional_substitution_gate")]
 pub use support_instability::{
     SupportInstabilityDetector, SupportMask, magnitudes, support_instability,
 };

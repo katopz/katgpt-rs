@@ -31,8 +31,6 @@
 //!   --features non_interference_branches --nocapture
 //! ```
 
-#![cfg(feature = "non_interference_branches")]
-
 use katgpt_core::branching::{BranchBank, BranchRouter, DEFAULT_TAU_SNAP};
 use std::hint::black_box;
 use std::time::Instant;

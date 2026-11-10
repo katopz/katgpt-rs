@@ -20,7 +20,7 @@
 //! cargo run --release --features qmc_sampling,bom_sampling --bench bench_367_qmc_bom_overhead
 //! ```
 
-#![cfg(all(feature = "qmc_sampling", feature = "bom_sampling"))]
+#![cfg(feature = "bom_sampling")]
 
 use std::hint::black_box;
 use std::time::Instant;

@@ -4,8 +4,6 @@
 //! `bench_655/656/676` convention): parallel tests share the global counter,
 //! so all checks live in ONE test function, serial by construction.
 
-#![cfg(feature = "kinematic_rollout")]
-
 use katgpt_core::kinematics::fixture::{self, RangeLabel};
 use katgpt_core::kinematics::perception::{
     Eps, RegimeClassifier, RegimeConfig, RegimeSnapshot, ResidualConfig, ResidualMonitor,

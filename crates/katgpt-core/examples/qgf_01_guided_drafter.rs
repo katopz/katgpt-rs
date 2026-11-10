@@ -29,7 +29,7 @@
 //!
 //! Run with: `cargo run --example qgf_01_guided_drafter --features qgf_drafter --release`
 
-#![cfg(feature = "qgf_drafter")]
+#![cfg(feature = "qgf")]
 
 use katgpt_core::qgf::QGuidedDrafter;
 use katgpt_core::traits::{QGradientOracle, SpeculativeGenerator};

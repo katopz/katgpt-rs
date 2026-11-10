@@ -19,8 +19,6 @@
 //! /tmp/vfe_376/release/deps/bench_376_velocity_field_ensemble_goat-* --nocapture
 //! ```
 
-#![cfg(feature = "velocity_field_ensemble")]
-
 use katgpt_core::velocity_field_ensemble::{
     ClosureField, EnsembleFitScratch, VelocityFieldEnsemble,
 };

@@ -11,7 +11,7 @@
 //!
 //! All benchmarks behind the `rtdc_subtree_inclusion` feature gate.
 
-#![cfg(feature = "rtdc_subtree_inclusion")]
+#![cfg(feature = "rtdc")]
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use katgpt_core::merkle::{HASH_SIZE, MERKLE_OCTREE_LEAVES, MerkleOctree};

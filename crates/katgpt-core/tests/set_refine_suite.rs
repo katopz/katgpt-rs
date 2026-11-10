@@ -21,7 +21,6 @@
 //! Plus the d=256 smoke (the reflex EMBED_DIM — the wide kernel path this
 //! plan exists beside) and the 100-call stability arm.
 
-#![cfg(feature = "set_refine")]
 #![allow(clippy::float_cmp)]
 
 use katgpt_core::set_refine::{SetRefineConfig, SetRefineScratch, gate_weight, refine_state_into};

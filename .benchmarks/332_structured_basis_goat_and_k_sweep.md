@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-26
 **Plan:** [332_structured_basis_selection_for_funcattn.md](../.plans/332_structured_basis_selection_for_funcattn.md)
-**Feature:** `funcattn_structured_basis` (**DEFAULT-ON in katgpt-core** since Phase 4 follow-up, 2026-06-26; root katgpt-rs stays opt-in because it implies the root's `funcattn` feature which is Gain-tier until LLM-domain evidence)
+**Feature:** `funcattn_structured_basis` (**BAKED flagless in katgpt-core** since Plan 635, 2026-11-10 — default member since Phase 4 follow-up, 2026-06-26; root katgpt-rs stays opt-in because it implies the root's `funcattn` feature which is Gain-tier until LLM-domain evidence)
 **Verdict:** **PROMOTED TO DEFAULT in katgpt-core via per-basis GOAT gate.** The original strict-AND gate (G1 requires BOTH bases to pass on the SAME narrow probe signal) FAILED — the probe is a narrow-low-frequency cluster pathologically DCT-misaligned. The per-basis gate (`funcattn_structured_basis_per_basis_gate`) PASSES on the realistic broadband PDE-like signal: DCT-log beats random by +0.3409 cos (captures 200.6% of achievable), Haar-packet beats random by +0.1615 cos (captures 95.0%), both clearing G1 (>=+0.05) and G2 (>=50%) with hard asserts. Gain is modelless (deterministic fixed bases). Cross-checked against FUNCATTN paper Table 7 (arXiv:2605.31559 §5.7).
 
 ---

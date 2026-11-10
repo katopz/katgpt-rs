@@ -17,10 +17,8 @@
 //!   prints it): f64 IEEE sequential ops are profile-independent, so the
 //!   release bench and the debug suite must produce BYTE-identical tables.
 //!
-//! Run: `cargo bench -p katgpt-core --features escalation_probe_gate --bench
+//! Run: `cargo bench -p katgpt-core --bench
 //! bench_621b_healer_lane_eval` (cargo bench is release by construction).
-
-#![cfg(feature = "escalation_probe_gate")]
 
 #[path = "../tests/common/plan621_healer_sim.rs"]
 mod sim;

@@ -36,8 +36,6 @@
 //! CARGO_TARGET_DIR=/tmp/lbr_goat target/release/deps/bench_377_local_branch_routing_goat-* --nocapture
 //! ```
 
-#![cfg(feature = "local_branch_routing")]
-
 use katgpt_core::branch_routing::{DotProductRouter, PostCandidateRouter};
 use std::hint::black_box;
 use std::time::Instant;

@@ -29,10 +29,8 @@
 //! # Run
 //!
 //! ```bash
-//! cargo run --release -p katgpt-core --features bmr --bench bench_597_bmr_efe_goat
+//! cargo run --release -p katgpt-core --bench bench_597_bmr_efe_goat
 //! ```
-
-#![cfg(feature = "bmr")]
 
 use katgpt_core::bmr::{
     self, Counts, EfeScratch, FactorLayout, ModelSpace, enumerate_isomorphic_rules,

@@ -61,8 +61,6 @@
 //! wrapper here). DEFAULT-ON 2026-10-10 — the Phase-2 riir-ai PoC (bench 978)
 //! confirmed the Type-A index (1.000) and the plan's promotion gate is met.
 
-#![cfg(feature = "event_state_windows")]
-
 use crate::simd::fast_sigmoid;
 
 /// The two-sided sigmoid product window (TWS Eq. 1 general interior-state

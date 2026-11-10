@@ -16,7 +16,7 @@
 //! Opt-in POC discipline (Issue 719): no live consumer, no GOAT promotion
 //! claim, no citation of the paper's drift figures — our numbers are ours.
 
-#![cfg(feature = "cond_audit")]
+#![cfg(feature = "stale_residual")]
 
 use katgpt_core::cond_audit::{AuditReport, CondAuditConfig, audit_conditioning, pinsker_tv_bound};
 

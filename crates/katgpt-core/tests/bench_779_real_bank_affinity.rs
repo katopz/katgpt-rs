@@ -26,7 +26,7 @@
 //!   --example future_probe_bank_capture            # writes bank779.bin/.json
 //! # 2. analyze (katgpt-rs, release — the per-layer SVD is heavy):
 //! BANK779_BIN=…/bank779.bin BANK779_JSON=…/bank779.json \
-//!   cargo test --release -p katgpt-core --features subspace_intervention \
+//!   cargo test --release -p katgpt-core \
 //!   --test bench_779_real_bank_affinity -- --ignored --nocapture
 //! ```
 //!
@@ -34,7 +34,6 @@
 //! printed) — the affinity VERDICT is a measurement, recorded in the bench
 //! doc, never hard-asserted (a flat curve is a legitimate outcome).
 
-#![cfg(feature = "subspace_intervention")]
 #![cfg(not(target_arch = "wasm32"))]
 
 use katgpt_core::subspace_intervention::{

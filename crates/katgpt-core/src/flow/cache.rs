@@ -10,7 +10,6 @@ use rustfft::{FftPlanner, num_complex::Complex};
 use super::{
     FlowField, FlowFieldConfig, LeoPotentialGrid, fft_smooth_into, inflate_obstacles_with_snapshot,
 };
-#[cfg(feature = "dual_leo")]
 use crate::traits::DualLeoMixer;
 use crate::traits::LeoHead;
 
@@ -200,7 +199,6 @@ impl FlowFieldCache {
     ///
     /// Returns `None` under the same conditions as `get_or_compute`, plus if the
     /// two heads return incompatible goal/action counts.
-    #[cfg(feature = "dual_leo")]
     #[allow(clippy::too_many_arguments)]
     pub fn get_or_compute_dual<H1, H2, M>(
         &mut self,
@@ -291,7 +289,6 @@ impl FlowFieldCache {
     /// teacher's.
     ///
     /// Returns `None` under the same conditions as `get_or_compute_dual`.
-    #[cfg(feature = "dual_leo")]
     #[allow(clippy::too_many_arguments)]
     pub fn get_or_compute_dual_postmax<H1, H2, M>(
         &mut self,
@@ -911,10 +908,8 @@ mod tests {
     // ──── Plan 459: DualLeoMixer fusion tests ────────────────────────────
 
     /// A trivial mixer that uses the default `combine_into` (Lc / LeoOnly / UvfaOnly / Max / Min).
-    #[cfg(feature = "dual_leo")]
     struct TestMixer(crate::traits::ActingMode);
 
-    #[cfg(feature = "dual_leo")]
     impl crate::traits::DualLeoMixer for TestMixer {
         fn acting_mode(&self) -> crate::traits::ActingMode {
             self.0
@@ -926,7 +921,6 @@ mod tests {
     /// `0.3·q_leo + 0.7·0.5`, which is a uniform shift that should not change
     /// the gradient direction (only its magnitude, which the FlowField normalises
     /// away). This makes the G1 baseline sanity check clean.
-    #[cfg(feature = "dual_leo")]
     struct ConstantHead {
         goals: usize,
         actions: usize,
@@ -935,7 +929,6 @@ mod tests {
         value: f32,
     }
 
-    #[cfg(feature = "dual_leo")]
     impl LeoHead for ConstantHead {
         fn all_goals_q(&self, _state: &[f32]) -> Vec<f32> {
             vec![
@@ -960,7 +953,6 @@ mod tests {
     /// G1 (correctness): `get_or_compute_dual` with `ActingMode::LeoOnly`
     /// produces bit-identical `FlowField` to `get_or_compute` with the same
     /// LEO head, same state, same goal.
-    #[cfg(feature = "dual_leo")]
     #[test]
     fn test_dual_leo_only_matches_single_head_bit_identical() {
         let mut cache_a = FlowFieldCache::new(test_config()).with_min_npcs(1);
@@ -996,7 +988,6 @@ mod tests {
 
     /// Sanity: `ActingMode::UvfaOnly` should produce the same field as calling
     /// `get_or_compute` directly with the UVFA head.
-    #[cfg(feature = "dual_leo")]
     #[test]
     fn test_dual_uvfa_only_matches_uvfa_head() {
         let mut cache_a = FlowFieldCache::new(test_config()).with_min_npcs(1);
@@ -1029,7 +1020,6 @@ mod tests {
     /// a valid (non-empty) FlowField. The constant-0.5 UVFA should shift the
     /// potential but the gradient direction (after FFT smoothing) should remain
     /// oriented the same way.
-    #[cfg(feature = "dual_leo")]
     #[test]
     fn test_dual_lc_mode_produces_valid_field() {
         let mut cache = FlowFieldCache::new(test_config()).with_min_npcs(1);
@@ -1065,7 +1055,6 @@ mod tests {
     /// Cache key caveat: same `goal_id` with different α should still return the
     /// **first** cached field. Callers must encode α into the goal_id. Documented
     /// behavior — we test it to make sure the contract holds.
-    #[cfg(feature = "dual_leo")]
     #[test]
     fn test_dual_cache_key_is_goal_id_only() {
         let mut cache = FlowFieldCache::new(test_config()).with_min_npcs(1);
@@ -1121,7 +1110,6 @@ mod tests {
     }
 
     /// Dual path respects npc_count gate (same as single path).
-    #[cfg(feature = "dual_leo")]
     #[test]
     fn test_dual_returns_none_below_min_npcs() {
         let mut cache = FlowFieldCache::new(test_config()).with_min_npcs(3);
@@ -1158,7 +1146,6 @@ mod tests {
     /// head, same state, same goal. The post-max blend at effective α=1.0 writes
     /// `grid_leo.potential` unchanged, so the downstream FFT + gradient pipeline
     /// sees the same input as the single-head path.
-    #[cfg(feature = "dual_leo")]
     #[test]
     fn test_dual_postmax_leo_only_matches_single_head_bit_identical() {
         let mut cache_a = FlowFieldCache::new(test_config()).with_min_npcs(1);
@@ -1209,7 +1196,6 @@ mod tests {
     /// Sanity: `ActingMode::UvfaOnly` on the post-max path should produce the
     /// same field as calling `get_or_compute` directly with the UVFA head.
     /// (Effective α=0.0 → out = grid_uvfa.potential.)
-    #[cfg(feature = "dual_leo")]
     #[test]
     fn test_dual_postmax_uvfa_only_matches_uvfa_head() {
         let mut cache_a = FlowFieldCache::new(test_config()).with_min_npcs(1);
@@ -1257,7 +1243,6 @@ mod tests {
     /// Sanity: `get_or_compute_dual_postmax` with Lc mode produces a valid
     /// (non-empty) FlowField. The constant-0.5 UVFA blend shifts the potential
     /// but the field shape should remain coherent.
-    #[cfg(feature = "dual_leo")]
     #[test]
     fn test_dual_postmax_lc_mode_produces_valid_field() {
         let mut cache = FlowFieldCache::new(test_config()).with_min_npcs(1);
@@ -1291,7 +1276,6 @@ mod tests {
     }
 
     /// Post-max dual path respects npc_count gate (same as single + pre-max).
-    #[cfg(feature = "dual_leo")]
     #[test]
     fn test_dual_postmax_returns_none_below_min_npcs() {
         let mut cache = FlowFieldCache::new(test_config()).with_min_npcs(3);

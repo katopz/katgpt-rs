@@ -908,7 +908,6 @@ fn check_row_orthonormal(w: &[f32], k: usize, d: usize, tol: f32, label: &str) {
 }
 
 /// T1.1 unit test: DCT-log basis is row-orthonormal.
-#[cfg(feature = "funcattn_structured_basis")]
 #[test]
 fn dct_log_basis_is_row_orthonormal() {
     for &(k, d) in &[(1usize, 8usize), (4, 16), (8, 64), (16, 64), (8, 128)] {
@@ -922,7 +921,6 @@ fn dct_log_basis_is_row_orthonormal() {
 /// We verify by reconstructing the per-row dominant frequency from the
 /// zero-crossing count of the post-Gram-Schmidt rows. The i-th row's
 /// dominant frequency should be monotonically non-decreasing in i.
-#[cfg(feature = "funcattn_structured_basis")]
 #[test]
 fn dct_log_basis_covers_log_spaced_frequencies() {
     let (k, d) = (8, 64);
@@ -959,7 +957,6 @@ fn dct_log_basis_covers_log_spaced_frequencies() {
 }
 
 /// T1.2 unit test: Haar-packet basis is row-orthonormal.
-#[cfg(feature = "funcattn_structured_basis")]
 #[test]
 fn haar_packet_basis_is_row_orthonormal() {
     for &(k, d) in &[(1usize, 8usize), (4, 16), (8, 64), (16, 64), (7, 128)] {
@@ -973,7 +970,6 @@ fn haar_packet_basis_is_row_orthonormal() {
 /// Row 0 must be the DC component (constant sign — zero sign changes).
 /// Later rows must have progressively more localized support: sign changes
 /// increase as we move to finer-scale wavelets.
-#[cfg(feature = "funcattn_structured_basis")]
 #[test]
 fn haar_packet_basis_spans_multiple_scales() {
     let (k, d) = (8, 64);
@@ -1014,7 +1010,6 @@ fn haar_packet_basis_spans_multiple_scales() {
 /// T1.1+T1.2 cross-check: both bases plug into `funcattn_forward` cleanly
 /// (G3 — drop-in replacement sanity). Output must be finite + partition of
 /// unity on Φ (the existing forward-pass invariant).
-#[cfg(feature = "funcattn_structured_basis")]
 #[test]
 fn structured_bases_forward_pass_clean() {
     let (n, d, k) = (12, 64, 8);

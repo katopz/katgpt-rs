@@ -10,8 +10,6 @@
 //! | G4 | latency | structural size proof + smoke (criterion bench is separate) |
 //! | G5 | determinism | commitment deterministic; `walk_manifold` bit-identical for fixed alpha_grid |
 
-#![cfg(feature = "subspace_steering")]
-
 use katgpt_core::latent_steering::{LatentSteeringVector, apply_latent_steering};
 use katgpt_core::subspace_steering::{
     SubspaceSteeringField, apply_subspace_steering, compute_block_commitment, walk_manifold,

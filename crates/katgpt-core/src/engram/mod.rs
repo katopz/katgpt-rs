@@ -99,7 +99,7 @@ mod tokenizer;
 // gate: `out = (base_gate · σ((Δ_slot − m)/s)) · v`. The `PrivilegeLedger` is
 // a side-car indexed by slot, NOT a table field — the table stays frozen and
 // BLAKE3-committed. Opt-in (`engram_privilege`).
-#[cfg(feature = "engram_privilege")]
+#[cfg(feature = "engram")]
 mod privilege;
 
 // Issue 837 wiring — the stateful detector half of the detector+repair split
@@ -154,12 +154,12 @@ pub use conv::{
 pub use forward::{EngramConfig, fuse_into_hidden_state};
 pub use hash::{HashHead, multi_head_hash};
 pub use hotswap::EngramHotSwap;
-#[cfg(any(feature = "engram_privilege", feature = "engram_tripwire"))]
+#[cfg(any(feature = "engram", feature = "engram_tripwire"))]
 pub use kernel::sigmoid_fuse_scaled_into;
 pub use kernel::{
     SigmoidFusionConfig, rmsnorm_into, sigmoid_fuse_into, sigmoid_fuse_multi_branch_into,
 };
-#[cfg(feature = "engram_privilege")]
+#[cfg(feature = "engram")]
 pub use privilege::{
     CreditAssignment, PrivilegeConfig, PrivilegeLedger, PrivilegeTrace,
     fuse_into_hidden_state_privileged,

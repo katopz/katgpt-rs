@@ -20,8 +20,6 @@
 //! 4. Gate: MAG class-conditional Top-1 ≥ 0.50 (3× random 1/6 ≈ 0.167).
 //!    Raw cosine Top-1 ≈ random (< 0.40).
 
-#![cfg(feature = "mag_mining")]
-
 use katgpt_core::mag::{DataSet, TransferMetric, rank_candidates};
 
 const D: usize = 64;

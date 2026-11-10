@@ -116,7 +116,7 @@
 //! ComplexityClustered regime is the exemplar-seeking trigger consumed by
 //! riir-ai Issue 672.
 
-#[cfg(feature = "operator_consistency")]
+#[cfg(feature = "bisimulation_operator_inference")]
 pub mod consistency;
 pub mod graph;
 pub mod operator;
@@ -132,7 +132,7 @@ pub mod types;
 // `katgpt_core::bisimulation::BisimulationQuotient` instead of
 // `katgpt_core::bisimulation::refine::BisimulationQuotient`.
 
-#[cfg(feature = "operator_consistency")]
+#[cfg(feature = "bisimulation_operator_inference")]
 pub use consistency::{
     ApplicationOutcome, ConsistencyGateConfig, ConsistencyRegime, ConsistencyReport,
     PromotionVerdict, promotion_verdict, rule_consistency,

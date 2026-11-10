@@ -15,13 +15,13 @@ pub mod span_pruner;
 #[cfg(feature = "mux_pruner")]
 pub mod top_k;
 
-#[cfg(feature = "mux_ddtree")]
+#[cfg(feature = "mux_pruner")]
 pub mod dd_tree;
 
-#[cfg(feature = "mux_bfs")]
+#[cfg(feature = "mux_pruner")]
 pub mod bfs;
 
-#[cfg(feature = "mux_height_gate")]
+#[cfg(feature = "mux_pruner")]
 pub mod height_gate;
 
 #[cfg(feature = "mux_demux")]
@@ -30,5 +30,5 @@ pub mod demux;
 #[cfg(feature = "mux_bandit_width")]
 pub mod bandit_width;
 
-#[cfg(feature = "mux_freeze_thaw")]
+#[cfg(feature = "mux_pruner")]
 pub mod freeze_thaw;

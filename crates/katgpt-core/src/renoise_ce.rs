@@ -405,7 +405,6 @@ pub fn renoise_ce_score_horizon<O: RenoiseCeProbe>(
 ///
 /// Same as the incumbent: one `candidate.clone()` per draw; no other heap
 /// allocation. Neither `candidate` nor `target` is mutated.
-#[cfg(feature = "renoise_ce_surprise")]
 pub fn renoise_ce_surprise<O: RenoiseCeProbe>(
     operator: &O,
     target: &O::State,
@@ -527,7 +526,6 @@ where
 /// after the best drift is known — proposers may be stochastic, so candidates
 /// cannot be re-drawn). Not a hot-path decode primitive.
 #[allow(clippy::too_many_arguments)] // selection seam mirrors best_of_n_stability + gate/occupancy/classifier (Issue 665)
-#[cfg(feature = "freedom_selection")]
 pub fn best_of_n_freedom<P, O, C>(
     proposer: &P,
     operator: &O,
@@ -912,7 +910,6 @@ mod tests {
     // Toy: state = (cell, loss); drift = loss (deterministic probe — the
     // point is the SELECTION rule, not the drift estimator). Partition:
     // 2 contexts × 2 cells.
-    #[cfg(feature = "freedom_selection")]
     mod freedom {
         use super::*;
 
@@ -1330,7 +1327,6 @@ mod tests {
 
     // ---- renoise_ce_surprise (Issue 875 T4, target-anchored) ----
 
-    #[cfg(feature = "renoise_ce_surprise")]
     mod surprise {
         use super::*;
 

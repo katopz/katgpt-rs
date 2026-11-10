@@ -24,8 +24,6 @@
 //! cargo run --example ac_prefix_demo --features ac_prefix --release
 //! ```
 
-#![cfg(feature = "ac_prefix")]
-
 use katgpt_core::ac_prefix::{AcPrefix, AcPrefixMask};
 use katgpt_core::{Config, matmul, matmul_relu, rmsnorm, softmax};
 

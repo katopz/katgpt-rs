@@ -7,7 +7,7 @@
 //! permutation test (uniform + dCor + stratified) + multi-draw antithetic —
 //! all buffers scratch-resident, so the steady state must allocate NOTHING.
 
-#![cfg(feature = "mi_est")]
+#![cfg(feature = "gaussianity_probe")]
 
 #[path = "common/mod.rs"]
 mod common;

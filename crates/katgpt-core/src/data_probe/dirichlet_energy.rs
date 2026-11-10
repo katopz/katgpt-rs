@@ -16,7 +16,6 @@ pub use crate::dirichlet::{
 };
 
 // Spectral hierarchy diagnostics (Plan 156, Research 121).
-#[cfg(feature = "spectral_hierarchy")]
 pub use crate::spectral_hierarchy::{
     cauchy_interlacing_check, eigenspace_alignment, haar_wavelet_basis,
 };

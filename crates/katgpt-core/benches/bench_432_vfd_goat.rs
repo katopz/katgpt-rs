@@ -17,8 +17,6 @@
 //! /tmp/vfd_432/release/deps/bench_432_vfd_goat-* --nocapture
 //! ```
 
-#![cfg(feature = "velocity_field_disagreement")]
-
 use katgpt_core::velocity_field_disagreement::{VfdScratch, vfd_score_into};
 use katgpt_core::velocity_field_ensemble::{ClosureField, Schedule, VelocityField};
 use std::hint::black_box;

@@ -987,7 +987,6 @@ fn acquisition_lane_matches_a_full_rescan() {
     );
 }
 
-#[cfg(feature = "viable_manifold_graph")]
 #[test]
 fn t4_1_geodesics_over_a_certified_graph_never_leave_the_certified_set() {
     use katgpt_core::certified_frontier::certified_manifold_graph;

@@ -555,7 +555,6 @@ impl RrqWeights {
     /// # Feature gates
     ///
     /// Requires both `rrq_quant` AND `simd_lut_dequant` features.
-    #[cfg(feature = "simd_lut_dequant")]
     pub fn prefix_dot_lut_into(
         &self,
         t: usize,
@@ -1328,7 +1327,6 @@ mod tests {
     /// (LUT path sums stages per-element before the FMA; arithmetic path
     /// sums per-stage GEMV results), so they won't be bit-identical — but both
     /// approximate the same true mathematical result.
-    #[cfg(feature = "simd_lut_dequant")]
     #[test]
     fn g1_prefix_dot_lut_matches_arithmetic() {
         // 4 groups per row (cols=128, gs=32 → 4 groups/row).
@@ -1427,7 +1425,6 @@ mod tests {
     ///
     /// This test RUNS and reports the ratio via `eprintln!` but does NOT panic
     /// on failure — the negative is the documented result, not a regression.
-    #[cfg(feature = "simd_lut_dequant")]
     #[cfg_attr(debug_assertions, ignore)]
     #[test]
     fn g2_4stage_lut_vs_single_8bit_documented_negative() {

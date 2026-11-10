@@ -16,8 +16,6 @@
 //!    of the other 199 samples' class-mean projections.
 //! 5. Gate: LOO accuracy ≥ 0.75 at σ=1.5; ≥ 0.60 at σ=3.0.
 
-#![cfg(feature = "mag_mining")]
-
 use katgpt_core::mag::mine_contrast_direction;
 
 const D: usize = 64;

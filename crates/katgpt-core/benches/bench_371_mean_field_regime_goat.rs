@@ -33,8 +33,6 @@
 //! DYLD_PRINT_STATISTICS=1 /tmp/mean_field_poc/release/bench_371_mean_field_regime_goat-* --nocapture
 //! ```
 
-#![cfg(feature = "mean_field_regime")]
-
 use katgpt_core::mean_field::{HopfParams, MeanFieldOverlap, RegimeClassifier, hopf_boundary};
 use std::hint::black_box;
 use std::time::Instant;

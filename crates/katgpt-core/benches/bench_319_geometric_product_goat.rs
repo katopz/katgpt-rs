@@ -22,10 +22,9 @@
 //! # Run
 //!
 //! ```bash
-//! cargo run -p katgpt-core --features geometric_product --bench bench_319_geometric_product_goat --release -- --nocapture
+//! cargo run -p katgpt-core --bench bench_319_geometric_product_goat --release -- --nocapture
 //! ```
 
-#![cfg(feature = "geometric_product")]
 #![allow(clippy::excessive_precision)]
 
 use katgpt_core::linalg::{geometric_product_into, geometric_product_wedge_into};

@@ -4,7 +4,7 @@
 //! (parallel lib tests would corrupt the deltas — the bench-655
 //! convention).
 
-#![cfg(feature = "state_option_scoring")]
+#![cfg(feature = "distance_abstain")]
 
 #[path = "common/mod.rs"]
 mod common;

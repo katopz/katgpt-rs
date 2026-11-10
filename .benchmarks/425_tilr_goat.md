@@ -4,7 +4,7 @@
 **Plan:** [425_tilr_invariant_subspace_refinement.md](../.plans/425_tilr_invariant_subspace_refinement.md)
 **Research:** [408_Trajectory_Invariant_Latent_Refinement.md](../.research/408_Trajectory_Invariant_Latent_Refinement.md)
 **Source paper:** [arXiv:2606.29164](https://arxiv.org/abs/2606.29164) — Malarkkan et al., *TILR: Trajectory-Invariant Latent Refinement*, ICML 2026 Mech Interp Workshop
-**Feature:** `tilr_invariant_subspace` (DEFAULT-ON post-GOAT)
+**Feature:** `tilr_invariant_subspace` (BAKED flagless in katgpt-core since Plan 635, 2026-11-10)
 **Primitive:** `tilr_refine_into(state, direction, basis, r, eta_base, epsilon, scratch, out)`
 
 ## GOAT Gate Results — ALL PASS

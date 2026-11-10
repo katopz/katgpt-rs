@@ -104,7 +104,7 @@ impl SpectralLOD {
     ///
     /// Returns a vec of (window_tokens, optimal_ratio) pairs.
     /// The actual ratios may be adjusted to hit the target average.
-    #[cfg(feature = "lclm_adaptive_lod")]
+    #[cfg(feature = "mux_latent_context")]
     pub fn adaptive_ratios<'a>(
         &self,
         windows: &'a [&[u32]],
@@ -210,7 +210,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "lclm_adaptive_lod")]
+    #[cfg(feature = "mux_latent_context")]
     fn test_adaptive_ratios_maintains_target() {
         let slod = SpectralLOD::default();
 

@@ -34,7 +34,6 @@
 //! - Lean proof: `.proofs/KatgptProof/Ssmax/DilutionBound.lean`
 //! - Rust implementation: `crates/katgpt-core/src/ssmax.rs`
 
-#![cfg(feature = "ssmax_temperature")]
 #![cfg(test)]
 
 use katgpt_core::ssmax::{SsmaxConfig, SsmaxMode, apply_ssmax_inplace};

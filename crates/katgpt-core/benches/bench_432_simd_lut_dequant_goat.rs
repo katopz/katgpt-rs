@@ -35,17 +35,15 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features simd_lut_dequant --bench bench_432_simd_lut_dequant_goat -- --nocapture
+//! cargo bench -p katgpt-core --bench bench_432_simd_lut_dequant_goat -- --nocapture
 //! ```
 //!
 //! Or (working around the dyld/trustD stall on macOS):
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features simd_lut_dequant --bench bench_432_simd_lut_dequant_goat --no-run
+//! cargo bench -p katgpt-core --bench bench_432_simd_lut_dequant_goat --no-run
 //! target/release/deps/bench_432_simd_lut_dequant_goat-<hash>
 //! ```
-
-#![cfg(feature = "simd_lut_dequant")]
 
 use katgpt_core::simd_lut_dequant::{
     Int4Lut, Int8Lut, QuantLut, UInt4Lut, dequant_arithmetic_ref, dequant_dot_via_lut,

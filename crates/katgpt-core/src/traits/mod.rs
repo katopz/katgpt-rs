@@ -797,7 +797,6 @@ impl fmt::Display for ActionSpaceLog {
 /// Maps raw Q ∈ (-∞, +∞) → bounded Q ∈ (0, 1).
 ///
 /// Delegates to shared crate::simd::fast_sigmoid (Cephes-exp accuracy, ~1 ULP).
-#[cfg(feature = "leo_all_goals")]
 #[inline]
 pub fn sigmoid_bounded_q(raw_q: f32) -> f32 {
     crate::simd::fast_sigmoid(raw_q)
@@ -810,7 +809,6 @@ pub fn sigmoid_bounded_q(raw_q: f32) -> f32 {
 ///
 /// Ref: Matthews et al. (2026) "Goal-Conditioned Agents that Learn Everything
 ///   All at Once", ICML 2026. arXiv:2605.23551
-#[cfg(feature = "leo_all_goals")]
 pub trait LeoHead {
     /// Compute Q-values for all goals × all actions from state.
     /// Returns `[goals * actions]` flattened (row-major: goal-major).
@@ -835,7 +833,6 @@ pub trait LeoHead {
 ///
 /// Where R(s') ∈ R^G is the reward vector across ALL goals.
 /// Single forward pass updates all |G| Q-value heads simultaneously.
-#[cfg(feature = "leo_all_goals")]
 pub trait AllGoalsUpdate {
     /// Compute all-goals TD target.
     ///
@@ -912,7 +909,6 @@ pub trait AllGoalsUpdate {
 ///
 /// Controls how LEO (teacher) and UVFA (student) Q-values are combined
 /// for action selection. From JAX `DUAL_LEO_ACTING_MODE` config.
-#[cfg(feature = "dual_leo")]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ActingMode {
@@ -931,7 +927,6 @@ pub enum ActingMode {
 }
 
 /// Schedule for the mixing coefficient α over training.
-#[cfg(feature = "dual_leo")]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub enum AlphaSchedule {
@@ -943,7 +938,6 @@ pub enum AlphaSchedule {
     LinearAnneal { start: f32, end: f32 },
 }
 
-#[cfg(feature = "dual_leo")]
 impl Default for AlphaSchedule {
     fn default() -> Self {
         AlphaSchedule::Fixed(0.3)
@@ -951,7 +945,6 @@ impl Default for AlphaSchedule {
 }
 
 /// Behavioral cloning target source for BC regularization (PPO variant).
-#[cfg(feature = "dual_leo")]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum BcTarget {
@@ -970,7 +963,6 @@ pub enum BcTarget {
 /// territory — an anneal schedule belongs to the consumer's training loop
 /// (see AlphaSchedule::LinearAnneal on DualLeoMixer); no anneal knob is
 /// carried here.)
-#[cfg(feature = "dual_leo")]
 #[derive(Clone, Copy, Debug)]
 pub struct BcConfig {
     /// PPO policy regularization coefficient toward LEO's action.
@@ -982,7 +974,6 @@ pub struct BcConfig {
     pub target: BcTarget,
 }
 
-#[cfg(feature = "dual_leo")]
 impl Default for BcConfig {
     fn default() -> Self {
         Self {
@@ -1000,7 +991,6 @@ impl Default for BcConfig {
 /// α controls modelless→model trust transfer:
 /// - High α: trust LEO teacher (modelless, broad)
 /// - Low α: trust UVFA student (model-based, precise)
-#[cfg(feature = "dual_leo")]
 pub trait DualLeoMixer {
     /// Mix LEO and UVFA Q-values for acting on a specific goal.
     fn mix(&self, q_leo: &[f32], q_uvfa: &[f32], alpha: f32) -> Vec<f32> {
@@ -1080,7 +1070,6 @@ pub trait DualLeoMixer {
 /// "We sample goals only from goals observed at least once in the past,
 /// to prevent completely out-of-reach goals being sampled."
 /// — Matthews et al. (2026), ICML 2026, arXiv:2605.23551
-#[cfg(feature = "dual_leo")]
 pub trait AutocurriculumSampler {
     /// Sample a goal uniformly from previously observed goals.
     fn sample_goal(&self, rng: &mut Rng) -> usize;

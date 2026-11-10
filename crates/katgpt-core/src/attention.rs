@@ -88,7 +88,7 @@ pub fn tiled_attention_forward(
 ///
 /// `log(N) = 0`, so the scale is unchanged — SSMax is a no-op. This preserves
 /// the small-N no-regression guarantee (G5).
-#[cfg(all(feature = "tiled_attention", feature = "ssmax_temperature"))]
+#[cfg(feature = "tiled_attention")]
 #[allow(clippy::too_many_arguments)]
 pub fn tiled_attention_forward_ssmax(
     q: &[f32],
@@ -924,7 +924,7 @@ mod tests {
 
 // ── SSMax SDPA wrapper tests (Plan 411 T2.4) ──────────────────────
 
-#[cfg(all(test, feature = "tiled_attention", feature = "ssmax_temperature"))]
+#[cfg(all(test, feature = "tiled_attention"))]
 mod ssmax_tests {
     use super::*;
     use crate::ssmax::SsmaxMode;

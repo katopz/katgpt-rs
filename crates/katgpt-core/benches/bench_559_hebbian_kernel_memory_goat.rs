@@ -13,7 +13,7 @@
 //! - **G2 (perf)** — construction time + forward-path latency at `D=64, m=512`.
 //!   Target: construction < 50µs/fact, forward < 1µs/query.
 //! - **G3 (no-regression)** — verified externally via
-//!   `cargo test -p katgpt-core --features hebbian_kernel_memory --lib` (1814 green)
+//!   `cargo test -p katgpt-core --lib` (1814 green)
 //!   + `cargo check --all-features`. This bench prints the gate as informational.
 //! - **G4 (alloc-free hot path)** — `CountingAllocator` audit on `forward_into`
 //!   and `retrieval_scores_into` (steady-state, after warmup). Target: 0 allocs.
@@ -43,8 +43,6 @@
 //!     --features hebbian_kernel_memory --bench bench_559_hebbian_kernel_memory_goat
 //! /tmp/hebbian_goat/release/bench_559_hebbian_kernel_memory_goat-* --nocapture
 //! ```
-
-#![cfg(feature = "hebbian_kernel_memory")]
 
 use katgpt_core::hebbian_kernel_memory::{HebbianKernelMemory, HebbianMlpConfig, SeedRng};
 use std::hint::black_box;

@@ -78,7 +78,7 @@ use crate::float_order;
 // busiest items carry the smallest gates, so DeathRow carries no magnitude
 // field at all. OPT-IN pending first consumer GOAT (ndb shard_compactor,
 // riir-clippy corpus retirement, belief GC).
-#[cfg(feature = "dying")]
+#[cfg(feature = "usage_rate_eviction")]
 pub mod dying;
 
 // differential (Issue 882 P3): the keep-side score with the common mode
@@ -86,7 +86,7 @@ pub mod dying;
 // the EMA of key j's attention mass; evict argmin, sinks exempt through
 // kv_sink_window's pin mask. λ = 0 is the max-recent baseline bit-for-bit.
 // OPT-IN (Bench 894; the model-bound needle@64K half is riir-infer Issue 012).
-#[cfg(feature = "differential_kv_eviction")]
+#[cfg(feature = "usage_rate_eviction")]
 pub mod differential;
 
 /// Per-row usage bookkeeping. One row per live KV slot, per (batch, head);

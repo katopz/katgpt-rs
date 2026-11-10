@@ -19,11 +19,11 @@
 //!
 //! ```bash
 //! CARGO_TARGET_DIR=/tmp/431_cross_stage_relocation \
-//!   cargo run -p katgpt-core --features cross_stage_relocation \
+//!   cargo run -p katgpt-core --features causal_head_importance \
 //!   --bench bench_431_cross_stage_relocation_goat --release -- --nocapture
 //! ```
 
-#![cfg(feature = "cross_stage_relocation")]
+#![cfg(feature = "causal_head_importance")]
 
 use std::hint::black_box;
 use std::time::Instant;

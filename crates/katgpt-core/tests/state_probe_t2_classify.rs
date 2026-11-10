@@ -7,8 +7,6 @@
 //! Research 609's 28/76 calibration split is CONTEXT, never a fixture
 //! assertion (T2.3's own note).
 
-#![cfg(feature = "state_probe")]
-
 use katgpt_core::state_probe::{
     AdaptiveClassifier, AdaptiveDecision, ProbeClass, ProbeInput, classify, probe,
 };

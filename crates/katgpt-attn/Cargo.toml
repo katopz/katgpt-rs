@@ -42,7 +42,7 @@ blake3 = "1.8"
 # Issue 779 T2: the FUNCATTN spectral-arm eval consumes the promoted
 # subspace-intervention protocol (test-only feature forward — the lib's
 # dependency surface is unchanged).
-katgpt-core = { path = "../katgpt-core", features = ["subspace_intervention"] }
+katgpt-core = { path = "../katgpt-core", features = [] }
 katgpt-spectral = { path = "../katgpt-spectral" }
 
 [features]
@@ -132,7 +132,7 @@ funcattn_chiar_blend = ["chiaroscuro"]
 # sparse_mlp: gates the `#[cfg(feature = "sparse_mlp")]` MLP path in
 # gdn2/forward.rs. Forwards to katgpt-core (for sparse_matmul) and
 # katgpt-forward (for ForwardContext.active_indices/active_values).
-sparse_mlp = ["katgpt-core/sparse_mlp", "katgpt-forward/sparse_mlp"]
+sparse_mlp = ["katgpt-forward/sparse_mlp"]
 # HOLA Hippocampal Exact KV Cache integration (Plan 395, Research 378).
 # Forwards to katgpt-core/hippocampal_cache. When active, Gdn2LayerState gains
 # `hippocampal_caches: Vec<HippocampalCacheDyn>` (one per KV head, empty =

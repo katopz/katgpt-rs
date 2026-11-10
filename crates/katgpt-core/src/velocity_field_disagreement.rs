@@ -411,7 +411,7 @@ impl VfdVarianceSignal {
 // QgfVarianceSignal impl — only compiled when both features are on.
 // `qgf_adaptive` is opt-in (not in default); `velocity_field_disagreement` is opt-in.
 // The trait bridge closes the "ensemble KL" open item in qgf/adaptive.rs.
-#[cfg(feature = "qgf_adaptive")]
+#[cfg(feature = "qgf")]
 impl crate::qgf::adaptive::QgfVarianceSignal for VfdVarianceSignal {
     #[inline]
     fn normalized_disagreement(&self) -> f32 {
@@ -940,7 +940,7 @@ mod tests {
     // ── QGF integration smoke test (G5 analog) ──────────────────────────────
     // Only compiled when the qgf feature is also on.
 
-    #[cfg(feature = "qgf_adaptive")]
+    #[cfg(feature = "qgf")]
     #[test]
     fn test_vfd_qgf_integration_smoke() {
         use crate::qgf::adaptive::{adaptive_guidance_weight, confidence_from_disagreement};

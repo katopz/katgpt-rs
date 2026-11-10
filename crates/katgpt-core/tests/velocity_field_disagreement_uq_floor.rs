@@ -48,11 +48,6 @@
 //!   --test velocity_field_disagreement_uq_floor -- --nocapture --ignored
 //! ```
 
-#![cfg(all(
-    feature = "velocity_field_disagreement",
-    feature = "conformal_predictive_intervals"
-))]
-
 use katgpt_core::conformal::{
     PredictiveInterval, PredictiveOutput, TrajectoryCorpus, UqPrimitiveUnderTest,
     run_floor_comparison,

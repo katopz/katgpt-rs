@@ -46,8 +46,6 @@
 //!
 //! Reference: Plan 303 T3.2 / T3.3 / T3.4.
 
-#![cfg(feature = "salience_tri_gate")]
-
 use crate::salience::types::DelegateToken;
 
 /// Fixed-capacity ring buffer of pending [`DelegateToken`]s.

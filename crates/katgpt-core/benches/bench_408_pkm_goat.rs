@@ -32,8 +32,6 @@
 //! CARGO_TARGET_DIR=/tmp/pkm_goat target/release/deps/bench_408_pkm_goat-* --nocapture
 //! ```
 
-#![cfg(feature = "product_key_memory")]
-
 use katgpt_core::product_key_memory::{PkmScratch, ProductKeyMemory, ScoreFn, score_dot};
 use std::hint::black_box;
 use std::time::Instant;

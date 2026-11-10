@@ -24,8 +24,6 @@
 //!   --features ssmax_adaptive --bench bench_411_ssmax_adaptive_goat -- --nocapture
 //! ```
 
-#![cfg(feature = "ssmax_adaptive")]
-
 use katgpt_core::ssmax::{RollingDeltaEstimator, SsmaxMode, apply_ssmax_inplace};
 use std::hint::black_box;
 use std::time::Instant;

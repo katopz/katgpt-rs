@@ -19,10 +19,8 @@
 //! # Run
 //!
 //! ```bash
-//! cargo run -p katgpt-core --features temp_loss_fingerprint --bench bench_341_temp_loss_fingerprint_goat --release -- --nocapture
+//! cargo run -p katgpt-core --bench bench_341_temp_loss_fingerprint_goat --release -- --nocapture
 //! ```
-
-#![cfg(feature = "temp_loss_fingerprint")]
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use katgpt_core::diversity::temp::{

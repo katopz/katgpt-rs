@@ -30,7 +30,7 @@
 //! carries the rules (action enum, forward model) by virtue of `impl
 //! GameState`, exactly as Phase 1's `MockCounterState` does.
 
-#![cfg(all(test, feature = "induced_cwm_ismcts"))]
+#![cfg(all(test, feature = "induced_cwm"))]
 
 use crate::induced_cwm::ismcts::{
     InformationSet, NodeStats, action_hash, ismcts_search_with_inference,

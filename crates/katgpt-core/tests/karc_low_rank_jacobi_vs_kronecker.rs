@@ -16,8 +16,6 @@
 //! diagonalization), so bit-identity is not expected — only agreement to
 //! ~`1e-10` (well below the convergence `tol` of `1e-8` typically used).
 
-#![cfg(feature = "karc_forecaster")]
-
 use katgpt_core::karc::{
     LowRankFitScratch, large_dh::low_rank_fit_jacobi_bstep, low_rank_fit, low_rank_fit_warm_start,
 };

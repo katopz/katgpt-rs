@@ -69,10 +69,6 @@ use core::cmp::Ordering;
 /// fast path covers all realistic configs.
 const WEIGHTS_BUF_LEN: usize = 1024;
 
-#[cfg(all(
-    feature = "conformal_predictive_intervals",
-    feature = "karc_forecaster"
-))]
 mod karc_adapter;
 pub mod metrics;
 mod ring;
@@ -80,7 +76,6 @@ mod seasonal;
 // Issue 010 T2 — "Report the Floor" comparison harness. Gated on
 // `conformal_predictive_intervals` because it depends on the floor
 // (`ConformalIntervalCalibrator<SeasonalNaiveForecaster>`).
-#[cfg(feature = "conformal_predictive_intervals")]
 mod floor_harness;
 // Issue 841 §B-3 seam 4 — the freeze/thaw staleness guard. Opt-in, and it adds
 // NOTHING to a default build: the calibrator and every method on it are
@@ -88,15 +83,10 @@ mod floor_harness;
 #[cfg(feature = "calibration_staleness")]
 pub mod staleness;
 
-#[cfg(feature = "conformal_predictive_intervals")]
 pub use floor_harness::{
     FloorAdapter, FloorComparisonReport, OverallVerdict, PredictiveOutput, TrajectoryCorpus,
     UqMetrics, UqPrimitiveUnderTest, empirical_quantile_interval, run_floor_comparison,
 };
-#[cfg(all(
-    feature = "conformal_predictive_intervals",
-    feature = "karc_forecaster"
-))]
 pub use karc_adapter::KarcChannelForecaster;
 pub use metrics::{crps, empirical_coverage, winkler_score};
 pub use ring::{ResidualRingBuffer, RingBuffer};

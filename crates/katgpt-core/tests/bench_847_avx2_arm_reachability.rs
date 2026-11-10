@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! # (1) the default build — the configuration everybody ships
-//! cargo test -p katgpt-core --release --features simd_lut_dequant,bf16_simd \
+//! cargo test -p katgpt-core --release --features bf16_simd \
 //!     --test bench_847_avx2_arm_reachability -- --nocapture
 //!
 //! # (2) the same thing with the arm's compile-time predicate satisfied
@@ -65,7 +65,7 @@
 //! The bar is 1.5× against a measured 5.0×: over 3× of slack, because this is a
 //! REACHABILITY assertion and not a perf budget.
 //!
-#![cfg(all(feature = "simd_lut_dequant", feature = "bf16_simd"))]
+#![cfg(feature = "bf16_simd")]
 
 use katgpt_core::bf16_convert::{bf16_bits_to_f32_into, bf16_bits_to_f32_scalar_into};
 use katgpt_core::simd_lut_dequant::{

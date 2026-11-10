@@ -17,8 +17,6 @@
 //!   --features kinematic_rollout --release -- --nocapture
 //! ```
 
-#![cfg(feature = "kinematic_rollout")]
-
 use katgpt_core::kinematics::fixture::{self, RangeLabel};
 use katgpt_core::kinematics::perception::{
     Eps, RegimeClassifier, RegimeConfig, RegimeSnapshot, ResidualConfig, ResidualMonitor,

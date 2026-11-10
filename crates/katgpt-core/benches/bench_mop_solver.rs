@@ -24,7 +24,7 @@
 //!   --features mop_path_entropy --bench bench_mop_solver -- --nocapture
 //! ```
 
-#![cfg(feature = "mop_path_entropy")]
+#![cfg(feature = "cgsp")]
 
 use katgpt_core::mop::{
     MopConfig, MopScratch, MopSolver,

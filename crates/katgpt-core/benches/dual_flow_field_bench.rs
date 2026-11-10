@@ -17,7 +17,7 @@
 //!   G5 (quality gain): Lc(α=0.3) avg path length < LeoOnly by ≥10%,
 //!                       OR local-minima stuck count reduced ≥30%.
 
-#![cfg(all(feature = "flow_field_nav", feature = "dual_leo"))]
+#![cfg(feature = "flow_field_nav")]
 
 use std::hint::black_box;
 use std::time::Instant;

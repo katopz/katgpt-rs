@@ -1,7 +1,7 @@
 //! Plan 623 T1.3 — `event_state_windows` GOAT gate (G1 posture re-pin +
 //! G2 latency with the fixed-window baseline arm + determinism digest).
 //!
-//! Gates (run: `cargo bench -p katgpt-core --features event_state_windows
+//! Gates (run: `cargo bench -p katgpt-core
 //! --bench bench_931_event_state_window_goat` at `--release` — the profile
 //! AGENTS.md mandates for gates):
 //!
@@ -26,7 +26,6 @@
 //!
 //! Loud-zero defense: every timed loop's outputs feed `black_box` sinks so
 //! LTO cannot delete the work it timed (the timed-region rule).
-#![cfg(feature = "event_state_windows")]
 
 use katgpt_core::event_state_window::{event_state_window, population_state_summary};
 use std::hint::black_box;

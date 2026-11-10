@@ -39,8 +39,6 @@
 //!   --features product_key_memory_episodic --bench bench_481_idf_write_gate -- --nocapture
 //! ```
 
-#![cfg(feature = "product_key_memory_episodic")]
-
 use katgpt_core::product_key_memory::{
     BackgroundAccessStats, PkmEpisodicStore, PkmScratch, ProductKeyMemory, ScoreFn,
 };

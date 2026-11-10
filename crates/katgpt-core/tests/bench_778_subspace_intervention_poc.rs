@@ -1,4 +1,3 @@
-#![cfg(feature = "subspace_intervention")]
 //! Issue 778 / Research 557 POC — Subspace Intervention protocol validation
 //! (arXiv:2607.01987, "Understanding Geometric Representations in SSL ViTs
 //! via Subspace Intervention", Zhou et al. ECCV 2026).

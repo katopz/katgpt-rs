@@ -29,10 +29,8 @@
 //! # Run
 //!
 //! ```bash
-//! cargo run -p katgpt-core --features fourier_continuation --bench bench_323_fourier_continuation_goat --release -- --nocapture
+//! cargo run -p katgpt-core --bench bench_323_fourier_continuation_goat --release -- --nocapture
 //! ```
-
-#![cfg(feature = "fourier_continuation")]
 
 use katgpt_core::{FcConfig, FcScratch, fourier_continue, fourier_continue_into};
 use rustfft::{FftPlanner, num_complex::Complex};

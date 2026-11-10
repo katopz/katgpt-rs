@@ -26,8 +26,6 @@
 //! gate verdict is informational so a KILL doesn't break CI until T4.1
 //! decides whether to promote or close.
 
-#![cfg(feature = "funcattn_structured_basis")]
-
 use katgpt_core::funcattn::{
     FuncAttnBasis, FuncAttnConfig, FuncAttnScratch, funcattn_forward, make_dct_log_basis,
     make_haar_packet_basis,

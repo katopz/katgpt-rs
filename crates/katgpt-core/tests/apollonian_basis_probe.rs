@@ -17,8 +17,6 @@
 //! If H_structure holds, the T5.1 conclusion was overstated and structured
 //! bases (incl. Apollonian) deserve a real test.
 
-#![cfg(feature = "funcattn")]
-
 use katgpt_core::funcattn::{
     FuncAttnBasis, FuncAttnConfig, FuncAttnScratch, compute_basis_into, funcattn_forward,
 };

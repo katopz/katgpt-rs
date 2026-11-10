@@ -19,15 +19,13 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features viable_manifold_graph \
+//! cargo bench -p katgpt-core \
 //!   --bench viable_manifold_graph_bench -- --warm-up-time 1 --measurement-time 2 --sample-size 10
 //! ```
 //!
 //! # Feature gate
 //!
 //! Requires `viable_manifold_graph` (Plan 312).
-
-#![cfg(feature = "viable_manifold_graph")]
 
 use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
 use fastrand::Rng;

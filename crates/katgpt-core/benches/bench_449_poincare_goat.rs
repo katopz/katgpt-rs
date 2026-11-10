@@ -52,8 +52,6 @@
 //! target/release/deps/bench_449_poincare_goat-<hash> --nocapture
 //! ```
 
-#![cfg(feature = "poincare_navigator")]
-
 use katgpt_core::poincare::{
     FitConfig, PoincareAdapter, fit_poincare_adapter, poincare_multi_step_into,
     poincare_navigate_into,

@@ -4,8 +4,6 @@
 //! allocator picks up ONLY this path's allocations (parallel lib tests
 //! would corrupt the deltas — the bench-655 convention).
 
-#![cfg(feature = "event_state_windows")]
-
 #[path = "common/mod.rs"]
 mod common;
 counting_allocator!();

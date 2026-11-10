@@ -25,8 +25,6 @@
 //!   --features conformal_predictive_intervals
 //! ```
 
-#![cfg(feature = "conformal_predictive_intervals")]
-
 use katgpt_core::{
     FloorAdapter, OverallVerdict, PredictiveInterval, PredictiveOutput, TrajectoryCorpus,
     UqPrimitiveUnderTest, run_floor_comparison,

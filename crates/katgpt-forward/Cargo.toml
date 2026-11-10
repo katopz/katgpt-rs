@@ -66,7 +66,7 @@ cna_steering = ["katgpt-pruners/cna_steering"]
 kv_capture = []
 
 # Sparse MLP active-indices/value buffers (Plan 022).
-sparse_mlp = ["katgpt-core/sparse_mlp"]
+sparse_mlp = []
 
 # SubstrateGate: per-sequence capability mask for dual sparsity (Plan 216).
 substrate_gate = ["katgpt-pruners/substrate_gate", "sparse_mlp"]
@@ -112,7 +112,7 @@ turboquant = []
 # Free Transformer mid-layer domain conditioning (Plan 038). Gates the
 # `domain_latent: Option<&DomainLatent>` parameter of forward_base/forward_coda
 # AND the mid-layer K/V injection block.
-domain_latent = ["katgpt-core/domain_latent"]
+domain_latent = []
 
 # Kog AI monokernel CPU fusion — RMSNorm gamma folding + QKV interleaving
 # (Plan 160). Gates the `types::rmsnorm_with_gamma` branch in forward_base/coda
@@ -345,7 +345,7 @@ nucleus_accept = ["dllm", "tri_mode", "katgpt-core/relaxed_accept"]
 # `#[cfg(feature = "plasma_path")]` block (which uses
 # `katgpt_core::{TernaryWeights, simd_ternary_matvec}`) compiles when the root
 # feature is enabled. Forwards to katgpt-core so those symbols resolve.
-plasma_path = ["katgpt-core/plasma_path"]
+plasma_path = []
 
 # Binary plasma tier (Issue 145). Forwards to katgpt-core so BinaryWeights +
 # simd_binary_matvec resolve when the root feature is enabled.

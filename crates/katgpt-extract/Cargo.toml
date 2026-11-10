@@ -67,8 +67,6 @@ typed_parsers = ["dep:katgpt-core", "katgpt-core/extraction_wire"]
 extraction_estimate = [
     "dep:katgpt-core",
     "katgpt-core/extraction_wire",
-    "katgpt-core/conformal_predictive_intervals",
-    "katgpt-core/karc_forecaster",
 ]
 
 # bet_search (Issue 952 T1–T4, DEFAULT-ON 2026-10-22): the calculation

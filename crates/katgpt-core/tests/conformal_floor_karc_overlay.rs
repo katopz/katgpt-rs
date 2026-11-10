@@ -97,10 +97,6 @@
 //!   --features conformal_predictive_intervals,karc_forecaster -- --nocapture
 //! ```
 
-#![cfg(all(
-    feature = "conformal_predictive_intervals",
-    feature = "karc_forecaster"
-))]
 #![allow(clippy::needless_range_loop)]
 
 use katgpt_core::{

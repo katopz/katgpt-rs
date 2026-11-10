@@ -140,7 +140,6 @@ pub mod contrast_combine;
 #[cfg(feature = "path_kernel_sim")]
 pub mod path_kernel_sim;
 
-#[cfg(feature = "rating")]
 pub mod rating;
 
 #[cfg(feature = "laprop")]
@@ -148,15 +147,11 @@ pub mod laprop;
 
 pub mod prover_selection;
 
-#[cfg(any(feature = "linking_fold_fold", feature = "linking_fold_detector"))]
 pub mod linking_fold;
 
-#[cfg(feature = "best_belief")]
 pub mod best_belief;
-#[cfg(feature = "best_belief")]
 pub use best_belief::{best_belief_score, best_belief_scores, select_best_belief};
 
-#[cfg(feature = "hint_regret")]
 pub mod hint_regret;
 
 // Issue 974 (closed `d5c7c3da8`) (the ndb 640 T7 ledger): the walk-proximity
@@ -180,7 +175,6 @@ pub use walk_rank::{
 #[cfg(feature = "harness_evolution")]
 pub mod harness_evolution;
 
-#[cfg(feature = "state_probe")]
 pub mod state_probe;
 
 #[cfg(feature = "risk_control_exit")]
@@ -213,7 +207,6 @@ pub mod ignition;
 pub use ignition::{IgnitionSchedule, commit_time_star, ignition_time, order_by_ignition_into};
 
 pub mod conformal;
-#[cfg(feature = "conformal_predictive_intervals")]
 #[cfg(feature = "limit_fixture")]
 pub mod limit_fixture;
 
@@ -223,38 +216,28 @@ pub mod incidence;
 #[cfg(feature = "evidence_tripwire")]
 pub mod evidence_tripwire;
 
-#[cfg(feature = "state_option_scoring")]
+#[cfg(feature = "distance_abstain")]
 pub mod state_option_scoring;
 
-#[cfg(feature = "event_state_windows")]
 pub mod event_state_window;
 
-#[cfg(feature = "escalation_probe_gate")]
 pub mod escalation_probe_gate;
 
-#[cfg(feature = "escalation_probe_gate")]
 pub mod state_probe_eval;
 
 #[cfg(feature = "template_decode")]
 pub mod template_decode;
-#[cfg(feature = "conformal_predictive_intervals")]
 pub use conformal::metrics::{
     crps, crps_interval, empirical_coverage, mean_crps_interval, mean_winkler, winkler_score,
 };
-#[cfg(feature = "conformal_predictive_intervals")]
 pub use conformal::{
     ConformalIntervalCalibrator, DecayUnit, PointForecaster, PredictiveInterval, ResidualMode,
     ResidualRingBuffer, RingBuffer, SeasonalNaiveForecaster, SeasonalPoolForecaster,
     seasonal_naive_floor,
 };
 
-#[cfg(all(
-    feature = "conformal_predictive_intervals",
-    feature = "karc_forecaster"
-))]
 pub use conformal::KarcChannelForecaster;
 
-#[cfg(feature = "conformal_predictive_intervals")]
 pub use conformal::{
     FloorAdapter, FloorComparisonReport, OverallVerdict, PredictiveOutput, TrajectoryCorpus,
     UqMetrics, UqPrimitiveUnderTest, empirical_quantile_interval, run_floor_comparison,
@@ -309,7 +292,6 @@ pub mod thinking_mode;
 pub mod algebra;
 pub mod shard_embedding;
 
-#[cfg(feature = "ssmax_temperature")]
 pub mod ssmax;
 
 #[cfg(feature = "scale_invariant_attn")]
@@ -318,12 +300,9 @@ pub mod scale_invariant;
 #[cfg(feature = "logit_regime")]
 pub mod logit_regime;
 
-#[cfg(feature = "simd_lut_dequant")]
 pub mod simd_lut_dequant;
 
-#[cfg(feature = "smooth_min_similarity")]
 pub mod similarity;
-#[cfg(feature = "smooth_min_similarity")]
 pub use similarity::{edit_penalty, smooth_min_similarity};
 
 #[cfg(feature = "recos")]
@@ -366,16 +345,12 @@ pub use switch_cost::{
     DEFAULT_ALPHA, FactorizedSwitchCost, NEUTRAL_ACC, SwitchCostSnapshot, SwitchCostTable, cdf_rank,
 };
 
-#[cfg(feature = "freedom_selection")]
 pub mod extension_count;
-#[cfg(feature = "freedom_selection")]
 pub use extension_count::{
     ExtensionOccupancy, FIRST_ACTIVATION_GAIN, LossGate, freedom_gain, log_freedom,
 };
 
-#[cfg(feature = "effective_degree")]
 pub mod effective_degree;
-#[cfg(feature = "effective_degree")]
 pub use effective_degree::{
     EdConfig, EdError, EdResult, EdScratch, MAX_ED_DEGREE, MAX_ED_TERMS, ed_from_coeff_norms,
     ed_over_pairs, effective_degree_along_path, effective_degree_along_path_multi,
@@ -435,15 +410,13 @@ pub use cgsp::{
     // `katgpt_core::cgsp::sigmoid` (in cgsp/types.rs) remains for `cgsp::*` paths.
 };
 
-#[cfg(feature = "cgsp_dual_pool")]
+#[cfg(feature = "cgsp")]
 pub use cgsp::{DualPoolBandit, DualPoolConfig, PoolId, ReachableDualPoolRouter};
 
 #[cfg(all(feature = "cgsp", feature = "gain_cost_halt"))]
 pub use cgsp::{KnpcDecision, KnpcSelector};
 
-#[cfg(feature = "action_bridge")]
 pub mod bridge;
-#[cfg(feature = "action_bridge")]
 pub use bridge::ActionBridge;
 
 pub use traits::{
@@ -476,7 +449,7 @@ pub use micro_belief::{
 #[cfg(feature = "bom_sampling")]
 pub use micro_belief::{BoMSampler, NoiseQueryConfig, QmcMethod, SeedStrategy, dot_product_scorer};
 
-#[cfg(all(feature = "qmc_sampling", feature = "bom_sampling"))]
+#[cfg(feature = "bom_sampling")]
 pub use speculative::fill_noise_queries_gaussian_qmc_by_method;
 
 // BoM G2 arena harness — Plan 281 T2.3: engine-side traits + synthetic reference env; riir-ai
@@ -488,7 +461,6 @@ pub use micro_belief::{
     bom_mean_attractor, bom_minimax_attractor, bom_minimax_leaky, run_arena_comparison,
 };
 
-#[cfg(any(feature = "faithfulness_probe", feature = "triggered_injection"))]
 pub mod faithfulness;
 
 pub mod pruners;
@@ -515,21 +487,17 @@ pub mod hga;
 #[cfg(feature = "hga")]
 pub use hga::{GroupSummaryCache, MixedRopeSummarizer};
 
-#[cfg(feature = "renoise_ce")]
 pub mod renoise_ce;
-#[cfg(feature = "renoise_ce")]
 pub use renoise_ce::{
     Proposer, RenoiseCeConfig, RenoiseCeProbe, RenoiseCeScore, best_of_n_stability,
     renoise_ce_score, verify_and_restart,
 };
 
-#[cfg(feature = "freedom_selection")]
 pub use renoise_ce::best_of_n_freedom;
 
-#[cfg(all(feature = "renoise_ce", feature = "horizon_weights"))]
+#[cfg(feature = "horizon_weights")]
 pub use renoise_ce::{RenoiseCeHorizon, renoise_ce_score_horizon};
 
-#[cfg(feature = "renoise_ce_surprise")]
 pub use renoise_ce::renoise_ce_surprise;
 
 #[cfg(feature = "horizon_weights")]
@@ -541,11 +509,9 @@ pub use horizon_weights::{
     remaining_horizon_weights, terminal_truncation_ceiling, truncated_w_mass_fraction,
 };
 
-#[cfg(feature = "dual_leo")]
 pub use traits::{
     ActingMode, AlphaSchedule, AutocurriculumSampler, BcConfig, BcTarget, DualLeoMixer,
 };
-#[cfg(feature = "leo_all_goals")]
 pub use traits::{AllGoalsUpdate, LeoHead, sigmoid_bounded_q};
 
 #[allow(deprecated)]
@@ -565,7 +531,6 @@ pub use types::{
     softmax, softmax_scaled,
 };
 
-#[cfg(feature = "domain_latent")]
 pub use types::DomainLatent;
 
 #[cfg(feature = "sr2am_configurator")]
@@ -574,7 +539,6 @@ pub use types::{ConfiguratorContext, PlanningDecision};
 #[cfg(feature = "data_gate")]
 pub use types::{DataGate, GateDecision, ProposerTask, TaskType};
 
-#[cfg(feature = "sparse_mlp")]
 pub use types::sparse_matmul;
 
 #[cfg(feature = "coda_fusion")]
@@ -620,16 +584,14 @@ pub use questbench::{
     generate_synthetic_csps, tier_from_score, underspecification_score,
 };
 
-#[cfg(feature = "tf_loop")]
+#[cfg(feature = "lt2_looped")]
 pub use types::{CacheStrategy, IterationMode, SubStepStrategy, TrainingFreeLoopConfig};
 
-#[cfg(feature = "plasma_path")]
 pub use simd::{
     DEFAULT_L3_BYTES, l3_cache_bytes, plasma_prefers_ternary, plasma_prefers_ternary_with_l3,
     simd_matvec_plasma_dispatch, simd_matvec_plasma_dispatch_with_l3, simd_ternary_matmul_batch,
     simd_ternary_matvec, ternary_matvec_scalar,
 };
-#[cfg(feature = "plasma_path")]
 pub use types::TernaryWeights;
 
 #[cfg(feature = "binary_plasma")]
@@ -677,19 +639,15 @@ pub use dirichlet::{
     consecutive_adjacency, dirichlet_energy, functor_adjacency, kv_cache_dirichlet_energy,
 };
 
-#[cfg(feature = "spectral_hierarchy")]
 pub mod spectral_hierarchy;
-#[cfg(feature = "spectral_hierarchy")]
 pub use spectral_hierarchy::{cauchy_interlacing_check, eigenspace_alignment, haar_wavelet_basis};
 
-#[cfg(feature = "sigmoid_margin")]
 pub use simd::{
     ArgmaxAudit, argmaxable_witness, audit_argmaxable, compute_retrieval_margin,
     dim_capacity_ceiling, dim_capacity_floor, dim_capacity_required, dim_sufficiency_bound,
     ln_binomial, matrix_rank, sigmoid_margin_loss,
 };
 
-#[cfg(feature = "dual_gram_pca")]
 pub use simd::simd_gram_f32;
 
 #[cfg(feature = "roofline_cost")]
@@ -700,9 +658,7 @@ pub use roofline::{
     roofline_estimate,
 };
 
-#[cfg(feature = "ane_roofline")]
 pub mod ane_roofline;
-#[cfg(feature = "ane_roofline")]
 pub use ane_roofline::{
     AneBound, AneCost, AneFamily, AneOpShape, AnePeaks, Device, ane_conv3x3_cost, ane_estimate,
     ane_gemm_cost, ane_gemv_cost,
@@ -740,9 +696,7 @@ pub mod sense {
 #[cfg(feature = "spectral_threat")]
 pub mod sense_threat;
 
-#[cfg(feature = "slod")]
 pub mod slod;
-#[cfg(feature = "slod")]
 pub use slod::{
     ScaleBoundary, SlodConfig, SlodOperator, SlodPruner, exp_map, frechet_mean,
     heat_kernel_weights, log_map, poincare_distance,
@@ -762,10 +716,8 @@ pub use frozen_evidence::{
 #[cfg(feature = "dual_wave")]
 pub mod dual;
 
-#[cfg(feature = "subspace_phase_gate")]
 pub mod subspace_phase_gate;
 
-#[cfg(feature = "subspace_intervention")]
 pub mod subspace_intervention;
 
 #[cfg(feature = "refinement_marginal")]
@@ -792,7 +744,6 @@ pub mod nuisance_fraction;
 #[cfg(feature = "interpolation_geometry")]
 pub mod interpolation_geometry;
 
-#[cfg(feature = "viable_manifold_graph")]
 pub mod viable_manifold_graph;
 
 #[cfg(feature = "certified_frontier")]
@@ -816,19 +767,16 @@ pub mod zone_manifold;
 #[cfg(feature = "zone_density_routing")]
 pub mod zone_density;
 
-#[cfg(feature = "ac_prefix")]
 pub mod ac_prefix;
 
 #[cfg(feature = "causal_head_importance")]
 pub mod causal_head_importance;
 
-#[cfg(feature = "causal_identification")]
 pub mod causal_id;
 #[cfg(feature = "spectral_pruner")]
 pub use irrep_pruner::{
     IrrepPruner, IrrepPrunerConfig, irrep_pruner_from_config, spectral_flatness,
 };
-#[cfg(feature = "subspace_phase_gate")]
 pub use subspace_phase_gate::{
     IntrinsicDimMethod, JacobianSvdScratch, SvdResult, SvdResultScratch, SvdScratch,
     estimate_intrinsic_dim, jacobian_svd_at, jacobian_svd_at_into, numerical_rank,
@@ -850,12 +798,12 @@ pub use causal_head_importance::{
     per_capability_score,
 };
 
-#[cfg(feature = "adaptive_causal_calibration")]
+#[cfg(feature = "causal_head_importance")]
 pub use causal_head_importance::{adaptive_partition, suspect_indices};
 
-#[cfg(feature = "cross_stage_relocation")]
+#[cfg(feature = "causal_head_importance")]
 pub mod cross_stage_relocation;
-#[cfg(feature = "cross_stage_relocation")]
+#[cfg(feature = "causal_head_importance")]
 pub use cross_stage_relocation::{
     ClusterClass, PermeationMap, RelocateOp, RelocatePair, RelocatingForward, permeation_scan_into,
     permeation_scan_square_into,
@@ -888,7 +836,6 @@ pub use interpolation_geometry::{
     LatentSpace, imauve_score, intervention_battery,
 };
 
-#[cfg(feature = "viable_manifold_graph")]
 pub use viable_manifold_graph::{
     ClosurePredicate, GraphBuildConfig, SafeManifoldGraph, ViabilityPredicate, VolumeFieldConfig,
     build_safe_manifold_graph, manifold_curiosity_walk, manifold_geodesic, manifold_random_walk,
@@ -904,13 +851,11 @@ pub use certified_frontier::{
     sphere_exclusion_coverage, spherical_cap_bound, vendi_diversity,
 };
 
-#[cfg(all(feature = "certified_frontier", feature = "viable_manifold_graph"))]
+#[cfg(feature = "certified_frontier")]
 pub use certified_frontier::{CertifiedManifoldGraph, certified_manifold_graph};
 
-#[cfg(feature = "ac_prefix")]
 pub use ac_prefix::{AcPrefix, AcPrefixMask};
 
-#[cfg(feature = "ac_prefix")]
 pub use ac_prefix::{
     keyed_gumbel_max_sample, keyed_gumbel_max_sample_masked, keyed_gumbel_max_sample_truncated,
     keyed_gumbel_noise, keyed_posterior_gumbel_noise, truncation_keep_mask,
@@ -924,9 +869,7 @@ pub use flow::{
     fft_smooth_into, flow_steering, inflate_obstacles, should_use_flow_field,
 };
 
-#[cfg(any(feature = "fourier_continuation", feature = "spectral_differentiation"))]
 pub mod spectral;
-#[cfg(feature = "fourier_continuation")]
 pub use spectral::continuation::{
     FcConfig, FcScratch, FourierContinuationError, MAX_POLY_ORDER, fourier_continue,
     fourier_continue_into,
@@ -960,7 +903,7 @@ pub use rtdc::{
     DepthSelector, DepthTieredMerkleOctree, DepthTieredRoots, DeterministicLeafEncode, RtdcError,
     RtdcProof,
 };
-#[cfg(feature = "rtdc_subtree_inclusion")]
+#[cfg(feature = "rtdc")]
 pub use rtdc::{RTDC_SUBTREE_DEFAULT_K, SubtreeProof, min_k_for_95pct_confidence};
 
 // GPart isometric partition adapter — replaces LoRA's bilinear BA with single isometric Pθ_d (Plan 257).
@@ -1000,15 +943,12 @@ pub use analytic_lattice::{
     decoder::direction_vector_decode_into, decoder::direction_vector_decode_slice,
 };
 
-#[cfg(feature = "funcattn")]
 pub mod funcattn;
-#[cfg(feature = "funcattn")]
 pub use funcattn::{
     FuncAttnBasis, FuncAttnConfig, FuncAttnError, FuncAttnScratch, compute_basis_into,
     funcattn_forward, pre_rotate_basis_weights_into, solve_convex_combo_dual,
 };
 
-#[cfg(feature = "funcattn_structured_basis")]
 pub use funcattn::{make_dct_log_basis, make_haar_packet_basis};
 
 #[cfg(feature = "functional_substitution_gate")]
@@ -1016,61 +956,46 @@ pub mod functional_substitution;
 #[cfg(feature = "functional_substitution_gate")]
 pub use functional_substitution::{HeadSubstitutionGate, iou, worst_case_behavior_delta};
 
-#[cfg(feature = "cross_resolution_transport")]
 pub mod cross_resolution;
-#[cfg(feature = "cross_resolution_transport")]
 pub use cross_resolution::{
     CrossResScratch, CrossResolutionBases, CrossResolutionError, project_to_spectral_into,
     reconstruct_from_spectral_into, transport_cross_domain_cross_resolution_into,
     transport_cross_resolution, transport_cross_resolution_into,
 };
 
-#[cfg(feature = "latent_field_steering")]
 pub mod latent_steering;
-#[cfg(feature = "latent_field_steering")]
 pub use latent_steering::{
     BELIEF_AROUSAL, BELIEF_CALM, BELIEF_DESPERATION, BELIEF_DIM, BELIEF_FEAR, BELIEF_VALENCE,
     FieldSupport, LatentField, LatentSteeringError, LatentSteeringVector, apply_field_to_crowd,
     apply_latent_steering, apply_latent_steering_weighted, kernel_weight,
 };
 
-#[cfg(feature = "subspace_steering")]
 pub mod subspace_steering;
-#[cfg(feature = "subspace_steering")]
 pub use subspace_steering::{
     SubspaceSteeringError, SubspaceSteeringField, apply_subspace_steering, block_energy,
     compute_block_commitment, walk_manifold,
 };
 
-#[cfg(feature = "region_subspace_steering")]
 pub mod region_subspace;
-#[cfg(feature = "region_subspace_steering")]
 pub use region_subspace::{
     RegionDecomposition, RegionSubspaceError, RegionSubspaceField, compute_field_commitment,
     reconstruct,
 };
 
-#[cfg(feature = "phase_rotation_coupling")]
 pub mod phase_rotation;
-#[cfg(feature = "phase_rotation_coupling")]
 pub use phase_rotation::{
     PhaseRotationError, PhaseRotationGate, PhaseRotationScratch, compute_phase_from_projection,
     compute_phase_per_channel_into, phase_rotation_gate_into,
 };
 
-#[cfg(feature = "grapem_rodrigues")]
 pub mod grapem;
-#[cfg(feature = "grapem_rodrigues")]
 pub use grapem::{GrapemError, Rank2Plane, grapem_apply_into};
 
-#[cfg(feature = "position_group_action")]
 pub mod position_group_action;
-#[cfg(feature = "position_group_action")]
 pub use position_group_action::{
     AlibiAction, FoxAction, GrapeMAction, NopeAction, PositionGroupAction, RopeAction, WallAction,
 };
 
-#[cfg(feature = "rotary_value_embedding")]
 pub mod rotary_value_embedding;
 
 #[cfg(feature = "grape_ap_vector")]
@@ -1078,14 +1003,10 @@ pub mod grape_ap;
 #[cfg(feature = "grape_ap_vector")]
 pub use grape_ap::{GrapeApError, GrapeApGate, RotationSchedule, log_sigmoid};
 
-#[cfg(feature = "grape_joint_lift")]
 pub mod grape_joint_lift;
-#[cfg(feature = "grape_joint_lift")]
 pub use grape_joint_lift::{GrapeJointLift, JointLiftError, softplus};
 
-#[cfg(feature = "spherical_steering")]
 pub mod spherical_steering;
-#[cfg(feature = "spherical_steering")]
 pub use spherical_steering::{
     SlerpError, SlerpScratch, slerp_steering_into, spherical_steering_into, vmf_confidence_gate,
 };
@@ -1098,9 +1019,7 @@ pub use sphere_sampling::{
     parallel_transport_householder_into, sphere_exp_map_into,
 };
 
-#[cfg(feature = "mag_mining")]
 pub mod mag;
-#[cfg(feature = "mag_mining")]
 pub use mag::{
     DataSet, MagDirection, MagError, MagOperator, RankEntry, TransferMetric, apply_operator,
     calibrate_alpha, mine_contrast_direction, mine_direction, rank_candidates,
@@ -1149,7 +1068,7 @@ pub use data_probe::{
     stable_rank_update_into_flat,
 };
 
-#[cfg(feature = "mi_est")]
+#[cfg(feature = "gaussianity_probe")]
 pub mod mi;
 
 #[cfg(feature = "ict_branching")]
@@ -1169,7 +1088,7 @@ pub use induced_cwm::{
     make_transition_tests_from_trajectory, verify_transition,
 };
 
-#[cfg(feature = "induced_cwm_ismcts")]
+#[cfg(feature = "induced_cwm")]
 pub use induced_cwm::{InformationSet, NodeStats, ismcts_search_with_inference};
 
 #[cfg(feature = "bisimulation_operator_inference")]
@@ -1181,7 +1100,7 @@ pub use bisimulation::{
     plan as bisimulation_plan,
 };
 
-#[cfg(feature = "operator_consistency")]
+#[cfg(feature = "bisimulation_operator_inference")]
 pub use bisimulation::consistency::{
     ApplicationOutcome, ConsistencyGateConfig, ConsistencyRegime, ConsistencyReport,
     PromotionVerdict, promotion_verdict, rule_consistency,
@@ -1214,7 +1133,7 @@ pub mod meld;
 #[cfg(feature = "meld")]
 pub use meld::{MeldCompose, MeldLaw};
 
-#[cfg(feature = "variable_rank_domain_expert")]
+#[cfg(feature = "committed_field_blend")]
 pub mod variable_rank_domain_expert;
 
 #[cfg(feature = "engram")]
@@ -1230,15 +1149,13 @@ pub use engram::{
     sigmoid_fuse_multi_branch_into, try_compress_token,
 };
 
-#[cfg(feature = "engram_privilege")]
+#[cfg(feature = "engram")]
 pub use engram::{
     CreditAssignment, PrivilegeConfig, PrivilegeLedger, PrivilegeTrace,
     fuse_into_hidden_state_privileged, sigmoid_fuse_scaled_into,
 };
 
-#[cfg(feature = "product_key_memory")]
 pub mod product_key_memory;
-#[cfg(feature = "product_key_memory")]
 pub use product_key_memory::{
     D_K_FLOOR, PkEntry, PkQuery, PkmScratch, ProductKeyMemory, SQRT_N_FLOOR, ScoreFn, score_dot,
     score_idw,
@@ -1249,17 +1166,14 @@ pub use product_key_memory::{
 // consumes the same bit-identity-hardened primitives without implying the
 // mop feature. Compiled only when a consumer feature is on (a bare
 // --no-default-features build must not see dead_code).
-#[cfg(any(feature = "mop_path_entropy", feature = "hmm_homeostasis"))]
 pub(crate) mod tabular_kernel;
 
-#[cfg(feature = "mop_path_entropy")]
+#[cfg(feature = "cgsp")]
 pub mod mop;
-#[cfg(feature = "mop_path_entropy")]
+#[cfg(feature = "cgsp")]
 pub use mop::{MopConfig, MopConfigError, MopScratch, MopSolution, MopSolver};
 
-#[cfg(feature = "hmm_homeostasis")]
 pub mod hmm_control;
-#[cfg(feature = "hmm_homeostasis")]
 pub use hmm_control::{HmmControlSolver, HmmInputError, HmmSolution};
 
 #[cfg(feature = "gw_alignment")]
@@ -1270,10 +1184,8 @@ pub use gw_alignment::{
     score_from_loss,
 };
 
-#[cfg(feature = "product_key_memory_freeze")]
 pub use product_key_memory::FrozenProductKeyMemory;
 
-#[cfg(feature = "product_key_memory_episodic")]
 pub use product_key_memory::PkmEpisodicStore;
 
 #[cfg(feature = "gain_cost_halt")]
@@ -1292,10 +1204,10 @@ pub use qrr_convergence::{
     settling_steps, solve_sylvester, tolerance_for_budget,
 };
 
-#[cfg(feature = "saddle_escape")]
+#[cfg(feature = "gain_cost_halt")]
 pub mod saddle_escape;
 
-#[cfg(feature = "saddle_escape")]
+#[cfg(feature = "gain_cost_halt")]
 pub use saddle_escape::{
     FlipDetector, HaltOutcome, SaddleEscapeGate, TrapConfig, TrapObservables, apply_kick,
 };
@@ -1315,9 +1227,9 @@ pub use metabolic_gate::{
     MetabolicGate, defector_starves, execution_share, metabolic_drag_threshold, steal_lossy,
 };
 
-#[cfg(feature = "structural_cot_halt")]
+#[cfg(feature = "ict_branching")]
 pub mod structural_cot_halt;
-#[cfg(feature = "structural_cot_halt")]
+#[cfg(feature = "ict_branching")]
 pub use structural_cot_halt::{
     BacktrackRevisitHalt, ClassifiedPattern, HaltPolicy, HaltVote, Pattern, SelfLoopHalt,
     StructuralHaltDecision, StructuralHaltReason, StructuralTraceMonitor, StructuralTransition,
@@ -1332,7 +1244,6 @@ pub use convergence_cadence::{CadenceConfig, CadenceVerdict, ConvergenceCadence}
 #[cfg(feature = "kl_depth_probe")]
 pub mod loop_depth_probe;
 
-#[cfg(feature = "loop_alignment_probe")]
 pub mod loop_alignment_probe;
 
 #[cfg(feature = "regime_probe")]
@@ -1345,19 +1256,14 @@ pub use regime_probe::{
     kappa_max_bisection, mean_conditional_entropy, phi_cdf, phi_pdf,
 };
 
-#[cfg(feature = "set_attention")]
 pub mod set_attention;
-#[cfg(feature = "set_attention")]
 pub use set_attention::{
     SetAttentionConfig, SetAttentionError, identity, identity_into, identity_projection,
     identity_projection_into, set_sigmoid_attention_into, set_sigmoid_attention_wide_into,
 };
-#[cfg(feature = "clr_weighted_set_attention")]
 pub use set_attention::{clr_reliability_scores, clr_weighted_set_attention_into};
 
-#[cfg(feature = "set_refine")]
 pub mod set_refine;
-#[cfg(feature = "set_refine")]
 pub use set_refine::{
     SetRefineConfig, SetRefineError, SetRefineScratch, gate_weight, refine_state_into,
 };
@@ -1372,66 +1278,9 @@ pub use katgpt_types::depth_invariance::{
     Scratch, apply_magnitude_regularization, classify_chain, classify_chain_batched,
 };
 
-#[cfg(any(
-    feature = "karc_forecaster",
-    feature = "geometric_product",
-    feature = "tucker_factorization",
-    feature = "svd_cca",
-    feature = "twist_smc",
-    feature = "mi_est",
-    // Both joined the rule late and broke it silently: each consumes
-    // `linalg::ridge_solve` and neither gated this `pub mod`, so
-    // `--no-default-features --features <either>` failed E0433. Found by the
-    // Issue 701 R1b default-on isolation sweep (2026-09-01) — the FIRST run of
-    // that scope, and it found them in 4.1 minutes. Nothing else catches this
-    // class: `--all-features` compiles the union, where some other consumer
-    // always brings `linalg` in.
-    feature = "velocity_field_ensemble",
-    feature = "hebbian_kernel_memory",
-    // Issue 707: `tpr::als` consumes `ridge_solve_direct_f32` / `cholesky_f32`
-    // / `chol_solve_f32` for its four closed-form ALS blocks and the cached
-    // projection factor — same rule, joined at birth rather than late.
-    feature = "tpr",
-    // Issue 736: `leakage_probe::transport` consumes `symmetric_eig` (f64
-    // eigenvalues+vectors) for PCA whitening and the orthogonal-Procrustes
-    // polar factor — same rule, joined at birth rather than late.
-    feature = "leakage_probe",
-    // Issue 763: `lif_graph::fit_readout` consumes `ridge_solve_direct_f64`
-    // (the KARC-precedent closed-form readout) — same rule, joined at birth.
-    feature = "lif_graph",
-    // Issue 767: `mb_value`'s G1 floor test consumes `ridge_solve_direct_f64`
-    // (the ridge-batch-on-the-same-code baseline) — joined at birth per the
-    // same rule (the crate must compile when only this feature is on).
-    feature = "mb_value",
-    // Issue 839: `linalg::kron_tile` IS a linalg submodule, so it gates this
-    // `pub mod` too — joined at birth per the same rule.
-    feature = "kron_tile",
-    // Issue 954: `kron_memory::health`/`consolidate_ls` consume
-    // `symmetric_eig` — joined at birth per the same rule.
-    feature = "kron_memory",
-    // Plan 607 T3: `state_option_scoring::head` consumes
-    // `ridge_solve_direct_f64` for the corpus-fitted linear head (the KARC
-    // Plan-308 fit math) — joined at birth per the same rule.
-    feature = "state_option_scoring",
-    // Plan 630: `delta_mem::rls`'s G1 batch-equivalence test consumes
-    // `ridge_solve_direct_f64` (the decayed-ridge oracle) + `try_cholesky_f32`
-    // (the per-step SPD assertion) — joined at birth per the same rule.
-    feature = "rls_depth_mem",
-    // Plan 449: `poincare::fit` consumes `ridge_solve_direct_f32` — joined
-    // late (Bench 975: hidden by the default set until riir-refine turned
-    // katgpt-core's defaults off and enabled only its own features).
-    feature = "poincare_navigator",
-    // Issue 978: `nuisance_fraction` consumes `symmetric_eig` for the
-    // population whitening basis and the corrected between-group spectrum —
-    // joined at birth per the same rule (the crate must compile when only
-    // this feature is on).
-    feature = "nuisance_fraction"
-))]
 pub mod linalg;
 
-#[cfg(feature = "karc_forecaster")]
 pub mod karc;
-#[cfg(feature = "karc_forecaster")]
 pub use karc::{
     BSplineBasis, ChebyshevBasis, DelayRing, FitError, FourierBasis, KarcBasis, KarcForecaster,
     KarcScratch, LowRankFitScratch, chunked_gram_into, feature_expand, feature_expand_higher_order,
@@ -1441,15 +1290,11 @@ pub use karc::{
 #[cfg(feature = "karc_regime_gate")]
 pub use karc::regime_gate::{KarcRegime, KarcRegimeGate, RegimeVerdict};
 
-#[cfg(feature = "karc_batched_matvec")]
 pub use karc::batched::{KarcBatchForecaster, karc_batched_matvec_into};
 
-#[cfg(feature = "karc_lod_tier")]
 pub use karc::lod_tier::{KarcLodTier, is_identity_projection, project_wout_lod_into};
 
-#[cfg(feature = "karc_forecaster")]
 pub mod karc_dp;
-#[cfg(feature = "karc_forecaster")]
 pub use karc_dp::{KarcDpNoiseConfig, apply_dp_noise_to_wout};
 
 #[cfg(feature = "lif_graph")]
@@ -1458,16 +1303,14 @@ pub mod lif_graph;
 #[cfg(feature = "mb_value")]
 pub mod mb_value;
 
-#[cfg(feature = "hope_capacity")]
 pub mod hope;
 
-#[cfg(feature = "hebbian_kernel_memory")]
 pub mod hebbian_kernel_memory;
 
 #[cfg(feature = "spectral_pencil")]
 pub mod spectral_pencil;
 
-#[cfg(feature = "orthogonal_factorization")]
+#[cfg(feature = "spectral_pencil")]
 pub mod orthogonal_factorization;
 
 #[cfg(feature = "cp_hopfield")]
@@ -1505,9 +1348,7 @@ pub use arg::{
     TaxonomyValidator, TypedOfflineCandidate, ValidationError, ValidationResult, ValidationScratch,
 };
 
-#[cfg(feature = "non_interference_branches")]
 pub mod branching;
-#[cfg(feature = "non_interference_branches")]
 pub use branching::{
     AssignError, AssignResult, BranchBank, BranchId, BranchLifecycle, BranchRouter, BranchStats,
     BudgetCompiler, CognitiveBranch, CompiledContext, CompiledItem,
@@ -1518,9 +1359,7 @@ pub use branching::{
     RouteMode, RouteResult, VerifierGate, WriteDecision, max_orthogonal_branches,
 };
 
-#[cfg(feature = "local_branch_routing")]
 pub mod branch_routing;
-#[cfg(feature = "local_branch_routing")]
 pub use branch_routing::{
     ColliderRouterAdapter, DotProductRouter, PostCandidateRouter, PreservationScorer,
 };
@@ -1550,15 +1389,12 @@ pub use paired_loss::{
 // was added under a `temp_loss_fingerprint`-only gate — a consumer enabling
 // only `diffusion_diversity` failed to compile, found by the reflex Issue-115
 // consumer lane 2026-11-10; the temp rows keep their own narrower gates).
-#[cfg(any(feature = "temp_loss_fingerprint", feature = "diffusion_diversity"))]
 pub mod diversity;
-#[cfg(feature = "temp_loss_fingerprint")]
 pub use diversity::temp::{
     LossKernel, blake3_noise_fill, extrapolated_snapshot_schedule, lipschitz_gradient_bound,
     pairwise_bound, perturbed_loss_vector, select_diverse_subset, select_diverse_subset_in_place,
 };
 
-#[cfg(all(feature = "temp_loss_fingerprint", feature = "qmc_sampling"))]
 pub use diversity::temp::extrapolated_snapshot_schedule_qmc;
 
 #[cfg(feature = "diffusion_diversity")]
@@ -1567,12 +1403,9 @@ pub use diversity::diffusion::{
     neighbor_diversity_pick,
 };
 
-#[cfg(feature = "manifold_bandit")]
 pub mod manifold_bandit;
 
-#[cfg(feature = "mean_field_regime")]
 pub mod mean_field;
-#[cfg(feature = "mean_field_regime")]
 pub use mean_field::{
     DEFAULT_CLASSIFIER, HopfParams, MeanFieldOverlap, Regime, RegimeClassifier, hopf_boundary,
     static_boundary,
@@ -1595,17 +1428,13 @@ pub use ooo_audit::{
     cross_ooo, exemplar_rbf_sim_into, greedy_curate, ooo_score, select_meis_into,
 };
 
-#[cfg(feature = "velocity_field_ensemble")]
 pub mod velocity_field_ensemble;
-#[cfg(feature = "velocity_field_ensemble")]
 pub use velocity_field_ensemble::{
     ClosureField, EnsembleFitScratch, Schedule, VelocityField, VelocityFieldEnsemble,
     accumulate_pair_into, stochastic_interpolant_step_into,
 };
 
-#[cfg(feature = "velocity_field_disagreement")]
 pub mod velocity_field_disagreement;
-#[cfg(feature = "velocity_field_disagreement")]
 pub use velocity_field_disagreement::{VfdScore, VfdScratch, VfdVarianceSignal, vfd_score_into};
 
 pub mod welford;
@@ -1654,17 +1483,13 @@ pub mod cubical_nerve; // CubicalNerve CAT(0) cubical complexes (Plan 252 Phase 
 #[cfg(feature = "mux_latent_context")]
 pub mod mux_latent; // MUX-Latent Context Compression (Research 211, Plan 238) // Breakeven complexity cost-aware routing (Plan 250)
 // Feature-gated (mirror root feature names):
-#[cfg(feature = "cce_moderator")]
 pub mod cce;
-#[cfg(feature = "llmexec_guard")]
 pub mod llmexec_guard;
 #[cfg(feature = "memory_soup_lora")]
 pub mod memory_soup_lora;
 #[cfg(feature = "mux_demux")]
 pub mod mux_demux;
-#[cfg(feature = "salience_tri_gate")]
 pub mod salience;
-#[cfg(feature = "salience_tri_gate")]
 pub use salience::{
     DelegateToken, FoldbackTarget, SalienceDecision, SalienceTriGate, SilenceToken,
 };
@@ -1675,20 +1500,16 @@ pub mod channel_simd;
 pub mod bf16_convert;
 #[cfg(feature = "skill_opt")]
 pub mod skill_opt;
-#[cfg(feature = "ssd_block")]
 pub mod ssd_block;
 
 #[cfg(feature = "gdn_tree_verify")]
 pub mod gdn_tree_verify;
 
-#[cfg(feature = "tilr_invariant_subspace")]
 pub mod tilr;
-#[cfg(feature = "tilr_invariant_subspace")]
 pub use tilr::{
     TilrError, TilrScratch, check_orthonormal, tilr_refine, tilr_refine_apply, tilr_refine_into,
 };
 
-#[cfg(all(feature = "tilr_invariant_subspace", feature = "subspace_phase_gate"))]
 pub use tilr::discover_invariant_subspace;
 
 #[cfg(feature = "basis_split")]
@@ -1718,13 +1539,12 @@ pub use sst_cross_tail::{
     cross_tail_interference_into,
 };
 
-#[cfg(all(feature = "manifold_erasure", feature = "subspace_phase_gate"))]
 pub mod manifold_erasure;
 
-#[cfg(all(feature = "quant_error_lora", feature = "subspace_phase_gate"))]
+#[cfg(feature = "quant_error_lora")]
 pub mod quant_error_lora;
 
-#[cfg(all(feature = "closed_form_weight_write", feature = "subspace_phase_gate"))]
+#[cfg(feature = "quant_error_lora")]
 pub mod closed_form_weight_write;
 
 // Issue 980 — WeightEditOverlay (Research 648 modelless half): implies
@@ -1736,9 +1556,9 @@ pub mod closed_form_weight_write;
 // riir-instinct record 0064). The probe-parse machinery + its PoC battery
 // stay as the submodule `weight_edit_overlay::probe_circuit_grammar`
 // (attribution record, no separate feature).
-#[cfg(feature = "weight_edit_overlay")]
+#[cfg(feature = "gain_cost_halt")]
 pub mod weight_edit_overlay;
-#[cfg(feature = "weight_edit_overlay")]
+#[cfg(feature = "gain_cost_halt")]
 pub use weight_edit_overlay::{
     ArmRefusal, ArmVerdict, EditForm, ObstacleArmConfig, ProvenanceTrailer, WeightEditArtifact,
     WeightEditOverlay, WeightEditSpec, arm_from_telemetry, blake3_seed,
@@ -1751,7 +1571,6 @@ pub use weight_edit_overlay::{
 // documented softmax exception class; sigmoid on every gate/threshold.
 #[cfg(feature = "regret_guard")]
 pub mod regret_guard;
-#[cfg(all(feature = "manifold_erasure", feature = "subspace_phase_gate"))]
 pub use manifold_erasure::{
     ManceConfig, ManceError, ManceScratch, ManceStepInfo, ManceTangentCache,
     covmatch_second_moment_into, leace_first_moment_into, mance_plus_plus_step_into,
@@ -1767,18 +1586,14 @@ pub use regret_guard::{
 #[cfg(feature = "multi_agent_path")]
 pub mod multi_agent_path;
 
-#[cfg(all(feature = "poincare_navigator", feature = "subspace_phase_gate"))]
 pub mod poincare;
-#[cfg(all(feature = "poincare_navigator", feature = "subspace_phase_gate"))]
 pub use poincare::{
     FitConfig, LATENT_DIM_MAX, PHI_HIDDEN_DEFAULT, PHI_OUT_DEFAULT, PoincareAdapter,
     PoincareFitError, RIDGE_ALPHA_DEFAULT, TARGET_DIM_MAX, accumulate_pinv_into, eval_phi_into,
     fit_poincare_adapter, poincare_multi_step_into, poincare_navigate_into,
 };
 
-#[cfg(feature = "phase_separation")]
 pub mod phase_separation;
-#[cfg(feature = "phase_separation")]
 pub use phase_separation::{
     circular_distance, from_latent_projection, from_speeds_and_tick, phase_separation,
     phase_separation_all, phase_separation_sorted,
@@ -1845,7 +1660,6 @@ pub mod sterling;
 #[cfg(feature = "recirculation")]
 pub mod recirculation;
 
-#[cfg(feature = "contrastive_scope")]
 pub mod contrastive_scope;
 
 #[cfg(feature = "successor_density_critic")]
@@ -1861,16 +1675,14 @@ pub mod anchored_reach;
 #[cfg(feature = "anti_common_mode")]
 pub mod anti_common_mode;
 
-#[cfg(feature = "numeric_stability")]
 pub mod numeric_stability;
 
-#[cfg(feature = "kinematic_rollout")]
 pub mod kinematics;
 
 #[cfg(feature = "stale_residual")]
 pub mod stale_residual;
 
-#[cfg(feature = "cond_audit")]
+#[cfg(feature = "stale_residual")]
 pub mod cond_audit;
 
 #[cfg(feature = "tpr")]
@@ -1883,20 +1695,12 @@ pub mod tpr;
 // consumers compile away and the ungated module tripped dead_code — it now
 // compiles to nothing with them (the cfg-gated-target discipline, not an
 // #[allow(dead_code)] blanket).
-#[cfg(any(
-    feature = "best_belief",
-    feature = "bmr",
-    feature = "certified_frontier"
-))]
 pub(crate) mod special_fn;
 
-#[cfg(feature = "slice_tca")]
 pub mod slice_tca;
 
-#[cfg(feature = "bmr")]
 pub mod bmr;
 
-#[cfg(feature = "slt")]
 pub mod slt;
 
 #[cfg(feature = "graph_stable_pool")]
@@ -1946,7 +1750,7 @@ pub mod slot_bank;
 #[cfg(feature = "soft_read")]
 pub mod soft_read;
 
-#[cfg(feature = "gmm_support")]
+#[cfg(feature = "factorized_action")]
 pub mod gmm_support;
 
 #[cfg(feature = "dirichlet_dist")]
@@ -1955,13 +1759,11 @@ pub mod dirichlet_dist;
 #[cfg(feature = "grouped_evidence_weighting")]
 pub mod grouped_evidence;
 
-#[cfg(feature = "fitted_anchor_tables")]
 pub mod fitted_anchor_table;
 
 #[cfg(feature = "act_channel_moments")]
 pub mod act_channel_moments;
 
-#[cfg(feature = "differential_anchor")]
 pub mod differential_anchor;
 
 #[cfg(feature = "attention_snr")]
@@ -1973,7 +1775,6 @@ pub mod row_logit_floor;
 #[cfg(feature = "canonical_context")]
 pub mod canonical_context;
 
-#[cfg(feature = "fitted_value_tables")]
 pub mod fitted_value_table;
 
 #[cfg(feature = "habituation_filter")]
@@ -2009,7 +1810,7 @@ pub mod extraction_wire;
 #[cfg(feature = "runetrace")]
 pub mod runetrace;
 
-#[cfg(feature = "kv_sink_window")]
+#[cfg(feature = "usage_rate_eviction")]
 pub mod kv_sink_window;
 
 #[cfg(feature = "coverage_manifest")]

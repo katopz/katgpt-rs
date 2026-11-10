@@ -29,7 +29,7 @@
 //! Determinism: SplitMix64 fixtures + fixed seeds; no wall-clock verdicts
 //! except the G2 timing (release-gated assert, printed everywhere).
 
-#![cfg(feature = "mi_est")]
+#![cfg(feature = "gaussianity_probe")]
 
 use katgpt_core::mi::bounds::{DEFAULT_K_LADDER, bounds_all};
 use katgpt_core::mi::dv::{QuadraticCritic, dv_report};

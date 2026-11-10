@@ -36,7 +36,7 @@ bckvss = ["band_conditioner"]
 # DEFAULT-ON (T5.3, 2026-07-02): G7-G9 pass. Forwards katgpt-core/local_branch_routing
 # so the PreservationScorer impl for ColliderConstraint (Plan 377 Phase 2 follow-up)
 # compiles under `--no-default-features --features collider_consistency`.
-collider_consistency = ["band_conditioner", "katgpt-core/local_branch_routing"]
+collider_consistency = ["band_conditioner"]
 
 # Phase 4: Theory-backed adaptive CoT stopping criterion (Plan 265 Phase 4).
 # Opt-in — was opt-in in root pending GOAT G10. Despite the historical lib.rs

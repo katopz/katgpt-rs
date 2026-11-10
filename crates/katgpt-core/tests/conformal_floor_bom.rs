@@ -57,7 +57,7 @@
 //!   --features conformal_predictive_intervals,bom_sampling -- --nocapture
 //! ```
 
-#![cfg(all(feature = "conformal_predictive_intervals", feature = "bom_sampling"))]
+#![cfg(feature = "bom_sampling")]
 #![allow(clippy::needless_range_loop)]
 
 use katgpt_core::{

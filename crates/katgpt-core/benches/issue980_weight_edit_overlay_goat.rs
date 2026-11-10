@@ -14,7 +14,7 @@
 //! measurement). Run with: cargo bench -p katgpt-core --features
 //! weight_edit_overlay --bench issue980_weight_edit_overlay_goat
 
-#![cfg(feature = "weight_edit_overlay")]
+#![cfg(feature = "gain_cost_halt")]
 
 use std::hint::black_box;
 use std::time::Instant;

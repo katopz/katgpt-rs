@@ -104,7 +104,7 @@ recfm = []
 # calibrate_from_adaptive_causal in rt_turbo/calibration. Forwards to
 # katgpt-core/adaptive_causal_calibration which provides suspect_indices
 # (chained: enables katgpt-core/causal_head_importance transitively).
-adaptive_causal_calibration = ["katgpt-core/adaptive_causal_calibration"]
+adaptive_causal_calibration = ["katgpt-core/causal_head_importance"]
 
 # cache_prune forward — gates segment_match (spechop) + sat_retrieval (rt_turbo).
 # Forwards to katgpt-kv so `use katgpt_kv::cache_prune::*` resolves.
@@ -214,7 +214,7 @@ selectivity_router = ["kurtosis_gate", "dep:bytemuck"]
 # qgf_drafter)` matching root's gating — nf_flow_score itself stays empty.
 nf_flow_score = []
 # NFCoT × QGF Fusion (Plan 268 T6). Forwards to katgpt-core for QGuidedDrafter.
-qgf_drafter = ["katgpt-core/qgf_drafter"]
+qgf_drafter = ["katgpt-core/qgf"]
 # Parallel-Probe 2D controller (Plan 133, Research 094). Gates answer_extract
 # (Phase 16) + parallel_probe module (Plan 389 Phase 4). The hosted
 # SpeculativeVerifier trait (verifier_trait module) is always-on (not gated
@@ -266,7 +266,7 @@ thinking_cot = []
 # plug-point seams here compile: the fold/thinking_ext.rs observer + the
 # dd_tree TreeBuilder patience seam. Opt-in — flag-off behavior is
 # bit-identical (the seams are `Option`-shaped and whole blocks cfg-gated).
-structural_cot_halt = ["katgpt-core/structural_cot_halt"]
+structural_cot_halt = ["katgpt-core/ict_branching"]
 
 # RV-Gated Thinking — ThinkingController RV bias (Plan 202 GOAT, default-ON
 # via rv_gated_routing in root). Tracking flag for thinking_controller's
@@ -286,7 +286,7 @@ and_or_dtree = ["katgpt-core/and_or_dtree", "dep:blake3"]
 # ── Plan 390 (2026-07-05): prefill substrate tracking flags. ──
 # MaxSim late-interaction scoring — gates `block_score_maxsim` in prefill.rs.
 # Forwards to katgpt-core/maxsim so `katgpt_core::simd::maxsim_score` resolves.
-maxsim = ["katgpt-core/maxsim"]
+maxsim = []
 
 # ── Plan 391 (2026-07-05): dd_tree substrate tracking flags. ──
 # These were originally root-only features that gated dd_tree.rs items now

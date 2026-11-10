@@ -139,7 +139,6 @@ pub mod regime_gate;
 // is ~75ns, far below rayon's ~5µs scheduling overhead. Crowd-scale perf
 // primitive: unblocks Plan 514 Phase 3 (octree-batched cell-level KARC).
 // Gated on `karc_batched_matvec` (which implies `karc_forecaster`).
-#[cfg(feature = "karc_batched_matvec")]
 pub mod batched;
 
 // ── LOD Tier (Plan 556 Phase 3) ────────────────────────────────────────
@@ -151,13 +150,11 @@ pub mod batched;
 // columns; up-tier zero-fills new columns). Phase 3 ships R=1 only; the R=2
 // promotion-gate config (d_h=18_720, Issue 185/186/187) is deferred.
 // Gated on `karc_lod_tier` (which implies `karc_forecaster`).
-#[cfg(feature = "karc_lod_tier")]
 pub mod lod_tier;
 
 // Re-export the LOD tier API at `katgpt_core::karc::` so callers can use the
 // consistent `karc::` namespace for all KARC primitives. The top-level
 // `katgpt_core::` re-export (lib.rs) stays for caller ergonomics.
-#[cfg(feature = "karc_lod_tier")]
 pub use lod_tier::{KarcLodTier, is_identity_projection, project_wout_lod_into};
 
 // ── Hebbian Readout (riir-ai Plan 584 — the `w_out` fit, Hebbian-flavored) ──
@@ -168,7 +165,6 @@ pub use lod_tier::{KarcLodTier, is_identity_projection, project_wout_lod_into};
 // `karc_hebbian_readout` (implies `hebbian_kernel_memory`; the karc-side
 // dependency is conceptual — this module needs no `fit_ridge` machinery,
 // only the pairing convention).
-#[cfg(feature = "karc_hebbian_readout")]
 pub mod hebbian_readout;
 
 // ── Sealed trait machinery ────────────────────────────────────────────────────

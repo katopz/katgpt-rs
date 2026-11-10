@@ -59,7 +59,7 @@ pub mod types;
 
 // Dual-pool reachable memory router (Plan 282, Research 249 — DecentMem).
 // Opt-in until G1–G5 GOAT gate passes.
-#[cfg(feature = "cgsp_dual_pool")]
+#[cfg(feature = "cgsp")]
 pub mod dual_pool;
 
 // Convenience re-exports — flat namespace for callers.
@@ -90,7 +90,7 @@ pub use types::{
 };
 
 // Dual-pool re-exports (Plan 282, Research 249).
-#[cfg(feature = "cgsp_dual_pool")]
+#[cfg(feature = "cgsp")]
 pub use dual_pool::{DualPoolBandit, DualPoolConfig, PoolId, ReachableDualPoolRouter};
 
 // ── Integration tests (T1.7) ──────────────────────────────────────────────

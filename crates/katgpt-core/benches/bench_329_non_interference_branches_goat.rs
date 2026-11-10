@@ -30,7 +30,7 @@
 //! # Run
 //!
 //! ```bash
-//! cargo bench -p katgpt-core --features non_interference_branches --bench bench_329_non_interference_branches_goat -- --nocapture
+//! cargo bench -p katgpt-core --bench bench_329_non_interference_branches_goat -- --nocapture
 //! ```
 //!
 //! Or, working around the intermittent macOS dyld/trustd launch stall
@@ -39,8 +39,6 @@
 //! ```bash
 //! target/release/deps/bench_329_non_interference_branches_goat-* --nocapture
 //! ```
-
-#![cfg(feature = "non_interference_branches")]
 
 use katgpt_core::{
     BranchBank, BranchId, BranchRouter, CognitiveBranch, NonInterferenceProjection, VerifierGate,

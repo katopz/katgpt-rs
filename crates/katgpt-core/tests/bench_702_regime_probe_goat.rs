@@ -1,4 +1,4 @@
-#![cfg(all(feature = "regime_probe", feature = "hebbian_kernel_memory"))]
+#![cfg(feature = "regime_probe")]
 //! Issue 740 T5–T7 — the regime-probe GOAT gate (bench number 702; the
 //! bench counter is monotonic and independent of the issue number).
 //!
@@ -44,7 +44,7 @@
 //! # Run
 //!
 //! ```bash
-//! cargo test -p katgpt-core --features regime_probe,hebbian_kernel_memory \
+//! cargo test -p katgpt-core --features regime_probe \
 //!   --test bench_702_regime_probe_goat -- --nocapture
 //! ```
 

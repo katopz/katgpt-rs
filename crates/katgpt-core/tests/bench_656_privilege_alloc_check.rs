@@ -23,11 +23,11 @@
 //! # Run
 //!
 //! ```bash
-//! cargo test -p katgpt-core --features engram_privilege \
+//! cargo test -p katgpt-core --features engram \
 //!     --test bench_656_privilege_alloc_check --release -- --nocapture
 //! ```
 
-#![cfg(feature = "engram_privilege")]
+#![cfg(feature = "engram")]
 
 use katgpt_core::engram::{
     CreditAssignment, EngramConfig, EngramHash, EngramTable, EngramTableBuilder, K_MAX,

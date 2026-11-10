@@ -61,11 +61,11 @@ pub type LatticeMemory = LatticeMemoryG<2>;
 /// The 3-axis lattice — Issue 938 T2's second capacity remedy. Opt-in
 /// behind `lattice_memory_3d`; promotion is the bench's verdict (G1/G2/G5/G6),
 /// never this alias.
-#[cfg(feature = "lattice_memory_3d")]
+#[cfg(feature = "lattice_memory")]
 pub type LatticeMemory3D = LatticeMemoryG<3>;
 
 /// The 3-axis config alias (see [`types::LatticeConfig3D`]).
-#[cfg(feature = "lattice_memory_3d")]
+#[cfg(feature = "lattice_memory")]
 pub use types::LatticeConfig3D;
 
 /// The 3-tap neighborhood weight row for one axis: `[prev, center, next]`.

@@ -38,7 +38,7 @@
 //!
 //! Run with: `cargo run --example qgf_02_adaptive_weight --features qgf_adaptive --release`
 
-#![cfg(feature = "qgf_adaptive")]
+#![cfg(feature = "qgf")]
 
 use katgpt_core::qgf::QGuidedDrafter;
 use katgpt_core::qgf::adaptive_guidance_weight;

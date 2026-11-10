@@ -21,7 +21,7 @@
 //!
 //! Documented in `.benchmarks/633_operator_consistency_goat.md`.
 
-#![cfg(feature = "operator_consistency")]
+#![cfg(feature = "bisimulation_operator_inference")]
 
 use katgpt_core::bisimulation::consistency::{
     ApplicationOutcome, ConsistencyGateConfig, ConsistencyRegime, PromotionVerdict,

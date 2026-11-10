@@ -6,7 +6,7 @@
 //!
 //! Run:
 //! ```bash
-//! cargo run --release -p katgpt-core --features set_attention \
+//! cargo run --release -p katgpt-core \
 //!   --bench set_attention_bench
 //! ```
 //!
@@ -14,8 +14,6 @@
 //! - **G3 latency** — mean wall-clock per call < 5 µs at N=64, d=8, k=4.
 //!   (20Hz tick budget = 50ms; 5µs leaves 10,000× headroom.)
 //! - **G4 zero-alloc** — counting allocator delta == 0 on the dense path.
-
-#![cfg(feature = "set_attention")]
 
 use katgpt_core::set_attention::{
     SetAttentionConfig, identity_projection, set_sigmoid_attention_into,

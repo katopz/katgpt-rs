@@ -3,8 +3,6 @@
 //! convention: parallel tests share the global counting allocator —
 //! `bench_655_propagation_alloc_check.rs` pattern).
 
-#![cfg(feature = "hint_regret")]
-
 use katgpt_core::hint_regret::{
     HintRegretEstimator, Regime, RegretMemory, RegretMemoryEntry, ReturnBounds, beta_lcb_order_into,
 };

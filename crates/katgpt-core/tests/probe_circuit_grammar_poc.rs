@@ -53,7 +53,7 @@
 //!
 //! Green-zero rule: whole-file `#![cfg]` + `required-features` row pair.
 
-#![cfg(feature = "weight_edit_overlay")]
+#![cfg(feature = "gain_cost_halt")]
 
 use std::cell::Cell;
 

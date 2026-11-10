@@ -9,7 +9,7 @@
 //! OUT of this window. The G4 claim is the per-decision hot loop: the
 //! head's score/pick are stack-local f64 folds.
 
-#![cfg(feature = "state_option_scoring")]
+#![cfg(feature = "distance_abstain")]
 
 #[path = "common/mod.rs"]
 mod common;

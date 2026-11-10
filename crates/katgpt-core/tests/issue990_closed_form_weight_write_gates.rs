@@ -1,4 +1,4 @@
-#![cfg(all(feature = "closed_form_weight_write", feature = "subspace_phase_gate"))]
+#![cfg(feature = "quant_error_lora")]
 //! Issue 990 gates — closed-form fact-write on a purpose-built ≥2-layer toy
 //! decoder. PRIMARY path per the issue: a katgpt-core test cannot dev-depend
 //! on katgpt-transformer (it path-deps katgpt-core; a reverse dev-dep would
