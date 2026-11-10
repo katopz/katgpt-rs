@@ -32,6 +32,8 @@ Looped transformers wired carry-last (`h_t = z_t`) suffer **latent overthinking*
 
 ---
 
+> **PASS-Redirects (synthesis):** Yao et al. [arXiv:2611.05234 "ARLoop: Fully-Open Pre-trained Looped Transformers with Attention Residuals"] (Nov 2026) — independent LLM-scale corroboration of the RECENCY-LOCALITY PREMISE underlying this note's forward-decay law (not the decay shape itself): depth attention over the loop axis concentrates 96% of its mass on the embedding + 3 most recent residual blocks (cross-recurrence cosine redundancy high), and pruning to that hard window matches/beats full-history on looped models at R>2 while degrading the matched-depth non-recurrent control — recency-local aggregation is the loop axis's own structure, the premise the N/D decay (`β = e^{−λ}`) implements softly. Their value-residual dependency (Sandwich-Norm looped training collapses without it) is recorded training-side; no change to Issue 950's gates.
+
 ## 1. Paper core findings
 
 1. **Latent overthinking (the diagnosis).** Under carry-last, TRM on Sudoku-Extreme: peak 62.2% @ 468 layers → 58.1% @ 1,872; updates 36–72 change 77.0 predicted cells/puzzle on empty cells (InfiLoop 24.0), +0.21 incorrect cells/puzzle (InfiLoop −1.25); **20.9% of correct predictions at update 36 get overwritten at least once** (InfiLoop 2.4%); after first solve, TRM's per-update state change falls to 3% then climbs back to 10% and stays — it begins losing solved puzzles after 9 updates and has lost 19.7% after 36. InfiLoop: 0.3%/update, every solved puzzle still solved 36 updates later. Once an error propagates long-range through the recurrence, later loops cannot correct it.
