@@ -1,6 +1,7 @@
 # Issue 994 — adoption_gate tie rule on destructive consults (+ the α=1 endpoint degeneracy; + optional digest-keyed holdout)
 
 **Status:** OPEN — filed from the riir-refine G3 real-store cell (riir-refine Bench 148, 2026-11-10; consumer issue 220 closed, plan 633 T3 executed). Not claimed; the design decision below is pre-registered for the NEXT cell, never patched into the executed one.
+**Claimed:** zed-m3-i994@m3, 1794347251, expires 2026-11-12T21:47:00Z — the idle-loop issue-first unit: decide + land the tie rule (Option A direction, pending the delegated-owner verdict), fixtures + module-doc rule name + pre-registered bars for the next G3 re-run; the push is the arbiter.
 
 ## The finding (measured, riir-refine Bench 148)
 
