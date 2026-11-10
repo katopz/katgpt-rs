@@ -1,7 +1,7 @@
 # Plan 633 — Adoption/retention regression gate (AGCL form; issue 987 priority-1, fixture-first)
 
-**Status:** ACTIVE — T0 LANDED (fixture + primitive; landing commit recorded below). T1–T4 stay unchecked pending their preconditions (ungoat discipline: the fixture IS the proof path; the real-store GOAT cell opens only after a consumer names its store).
-**Claimed:** zed-86011726@m3, 1794136639, expires 2026-11-10T11:20:00+00:00
+**Status:** ACTIVE — T0 + T1 + T3 LANDED (T3 = the REAL-store cell, executed honestly-split: G3-b/G3-c FAIL as pre-registered, G3-d PASS, G3-a not-vacuous; the durable record is riir-refine `.benchmarks/148_issue220_g3_real_store_cell.md`; **T4 DEFERRED** by the delegated owner — reopen when a later G3 re-run could support promotion; the tie-rule surface routes to `.issues/994`).
+**Lease closed:** zed-86011726@m3, 1794136639, was expires 2026-11-10T11:20:00+00:00 — EXPIRED unconsumed; the T3 execution lane did not re-claim this file (the cell was claimed on the CONSUMER side: riir-refine issue 220 lease `zed-m3-i220-g3cell`, epoch 1794335612, commit `ad0711680`; this plan's checkboxes are updated by that lane's record). (claim record: zed-86011726@m3, epoch 1794136639, was expires 2026-11-10T11:20:00+00:00)
 
 Source: `.issues/987_cactus_neurips2026_follow_ups.md` priority-1 lead — [P] gate form from AGCL (Research 657 §A5) + [ours] consumers + judge-noise handling. **Substrate-first verdict (2026-11-08, vocabulary translation run):** NO existing outcome-retention gate substrate in katgpt-rs — every `retention` hit is KV/attention-side (`dash_attn` eviction windows, needle retention), every `dedup` hit is AC-prefix attention masking or ARG ontology `RegistryDedup`; `RingRow<T,32>` lives in riir-neuron-db, which this upstream repo cannot dep (BOUNDARY law). A new primitive is justified; it mirrors the ring shape locally.
 
@@ -27,10 +27,10 @@ Fixture tests (the proof path — synthetic outcome streams, LABELED synthetic g
 
 ## Gates after T0 (leave UNCHECKED until their precondition lands)
 
-- [ ] T1 — consumer wiring: riir-refine active-set demote/readmit + `seat_rerank` head swaps consume the gate (file locally in riir-refine citing 987 + this plan; the 632 `elo_k_eff` precedent shape).
+- [x] T1 — consumer wiring: riir-refine active-set demote/readmit + `seat_rerank` head swaps consume the gate (LANDED 2026-11-10, riir-refine T1 wiring + issue 220; feature `adoption_gate`, G1 6/6 + G2 byte-identical; the `elo_k_eff` forward shape).
 - [ ] T2 — instinct LaneSlot epoch-swap consumer (file in riir-instinct likewise).
-- [ ] T3 — GOAT cell: gate-on vs gate-off on the REAL store (fix trajectories + oracle verdicts); α under judge noise measured (the issue's open caveat — the fixture's perturbation arm is the harness, the real-store number is the verdict); may fail honestly — a verdict, not a bug. Pre-registered bars at T3 open time.
-- [ ] T4 — adoption-proof sidecar on the freeze envelope (987's second lead) — only after T3 produces evidence worth sealing.
+- [x] T3 — GOAT cell: gate-on vs gate-off on the REAL store (fix trajectories + oracle verdicts); α under judge noise measured (the issue's open caveat — the fixture's perturbation arm is the harness, the real-store number is the verdict); may fail honestly — a verdict, not a bug. **EXECUTED 2026-11-10** (riir-refine Bench 148; bars pre-registered at open in the consumer claim `ad0711680`; deterministic instrument, two runs byte-identical). Verdict: G3-b FAIL (5 α-flips — ALL the zero-rejection exact-tie class at the α=1 endpoint; the tie→challenger rule on destructive consults is the defect surface, `.issues/994`), G3-c FAIL (dominant refusals on 1-row evidence below the 0.90 noise bar; quotability is per-consult measured stability — today 2/34), G3-d PASS, G3-a PASS as NOT-VACUOUS (16/17 refused; NOT a discrimination measurement). `adoption_gate` stays opt-in. Delegated-owner Claude verdict: REVISE, four revisions applied (session `3e68878e-6d79-42e1-88ad-71167e81eccf`).
+- [-] T4 — adoption-proof sidecar on the freeze envelope (987's second lead) — DEFERRED by the delegated owner 2026-11-10 (Bench 148 verdict): no gain and no GOAT result to protect; the deterministic instrument + record already reproduce the evidence. Reopen when a later G3 re-run could support promotion.
 
 ## Constraints
 
