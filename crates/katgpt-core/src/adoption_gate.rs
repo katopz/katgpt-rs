@@ -33,10 +33,16 @@ pub const RING_CAPACITY: usize = 32;
 /// Default α — the linear mix weight on the repeated-rejected term.
 pub const DEFAULT_ADOPTION_ALPHA: f64 = 0.5;
 
-/// The ONE tie rule, pinned as a value: an exact score tie ADOPTS the
-/// challenger. [`AdoptionGate::decide`] reads this constant in its
-/// comparison — `>=` while it is `true`, `>` would demote ties to Keep.
-pub const TIE_GOES_TO_CHALLENGER: bool = true;
+/// The ONE tie rule, pinned as a value: an exact score tie goes to the
+/// INCUMBENT (katgpt-rs issue 994, landed 2026-11-10 — an uninformative
+/// window declines, the decline-first law; measured in riir-refine Bench
+/// 148: the old tie-adopts-challenger rule demoted a rule carrying an
+/// accepted fix on a no-evidence window at the default α and demoted the
+/// only productive rule at the α=1 endpoint). [`AdoptionGate::decide`]
+/// selects its comparison BY this constant — `>` while it is `false`
+/// (ties Keep; strict improvement still adopts); `true` restores the old
+/// `>=` tie-adopts-challenger behavior.
+pub const TIE_GOES_TO_CHALLENGER: bool = false;
 
 /// Every `stride`-th ACCEPTED outcome files to the held-out audit set `A`;
 /// every other outcome (accepted or rejected) files to the gate set `T`.
@@ -281,8 +287,9 @@ fn incumbent_score(accepted: &DedupRing, rejected: &DedupRing, alpha: f64) -> Ad
 /// The gate's decision over a candidate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdoptionDecision {
-    /// Challenger scores ≥ the incumbent on the same T window — an exact
-    /// tie included ([`TIE_GOES_TO_CHALLENGER`]).
+    /// Challenger scores strictly above the incumbent on the same T
+    /// window; an exact tie adopts only while [`TIE_GOES_TO_CHALLENGER`]
+    /// is `true` (the pinned value is `false` — ties Keep, issue 994).
     Adopt,
     /// Challenger regresses the incumbent — keep what is running.
     Keep,
@@ -375,8 +382,10 @@ impl AdoptionGate {
     ///   keeps the incumbent (decline-first law).
     /// - Otherwise the incumbent's own score under the same formula is
     ///   derived from the rings (always-from-base), and the challenger is
-    ///   ADOPTED iff its score ≥ the incumbent's — an exact tie adopts the
-    ///   challenger ([`TIE_GOES_TO_CHALLENGER`]).
+    ///   ADOPTED iff its score beats the incumbent's under the pinned tie
+    ///   rule ([`TIE_GOES_TO_CHALLENGER`] — `false` since issue 994: an
+    ///   exact tie is a no-evidence state and KEEPS the incumbent,
+    ///   decline-first; strict improvement adopts).
     pub fn decide(
         &self,
         candidate_accepted: &[OutcomeDigest],
@@ -399,9 +408,17 @@ impl AdoptionGate {
             };
         }
         let incumbent = incumbent_score(&self.accepted_ring, &self.rejected_ring, alpha);
-        // TIE_GOES_TO_CHALLENGER is the pinned tie rule: `>=` adopts on an
-        // exact tie; the constant flipped to false would demote ties to Keep.
-        let decision = if TIE_GOES_TO_CHALLENGER && candidate.score >= incumbent.score {
+        // The pinned tie rule SELECTS the comparison (`>=` vs `>`); it must
+        // never gate the whole adoption — a plain `&&` here would turn every
+        // consult into Keep once the constant is false (issue 994 verdict
+        // correction). Pinned `false`: ties Keep (a tie is a no-evidence
+        // state, decline-first); strict improvement adopts.
+        let beats = if TIE_GOES_TO_CHALLENGER {
+            candidate.score >= incumbent.score
+        } else {
+            candidate.score > incumbent.score
+        };
+        let decision = if beats {
             AdoptionDecision::Adopt
         } else {
             AdoptionDecision::Keep
@@ -493,11 +510,14 @@ mod tests {
     }
 
     /// SYNTHETIC GATE-MECHANICS fixture 2 — a challenger that retains every
-    /// previously-accepted outcome and never repeats a rejected one ADOPTS;
-    /// and on an exact score tie the challenger wins
-    /// (TIE_GOES_TO_CHALLENGER). Never a serving-quality number.
+    /// previously-accepted outcome and never repeats a rejected one ADOPTS
+    /// (with [`TIE_GOES_TO_CHALLENGER`] pinned `false`: the guard that
+    /// adoption stays live — a plain `&&` on the constant would turn this
+    /// arm Keep too); an exact score tie at the default α KEEPS the
+    /// incumbent, and the α=1 zero-rejection tie KEEPS as well (issue 994's
+    /// measured endpoint). Never a serving-quality number.
     #[test]
-    fn genuine_improvement_adopts_and_ties_go_to_challenger() {
+    fn genuine_improvement_adopts_and_ties_keep() {
         let gate = gate_from_accepted_then_rejected(15, 2);
         let candidate_accepted: Vec<OutcomeDigest> = gate.accepted().iter().collect();
         let candidate_outputs = candidate_accepted.clone();
@@ -512,15 +532,23 @@ mod tests {
         assert_eq!(verdict.repeated, 0.0);
         assert_eq!(verdict.score, 1.0);
 
-        // Exact-tie arm: an incumbent with no rejected outcomes scores 1.0;
-        // the same challenger also scores 1.0 — the `>=` comparison adopts
-        // it. Bit-exact tie: both sides run the identical expression.
+        // Exact-tie arm (issue 994): an incumbent with no rejected outcomes
+        // scores 1.0 at the default α; the identical challenger also scores
+        // 1.0 — the tie KEEPS the incumbent. Bit-exact tie: both sides run
+        // the identical expression.
         let tie_gate = gate_from_accepted_then_rejected(15, 0);
         assert_eq!(tie_gate.rejected().len(), 0);
         let tie_accepted: Vec<OutcomeDigest> = tie_gate.accepted().iter().collect();
         let tie_verdict = tie_gate.decide(&tie_accepted, &tie_accepted, DEFAULT_ADOPTION_ALPHA);
         assert_eq!(tie_verdict.score, 1.0);
-        assert_eq!(tie_verdict.decision, AdoptionDecision::Adopt);
+        assert_eq!(tie_verdict.decision, AdoptionDecision::Keep);
+
+        // The α=1 endpoint (issue 994's measured degeneracy): on the same
+        // zero-rejection window both sides score exactly 1.0 at α=1 — the
+        // tie KEEPS the incumbent instead of demoting it.
+        let endpoint_verdict = tie_gate.decide(&tie_accepted, &tie_accepted, 1.0);
+        assert_eq!(endpoint_verdict.score, 1.0);
+        assert_eq!(endpoint_verdict.decision, AdoptionDecision::Keep);
     }
 
     /// SYNTHETIC GATE-MECHANICS fixture 3 — a 600-outcome stream at stride
