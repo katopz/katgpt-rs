@@ -1,6 +1,6 @@
 # Issue 992 — crates.io refuses katgpt-core: 414 features > the 300 limit (P1 cascade blocker, 8/9 landed)
 
-**Status:** UNBLOCKING — 2026-11-10 owner order superseded ROAD 2 ("we won't mail and wait forever — bake or group"): Plan 635 Tranche 1 (BAKE 74 default-closure features flagless + GROUP 62 single-parent additive children into their parent) takes katgpt-core **414 → 278** features (< 300). Next: land the path-dep sibling rewrites, re-run the P1 publish cascade (kat-secret lane); riir-chain/riir-dapps (git `branch = "main"`) rewrite at the develop→main merge. Previous status (ROAD 2 email, delegated verdict) kept below as history.
+**Status:** UNBLOCKED (feature count) — katgpt-rs `8c3349bfb` landed 414 → 278; publish cascade re-run pending. — 2026-11-10 owner order superseded ROAD 2 ("we won't mail and wait forever — bake or group"): Plan 635 Tranche 1 (BAKE 74 default-closure features flagless + GROUP 62 single-parent additive children into their parent) takes katgpt-core **414 → 278** features (< 300). Next: land the path-dep sibling rewrites, re-run the P1 publish cascade (kat-secret lane); riir-chain/riir-dapps (git `branch = "main"`) rewrite at the develop→main merge. Previous status (ROAD 2 email, delegated verdict) kept below as history.
 
 ## What happened
 
