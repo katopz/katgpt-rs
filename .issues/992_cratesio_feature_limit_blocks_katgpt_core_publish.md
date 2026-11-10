@@ -137,6 +137,14 @@ badge/keyword-spam one:
 Thank you for considering it.
 ```
 
+### Registry-side pointers (researched 2026-11-10 — cite in the email)
+
+- **The official exception path is DOCUMENTED**: the Cargo Book's [Features page](https://doc.rust-lang.org/cargo/reference/features.html) states the 300-feature limit and adds "Exceptions are granted on a case-by-case basis" — the request is procedure, not favor.
+- **Precedent is on record**: the announcing [blog post](https://blog.rust-lang.org/2023/10/26/broken-badges-and-23k-keywords/) says "We are aware of a couple of crates that also have legitimate reasons for having more than 300 features, and we have granted them appropriate exceptions to this rule."
+- **The limit is a pending mitigation, not a permanent law**: the blog frames it "… for now, or at least until we have found solutions for the above problems" — the underlying problems (unpaginated API responses + unpaginated package index) are what the request actually works around.
+- **Rationale + scale counter-fact**: the cap exists because feature rows bloat the unpaginated API response and the index file (the abuse case: ~23,000 features — 77× ours; see rust-lang/crates.io #7269 for the metadata-cost report). Our 414 rows are ~1.7% of the abusive crate's metadata; sparse-index clients (the cargo default for years, per the blog itself) download only this crate's own index entry.
+- **Strengthening line for the email**: note the limit was announced as temporary pending index/API pagination work, and cite the Cargo Book's exceptions sentence as the documented procedure.
+
 ## Tasks
 
 - [ ] 👤 owner: send the email above to help@crates.io from the publishing account (this unblocks everything else; agent cannot send it)
