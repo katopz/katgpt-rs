@@ -1,6 +1,7 @@
 # Plan 635: katgpt-core feature reduction to ≤300 for crates.io — classification (CUT = 0, ROAD 1 as scoped is infeasible)
 
-**Status:** FALLBACK MAP ONLY (ROAD 1′) — never the default road. DECIDED 2026-11-10: ROAD 2 (crates.io limit-increase email) per the delegated-owner verdict on Issue 992 (round 1 REVISE → round 2 AGREE); this plan's execution stays BLOCKED unless the owner orders the ROAD 1′ campaign or crates.io counters with a specific partial limit. Growth-guard task added.
+**Status:** EXECUTING (owner order 2026-11-10: "we won't mail and wait forever — find more features to bake or group") — ROAD 1′ reshaped as BAKE (74 default-closure features made unconditional) + GROUP (62 single-parent additive children folded into their parent) → 414 → 278 rows. ROAD 2 email no longer the road.
+**Claimed:** katgpt-rs-85@m3, 1794304147, expires 2026-11-12T09:49:07Z
 
 **Date:** 2026-11-10
 **Issue:** [`.issues/992_cratesio_feature_limit_blocks_katgpt_core_publish.md`](../.issues/992_cratesio_feature_limit_blocks_katgpt_core_publish.md) (decided 2026-11-10: ROAD 2 — limit-increase email; the ROAD 1 premise was falsified by this plan's corrected census — THIS plan is the fallback map only)
