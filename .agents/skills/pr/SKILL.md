@@ -120,7 +120,19 @@ carries over only in one shape is scoped to that shape IN THE BODY.
   "HEAD has 9 uploads less than BASE" artifact — a fork PR uploads
   coverage from fewer CI jobs than main, so the project delta always reads
   as a fake regression; the real signal is patch coverage on the added
-  lines, and only a maintainer's question makes it actionable.)
+   lines, and only a maintainer's question makes it actionable.)
+- **Do silence the fork's own workflows at send time.** Pushing a branch to
+  the fork fires their `push`-event workflows IN THE FORK, where
+  secret-dependent steps (Codecov token, deploy keys) fail loudly — and
+  those runs NEVER appear on the PR's checks panel (which aggregates
+  base-repo-context runs only), so the reds are invisible on the PR but
+  read as "our fork CI is red" to any later agent. After the branch push:
+  disable each fork workflow (`gh api -X PUT
+  repos/<org>/<repo>/actions/workflows/<name>/disable`), cancel queued
+  runs, note it in the send record. (#3025: `integration-tests.yml` failed
+  at the Codecov upload — "Token required - not valid tokenless upload" —
+  while the mozilla-side upload worked fine, proving coverage was measured
+  where it matters.)
 
 ## DON'T
 
