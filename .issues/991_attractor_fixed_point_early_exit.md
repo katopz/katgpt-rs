@@ -1,6 +1,7 @@
 # Issue 991: Attractor fixed-point early exit for latent-thought kernels
 
 **Status:** Open — small latency lever (Research 662, reframed at verdict round 1); fixture gate pre-registered below
+**Claimed:** zed-m3-idle-991, 1794362080, expires 2026-11-13T01:54:40+00:00
 **Date:** 2026-11-09
 **Origin:** katgpt-rs Research 662 ([arXiv:2610.42149](https://arxiv.org/abs/2610.42149) LARC) motivated the look at step-to-step geometry on latent-thought kernels, but the mechanism here is NOT LARC's: `LatentThoughtKernel` is an **attractor iteration** (its module doc: one observed signal "should move the belief further toward a fixed point than a single attractor step would") — successive cosine approaching 1 on Family B is the kernel *doing its job*, not a failure. LARC's collapse (pairwise cos 0.97 under RL pressure, Table 12) is a different failure mode that requires a consumer reading **every** step separately — no such consumer exists in this stack (the kernel's callers read only the final state). What survives is a standard convergence-detection lever the reframe surfaced: **stop iterating once the iteration has effectively converged.**
 
