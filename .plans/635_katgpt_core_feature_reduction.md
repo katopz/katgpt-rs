@@ -2,7 +2,7 @@
 
 **Status:** TRANCHE 1 LANDED 2026-11-10 — katgpt-core 414 → **278** features (BAKE 74 + GROUP 62), katgpt-rs `8c3349bfb`; sibling spelling rewrites pushed (riir-ai `b7431c505`, riir-train `66bad5a7`, riir-neuron-db `84c9d20`, riir-infer `63e48b98`, riir-reflex `c41aabb`, riir-dao `b2f8d88`, riir-game-sdk `9280bce`, seal-remake `9337a4b4`, seal-online-remaster `c26e2ba`, riir-instinct `1d9efff`, riir-refine `c86d8603`). Open: riir-chain/riir-dapps at the develop→main merge; Tranche 2 verdict REVISE (2026-11-11) — count ratchet LANDED, additive umbrellas next.
 **Lease closed:** katgpt-rs-85@m3, 1794304147, expires 2026-11-12T09:49:07Z — Tranche 1 landed (`8c3349bfb`); Tranche 2 unclaimed.
-**Claimed:** katgpt-rs-a3@m3, 1794371100, expires 2026-11-13T04:25:00Z — Tranche 2 (b) downstream spelling migration to umbrellas
+**Claimed:** katgpt-rs-a3@m3, 1794371100, expires 2026-11-13T04:25:00Z
 
 **Date:** 2026-11-10
 **Issue:** [`.issues/992_cratesio_feature_limit_blocks_katgpt_core_publish.md`](../.issues/992_cratesio_feature_limit_blocks_katgpt_core_publish.md) (decided 2026-11-10: ROAD 2 — limit-increase email; the ROAD 1 premise was falsified by this plan's corrected census — THIS plan is the fallback map only)
