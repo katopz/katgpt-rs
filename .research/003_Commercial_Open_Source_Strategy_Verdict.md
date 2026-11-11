@@ -4,6 +4,8 @@
 **Status:** Active (public subset)
 **Purpose:** Let public-research agents self-govern the public/private boundary without needing the sensitive moat doc.
 
+> **Amendment 2026-11-11 — riir-refine is a public crate.** `riir-ai/riir-refine` is PUBLIC (MIT) and publishes **`cargo-refine` to crates.io** (0.5.0 first publish 2026-11-11 — riir-refine issue 221 P3, record in its HISTORY.md `6cdaffed`; published from a generated manifest carrying ZERO private-sibling deps). The "anything `riir-*` is internal" rule below is superseded FOR THAT REPO ONLY (riir-refine issue 192 decision 1 + GAP 11); every other private sibling stays internal and `publish = false`. `katgpt-core` 0.5.0 published the same day (Plan 635: 414 → 278 features under the crates.io cap).
+
 > ⚠️ **This is the PUBLIC routing-rules subset.** The full strategy doc — moat analysis, "why hard to replicate" detail, capability specifics — moved to **`riir-ai/.research/003_Commercial_Open_Source_Strategy_Verdict.md`** (internal) on 2026-06-27 because it exposes too much commercial detail for a public MIT repo. This trimmed version keeps only what public research needs to route correctly.
 
 ---
