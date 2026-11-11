@@ -150,11 +150,11 @@ domino_lora = ["katgpt-speculative/domino_lora"]
 
 # DFlare Pruner-Confidence KV Routing (Plan 174). Forwards to katgpt-core
 # so KvRoutingConfig + the routing cfg block resolve.
-dflare_kv_routing = ["katgpt-core/dflare_kv_routing"]
+dflare_kv_routing = ["katgpt-core/decoding"]
 
 # DFlare Marginal Fusion (Plan 174). Forwards to katgpt-core so
 # MarginalFusionConfig resolves.
-dflare_fusion = ["katgpt-core/dflare_fusion"]
+dflare_fusion = ["katgpt-core/decoding"]
 
 # Domino Causal Correction (Plan 197). Forwards to katgpt-speculative so
 # PrefixCorrectionTable + prefix_hash resolve.
@@ -210,7 +210,7 @@ belief_drafter = ["katgpt-speculative/belief_drafter"]
 # DFlare Position-Weighted DDTree Budget (Plan 174). Forwards to katgpt-core
 # so PositionWeightedBudget resolves, and to katgpt-speculative so
 # build_dd_tree_screened_progressive + TreeBuilder::build_screened_progressive resolve.
-dflare_progressive_budget = ["katgpt-core/dflare_progressive_budget", "katgpt-speculative/dflare_progressive_budget"]
+dflare_progressive_budget = ["katgpt-core/decoding", "katgpt-speculative/dflare_progressive_budget"]
 
 # ELF SDE noise injection (Plan 079). Forwards to katgpt-speculative so
 # WidthScaleConfig + best_of_k_rollouts resolve.
@@ -283,7 +283,7 @@ rcd_residual = ["katgpt-core/rcd_residual", "katgpt-core/critical_interval_gate"
 # implies `rcd_residual` (local) so the `compute_residual` /
 # `interpolate_residual` / `normalized_entropy` / `RcdConfig` paths resolve —
 # the `_3sr` variant composes on top of RCD and calls those helpers too.
-d2f_3sr_warm_start = ["rcd_residual", "katgpt-core/d2f_3sr_warm_start"]
+d2f_3sr_warm_start = ["rcd_residual", "katgpt-core/decoding"]
 
 # ── Plan 399 (2026-07-05): features consumed by the moved d2f wrapper cluster ──
 # (`d2f.rs`, `d2f_verifier.rs`, `diffusion_sampler.rs` moved from root
@@ -334,7 +334,7 @@ flashar_consensus = ["tri_mode"]
 # step fn in `d2f_verifier.rs` and the matching Warm/Cold arm in
 # `flashar_consensus.rs`. Opt-in: deliberately lossy away from the
 # (ρ=0, ε=1) corner; ρ/ε quality calibration is riir-ai Issue 1142.
-nucleus_accept = ["dllm", "tri_mode", "katgpt-core/relaxed_accept"]
+nucleus_accept = ["dllm", "tri_mode", "katgpt-core/decoding"]
 
 # Bit-plane ternary SIMD matvec — CPU inference with a 21× smaller weight
 # footprint (Plan 148). ⚠ MEASURED (Issue 843, 2026-09-19): 1.9–3.0× slower
@@ -366,7 +366,7 @@ set_diffusion = []
 # + `SetDiffusionResult::unmask_steps`. Forwards the pure-metrics module
 # (`katgpt_core::dllm`) so the emitters + consumers share one sentinel.
 # OPT-IN pending the Phase-3 G3 GOAT.
-decode_order_metrics = ["katgpt-core/decode_order_metrics"]
+decode_order_metrics = ["katgpt-core/decoding"]
 
 # Probe guidance (Issue 865 T1): weak-side probe seam + affine autoguidance
 # combine on the D2F decode path — `logits' = λ·logits + (1−λ)·probe_logits`
@@ -381,7 +381,7 @@ decode_order_metrics = ["katgpt-core/decode_order_metrics"]
 # OPT-IN until the T3 λ-sweep GOAT gate passes.
 # Implies `dllm` — the combine lives inside the dllm-gated d2f module, so a
 # probe_guidance build without dllm would compile the feature to nothing.
-probe_guidance = ["dllm", "katgpt-speculative/probe_artifact", "katgpt-core/probe_guidance"]
+probe_guidance = ["dllm", "katgpt-speculative/probe_artifact", "katgpt-core/decoding"]
 
 # Issue 917 T2 (2026-10-08): EB-Sampler commit policy for the D2F decode
 # loops — the per-pass commit set is the largest entropy-ordered prefix with
@@ -394,7 +394,7 @@ probe_guidance = ["dllm", "katgpt-speculative/probe_artifact", "katgpt-core/prob
 # (riir-train Plan 437 Phase 4). Implies `dllm` — the wiring lives inside
 # the dllm-gated d2f module, so a build without dllm would compile the
 # feature to nothing (the probe_guidance precedent).
-entropy_bounded_commit = ["dllm", "katgpt-core/entropy_bounded_commit"]
+entropy_bounded_commit = ["dllm", "katgpt-core/decoding"]
 
 # Weaver inference-only logit corrector (Issue 131, Plan 433). Gates the
 # `dflash_predict_with_weaver` wrapper that combines DFlash predict + Weaver

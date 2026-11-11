@@ -112,7 +112,7 @@ gdn_tree_verify = ["gdn2_attention", "katgpt-core/gdn_tree_verify"]
 # (per-decade mass, entropy laws, sigmoid MC curve, τ-sweep verdict
 # assembly). Forwards the katgpt-core primitive feature; see si_probes.rs
 # (the recorded home deviation from the plan's chiaroscuro/ path).
-scale_invariant_attn = ["katgpt-core/scale_invariant_attn"]
+scale_invariant_attn = ["katgpt-core/attention_memory"]
 # Plan 430: Dual-path GDN × HOLA tree verify bridge. Implies both parents.
 gdn_hola_tree_verify = ["gdn_tree_verify", "hippocampal_cache", "katgpt-core/gdn_hola_tree_verify"]
 # FuncAttn composition layer (Plan 286 Phase 5).
@@ -126,7 +126,7 @@ funcattn_freeze_thaw = ["dep:blake3", "dep:serde"]
 # adds no field, changes no shipped signature, and compiles to nothing when
 # off. Consumers (StaticCalTable, CalibratedVerifier, and last because it is
 # default-on, ConformalIntervalCalibrator) are separate rows.
-calibration_staleness = ["funcattn_freeze_thaw", "katgpt-core/calibration_staleness"]
+calibration_staleness = ["funcattn_freeze_thaw", "katgpt-core/diagnostics"]
 funcattn_spectral_pre_rotate = ["dep:katgpt-spectral"]
 funcattn_chiar_blend = ["chiaroscuro"]
 # sparse_mlp: gates the `#[cfg(feature = "sparse_mlp")]` MLP path in
@@ -146,7 +146,7 @@ hippocampal_cache = ["katgpt-core/hippocampal_cache"]
 # three-stage chunk→group→token routing path using dash_attn::entmax_1p5 for
 # chunk selection + katgpt_core::hga::GroupSummaryCache for group selection +
 # katgpt_kv::tiered_kv::TieredKvStore for route-and-fetch.
-hga = ["katgpt-core/hga"]
+hga = ["katgpt-core/attention_memory"]
 
 # Gated MLP (SwiGLU) — LLaMA-style gated MLP variant (Issue 377).
 # Forwards to katgpt-forward so ForwardContext.hidden2 resolves, and to

@@ -127,14 +127,14 @@ async_qdq_overlap = []
 # 800 C1 — the extracted form of this tree's inline free-list contract).
 # Opt-in — GOAT bench_762; promotion candidate when a multi-request
 # serving lane consumes it.
-radix_prefix_cache = ["katgpt-core/graph_stable_pool"]
+radix_prefix_cache = ["katgpt-core/attention_memory"]
 
 # Plan 583 T3.5 — offline MI quant-fidelity probe (audit-only): forwards
 # katgpt-core's `mi_est` so the I(W; Ŵ) probe measures retained information
 # through the shipped KVarN round-trip alongside the reconstruction metrics.
 # Implies `kvarn` (the probed surface). Test-support only — no production
 # consumer, never a default.
-mi_probe = ["kvarn", "katgpt-core/gaussianity_probe"]
+mi_probe = ["kvarn", "katgpt-core/diagnostics"]
 
 [[test]]
 name = "bench_694_mi_quant_fidelity_probe"

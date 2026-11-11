@@ -56,4 +56,4 @@ clr_calibration = ["clr", "katgpt-core/sigmoid_calibration"]
 # method returning a bare `Verdict` — is untouched, and the guarded read is an
 # additive sibling. Implies clr_calibration (there is nothing to go stale
 # without it).
-calibration_staleness = ["clr_calibration", "katgpt-core/calibration_staleness"]
+calibration_staleness = ["clr_calibration", "katgpt-core/diagnostics"]

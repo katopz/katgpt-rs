@@ -96,7 +96,7 @@ manifold_power_iter_router = ["blake3"]
 # `gate_sigmoid_topk_mass_into` — the incumbent's logits + exact-k selection,
 # weights re-biased by katgpt-core's `exact_mass_admit` so Σm = k. Opt-in:
 # the router has no production consumer, so there is no gain to promote on.
-calibrated_mass_gate = ["manifold_power_iter_router", "katgpt-core/exact_mass_admit"]
+calibrated_mass_gate = ["manifold_power_iter_router", "katgpt-core/attention_memory"]
 
 # Quantile Balancing MoE Router (Plan 455, Research 447 §2.4) — sibling to
 # manifold_power_iter_router. One-shot per-expert bias `β` computation at
@@ -163,7 +163,7 @@ ica_lens = ["hla_eigenbasis_recovery"]
 # this crate's `ks_d_statistic`, made because the katgpt-core leaf must not
 # depend on katgpt-spectral — the rrq_quant scalar-inversion rule) must
 # agree with the original on the same 1D samples. Test-only feature
-gaussianity_agreement = ["katgpt-core/gaussianity_probe"]
+gaussianity_agreement = ["katgpt-core/diagnostics"]
 
 # Spectral Rewiring — weight delta purification via base SVD projection
 # (Plan 423, Research 406 — Zhang et al. arXiv:2607.03065). Projects ΔW onto

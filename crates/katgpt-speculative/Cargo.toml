@@ -165,7 +165,7 @@ gpu = []
 depth_invariance = []
 # self_cond_draft tracking flag — belief_drafter's 2-pass self-conditioned path
 # (Plan 386 move from root). Forwards to katgpt-core for the trait half.
-self_cond_draft = ["katgpt-core/self_cond_draft"]
+self_cond_draft = ["katgpt-core/decoding"]
 
 # ── Plan 386 (2026-07-05): speculative modules moved from katgpt-rs/src/speculative/. ──
 # Each feature gates one module moved in Phase 1. Root forwards these so
@@ -248,7 +248,7 @@ domino_lora = ["dep:blake3", "dep:bytemuck"]
 # Tracking flags for caddtree_budget's mux_residual variant. The function
 # `build_dd_tree_adaptive_mux_residual` is gated `all(mux_demux, rcd_residual)`.
 # Forward to katgpt-core so the underlying `compute_mux_residual` compiles.
-mux_demux = ["katgpt-core/mux_demux"]
+mux_demux = ["katgpt-core/decoding"]
 rcd_residual = ["katgpt-core/rcd_residual"]
 
 # Tracking flag for budget.rs's EchoConsistency variant (Plan 167). Also gates
@@ -320,7 +320,7 @@ manifold_pruner = []
 # DFlare progressive budget — Position-Weighted DDTree Budget (Plan 174).
 # Gates build_dd_tree_screened_progressive + TreeBuilder::build_screened_progressive.
 # Forwards to katgpt-core so PositionWeightedBudget resolves.
-dflare_progressive_budget = ["katgpt-core/dflare_progressive_budget"]
+dflare_progressive_budget = ["katgpt-core/decoding"]
 
 # Correlation Budget Allocation — EMA-driven depth budget (Plan 200 GOAT, default-ON).
 # Gates build_dd_tree_screened_corr + TreeBuilder::build_screened_with_depth_budgets.
@@ -347,7 +347,7 @@ weaver_runtime = ["dep:safetensors", "dep:bytemuck", "dep:blake3", "dep:half"]
 # reimplemented here). Opt-in: the legacy builders and dflash cores are
 # untouched and bit-identical with the flag off; T2 (D2F decode) remains
 # blocked on the riir-train Plan 437 checkpoint.
-entropy_bounded_commit = ["katgpt-core/entropy_bounded_commit"]
+entropy_bounded_commit = ["katgpt-core/decoding"]
 
 [dev-dependencies]
 # katgpt-pruners is a DEV-ONLY dep here (echo_env's GOAT test imports BanditPruner

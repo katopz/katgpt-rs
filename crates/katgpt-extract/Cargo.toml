@@ -84,7 +84,7 @@ bet_search = ["extraction_estimate"]
 # composition budget it found lower selection CRPS but scored WORSE on
 # held-out queries than exhaustive (-1.2% / -0.3% / -0.4% at b=16/64/256,
 # Bench 952); it waits for bet families too large to enumerate.
-bet_search_puct = ["bet_search", "katgpt-core/chance_puct"]
+bet_search_puct = ["bet_search", "katgpt-core/planning"]
 
 # temper (Plan 628 T0.5, gate half): the calibration/abstention gate —
 # per-field residual pools, sigmoid confidence readout, fused abstain
