@@ -85,7 +85,7 @@ Grouped (child → parent): `adaptive_causal_calibration`→`causal_head_importa
 
 - [x] Landed: katgpt-rs `8c3349bfb` + 11 sibling commits (status line); docs_gate 36/36 on the real checkout; test_gate PASS; consumers clean (amo `~/scratch/cws`)
 - [ ] riir-chain + riir-dapps (`branch = "main"` git deps): run `rewrite_toml.py`-equivalent spelling rewrite at the develop→main merge (riir-dapps spells `best_belief` — baked)
-- [ ] Re-run the Issue 992 P1 publish cascade (kat-secret lane)
+- [x] **katgpt-core v0.5.0 PUBLISHED to crates.io 2026-11-11** (owner Touch-ID, `p1-cascade` token, from a clean detached worktree at `c116555ad`; dry-run `9b9c79a15` + `c22ac844e`; 278 features, 5.3 MiB compressed). Issue 992 CLOSED + removed (recovery: `git log --diff-filter=D -- .issues/992_*`); riir-refine Issue 221 P1 9/9 (`11e3a5e7`)
 
 ## Tranche 2 — NEXT (headroom): umbrella families + sub-crate extraction
 
