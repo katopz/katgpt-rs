@@ -6463,14 +6463,18 @@ action (targeted lookup / escalate / `--misses`-style intake event).
   (checks/query, lookups/query, tokens/lookup, link-follow share).
 
 🔧 Feature flag: `coverage_manifest` (katgpt-core). **OPT-IN, DEFAULT-OFF,
-report-only first** — no consumer wired yet (T1's first consumer is the
-riir-refine heal-lane corpus-gap event). GOAT cell (in-lane synthetic eval,
-disclosed): lookup-anomaly posture 1/1 > full-trigger 1/2 > static
-coverage-report cousin 1/3 — the full-trigger margin is the F4 staleness
-gate alone; the lookup-anomaly posture adds the per-class pinned
-expectation. Cost + coverage-accounting axes only, never accuracy parity
-with a trained reader (Research 654 W1–W6). Promotion only via a wired
-consumer + a real-corpus cell.
+report-only first** — **consumer WIRED**: the riir-refine heal-lane
+corpus-gap event (`riir-refine` `494f70e96` — `--corpus-gap`, report-only,
+content-addressed intake rows at `.refine/misses/corpus-gap/`, the
+`--misses` queue prints them; freshness anchors never queued). GOAT cell
+(in-lane synthetic eval, disclosed): lookup-anomaly posture 1/1 >
+full-trigger 1/2 > static coverage-report cousin 1/3 — the full-trigger
+margin is the F4 staleness gate alone; the lookup-anomaly posture adds the
+per-class pinned expectation. Cost + coverage-accounting axes only, never
+accuracy parity with a trained reader (Research 654 W1–W6). **Promotion
+NOT claimed**: the real-corpus GOAT cell is not honestly runnable until a
+consumer calls `suspicions()` on REAL lookups (Issue 983 closed
+`f3b993f49`; re-open trigger in HISTORY.md).
 
 ## 162. zha_chunk_sidecar — the trained head_cls reference-query sidecar (riir-train Issue 666 T2 / Research 021)
 
