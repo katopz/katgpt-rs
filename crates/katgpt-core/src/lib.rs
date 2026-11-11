@@ -1849,3 +1849,18 @@ pub mod pick_latch;
 
 #[cfg(feature = "pick_latch")]
 pub use pick_latch::{LatchDecision, PickLatch};
+
+// fitted rule-circuit overlay primitive (issue 988, Research 658) —
+// reads/rules/writes/switches, all closed-form or authored, nothing
+// trained (the Plan 025 deterministic-overlay doctrine's fitted
+// instance). Consumes the SHARED leaf ridge solver (linalg — never a
+// second factorisation; issue 995 tracks the attn-match dedup).
+#[cfg(feature = "grafts")]
+pub mod graft;
+
+#[cfg(feature = "grafts")]
+pub use graft::{
+    fit_read, fit_switch, mined_table, pack_key, ActivationReader, CellRule, Graft, GraftApplied,
+    GraftError, GraftRead, GraftSwitch, GraftTable, GraftWrite, GraftExample, LogitWriter,
+    ReadSegment, WriteEntry,
+};

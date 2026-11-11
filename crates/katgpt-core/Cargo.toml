@@ -1516,6 +1516,20 @@ adoption_gate = []
 # gated on the T0 fixture.
 pick_latch = []
 
+# grafts (issue 988, Research 658, 2026-11-12): the fitted rule-circuit
+# overlay primitive — reads (closed-form linear probes via the SHARED
+# linalg ridge solver, never a second factorisation), rules (authored or
+# mined minimal-deciding-set tables, cap k≤3 pinned, Undecidable loud),
+# writes (sampling-seam logit bias, never residual-stream surgery),
+# switches (exact_sigmoid gates). Model-agnostic callbacks (reader/writer
+# traits); zero-alloc apply hot path; T2a synthetic fixture + the T3
+# mechanism arms (scramble constructor, disarm no-op). The T2b
+# real-activation accuracy cell is riir-infer-hosted (files its own
+# issue there); T5 digest-pinned artifact serialization follows. Opt-in;
+# byte-identical off. GOAT (T4) = the T2b accuracy cell + scramble
+# at/below-baseline + switch-off byte-identity + G2/G4 mechanical legs.
+grafts = []
+
 # Plan 371 Phase 5 — Mean-Field Regime Classifier GOAT gate (G2/G4/G5).
 # G1 (defend-wrong PoC) ships separately in riir-poc/benches/.
 
@@ -4438,3 +4452,10 @@ required-features = ["diffusion_diversity"]
 [[test]]
 name = "plan634_t14_div_normalization_spec"
 required-features = ["diffusion_diversity"]
+
+# Issue 988 T1 — the graft apply hot path's G4 alloc census (the
+# repo-birth gate discipline: the row rides the SAME commit as the
+# gated target — a missing row is the green-zero trap).
+[[test]]
+name = "graft_g4_alloc"
+required-features = ["grafts"]
