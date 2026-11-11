@@ -6544,16 +6544,21 @@ conditioning moves each head ~0.3%, all 16 heads are the same head,
 unique-candidate count 1.0 (a 1-candidate read vs 16). Learning buys effective
 conditioning magnitude + placement, not distinctness alone. Grade struck; the
 feature stays opt-in for replication; `bench_985_soft_read_goat` is the
-report-only instrument (one live assert: fixture validity). Hypotheses carry
-to Issue 986 (density-aware placement + effective conditioning strength). The
-trained lane (riir-train Plan 488 R1) is NOT indicted — its bar is hard
-top-16, the standing champion.
+report-only instrument (one live assert: fixture validity). The two carried
+hypotheses RAN as Issue 986 and CLOSED NEGATIVE same day (`81106ecab` —
+k-means++ placement byte-identical, the conditioning tilt mechanical, the
+noise-store inversion decisive): the query-conditioned aggregate axis is
+CLOSED at the modelless floor level — a re-open needs NEW consumer
+information, not another posture. The trained lane (riir-train Plan 488 R1)
+is NOT indicted — its bar is hard top-16, now double-confirmed champion.
 
 🔧 Feature flag: `soft_read` (katgpt-core; the
 `soft_read::distance_soft::DistanceSoftGate` composition adds the second
 signal over an untouched `CorpusDistanceGate`). **OPT-IN, DEFAULT-OFF,
-MEASURED NEGATIVE — no consumer, no promotion path until Issue 986's cell
-clears the same bar.**
+MEASURED NEGATIVE — no consumer, no promotion path; the Issue-986 follow-up
+cell ran 2026-11-06 and CLOSED NEGATIVE (`81106ecab`), closing the
+query-conditioned aggregate axis at the modelless floor (re-open needs NEW
+consumer information).**
 
 ## 164. adoption_gate — Adoption/Retention Regression Gate (Plan 633 / issue 987 priority-1, 2026-11-08)
 
