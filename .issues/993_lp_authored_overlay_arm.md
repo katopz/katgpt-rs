@@ -1,6 +1,7 @@
 # Issue 993: LP-authored overlay arm — deterministic no-LLM authoring for the weight-edit lane (weight-space-lp distill)
 
 **Status:** Open — poc/proof task; Gain-tier on the `weight_edit_overlay` GOAT lane (Issue 980 / Bench 976). Research: [`.research/664_LP_Authored_Weight_Edits_Weight_Space_LP.md`](../.research/664_LP_Authored_Weight_Edits_Weight_Space_LP.md). No real-model claim in scope (the 976 serving veto stands; sibling precedent Issue 990 CLOSED NEGATIVE `da5b21f50`).
+**Claimed:** zed-m3-idle-993 (mac m3), epoch=1794261000, expires 2026-11-13T12:30:00+00:00
 
 > **Source:** Barry, "Can a Linear Program Do Weight-Space Programming?" (nathan.rs, 2026-11-09) + github.com/nathanrs/weight-space-lp (MIT). Upstream: Sparks of Weight-Space Programming (MIT CSAIL, 2026-11-02, Research 648).
 > **Feature posture:** NO new flag — the arm ships UNGATED inside the existing opt-in `weight_edit_overlay` (authoring-time-only). Reason: the Issue-992/Plan-635 feature budget merged single-parent additive children and katgpt-core sits under the crates.io 300-feature ceiling — an `lp_authored_overlay` child implying only `weight_edit_overlay` is exactly that class. The 976 no-default-consumer verdict is unchanged.
