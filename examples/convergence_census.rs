@@ -21,8 +21,8 @@
 //! stable mean across the sweep says the distribution has stopped moving.
 
 use katgpt_core::micro_belief::{
-    LatentThoughtKernel, MicroRecurrentBeliefState, convergence_census_armed,
-    convergence_census_reset, convergence_census_snapshot, coherence_bench,
+    LatentThoughtKernel, MicroRecurrentBeliefState, coherence_bench, convergence_census_armed,
+    convergence_census_reset, convergence_census_snapshot,
 };
 
 /// K postures swept (the bench trio is 1/3/5; the sweep continues until the
@@ -121,9 +121,7 @@ fn run_cell(label: &str, dim: usize, k: u8, seed: u64, inputs: &[Vec<f32>]) {
 
 fn main() {
     if !convergence_census_armed() {
-        eprintln!(
-            "REFUSED: the census is not armed — run with KATGPT_BELIEF_CONVERGENCE_CENSUS=1"
-        );
+        eprintln!("REFUSED: the census is not armed — run with KATGPT_BELIEF_CONVERGENCE_CENSUS=1");
         std::process::exit(2);
     }
 
@@ -137,7 +135,13 @@ fn main() {
 
     let coherence = coherence_bench::build_input_sequence(coherence_bench::BENCH_DIM);
     for k in K_POSTURES.iter().copied() {
-        run_cell("coherence_seq", coherence_bench::BENCH_DIM, k, 42, &coherence);
+        run_cell(
+            "coherence_seq",
+            coherence_bench::BENCH_DIM,
+            k,
+            42,
+            &coherence,
+        );
     }
     println!();
 

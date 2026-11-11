@@ -37,8 +37,8 @@
 //! residual: a sequential `+=` fold + one sqrt — no platform-lane SIMD
 //! kernel, no allocation.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Pre-registered census/detector threshold (Issue 991 T1/T2): the residual
 /// crossing that declares the inner fixed point reached. 1e-6 sits at f32
@@ -164,8 +164,7 @@ static CENSUS: OnceLock<Option<CensusState>> = OnceLock::new();
 fn census() -> Option<&'static CensusState> {
     CENSUS
         .get_or_init(|| {
-            let armed = std::env::var("KATGPT_BELIEF_CONVERGENCE_CENSUS")
-                .is_ok_and(|v| v == "1");
+            let armed = std::env::var("KATGPT_BELIEF_CONVERGENCE_CENSUS").is_ok_and(|v| v == "1");
             if armed {
                 Some(CensusState::new())
             } else {
@@ -350,7 +349,10 @@ mod tests {
             }
             let r = residual_l2(&prev, &x);
             assert!(r > CONVERGENCE_EPS, "fixture residual must stay above eps");
-            assert!(!det.observe(r), "a non-contracting sequence must never fire");
+            assert!(
+                !det.observe(r),
+                "a non-contracting sequence must never fire"
+            );
         }
         assert_eq!(det.fired_at(), None);
     }
@@ -369,7 +371,11 @@ mod tests {
                 break;
             }
         }
-        assert_eq!(fired_at, Some(5), "window 2 fires on the second consecutive crossing");
+        assert_eq!(
+            fired_at,
+            Some(5),
+            "window 2 fires on the second consecutive crossing"
+        );
         assert_eq!(det.fired_at(), Some(5));
         // observe() after firing stays false.
         assert!(!det.observe(1e-5));

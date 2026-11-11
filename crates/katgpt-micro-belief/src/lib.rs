@@ -127,8 +127,9 @@ pub use bom_arena::{
 };
 pub use bridge::project_to_scalars;
 pub use convergence::{
-    CensusSnapshot, ConvergenceDetector, convergence_census_armed, convergence_census_ever_armed,
-    convergence_census_reset, convergence_census_snapshot, residual_l2, CONVERGENCE_EPS,
+    CONVERGENCE_EPS, CensusSnapshot, ConvergenceDetector, convergence_census_armed,
+    convergence_census_ever_armed, convergence_census_reset, convergence_census_snapshot,
+    residual_l2,
 };
 pub use latent_thought::LatentThoughtKernel;
 pub use leaky::LeakyIntegrator;

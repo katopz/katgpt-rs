@@ -28,8 +28,8 @@
 use crate::attractor::AttractorKernel;
 use crate::bridge::project_to_scalars as bridge_project;
 use crate::convergence::{
-    census_record, convergence_census_armed, residual_l2, ConvergenceDetector, CONVERGENCE_EPS,
-    CENSUS_WINDOW,
+    CENSUS_WINDOW, CONVERGENCE_EPS, ConvergenceDetector, census_record, convergence_census_armed,
+    residual_l2,
 };
 use crate::types::{MicroRecurrentBeliefState, RecurrenceFamily};
 use crate::{assume_init_slice, uninit_stack};
