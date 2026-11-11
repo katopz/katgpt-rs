@@ -87,10 +87,31 @@ Grouped (child → parent): `adaptive_causal_calibration`→`causal_head_importa
 - [ ] riir-chain + riir-dapps (`branch = "main"` git deps): run `rewrite_toml.py`-equivalent spelling rewrite at the develop→main merge (riir-dapps spells `best_belief` — baked)
 - [x] **katgpt-core v0.5.0 PUBLISHED to crates.io 2026-11-11** (owner Touch-ID, `p1-cascade` token, from a clean detached worktree at `c116555ad`; dry-run `9b9c79a15` + `c22ac844e`; 278 features, 5.3 MiB compressed). Issue 992 CLOSED + removed (recovery: `git log --diff-filter=D -- .issues/992_*`); riir-refine Issue 221 P1 9/9 (`11e3a5e7`)
 
-## Tranche 2 — NEXT (headroom): umbrella families + sub-crate extraction
+## Tranche 2 — PROPOSAL (2026-11-11, awaiting owner sign-off on the family names — public API in a breaking katgpt-core 0.6.0)
 
-- [ ] Umbrella-group the ~156 standalone additive non-default features into ~5 family flags (attention/KV, memory/retrieval, sampling/search, geometry/linalg, probes/gates) → ~278 → ~130; behavioural (BODY-site) features keep their own flags
-- [ ] Sub-crate extraction of the top-10 families (each crate gets its own 300 budget; core exposes ONE umbrella per sub-crate) — separate plan; leaf-most families first (`linalg` coupling is the main blocker)
+Measured on develop after Tranche 1 (278 features, 22 headroom; growth guard `a1bd4ad70`/`c785d045a` live): **166 standalone additive opt-in features** (non-default, no dep activation, no implied feature, every cfg site an item/module gate; ZERO `not(feature)` / `cfg!` / field / statement gates — re-verified across multi-line attributes). Read-only classification (each gated module's `//!` doc + Cargo row) → 8 umbrella families, no name collision with any tracked katgpt-rs feature:
+
+| family | scope | members | downstream spellings |
+|---|---|---|---|
+| `decoding` | speculative/diffusion drafting, tree verification, commit/accept rules, MUX superposition, guidance combine | 32 | 63 |
+| `planning` | game/goal search: AND-OR, PUCT, world-model abstraction, safe-set expansion, BAI, pathfinding | 16 | 35 |
+| `attention_memory` | attention + fused SIMD kernels, KV cache/eviction, compaction, associative/delta-rule memories, retrieval ranking | 20 | 32 |
+| `compute_control` | halting/exit, looped depth, routing, escalation, admission, hysteresis, adoption | 18 | 35 |
+| `probes` | report-only diagnostics/audits over frozen models + latents, instrument-grade numerics, fixtures | 27 | 57 |
+| `latent_geometry` | spectral/orthogonal operators, alignment, binding, complexes, graph/opinion dynamics, flow fields | 19 | 50 |
+| `estimators` | closed-form calibration, uncertainty, divergence/entropy, schedules, advantage shaping, rate control | 20 | 36 |
+| `artifacts` | wire contracts, codecs, archives, hashes, quantization + LoRA weight overlays | 13 | 24 |
+
+Excluded: `alloc_tracking` (profile-dependent `any(debug_assertions, …)` + installs a `#[global_allocator]` in tests). Hard constraint: `loop_guidance` + `probe_guidance` share one `any(...)`-gated module → same family.
+
+**Two fold-surprise risks → recommended scope for round 1:**
+1. **[D] 21 members are enabled by the ROOT `katgpt-rs` crate's defaults** (spread over 7 families) — folding them would widen root default compile from ~20k to ~180k gated lines.
+2. **[I] 18 members are implied by out-of-list features** (worst: `set_admission` → planning + latent_geometry + decoding; `twist_smc` → decoding + estimators; `gdn_hola_tree_verify` → decoding + attention_memory).
+⇒ **Round 1 folds only the ~129 members that are neither [D] nor [I] → 278 → ~157 features**; the [D]/[I] members stay standalone (re-judge after round 1). Cost notes: a family compiles 15–32k lines vs ~0.5–1k per member (a consumer wanting one member pays ~15× compile); heavy modules ≥4k lines: multi_agent_path, spectral_pencil, induced_cwm, gain_cost_halt, tpr, mux_pruner, gaussianity_probe, closed_unit_compaction, mux_latent_context, usage_rate_eviction. Stale row comments to fix in the same pass: `karc_regime_gate` ("implies karc_forecaster") and `spectral_pencil` ("+karc") — both rows are `[]`.
+
+- [ ] 👤 Owner: approve the 8 names (or rename — `artifacts` → `formats_weights` is the alternative; `decoding`/`probes` sit beside `decode_*`/`*_probe` names) + the round-1 scope ([D]/[I] held out)
+- [ ] Round 1 fold (after sign-off): child rows → family umbrella, cfg sites renamed to the family, downstream spellings rewritten (Tranche 1 rewriter pattern), katgpt-core 0.6.0 (feature removal = breaking), consumer check + publish
+- [ ] Sub-crate extraction of the top-10 families — separate plan; only if round 1 + the guard prove insufficient
 
 ## Table A — CUT rows by class: EMPTY (|CUT| = 0)
 
