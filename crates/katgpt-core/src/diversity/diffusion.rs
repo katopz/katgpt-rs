@@ -234,13 +234,17 @@ impl SimGraph {
             q.swap_with_slice(r);
         }
         // ‖q‖²_{ℓ2(1/π)} = Σ_x q(x)² / π(x) — π is the NORMALIZED
-        // stationary measure, so 1/π(x) = total_weight / degree(x). The
-        // constant factor cancels in 1/‖·‖² only if π sums to 1; it does
-        // (build normalizes), so the fold uses inv_stationary_unnorm ·
-        // total_weight to keep the normalized 1/π exactly.
+        // stationary measure (stationary = deg/Σdeg, sums to 1), so
+        // 1/π(x) = Σdeg / deg(x) = 2·vol(G) / deg(x) = 2·total_weight ·
+        // inv_stationary_unnorm[x]. (The historical fold multiplied by
+        // total_weight alone — half the weight — which inflated every
+        // emitted Div by exactly 2×; found by the riir-refine Issue 222
+        // T1 readout reading ~2.0 on fully-spread batches, fixed
+        // 2026-11-11. The two-node μ=π spec test pins 1.0 exactly.)
+        let twice_vol = (2.0 * self.total_weight) as f32;
         let mut norm_sq = 0.0_f32;
         for (&qv, &inv) in q[..self.n].iter().zip(self.inv_stationary_unnorm.iter()) {
-            let one_over_pi = inv * self.total_weight as f32;
+            let one_over_pi = inv * twice_vol;
             norm_sq += qv * qv * one_over_pi;
         }
         if norm_sq <= 0.0 {

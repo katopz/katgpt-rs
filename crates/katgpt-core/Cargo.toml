@@ -4431,3 +4431,10 @@ required-features = ["quant_error_lora"]
 [[test]]
 name = "plan634_t12_spectral_local_identity"
 required-features = ["diffusion_diversity"]
+
+# Plan 634 T1.4 spec: the Div_P^τ normalization law — μ = π reads 1.0
+# exactly (the 2026-11-11 fold fix's reproducer + the concentrated-
+# intake pins below the anchor).
+[[test]]
+name = "plan634_t14_div_normalization_spec"
+required-features = ["diffusion_diversity"]
