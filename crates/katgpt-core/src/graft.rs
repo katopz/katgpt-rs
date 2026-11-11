@@ -54,6 +54,42 @@ pub enum GraftError {
         /// The offending rule's output cell.
         cell: u16,
     },
+    /// The canonical artifact bytes are malformed (bad magic, unsupported
+    /// format version, truncation, trailing bytes, non-finite payload).
+    /// [`crate::graft_artifact::GRAFT_ARTIFACT_FORMAT_VERSION`] names the
+    /// version this build reads.
+    Encoding(&'static str),
+    /// The artifact's stored digest does not match BLAKE3 over its
+    /// canonical bytes — the content was corrupted after mint.
+    DigestMismatch {
+        /// The digest the artifact carries.
+        stored: [u8; 32],
+        /// The digest computed over the canonical bytes.
+        computed: [u8; 32],
+    },
+    /// The canonical bytes parse but are NOT in canonical form — the
+    /// decoded graft re-encodes to different bytes (e.g. unsorted table
+    /// or write entries). Content is recoverable only through a fresh
+    /// mint; the artifact is refused.
+    NonCanonical,
+    /// The mount law (issue 988 T5, the freeze/thaw envelope shape):
+    /// same epoch as the mounted artifact, different content digest —
+    /// a fork of the lineage, refused loud. Advance past the mounted
+    /// epoch instead.
+    Fork {
+        /// The epoch already mounted.
+        mounted_epoch: u64,
+        /// The incoming artifact's content digest.
+        incoming_digest: [u8; 32],
+    },
+    /// The mount law: an epoch strictly below the mounted one — a
+    /// downgrade, refused loud. The mounted graft stays untouched.
+    Downgrade {
+        /// The epoch already mounted.
+        mounted_epoch: u64,
+        /// The refused artifact's epoch.
+        incoming_epoch: u64,
+    },
 }
 
 impl core::fmt::Display for GraftError {
@@ -69,11 +105,47 @@ impl core::fmt::Display for GraftError {
             Self::DuplicateEntry { cell } => {
                 write!(f, "graft rule for cell {cell} has duplicate entry keys")
             }
+            Self::Encoding(m) => write!(f, "graft artifact encoding: {m}"),
+            Self::DigestMismatch { stored, computed } => write!(
+                f,
+                "graft artifact digest mismatch: stored {} computed {}",
+                hex32(stored),
+                hex32(computed)
+            ),
+            Self::NonCanonical => write!(
+                f,
+                "graft canonical bytes are not canonical (re-encode differs)"
+            ),
+            Self::Fork {
+                mounted_epoch,
+                incoming_digest,
+            } => write!(
+                f,
+                "graft mount fork refused: epoch {mounted_epoch} already holds a different digest; incoming {}",
+                hex32(incoming_digest)
+            ),
+            Self::Downgrade {
+                mounted_epoch,
+                incoming_epoch,
+            } => write!(
+                f,
+                "graft mount downgrade refused: mounted epoch {mounted_epoch} > incoming epoch {incoming_epoch}"
+            ),
         }
     }
 }
 
 impl std::error::Error for GraftError {}
+
+/// Lowercase hex for a 32-byte digest (error Display + artifact logging).
+#[must_use]
+pub fn hex32(d: &[u8; 32]) -> String {
+    let mut s = String::with_capacity(64);
+    for b in d {
+        s.push_str(&format!("{b:02x}"));
+    }
+    s
+}
 
 // ── The shared solver seam ───────────────────────────────────────────────
 

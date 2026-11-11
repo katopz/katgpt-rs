@@ -1858,9 +1858,17 @@ pub use pick_latch::{LatchDecision, PickLatch};
 #[cfg(feature = "grafts")]
 pub mod graft;
 
+// Issue 988 T5 — the digest-pinned sidecar envelope + the monotonic
+// mount (freeze/thaw envelope law; LoraPair-hot-swap shape).
+#[cfg(feature = "grafts")]
+pub mod graft_artifact;
+
 #[cfg(feature = "grafts")]
 pub use graft::{
-    fit_read, fit_switch, mined_table, pack_key, ActivationReader, CellRule, Graft, GraftApplied,
-    GraftError, GraftRead, GraftSwitch, GraftTable, GraftWrite, GraftExample, LogitWriter,
-    ReadSegment, WriteEntry,
+    ActivationReader, CellRule, Graft, GraftApplied, GraftError, GraftExample, GraftRead,
+    GraftSwitch, GraftTable, GraftWrite, LogitWriter, ReadSegment, WriteEntry, fit_read,
+    fit_switch, hex32, mined_table, pack_key,
 };
+
+#[cfg(feature = "grafts")]
+pub use graft_artifact::{GRAFT_ARTIFACT_FORMAT_VERSION, GraftArtifact, GraftInstall, GraftSlot};
