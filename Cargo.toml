@@ -2208,6 +2208,12 @@ required-features = ["coexplain_riir"]
 name = "micro_belief_demo"
 required-features = ["micro_belief"]
 
+# Issue 991 T1 — the Family-B convergence census RUN instrument (report-only;
+# the census itself arms via KATGPT_BELIEF_CONVERGENCE_CENSUS=1 at runtime).
+[[example]]
+name = "convergence_census"
+required-features = ["micro_belief"]
+
 [[example]]
 name = "compression_drafter_01_basic"
 required-features = ["compression_drafter"]

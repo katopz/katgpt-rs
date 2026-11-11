@@ -27,6 +27,10 @@
 
 use crate::attractor::AttractorKernel;
 use crate::bridge::project_to_scalars as bridge_project;
+use crate::convergence::{
+    census_record, convergence_census_armed, residual_l2, ConvergenceDetector, CONVERGENCE_EPS,
+    CENSUS_WINDOW,
+};
 use crate::types::{MicroRecurrentBeliefState, RecurrenceFamily};
 use crate::{assume_init_slice, uninit_stack};
 
@@ -117,8 +121,31 @@ impl MicroRecurrentBeliefState for LatentThoughtKernel {
                 let wx_x: &mut [f32] = unsafe { assume_init_slice(&mut wx_x_buf, self.inner.dim) };
                 let dim = self.inner.dim;
                 self.inner.precompute_wx_dot(input, &mut wx_x[..dim]);
-                for _ in 0..self.k_iters {
-                    self.inner.step_with_precomputed_wx(state, &wx_x[..dim]);
+                if convergence_census_armed() {
+                    // Issue 991 T1 census arm — report-only. Identical iteration
+                    // math, plus a residual observation per inner iteration into
+                    // the env-armed census. The armed path is bit-identical to the
+                    // disarmed loop: the residual reads a COPY of the previous
+                    // state and never participates in the update.
+                    let mut prev_buf = uninit_stack::<WX_X_BUF_LEN>();
+                    // SAFETY: prev[..dim] is written by the copy before the read.
+                    let prev: &mut [f32] = unsafe { assume_init_slice(&mut prev_buf, dim) };
+                    let mut detector = ConvergenceDetector::new(CONVERGENCE_EPS, CENSUS_WINDOW);
+                    let mut exact_zero = false;
+                    for _ in 0..self.k_iters {
+                        prev[..dim].copy_from_slice(&state[..dim]);
+                        self.inner.step_with_precomputed_wx(state, &wx_x[..dim]);
+                        let r = residual_l2(&prev[..dim], &state[..dim]);
+                        if r == 0.0 {
+                            exact_zero = true;
+                        }
+                        detector.observe(r);
+                    }
+                    census_record(self.k_iters, detector.fired_at(), exact_zero);
+                } else {
+                    for _ in 0..self.k_iters {
+                        self.inner.step_with_precomputed_wx(state, &wx_x[..dim]);
+                    }
                 }
             }
         }

@@ -56,6 +56,7 @@ pub mod bom;
 pub mod bom_arena;
 pub mod bridge;
 pub mod coherence_bench;
+pub mod convergence;
 pub mod latent_thought;
 pub mod leaky;
 #[cfg(feature = "nonergodic_belief")]
@@ -125,6 +126,10 @@ pub use bom_arena::{
     bom_mean_attractor, bom_minimax_attractor, bom_minimax_leaky, run_arena_comparison,
 };
 pub use bridge::project_to_scalars;
+pub use convergence::{
+    CensusSnapshot, ConvergenceDetector, convergence_census_armed, convergence_census_ever_armed,
+    convergence_census_reset, convergence_census_snapshot, residual_l2, CONVERGENCE_EPS,
+};
 pub use latent_thought::LatentThoughtKernel;
 pub use leaky::LeakyIntegrator;
 #[cfg(feature = "nonergodic_belief")]
