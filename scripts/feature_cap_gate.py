@@ -107,11 +107,12 @@ def manifests() -> list[Path]:
     return [p for p in found if p.is_file()]
 
 
-def judge(paths: list[Path], must_see: tuple[str, ...]) -> tuple[int, list[str]]:
-    """Exit code + report lines over ``paths``."""
+def judge(paths: list[Path], must_see: tuple[str, ...]) -> tuple[int, list[str], str]:
+    """Exit code + report lines over ``paths`` + the least-headroom crate (``""`` if none)."""
     lines: list[str] = []
     seen: set[str] = set()
     over = 0
+    tightest: tuple[int, str] = (sys.maxsize, "")
     for path in paths:
         manifest = load(path)
         name = publishable(manifest)
@@ -122,11 +123,13 @@ def judge(paths: list[Path], must_see: tuple[str, ...]) -> tuple[int, list[str]]
         v, cap = verdict(name, count)
         over += v == "OVER"
         lines.append(f"  {v:<4} {name}: {count}/{cap} features ({cap - count} headroom)")
+        if cap - count < tightest[0]:
+            tightest = (cap - count, f"max {name} {count}/{cap}, {cap - count} headroom")
     blind = [m for m in must_see if m not in seen]
     if blind:
         lines.append(f"  BLIND: the walk never saw {blind} — a cap verdict over nothing is not green")
-        return 2, lines
-    return (1 if over else 0), lines
+        return 2, lines, tightest[1]
+    return (1 if over else 0), lines, tightest[1]
 
 
 def gate_selftest() -> list[str]:
@@ -173,17 +176,18 @@ def main(argv: list[str]) -> int:
             print(f"✗ feature_cap_gate selftest: {f}")
         return 2
     if len(argv) == 2 and argv[0] == "--manifest":
-        code, lines = judge([Path(argv[1])], must_see=())
+        code, lines, top = judge([Path(argv[1])], must_see=())
         if not lines:
             print(f"✗ feature_cap_gate: {argv[1]} is not a publishable package manifest")
             return 2
     else:
-        code, lines = judge(manifests(), MUST_SEE)
+        code, lines, top = judge(manifests(), MUST_SEE)
     for line in lines:
         print(line)
     mark = {0: "✓", 1: "✗", 2: "✗"}[code]
     word = {0: "PASS", 1: "FAIL — over the registry cap", 2: "BLIND"}[code]
-    print(f"{mark} feature_cap_gate: {word} (cap {REGISTRY_CAP}, warn band {WARN_MARGIN})")
+    tail = f"; {top}" if top else ""
+    print(f"{mark} feature_cap_gate: {word} (cap {REGISTRY_CAP}, warn band {WARN_MARGIN}{tail})")
     return code
 
 
