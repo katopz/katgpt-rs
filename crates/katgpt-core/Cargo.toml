@@ -1518,6 +1518,22 @@ pick_latch = []
 
 # Plan 371 Phase 5 — Mean-Field Regime Classifier GOAT gate (G2/G4/G5).
 # G1 (defend-wrong PoC) ships separately in riir-poc/benches/.
+
+# ── Plan 635 Tranche 2 family umbrellas (delegated-owner verdict REVISE, 2026-11-11) ──
+# ADDITIVE: each umbrella implies its round-1 members; every member row stays (non-breaking,
+# 0.5.x). Downstream migrates to the umbrella spelling; katgpt-core 0.6.0 deletes member rows
+# nothing spells any more. NEW opt-in primitives land under one of these (or an existing
+# parent row) — a new top-level row needs a reasoned `grant` (scripts/feature_count_pins.txt).
+# Root-default [D] and out-of-list-implied [I] members are held out (re-judge after round 1).
+decoding = ["d2f_3sr_warm_start", "decode_order_metrics", "dflare_fusion", "dflare_kv_routing", "dflare_progressive_budget", "echo_env_predictor", "entropy_bounded_commit", "loop_guidance", "marginal_rewind", "mbr_tree_select", "mux_bandit_width", "mux_demux", "mux_pruner", "probe_guidance", "refinement_marginal", "relaxed_accept", "self_cond_draft", "stale_residual", "sterling_primitives", "template_decode"]
+planning = ["bisimulation_operator_inference", "chance_puct", "distance_abstain", "factorized_action", "harness_evolution", "ict_branching", "induced_cwm", "minmax_partition", "prover_selection", "similarity_inference", "skill_opt", "successor_density_critic", "switch_cost", "two_fidelity_bai"]
+attention_memory = ["bf16_simd", "canonical_context", "canvas_schema", "coverage_manifest", "cp_hopfield", "exact_mass_admit", "grape_ap_vector", "graph_stable_pool", "habituation_filter", "hga", "kron_memory", "lattice_memory", "prior_logit_lane", "rat_plus_bridge", "rls_depth_mem", "row_logit_floor", "scale_invariant_attn", "selection_propagation", "sink_aware_attn", "soft_read", "usage_rate_eviction", "walk_rank"]
+compute_control = ["adoption_gate", "cadence_gate", "escalation_guard", "frozen_evidence", "kl_depth_probe", "ladder_gate", "metabolic_gate", "pick_latch", "pool_admission", "recirculation", "recursion_logits", "regret_guard", "risk_control_exit", "step_noise", "substrate_gate"]
+diagnostics = ["act_channel_moments", "basis_split", "calibration_staleness", "causal_head_importance", "direction_bank_audit", "dirichlet_energy", "fixed_log_softmax", "gaussianity_probe", "gold_share_probe", "group_invariance_probe", "hla_committed_belief_probe", "interpolation_geometry", "latent_confounder_audit", "leakage_probe", "limit_fixture", "logit_regime", "logspace_diff", "nuisance_fraction", "paired_loss_diagnostic", "path_kernel_sim", "questbench", "regime_probe"]
+latent_geometry = ["analytic_lattice", "cubical_nerve", "elasticity_gated_update", "gw_alignment", "incidence_algebra", "lif_graph", "meld", "qsg_gossip", "signed_coupling_dynamics", "sphere_sampling", "tpr", "transfer_matrix_band_structure", "velocity_field_ensemble_heterogeneous", "zone_affective_manifold"]
+estimators = ["anchored_reach", "anti_common_mode", "bounded_target", "dirichlet_dist", "grouped_evidence_weighting", "horizon_weights", "ignition_schedule", "jsd_topk", "karc_regime_gate", "knn_entropy", "laprop", "mb_value", "occupancy_ratio", "perturbation_ensemble", "rate_control", "remax_aggregation", "sigmoid_calibration", "tether"]
+formats_weights = ["babel_codec", "chunked_net_fetch", "decision_wire", "extraction_wire", "kpt_archive", "lthash", "memory_soup_lora", "quant_error_lora", "rrq_quant", "runetrace", "sst_project"]
+
 [[bench]]
 name = "bench_371_mean_field_regime_goat"
 harness = false

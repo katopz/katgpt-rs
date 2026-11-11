@@ -17,3 +17,11 @@
 #   ceiling <crate> <count>
 #   grant <crate> <feature>  # <reason>
 ceiling katgpt-core 278
+grant katgpt-core decoding          # Plan 635 Tranche 2 family umbrella (additive, implies its round-1 members)
+grant katgpt-core planning          # Plan 635 Tranche 2 family umbrella
+grant katgpt-core attention_memory  # Plan 635 Tranche 2 family umbrella
+grant katgpt-core compute_control   # Plan 635 Tranche 2 family umbrella
+grant katgpt-core diagnostics       # Plan 635 Tranche 2 family umbrella (verdict rename of `probes`)
+grant katgpt-core latent_geometry   # Plan 635 Tranche 2 family umbrella
+grant katgpt-core estimators        # Plan 635 Tranche 2 family umbrella
+grant katgpt-core formats_weights   # Plan 635 Tranche 2 family umbrella (verdict rename of `artifacts`)
