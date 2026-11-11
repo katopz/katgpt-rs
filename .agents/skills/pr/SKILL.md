@@ -108,7 +108,19 @@ carries over only in one shape is scoped to that shape IN THE BODY.
   posture means the gate worked. A manufactured PR is the failure.
 - **Do expect first-contribution CI to need a maintainer's "approve and
   run"** (`action_required` state) — say so in the reply rather than
-  re-pushing to trigger it.
+  re-pushing to trigger it. (Some repos auto-run on fork PRs — #3025's
+  checks started within a minute.)
+- **Do classify first responders by `author_association`, not by surface
+  text.** Bots (Codecov, clippy, merge automation) post the first comment
+  on most PRs; a scary "patch coverage X%, N lines missing" report is
+  TELEMETRY, not a maintainer review — `author_association: NONE` + a bot
+  login means no reply, no reaction, no re-push. Record the bot in the
+  per-repo CI surface map. (Worked example: Codecov opened #3025's thread
+  minutes after the send; the alarming −6.77% project delta was its own
+  "HEAD has 9 uploads less than BASE" artifact — a fork PR uploads
+  coverage from fewer CI jobs than main, so the project delta always reads
+  as a fake regression; the real signal is patch coverage on the added
+  lines, and only a maintainer's question makes it actionable.)
 
 ## DON'T
 
