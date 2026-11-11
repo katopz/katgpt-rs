@@ -4369,6 +4369,15 @@ name = "issue980_weight_edit_overlay_goat"
 harness = false
 required-features = ["gain_cost_halt"]
 
+# Issue 993 — the LP-authored overlay arm's gate battery (T2–T4): the LP
+# authors the carrier repair on the SAME seeded-degeneracy world (shared
+# fixture `tests/wsp980_common`), held-out separation, determinism, dose
+# grid, matched-K grid incumbent, steering probe, falsifiers.
+# Green-zero rule: required-features + whole-file #![cfg] pairing.
+[[test]]
+name = "issue993_lp_authored_overlay_gates"
+required-features = ["gain_cost_halt"]
+
 # Issue 979 T1–T4 — the regret_guard gate battery (arXiv:2603.28499): the
 # deterministic-BR probe (Lem 2.2), the 8-distribution battery (Ber(1/3),
 # Ber(2/3), both regime-switch orders, sine drifts ϕ ∈ {T/2, T/5, T/10,

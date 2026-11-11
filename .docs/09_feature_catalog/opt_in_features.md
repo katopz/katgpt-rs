@@ -6339,6 +6339,40 @@ demote to the SparseErrorBypass representation. Gate battery:
 `benches/issue980_weight_edit_overlay_goat.rs`; record:
 [Bench 976](../../.benchmarks/976_issue980_weight_edit_overlay_goat.md).
 
+**LP-authored overlay arm (Issue 993, Research 664):** the lane's authoring
+half gains a deterministic, NO-LLM path — `weight_edit_overlay::
+lp_authoring` solves the min-L1 authoring LP `min Σ|vⱼ| + C·Σ slack s.t.
+v·h_t ≤ −δ (push class), |v·h_t| ≤ ε (keep class)` with PDHG (Chambolle–Pock
+θ=1, first-order, matrix-vector only, zero new deps — the same solver
+family as `cce/primal_dual.rs`, pattern reused, code never), yielding sparse
+per-column coefficients `v` composed as single-column DirectionSubtraction
+edits over the loop direction `u` (ΔW = −u vᵀ). Determinism per the
+Issue-940 law: sequential folds throughout — two solves on the same pinned
+traces are bit-identical, so the composed artifact digest is committed and
+hash-comparable; the module doc states the cross-platform claim explicitly
+(bit-identity iff the fold discipline is followed; per-platform otherwise).
+A `v = 0` solve is a LOUD `DegenerateZeroSolution` refusal. Authoring-
+time-only: no serving wiring, no real-model evaluation, no promotion claim
+(the Bench-976 veto + no-default-consumer rule stand unchanged), and no new
+feature flag (ships inside the existing opt-in — the Issue-992/Plan-635
+budget). Gate battery: `tests/issue993_lp_authored_overlay_gates.rs` (4
+tests over the SAME `tests/wsp980_common` fixture — the LP authors the
+carrier repair and passes the existing battery arms; matched-K α-grid
+incumbent with the pre-registered tie law (UNDECIDED expected — both arms
+saturate held-out separation at K=1); steering-equivalence probe recorded
+(this fixture's carrier is SIGN-VARYING across the obstacle set, so no
+constant push recovers success-without-oscillation — per-state selectivity
+is load-bearing here, the decision law selects bake over the frozen-model
+quadrant); falsifiers all red (unconstrained → loud refusal, random-u fails,
+tampered artifact refuses thaw)). Fixture fine structure recorded there: the
+oscillation statistic is NOT monotone in the coefficient — a failing island
+at residual r ≈ 0.09–0.18 (the 980 dose grid {1,2,4,8} never samples it);
+the LP's k₀-anchored push target lands the kink optimum at exact injection
+offset, island-free. Demotion law (pre-registered): if LP-authored v fails
+any battery arm the hand/reasoning-authored edits pass, record the negative
+and strike the arm from the docs — the lane's reasoning-authored path is
+untouched either way.
+
 **Fold (2026-11-06):** the Research-649 `probe_circuit_grammar` probe-authored derivation lane
 (Bench 978 PoC PASS on 4 pinned configs) folded INTO this module — its own pre-registered
 demotion law fired when the first consumer PoC lost its G1 value claim to fair

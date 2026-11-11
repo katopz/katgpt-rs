@@ -1086,6 +1086,13 @@ pub fn norm_matched_random_direction(seed: u64, dim: usize, out: &mut [f32]) {
 // stay as the attribution record, compiled whenever this feature is on.
 pub mod probe_circuit_grammar;
 
+// Issue 993 — the LP-authored overlay arm: a deterministic, no-LLM
+// authoring instrument for this lane (min-L1 per-neuron coefficients
+// under push/keep activation constraints, PDHG). Authoring-time-only —
+// no serving wiring (the Bench-976 veto stands), no new feature flag
+// (the Issue-992/Plan-635 budget).
+pub mod lp_authoring;
+
 // ─────────────────────────────────────────────────────────────────────
 // Unit tests
 // ─────────────────────────────────────────────────────────────────────
