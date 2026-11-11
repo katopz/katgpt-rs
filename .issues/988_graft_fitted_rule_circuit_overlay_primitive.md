@@ -4,7 +4,7 @@
 
 **Claimed:** amo-i988-grafts@amo, 1794423582, expires 2026-11-13T19:26:22+00:00
 
-**Claimed:** katgpt-rs research session (mac m3), 1794160000, expires 2026-11-10T21:00:00Z
+**Lease closed:** katgpt-rs research session (mac m3), 1794160000, expires 2026-11-10T21:00:00Z — expired before the live amo-i988-grafts@amo claim above took the lane; folded so the file carries exactly one **Claimed:** line (the ambiguous double claim blinded the claim scanner for this repo).
 
 ## Summary
 
