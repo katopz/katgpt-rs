@@ -26,6 +26,8 @@ if [[ "${1:-}" == "--publish" ]]; then
   [[ "$BRANCH" == "main" ]] || { echo "error: --publish runs from main (on $BRANCH)" >&2; exit 1; }
   command -v gh >/dev/null 2>&1 || { echo "error: brew install gh" >&2; exit 1; }
   gh auth status >/dev/null 2>&1 || { echo "error: gh auth login" >&2; exit 1; }
+  python3 "$(dirname "$0")/feature_cap_gate.py" \
+    || { echo "error: a publishable crate is over the crates.io feature cap — see above" >&2; exit 1; }
   git push -u origin main
   echo "→ triggering release-plz release on main..."
   gh workflow run release-plz.yml --ref main -f command=release
@@ -41,6 +43,11 @@ BRANCH="$(git branch --show-current)"
 
 command -v gh >/dev/null 2>&1 || { echo "error: brew install gh" >&2; exit 1; }
 gh auth status >/dev/null 2>&1 || { echo "error: gh auth login" >&2; exit 1; }
+
+# Plan 635 growth guard: the registry refuses a crate over its feature cap (katgpt-core 0.5.0
+# was refused at 414). Refuse HERE, before a release PR or a CI publish run exists.
+python3 "$(dirname "$0")/feature_cap_gate.py" \
+  || { echo "error: a publishable crate is over the crates.io feature cap — see above" >&2; exit 1; }
 
 # Push any unpushed develop commits (so release-plz sees the latest)
 git push origin develop 2>/dev/null || true
