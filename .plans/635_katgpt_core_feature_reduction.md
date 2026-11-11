@@ -1,6 +1,6 @@
 # Plan 635: katgpt-core feature reduction to ≤300 for crates.io — classification (CUT = 0, ROAD 1 as scoped is infeasible)
 
-**Status:** TRANCHE 1 LANDED 2026-11-10 — katgpt-core 414 → **278** features (BAKE 74 + GROUP 62), katgpt-rs `8c3349bfb`; sibling spelling rewrites pushed (riir-ai `b7431c505`, riir-train `66bad5a7`, riir-neuron-db `84c9d20`, riir-infer `63e48b98`, riir-reflex `c41aabb`, riir-dao `b2f8d88`, riir-game-sdk `9280bce`, seal-remake `9337a4b4`, seal-online-remaster `c26e2ba`, riir-instinct `1d9efff`, riir-refine `c86d8603`). Open: riir-chain/riir-dapps at the develop→main merge; Tranche 2 (headroom).
+**Status:** TRANCHE 1 LANDED 2026-11-10 — katgpt-core 414 → **278** features (BAKE 74 + GROUP 62), katgpt-rs `8c3349bfb`; sibling spelling rewrites pushed (riir-ai `b7431c505`, riir-train `66bad5a7`, riir-neuron-db `84c9d20`, riir-infer `63e48b98`, riir-reflex `c41aabb`, riir-dao `b2f8d88`, riir-game-sdk `9280bce`, seal-remake `9337a4b4`, seal-online-remaster `c26e2ba`, riir-instinct `1d9efff`, riir-refine `c86d8603`). Open: riir-chain/riir-dapps at the develop→main merge; Tranche 2 verdict REVISE (2026-11-11) — count ratchet LANDED, additive umbrellas next.
 **Lease closed:** katgpt-rs-85@m3, 1794304147, expires 2026-11-12T09:49:07Z — Tranche 1 landed (`8c3349bfb`); Tranche 2 unclaimed.
 
 **Date:** 2026-11-10
@@ -87,7 +87,7 @@ Grouped (child → parent): `adaptive_causal_calibration`→`causal_head_importa
 - [ ] riir-chain + riir-dapps (`branch = "main"` git deps): run `rewrite_toml.py`-equivalent spelling rewrite at the develop→main merge (riir-dapps spells `best_belief` — baked)
 - [x] **katgpt-core v0.5.0 PUBLISHED to crates.io 2026-11-11** (owner Touch-ID, `p1-cascade` token, from a clean detached worktree at `c116555ad`; dry-run `9b9c79a15` + `c22ac844e`; 278 features, 5.3 MiB compressed). Issue 992 CLOSED + removed (recovery: `git log --diff-filter=D -- .issues/992_*`); riir-refine Issue 221 P1 9/9 (`11e3a5e7`)
 
-## Tranche 2 — PROPOSAL (2026-11-11, awaiting owner sign-off on the family names — public API in a breaking katgpt-core 0.6.0)
+## Tranche 2 — PROPOSAL (2026-11-11) → delegated-owner verdict REVISE (2026-11-11): additive umbrellas + count ratchet now, breaking fold deferred to 0.6.0
 
 Measured on develop after Tranche 1 (278 features, 22 headroom; growth guard `a1bd4ad70`/`c785d045a` live): **166 standalone additive opt-in features** (non-default, no dep activation, no implied feature, every cfg site an item/module gate; ZERO `not(feature)` / `cfg!` / field / statement gates — re-verified across multi-line attributes). Read-only classification (each gated module's `//!` doc + Cargo row) → 8 umbrella families, no name collision with any tracked katgpt-rs feature:
 
@@ -109,8 +109,15 @@ Excluded: `alloc_tracking` (profile-dependent `any(debug_assertions, …)` + ins
 2. **[I] 18 members are implied by out-of-list features** (worst: `set_admission` → planning + latent_geometry + decoding; `twist_smc` → decoding + estimators; `gdn_hola_tree_verify` → decoding + attention_memory).
 ⇒ **Round 1 folds only the ~129 members that are neither [D] nor [I] → 278 → ~157 features**; the [D]/[I] members stay standalone (re-judge after round 1). Cost notes: a family compiles 15–32k lines vs ~0.5–1k per member (a consumer wanting one member pays ~15× compile); heavy modules ≥4k lines: multi_agent_path, spectral_pencil, induced_cwm, gain_cost_halt, tpr, mux_pruner, gaussianity_probe, closed_unit_compaction, mux_latent_context, usage_rate_eviction. Stale row comments `karc_regime_gate` ("implies karc_forecaster") and `spectral_pencil` ("+karc") — both rows are `[]` — ✅ fixed ahead of round 1 (independent of the name sign-off; see this commit).
 
-- [ ] 👤 Owner: approve the 8 names (or rename — `artifacts` → `formats_weights` is the alternative; `decoding`/`probes` sit beside `decode_*`/`*_probe` names) + the round-1 scope ([D]/[I] held out)
-- [ ] Round 1 fold (after sign-off): child rows → family umbrella, cfg sites renamed to the family, downstream spellings rewritten (Tranche 1 rewriter pattern), katgpt-core 0.6.0 (feature removal = breaking), consumer check + publish
+- [x] Delegated-owner verdict 2026-11-11 (independent read-only review, per the owner's "agents do all work; owner touches deploy only" rule) — **REVISE**:
+  - **Q1 timing — no breaking fold now.** Measured growth 12/wk (08-01→09-15), 8/wk (10-01→11-09), 6/wk (10-22→11-09) ⇒ ~3-4 weeks to 300 at the old rate; real, not urgent. Cheaper order: (a) add the 8 umbrellas as ADDITIVE rows implying their round-1 members (non-breaking, 0.5.x, 278 → 286); (b) migrate downstream spellings to umbrellas gradually; (c) 0.6.0 deletes member rows once nothing spells them. Sub-crate extraction stays last resort.
+  - **Q2 names — two renames:** `probes` → **`diagnostics`** (sits beside 11 `*_probe`/`probe_*` features incl. the forced member `probe_guidance`; scope is wider than probes); `artifacts` → **`formats_weights`** (reads as Cargo build artifacts). No exact collision among the other six vs all 278. `decoding` beside `decode_order_metrics`/`decode_spin_pool`: fine if they become members, else note it in their row comments.
+  - **Q3 round-1 scope — AGREE** ([D] 21 root-default + [I] 18 implied held out).
+  - **Q4 policy — AGREE + gate it:** new opt-in primitives land under an existing family umbrella or parent row; a new top-level row needs a recorded reason. Enforced by the count ratchet.
+- [x] Q4 ratchet — `scripts/feature_cap_gate.py` + `scripts/feature_count_pins.txt` (`ceiling katgpt-core 278`; GROWTH / LOOSE / STALE all exit 1; self-test arms + a planted-row canary fired GROWTH, granted → PASS, LOOSE prints the re-pin value)
+- [ ] (a) the 8 additive umbrella rows (`decoding`, `planning`, `attention_memory`, `compute_control`, `diagnostics`, `latent_geometry`, `estimators`, `formats_weights`), each implying its round-1 members; 8 `grant` rows in the pin file; 0.5.x
+- [ ] (b) downstream spellings migrate to the umbrellas (gradual; Tranche 1 rewriter pattern)
+- [ ] (c) katgpt-core 0.6.0 deletes member rows nothing spells any more (breaking; publish is the owner's Touch-ID step)
 - [ ] Sub-crate extraction of the top-10 families — separate plan; only if round 1 + the guard prove insufficient
 
 ## Table A — CUT rows by class: EMPTY (|CUT| = 0)

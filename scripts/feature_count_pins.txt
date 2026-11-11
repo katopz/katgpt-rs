@@ -1,0 +1,19 @@
+# Feature-count RATCHET pins (Plan 635 Tranche 2, delegated-owner verdict Q4, 2026-11-11).
+#
+# The cap guard (feature_cap_gate.py) only fires near crates.io's 300; at the measured
+# 6-8 new top-level rows/week that is ~3 weeks of warning. The ratchet stops net growth
+# instead: a NEW opt-in primitive lands under an existing family umbrella or an existing
+# parent row (`parent = ["child"]` / gated under the parent's cfg), never as a new
+# top-level [features] key — unless a `grant` row below names it with a reason (a dep
+# activation, a `not(feature)` behavioural switch, a family umbrella).
+#
+# Two directions, both exit 1:
+#   GROWTH — count > ceiling + live grants   (land it under a family, or add a grant)
+#   LOOSE  — count < ceiling + live grants   (rows went: lower the ceiling to the printed value,
+#                                            so freed slots never refill silently)
+#   STALE  — a grant naming a feature the manifest no longer has (delete the row)
+#
+# Format (one per line, `#` comments):
+#   ceiling <crate> <count>
+#   grant <crate> <feature>  # <reason>
+ceiling katgpt-core 278

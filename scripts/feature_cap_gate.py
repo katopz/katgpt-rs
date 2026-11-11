@@ -21,6 +21,13 @@ printed so the headroom is visible on every push) · ``OVER`` above the cap (exi
 registry refuses). A crate granted a raised limit gets a row in ``GRANTED`` with the grant's
 reference — the cap is a pin, never a guess.
 
+RATCHET (Plan 635 Tranche 2, verdict Q4): a crate pinned in ``scripts/feature_count_pins.txt``
+must hold its count at ``ceiling + live grants`` exactly — GROWTH above it (a new primitive must
+land under an existing family umbrella / parent row, or carry a ``grant`` row with a reason),
+LOOSE below it (re-pin the ceiling down so freed slots never refill silently), STALE for a grant
+naming a feature the manifest no longer has. All three exit 1. Pins apply to the repo walk only,
+never to ``--manifest`` (a publish lane's rendered manifest is a different file).
+
 Usage:
     python3 scripts/feature_cap_gate.py                    # the verdict, this repo
     python3 scripts/feature_cap_gate.py --manifest PATH    # one manifest (a publish lane's
@@ -48,6 +55,7 @@ REGISTRY_CAP = 300
 WARN_MARGIN = 30
 # Crates the registry granted a raised limit: name -> (cap, reference). Empty — none granted.
 GRANTED: dict[str, tuple[int, str]] = {}
+PINS = ROOT / "scripts" / "feature_count_pins.txt"
 # The crate that ships; the walk must see it.
 MUST_SEE = ("katgpt-core",)
 
@@ -96,6 +104,52 @@ def verdict(name: str, count: int) -> tuple[str, int]:
     return "ok", cap
 
 
+def parse_pins(text: str) -> tuple[dict[str, int], dict[str, dict[str, str]], list[str]]:
+    """(ceilings, grants crate -> {feature: reason}, malformed lines) from the pin file text."""
+    ceilings: dict[str, int] = {}
+    grants: dict[str, dict[str, str]] = {}
+    bad: list[str] = []
+    for raw in text.splitlines():
+        body, _, reason = raw.partition("#")
+        parts = body.split()
+        if not parts:
+            continue
+        if parts[0] == "ceiling" and len(parts) == 3 and parts[2].isdigit():
+            if parts[1] in ceilings:
+                bad.append(raw)
+            ceilings[parts[1]] = int(parts[2])
+        elif parts[0] == "grant" and len(parts) == 3 and reason.strip():
+            grants.setdefault(parts[1], {})[parts[2]] = reason.strip()
+        else:
+            bad.append(raw)
+    for crate in grants:
+        if crate not in ceilings:
+            bad.append(f"grant for {crate} with no ceiling row")
+    return ceilings, grants, bad
+
+
+def ratchet(name: str, count: int, names: set[str], ceiling: int, grants: dict[str, str]) -> list[str]:
+    """Ratchet findings for one pinned crate (empty = held)."""
+    findings = [
+        f"STALE {name}: grant `{f}` names no [features] row — delete the grant"
+        for f in sorted(grants)
+        if f not in names
+    ]
+    allowed = ceiling + sum(1 for f in grants if f in names)
+    if count > allowed:
+        findings.append(
+            f"GROWTH {name}: {count} > {allowed} (ceiling {ceiling} + {allowed - ceiling} grants)"
+            " — land the new primitive under an existing family umbrella / parent row,"
+            " or add a `grant` row with its reason to scripts/feature_count_pins.txt"
+        )
+    elif count < allowed:
+        findings.append(
+            f"LOOSE {name}: {count} < {allowed} — rows went; lower `ceiling {name}` to"
+            f" {count - (allowed - ceiling)} in scripts/feature_count_pins.txt"
+        )
+    return findings
+
+
 def load(path: Path) -> dict:
     with path.open("rb") as f:
         return tomllib.load(f)
@@ -107,11 +161,15 @@ def manifests() -> list[Path]:
     return [p for p in found if p.is_file()]
 
 
-def judge(paths: list[Path], must_see: tuple[str, ...]) -> tuple[int, list[str], str]:
-    """Exit code + report lines over ``paths`` + the least-headroom crate (``""`` if none)."""
-    lines: list[str] = []
+def judge(
+    paths: list[Path], must_see: tuple[str, ...], pins: str | None = None
+) -> tuple[int, list[str], str]:
+    """Exit code + report lines over ``paths`` + the least-headroom crate (``""`` if none).
+    ``pins`` is the ratchet pin-file text (``None`` = no ratchet, the ``--manifest`` lane)."""
+    ceilings, grants, bad = parse_pins(pins) if pins is not None else ({}, {}, [])
+    lines: list[str] = [f"  MALFORMED pin: {b!r}" for b in bad]
+    over = len(bad)
     seen: set[str] = set()
-    over = 0
     tightest: tuple[int, str] = (sys.maxsize, "")
     for path in paths:
         manifest = load(path)
@@ -123,9 +181,17 @@ def judge(paths: list[Path], must_see: tuple[str, ...]) -> tuple[int, list[str],
         v, cap = verdict(name, count)
         over += v == "OVER"
         lines.append(f"  {v:<4} {name}: {count}/{cap} features ({cap - count} headroom)")
+        if name in ceilings:
+            names = set(manifest.get("features", {}) or {})
+            findings = ratchet(name, count, names, ceilings[name], grants.get(name, {}))
+            over += len(findings)
+            lines.extend(f"  {f}" for f in findings)
+            if not findings:
+                lines.append(f"  held {name}: ratchet {count} = ceiling {ceilings[name]} + grants")
         if cap - count < tightest[0]:
             tightest = (cap - count, f"max {name} {count}/{cap}, {cap - count} headroom")
     blind = [m for m in must_see if m not in seen]
+    blind += [f"{c} (pinned)" for c in ceilings if c not in seen]
     if blind:
         lines.append(f"  BLIND: the walk never saw {blind} — a cap verdict over nothing is not green")
         return 2, lines, tightest[1]
@@ -162,6 +228,24 @@ def gate_selftest() -> list[str]:
         p.write_text(manifest_text(5, publish="publish = false"), encoding="utf-8")
         if publishable(load(p)) is not None:
             failures.append("publish = false must leave the population")
+    c, g, b = parse_pins("ceiling k 10\ngrant k fam  # umbrella\ngrant k gone # x\nceiling k\n")
+    if c != {"k": 10} or g != {"k": {"fam": "umbrella", "gone": "x"}} or b != ["ceiling k"]:
+        failures.append(f"parse_pins: got {c} {g} {b}")
+    if parse_pins("grant k f\n")[2] == []:
+        failures.append("a grant with no reason must be MALFORMED")
+    names = {f"f{i}" for i in range(11)} | {"fam"}
+    arms = (
+        (12, {"fam": "u"}, 11, []),  # 11 + 1 live grant = 12 held
+        (13, {"fam": "u"}, 11, ["GROWTH"]),
+        (11, {"fam": "u"}, 11, ["LOOSE"]),
+        (12, {"fam": "u", "gone": "x"}, 11, ["STALE"]),
+    )
+    for count, gr, ceil, want in arms:
+        got = [f.split()[0] for f in ratchet("k", count, names, ceil, gr)]
+        if got != want:
+            failures.append(f"ratchet(count={count}, grants={sorted(gr)}) = {got}, want {want}")
+    if "lower `ceiling k` to 10" not in ratchet("k", 11, names, 11, {"fam": "u"})[0]:
+        failures.append("LOOSE must print the re-pin value (count - live grants)")
     for count, want in ((269, "ok"), (270, "ok"), (271, "WARN"), (300, "WARN"), (301, "OVER")):
         got = verdict("probe", count)[0]
         if got != want:
@@ -181,11 +265,11 @@ def main(argv: list[str]) -> int:
             print(f"✗ feature_cap_gate: {argv[1]} is not a publishable package manifest")
             return 2
     else:
-        code, lines, top = judge(manifests(), MUST_SEE)
+        code, lines, top = judge(manifests(), MUST_SEE, PINS.read_text(encoding="utf-8"))
     for line in lines:
         print(line)
     mark = {0: "✓", 1: "✗", 2: "✗"}[code]
-    word = {0: "PASS", 1: "FAIL — over the registry cap", 2: "BLIND"}[code]
+    word = {0: "PASS", 1: "FAIL — over the registry cap or off the ratchet pin", 2: "BLIND"}[code]
     tail = f"; {top}" if top else ""
     print(f"{mark} feature_cap_gate: {word} (cap {REGISTRY_CAP}, warn band {WARN_MARGIN}{tail})")
     return code
