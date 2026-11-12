@@ -491,6 +491,7 @@ def selftest() -> list[str]:
     # already written and passing).
     fails += collision_arms()
     fails += foreign_arms()
+    fails += legacy_arms()
 
     return fails
 
@@ -560,6 +561,57 @@ def foreign_arms() -> list[str]:
                (row is not None and row["min_files"]), 10)
         finally:
             globals()["DRIFT_FLOORS_PATH"] = saved
+
+    return fails
+
+
+def legacy_arms() -> list[str]:
+    """The Issue 1208 verdict's OWN arithmetic: the per-repo legacy_ratchet
+    channel in collision_pins_for.
+
+    Three arms: a per-repo file's legacy scalar OVERRIDES the shared value
+    (the re-pin-DOWN remedy becoming expressable); a repo WITHOUT a per-repo
+    file keeps the shared value (the channel is opt-in per repo, never a
+    silent global retune); and the shared era_boundary is untouched by the
+    override (the wall stays katgpt-rs's own — only the RATCHET is per-repo).
+    """
+    import tempfile as _tf, pathlib as _pl
+    fails: list[str] = []
+
+    def eq(label, got, want):
+        if got != want:
+            fails.append(f"    {label}: got {got!r}, want {want!r}")
+
+    with _tf.TemporaryDirectory() as _td:
+        base = _pl.Path(_td)
+        (base / "number_collisions_expected.txt").write_text(
+            "era_boundary = 700\nlegacy_ratchet = 64\nmin_dirs = 2\n"
+            "min_numbers = 10\n"
+            "collision = katgpt-rs/.issues 900 the shared-file row shape\n",
+            encoding="utf-8")
+        withrepo = base / "fixture_repo"
+        withrepo.mkdir()
+        (base / "number_collisions_fixture_repo.txt").write_text(
+            "# the repo's own legacy ratchet, measured (issue 1208)\n"
+            "legacy_ratchet = 9\n",
+            encoding="utf-8")
+        bare = base / "bare_repo"
+        bare.mkdir()
+        try:
+            sc, _ovr, _pins = collision_pins_for(withrepo, pins_dir=base)
+            eq("a per-repo legacy_ratchet overrides the shared value",
+               sc["legacy_ratchet"], 9)
+            eq("the shared era_boundary survives the override",
+               sc["era_boundary"], 700)
+            sc2, _ovr2, _pins2 = collision_pins_for(bare, pins_dir=base)
+            eq("a repo WITHOUT a per-repo file keeps the shared ratchet",
+               sc2["legacy_ratchet"], 64)
+            sc3, _ovr3, _pins3 = collision_pins_for(
+                Path(__file__).resolve().parent.parent, pins_dir=base)
+            eq("katgpt-rs itself never takes a foreign override",
+               sc3["legacy_ratchet"], 64)
+        except (OSError, ValueError) as e:
+            fails.append(f"    collision_pins_for raised on the fixture: {e}")
 
     return fails
 
@@ -746,7 +798,7 @@ def historical_collisions(repo: Path, dirs: list[str],
     return rows, walked
 
 
-def collision_pins_for(repo: Path) -> tuple[dict, dict[str, int], dict[tuple[str, int], str]]:
+def collision_pins_for(repo: Path, pins_dir: Path | None = None) -> tuple[dict, dict[str, int], dict[tuple[str, int], str]]:
     """The collision pins ASSEMBLED FOR `repo` — the shared file's scalars plus
     (a) `number_collisions_<repo>.txt`'s rows when the file exists (a number's
     pin lives beside the repo that holds it; absent = no extra rows),
@@ -756,17 +808,29 @@ def collision_pins_for(repo: Path) -> tuple[dict, dict[str, int], dict[tuple[str
     STALE-here/UNPINNED-there shape riir-ai Issue 1205 measured live
     2026-11-12 when re-keying the 791/795 divergence rows).
 
+    Issue 1208: a per-repo file may also carry a `legacy_ratchet` scalar —
+    the legacy ratchet has NO drift-row column, so the per-repo file is the
+    only per-repo record and the shared value (katgpt-rs's own pre-gate
+    archive count) must not leak into another repo's verdict. Without this
+    channel the re-pin-DOWN note is unexpressable for every foreign repo
+    below 64, and the growth direction is BLIND: a foreign repo accumulating
+    its first legacy re-spend stays green against katgpt-rs's 64 forever.
+
+    `pins_dir` is the self-test seam (the directory holding the shared +
+    per-repo pins files); None = this instrument's own directory.
+
     ONE home for the assembly: `main` and `numbering_drift_sweep`'s T3
     cross-check both call this, so the gate and the sweep can never disagree
     about which rows a verdict sees.
     """
-    cpins_path = Path(__file__).resolve().parent / "number_collisions_expected.txt"
+    base = pins_dir if pins_dir is not None else Path(__file__).resolve().parent
+    cpins_path = base / "number_collisions_expected.txt"
     if not cpins_path.is_file():
         raise OSError(f"collision pins file missing: {cpins_path}")
     cscalars, cpins = parse_collision_pins(cpins_path)
     target_name = repo.resolve().name
     self_name = REPO_NAME
-    per_repo_file = Path(__file__).resolve().parent / f"number_collisions_{target_name}.txt"
+    per_repo_file = base / f"number_collisions_{target_name}.txt"
     if target_name != self_name:
         per_repo = per_repo_file
         if per_repo.is_file():
@@ -814,6 +878,13 @@ def collision_pins_for(repo: Path) -> tuple[dict, dict[str, int], dict[tuple[str
             pins_overrides[key] = row[row_key]
     if target_name != self_name and per_repo_file.is_file():
         extra_scalars, _rows = parse_collision_pins(per_repo_file)
+        lr = extra_scalars.get("legacy_ratchet")
+        if lr is not None:
+            # Issue 1208: the per-repo legacy ratchet, no row column to agree
+            # with — the file value IS the record (the ONE-RECORD-TWO-MEDIA
+            # equality check below is for the CAPS, which the row carries;
+            # this scalar does not).
+            cscalars["legacy_ratchet"] = lr
         for key, row_key in (("max_hand_read", "max_hand"),
                              ("max_rename_residue", "max_rename")):
             file_val = extra_scalars.get(key)

@@ -1,0 +1,16 @@
+# riir-refine's OWN legacy-collision ratchet — the per-repo channel
+# collision_pins_for() reads (katgpt-rs issue 1208, landed 2026-11-13).
+#
+# The SHARED number_collisions_expected.txt legacy_ratchet (64) is
+# katgpt-rs's own pre-gate archive count; without this file a foreign repo
+# inherits it, the gate prints a permanent `re-pin DOWN` note the repo
+# cannot act on, and the GROWTH direction is blind (a first legacy re-spend
+# here would stay green against 64 forever).
+#
+# Measured 2026-11-13 at riir-refine develop 3c6359ea:
+#   9 historical collision(s) over 1012 number(s), 0 above the era boundary,
+#   families: 0 collision / 0 rename-residue / 2 hand-read (ratchets 0/2).
+# A NEW legacy collision here breaches this ratchet and reds the gate —
+# the commit that grows the count re-pins UP with the reason, per the
+# legacy_ratchet discipline.
+legacy_ratchet = 9

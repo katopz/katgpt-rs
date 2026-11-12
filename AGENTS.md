@@ -184,7 +184,7 @@ work. One line per check:
 | `cfg_gated_floor_gate.py` | `#![cfg]`-gated targets that report a green 0-pass (Issue 713) |
 | `orphaned_attr_gate.py` | a `#[cfg]` separated from its item by a blank line |
 | `percentile_floor_gate.py` | a percentile index that lands on n-1 and so reports the MAX |
-| `numbering_gate.py` | a number allocated twice, or a stale/malformed `.highwater` — walled by membership above the era boundary, ratcheted below it; `.benchmarks/` stem-CLASSIFIED: COLLISION walls at zero unpinnable, rename/hand-read ratchets at measured, FAMILY-EXPLICIT silent (Issues 724, 725, 795); a FOREIGN target is ARMED from its own `numbering_drift_floors.txt` row (one record, two instruments; caps equality-synced with `number_collisions_<repo>.txt`), row floors hard / katgpt-rs floors advisory / empty walk refuses (Issue 1206, landed `2eee300c8`) |
+| `numbering_gate.py` | a number allocated twice, or a stale/malformed `.highwater` — walled by membership above the era boundary, ratcheted below it; `.benchmarks/` stem-CLASSIFIED: COLLISION walls at zero unpinnable, rename/hand-read ratchets at measured, FAMILY-EXPLICIT silent (Issues 724, 725, 795); a FOREIGN target is ARMED from its own `numbering_drift_floors.txt` row (one record, two instruments; caps equality-synced with `number_collisions_<repo>.txt`), row floors hard / katgpt-rs floors advisory / empty walk refuses (Issue 1206, landed `2eee300c8`); a per-repo `legacy_ratchet` scalar gives a foreign repo its OWN ratchet — the shared 64 never leaks (Issue 1208) |
 | `dual_allocation_gate.py` | this checkout and its upstream both allocated a numbered document since their merge base — TWIN (same stem, the rebased own line) annotates exit-neutral, INDEPENDENT (two documents claiming one number) exits 1 naming both sides' adding commits (Issue 796) COUNTER exits non-zero too: the first two verdicts compare DOCUMENTS, and a number allocated and CLOSED in one commit never has a file in any tree, so the counters are the only thing that sees it. A one-sided bump stays green by construction; armed on every push with the reader injected and by a real two-repo fixture under --prove-fires (Issue 850) |
 | `docs_gate_paths_sync.py` | docs_gate.yml's two hand-duplicated trigger `paths:` lists stay identical (Issue 724 T4b) |
 | `required_features_static_gate.py` | a required-features row naming a feature its package cannot enable (riir-train Issue 513) |
@@ -904,7 +904,16 @@ git fetch origin && py ../katgpt-rs/scripts/dual_allocation_gate.py
   MEMBERSHIP with reasons; below it a RATCHET. Take SCOPE from
   `scripts/numbering_floors.txt`, never a tree walk. Cross-repo half:
   `scripts/numbering_drift_sweep.py` (`max_hist` ratchet; `min_numbers` floors
-  the history walk; `min_bench`).
+  the history walk; `min_bench`). **Per-repo ratchet channel (issue 1208,
+  landed 2026-11-13):** a foreign target may carry
+  `scripts/number_collisions_<repo>.txt` with a `legacy_ratchet` scalar —
+  the legacy ratchet has no drift-row column, so the per-repo file is the
+  only per-repo record, and the shared value (katgpt-rs's own pre-gate
+  archive count) never leaks into another repo's verdict. First landing:
+  riir-refine (`legacy_ratchet = 9`) — the permanent `re-pin DOWN` note
+  (9 < 64 every run) is gone, and the growth direction is watched again.
+  A NEW legacy collision in that repo breaches its own ratchet and reds —
+  the growing commit re-pins UP with the reason, per the discipline.
 - **On-disk duplicate classifier** (`numbering_gate.classify_stems`): a
   ≥2-holder (number, directory) group is COLLISION (token-disjoint — walled at
   0 everywhere, unpinnable; a pinned COLLISION is a work item) /
