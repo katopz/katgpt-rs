@@ -66,3 +66,19 @@ Four arms — **shipped / fixed-farthest / split / split+EMA** — on the bench_
 - **No-regression:** `bench_375` G1 ≥ the 4.9× margin; GMM arm: EM final-LL ≥ shipped seed on the gmm fixtures (rides the seed swap automatically).
 
 **Demote clause:** split arms fail to beat fixed-farthest ⇒ GOAT grade struck, PoC Addendum records the raw numbers in this note in the same commit, only T1 (the defect fix) survives.
+
+
+## PoC Addendum — Issue 997 verdict (2026-11-12, DEMOTED)
+
+The Issue 997 PoC (split revival vs farthest revival, bench_375 posture) ran as
+**one negative**: batch Lloyd's with the shipped k-means++ init never produces
+empty clusters on any reachable posture (zero deaths across continuous,
+quantized, duplicate-heavy, and the real bench_375 corpora), and forced
+starvation provably collapses both revival policies to identical picks (all
+revival distances zero under first-index tie-dups). Split did NOT beat
+farthest — the arms are unreachable/identical. **GOAT grade for the batch
+split-revival track: DEMOTED** per the pre-registered T7 rule. T1 (the
+`d2_nearest` staleness fix) stands on its own state-level regression test.
+The split-vs-farthest head-to-head moves to the mini-batch EMA regime
+(Issue 997 T4), where empty clusters occur naturally; the PoC harness lifts
+from git history (tree of `b6b85a906`, 2026-11-12).
