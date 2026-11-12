@@ -16,6 +16,7 @@ This skill brings a repo's documentation up to date with the work that has
   primitive's status line).
 - After a feature is promoted to default-on OR demoted to opt-in.
 - Quarterly as a doc-hygiene gate.
+- **Any numbered-file work session (issue 1205 fix path 3):** run that repo's numbering gate before leaving — `py ../katgpt-rs/scripts/numbering_gate.py <repo>` (exit 1 = an un-bumped `.highwater`, a collision, or a stale/malformed allocator; fix in the same commit). riir-ai's guard layer 1.39 carries the same check every guard run; this bullet is the standing lane for repos without that layer.
 - **NOT** for speculative work — only landed, committed work counts.
 
 ## `BOUNDARY.md` — the 4th doc surface (added 2026-08-21)
