@@ -220,6 +220,8 @@ Without concentration, the compound gain cannot exist (SAR cannot widen the reac
 
 **CLOSED impractical (2026-07-15).** The fatal scope problem (identified during open-questions analysis) is confirmed: SAR operates on a **weight delta** `ΔW`, but a backdoor detector must operate on the **base weights `W`** (you don't have the honest delta to subtract). SAR's purification needs a reference point; a backdoored-in-from-scratch model has no honest baseline to purify against. The detection surface SAR provides exists only on the delta, not the deployed weights. R422's PASS verdict (backdoor is statistically undetectable) stands unbroken. (Issue 152 closed + removed per noise-reduction rule; git `2524918b`.)
 
+> **2026-11-12 boundary note:** the *general* "reference-free detection is impractical" reading is now carved: Lazarus (Zeng et al., Microsoft, Nov 2026 — riir-infer `.research/025`) detects the sparse-edit class **without any reference** — the layer's own population (median/MAD z-scores, gate↔up cosine, down→unembedding alignment) is the reference — validated on the paper's own 114-checkpoint family at 91.4% TPR @ 9.7% FPR; its Theorem 4 makes the footprint a lower bound for independent multi-token writes. R422-class training-time constructions remain undetectable by theorem; the delta-purification closure above stands as written.
+
 ## 12. Shard Embedding / JL Projection (Plan 230) — DEPRECATED (Issue 139)
 
 **Hypothesis:** Johnson-Lindenstrauss random orthogonal projection `[f32;64]→[f32;8]` provides O(1) cosine similarity shard lookup at ~90% NN preservation (the JL guarantee).
