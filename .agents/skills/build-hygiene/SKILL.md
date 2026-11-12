@@ -65,6 +65,14 @@ Rules:
    nightly, whatever your repo pins), trades GB-scale memory, and is young —
    cargo + CI stay the final word. Adopt only through a measured pilot on your
    own loop, never on published numbers alone.
+   *Not a rung: toolchain-replacing JIT runtimes.* makepad/relax replaces
+   rustc/LLVM/the linker entirely (its own borrow checker + backends, interp→O1→O3
+   tiering) — a faster "compiler" that ISN'T your compiler: a JIT run sits outside
+   every pinned-toolchain gate (rust-toolchain.toml, determinism pins, wasm lanes,
+   CI), its `check` cannot substitute for a rustc-semantic gate (proven semantic
+   divergences exist), and ecosystem compat (bevy/egui/wgpu) is unproven. Distilled
+   MARGINAL 2026-11-12 (riir-refine queue, pin 23d69916) — pilot-only if ever, and
+   not worth the pilot on a bevy stack today.
 4. **Measure the LOOP, not the build half.** The metric is edit→first-frame
    (GUI) or edit→test-green (headless): stimulus apply → incremental build →
    observed result. Interleaved A→B pairs, per-arm isolated `CARGO_TARGET_DIR`,
@@ -79,6 +87,14 @@ Rules:
   `incremental = false`. Reclamation is a separate approved step — never delete
   `target/release` anywhere, never delete a tool binary's release dir that
   symlinks or scripts point at.
+- **Per-package `incremental = false` on the hottest-edited crates, inside an
+  incremental-on release profile** (makepad/relax Cargo.toml, measured in-source:
+  "a relax-compiler edit rebuilds in 33 s instead of 59 s", clean 63→52 s with
+  `lto = "off"`). The counterintuitive shape: a crate edited every few minutes
+  pays incremental-cache write/invalidate cost on every build, so fresh is
+  faster *for that crate* while every other member keeps incremental. Mirror of
+  §1's `incremental = false` for single-pass postures — there the reason is one
+  compile per run, here it is many compiles of one crate.
 - **Sibling build holding the lock:** `CARGO_TARGET_DIR=/tmp/<task>` — never wait
   on a lock, never share a target tree across concurrent sessions; move scratch
   targets to a roomy volume when the internal disk runs low.
