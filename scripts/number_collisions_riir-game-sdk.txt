@@ -1,0 +1,8 @@
+# riir-game-sdk's OWN collision pins — read by katgpt-rs numbering_gate.py when it
+# gates riir-game-sdk (per-repo pins; see number_collisions_expected.txt's
+# 2026-11-12 re-keying note, riir-ai Issue 1205's reconciliation).
+# One above-boundary historical event, both holders verified in full history:
+
+max_hand_read = 0
+
+collision = .issues 055 asset_vessel_lean_hash_only (added 04b3aa2 2026-11-06, "asset_vessel takes the 32-byte hash — drop the riir-games-mmorpg edge"; removed bad3a4e same day) x gated_predicate_refuses_the_authoritys_own_trjr (added a6f53e4 2026-11-06, LIVE — the sdk 055 issue) — same-day dual allocation; the loser closed+removed, no live file, no citation rewrite; the pin is the record
