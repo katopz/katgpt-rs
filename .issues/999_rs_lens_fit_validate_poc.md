@@ -1,6 +1,21 @@
 # Issue 999: R/S lens fit-and-validate PoC (neuron-lens distill, Research 666)
-**Status:** open — filed 2026-11-12; Gain-tier PoC from `katgpt-rs/.research/666_Neuron_Lens_RS_Transposable_Lens_Reads.md`. No consumer lane claimed yet; the riir-infer-laya stability lane (`src/laya/riir/stability.rs` + its two tests) has an explicitly DEFERRED "headful lens variant" this PoC would fill.
+**Status:** in progress — T1 done (checkpoint probed + recorded below), T2a done (op maps landed in riir-infer `16d50c46`), T2b/T2c/T2d remain. Claimed by m3 (see lease line); the riir-infer-laya stability lane (`src/laya/riir/stability.rs` + its two tests) has the explicitly DEFERRED "headful lens variant" this PoC fills.
 **Claimed:** m3, 1794485961, expires 2026-11-14T12:19:22Z
+
+## T1 record — checkpoint probed (2026-11-12)
+
+- File: `riir-train/data/Qwen3.5-0.8B-Base-Q8_0.gguf`, 811,843,200 B, sha256 `fb22c7a8b76fc8ca6f5b219c88e999031c443f70a5335b5aa1d611ad59b455d1`, GGUF v3, arch `qwen35`.
+- Geometry: 24 blocks · d_model 1024 · 8 Q heads / 2 KV heads · head_dim (key/value length) 256 · FFN 3584 · rms eps 1e-6 · rope freq_base 1e7 · vocab 248320 (GPT-2 BPE) · context 262144.
+- Layer mix (derived from tensor names + `qwen35.full_attention_interval` = 4): full attention at **{3, 7, 11, 15, 19, 23}** (attn_q/k/v/output + attn_q_norm/attn_k_norm); Gated-DeltaNet (GDN) at the other **18** (attn_qkv fused + attn_gate + ssm_conv1d/ssm_a/ssm_alpha/ssm_beta/ssm_dt/ssm_norm/ssm_out).
+- **Tied embeddings** — no `output.weight` tensor → `W_U = E` (the R read uses `E` directly); S read uses `W_E = token_embd.weight`.
+- riir-infer already loads + runs this arch: `qwen35_deltanet_config_from_gguf_metadata` / `forward_qwen_deltanet` (deltanet/forward.rs; GDN rows named in_proj_qkv/in_proj_z/conv1d_weight/dt_bias/a_log/in_proj_b/in_proj_a/linear_norm/out_proj); weights dequantize to f32 at load (T2's dequantize-to-f32 note satisfied by the loader).
+
+## T2 sub-splits (coverage)
+
+- [x] T2a — op-level RelP maps + adjoint tests: LANDED riir-infer `16d50c46` (`src/lens/ops.rs`, feature `lens`, 9 gate tests green at `--features lens`; LN-rule diagonal pinned vs the forward's rmsnorm; RoPE vjp round-trip-pinned against `crate::rope`'s rotate-half pairing — NOTE: rope.rs's module doc says adjacent pairs `(q[2i],q[2i+1])` but the actual `apply_rope_heads_precomputed` pairs `(i, i+half)`; the vjp follows the CODE; the stale doc is the sibling lane's to fix, not this PoC's).
+- [ ] T2b — attention-layer VJP/JVP (true derivative through softmax attention; q/k RMSNorm maps; GQA 8Q/2KV; rope at rotary_dim per `effective_rotary_dim`).
+- [ ] T2c — GDN-layer backward (causal conv1d compose + gated delta-rule state recurrence backward scan + ssm_norm/out + attn_gate compose; true derivative per upstream `layers.py`).
+- [ ] T2d — linearize capture over a doc (ride `forward_qwen_deltanet` seams like the sink-audit capture) + fit accumulators (mean over docs, offset sums) + reads (R: `softmax(W_U·norm(J_L h))` with tied `W_U = E`; S: token scoring with rare-token mask) + G1–G4 gate harness on held-out firing tokens.
 
 - [ ] T1 — pick the checkpoints. **R side needs an LM head** (the laya lane ships none — `stability.rs:4-5`): primary `riir-train/data/Qwen3.5-0.8B-Base-Q8_0.gguf` (headful, on disk, the closed-form-write cell's model), else a small katgpt-core LM; record arch (layers / d_model / heads / norm layout) + weights provenance sha. **S-only extension (optional):** the laya encoder lane — G1/G3 only; **G2 N/A — no unembed** (the lane's own words); Bonsai-2-27B noted as a stretch (27B-class lens fits are heavy), never primary.
 - [ ] T2 — implement the RelP hand-rule layer maps in Rust: LN rule (RMSNorm rsqrt held), identity rule (`silu(g)` → `sigmoid(g)·dg`), half rule (`silu(g)·up` passes β=0.5 of each factor's change), true derivative kept for attention / qk-norm / RoPE **and GDN recurrence** (Qwen3.5-0.8B is a GDN+attention hybrid — without a GDN map the transpose test covers only the attention layers; upstream `layers.py` carries the GDN map to port) — a `linearize` / `jvp` / `vjp` triple per layer composed into a stack. Fit on DEQUANTIZED f32 weights (the GGUF is Q8_0 — dequantize at load so G3 stability is not a quantization artifact). Tests: finite-difference cross-check on one small doc + the transpose identity (`vjp` of the R map ≡ `jvp` of the S map).
