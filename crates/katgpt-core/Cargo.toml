@@ -4488,6 +4488,42 @@ required-features = ["diffusion_diversity"]
 name = "plan634_t16_batch_selector"
 required-features = ["diffusion_diversity"]
 
+# Plan 634 T2.1 (F1): the ordering-law battery — the SRW closed-form gap
+# (exact, paper C.14–C.15), the Alg-4 meta-gap bound (Prop 5.6 shape,
+# 0.5 safety factor), the global-roulette baseline reported beside.
+[[test]]
+name = "plan634_t21_ordering_law"
+required-features = ["diffusion_diversity"]
+
+# Plan 634 T2.2 (F2): the named-graph local==spectral equality battery at
+# k = n (loud per-pair messages) + the REPORTED truncation tail rows.
+[[test]]
+name = "plan634_t22_crosscheck_truncation"
+required-features = ["diffusion_diversity"]
+
+# Plan 634 T2.3 (F3): the CGSP-shaped Div-vs-next-cycle-admission
+# Spearman loop — REPORT-ONLY this phase (determinism + non-vacuity are
+# the only asserts; the bar waits for riir-ai Plan 646 data).
+[[test]]
+name = "plan634_t23_div_signal"
+required-features = ["diffusion_diversity"]
+
+# Plan 634 T2.4 (F4): the well-mixed tie battery — the Alg-4 walk's
+# sampled-batch colinearity + frontier coverage tie BOTH baselines (SRW
+# + global jump) within pinned bands; the walk-time selector's demote
+# tripwire.
+[[test]]
+name = "plan634_t24_well_mixed_tie"
+required-features = ["diffusion_diversity"]
+
+# Plan 634 T2.5 (F5): the batch-selector gate — the planted-clique-graph
+# coverage win over the raw-cosine baseline (paired strict margin, one
+# frozen read), the expander tie vs global roulette, the identity
+# cross-check, the truncation tail reported.
+[[test]]
+name = "plan634_t25_batch_gate"
+required-features = ["diffusion_diversity"]
+
 # Issue 988 T1 — the graft apply hot path's G4 alloc census (the
 # repo-birth gate discipline: the row rides the SAME commit as the
 # gated target — a missing row is the green-zero trap).
