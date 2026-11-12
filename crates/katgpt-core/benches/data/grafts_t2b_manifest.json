@@ -1,35 +1,41 @@
 {
   "detector": {
     "cal_auc": 1.0,
-    "calibration_armed": 4,
+    "cal_max_score": 0.10342855751514435,
+    "calibration_armed": 0,
     "calibration_n": 600,
+    "class_maxima_test": {
+      "easy": 0.042369741946458817,
+      "hard_a": 0.10261715948581696,
+      "hard_b": 0.00916618574410677
+    },
     "fit_auc": 1.0,
     "gap_calibration": 0.8869743794202805,
-    "gap_test": 0.8860830292105675,
+    "gap_test": 0.8877857774496078,
     "kl_labeling": "Zipf-surface KL(top-40) — never a real-model no-harm proof",
-    "law": "998 T2 posture 2 — gated legs: dev-200 task disarm contract + sealed-400 capture-only arm check (cell run) + off-task TEST 600 CP-UB gate + hard sub-leg; fit/calibration rates reported, never gated",
+    "law": "998 T2 posture 3 — gated legs: dev-200 task disarm contract + sealed-400 capture-only arm check (cell run) + off-task TEST 600 CP-UB gate (0 false ARMS, the durable unit) + hard sub-leg; fit/calibration rates reported, never gated; FIRES reported beside, never gating (arms are table-independent)",
     "offtask_fit_armed": 0,
     "offtask_fit_n": 400,
-    "quantile": 0.995,
-    "quantile_tail_support": 4,
+    "tail_margin": 2.0,
+    "tail_support": 1,
     "task_dev_armed": 200,
     "task_dev_n": 200,
     "task_fit_armed": 400,
     "task_fit_n": 400,
-    "test_armed": 1,
+    "test_armed": 0,
     "test_auc": 1.0,
     "test_n": 600,
-    "threshold_score": 0.05397161468863487,
-    "threshold_sigmoid": 0.5134896636009216
+    "threshold_score": 0.2068571150302887,
+    "threshold_sigmoid": 0.551530659198761
   },
   "fit_pins": {
     "artifact_epoch": 1,
     "bias_delta": 8.0,
-    "detector_threshold_score": 0.05397161468863487,
-    "detector_threshold_sigmoid": 0.5134896636009216,
-    "detector_threshold_source": "calibration-split quantile (alpha=0.995, n=600)",
+    "detector_threshold_score": 0.2068571150302887,
+    "detector_threshold_sigmoid": 0.551530659198761,
+    "detector_threshold_source": "calibration max x M=2 (RAW score space, n=600), posture-3 pre-registration commit ebe59f611",
     "n_embd": 1024,
-    "posture": "2 — calibration-split placement; posture-1 (fit-quantile placement) FAILED the off-task gate 234/600 and was recorded, never re-thresholded",
+    "posture": "3 — calibration-max x M=2.0 (raw score space; posture-1 fit-quantile FAILED 234/600, posture-2 calibration-quantile FAILED 1/600 — both recorded, never re-thresholded)",
     "probe_layers": [
       3,
       6,
@@ -41,14 +47,14 @@
   },
   "fixtures": {
     "grafts_t2b_artifact.bin": {
-      "blake3": "521f3aa0df66939ee7d57e766f997b96dbf66a8787225fd4a840981637556189",
+      "blake3": "2c026fdf86226585c97445f533530cccb02cb41e313232f580d3ff2f8a277dff",
       "bytes": 77310,
       "canonical_bytes": 77258,
-      "graft_digest_hex": "d7a4cdbd7cabd8d11d6af6b4eeb296c48126f4c6847529eaa448ecb87ac6069b",
+      "graft_digest_hex": "53638776826ee472c672a23592a4000389305ec8b8e643e3b98fb1b7db0cdf53",
       "rules": 1
     },
     "grafts_t2b_rows.bin": {
-      "blake3": "bb576ebac59fecfd1a3879402f45a636a6ff05f678931deb00fabde7d200610a",
+      "blake3": "de4dee347ad2434f94e5d5ca0d4725d19e2b92ef485f54f031504d219556afb2",
       "bytes": 33012,
       "format_version": 2,
       "row_bytes": 15,
@@ -61,9 +67,9 @@
     "classes": "1 easy / 2 hard-A digits-non-arithmetic / 3 hard-B arithmetic-words (998 T2 pre-registration)",
     "detector_fit_n": 400,
     "fit_calibration_cache_blake3": "a0438cc7efcc0616be15b36d9269b924a3a93761a63058e1dfb74aa41da6998a",
-    "test_cache_blake3": "7bc8848640c544812663d81e51c2b607c39dea5a0f218e36f1ef77345fa68c01",
+    "test_cache_blake3": "7d95ce0e98ad11a8ebcee33191721b82ea890062fe4987a9869ac46457686318",
     "test_n": 600,
-    "test_provenance": "OFFTASK_SEED_TEST fresh capture, taken AFTER the posture-2 rule commit (the ruling's contamination ban)"
+    "test_provenance": "OFFTASK_SEED_TEST_P3 fresh capture (posture 3, seed 0x998_0FF3), taken AFTER the posture-3 pre-registration commit ebe59f611 (the ruling's contamination ban); the spent posture-2 corpus feeds the tail diagnostics only"
   },
   "producer": {
     "checkpoint_blake3": "70fd9c83d63454ae72e07a29ebdb78f863cfad102d8939f6ec49b2aea32104e2",

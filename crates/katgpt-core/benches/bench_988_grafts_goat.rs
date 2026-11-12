@@ -31,19 +31,25 @@
 //! - **G3(a)** — switches DISARMED: byte-identical outputs (exact — the
 //!   writer never touched), the unarmed no-op law.
 //! - **G3(b)** — the 998 T2 no-harm legs (pre-registration in
-//!   `.issues/998`, verdict AGREE 2026-11-12): the detector switch's
-//!   GATED legs are (1) the task contract — disarm rate 0 on the dev-200
-//!   held-out task rows (the sealed-400 capture-only arm check runs
-//!   cell-side, never in this bench); (2) the FRESH off-task TEST
-//!   corpus (seed OFFTASK_SEED_TEST, captured after the calibration-rule
-//!   commit — the posture-2 ruling) — gate = Clopper–Pearson 95% UB ≤
-//!   0.5% ⇔ **0 false arms at n = 600** (1/600 ≈ 0.79% = FAIL); (3) the hard-negative sub-leg
+//!   `.issues/998`; posture-3 re-registration verdict AGREE 2026-11-12,
+//!   reviewer session 40a812a8, committed BEFORE the fresh capture
+//!   `ebe59f611`): the detector switch's GATED legs are (1) the task
+//!   contract — disarm rate 0 on the dev-200 held-out task rows (the
+//!   sealed-400 capture-only arm check runs cell-side, never in this
+//!   bench); (2) the FRESH off-task TEST corpus (seed OFFTASK_SEED_TEST_P3
+//!   0x998_0FF3, captured after the posture-3 pre-registration commit —
+//!   the ruling's contamination ban) — gate = Clopper–Pearson 95% UB ≤
+//!   0.5% ⇔ **0 false arms at n = 600**; (3) the hard-negative sub-leg
 //!   (digits-non-arithmetic + arithmetic-words, n = 200, same gate,
-//!   thinner power disclosed: 0/200 certifies ≤ 1.5%). The task-corpus
-//!   base-right damage is REPORTED (the accepted trade: +26.75pp net
-//!   lane accuracy), never gated. KL is **Zipf-surface** KL(top-40) —
-//!   the documented Zipf logit surface (−1.07·ln(i+8)) is the synthetic
-//!   stand-in for the host LM head, never a real-model no-harm proof.
+//!   thinner power disclosed: 0/200 certifies ≤ 1.5%). The threshold is
+//!   the CALIBRATION split's max raw ridge score × M = 2.0 (frozen a
+//!   priori; expected exceedance 0.0357/600 from the pre-registered GPD
+//!   tail fit — the posture-2 flaw, a gate demanding 0 at an expected-3
+//!   placement, fixed). The task-corpus base-right damage is REPORTED
+//!   (the accepted trade: +26.75pp net lane accuracy), never gated. KL
+//!   is **Zipf-surface** KL(top-40) — the documented Zipf logit surface
+//!   (−1.07·ln(i+8)) is the synthetic stand-in for the host LM head,
+//!   never a real-model no-harm proof.
 //! - **G4** — zero allocation on the armed hot path (counting
 //!   allocator, delta over 1000 applies == 0; the `graft_g4_alloc`
 //!   fixture is the primary evidence, this is the re-assert).
@@ -82,9 +88,9 @@ use katgpt_core::{GraftArtifact, GraftInstall, GraftSlot};
 const ARTIFACT_BYTES: &[u8] = include_bytes!("data/grafts_t2b_artifact.bin");
 const ROWS_BYTES: &[u8] = include_bytes!("data/grafts_t2b_rows.bin");
 
-const ARTIFACT_BLAKE3: &str = "521f3aa0df66939ee7d57e766f997b96dbf66a8787225fd4a840981637556189";
-const ROWS_BLAKE3: &str = "bb576ebac59fecfd1a3879402f45a636a6ff05f678931deb00fabde7d200610a";
-const GRAFT_DIGEST_HEX: &str = "d7a4cdbd7cabd8d11d6af6b4eeb296c48126f4c6847529eaa448ecb87ac6069b";
+const ARTIFACT_BLAKE3: &str = "2c026fdf86226585c97445f533530cccb02cb41e313232f580d3ff2f8a277dff";
+const ROWS_BLAKE3: &str = "de4dee347ad2434f94e5d5ca0d4725d19e2b92ef485f54f031504d219556afb2";
+const GRAFT_DIGEST_HEX: &str = "53638776826ee472c672a23592a4000389305ec8b8e643e3b98fb1b7db0cdf53";
 const SEALED_PAYLOAD_BLAKE3: &str =
     "fac21420025b309ec6b2374080fb6ece50f8a304cd74a8edf0428a3438e0a747";
 
@@ -113,9 +119,10 @@ const SCRAMBLE_SEED: u64 = 0x5EED_9880;
 /// Rows v2 (998 T2): +class byte — strict version match, v1 refused loud.
 const ROWS_VERSION: u32 = 2;
 const ROW_BYTES: usize = 15;
-/// Split ids (998 T2 posture-2 leg map): 3 = the FRESH test corpus
+/// Split ids (998 T2 leg map, posture 3): 3 = the FRESH P3 test corpus
 /// (the only off-task gate surface), 4 = the CALIBRATION segment
-/// (reported diagnostics, never gated).
+/// (the threshold's only source — placement data, reported, never
+/// gated).
 const SPLIT_SOLVED: u8 = 0;
 const SPLIT_DEV: u8 = 1;
 const SPLIT_OFFTASK_FIT: u8 = 2;
@@ -735,8 +742,8 @@ fn main() {
     // ── G3(b): the 998 T2 no-harm legs at +8.0 ──
     // GATED leg 2 — the FRESH off-task TEST corpus (n = 600): gate = CP
     // 95% UB ≤ 0.5% ⇔ 0 false ARMS (1/600 ≈ 0.79% = FAIL). The gate
-    // quantity is ARMS — the pre-registered unit (998 T2 posture-2
-    // verdict: the text decides, and arms is the durable quantity: the
+    // quantity is ARMS — the pre-registered unit (the 998 T2 posture-2
+    // + posture-3 rulings: the text decides, and arms is the durable quantity: the
     // fire count depends on the CURRENT mined table, whose growth turns
     // false arms into fires). FIRES are reported beside, never gating:
     // the all-or-nothing table law abstains undecided triples, so the
@@ -795,10 +802,12 @@ fn main() {
         };
         for _ in 0..60 {
             let mid = (lo + hi) / 2.0;
+            // cdf is DECREASING in p; we want the crossing of 0.05.
+            // Above the crossing cdf > 0.05, below it cdf <= 0.05.
             if cdf(mid) > 0.05 {
-                hi = mid;
-            } else {
                 lo = mid;
+            } else {
+                hi = mid;
             }
         }
         (lo + hi) / 2.0
@@ -974,7 +983,7 @@ fn main() {
             if !g3b_offtask {
                 println!(
                     "  G3(b) off-task FAIL: {off_arms} false arm(s) (gated unit) — the artifact is not self-selective at the placed \
-                     threshold; FAIL is a measured verdict, never a moved threshold (998 T2 posture-2 verdict)."
+                     threshold; FAIL is a measured verdict, never a moved threshold (998 T2 posture-2 + posture-3 verdicts; posture 3 permanently closes this placement family on FAIL)."
                 );
             }
             if !g3b_hard {
