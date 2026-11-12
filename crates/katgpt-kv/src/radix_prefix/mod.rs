@@ -21,6 +21,10 @@
 //!         → tree.unlock(&hit)              // drop the match lock
 //! … memory pressure …
 //!         → tree.evict_to_budget(|pages| pool.release_chunk_pages(&pages))
+//!          // or: policy-driven (greedy-dual-size-class retention, Issue
+//!          // katgpt-rs 771 lineage / riir-infer plan 630 T3):
+//!          → for LeafSnapshot in tree.leaf_ids() { rank; }
+//!          → tree.evict_leaf(victim_id, |pages| pool.release_chunk_pages(&pages))
 //! ```
 //!
 //! **Refcount discipline (safety-critical):** for every chunk page, the pool
@@ -131,6 +135,24 @@ impl fmt::Display for TreeError {
 }
 
 impl std::error::Error for TreeError {}
+
+/// One evictable leaf's ranking snapshot, from [`RadixPrefixTree::leaf_ids`].
+/// A policy-driven eviction ([`RadixPrefixTree::evict_leaf`]) ranks these —
+/// cost-density retention ranks `chunks` (re-prefill cost) against the pages
+/// the caller's pool still uniquely holds (freed capacity), with
+/// `last_touch` as the recency tiebreak. The snapshot is a momentary read:
+/// ids stay valid until the next tree mutation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LeafSnapshot {
+    /// The leaf's node id (pass to [`RadixPrefixTree::evict_leaf`]).
+    pub id: NodeId,
+    /// Whole token chunks the leaf spans (≥ 1).
+    pub chunks: usize,
+    /// The leaf's chunk-major page ids (`chunks × n_layers` entries).
+    pub pages: Vec<usize>,
+    /// LRU clock at last traversal through this leaf.
+    pub last_touch: u64,
+}
 
 /// Counters for bench reporting and invariant tests.
 #[derive(Debug, Clone, Copy, Default)]
@@ -509,6 +531,55 @@ impl RadixPrefixTree {
 
     // ── eviction ───────────────────────────────────────────────────────────
 
+    /// Enumerate the currently evictable leaves (childless, unlocked,
+    /// non-root) with the data a retention policy ranks on: span chunks,
+    /// page ids, recency. A cold-path snapshot — the leaf set changes on
+    /// every eviction/insert, so rank from one snapshot per round and
+    /// evict through [`Self::evict_leaf`].
+    pub fn leaf_ids(&self) -> Vec<LeafSnapshot> {
+        self.nodes
+            .iter()
+            .filter(|&(id, n)| id != ROOT && n.children.is_empty() && n.lock == 0)
+            .map(|(id, n)| LeafSnapshot {
+                id,
+                chunks: n.tokens.len() / self.page_tokens,
+                pages: n.pages.clone(),
+                last_touch: n.last_touch,
+            })
+            .collect()
+    }
+
+    /// Evict ONE leaf. Returns `false` — untouched — unless `id` is
+    /// currently an evictable leaf (childless, unlocked, live, not root):
+    /// interior, locked, stale, and root ids all refuse, so a policy may
+    /// act on a slightly stale snapshot without corrupting the tree. On
+    /// success `release` receives the node's chunk-major pages (the caller
+    /// drops the tree's pool hold) exactly as [`Self::evict_to_budget`]
+    /// would, the node is unlinked from its parent and its slot freed.
+    pub fn evict_leaf(&mut self, id: NodeId, release: impl FnOnce(&[usize])) -> bool {
+        let evictable = self
+            .nodes
+            .get(id)
+            .is_some_and(|n| id != ROOT && n.children.is_empty() && n.lock == 0);
+        if !evictable {
+            return false;
+        }
+        // Release the page hold while the node is still borrowed, then
+        // take the slot: the pool's free drops the node value, so the
+        // token/page buffers are released here instead of parked
+        // cleared-but-allocated until the next overwrite.
+        let (parent, chunks) = {
+            let node = self.node(id);
+            release(&node.pages);
+            (node.parent, node.tokens.len() / self.page_tokens)
+        };
+        self.node_mut(parent).children.retain(|&c| c != id);
+        drop(self.nodes.free(id));
+        self.held_pages -= chunks * self.n_layers;
+        self.stats.evictions += 1;
+        true
+    }
+
     /// Evict leaf-preferential LRU until `held_pages <= budget` (or every
     /// leaf is locked — reported via `stats.evict_deadlocks`). `release`
     /// receives each evicted node's chunk-major pages; the caller drops the
@@ -516,6 +587,8 @@ impl RadixPrefixTree {
     ///
     /// Interior nodes are never evicted (they have children); a locked leaf
     /// is skipped; becoming-childless parents are picked up by later scans.
+    /// A custom retention policy (cost-density, priority, …) can replace
+    /// the victim choice entirely: [`Self::leaf_ids`] + [`Self::evict_leaf`].
     pub fn evict_to_budget(&mut self, mut release: impl FnMut(&[usize])) {
         while self.held_pages > self.page_budget {
             // Slot occupancy is liveness now: freed slots yield nothing from
@@ -532,19 +605,13 @@ impl RadixPrefixTree {
                 self.stats.evict_deadlocks += 1;
                 break;
             };
-            // Release the page hold while the node is still borrowed, then
-            // take the slot: the pool's free drops the node value, so the
-            // token/page buffers are released here instead of parked
-            // cleared-but-allocated until the next overwrite.
-            let (parent, chunks) = {
-                let node = self.node(victim);
-                release(&node.pages);
-                (node.parent, node.tokens.len() / self.page_tokens)
-            };
-            self.node_mut(parent).children.retain(|&c| c != victim);
-            drop(self.nodes.free(victim));
-            self.held_pages -= chunks * self.n_layers;
-            self.stats.evictions += 1;
+            // The victim came from the same evictable predicate evict_leaf
+            // re-checks, so this cannot refuse; a false here is a defensive
+            // deadlock (never loop on a refusing victim).
+            if !self.evict_leaf(victim, |pages| release(pages)) {
+                self.stats.evict_deadlocks += 1;
+                break;
+            }
         }
     }
 

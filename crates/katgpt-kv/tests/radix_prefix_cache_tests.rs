@@ -4,6 +4,7 @@
 //! Issue-713 discipline: naming this target without the feature errors
 //! instead of reporting a green zero.
 
+use katgpt_kv::radix_prefix::ROOT;
 use katgpt_kv::radix_prefix::{InsertOutcome, RadixPrefixTree, TreeError};
 
 const NL: usize = 2; // layers
@@ -426,5 +427,204 @@ fn randomized_oracle_equivalence() {
         // Every serve + probe unlocked — no lock leaks across 40 serves ×
         // 80 probes.
         assert_eq!(tree.total_locks(), 0, "seed {seed} lock leak");
+    }
+}
+
+#[test]
+fn leaf_enumeration_lists_only_unlocked_childless_leaves() {
+    // seq1 (3 chunks) branches into seq2 (+1 chunk); seq3 is a disjoint
+    // 3-chunk sequence. Leaves: seq2's tail (1 chunk) + seq3's node
+    // (3 chunks); everything else is interior. Locking seq2's terminal
+    // drops it from the snapshot; the surviving snapshot carries span
+    // chunks, exact page ids, and a recency clock.
+    let mut tree = RadixPrefixTree::new(NL, PT, usize::MAX);
+    let mut pool = MockPool::new();
+    let mut seq2 = tokens(1, 3);
+    seq2.extend(tokens(2, 1));
+    let seq3 = tokens(5, 3);
+    serve(&mut tree, &mut pool, &tokens(1, 3));
+    serve(&mut tree, &mut pool, &seq2);
+    serve(&mut tree, &mut pool, &seq3);
+
+    let leaves = tree.leaf_ids();
+    assert_eq!(leaves.len(), 2, "seq2-tail and seq3-node are the leaves");
+    assert!(leaves.iter().any(|l| l.chunks == 1));
+    assert!(leaves.iter().any(|l| l.chunks == 3));
+
+    // Lock seq2's terminal (its 1-chunk tail) — it must drop out.
+    let hit2 = tree.match_prefix(&seq2);
+    assert_eq!(hit2.matched_chunks, 4);
+    let leaves = tree.leaf_ids();
+    assert_eq!(leaves.len(), 1, "locked leaf excluded");
+    let leaf = &leaves[0];
+    assert_eq!(leaf.chunks, 3, "seq3's node is the remaining leaf");
+    // Its pages are seq3's whole path (matched fully → partial = all).
+    let mut path = Vec::new();
+    tree.path_pages_into(&hit2, &mut path); // seq2, for lock symmetry
+    tree.unlock(&hit2);
+    let hit3 = tree.match_prefix(&seq3);
+    tree.path_pages_into(&hit3, &mut path);
+    tree.unlock(&hit3);
+    let tail = &path[path.len() - 3 * NL..];
+    assert_eq!(leaf.pages, tail, "leaf pages match seq3's path");
+    assert!(leaf.last_touch > 0);
+    assert_eq!(tree.total_locks(), 0);
+}
+
+#[test]
+fn evict_leaf_single_victim_and_refusals() {
+    let mut tree = RadixPrefixTree::new(NL, PT, usize::MAX);
+    let mut pool = MockPool::new();
+    let mut a = tokens(1, 2);
+    a.extend(tokens(2, 2));
+    let mut b = a[..2 * PT].to_vec();
+    b.extend(tokens(3, 1));
+    serve(&mut tree, &mut pool, &a);
+    serve(&mut tree, &mut pool, &b);
+    let held_before = tree.held_pages();
+    assert_eq!(held_before, 5 * NL);
+
+    // ROOT refuses.
+    assert!(!tree.evict_leaf(ROOT, |_| panic!("ROOT must refuse before release")));
+    assert_eq!(tree.held_pages(), held_before);
+    assert_eq!(tree.stats().evictions, 0);
+
+    // A locked leaf refuses.
+    let hit_b = tree.match_prefix(&b);
+    assert_eq!(hit_b.matched_chunks, 3);
+    assert!(!tree.evict_leaf(hit_b.node, |_| panic!("locked must refuse before release")));
+    tree.unlock(&hit_b);
+    assert_eq!(tree.stats().evictions, 0);
+
+    // An interior node refuses (the shared trunk, reached by a 2-chunk
+    // prefix of a — the leaf set only exposes the 1-chunk b-tail).
+    let hit_trunk = tree.match_prefix(&a[..2 * PT]);
+    assert_eq!(hit_trunk.matched_chunks, 2);
+    assert!(!tree.evict_leaf(hit_trunk.node, |_| panic!(
+        "interior must refuse before release"
+    )));
+    tree.unlock(&hit_trunk);
+
+    // Evict the b-tail (the 1-chunk leaf) for real.
+    let victim = tree
+        .leaf_ids()
+        .iter()
+        .find(|l| l.chunks == 1)
+        .expect("b-tail leaf")
+        .id;
+    let mut released = Vec::new();
+    assert!(tree.evict_leaf(victim, |pages| released.extend_from_slice(pages)));
+    assert_eq!(released.len(), NL, "one chunk × layers released");
+    for &p in &released {
+        pool.release(std::slice::from_ref(&p));
+    }
+    assert_eq!(tree.stats().evictions, 1);
+    assert_eq!(tree.held_pages(), held_before - NL);
+    // Stale id refuses (slot freed).
+    assert!(!tree.evict_leaf(victim, |_| panic!("stale must refuse before release")));
+    // b falls back to the shared trunk; a untouched.
+    let hit = tree.match_prefix(&b);
+    tree.unlock(&hit);
+    assert_eq!(hit.matched_chunks, 2, "b falls back to the shared trunk");
+    let hit = tree.match_prefix(&a);
+    tree.unlock(&hit);
+    assert_eq!(hit.matched_chunks, 4, "a untouched");
+    assert_eq!(tree.total_locks(), 0);
+}
+
+#[test]
+fn evict_leaf_picks_up_becoming_childless_parent() {
+    // Chain a→b→c (each a 1-chunk extension). Evicting the leaf c turns b
+    // into a leaf; evicting b then turns a into one — the peeling order a
+    // policy loop must be able to walk.
+    let mut tree = RadixPrefixTree::new(NL, PT, usize::MAX);
+    let mut pool = MockPool::new();
+    // The chain grows 2 → 3 → 4 chunks: serve #1 indexes a 2-chunk trunk
+    // (the head + turn 0), then each later turn appends a 1-chunk node.
+    let mut chain = tokens(1, 1);
+    for turn in 0..3 {
+        chain.extend(tokens(10 + turn as u32, 1));
+        serve(&mut tree, &mut pool, &chain);
+    }
+    assert_eq!(tree.node_count(), 3);
+
+    let mut released_total = 0usize;
+    for round in 0..3 {
+        let leaves = tree.leaf_ids();
+        assert_eq!(
+            leaves.len(),
+            1,
+            "round {round}: the chain tail is the one leaf"
+        );
+        let victim = leaves[0].id;
+        assert!(tree.evict_leaf(victim, |pages| {
+            released_total += pages.len();
+            pool.release(pages)
+        }));
+    }
+    assert_eq!(released_total, 4 * NL);
+    assert_eq!(tree.held_pages(), 0);
+    assert_eq!(tree.node_count(), 0);
+    assert_eq!(tree.stats().evictions, 3);
+}
+
+#[test]
+fn policy_loop_reaches_budget_and_keeps_hold_discipline() {
+    // The manager-side policy shape (riir-infer plan 630 T3): snapshot →
+    // rank → evict_leaf, looped to a caller budget — here a degenerate
+    // smallest-chunks-first policy. Same guarantees as evict_to_budget:
+    // budget reached (or deadlock reported), hold discipline intact.
+    let mut rng = fastrand::Rng::with_seed(0x630);
+    let budget = 10 * NL;
+    let mut tree = RadixPrefixTree::new(NL, PT, usize::MAX);
+    let mut pool = MockPool::new();
+    let mut all: Vec<Vec<u32>> = Vec::new();
+    for i in 0..40 {
+        let toks = if i % 3 == 0 || all.is_empty() {
+            tokens(i as u32, 1 + rng.usize(0..4))
+        } else {
+            let mut base = all[rng.usize(0..all.len())].clone();
+            base.extend(tokens(i as u32, 1 + rng.usize(0..3)));
+            base
+        };
+        serve(&mut tree, &mut pool, &toks);
+        all.push(toks);
+        policy_loop_to_budget(&mut tree, &mut pool, budget);
+        assert!(tree.held_pages() <= budget, "policy loop met the budget");
+    }
+    // Hold discipline: every tree-indexed page still carries ≥ 1 hold, and
+    // every released page is no longer indexed.
+    tree.for_each_held_page(|pages| {
+        for &p in pages {
+            assert!(
+                pool.refcounts.get(&p).copied().unwrap_or(0) >= 1,
+                "indexed page {p} lost its hold"
+            );
+        }
+    });
+    for &p in &pool.released {
+        let mut still_indexed = false;
+        tree.for_each_held_page(|pages| still_indexed |= pages.contains(&p));
+        assert!(!still_indexed, "released page {p} still indexed");
+    }
+    assert_eq!(tree.total_locks(), 0);
+}
+
+/// The degenerate policy loop: evict smallest-chunks-first (cheapest
+/// re-prefill), tie by recency, until held ≤ budget or nothing evictable.
+fn policy_loop_to_budget(tree: &mut RadixPrefixTree, pool: &mut MockPool, budget: usize) {
+    let mut guard = 0usize;
+    while tree.held_pages() > budget {
+        guard += 1;
+        assert!(guard < 10_000, "policy loop wedged");
+        let victim = tree
+            .leaf_ids()
+            .iter()
+            .min_by_key(|l| (l.chunks, l.last_touch))
+            .map(|l| l.id);
+        let Some(victim) = victim else { break };
+        if !tree.evict_leaf(victim, |pages| pool.release(pages)) {
+            break;
+        }
     }
 }
