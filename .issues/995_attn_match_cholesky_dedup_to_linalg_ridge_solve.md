@@ -2,6 +2,9 @@
 
 **Status:** OPEN — filed 2026-11-12 (amo, from issue 988 T1's landing; the dedup issue 988's own fallback branch named — "keep its local copy and file a dedup issue — never a second solver").
 
+**Claimed:** zed-dfa5bc1f@amo, 1794459060, expires 2026-11-14T04:51:00Z
+(decision recorded at claim: OPTION 1 — katgpt-core goes non-optional in attn-match. Rationale: the base leaf adds no new dependency class (attn-match already carries rayon/serde/postcard/half; core adds fastrand/log/bytemuck/arrayvec — same class), the workspace ships core to crates.io as its central crate anyway, and option 2's dual-codepath-until-retirement is the exact smell this dedup exists to kill. Shape: beta_fitter's jitter loop STAYS caller-side (retry policy), the factorisation/solve re-points onto linalg::{try_cholesky_f32, chol_solve_f32}, the local cholesky_decompose deletes, value_fitter's same-family copy (unblocked+blocked) sweeps in the same landing, the G5 gate grades on the RELATIVE-ERROR floors (no bit-pin — the numerics delta scalar→SIMD-interiors is disclosed at the landing), the f978a20b summation-order lesson stays as a doc note in the consuming module. Implementation + compile gates deferred until amo's window frees (the 1165 attempt-5 measurement holds the box; the zero-contention law).)
+
 **Repos:** [katgpt-rs]
 
 ## The duplication
