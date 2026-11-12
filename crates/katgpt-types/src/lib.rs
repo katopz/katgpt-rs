@@ -55,6 +55,13 @@ pub use depth_invariance::{
 /// Checked approximation contracts — the one ULP metric behind the
 /// test/bench float-exactness gates, with one stated edge law (Issue 944).
 pub mod approx;
+/// Belief-contraction certificates + derived staleness schedules for the
+/// modality-additive belief-kernel family (Issue 1000, Research 667 /
+/// arXiv:2611.09217). Pure inline math, zero deps; every helper names its
+/// space (discrete map vs continuous flow). The certificate sibling of
+/// [`leaky_core`]: that module owns the divisive kernel this module records
+/// as the non-contraction distinction (Research 667 §4.1).
+pub mod belief_contract;
 /// Binary `{-1,+1}` bit-plane packed weights (Issue 145, `binary_plasma` feature).
 #[cfg(feature = "binary_plasma")]
 pub mod binary;
@@ -115,6 +122,11 @@ mod tests_types;
 // Re-export the entire public surface so `katgpt_types::*` paths are
 // available at the crate root. Feature gates mirror the gates on the
 // underlying items.
+pub use belief_contract::{
+    ADDITIVE_BALL_RADIUS, BeliefContractError, ContractionRate, ResidualCellCertificate, StepLaw,
+    contraction_rate, disturbance_fade_ticks, residual_cell_certificate, settling_ticks, step_law,
+    useful_gain,
+};
 #[cfg(feature = "binary_plasma")]
 pub use binary::{BinaryWeights, GROUP_SIZE};
 #[cfg(feature = "bitcos")]

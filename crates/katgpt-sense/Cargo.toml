@@ -116,6 +116,17 @@ name = "modality_additive_superposition"
 path = "tests/modality_additive_superposition.rs"
 required-features = ["modality_additive"]
 
+# Issue 1000 T2 — the kernel-half contraction fixtures (F1/F2/F3-consistency/
+# F4) against `evolve_belief_additive`. Same discipline: without the feature
+# the file would compile to an empty binary and print a green `0 passed`;
+# this row makes the skip VISIBLE. (F3-primary + F5 live in katgpt-types'
+# belief_contract module tests — properties of the derived laws, not of this
+# kernel.)
+[[test]]
+name = "belief_contract_fixtures"
+path = "tests/belief_contract_fixtures.rs"
+required-features = ["modality_additive"]
+
 # Issue 939 — phase-belief kernel gates. required-features per the
 # cfg-gated-target discipline: without the feature the file is an empty
 # binary that would print a green `0 passed`; this row makes the skip

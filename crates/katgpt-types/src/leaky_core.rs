@@ -41,6 +41,20 @@
 //! - Zero allocation: operates purely on the borrowed `&mut [f32]` / `&[f32]`.
 //! - No softmax: pure additive update with sigmoid-style bounds.
 //!
+//! # Not a contraction (Research 667 §4.1 / Issue 1000 — a distinction, not a
+//! defect)
+//!
+//! This kernel's update is STATE-INDEPENDENT (`z ↦ clamp(z + c(e))`): two
+//! trajectories differing by a constant interior offset never converge, and
+//! its fading is clamp-boundary-driven, not flow contraction. It is therefore
+//! NOT a contraction in the arXiv:2611.09217 sense — recorded as a measured
+//! distinction, never a defect: the divisive kernel is GOAT-adopted for
+//! superposition-scaling reasons (ratio 5.17 additive-vs-divisive axes are
+//! orthogonal, `modality_superposition_bench`). Do not "fix" the math. If a
+//! consumer needs a CERTIFIED belief filter, the modality-additive kernel
+//! ([`crate::belief_contract`], `evolve_belief_additive` in katgpt-sense) is
+//! the one that carries the certificate — `ρ = α_m` exact, `κ = −ln α_m`.
+//!
 //! `state.len()` determines the iteration count; `input` must be at least that
 //! long. Callers ensure `state.len() == input.len()`.
 
