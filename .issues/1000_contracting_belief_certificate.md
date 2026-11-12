@@ -1,6 +1,7 @@
 # Issue 1000: Contraction certificate + derived staleness laws for latent belief updates
 
 **Status:** Open — filed from [`../.research/667_Contracting_Belief_Observers.md`](../.research/667_Contracting_Belief_Observers.md) (arXiv:2611.09217); verdict Gain (modelless track), Claude ping-pong 2026-11-12. Proof path pre-registered in Research 667 §5 — fixtures land WITH the primitive (the certificate without its fixture is prose, 667 §9).
+**Claimed:** zed-amo-i1000@amo, 1794502927, expires 2026-11-14T17:02:07+00:00
 
 ## Premise
 
