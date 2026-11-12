@@ -902,7 +902,12 @@ git fetch origin && py ../katgpt-rs/scripts/dual_allocation_gate.py
 - Verdict: `scripts/numbering_gate.py` (docs gate), two regimes in
   `scripts/number_collisions_expected.txt`: ≥ `era_boundary = 700` a WALL by
   MEMBERSHIP with reasons; below it a RATCHET. Take SCOPE from
-  `scripts/numbering_floors.txt`, never a tree walk. Cross-repo half:
+  `scripts/numbering_floors.txt`, never a tree walk. Per-repo pins: when the
+  gate/sweep run against ANOTHER repo, `collision_pins_for()` assembles the
+  shared file plus that repo's own `scripts/number_collisions_<repo>.txt` side
+  file, and DROPS shared-file rows keyed `<other-repo>/<dir>` — a pin whose
+  dir names a repo the walk cannot witness reds both ways (Issue 1205's
+  stale-here/unpinned-there shape). Cross-repo half:
   `scripts/numbering_drift_sweep.py` (`max_hist` ratchet; `min_numbers` floors
   the history walk; `min_bench`).
 - **On-disk duplicate classifier** (`numbering_gate.classify_stems`): a
