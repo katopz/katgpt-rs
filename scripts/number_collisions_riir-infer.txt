@@ -1,0 +1,19 @@
+# riir-infer's OWN collision pins — read by katgpt-rs numbering_gate.py when it
+# gates riir-infer (per-repo pins; see number_collisions_expected.txt's
+# 2026-11-12 re-keying note, riir-ai Issue 1205's reconciliation). Format
+# identical: `collision = <dir> <number> <reason>`.
+#
+# Scope note: the SHARED floors in numbering_floors.txt (min_files.* 400/200/10,
+# min_numbers 1200) are katgpt-rs-scale — riir-infer is SWEEP-scoped (its
+# floors + max_hist live in numbering_drift_floors.txt's riir-infer row), so an
+# ad-hoc gate run here still reds those floors BY DESIGN. This file pins the
+# collision class and the family ratchet only.
+#
+# Family ratchet (riir-infer's own measurement, matching the sweep row's
+# hand-read column): the shared floors file's 59 serves katgpt-rs's families;
+# riir-infer measures 7.
+max_hand_read = 7
+
+# One above-boundary historical event, both holders verified in full history
+# (fresh citation_weight re-run 2026-11-12 reproduces the recorded verdict):
+collision = .issues 1151 production_posture_aggregate_single_home (added 559be00 2026-10-28 — the promoted serving posture has no single home; landed 80ff665, removed f6b3b6a same-day per noise-reduction) x plan623_t34_gpu_comm_sync (added 148f22d 2026-10-29 — the allocator read the counter's VALUE not value+1, the recycled-number slip; removed 726cec7, records live in Bench 929 + plan 623 + AGENTS) — citation_weight AWARDS production_posture 11-5 of 17 decided (6 UNRESOLVED, 26%) = first allocation; both holders removed, nothing live to renumber; disambiguated in riir-infer HISTORY.md at 12eb24e (the riir-neuron-db ca71723 precedent); the sweep floors row's max_hist 1 ratchet carries the same event
