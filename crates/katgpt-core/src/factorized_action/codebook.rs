@@ -86,6 +86,22 @@ fn sq_dist(a: &[f32], b: &[f32]) -> f32 {
     s
 }
 
+/// Issue 997 T1: fold one freshly placed centroid into `d2_nearest`.
+///
+/// The revival loop reuses a single `d2_nearest` array across consecutive
+/// dead-cluster placements; without this refresh the second placement reads
+/// distances measured before the first revival and can clump onto the same
+/// outlier region. Pure helper so the stale-vs-refreshed pick is directly
+/// unit-testable.
+fn refresh_d2_nearest_against(d2_nearest: &mut [f64], patches: &[&[f32]], centroid: &[f32]) {
+    for (i, d2) in d2_nearest.iter_mut().enumerate() {
+        let dist = sq_dist(patches[i], centroid) as f64;
+        if dist < *d2 {
+            *d2 = dist;
+        }
+    }
+}
+
 /// Fit a codebook of `k` centroids from a set of D-dim patches using
 /// Lloyd's algorithm with k-means++ initialization.
 ///
@@ -257,6 +273,11 @@ pub fn fit_codebook_kmeans_into<const K: usize, const D: usize>(
                 centroids[kk].copy_from_slice(&patches[far_idx][..D]);
                 // Update d2_nearest: this patch is now at distance 0.
                 d2_nearest[far_idx] = 0.0;
+                // Issue 997 T1: a second dead cluster in the same pass must
+                // see the centroid just placed - without refreshing against
+                // it, the next pick reads distances measured before the
+                // revival and can clump onto the same outlier region.
+                refresh_d2_nearest_against(&mut d2_nearest, patches, &centroids[kk]);
                 changed = true;
             } else {
                 let inv = 1.0f64 / counts[kk] as f64;
@@ -501,6 +522,83 @@ mod tests {
         // Either identical or symmetric — both acceptable for a clean
         // 2-cluster problem. We just check it ran without panicking.
         let _ = c;
+    }
+
+    /// Issue 997 T1 regression: the refresh must change the second revival
+    /// pick. P and P2 sit in the same far outlier region; before the refresh
+    /// both carry large stale distances, so a stale second pick clumps onto
+    /// P. After refreshing against P's new centroid, P2 collapses and the
+    /// next-largest region Q wins instead.
+    #[test]
+    fn revival_refresh_moves_second_pick_off_the_clump() {
+        let patches: [&[f32]; 5] = [
+            &[0.0, 0.0],    // A - covered, distance 0
+            &[1000.0, 1.0], // P - the first revival's pick
+            &[1000.0, 0.0], // P2 - P's pair mate, stale-large before refresh
+            &[200.0, 0.0],  // Q - the runner-up region
+            &[0.0, 0.0],    // A again - covered, distance 0
+        ];
+        let mut d2_nearest: Vec<f64> = [0.0, 1_000_001.0, 1_000_000.0, 40_000.0, 0.0]
+            .iter()
+            .copied()
+            .collect();
+
+        // Stale argmax = P (1_000_001), the first revival lands there.
+        let (first_pick, _) = d2_nearest
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| crate::float_order::cmp_for_max_f64(**a, **b))
+            .map_or((0, 0.0f64), |(i, &d)| (i, d));
+        assert_eq!(first_pick, 1, "stale pick must be P");
+
+        d2_nearest[first_pick] = 0.0;
+        // Without the refresh, the next argmax is P2 (1_000_000) - the clump.
+        let (stale_second, _) = d2_nearest
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| crate::float_order::cmp_for_max_f64(**a, **b))
+            .map_or((0, 0.0f64), |(i, &d)| (i, d));
+        assert_eq!(stale_second, 2, "stale second pick must be P2 (the clump)");
+
+        // The fix: refresh against P's centroid; P2 collapses to 1.0 and the
+        // runner-up region Q wins instead.
+        refresh_d2_nearest_against(&mut d2_nearest, &patches, &patches[first_pick]);
+        let (fixed_second, _) = d2_nearest
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| crate::float_order::cmp_for_max_f64(**a, **b))
+            .map_or((0, 0.0f64), |(i, &d)| (i, d));
+        assert_eq!(fixed_second, 3, "refreshed second pick must move to Q");
+        assert!(
+            (d2_nearest[2] - 1.0).abs() < 1e-6,
+            "P2 must collapse to its distance to P (1.0), got {}",
+            d2_nearest[2]
+        );
+    }
+
+    /// Issue 997 T1 end-to-end: a duplicate-heavy fixture with more clusters
+    /// than distinct positions forces multiple dead clusters into one pass.
+    /// The fit must stay deterministic and finite (the revival path exercises
+    /// the refresh without unbounded drift).
+    #[test]
+    fn revival_two_dead_clusters_stays_deterministic() {
+        let patches: Vec<&[f32]> = vec![
+            &[0.0, 0.0],
+            &[0.0, 0.0],
+            &[100.0, 0.0],
+            &[100.0, 0.0],
+            &[200.0, 0.0],
+        ];
+        let mut a: EffectCodebook<6, 2> = EffectCodebook::zeroed();
+        let mut b: EffectCodebook<6, 2> = EffectCodebook::zeroed();
+        fit_codebook_kmeans_into(&patches, 6, 42, 20, &mut a);
+        fit_codebook_kmeans_into(&patches, 6, 42, 20, &mut b);
+        assert_eq!(a.centroids, b.centroids, "two-dead-cluster fit must be deterministic");
+        for kk in 0..6 {
+            for d in 0..2 {
+                assert!(a.centroids[kk][d].is_finite(), "centroid {kk} drifted non-finite");
+            }
+        }
     }
 
     /// `patchify_1d` produces correct non-overlapping patches.
