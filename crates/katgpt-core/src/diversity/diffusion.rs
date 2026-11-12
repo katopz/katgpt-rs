@@ -154,11 +154,8 @@ impl SimGraph {
         for x in 0..n {
             let a = row_start[x];
             let b = row_start[x + 1];
-            let mut d = 0.0_f32;
-            for slot in a..b {
-                d += w[slot]; // ascending slot order — the `degree()` fold
-            }
-            deg_csr[x] = d;
+            // Ascending slot order — the exact `degree()` fold.
+            deg_csr[x] = w[a..b].iter().sum();
         }
         let w_norm: Vec<f32> = (0..acc)
             .map(|slot| {
