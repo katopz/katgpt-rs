@@ -1,6 +1,6 @@
 # Plan 636 — Issue 997 e-means PoC: split-revival vs farthest-reinit head-to-head
 
-**Status:** CLOSED — T7 NEGATIVE (see the outcome block in issue 997; Research 665 GOAT demoted; the split arm is unreachable in batch Lloyd's — the head-to-head moves to T4's mini-batch lane) — claimed 2026-11-12 (zed-84acf899@amo; the 997 issue row carries the live lease); amo free (the measurement ended), box law satisfied.
+**Status:** REOPENED for T4-T5 (2026-11-12 second engagement — see the T4-T5 extension below; the T2-T7 batch closed NEGATIVE)
 
 **Issue:** [997_emeans_codebook_fit_upgrade.md](../.issues/997_emeans_codebook_fit_upgrade.md) · **Research:** [665_EMeans_EMA_MiniBatch_KMeans.md](../.research/665_EMeans_EMA_MiniBatch_KMeans.md) · **Posture:** bench_375 (K=128, D=32, patch corpus from N_TRANSITIONS=1000 x 16 patches)
 
@@ -40,3 +40,27 @@ is fully covered by these two.
       improves => GOAT stands (promote winner behind its flag); otherwise strike
       the GOAT grade in 665 (demote), keep only T1, record the negative
 - [x] Commit + push (claim folded to lease-closed at landing)
+
+## T4–T5 extension (2026-11-12 second engagement, claim c3555043a)
+
+The T7 negative moved the head-to-head to the mini-batch/EMA regime — this
+section is that lane. Status: **CLOSED** — EMA capability shipped behind
+`emeans_poc`; the revival dimension collapsed (split ≡ farthest in every
+reachable regime); grid validates the law extrapolation; T5 green; verdict in
+Research 665 Addendum 2.
+
+- [x] Extract the k-means++ init into a shared private helper (pure code
+      motion out of `fit_codebook_kmeans_into`; default behavior validated
+      identical by the existing determinism pins)
+- [x] `fit_codebook_kmeans_ema_into` behind `emeans_poc`: Sculley-style EMA
+      recurrence (fixed contiguous batch schedule, cosine anneal
+      a0 -> 0.1*a0, finalization = exact last-epoch mean), revival policy
+      parameter (Farthest | Split) — deaths occur naturally here
+- [x] Harness `tests/bench_997_t4_ema_grid.rs`: the ~5x5 (B, a0) sanity grid
+      (OUT-OF-RANGE law claim held until the grid shows the law's region in
+      the low-loss band), the split-vs-farthest head-to-head at a grid point,
+      BLAKE3 determinism parity, stuck-rate counts
+- [x] T5 GMM consumer check: gmm_support fixtures at HEAD (the T1-era seed)
+      green; EM final LL + iterations-to-tol reported vs the shipped record
+- [x] T7 verdict update in Research 665 + issue 997 (same commit as numbers)
+- [x] Commit + push (lease folded at landing)

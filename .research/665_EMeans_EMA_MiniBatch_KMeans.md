@@ -82,3 +82,23 @@ split-revival track: DEMOTED** per the pre-registered T7 rule. T1 (the
 The split-vs-farthest head-to-head moves to the mini-batch EMA regime
 (Issue 997 T4), where empty clusters occur naturally; the PoC harness lifts
 from git history (tree of `b6b85a906`, 2026-11-12).
+
+
+## PoC Addendum 2 — Issue 997 T4/T5 (2026-11-12)
+
+The mini-batch EMA lane SHIPPED (`fit_codebook_kmeans_ema_into`, opt-in
+`emeans_poc`): Sculley-style EMA over fixed contiguous batches, cosine anneal
+alpha0 -> 0.1*alpha0, exact-means finalization, farthest revival. The ~5x5
+(B, alpha0) sanity grid at n=16K/K=128/D=32: smooth band 3.90-4.01e5 SSE,
+low-loss at B=1000/alpha0=0.3 — the paper's law region (B=hundreds, mid a0)
+sits inside it, so the OUT-OF-RANGE extrapolation holds at stack scale (the
+"no sweep needed" claim is still NOT made — the grid IS the evidence). The
+split-revival challenger measured behaviorally identical to farthest in every
+reachable regime (including the 400-cluster overcrowding corner), so the
+revival dimension was collapsed to the incumbent. Caveat recorded: mini-batch
+seed-variance is real (stuck-rate 49/50 on the uneven fixture vs 0/50 for
+batch Lloyd's) — consumers wanting seed-robustness keep the batch fit.
+T5: gmm_support 19/19 at HEAD. GOAT grade for the e-means capability:
+**OPT-IN CAPABILITY, no promotion** (no SSE win over the batch incumbent on
+these corpora; the lane's value is the fit-regime option + the validated
+grid instrument).

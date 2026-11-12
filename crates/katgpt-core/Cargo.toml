@@ -130,6 +130,13 @@ statrs = "0.17"
 
 [features]
 
+# emeans_poc (Issue 997 T4, from Research 665 / arXiv:2611.09501 e-means): the
+# mini-batch EMA fit + the split-vs-farthest revival head-to-head. The batch
+# Lloyd's path never empties clusters (the T2-T7 structural finding), so the
+# revival policies only differentiate here — mini-batch dynamics starve
+# centroids naturally. Opt-in; the batch fn is untouched.
+emeans_poc = []
+
 # path_kernel_sim (Issue 949, from Research 625 / arXiv:2012.00152 path-kernel
 # lens, 2026-10-20): the sensitivity-fingerprint response-space kernel —
 # K(x,x') = cos(∇_w f(x;w0), ∇_w f(x';w0)) over an authored scorer's p ≤ 64

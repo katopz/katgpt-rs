@@ -102,6 +102,64 @@ fn refresh_d2_nearest_against(d2_nearest: &mut [f64], patches: &[&[f32]], centro
     }
 }
 
+/// k-means++ initialization shared by the batch and mini-batch fits (Issue
+/// 997 T4 extraction — pure code motion out of `fit_codebook_kmeans_into`;
+/// the sequence is unchanged, so both fits stay deterministic per seed).
+#[inline]
+fn kmeans_pp_init<const D: usize>(
+    patches: &[&[f32]],
+    k: usize,
+    rng: &mut SplitMix64,
+) -> Vec<Vec<f32>> {
+    let n = patches.len();
+    // Pick the first centroid uniformly at random.
+    let first_idx = (rng.next_u64() as usize) % n;
+    let mut centroids: Vec<Vec<f32>> = Vec::with_capacity(k);
+    let mut c0 = vec![0.0f32; D];
+    c0.copy_from_slice(&patches[first_idx][..D]);
+    centroids.push(c0);
+
+    // Squared distance from each patch to its nearest chosen centroid.
+    let mut d2_nearest: Vec<f64> = (0..n)
+        .map(|i| sq_dist(patches[i], &centroids[0]) as f64)
+        .collect();
+
+    for _ in 1..k {
+        let total: f64 = d2_nearest.iter().sum();
+        if total <= 0.0 {
+            // All patches coincide with chosen centroids — pick random.
+            let idx = (rng.next_u64() as usize) % n;
+            let mut c = vec![0.0f32; D];
+            c.copy_from_slice(&patches[idx][..D]);
+            centroids.push(c);
+        } else {
+            // Sample proportional to D².
+            let r = rng.next_f64() * total;
+            let mut acc = 0.0f64;
+            let mut chosen = n - 1;
+            for (i, &d2) in d2_nearest.iter().enumerate() {
+                acc += d2;
+                if acc >= r {
+                    chosen = i;
+                    break;
+                }
+            }
+            let mut c = vec![0.0f32; D];
+            c.copy_from_slice(&patches[chosen][..D]);
+            centroids.push(c);
+        }
+        // Update d2_nearest with the new centroid.
+        let new_c = centroids.last().unwrap();
+        for i in 0..n {
+            let d2 = sq_dist(patches[i], new_c) as f64;
+            if d2 < d2_nearest[i] {
+                d2_nearest[i] = d2;
+            }
+        }
+    }
+    centroids
+}
+
 /// Fit a codebook of `k` centroids from a set of D-dim patches using
 /// Lloyd's algorithm with k-means++ initialization.
 ///
@@ -153,47 +211,16 @@ pub fn fit_codebook_kmeans_into<const K: usize, const D: usize>(
 
     let mut rng = SplitMix64::new(seed);
 
-    // ── k-means++ initialization ───────────────────────────────────────
-    // Pick the first centroid uniformly at random.
-    let first_idx = (rng.next_u64() as usize) % n;
-    let mut centroids: Vec<Vec<f32>> = Vec::with_capacity(k);
-    let mut c0 = vec![0.0f32; D];
-    c0.copy_from_slice(&patches[first_idx][..D]);
-    centroids.push(c0);
-
-    // Squared distance from each patch to its nearest chosen centroid.
+    let mut centroids = kmeans_pp_init::<D>(patches, k, &mut rng);
+    // Squared distance from each patch to its nearest chosen centroid (the
+    // Lloyd loop's revival input — recomputed from the final init set, the
+    // same values the inline init ended with).
     let mut d2_nearest: Vec<f64> = (0..n)
         .map(|i| sq_dist(patches[i], &centroids[0]) as f64)
         .collect();
-
-    for _ in 1..k {
-        let total: f64 = d2_nearest.iter().sum();
-        if total <= 0.0 {
-            // All patches coincide with chosen centroids — pick random.
-            let idx = (rng.next_u64() as usize) % n;
-            let mut c = vec![0.0f32; D];
-            c.copy_from_slice(&patches[idx][..D]);
-            centroids.push(c);
-        } else {
-            // Sample proportional to D².
-            let r = rng.next_f64() * total;
-            let mut acc = 0.0f64;
-            let mut chosen = n - 1;
-            for (i, &d2) in d2_nearest.iter().enumerate() {
-                acc += d2;
-                if acc >= r {
-                    chosen = i;
-                    break;
-                }
-            }
-            let mut c = vec![0.0f32; D];
-            c.copy_from_slice(&patches[chosen][..D]);
-            centroids.push(c);
-        }
-        // Update d2_nearest with the new centroid.
-        let new_c = centroids.last().unwrap();
+    for c in centroids.iter().skip(1) {
         for i in 0..n {
-            let d2 = sq_dist(patches[i], new_c) as f64;
+            let d2 = sq_dist(patches[i], c) as f64;
             if d2 < d2_nearest[i] {
                 d2_nearest[i] = d2;
             }
@@ -413,6 +440,226 @@ impl<const K: usize, const D: usize> EffectCodebook<K, D> {
         let mut out = Self::zeroed();
         fit_codebook_kmeans_into(&slices, k, seed, max_iters, &mut out);
         out
+    }
+}
+
+/// Mini-batch EMA k-means fit (Issue 997 T4, Research 665 / arXiv:2611.09501
+/// e-means). Opt-in under `emeans_poc`.
+///
+/// Fixed contiguous batch schedule (the determinism contract: batch b covers
+/// patches `[b*B, (b+1)*B)` in order, never shuffled). Per batch: assign the
+/// batch's patches to their nearest centroid, then each covered centroid moves
+/// toward its batch mean by the annealed rate
+/// `alpha = alpha0 * (0.55 + 0.45 * cos(pi * step / total_steps))`
+/// (cosine anneal alpha0 -> 0.1*alpha0 over the whole schedule). Uncovered
+/// centroids do not move — which is how clusters die in this regime (a
+/// centroid that loses every patch in every remaining batch starves).
+///
+/// Per epoch: after the batch sweep, any dead cluster is revived from the
+/// globally farthest patch by current nearest-centroid distance (the
+/// incumbent policy; the e-means split challenger measured behaviorally
+/// identical across every reachable regime — see the revive-block note).
+/// Finalization: one exact last-epoch mean pass (full-batch assignment +
+/// means, no revival), so the returned codebook is the plain Lloyd fixed
+/// point of the EMA trajectory.
+///
+/// Determinism: sequential f64/f32 accumulation in patch order, no shuffling,
+/// no parallelism — same seed + same `EmeansConfig` = byte-identical codebook
+/// (pinned by the T6 gate in the PoC harness).
+#[cfg(feature = "emeans_poc")]
+#[derive(Clone, Copy, Debug)]
+pub struct EmeansConfig {
+    /// Batch size B (patches per contiguous batch).
+    pub batch_size: usize,
+    /// Initial EMA rate; annealed to `0.1 * alpha0` across the schedule.
+    pub alpha0: f64,
+    /// Sweep count over the full patch set.
+    pub epochs: usize,
+}
+
+#[cfg(feature = "emeans_poc")]
+impl Default for EmeansConfig {
+    fn default() -> Self {
+        Self {
+            batch_size: 512,
+            alpha0: 0.1,
+            epochs: 10,
+        }
+    }
+}
+
+#[cfg(feature = "emeans_poc")]
+#[inline]
+fn sq_dist_f64(a: &[f32], b: &[f32]) -> f64 {
+    sq_dist(a, b) as f64
+}
+
+/// Fit via mini-batch EMA k-means. See the type docs for the schedule
+/// contract. `k <= K`, `max_batches_per_epoch` derives from the patch count.
+#[cfg(feature = "emeans_poc")]
+pub fn fit_codebook_kmeans_ema_into<const K: usize, const D: usize>(
+    patches: &[&[f32]],
+    k: usize,
+    seed: u64,
+    config: &EmeansConfig,
+    out: &mut EffectCodebook<K, D>,
+) {
+    debug_assert!(k > 0, "k must be > 0");
+    debug_assert!(k <= K, "k ({k}) must be <= K ({K})");
+    debug_assert!(!patches.is_empty(), "patches must be non-empty");
+    debug_assert!(config.batch_size > 0, "batch_size must be > 0");
+    debug_assert!(config.epochs > 0, "epochs must be > 0");
+
+    let n = patches.len();
+    let mut rng = SplitMix64::new(seed);
+    let mut centroids = kmeans_pp_init::<D>(patches, k, &mut rng);
+
+    let b = config.batch_size.min(n);
+    let batches_per_epoch = n.div_ceil(b);
+    let total_steps = batches_per_epoch * config.epochs;
+    let mut step = 0usize;
+
+    // Per-centroid EMA coverage counts (the starvation detector).
+    let mut covered = vec![0usize; k];
+    let mut deaths_total = 0usize;
+
+    for _epoch in 0..config.epochs {
+        covered.iter_mut().for_each(|c| *c = 0);
+        for batch_start in (0..n).step_by(b) {
+            let batch_end = (batch_start + b).min(n);
+            // Assign the batch.
+            let mut sums = vec![0.0f64; k * D];
+            let mut counts = vec![0usize; k];
+            for p in &patches[batch_start..batch_end] {
+                let mut best_k = 0usize;
+                let mut best_d2 = f32::INFINITY;
+                for (kk, c) in centroids.iter().enumerate().take(k) {
+                    let d2 = sq_dist(p, c);
+                    if d2 < best_d2 {
+                        best_d2 = d2;
+                        best_k = kk;
+                    }
+                }
+                covered[best_k] += 1;
+                counts[best_k] += 1;
+                let row = &mut sums[best_k * D..(best_k + 1) * D];
+                for (acc, &x) in row.iter_mut().zip(p.iter()) {
+                    *acc += x as f64;
+                }
+            }
+            // Annealed rate (cosine, alpha0 -> 0.1*alpha0 across the schedule).
+            let frac = step as f64 / total_steps.max(1) as f64;
+            let alpha = config.alpha0 * (0.55 + 0.45 * (core::f64::consts::PI * frac).cos());
+            step += 1;
+            // EMA move toward the batch mean for covered centroids.
+            for kk in 0..k {
+                if counts[kk] == 0 {
+                    continue;
+                }
+                let inv = 1.0 / counts[kk] as f64;
+                let row = &sums[kk * D..(kk + 1) * D];
+                let c = &mut centroids[kk];
+                for d in 0..D {
+                    let batch_mean = row[d] * inv;
+                    c[d] = (c[d] as f64 * (1.0 - alpha) + batch_mean * alpha) as f32;
+                }
+            }
+        }
+
+        // Revive dead clusters (covered == 0 across the whole epoch sweep).
+        // Policy note (Issue 997 T4 verdict): the e-means proportional-split
+        // challenger measured BEHAVIORALLY IDENTICAL to the farthest pick in
+        // every reachable regime (batch, mini-batch, destabilizing corner,
+        // 400-cluster overcrowding — bit-identical SSE on every seed), so the
+        // policy parameter is collapsed to the incumbent: seed from the
+        // globally farthest patch by current nearest-centroid distance.
+        // Git history (the bench_997_t4 tree of the 997 lane) carries the
+        // split implementation should a corpus regime ever reopen it.
+        let mut dead: Vec<usize> = (0..k).filter(|&kk| covered[kk] == 0).collect();
+        while !dead.is_empty() {
+            deaths_total += dead.len();
+            let global_far = {
+                let mut g = 0usize;
+                let mut gd = -1.0f64;
+                for (i, p) in patches.iter().enumerate() {
+                    let mut bd = f64::INFINITY;
+                    for c in centroids.iter().take(k) {
+                        let d2 = sq_dist_f64(p, c);
+                        if d2 < bd {
+                            bd = d2;
+                        }
+                    }
+                    if bd >= gd {
+                        gd = bd;
+                        g = i;
+                    }
+                }
+                g
+            };
+            for &kk in &dead {
+                centroids[kk].copy_from_slice(&patches[global_far][..D]);
+            }
+            // Re-derive covered counts over one fresh sweep so subsequent
+            // death detection reflects the revived centroids.
+            covered.iter_mut().for_each(|c| *c = 0);
+            for p in patches.iter() {
+                let mut best_k = 0usize;
+                let mut best_d2 = f32::INFINITY;
+                for (kk, c) in centroids.iter().enumerate().take(k) {
+                    let d2 = sq_dist(p, c);
+                    if d2 < best_d2 {
+                        best_d2 = d2;
+                        best_k = kk;
+                    }
+                }
+                covered[best_k] += 1;
+            }
+            let remaining: Vec<usize> = (0..k).filter(|&kk| covered[kk] == 0).collect();
+            if remaining.len() == dead.len() {
+                // Revivals made no progress — break to avoid looping forever.
+                break;
+            }
+            dead = remaining;
+        }
+    }
+
+    // Finalization: one exact last-epoch mean pass (plain Lloyd step, no
+    // revival) so the returned codebook is an exact-means fixed point.
+    let mut sums = vec![0.0f64; k * D];
+    let mut counts = vec![0usize; k];
+    for p in patches.iter() {
+        let mut best_k = 0usize;
+        let mut best_d2 = f32::INFINITY;
+        for (kk, c) in centroids.iter().enumerate().take(k) {
+            let d2 = sq_dist(p, c);
+            if d2 < best_d2 {
+                best_d2 = d2;
+                best_k = kk;
+            }
+        }
+        counts[best_k] += 1;
+        let row = &mut sums[best_k * D..(best_k + 1) * D];
+        for (acc, &x) in row.iter_mut().zip(p.iter()) {
+            *acc += x as f64;
+        }
+    }
+    for kk in 0..k {
+        if counts[kk] == 0 {
+            continue;
+        }
+        let inv = 1.0 / counts[kk] as f64;
+        let row = &sums[kk * D..(kk + 1) * D];
+        let c = &mut centroids[kk];
+        for d in 0..D {
+            c[d] = (row[d] * inv) as f32;
+        }
+    }
+    let _ = deaths_total; // diagnostic; surfaced by the harness if needed
+
+    for (dst, src_row) in out.centroids.iter_mut().zip(centroids.iter()).take(k) {
+        for (dst_slot, &src_val) in dst.iter_mut().zip(src_row.iter()).take(D) {
+            *dst_slot = src_val;
+        }
     }
 }
 
