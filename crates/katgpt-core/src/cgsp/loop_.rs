@@ -191,6 +191,14 @@ where
         &self.conjecturer
     }
 
+    /// Mutably borrow the conjecturer (the wrapper-conjecturer feed seam:
+    /// a stateful wrapper — e.g. a batch selector carrying an observer —
+    /// is fed between cycles by the hook/fixture that owns the loop;
+    /// the `bandit_mut()` precedent).
+    pub fn conjecturer_mut(&mut self) -> &mut C {
+        &mut self.conjecturer
+    }
+
     /// Borrow the guide.
     pub fn guide(&self) -> &G {
         &self.guide
