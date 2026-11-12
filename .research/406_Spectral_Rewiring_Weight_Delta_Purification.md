@@ -6,6 +6,8 @@
 > **Related Research:** 231 (SOPTV — off-principal task vectors, complementary), 238 (LoRA-Muon gauge-invariant composition), 191 (Prism capability substrate), 039 (SpectralQuant KV), 100 (EGA spectral salience), 094 (MeMo TIES merging)
 > **Related Plans:** 094 (TIES merging — upgrade target), 264 (SOPTV — complementary fusion), 025 (LoRA hot-swap — purification target), 216 (SubstrateGate — parallel capability extraction)
 > **Classification:** Public — generic spectral matrix operation, no game/chain/shard semantics
+>
+> **Name-collision disambiguation (2026-11-12):** "Sparse Rewiring" (maxsloef owl-rewired-neurons, distilled as riir-train Research 492) is a DIFFERENT mechanism that shares only the word — it L0-selects MLP neurons and trains read-side-only rank-r additions with write columns frozen. SAR (this note) projects a dense delta onto the base SVD subspace. No signal overlap; grep `rewiring` hits both.
 
 ---
 
