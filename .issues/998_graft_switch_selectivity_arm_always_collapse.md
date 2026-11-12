@@ -2,6 +2,8 @@
 
 **Status:** OPEN — filed from issue 988 T4's measured G3(b) FAIL (the GOAT bench `bench_988_grafts_goat`, frozen-read replay posture).
 
+**Claimed:** amo-i998-t1@amo, 1794492300, expires 2026-11-14T10:00:00Z
+
 - [ ] **T1** — diagnose + document the collapse precisely: the fitted switch's per-row scores over the frozen corpus (export already carries the crosstab — zero disarmed rows in 600); confirm the mechanism (LS against labels whose conditional expectation given the input state is ≈ the base rate 0.92 collapses to the constant predictor — the state at the operand positions does not encode whether the model's ARGMAX will be right; that is a decode-time property). Record as a short `.research/` note or fold into this issue's resolution.
 - [ ] **T2** — lane A (model-side): a TASK-DETECTOR switch — refit the switch with labels = task-row vs non-task-row, which requires a non-task activation surface in the fit (a small riir-infer cell addition: capture rows from off-task prompts; the export bin gains the non-task cache input). GOAT: the same bench G3(b) bars (KL ≤ 0.02 nats, flips ≤ 0.5%) on the same base-right corpus + a NEW off-task corpus leg.
 - [ ] **T3** — lane B (deployment law, no model work): the consumer mounts the graft ONLY inside a task-detected context (e.g. riir-infer's serving lane mounts `grafts` artifacts solely for arithmetic-lane prompts). Zero katgpt-core changes; the selectivity contract moves to the mount site. Document the law in the graft module doc + the artifact doc.
