@@ -1,6 +1,7 @@
 # 997 — e-means codebook-fit upgrade PoC (split revival + EMA arm + defect fix)
 
 **Status:** OPEN — filed 2026-11-12 from Research 665 (arXiv:2611.09501) · GOAT demote-on-fail · consumer surfaces: `katgpt-core::factorized_action::fit_codebook_kmeans_into` + `gmm_support::fit_diag_gmm` (one change, two consumers — the GMM seed rides the codebook upgrade through its existing `fit_codebook_kmeans_into` call at `em.rs` L100–102; building a parallel GMM seed path is FORBIDDEN)
+**Claimed:** zed-84acf899@amo, 1794460428, expires 2026-11-14T05:13:48Z (T1 standalone defect fix; T2-T7 stay with the PoC lane / free window)
 
 **Verdict provenance:** Claude ping-pong 2026-11-12, R1 REVISE → R2 AGREE (+ final close), session `65c0ee85-095b-4730-b57d-2d33c37c78ad`.
 
@@ -25,3 +26,4 @@ e-means (mini-batch EMA k-means, Meta FAIR) beats Lloyd's loss in 1.4–2.6 epoc
 - The paper's quality claims are scale-independent (escape + revival); its speed claims are NOT expected to transfer to 16K patches — do not gate on speedup, gate on SSE at ≤ wall-time.
 - `bench_375` G1 is a no-regression check only — it is a downstream abstraction ratio, not a fit-quality metric (verdict R1 correction).
 - Bench numbers quote `scripts/bench_preflight.sh` PROVENANCE (or the riir-reflex equivalent) beside them.
+
