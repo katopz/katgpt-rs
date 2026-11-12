@@ -48,6 +48,16 @@
 //! fixture-pinned by `tests/graft_g4_alloc.rs`); the artifact lane
 //! allocates freely — it is a sidecar, not a tick path.
 //!
+//! Mount-site deployment law (issue 998 T3): selectivity is the MOUNT
+//! SITE's contract, never the artifact's. A [`GraftSlot`] may mount a
+//! graft only inside a context the artifact was fitted and validated
+//! for (the T2b cell's arithmetic-lane posture) — mounting a
+//! task-fitted graft onto out-of-task traffic repeats the measured
+//! G3(b) failure (armed-on-base-right: mean KL(top-40) 2.71 nats, 64.6%
+//! top-1 flips at write delta 8.0) no matter how clean the artifact
+//! is. The envelope verifies CONTENT (digest + monotonic epoch); it
+//! cannot verify CONTEXT.
+//!
 //! OPT-IN behind the same `grafts` feature; compiles to nothing without
 //! it.
 

@@ -68,6 +68,9 @@ use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
+#[path = "../../../tests/common/ab_timing.rs"]
+mod ab_timing;
+
 use katgpt_core::graft::{ActivationReader, Graft, LogitWriter};
 use katgpt_core::{GraftArtifact, GraftInstall, GraftSlot};
 
@@ -720,7 +723,7 @@ fn main() {
 
     // ── G2: hot-path latency ──
     println!(
-        "\n── G2: hot-path latency (bar ≤ {G2_BAR_US} µs/apply, min of {G2_WINDOWS}×{G2_APPLIES}) ──"
+        "\n── G2: hot-path latency (bar ≤ {G2_BAR_US} µs/apply, best_of_us {G2_WINDOWS}×{G2_APPLIES}) ──"
     );
     let mut syn = vec![0f32; slots * d];
     let mut sm: u64 = 0x988_7A5E;
@@ -734,22 +737,23 @@ fn main() {
     let syn_reader = harness.reader(&syn);
     let mut nw = NullWriter { n: 0 };
     let mut acc = 0usize;
-    let mut means = [0.0f64; G2_WINDOWS];
-    for (w, mean) in means.iter_mut().enumerate() {
+    // Issue-855 treatment: the timed region runs through `best_of_us` (the
+    // shared harness — the loud-zero defence: it panics when every window
+    // reads 0 ns, i.e. an apply loop the optimiser deleted). Same quantity
+    // as before: the min over windows of the per-apply mean.
+    let best = ab_timing::best_of_us(1, G2_WINDOWS, || {
         let t = Instant::now();
         for _ in 0..G2_APPLIES {
-            let applied = graft.apply(&syn_reader, &mut nw, &mut iv, &mut ov);
+            let applied = graft.apply(black_box(&syn_reader), &mut nw, &mut iv, &mut ov);
             acc += applied.decided;
         }
-        *mean = t.elapsed().as_secs_f64() * 1e6 / G2_APPLIES as f64;
-        println!("window {w}: {:.2} µs/apply", *mean);
-    }
+        t.elapsed()
+    }) / G2_APPLIES as f64;
     black_box(acc);
     black_box(nw.n);
-    let best = means.iter().cloned().fold(f64::INFINITY, f64::min);
     let g2 = best <= G2_BAR_US;
     println!(
-        "min window {best:.2} µs/apply vs bar {G2_BAR_US} → {} (quote numbers only with bench_preflight provenance)",
+        "best of {G2_WINDOWS}×{G2_APPLIES} applies: {best:.2} µs/apply vs bar {G2_BAR_US} → {} (quote numbers only with bench_preflight provenance)",
         gate(g2)
     );
 
@@ -792,10 +796,10 @@ fn main() {
         );
         if !g3b {
             println!(
-                "  G3(b) root cause (measured): the fitted switch arms the WHOLE task surface — \
-                 base_wrong is not state-readable at the capture position, so the LS fit collapsed \
-                 to the arm-always predictor. A task-detector switch (needs non-task fit rows) or \
-                 consumer-side mounting is the fix; grafts stays opt-in."
+                "  G3(b) root cause (measured, issue 998): the fitted switch arms the WHOLE task surface — \
+                 the direction that separates base-wrongness in-sample is memorization (train AUC 1.0000, held-out AUC 0.5966), \
+                 and every fitted score is positive so the 0.5-sigmoid threshold never closes the gate. \
+                 A task-detector switch (needs non-task fit rows) or consumer-side mounting is the fix; grafts stays opt-in."
             );
         }
         if !g2 {

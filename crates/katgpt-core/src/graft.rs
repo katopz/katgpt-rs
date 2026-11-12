@@ -19,6 +19,21 @@
 //! accuracy claim runs in the T2b real-activation cell (riir-infer,
 //! files its own issue there).
 //!
+//! Switch-label selectivity law (issue 998, measured 2026-11-12): a
+//! fitted switch's label must be a STATE-READABLE property, not merely
+//! in-sample correlated. The T2b `{base-wrong}` switch fit its 400
+//! solved rows to AUC 1.0000 IN-SAMPLE (memorization: d = 9216 ≫ n =
+//! 400 at λ = 0.1) and separated at CHANCE held-out (AUC 0.5966) —
+//! while every fitted score stayed positive, so the pinned 0.5-sigmoid
+//! threshold (score 0) armed ALL 600 rows and the gate contributed no
+//! selectivity (the GOAT's G3(b) FAIL; `grafts` stays opt-in). Two
+//! laws bind every future switch fit: (a) the label must be readable
+//! from the captured state (task identity qualifies; a decode-time
+//! outcome like the base argmax does not); (b) the threshold is a
+//! PLACEMENT decision validated against the fitted score
+//! distribution, never a default pin. See `.issues/998` for the full
+//! resolution.
+//!
 //! Numerics laws: fit paths solve ridge normal equations through the
 //! SHARED leaf solver ([`crate::linalg::ridge_solve_direct_f32`] — never
 //! a second factorisation; attn-match's duplicate copy is tracked for
