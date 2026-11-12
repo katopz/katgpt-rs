@@ -9,7 +9,6 @@
 katgpt-rs
 katgpt-web
 mmorpg-remake
-mmorpg-remaster
 reflex-site
 riir-ai
 riir-auth

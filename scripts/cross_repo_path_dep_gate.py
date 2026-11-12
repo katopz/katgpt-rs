@@ -95,7 +95,7 @@ def strip_toml_comments(text: str) -> str:
 
     A commented-out dependency is not a dependency: cargo never resolves it.
     Measured 2026-10-23: riir-ai `crates/riir-games/Cargo.toml` carries
-    `# seal-client-data = { path = "../../../seal-online-remaster/…" }`
+    `# seal-client-data = { path = "../../../seal-game-editor/tools/seal-client-data" }`
     (TEMP-ISSUE-027, deliberately disabled) and this gate read it as an
     ORPHAN on every workstation — a red no repair could clear but deleting
     the record of why the line is off. Multi-line strings do not occur in

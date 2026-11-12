@@ -42,7 +42,6 @@ riir-train              60    110   0    # repaired 39d0b8d4, 15db2c67; +4 sites
 riir-viewbridge          0      0    0
 katgpt-web               0      0    0
 mmorpg-remake            0      0    0
-mmorpg-remaster          0      0    0
 riir-dao                 0      0    0
 riir-deployer            0      0    0
 riir-esp32               0      0    0

@@ -38,7 +38,7 @@ trusting it"*, and it names repos by their **CONTRACT** spelling — correctly,
 because `repo_alias`'s own rule is that machine-local alias content must never
 reach stdout (run logs get pasted into tracked docs). On an aliased box those
 names are directories that **DO NOT EXIST**: measured here, the advisory tells
-the reader to fetch `mmorpg-editor`, `mmorpg-remake` and `mmorpg-remaster`
+the reader to fetch `mmorpg-editor` and `mmorpg-remake` (`mmorpg-remaster` retired 2026-11-12, sprint!019)
 while the checkouts are `seal-game-editor`, `seal-remake` and
 `seal-online-remaster`.
 

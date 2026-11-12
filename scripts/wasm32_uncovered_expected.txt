@@ -20,7 +20,6 @@
 # BY DESIGN and somebody has said so.
 #
 #  repo                  package
-mmorpg-remaster     seal-poc-submodule
 # 2026-09-19 (Issue 842 close-out): the sweep read this repo for the FIRST time
 # through the alias seam and the package SET has changed wholesale since the old
 # rows were typed — the 2026-09-16 owner migration moved seal-core and

@@ -582,7 +582,6 @@ def file_and_history_allocated(repo: Path, subdir: str) -> set[int]:
 DISK_SPELLING_ALIASES = {
     "mmorpg-editor": ["seal-game-editor"],
     "mmorpg-remake": ["seal-remake"],
-    "mmorpg-remaster": ["seal-online-remaster"],
     # The 2026-10-01 repo rename (riir-ai/riir-clippy -> riir-ai/riir-refine,
     # plan 192 T1.1): `riir-clippy` is the RETIRED spelling. Every archived
     # citation saying "riir-clippy Issue N" / "riir-clippy Plan N" was written

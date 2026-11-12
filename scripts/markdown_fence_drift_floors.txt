@@ -72,7 +72,6 @@ riir-shader                 13                 0
 riir-train                 375                 0
 riir-viewbridge              7                 0
 mmorpg-remake                 12                 0
-mmorpg-remaster       50                 0
 
 # Measured 2026-09-12, the landing run: 19 repos · 5058 tracked+untracked .md ·
 # 0 unterminated. Per-repo md counts at landing, for the next re-pin's slack

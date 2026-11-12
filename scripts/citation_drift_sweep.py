@@ -1156,9 +1156,9 @@ def selftest() -> list[str]:
             fails.append("alias-trailing counted a NON-owner alias")
 
         # ── Issue 846: the ON-DISK spellings of the aliased repos ─────────
-        # The contract names mmorpg-editor / mmorpg-remake / mmorpg-remaster
+        # The contract names mmorpg-editor / mmorpg-remake (mmorpg-remaster retired 2026-11-12)
         # exist only in repo_set.txt; the directories are on disk as
-        # seal-game-editor / seal-remake / seal-online-remaster on every box
+        # seal-game-editor / seal-remake on every box (seal-online-remaster retired 2026-11-12)
         # measured, and the docs name them that way. A spelling qualifies via
         # the lead OR the window (which reads the citation's own line
         # forward), never accuses, and a longer name does not match. The
