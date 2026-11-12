@@ -76,9 +76,14 @@ NUM_RE = re.compile(r"^(\d+)_")
 # (`**Claimed:** ...` / `Claimed: ...`, case-sensitive, colon required).
 # Looser shapes false-positive on wrapped prose continuations ("claimed.
 # Reopen condition: ..." measured in riir-refine .plans/019 on the first
-# cross-repo run). The epoch must be digits for a VALID lease; anything
-# line-anchored on `Claimed:` that is not a template (no `<...>`) and does
-# not parse is a MALFORMED finding.
+# cross-repo run). The epoch must be digits for a VALID lease, and a
+# SANE 9-10 digit count: < 9 digits predates the epoch's practical range
+# and > 10 digits is a unit accident (a 13-digit MILLISECONDS epoch was
+# measured live in seal-sprints .plans/019 — it linted clean while every
+# epoch consumer read garbage; the `expires` ISO carried the real lease
+# so the blind hid behind it). Anything line-anchored on `Claimed:` that
+# is not a template (no `<...>`) and does not parse is a MALFORMED
+# finding.
 CLAIM_LINE_RE = re.compile(
     r"^\s*\*{0,2}Claimed:\*{0,2}\s*(.+)$")
 PLACEHOLDER_RE = re.compile(r"<[^<>\n]+>")
@@ -114,7 +119,7 @@ def parse_claim_line(line: str) -> tuple[str, int, datetime] | None | str:
     if PLACEHOLDER_RE.search(body):
         return None                      # template prose, not a lease
     parts = [p.strip() for p in body.split(",")]
-    if len(parts) != 3 or not parts[1].isdigit() or len(parts[1]) < 9:
+    if len(parts) != 3 or not parts[1].isdigit() or not (9 <= len(parts[1]) <= 10):
         return "malformed"
     em = EXPIRY_RE.search(parts[2])
     if not em:
@@ -188,7 +193,7 @@ def reshape_hint(line: str) -> str:
     """The exact reshape for a malformed claim line — recover the fields the
     line already carries, template the rest. Report-only: the writer applies
     it; nothing here edits. Recovery mirrors the validator exactly (epoch =
-    digits, >= 9 chars; expiry = an ISO-8601-UTC-parsable token), so a fully
+    9-10 digits; expiry = an ISO-8601-UTC-parsable token), so a fully
     recovered hint would have parsed — a hint that still shows a placeholder
     names the slot the writer must fill."""
     m = CLAIM_LINE_RE.match(line)
@@ -204,7 +209,7 @@ def reshape_hint(line: str) -> str:
     epoch = None
     if len(parts) > 1:
         cand = parts[1].strip()
-        if cand.isdigit() and len(cand) >= 9:
+        if cand.isdigit() and 9 <= len(cand) <= 10:
             epoch = cand
     expiry = None
     em = EXPIRY_RE.search(body)
@@ -351,10 +356,23 @@ def selftest() -> list[str]:
     for bad in ("Claimed: a, notanumber, expires 2099-01-01T00:00:00Z",
                 "Claimed: a, 12345678, expires maybe-tomorrow",
                 "Claimed: a, 12345678",
-                "Claimed: a, 12345678, expires 2099-01-01, extra"):
+                "Claimed: a, 12345678, expires 2099-01-01, extra",
+                "Claimed: a, 1234567890123, expires 2099-01-01T00:00:00Z"):
         if parse_claim_line(bad) != "malformed":
             fails.append(f"a broken claim read as {parse_claim_line(bad)!r}: "
                          f"{bad}")
+    # the epoch-length ceiling: a 13-digit MILLISECONDS epoch measured live
+    # (seal-sprints .plans/019, 2026-11-12) linted clean and read as year
+    # ~56844 garbage in every epoch consumer; the floor/ceiling pair is the
+    # defense. 10 digits stays legal until year 2286.
+    ms_epoch = parse_claim_line(
+        "Claimed: a, 1794434493971, expires 2099-01-01T00:00:00Z")
+    if ms_epoch != "malformed":
+        fails.append(f"a milliseconds epoch parsed as a lease: {ms_epoch!r}")
+    ten_digit = parse_claim_line(
+        "Claimed: a, 1794434493, expires 2099-01-01T00:00:00Z")
+    if not isinstance(ten_digit, tuple):
+        fails.append(f"a 10-digit epoch refused: {ten_digit!r}")
     boundary = parse_claim_line(
         "Claimed: a, 123456789, expires 2026-10-16T00:00:00Z")
     if not (isinstance(boundary, tuple)
