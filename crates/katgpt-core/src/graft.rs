@@ -955,10 +955,23 @@ impl Graft {
         self.disarmed = true;
     }
 
+    /// The all-switches arm evaluation — one pass over the reader. The
+    /// held-arm caller evaluates ONCE (at the fit-geometry prompt
+    /// captures) and holds the decision for the whole decode chain:
+    /// task identity belongs to the prompt, never to a decode step
+    /// (issue 998 T2 pre-registration). A graft with no switches is
+    /// always armed.
+    #[must_use]
+    pub fn switches_armed_at(&self, reader: &dyn ActivationReader) -> bool {
+        self.switches.iter().all(|sw| sw.armed_at(reader))
+    }
+
     /// Apply the graft at `reader`: all switches arm → read the input
     /// cells → decide every output cell (ALL-OR-NOTHING: one undecided
     /// cell abstains the whole graft — the model still writes its own
-    /// reply) → add the fired writes' biases. Zero allocation.
+    /// reply) → add the fired writes' biases. Zero allocation. The
+    /// switches are evaluated PER CALL here; the held-arm form that
+    /// evaluates once per prompt is [`Self::apply_with_arm`].
     ///
     /// # Panics
     /// Buffer-shape violations (`input_vals`/`out` sizing) — loud caller
@@ -984,6 +997,48 @@ impl Graft {
                 };
             }
         }
+        self.apply_armed(reader, writer, input_vals, out)
+    }
+
+    /// Apply the graft under a CALLER-HELD arm decision (the per-prompt
+    /// held-arm seam): `armed == true` takes the read→decide→write path
+    /// switch-independently, `armed == false` is the no-op. The caller's
+    /// bit NEVER bypasses [`Graft::disarm`] — a disarmed graft stays a
+    /// no-op whatever the bit says (the unarmed no-op law; fixture
+    /// pinned). Step-0 equivalence — `apply_with_arm(`[`Self::switches_armed_at`]`(
+    /// reader), reader, …)` is byte-identical to [`Self::apply`] — is
+    /// fixture-pinned too (issue 998 T2 pre-registration).
+    ///
+    /// # Panics
+    /// The same buffer-shape violations as [`Self::apply`] (only reached
+    /// when armed and not disarmed).
+    pub fn apply_with_arm(
+        &self,
+        armed: bool,
+        reader: &dyn ActivationReader,
+        writer: &mut dyn LogitWriter,
+        input_vals: &mut [u16],
+        out: &mut [u16],
+    ) -> GraftApplied {
+        if self.disarmed || !armed {
+            return GraftApplied {
+                fired: false,
+                decided: 0,
+            };
+        }
+        self.apply_armed(reader, writer, input_vals, out)
+    }
+
+    /// The read→decide→write body, shared by [`Self::apply`] (after its
+    /// own disarmed + switches checks) and [`Self::apply_with_arm`]
+    /// (after the held-bit + disarmed checks). Zero allocation.
+    fn apply_armed(
+        &self,
+        reader: &dyn ActivationReader,
+        writer: &mut dyn LogitWriter,
+        input_vals: &mut [u16],
+        out: &mut [u16],
+    ) -> GraftApplied {
         assert_eq!(
             input_vals.len(),
             self.reads.len(),
@@ -1443,6 +1498,51 @@ mod tests {
         let applied = graft.apply(&reader, &mut writer, &mut input_vals, &mut out);
         assert!(!applied.fired);
         assert!(writer.0.is_empty());
+    }
+
+    /// Issue 998 T2 pre-registration: the held-arm seam's three laws —
+    /// step-0 equivalence with `apply`, the false bit is the no-op, and
+    /// a caller's `armed = true` NEVER bypasses `disarm()`.
+    #[test]
+    fn held_arm_step0_equivalence_and_disarm_precedence() {
+        let (graft, _) = e2e_graft().expect("graft");
+        let reader = FixtureReader {
+            layer0: vec![2.0, 4.0, 0.0, 0.0],
+            layer2: vec![8.0],
+        };
+        let run = |g: &Graft, armed: bool| {
+            let mut input_vals = [0u16; 2];
+            let mut out = [0u16; 3];
+            let mut writer = VecWriter(Vec::new());
+            let applied = g.apply_with_arm(armed, &reader, &mut writer, &mut input_vals, &mut out);
+            (applied, writer.0)
+        };
+
+        // Step-0 equivalence: the held bit computed from the switches
+        // reproduces `apply` byte-identically (same reader, same answer).
+        let armed = graft.switches_armed_at(&reader);
+        let (a_applied, a_writes) = run(&graft, armed);
+        let mut input_vals = [0u16; 2];
+        let mut out = [0u16; 3];
+        let mut writer = VecWriter(Vec::new());
+        let d_applied = graft.apply(&reader, &mut writer, &mut input_vals, &mut out);
+        assert_eq!(a_applied.fired, d_applied.fired);
+        assert_eq!(a_applied.decided, d_applied.decided);
+        assert_eq!(a_writes, writer.0, "step-0 equivalence: same writes");
+
+        // The held false bit is the no-op even though the switches arm.
+        assert!(armed, "fixture switch must arm at the hot reader");
+        let (f_applied, f_writes) = run(&graft, false);
+        assert!(!f_applied.fired);
+        assert!(f_writes.is_empty());
+
+        // The caller's true bit NEVER bypasses disarm() — the unarmed
+        // no-op law wins over the held bit.
+        let mut cold = graft.clone();
+        cold.disarm(); // switches still evaluate; disarm is operational state
+        let (c_applied, c_writes) = run(&cold, true);
+        assert!(!c_applied.fired);
+        assert!(c_writes.is_empty());
     }
 
     #[test]
