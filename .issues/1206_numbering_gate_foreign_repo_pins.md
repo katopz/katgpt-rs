@@ -1,6 +1,7 @@
 # Issue 1206: numbering_gate.py on a foreign repo applies katgpt-rs-only pins — structurally exit 1
 
-**Status:** Open — filed 2026-11-12 by the plan-373 overflow-continuation housekeeping unit (amo). Evidence reproduced same-day, both runs captured; no instrument change landed by this issue. Unclaimed — the instrument-owning lane (the Issue-1205 numbering lane, `d6f996199` is today's surface) adjudicates.
+**Status:** In progress — repair design adjudicated (verdict round pending record); filed 2026-11-12 by the plan-373 overflow-continuation housekeeping unit (amo). Evidence reproduced same-day, both runs captured; no instrument change landed yet.
+**Claimed:** zed-plan373-cont@amo, 1794574500, expires 2026-11-14T18:00:00+00:00
 
 ## Premise
 
