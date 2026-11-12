@@ -1,7 +1,7 @@
 # Issue 1000: Contraction certificate + derived staleness laws for latent belief updates
 
 **Status:** T1 + T2 + T4 LANDED `b7cf5916c` (2026-11-12, zed-amo-i1000@amo); T3 DEFERRED (below — gated on the noise-input decision). Filed from [`../.research/667_Contracting_Belief_Observers.md`](../.research/667_Contracting_Belief_Observers.md) (arXiv:2611.09217); verdict Gain (modelless track), Claude ping-pong 2026-11-12. Proof path pre-registered in Research 667 §5 — fixtures landed WITH the primitive in the same commit.
-**Claimed:** zed-amo-i1000@amo, 1794502927, expires 2026-11-14T17:02:07+00:00
+**Lease closed:** zed-amo-i1000@amo, epoch 1794502927 — work landed in-session `b7cf5916c` (T1/T2/T4); T3 remains the tracked defer.
 
 ## Premise
 
