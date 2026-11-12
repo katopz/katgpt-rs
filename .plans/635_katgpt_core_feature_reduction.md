@@ -4,7 +4,7 @@
 **Lease closed:** katgpt-rs-85@m3, 1794304147, expires 2026-11-12T09:49:07Z — Tranche 1 landed (`8c3349bfb`); Tranche 2 unclaimed. · (b) lease closed: katgpt-rs-a3@m3, 1794371100, expires 2026-11-13T04:25:00Z — (b) landed (see the (b) row).
 
 **Date:** 2026-11-10
-**Issue:** [`.issues/992_cratesio_feature_limit_blocks_katgpt_core_publish.md`](../.issues/992_cratesio_feature_limit_blocks_katgpt_core_publish.md) (decided 2026-11-10: ROAD 2 — limit-increase email; the ROAD 1 premise was falsified by this plan's corrected census — THIS plan is the fallback map only)
+**Issue:** `.issues/992_cratesio_feature_limit_blocks_katgpt_core_publish.md` (decided 2026-11-10: ROAD 2 — limit-increase email; the ROAD 1 premise was falsified by this plan's corrected census — THIS plan is the fallback map only)
 **Crate:** `crates/katgpt-core` 0.5.0 (registry refuses: 414 features > 300 cap)
 **Classification session:** zed-352d06e6-m3 (this box), reads+greps only, tree at `origin/develop` `3963a7d39`
 **Numbering gate:** `dual_allocation_gate.py` run at allocation time — 0 twin / 0 independent / 0 counter.

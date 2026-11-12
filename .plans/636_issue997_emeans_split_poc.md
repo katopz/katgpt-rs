@@ -2,7 +2,7 @@
 
 **Status:** REOPENED for T4-T5 (2026-11-12 second engagement — see the T4-T5 extension below; the T2-T7 batch closed NEGATIVE)
 
-**Issue:** [997_emeans_codebook_fit_upgrade.md](../.issues/997_emeans_codebook_fit_upgrade.md) · **Research:** [665_EMeans_EMA_MiniBatch_KMeans.md](../.research/665_EMeans_EMA_MiniBatch_KMeans.md) · **Posture:** bench_375 (K=128, D=32, patch corpus from N_TRANSITIONS=1000 x 16 patches)
+**Issue:** `997_emeans_codebook_fit_upgrade.md` · **Research:** [665_EMeans_EMA_MiniBatch_KMeans.md](../.research/665_EMeans_EMA_MiniBatch_KMeans.md) · **Posture:** bench_375 (K=128, D=32, patch corpus from N_TRANSITIONS=1000 x 16 patches)
 
 ## Arm accounting (deviation from the issue's four arms, disclosed)
 
