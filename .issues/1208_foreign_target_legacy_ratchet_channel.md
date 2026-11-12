@@ -1,4 +1,4 @@
-**Status:** open — the per-repo legacy_ratchet channel for a foreign `numbering_gate` target; advisory note today, never a failure. Measured: riir-refine walks 9 legacy collisions against the SHARED `number_collisions_expected.txt` `legacy_ratchet = 64` (katgpt-rs's own pre-gate archive value) on every gate run, printing a permanent `re-pin DOWN in this commit` note the target repo cannot act on.
+**Status:** open — IMPLEMENTATION CLAIMED (see Claimed line): the per-repo legacy_ratchet channel for a foreign `numbering_gate` target; advisory note today, never a failure. Measured: riir-refine walks 9 legacy collisions against the SHARED `number_collisions_expected.txt` `legacy_ratchet = 64` (katgpt-rs's own pre-gate archive value) on every gate run, printing a permanent `re-pin DOWN in this commit` note the target repo cannot act on. SAME SHAPE MEASURED ELSEWHERE: riir-train's gate run carries the identical 9-legacy advisory (4090 lane, 2026-11-13) — the fix is family-wide, one mechanism.
 
 ## 2026-11-13 — Issue 1208: foreign-target legacy_ratchet is the shared file's value — the re-pin-DOWN remedy is unexpressable for every non-katgpt-rs repo
 
@@ -25,4 +25,4 @@ So the note's remedy — "re-pin DOWN in this commit" — is UNEXPRESSABLE for e
 
 **Adjudication note:** the note is ADVISORY (never exit-1) — this issue is an instrument-honesty work item, not a red-gate repair. No security or correctness exposure; the ratchet's GROWTH direction already works for foreign repos (9 > 64 is impossible, but a repo whose shared ratchet undercounts would miss real growth — e.g. any repo starting clean at 0 legacy that accumulates its first re-spend would compare against 64 and stay green forever — that direction IS a live blind spot, and is the load-bearing reason this channel should exist: today a foreign repo's legacy-collision growth is UNWATCHED below 64).
 
-Claimed by: session zed-amo-b352-lone (epoch 1794518415) as FILED-ONLY — implementation is a katgpt-rs instrument change with its own self-test battery, open for the numbering lane.
+**Claimed:** zed-amo-b352-lone, 1794520421, expires 2026-11-15T21:55:00+00:00
