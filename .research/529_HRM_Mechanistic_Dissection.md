@@ -5,6 +5,7 @@
 > Date: 2026, distilled 2026-09-03
 > **Verdict: GAIN** — an analysis paper (no new method), but two modelless extractions survive the signal-diff: (1) the **convergence-cadence outcome signal** (‖Δz‖ trajectory separates solve from fail ~4.9× by mid-run → escalation semantics, not just halting), and (2) the **decodable≠causal audit discipline** for our latent-claim surfaces. Hierarchy finding validates two-brain as analyzability dividend.
 > **Status:** RECORD — both extractions LANDED (cadence: Issue 720 T1–T4, 2026-09-03→04; causal-audit: riir-ai Issue 858, `fea8c6ef5`). See §Landing record; issue files removed per the noise-reduction rule.
+> **PASS-Redirects (synthesis):** Vakde [blog "Looped mdlARC", Nov 2026, https://mvakde.github.io/blog/looped-mdlarc/] — the from-scratch ARC companion to this note's HRM dissection: re-confirms finding 1 from the recipe side (plain weight-tied loop, no hierarchy machinery, reaches 66.25 top-2 on ARC-AGI-1) and quantifies what this note did NOT ablate — HRM/TRM-class per-task lookup embeddings halve loop learning (+16.8→+8.5) while teacher-forced accuracy is unchanged: lookup vs algorithm, with the diagnostic pair recorded as law 2 in riir-train `.research/494`.
 
 ## TL;DR
 
