@@ -61,6 +61,16 @@ pub struct SimGraph {
     pub col: Vec<usize>,
     /// CSR weights, parallel to `col`.
     pub w: Vec<f32>,
+    /// Build-time-normalized transport weights, parallel to `col`/`w`:
+    /// `w_norm[slot] = w[slot] / degree(col[slot])` folded ONCE at build
+    /// (Issue 1207 R1 — the matvec hot loops previously divided by a
+    /// freshly re-walked `degree(z)` PER EDGE PER CALL, O(E·d̄) per matvec;
+    /// the fold is bit-identical — same f32 operands, same division, same
+    /// ascending accumulation order downstream — only its LOCATION moved
+    /// from call time to build time). The raw `w` stays the public row
+    /// view; the matvecs ([`SimGraph::diffuse_transpose`], the local
+    /// similarity posture, `div_tau`) consume `row_normed`.
+    pub w_norm: Vec<f32>,
     /// Stationary measure `π ∝ Σ_z w(x, z)` (the row-degree sum),
     /// normalized to sum 1 — computed once at build (plan T1.1).
     pub stationary: Vec<f32>,
@@ -131,6 +141,35 @@ impl SimGraph {
         }
         let total: f32 = deg.iter().sum();
         let total_weight = (total as f64) / 2.0; // every weight counted twice
+        // Issue 1207 R1 — the build-time transport fold: `w / deg(z)` per
+        // CSR slot, ONE division per edge at build (never `w * (1/deg)` —
+        // the reciprocal form rounds twice and is NOT bit-identical).
+        // ⚠ The divisor MUST be the CSR-row-sum degree (the exact fold
+        // `degree()` performs, ascending slot order) — NOT the edge-order
+        // `deg` accumulation above: f32 addition is non-associative and
+        // the two orders disagree in ULPs (measured: the T2.2 battery's
+        // 1e-6 pin RED on the edge-order divisor, first R1 pass). The CSR
+        // fold reproduces the historical call-time operand bit-exactly.
+        let mut deg_csr = vec![0.0_f32; n];
+        for x in 0..n {
+            let a = row_start[x];
+            let b = row_start[x + 1];
+            let mut d = 0.0_f32;
+            for slot in a..b {
+                d += w[slot]; // ascending slot order — the `degree()` fold
+            }
+            deg_csr[x] = d;
+        }
+        let w_norm: Vec<f32> = (0..acc)
+            .map(|slot| {
+                let z = col[slot];
+                if deg_csr[z] > 0.0 {
+                    w[slot] / deg_csr[z]
+                } else {
+                    0.0
+                }
+            })
+            .collect();
         let mut stationary = deg.clone();
         if total > 0.0 {
             for s in &mut stationary {
@@ -146,6 +185,7 @@ impl SimGraph {
             row_start,
             col,
             w,
+            w_norm,
             stationary,
             inv_stationary_unnorm,
             total_weight,
@@ -176,12 +216,15 @@ impl SimGraph {
         debug_assert!(scratch.len() >= self.n);
         // out[x] = Σ_z Pᵀ(x, z) p(z) = Σ_{z ~ x} w(x, z)/deg(z) · p(z).
         // Grouped per output x over its own CSR row: the fold order over
-        // z is the row's ascending column order — pinned.
+        // z is the row's ascending column order — pinned. The transport
+        // factor is the BUILD-time fold ([`SimGraph::row_normed`], Issue
+        // 1207 R1) — bit-identical to the historical per-call division.
         for (x, slot) in scratch.iter_mut().enumerate().take(self.n) {
             let mut acc = 0.0_f32;
-            let (cols, ws) = self.row(x);
-            for (&z, &w) in cols.iter().zip(ws.iter()) {
-                acc += (w / self.degree(z)) * p[z];
+            let (cols, _) = self.row(x);
+            let wns = self.row_normed(x);
+            for (&z, &wn) in cols.iter().zip(wns.iter()) {
+                acc += wn * p[z];
             }
             *slot = acc;
         }
@@ -197,6 +240,15 @@ impl SimGraph {
             d += w; // ascending slot order — the CSR construction order
         }
         d
+    }
+
+    /// Row `[x]`'s build-time transport weights `w(x,z)/deg(z)` (parallel
+    /// to [`SimGraph::row`]'s slices — the matvec fast path; Issue 1207
+    /// R1). Bit-identical to the historical per-call fold.
+    #[inline]
+    pub fn row_normed(&self, x: usize) -> &[f32] {
+        let (a, b) = (self.row_start[x], self.row_start[x + 1]);
+        &self.w_norm[a..b]
     }
 
     /// Distribution-level diversity scalar (paper Def 5.2, plan T1.4):
@@ -226,11 +278,14 @@ impl SimGraph {
             // r[x] = Σ_{z ~ x} w(x,z)/deg(z) · q[z] — reads q wholly,
             // writes r wholly (no aliasing), per-output ascending-column
             // fold (the Issue-940 pin, same order as diffuse_transpose).
+            // The transport factor is the BUILD-time fold (row_normed,
+            // Issue 1207 R1) — bit-identical to the per-call division.
             for (x, slot) in r.iter_mut().enumerate().take(self.n) {
                 let mut acc = 0.0_f32;
-                let (cols, ws) = self.row(x);
-                for (&z, &w) in cols.iter().zip(ws.iter()) {
-                    acc += (w / self.degree(z)) * q[z];
+                let (cols, _) = self.row(x);
+                let wns = self.row_normed(x);
+                for (&z, &wn) in cols.iter().zip(wns.iter()) {
+                    acc += wn * q[z];
                 }
                 *slot = acc;
             }
@@ -268,12 +323,15 @@ impl SimGraph {
 /// The `(τ+1)`-ball RESTRICTION (the paper's O(|B|·deg) efficiency half)
 /// is deliberately NOT implemented in this pass: full sparse matvecs are
 /// equally exact at every pair. ⚠ The T2.6 G2 ladder (`.benchmarks/980`)
-/// measured the full-graph posture EDGE-linear and division-dominated —
-/// planted battery fixture ~72 µs/similarity (n=64), 22 ms–1.4 s per walk
-/// pick at k=23/47 — REFUTING this doc's original "µs either way" premise;
-/// the ball pass plus the build-time `w/deg(z)` division hoist are Issue
-/// 1207's R1/R2 and land only when a consumer demands them (the walk-time
-/// selector's per-step cost is the named demand).
+/// measured the full-graph posture EDGE-linear — planted battery fixture
+/// ~72 µs/similarity (n=64), 22 ms–1.4 s per walk pick at k=23/47 —
+/// REFUTING this doc's original "µs either way" premise. Issue 1207's R1
+/// (the build-time `w/deg(z)` transport fold, landed 2026-11-13) cut the
+/// matvec-class costs 18–110× (battery-scale sim now ~4 µs, µs-class;
+/// the pick ms-class at planted degree); the ball rung (R2) remains the
+/// remaining lane for dense n≥1000 walk-time consumers — land it only
+/// when a consumer demands it (the walk-time selector's per-step cost is
+/// the named demand).
 ///
 /// `scratch` is caller-owned ([`LocalScratch`]) — zero per-call
 /// allocation. Accumulations fold in the CSR ascending-column order (the
@@ -319,9 +377,10 @@ pub fn diffusion_similarity_local(
 fn diffuse_into(g: &SimGraph, input: &[f32], out: &mut [f32]) {
     for (x, slot) in out.iter_mut().enumerate().take(g.n) {
         let mut acc = 0.0_f32;
-        let (cols, ws) = g.row(x);
-        for (&z, &w) in cols.iter().zip(ws.iter()) {
-            acc += (w / g.degree(z)) * input[z];
+        let (cols, _) = g.row(x);
+        let wns = g.row_normed(x);
+        for (&z, &wn) in cols.iter().zip(wns.iter()) {
+            acc += wn * input[z];
         }
         *slot = acc;
     }

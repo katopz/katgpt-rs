@@ -203,27 +203,26 @@ fn main() {
                 pick_iters,
             );
 
-            // Sanity ceilings — battery scale (n=64), calibrated from THIS
-            // bench's own first measurement (T2.6, 2026-11-12): the plan's
-            // ≤1 µs / ≤10 µs bar measured ~74–82 µs (the per-edge
-            // `w/degree(z)` f32 division dominates the matvec — the
-            // perf-rung issue carries the fix lanes), so the ceilings are
-            // 10× the measured reality: a pathology catch (an accidental
-            // O(n²) or a lost CSR row reads 10–100× this), never a
-            // calibration bar. Re-pin only alongside a perf-rung landing.
+            // Sanity ceilings — battery scale (n=64), re-pinned per Issue
+            // 1207 R4 after the R1 division hoist landed (2026-11-13): the
+            // R1-ladder battery scale reads sim 4.1 µs / div 1.8 µs / pick
+            // 1.13 ms, so the ceilings sit at ~10× measured — a pathology
+            // catch (an accidental O(n²) or a lost CSR row reads 10–100×
+            // this), never a calibration bar. The pre-R1 ceilings (500 µs /
+            // 250 µs / 100 ms) are recorded in the T2.6 bench + issue.
             if n == 64 {
                 battery_scale_checked = true;
                 assert!(
-                    sim_mean <= 500_000.0,
-                    "G2 PATHOLOGY: similarity at battery scale {sim_mean:.0} ns > 500 µs"
+                    sim_mean <= 50_000.0,
+                    "G2 PATHOLOGY: similarity at battery scale {sim_mean:.0} ns > 50 µs"
                 );
                 assert!(
-                    div_mean <= 250_000.0,
-                    "G2 PATHOLOGY: div_tau at battery scale {div_mean:.0} ns > 250 µs"
+                    div_mean <= 25_000.0,
+                    "G2 PATHOLOGY: div_tau at battery scale {div_mean:.0} ns > 25 µs"
                 );
                 assert!(
-                    pick_mean <= 100_000_000.0,
-                    "G2 PATHOLOGY: walk pick at battery scale {pick_mean:.0} ns > 100 ms"
+                    pick_mean <= 10_000_000.0,
+                    "G2 PATHOLOGY: walk pick at battery scale {pick_mean:.0} ns > 10 ms"
                 );
             }
         }
