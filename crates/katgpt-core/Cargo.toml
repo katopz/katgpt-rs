@@ -4524,6 +4524,22 @@ required-features = ["diffusion_diversity"]
 name = "plan634_t25_batch_gate"
 required-features = ["diffusion_diversity"]
 
+# Plan 634 T2.6 (G4): the diffusion-diversity hot-path zero-alloc census —
+# div_tau / local similarity / the matvec primitive / the walk-time QP
+# selector / the spectral query paths. Repo-birth gate discipline: the row
+# rides the SAME commit as the gated target (the green-zero trap).
+[[test]]
+name = "plan634_t26_g4_alloc"
+required-features = ["diffusion_diversity"]
+
+# Plan 634 T2.6 (G2): the diffusion-diversity latency ladder — local
+# similarity / div_tau / walk pick / spectral queries at n = 64/256/1000,
+# τ = 4, the build-time classes reported beside. --release by construction.
+[[bench]]
+name = "plan634_div_g2_latency"
+harness = false
+required-features = ["diffusion_diversity"]
+
 # Issue 988 T1 — the graft apply hot path's G4 alloc census (the
 # repo-birth gate discipline: the row rides the SAME commit as the
 # gated target — a missing row is the green-zero trap).

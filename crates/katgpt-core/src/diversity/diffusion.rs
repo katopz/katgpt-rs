@@ -267,9 +267,13 @@ impl SimGraph {
 ///
 /// The `(τ+1)`-ball RESTRICTION (the paper's O(|B|·deg) efficiency half)
 /// is deliberately NOT implemented in this pass: full sparse matvecs are
-/// equally exact at every pair and the fixture-scale G2 latency (≤ 1k
-/// nodes, τ ≤ 4) is µs either way — the ball pass lands only if a
-/// consumer's profile demands it (recorded in the plan row).
+/// equally exact at every pair. ⚠ The T2.6 G2 ladder (`.benchmarks/980`)
+/// measured the full-graph posture EDGE-linear and division-dominated —
+/// planted battery fixture ~72 µs/similarity (n=64), 22 ms–1.4 s per walk
+/// pick at k=23/47 — REFUTING this doc's original "µs either way" premise;
+/// the ball pass plus the build-time `w/deg(z)` division hoist are Issue
+/// 1207's R1/R2 and land only when a consumer demands them (the walk-time
+/// selector's per-step cost is the named demand).
 ///
 /// `scratch` is caller-owned ([`LocalScratch`]) — zero per-call
 /// allocation. Accumulations fold in the CSR ascending-column order (the
@@ -669,8 +673,18 @@ fn solve_equality_qp(
     k: usize,
     mu_out: &mut [f64; 64],
 ) {
-    let free: Vec<usize> = (0..k).filter(|&i| !pinned[i]).collect();
-    let f = free.len();
+    // Stack-resident free list (k ≤ 64 asserted by the caller) — the G4
+    // zero-alloc census (plan 634 T2.6) found the collect() here allocating
+    // per active-set pass on the walk-time selector's hot path.
+    let mut free = [0_usize; 64];
+    let mut f = 0;
+    for (i, &is_pinned) in pinned.iter().enumerate().take(k) {
+        if !is_pinned {
+            free[f] = i;
+            f += 1;
+        }
+    }
+    let free = &free[..f];
     if f == 0 {
         // All pinned: μ = floor (the sum constraint is the caller's
         // renormalization; an all-pinned pass means every coordinate sits
