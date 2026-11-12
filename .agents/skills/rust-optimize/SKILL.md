@@ -40,6 +40,7 @@ If you only summarized what you read without changing code, say "no optimization
     - Frame-rate cap fallback: a `Last`-schedule `std::thread::sleep` system capped at e.g. 60 FPS is a belt-and-suspenders defense when vsync + reactive mode somehow don't throttle
 11. **Perf diagnosis**: ship an in-process perf overlay (`sysinfo` for CPU/RAM + Bevy's `Time::delta()` for FPS) inside the GUI itself — external `ps` sampling misses focused-window swings and requires keeping a terminal attached
 12. **Sorted indexes & scans** (see § Sorted Indexes & Scans for details): seek to a prefix (never skip-walk), visitor/borrowing scans (0 alloc), bulk insert via sorted merge, order maintained at mutation not per-read, sort keys computed once, early-exit bounded scans
+13. **Borrow-checker appeasement** (audit AI-ported code especially): `std::mem::take(&mut self.field)` check-out/check-in pairs (the field is EMPTY during the window — nested reads see nothing), `.clone()`/`.to_vec()`/`.collect()` immediately before loops that mutate `self` (the clone only drops a borrow — fix with index loops or disjoint sub-struct splits), `thread::spawn`/`scope` inside per-frame/per-item functions (build the pool once), per-send `Arc` clones of large buffers (move or recycle through a bounded pool), dense-id `HashMap`/`HashSet` (flat slot-indexed array)
 
 ## Rules
 
