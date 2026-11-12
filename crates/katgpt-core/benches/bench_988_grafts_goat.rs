@@ -30,28 +30,31 @@
 //!   provisional number).
 //! - **G3(a)** — switches DISARMED: byte-identical outputs (exact — the
 //!   writer never touched), the unarmed no-op law.
-//! - **G3(b)** — switches ARMED on the UNRELATED corpus (the frozen
-//!   base-right rows: traffic the base already answers — the graft must
-//!   not disturb it) at the pinned write delta 8.0: per-position
-//!   KL(top-40 vs baseline) corpus mean **≤ 0.02 nats** AND top-1 flip
-//!   rate **≤ 0.5%** (48 rows ⇒ the flip bar admits zero fires: 1/48 =
-//!   2.08%). The Zipf logit surface (−1.07·ln(i+8)) is the documented
-//!   synthetic stand-in for the host LM head; the damage a fire causes
-//!   is what the bars quantify.
+//! - **G3(b)** — the 998 T2 no-harm legs (pre-registration in
+//!   `.issues/998`, verdict AGREE 2026-11-12): the detector switch's
+//!   GATED legs are (1) the task contract — disarm rate 0 on the dev-200
+//!   held-out task rows (the sealed-400 capture-only arm check runs
+//!   cell-side, never in this bench); (2) the FRESH off-task TEST
+//!   corpus (seed OFFTASK_SEED_TEST, captured after the calibration-rule
+//!   commit — the posture-2 ruling) — gate = Clopper–Pearson 95% UB ≤
+//!   0.5% ⇔ **0 false arms at n = 600** (1/600 ≈ 0.79% = FAIL); (3) the hard-negative sub-leg
+//!   (digits-non-arithmetic + arithmetic-words, n = 200, same gate,
+//!   thinner power disclosed: 0/200 certifies ≤ 1.5%). The task-corpus
+//!   base-right damage is REPORTED (the accepted trade: +26.75pp net
+//!   lane accuracy), never gated. KL is **Zipf-surface** KL(top-40) —
+//!   the documented Zipf logit surface (−1.07·ln(i+8)) is the synthetic
+//!   stand-in for the host LM head, never a real-model no-harm proof.
 //! - **G4** — zero allocation on the armed hot path (counting
 //!   allocator, delta over 1000 applies == 0; the `graft_g4_alloc`
 //!   fixture is the primary evidence, this is the re-assert).
 //!
-//! **Pre-registered expectation (disclosed before this run):** the
-//! export crosstab measured the fitted switch ARMING ON EVERY row
-//! (solved right+armed 31 / wrong+armed 369; dev right+armed 17 /
-//! wrong+armed 183 — zero disarmed anywhere). `base_wrong` is an
-//! output-space property (what the argmax will do), weakly encoded in
-//! the input state at the capture position; the {0,1} LS fit had no
-//! separating signal and collapsed to the arm-always predictor (92% of
-//! labels are 1). G3(b) is therefore expected to FAIL at this fit — the
-//! bench measures it anyway and the GOAT refuses promotion on the
-//! measured verdict. `grafts` stays opt-in.
+//! **History (disclosed):** the ORIGINAL 988-T4 posture fitted the
+//! switch on the {base-wrong} label; it armed on EVERY row (T1 measured
+//! the mechanism: in-sample memorization AUC 1.0000, held-out 0.5966 —
+//! `base_wrong` is not state-readable; see `.issues/998`). That
+//! pre-registration's G3(b) surface (task-corpus base-right) was
+//! unsatisfiable for every lane — T1's measurement is what forced the
+//! 998 T2 re-scope to the off-task surface this bench now gates.
 //!
 //! Provenance chain: the fixture files committed beside this bench
 //! (`data/grafts_t2b_{artifact,rows}.bin` + the manifest JSON) were
@@ -79,9 +82,9 @@ use katgpt_core::{GraftArtifact, GraftInstall, GraftSlot};
 const ARTIFACT_BYTES: &[u8] = include_bytes!("data/grafts_t2b_artifact.bin");
 const ROWS_BYTES: &[u8] = include_bytes!("data/grafts_t2b_rows.bin");
 
-const ARTIFACT_BLAKE3: &str = "c8dd641527dc04081f5e08d4e441b8991a488482068d5895dba6d4d968fb8083";
-const ROWS_BLAKE3: &str = "3dfa188a0a5c529eb387963133a7d885766bf4e5823224c15ac34329910203da";
-const GRAFT_DIGEST_HEX: &str = "1faa5513363c77591cd34c3dff774c1cf676663bbfb6e8e8f9a20385e6e6c8d8";
+const ARTIFACT_BLAKE3: &str = "521f3aa0df66939ee7d57e766f997b96dbf66a8787225fd4a840981637556189";
+const ROWS_BLAKE3: &str = "bb576ebac59fecfd1a3879402f45a636a6ff05f678931deb00fabde7d200610a";
+const GRAFT_DIGEST_HEX: &str = "d7a4cdbd7cabd8d11d6af6b4eeb296c48126f4c6847529eaa448ecb87ac6069b";
 const SEALED_PAYLOAD_BLAKE3: &str =
     "fac21420025b309ec6b2374080fb6ece50f8a304cd74a8edf0428a3438e0a747";
 
@@ -95,8 +98,11 @@ const G2_BAR_US: f64 = 30.0;
 const G2_WINDOWS: usize = 3;
 const G2_APPLIES: usize = 1000;
 
-/// G3(b): the pre-registered no-regression bars at the pinned delta.
-const G3_KL_BAR_NATS: f64 = 0.02;
+/// G3(b): the pre-registered false-arm target (998 T2). The GATE is the
+/// Clopper–Pearson 95% upper bound ≤ this bar ⇔ 0 false arms at n = 600
+/// (1/600 ≈ 0.79% would FAIL); the bar prints on every off-task verdict
+/// line. KL against the documented Zipf logit surface is REPORTED, never
+/// a real-model no-harm proof.
 const G3_FLIP_BAR: f64 = 0.005;
 const WRITE_BIAS: f32 = 8.0;
 const KL_TOPK: usize = 40;
@@ -104,8 +110,25 @@ const KL_TOPK: usize = 40;
 /// The T2b cell's pinned scramble seed.
 const SCRAMBLE_SEED: u64 = 0x5EED_9880;
 
-const ROWS_VERSION: u32 = 1;
-const ROW_BYTES: usize = 14;
+/// Rows v2 (998 T2): +class byte — strict version match, v1 refused loud.
+const ROWS_VERSION: u32 = 2;
+const ROW_BYTES: usize = 15;
+/// Split ids (998 T2 posture-2 leg map): 3 = the FRESH test corpus
+/// (the only off-task gate surface), 4 = the CALIBRATION segment
+/// (reported diagnostics, never gated).
+const SPLIT_SOLVED: u8 = 0;
+const SPLIT_DEV: u8 = 1;
+const SPLIT_OFFTASK_FIT: u8 = 2;
+const SPLIT_OFFTASK_TEST: u8 = 3;
+const SPLIT_OFFTASK_CALIBRATION: u8 = 4;
+/// Pinned leg sizes — the parse asserts them so a truncated corpus
+/// cannot pass a power-disclosed gate by shrinking silently.
+const LEG_SOLVED_N: usize = 400;
+const LEG_DEV_N: usize = 200;
+const LEG_OFFTASK_FIT_N: usize = 400;
+const LEG_OFFTASK_TEST_N: usize = 600;
+const LEG_CALIBRATION_N: usize = 600;
+const LEG_HARD_SUB_N: usize = 200;
 
 // ── G4: counting allocator ───────────────────────────────────────────────
 
@@ -142,14 +165,21 @@ struct FrozenRow {
     answer: u8,
     base_wrong: bool,
     armed: bool,
-    split: u8, // 0 = solved, 1 = dev
+    /// 0 task / 1 off-task easy / 2 off-task hard-A / 3 off-task hard-B.
+    class: u8,
+    /// 0 solved (task) / 1 dev (task) / 2 off-task fit / 3 off-task
+    /// held-out.
+    split: u8,
 }
 
 fn parse_rows(bytes: &[u8]) -> Vec<FrozenRow> {
     assert!(bytes.len() >= 12, "rows fixture truncated (header)");
     assert_eq!(&bytes[0..4], b"GRFW".as_slice(), "rows fixture magic");
     let version = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
-    assert_eq!(version, ROWS_VERSION, "rows fixture version");
+    assert_eq!(
+        version, ROWS_VERSION,
+        "rows fixture version (strict: v1 refused loud)"
+    );
     let n = u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]) as usize;
     assert_eq!(
         bytes.len(),
@@ -167,7 +197,8 @@ fn parse_rows(bytes: &[u8]) -> Vec<FrozenRow> {
                 answer: bytes[o + 10],
                 base_wrong: bytes[o + 11] != 0,
                 armed: bytes[o + 12] != 0,
-                split: bytes[o + 13],
+                class: bytes[o + 13],
+                split: bytes[o + 14],
             }
         })
         .collect()
@@ -378,27 +409,25 @@ impl Harness<'_> {
         );
     }
 
-    /// One arm over the base-right (unrelated) corpus: apply, fold any
-    /// fired biases into the Zipf surface, measure KL(top-40) + top-1
-    /// flip per position, average over the whole corpus. Returns
-    /// (mean KL nats, flip rate, fires, corpus size).
+    /// One arm over a frozen corpus: replay every row, apply, count the
+    /// fires + folds any fired biases into the Zipf surface (Zipf-surface
+    /// KL(top-40) + top-1 flip per FIRED row — reported, never a real
+    /// model). Returns (mean Zipf-KL over fired rows, flips, fires).
     #[allow(clippy::too_many_arguments)]
-    fn measure_arm(
+    fn measure_fires(
         &self,
         arm: &Graft,
-        label: &str,
-        rows: &[FrozenRow],
+        corpus: &[&FrozenRow],
         base: &[f64],
         top: &[usize],
         x: &mut [f32],
         iv: &mut [u16],
         ov: &mut [u16],
-    ) -> (f64, f64, usize, usize) {
-        let corpus: Vec<&FrozenRow> = rows.iter().filter(|r| !r.base_wrong).collect();
+    ) -> (f64, usize, usize) {
         let mut kl_sum = 0.0f64;
         let mut flips = 0usize;
         let mut fires = 0usize;
-        for row in &corpus {
+        for row in corpus {
             self.fill(row, x);
             let reader = self.reader(x);
             let mut vw = VecWriter { biases: Vec::new() };
@@ -416,14 +445,7 @@ impl Harness<'_> {
                 }
             }
         }
-        let n = corpus.len();
-        let mean = kl_sum / n.max(1) as f64;
-        let rate = flips as f64 / n.max(1) as f64;
-        println!(
-            "{label}: {n} base-right rows · fires {fires} · mean KL(top-{KL_TOPK}) {mean:.4} nats · flips {flips} ({:.2}%)",
-            rate * 100.0
-        );
-        (mean, rate, fires, n)
+        (kl_sum / fires.max(1) as f64, flips, fires)
     }
 }
 
@@ -481,6 +503,29 @@ fn main() {
     );
     let graft = artifact.decode().expect("artifact decode");
     let rows = parse_rows(ROWS_BYTES);
+    // The pinned leg map (998 T2 pre-registration): a truncated corpus
+    // cannot pass a power-disclosed gate by shrinking silently.
+    let leg = |class_task: bool, split: u8| -> Vec<&FrozenRow> {
+        rows.iter()
+            .filter(|r| r.split == split && (class_task == (r.class == 0)))
+            .collect()
+    };
+    let solved_leg = leg(true, SPLIT_SOLVED);
+    let dev_leg = leg(true, SPLIT_DEV);
+    let offfit_leg = leg(false, SPLIT_OFFTASK_FIT);
+    let test_leg = leg(false, SPLIT_OFFTASK_TEST);
+    let cal_leg = leg(false, SPLIT_OFFTASK_CALIBRATION);
+    let hard_leg: Vec<&FrozenRow> = test_leg.iter().copied().filter(|r| r.class >= 2).collect();
+    assert_eq!(solved_leg.len(), LEG_SOLVED_N, "solved leg size");
+    assert_eq!(dev_leg.len(), LEG_DEV_N, "dev leg size");
+    assert_eq!(offfit_leg.len(), LEG_OFFTASK_FIT_N, "off-task fit leg size");
+    assert_eq!(test_leg.len(), LEG_OFFTASK_TEST_N, "off-task TEST leg size");
+    assert_eq!(hard_leg.len(), LEG_HARD_SUB_N, "hard-negative sub-leg size");
+    assert_eq!(
+        cal_leg.len(),
+        LEG_CALIBRATION_N,
+        "calibration leg size (reported, never gated)"
+    );
     let mut mount = GraftSlot::new();
     assert!(matches!(
         mount.install(&artifact),
@@ -687,39 +732,164 @@ fn main() {
         gate(g3a)
     );
 
-    // ── G3(b): armed on the unrelated (base-right) corpus at +8.0 ──
-    println!("\n── G3(b): armed on the unrelated (base-right) corpus at +{WRITE_BIAS} ──");
+    // ── G3(b): the 998 T2 no-harm legs at +8.0 ──
+    // GATED leg 2 — the FRESH off-task TEST corpus (n = 600): gate = CP
+    // 95% UB ≤ 0.5% ⇔ 0 false ARMS (1/600 ≈ 0.79% = FAIL). The gate
+    // quantity is ARMS — the pre-registered unit (998 T2 posture-2
+    // verdict: the text decides, and arms is the durable quantity: the
+    // fire count depends on the CURRENT mined table, whose growth turns
+    // false arms into fires). FIRES are reported beside, never gating:
+    // the all-or-nothing table law abstains undecided triples, so the
+    // fire count is today's table hiding the arm rate. KL is
+    // Zipf-SURFACE KL — never a real-model no-harm proof.
+    println!(
+        "\n── G3(b) off-task FRESH-TEST leg (gated: 0 false ARMS at n = {} = CP 95% UB ≤ {:.1}%); fires reported beside ──",
+        test_leg.len(),
+        G3_FLIP_BAR * 100.0
+    );
     let zipf = |i: usize| -> f64 { -1.07 * (i as f64 + 8.0).ln() };
     let base: Vec<f64> = (0..vocab).map(zipf).collect();
     let mut top: Vec<usize> = (0..vocab).collect();
     top.sort_by(|&a, &b| base[b].total_cmp(&base[a]).then(a.cmp(&b)));
     top.truncate(KL_TOPK);
-    let (cond_kl, cond_rate, cond_fires, corpus_n) = harness.measure_arm(
-        &graft,
-        "conditional",
-        &rows,
-        &base,
-        &top,
-        &mut x,
-        &mut iv,
-        &mut ov,
-    );
-    let _ = harness.measure_arm(
-        &graft_uncond,
-        "unconditional (contrast)",
-        &rows,
-        &base,
-        &top,
-        &mut x,
-        &mut iv,
-        &mut ov,
-    );
-    let g3b = cond_kl <= G3_KL_BAR_NATS && cond_rate <= G3_FLIP_BAR;
+    // The gate quantity: ARMS — every recorded armed bit re-verified
+    // through the REAL armed_at on the reconstruction (the same
+    // law the task contract uses), never trusted from the fixture.
+    let mut off_arms = 0usize;
+    for row in &test_leg {
+        harness.fill(row, &mut x);
+        let reader = harness.reader(&x);
+        let replay = graft.switches_armed_at(&reader);
+        assert_eq!(
+            replay, row.armed,
+            "test row {} arming replay mismatch",
+            row.instance
+        );
+        if row.armed {
+            off_arms += 1;
+        }
+    }
+    let (off_kl, off_flips, off_fires) =
+        harness.measure_fires(&graft, &test_leg, &base, &top, &mut x, &mut iv, &mut ov);
+    // One-sided Clopper–Pearson 95% upper bound for the observed count.
+    let cp_ub = |fires: usize, n: usize| -> f64 {
+        // Solve sum_{k≤fires} C(n,k) p^k (1-p)^(n-k) = 0.05 by bisection
+        // on p — 60 iterations is far past f64 resolution.
+        if fires >= n {
+            return 1.0;
+        }
+        let mut lo = 0.0f64;
+        let mut hi = 1.0f64;
+        let cdf = |p: f64| -> f64 {
+            let mut total = 0.0f64;
+            let mut choose = 1.0f64; // C(n, 0)
+            let mut pk = 1.0f64; // p^0
+            let mut failure = (1.0 - p).powi(n as i32);
+            for k in 0..=fires {
+                total += choose * pk * failure;
+                choose *= (n - k) as f64 / (k + 1) as f64;
+                pk *= p;
+                failure /= 1.0 - p;
+            }
+            total
+        };
+        for _ in 0..60 {
+            let mid = (lo + hi) / 2.0;
+            if cdf(mid) > 0.05 {
+                hi = mid;
+            } else {
+                lo = mid;
+            }
+        }
+        (lo + hi) / 2.0
+    };
+    let off_ub = cp_ub(off_arms, test_leg.len());
+    let g3b_offtask = off_arms == 0;
     println!(
-        "bars: mean KL ≤ {G3_KL_BAR_NATS} nats · flip rate ≤ {:.1}% → {} ({cond_fires} fires over {corpus_n} rows)",
-        G3_FLIP_BAR * 100.0,
-        gate(g3b)
+        "off-task FRESH TEST: {off_arms} false ARMS / {} (the gated unit) — fires {off_fires} (reported; the all-or-nothing table law abstains undecided triples, so today's table hides the arm rate) — Zipf-surface KL(top-40) {off_kl:.4} nats over fired rows, {off_flips} flips — CP 95% UB on arms {off_ub:.4} → {}",
+        test_leg.len(),
+        gate(g3b_offtask)
     );
+
+    // GATED leg 3 — hard-negative sub-leg (class ≥ 2 TEST rows, n = 200):
+    // same gate shape; the thinner power is DISCLOSED on this line
+    // (0/200 certifies a CP 95% UB ≤ 1.5%, not ≤ 0.5%). If the detector
+    // only passes the easy rows, the artifact is not self-selective.
+    println!(
+        "\n── G3(b) hard-negative sub-leg (gated: 0 false arms at n = {}; disclosed power: 0/200 certifies ≤ 1.5%) ──",
+        hard_leg.len()
+    );
+    // The gate quantity: ARMS (the pre-registered unit — same law as
+    // the full-test leg), verified through the REAL armed_at replay.
+    let mut hard_arms = 0usize;
+    for row in &hard_leg {
+        harness.fill(row, &mut x);
+        let reader = harness.reader(&x);
+        let replay = graft.switches_armed_at(&reader);
+        assert_eq!(
+            replay, row.armed,
+            "hard row {} arming replay mismatch",
+            row.instance
+        );
+        if row.armed {
+            hard_arms += 1;
+        }
+    }
+    let (hard_kl, hard_flips, hard_fires) =
+        harness.measure_fires(&graft, &hard_leg, &base, &top, &mut x, &mut iv, &mut ov);
+    let hard_ub = cp_ub(hard_arms, hard_leg.len());
+    let g3b_hard = hard_arms == 0;
+    println!(
+        "hard-negative (digits-non-arithmetic + arithmetic-words): {hard_arms} false ARMS / {} (the gated unit) — fires {hard_fires} (reported) — Zipf-surface KL {hard_kl:.4} nats, {hard_flips} flips — CP 95% UB on arms {hard_ub:.4} → {}",
+        hard_leg.len(),
+        gate(g3b_hard)
+    );
+
+    // GATED leg 1 — the task contract on the dev-200 HELD-OUT rows: the
+    // recorded armed bit must be 1 everywhere, verified through the REAL
+    // armed_at replay. Any disarm = lane-A GOAT FAIL (998 T2: the
+    // threshold never moves on held-out evidence; the sealed-400
+    // capture-only arm check is the cell-side half of this contract).
+    println!(
+        "\n── G3(b) task contract, dev-200 held-out (gated: disarm rate = 0; sealed-400 capture-only check runs cell-side) ──"
+    );
+    let mut dev_disarmed = 0usize;
+    for row in &dev_leg {
+        harness.fill(row, &mut x);
+        let reader = harness.reader(&x);
+        let replay = graft.switches_armed_at(&reader);
+        assert_eq!(
+            replay, row.armed,
+            "dev row {} arming replay mismatch",
+            row.instance
+        );
+        if !row.armed {
+            dev_disarmed += 1;
+        }
+    }
+    let g3b_contract = dev_disarmed == 0;
+    println!(
+        "task contract (dev held-out): {dev_disarmed} disarmed / {} → {} (fit-split rates live in the export manifest — reported, never gated)",
+        dev_leg.len(),
+        gate(g3b_contract)
+    );
+
+    // REPORTED — the task-corpus base-right damage (the accepted trade,
+    // 998 T2 pre-registration: never gated, printed beside every verdict).
+    println!("\n── G3(b) task base-right corpus (REPORTED, accepted trade — never gated) ──");
+    let base_right: Vec<&FrozenRow> = rows
+        .iter()
+        .filter(|r| r.class == 0 && !r.base_wrong)
+        .collect();
+    let (trade_kl, trade_flips, trade_fires) =
+        harness.measure_fires(&graft, &base_right, &base, &top, &mut x, &mut iv, &mut ov);
+    println!(
+        "task base-right: {trade_fires} fires / {} rows (armed-posture replay) — Zipf-surface KL {trade_kl:.4} nats, {trade_flips} flips — the accepted trade against +{}pp net lane accuracy (Bench 971: baseline 0.125 → graft 0.3925)",
+        base_right.len(),
+        ((SEALED_GRAFT_ACC - SEALED_BASELINE_ACC) * 100.0) as i64
+    );
+
+    let g3b = g3b_offtask && g3b_hard && g3b_contract;
 
     // ── G2: hot-path latency ──
     println!(
@@ -795,12 +965,24 @@ fn main() {
             failed.join(", ")
         );
         if !g3b {
-            println!(
-                "  G3(b) root cause (measured, issue 998): the fitted switch arms the WHOLE task surface — \
-                 the direction that separates base-wrongness in-sample is memorization (train AUC 1.0000, held-out AUC 0.5966), \
-                 and every fitted score is positive so the 0.5-sigmoid threshold never closes the gate. \
-                 A task-detector switch (needs non-task fit rows) or consumer-side mounting is the fix; grafts stays opt-in."
-            );
+            if !g3b_contract {
+                println!(
+                    "  G3(b) task-contract FAIL: the detector disarmed held-out task rows — lane-A GOAT FAIL \
+                     (998 T2: the threshold never moves on held-out evidence; a fresh sealed read is forced)."
+                );
+            }
+            if !g3b_offtask {
+                println!(
+                    "  G3(b) off-task FAIL: {off_arms} false arm(s) (gated unit) — the artifact is not self-selective at the placed \
+                     threshold; FAIL is a measured verdict, never a moved threshold (998 T2 posture-2 verdict)."
+                );
+            }
+            if !g3b_hard {
+                println!(
+                    "  G3(b) hard-negative FAIL: {hard_arms} false arm(s) on the digits/arithmetic-words corpus — the \
+                     detector passes only easy rows; the artifact is not self-selective on real traffic."
+                );
+            }
         }
         if !g2 {
             println!(

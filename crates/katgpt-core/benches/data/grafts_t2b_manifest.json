@@ -1,22 +1,35 @@
 {
-  "crosstab": {
-    "dev": {
-      "base_right_armed": 17,
-      "base_right_disarmed": 0,
-      "base_wrong_armed": 183,
-      "base_wrong_disarmed": 0
-    },
-    "solved": {
-      "base_right_armed": 31,
-      "base_right_disarmed": 0,
-      "base_wrong_armed": 369,
-      "base_wrong_disarmed": 0
-    }
+  "detector": {
+    "cal_auc": 1.0,
+    "calibration_armed": 4,
+    "calibration_n": 600,
+    "fit_auc": 1.0,
+    "gap_calibration": 0.8869743794202805,
+    "gap_test": 0.8860830292105675,
+    "kl_labeling": "Zipf-surface KL(top-40) — never a real-model no-harm proof",
+    "law": "998 T2 posture 2 — gated legs: dev-200 task disarm contract + sealed-400 capture-only arm check (cell run) + off-task TEST 600 CP-UB gate + hard sub-leg; fit/calibration rates reported, never gated",
+    "offtask_fit_armed": 0,
+    "offtask_fit_n": 400,
+    "quantile": 0.995,
+    "quantile_tail_support": 4,
+    "task_dev_armed": 200,
+    "task_dev_n": 200,
+    "task_fit_armed": 400,
+    "task_fit_n": 400,
+    "test_armed": 1,
+    "test_auc": 1.0,
+    "test_n": 600,
+    "threshold_score": 0.05397161468863487,
+    "threshold_sigmoid": 0.5134896636009216
   },
   "fit_pins": {
     "artifact_epoch": 1,
     "bias_delta": 8.0,
+    "detector_threshold_score": 0.05397161468863487,
+    "detector_threshold_sigmoid": 0.5134896636009216,
+    "detector_threshold_source": "calibration-split quantile (alpha=0.995, n=600)",
     "n_embd": 1024,
+    "posture": "2 — calibration-split placement; posture-1 (fit-quantile placement) FAILED the off-task gate 234/600 and was recorded, never re-thresholded",
     "probe_layers": [
       3,
       6,
@@ -24,25 +37,34 @@
     ],
     "prompt_format": "FewShot",
     "ridge": 0.10000000149011612,
-    "switch_threshold": 0.5,
     "task": "ThreeOpAdd10"
   },
   "fixtures": {
     "grafts_t2b_artifact.bin": {
-      "blake3": "c8dd641527dc04081f5e08d4e441b8991a488482068d5895dba6d4d968fb8083",
+      "blake3": "521f3aa0df66939ee7d57e766f997b96dbf66a8787225fd4a840981637556189",
       "bytes": 77310,
       "canonical_bytes": 77258,
-      "graft_digest_hex": "1faa5513363c77591cd34c3dff774c1cf676663bbfb6e8e8f9a20385e6e6c8d8",
+      "graft_digest_hex": "d7a4cdbd7cabd8d11d6af6b4eeb296c48126f4c6847529eaa448ecb87ac6069b",
       "rules": 1
     },
     "grafts_t2b_rows.bin": {
-      "blake3": "3dfa188a0a5c529eb387963133a7d885766bf4e5823224c15ac34329910203da",
-      "bytes": 8412,
-      "row_bytes": 14,
-      "rows": 600
+      "blake3": "bb576ebac59fecfd1a3879402f45a636a6ff05f678931deb00fabde7d200610a",
+      "bytes": 33012,
+      "format_version": 2,
+      "row_bytes": 15,
+      "rows": 2200
     }
   },
   "issue": "katgpt-rs issue 988 T4 — the GOAT bench's frozen-read fixture (riir-infer issue 1206 lane)",
+  "offtask_corpus": {
+    "calibration_n": 600,
+    "classes": "1 easy / 2 hard-A digits-non-arithmetic / 3 hard-B arithmetic-words (998 T2 pre-registration)",
+    "detector_fit_n": 400,
+    "fit_calibration_cache_blake3": "a0438cc7efcc0616be15b36d9269b924a3a93761a63058e1dfb74aa41da6998a",
+    "test_cache_blake3": "7bc8848640c544812663d81e51c2b607c39dea5a0f218e36f1ef77345fa68c01",
+    "test_n": 600,
+    "test_provenance": "OFFTASK_SEED_TEST fresh capture, taken AFTER the posture-2 rule commit (the ruling's contamination ban)"
+  },
   "producer": {
     "checkpoint_blake3": "70fd9c83d63454ae72e07a29ebdb78f863cfad102d8939f6ec49b2aea32104e2",
     "sealed_report_payload_blake3": "fac21420025b309ec6b2374080fb6ece50f8a304cd74a8edf0428a3438e0a747",
