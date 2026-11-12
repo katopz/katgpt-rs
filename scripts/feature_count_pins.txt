@@ -26,3 +26,4 @@ grant katgpt-core latent_geometry   # Plan 635 Tranche 2 family umbrella
 grant katgpt-core estimators        # Plan 635 Tranche 2 family umbrella
 grant katgpt-core formats_weights   # Plan 635 Tranche 2 family umbrella (verdict rename of `artifacts`)
 grant katgpt-core grafts            # issue-988 overlay family umbrella (reads/rules/writes/switches + artifact — the Plan 025 deterministically-constructed-overlay family's fitted instance)
+grant katgpt-core emeans_poc        # issue-997 measured-negative PoC lane (mini-batch EMA k-means fit; closed negative, opt-in forever — negative_results.md)

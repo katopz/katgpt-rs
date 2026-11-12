@@ -4467,3 +4467,14 @@ required-features = ["diffusion_diversity"]
 [[test]]
 name = "graft_g4_alloc"
 required-features = ["grafts"]
+
+# Issue 988 T4 — the grafts GOAT bench: the frozen-read replay over the
+# T2b cell's exported artifact + decision rows (G1), the hot-path
+# latency bar at the T2b shape (G2), the no-regression cells — disarmed
+# byte-identity and armed-on-unrelated KL/flip at the pinned delta 8.0
+# (G3) — and the alloc re-assert (G4). Run:
+# cargo bench -p katgpt-core --features grafts --bench bench_988_grafts_goat
+[[bench]]
+name = "bench_988_grafts_goat"
+harness = false
+required-features = ["grafts"]

@@ -1,0 +1,87 @@
+{
+  "crosstab": {
+    "dev": {
+      "base_right_armed": 17,
+      "base_right_disarmed": 0,
+      "base_wrong_armed": 183,
+      "base_wrong_disarmed": 0
+    },
+    "solved": {
+      "base_right_armed": 31,
+      "base_right_disarmed": 0,
+      "base_wrong_armed": 369,
+      "base_wrong_disarmed": 0
+    }
+  },
+  "fit_pins": {
+    "artifact_epoch": 1,
+    "bias_delta": 8.0,
+    "n_embd": 1024,
+    "probe_layers": [
+      3,
+      6,
+      9
+    ],
+    "prompt_format": "FewShot",
+    "ridge": 0.10000000149011612,
+    "switch_threshold": 0.5,
+    "task": "ThreeOpAdd10"
+  },
+  "fixtures": {
+    "grafts_t2b_artifact.bin": {
+      "blake3": "c8dd641527dc04081f5e08d4e441b8991a488482068d5895dba6d4d968fb8083",
+      "bytes": 77310,
+      "canonical_bytes": 77258,
+      "graft_digest_hex": "1faa5513363c77591cd34c3dff774c1cf676663bbfb6e8e8f9a20385e6e6c8d8",
+      "rules": 1
+    },
+    "grafts_t2b_rows.bin": {
+      "blake3": "3dfa188a0a5c529eb387963133a7d885766bf4e5823224c15ac34329910203da",
+      "bytes": 8412,
+      "row_bytes": 14,
+      "rows": 600
+    }
+  },
+  "issue": "katgpt-rs issue 988 T4 — the GOAT bench's frozen-read fixture (riir-infer issue 1206 lane)",
+  "producer": {
+    "checkpoint_blake3": "70fd9c83d63454ae72e07a29ebdb78f863cfad102d8939f6ec49b2aea32104e2",
+    "sealed_report_payload_blake3": "fac21420025b309ec6b2374080fb6ece50f8a304cd74a8edf0428a3438e0a747",
+    "sealed_rows": [
+      {
+        "accuracy": 0.125,
+        "arm": "baseline",
+        "armed_rate": null,
+        "decided": null,
+        "digit_argmax_rate": 1.0,
+        "n": 400
+      },
+      {
+        "accuracy": 0.3925,
+        "arm": "graft_unconditional",
+        "armed_rate": 0.29662077596996245,
+        "decided": 0.5925,
+        "digit_argmax_rate": 1.0,
+        "n": 400
+      },
+      {
+        "accuracy": 0.3925,
+        "arm": "graft_conditional",
+        "armed_rate": 0.29662077596996245,
+        "decided": 0.5925,
+        "digit_argmax_rate": 1.0,
+        "n": 400
+      },
+      {
+        "accuracy": 0.3975,
+        "arm": "scramble",
+        "armed_rate": 0.311639549436796,
+        "decided": 0.6225,
+        "digit_argmax_rate": 1.0,
+        "n": 400
+      }
+    ],
+    "solved_triple_coverage": 0.79,
+    "split_digest": "0a7d8dbe899dd1ba1c843026abc6e1a935f0340194f9f1ed0bc24713f2af160e",
+    "split_seed": 159907841
+  }
+}
