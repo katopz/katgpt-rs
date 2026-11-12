@@ -209,6 +209,48 @@ impl core::fmt::Display for NotPositiveDefinite {
 
 impl std::error::Error for NotPositiveDefinite {}
 
+/// Strict failure-mode twin of [`try_cholesky_f32`]: rejects ANY
+/// non-positive pivot (`diag <= 0`) instead of clamping near-singular ones
+/// to the tolerance floor. Same factorisation loop, same SIMD-interior dots
+/// — only the failure semantics differ, mirroring the retired local copies
+/// (attn-match `beta_fitter`/`value_fitter`, Issue 995) whose `sum <= 0 ->
+/// None` contract is what drives those callers' caller-side jitter
+/// escalation. Without the strict twin, the relative-tolerance clamp
+/// succeeds on rank-deficient systems, the jitter policy never fires, and
+/// the solve rides clamped pseudo-pivots (measured on the G5 fixture:
+/// 0.033 -> 0.095 relative error). Use when the caller owns a
+/// degrade-by-retry policy; use [`try_cholesky_f32`] when a clamped
+/// pseudo-inverse solve is acceptable.
+#[inline]
+pub fn try_cholesky_strict_f32(l: &mut [f32], a: &[f32], k: usize) -> Result<(), NotPositiveDefinite> {
+    // Zero the lower-triangle scratch we are about to fill.
+    for v in l.iter_mut().take(k * k) {
+        *v = 0.0;
+    }
+    for j in 0..k {
+        let j_row = j * k;
+        let sum = if j > 0 {
+            simd_dot_f32(&l[j_row..j_row + j], &l[j_row..j_row + j], j)
+        } else {
+            0.0
+        };
+        let diag = a[j_row + j] - sum;
+        if diag <= 0.0 {
+            return Err(NotPositiveDefinite { pivot: diag, tol: 0.0 });
+        }
+        let d_sqrt = diag.sqrt();
+        l[j_row + j] = d_sqrt;
+        let inv = 1.0 / d_sqrt;
+        for i in (j + 1)..k {
+            let i_row = i * k;
+            let s =
+                a[i_row + j] - simd_dot_f32(&l[i_row..i_row + j], &l[j_row..j_row + j], j);
+            l[i_row + j] = s * inv;
+        }
+    }
+    Ok(())
+}
+
 /// Non-panicking [`cholesky_f32`]: returns [`NotPositiveDefinite`] instead of
 /// asserting when a pivot falls below `-tol`. The success path is the same
 /// loop (bit-identical factorisation); only the failure mode differs. Fit

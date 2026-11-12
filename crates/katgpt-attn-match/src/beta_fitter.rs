@@ -12,6 +12,22 @@
 //! fixed step size `η = 1/L`, `L ≈ ||M||²` estimated via a few power-iteration
 //! steps. Warm-started from a clamped closed-form least-squares solution.
 //!
+//! # Solver note (Issue 995)
+//!
+//! This module KEEPS its local scalar Cholesky + substitution solve — a
+//! reviewed exception to the Issue 995 dedup, not a forgotten duplicate.
+//! The β solve feeds a nested near-degenerate chain: β's ULP-level
+//! summation-order differences perturb the softmax rows, and the
+//! downstream `value_fitter` Cv system (itself rank-deficient at
+//! G5's shape) amplifies the perturbation ~10x. Measured on the G5
+//! fixture (`bench_271_attn_match_goat`): local scalar β solve +
+//! shared-kernel Cv solve = 0.0102 relative error; shared-kernel β solve
+//! = 0.0708 (G5 FAIL vs the 0.05 floor; the all-local baseline is
+//! 0.0071). The scalar discipline here is load-bearing — the `f978a20b`
+//! lesson applies to the WHOLE chain, not just one factorisation. If
+//! this copy is ever retired, the shared family needs a scalar-discipline
+//! twin and the G5 gate must re-grade the nested chain end to end.
+//!
 //! Box constraints (`w_lower ≤ w_j ≤ w_upper`) match the paper's stability
 //! bounds to prevent degenerate solutions where one key absorbs all mass.
 

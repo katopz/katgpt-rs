@@ -28,9 +28,15 @@ half = { version = "2", optional = true }
 # RoPE-preserving chunked compaction path. Optional — only for `still_kv`.
 katgpt-kv = { path = "../katgpt-kv", optional = true, default-features = false }
 # katgpt-core: provides simd::{maxsim_score, simd_dot_f32, simd_add_inplace,
-# simd_scale_inplace} used by the rerank module (Plan 080 MaxSim late-interaction
-# scoring, Research 45). Optional — only needed when the `maxsim` feature is on.
-katgpt-core = { path = "../katgpt-core", optional = true }
+# simd_scale_inplace} for the rerank module (Plan 080 MaxSim late-interaction
+# scoring, Research 45) and linalg::ridge_solve for the beta_fitter /
+# value_fitter Cholesky solves (Issue 995 dedup — one solver family per
+# purpose). NON-OPTIONAL per the Issue 995 claim decision (option 1): the
+# base leaf adds no new dependency class, and the dual-codepath alternative
+# was the exact smell this dedup exists to kill. The `maxsim` /
+# `smooth_min_rerank` / `rotary_value_embedding` features keep naming the
+# dep for root-forward compatibility; they no longer gate it.
+katgpt-core = { path = "../katgpt-core" }
 
 [features]
 default = []
@@ -47,13 +53,13 @@ still_kv = ["dep:katgpt-kv", "katgpt-kv/still_kv", "dep:half"]
 # Moved here from `katgpt-rs/src/rerank.rs` per Proposal 003 Phase 8 (2026-07-04).
 # Provides `rerank()` (Cosine vs MaxSim vs SmoothMin) and `ndcg_at()` quality eval.
 # Pulls in katgpt-core for the SIMD scoring primitives.
-maxsim = ["dep:katgpt-core"]
+maxsim = []
 
 # Smooth-Min reranking method (Issue 041, Research 385; Issue 041 removed, see git history). Adds `RerankMethod::SmoothMin`
 # — per-token-pair cosine aggregation via `smooth_min_similarity` instead of plain
 # mean. Requires `maxsim` (for the rerank module) + `katgpt-core/smooth_min_similarity`.
 # The first real consumer of the smooth-min primitive.
-smooth_min_rerank = ["maxsim", "dep:katgpt-core"]
+smooth_min_rerank = ["maxsim"]
 
 # RoVE-aware value-side compaction (Plan 557 Phase 4). When active, the
 # chunked compactor un-rotates RoVE-rotated values before compaction and
@@ -61,7 +67,7 @@ smooth_min_rerank = ["maxsim", "dep:katgpt-core"]
 # Uses katgpt-core's RoVE primitives directly (f32, no f16 round-trip) so it
 # composes independently with `still_kv` (keys) + `rotary_value_embedding`
 # (values). Requires `maxsim` or any feature that already pulls katgpt-core.
-rotary_value_embedding = ["dep:katgpt-core"]
+rotary_value_embedding = []
 
 # Opt-in reassociated dot (Issue 871 T4, Bench 871, owner verdict ADOPT
 # 2026-09-22): 1.77-8.8x vs strict on x86_64-pc-windows-msvc (rustc 1.98.1,

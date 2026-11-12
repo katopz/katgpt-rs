@@ -9,10 +9,24 @@
 //!
 //! Closed-form solution: `Cv = (X^T X)^{-1} X^T Y`.
 //!
-//! Default solver: Cholesky on `X^T X` (with diagonal jitter fallback for
-//! rank-deficient systems). No external LAPACK dependency.
+//! Default solver: the shared leaf Cholesky kernels
+//! (`katgpt_core::linalg::ridge_solve::{try_cholesky_strict_f32, chol_solve_f32}`)
+//! with diagonal jitter fallback for rank-deficient systems.
+//! No external LAPACK dependency.
+//!
+//! # Numerics note (the `f978a20b` lesson, carried from the retired local copy)
+//!
+//! The retired local factorisations (unblocked + blocked, scalar inner loops)
+//! deliberately avoided `dot_8wide` because Cholesky on near-singular
+//! matrices is a numerical cliff edge where ULP-level summation-order changes
+//! flipped a pivot and degraded the G5 gate 0.7% -> 7.5% relative error
+//! (`f978a20b`). The shared kernels carry SIMD-interior dots with a
+//! relative-tolerance pivot clamp instead; the swap was graded on the G5
+//! RELATIVE-ERROR floors (never bit identity) per Issue 995.
 
 #![allow(clippy::needless_range_loop)]
+
+use katgpt_core::linalg::ridge_solve::{chol_solve_f32, try_cholesky_strict_f32};
 
 use crate::{STABILITY_EPS, score_matrix_simd::dot_8wide};
 
@@ -122,9 +136,15 @@ pub fn fit_cv_least_squares(
                 xtx[j * t + j] += jitter;
             }
         }
-        if let Some(l) = cholesky_decompose(&xtx, t) {
-            // Solve L Z = X^T Y (forward), then L^T Cv = Z (back), per RHS column.
-            let cv = solve_cholesky_multi_rhs(&l, &xty, t, d);
+        let mut l = vec![0.0f32; t * t];
+        if try_cholesky_strict_f32(&mut l, &xtx, t).is_ok() {
+            // Shared leaf solve: L L^T Cv = X^T Y per RHS column.
+            // Issue 995: the factorisation + solve are linalg's kernels
+            // (SIMD-interior dots + relative-tolerance pivot clamp); the
+            // solution is graded by the G5 relative-error floors (no bit-pin).
+            let mut cv = vec![0.0f32; t * d];
+            let mut z_scratch = vec![0.0f32; t * d];
+            chol_solve_f32(&mut cv, &mut z_scratch, &l, &xty, t, d);
             let rel_err = compute_relative_error(&cv, x, y, n, t, d);
             return ValueFitResult {
                 compact_values: cv,
@@ -146,8 +166,11 @@ pub fn fit_cv_least_squares(
                     xtx[j * t + j] += 1.0;
                 }
                 // Try one more time with the heavy loading.
-                if let Some(l) = cholesky_decompose(&xtx, t) {
-                    let cv = solve_cholesky_multi_rhs(&l, &xty, t, d);
+                let mut l = vec![0.0f32; t * t];
+                if try_cholesky_strict_f32(&mut l, &xtx, t).is_ok() {
+                    let mut cv = vec![0.0f32; t * d];
+                    let mut z_scratch = vec![0.0f32; t * d];
+                    chol_solve_f32(&mut cv, &mut z_scratch, &l, &xty, t, d);
                     let rel_err = compute_relative_error(&cv, x, y, n, t, d);
                     return ValueFitResult {
                         compact_values: cv,
@@ -167,44 +190,6 @@ pub fn fit_cv_least_squares(
             jitter = next_jitter;
         }
     }
-}
-
-/// Solve `L L^T Cv = X^T Y` for the `(t, d)` RHS via forward+back substitution.
-///
-/// `l` is the lower-triangular Cholesky factor `(t, t)`, `rhs` is `X^T Y`
-/// laid out `(t, d)` row-major (`rhs[j*d + col]`). Returns `Cv` laid out `(t, d)`.
-///
-/// Hoists the `z` scratch outside the per-column loop — allocated once (t f32)
-/// and reused across all d columns, instead of reallocating per column.
-#[inline]
-fn solve_cholesky_multi_rhs(l: &[f32], rhs: &[f32], t: usize, d: usize) -> Vec<f32> {
-    let mut cv = vec![0.0f32; t * d];
-    let mut z = vec![0.0f32; t];
-    // The Cholesky diagonal is invariant across the d RHS columns — precompute
-    // its reciprocals once (t recips) instead of dividing 2·d·t times.
-    let inv_diag: Vec<f32> = (0..t).map(|j| 1.0 / l[j * t + j]).collect();
-    for col in 0..d {
-        // Forward: L z = rhs[:, col]
-        for j in 0..t {
-            let mut s = rhs[j * d + col];
-            // Pre-sliced row + zip: same k order (0..j), same subtraction
-            // sequence → bit-identical, but no per-element bounds check.
-            let l_row = &l[j * t..j * t + j];
-            for (&l_jk, &z_k) in l_row.iter().zip(z[..j].iter()) {
-                s -= l_jk * z_k;
-            }
-            z[j] = s * inv_diag[j];
-        }
-        // Back: L^T cv[:, col] = z
-        for j in (0..t).rev() {
-            let mut s = z[j];
-            for k in (j + 1)..t {
-                s -= l[k * t + j] * cv[k * d + col];
-            }
-            cv[j * d + col] = s * inv_diag[j];
-        }
-    }
-    cv
 }
 
 #[inline]
@@ -245,176 +230,10 @@ fn compute_relative_error(cv: &[f32], x: &[f32], y: &[f32], n: usize, t: usize, 
     (residual_sq / y_norm_sq).sqrt()
 }
 
-/// Cholesky decomposition of a symmetric positive-definite matrix.
-/// Returns lower-triangular `L` such that `A = L L^T`, row-major `(t, t)`.
-/// Returns `None` if the matrix is not PD.
-#[inline]
-fn cholesky_decompose(a: &[f32], t: usize) -> Option<Vec<f32>> {
-    // For small t (< BLOCK_SIZE), use the unblocked algorithm — it has no
-    // sub-matrix allocation overhead and is friendlier to the autovectorizer.
-    if t < CHOLESKY_BLOCK_SIZE {
-        return cholesky_decompose_unblocked(a, t);
-    }
-    cholesky_decompose_blocked(a, t)
-}
-
 /// Block size for the blocked Cholesky algorithm. 32 is a common choice that
 /// fits a 32×32 f32 block (4 KB) in L1 alongside two scratch buffers of the
 /// same size (12 KB total) — well within typical 32 KB L1 caches.
 pub const CHOLESKY_BLOCK_SIZE: usize = 32;
-
-/// Unblocked Cholesky decomposition (Plan 271 Phase 2, T2.4 reference).
-///
-/// This is the textbook column-by-column algorithm used for small matrices.
-/// It is called automatically by [`cholesky_decompose`] when `t <
-/// CHOLESKY_BLOCK_SIZE`, and is also used internally by the blocked variant
-/// to factorize the diagonal blocks.
-///
-/// # Numerical stability: scalar inner loops (NOT dot_8wide)
-///
-/// The inner dot products use scalar sequential accumulation, NOT the shared
-/// `dot_8wide` SIMD kernel. This is intentional. Cholesky on near-singular
-/// matrices (rank-deficient `X^T X` from synthetic or low-rank attention data)
-/// is a numerical cliff edge: ULP-level differences in the diagonal dot product
-/// summation order can flip the pivot `sum = a[j,j] − ‖l[j,0..j]‖²` from barely
-/// positive to barely negative, triggering the jitter fallback and degrading
-/// solution quality by 10×. The canonical failure: commit `f978a20b` routed
-/// these loops through `dot_8wide` for a ~8× FMA reduction, but the G5
-/// reconstruction gate (`bench_271_attn_match_goat`) degraded from 0.7% to
-/// 7.5% relative error — a 10× quality regression from a perf optimization on
-/// a numerically sensitive kernel. Scalar accumulation here is deterministic,
-/// platform-independent, and the loops are short (max `t−1` elements) so the
-/// SIMD opportunity is negligible anyway.
-#[inline]
-fn cholesky_decompose_unblocked(a: &[f32], t: usize) -> Option<Vec<f32>> {
-    let mut l = vec![0.0f32; t * t];
-    for j in 0..t {
-        // Diagonal: sum = a[j,j] − Σ_k l[j,k]². Sequential scalar subtraction —
-        // see the doc comment above for why this is NOT dot_8wide.
-        let mut sum = a[j * t + j];
-        for &l_jk in &l[j * t..j * t + j] {
-            sum -= l_jk * l_jk;
-        }
-        if sum <= 0.0 {
-            return None;
-        }
-        let diag = sum.sqrt();
-        l[j * t + j] = diag;
-        // Off-diagonal: l[i,j] = (a[i,j] − Σ_k l[i,k]·l[j,k]) / diag.
-        // `split_at_mut((j+1)*t)` separates the read-only j-th row from the
-        // mutable i>j rows so both can be pre-sliced; `chunks_exact_mut(t)`
-        // then walks rows j+1.. with the row-length bound known to LLVM.
-        // Same scalar k-order (0..j) and same subtraction sequence as before
-        // → bit-identical (critical here, see the doc comment above).
-        let (l_head, l_tail) = l.split_at_mut((j + 1) * t);
-        let l_j = &l_head[j * t..j * t + j];
-        for (i_off, l_i) in l_tail.chunks_exact_mut(t).enumerate() {
-            let i = j + 1 + i_off;
-            let mut s = a[i * t + j];
-            for (&l_ik, &l_jk) in l_i[..j].iter().zip(l_j.iter()) {
-                s -= l_ik * l_jk;
-            }
-            l_i[j] = s / diag;
-        }
-    }
-    Some(l)
-}
-
-/// Blocked Cholesky decomposition (Plan 271 Phase 2, T2.4).
-///
-/// Implements the right-looking blocked algorithm with block size
-/// [`CHOLESKY_BLOCK_SIZE`]. For each block column:
-///   1. Factorize the diagonal block with [`cholesky_decompose_unblocked`].
-///   2. Solve the off-diagonal strip via forward substitution.
-///   3. Symmetric rank-k update of the trailing sub-matrix into `a_red`.
-///
-/// The blocked variant is cache-aware: the inner GEMM-like rank-k update
-/// operates on contiguous rectangular blocks rather than triangular
-/// strided access (friendlier to the backend's scheduler; strict adds stay
-/// scalar on x86_64 — Issue 871).
-///
-/// Per AGENTS.md: the only allocations are the output buffer `l`, a single
-/// `a_red` scratch the size of `a`, and one `diag_block` scratch reused
-/// across all block iterations (allocated once at max block size, cleared in
-/// place per iteration — `bk * bk` is `bs * bs` at most).
-#[inline]
-fn cholesky_decompose_blocked(a: &[f32], t: usize) -> Option<Vec<f32>> {
-    debug_assert!(t >= CHOLESKY_BLOCK_SIZE, "use unblocked for small t");
-    // Copy A into a mutable scratch — we reduce it in place across blocks.
-    let mut a_red = a.to_vec();
-    let mut l = vec![0.0f32; t * t];
-    let bs = CHOLESKY_BLOCK_SIZE;
-    // Hoist the diagonal-block scratch outside the block loop: it's sized for
-    // the largest possible block (`bs * bs`) once and reused each iteration
-    // by writing only the live `bk * bk` sub-range. Saves a heap allocation
-    // per block iteration (the block count is `ceil(t / bs)`).
-    let mut diag_block = vec![0.0f32; bs * bs];
-    let mut k = 0usize;
-    while k < t {
-        let bk = bs.min(t - k);
-        // 1. Extract and factorize the diagonal block A[k:k+bk, k:k+bk].
-        // Row-contiguous block copies: `copy_from_slice` lowers to a memcpy
-        // instead of `bk` bounds-checked scalar loads/stores per row.
-        for i in 0..bk {
-            let src = &a_red[(k + i) * t + k..(k + i) * t + k + bk];
-            diag_block[i * bk..i * bk + bk].copy_from_slice(src);
-        }
-        let diag_l = cholesky_decompose_unblocked(&diag_block[..bk * bk], bk)?;
-        // Write lower-triangular result into L (row `i` holds `i+1` live cells).
-        for i in 0..bk {
-            let src = &diag_l[i * bk..=i * bk + i];
-            l[(k + i) * t + k..=(k + i) * t + k + i].copy_from_slice(src);
-        }
-
-        // 2. Off-diagonal strip L[k+bk:, k:k+bk] via forward substitution.
-        //    For each row i in the strip, solve L_diag · x = A[i, k:k+bk]^T.
-        //    The triangular dependency (col depends on col-1) prevents batching
-        //    across columns. Scalar inner loop — see cholesky_decompose_unblocked
-        //    doc for why this is NOT dot_8wide (numerical cliff edge on
-        //    near-singular matrices).
-        let n_strip = t - (k + bk);
-        if n_strip > 0 {
-            for i in 0..n_strip {
-                let row = k + bk + i;
-                // Pre-slice the live `bk` cells of this strip row once per row
-                // instead of recomputing `row * t + (k + p)` per element.
-                let l_row = &mut l[row * t + k..row * t + k + bk];
-                for col in 0..bk {
-                    let mut s = a_red[row * t + (k + col)];
-                    let dl_row = &diag_l[col * bk..col * bk + col];
-                    for (&l_p, &dl_p) in l_row[..col].iter().zip(dl_row.iter()) {
-                        s -= l_p * dl_p;
-                    }
-                    l_row[col] = s / diag_l[col * bk + col];
-                }
-            }
-
-            // 3. Symmetric rank-k update: a_red[k+bk:, k+bk:] -= L_strip · L_strip^T.
-            //    Maintains symmetry explicitly so subsequent iterations read
-            //    a consistent reduced matrix. Scalar inner loop — same numerical
-            //    stability rationale as the strip solve above.
-            for i in 0..n_strip {
-                let row_i = k + bk + i;
-                // Hoist the i-row slice out of the j loop; both strip rows are
-                // contiguous `bk`-length runs. Same p-order accumulation as
-                // before → bit-identical.
-                let l_i = &l[row_i * t + k..row_i * t + k + bk];
-                for j in 0..=i {
-                    let row_j = k + bk + j;
-                    let l_j = &l[row_j * t + k..row_j * t + k + bk];
-                    let mut dot = 0.0f32;
-                    for (&a_p, &b_p) in l_i.iter().zip(l_j.iter()) {
-                        dot += a_p * b_p;
-                    }
-                    a_red[row_i * t + row_j] -= dot;
-                    a_red[row_j * t + row_i] = a_red[row_i * t + row_j];
-                }
-            }
-        }
-        k += bk;
-    }
-    Some(l)
-}
 
 /// Helper: compute the X attention matrix from compact keys and β.
 ///
@@ -551,9 +370,10 @@ mod tests {
 
     #[test]
     fn test_cholesky_spd() {
-        // [[2,1],[1,2]] is SPD.
+        // [[2,1],[1,2]] is SPD. Issue 995: pins the shared leaf kernel.
         let a = vec![2.0f32, 1.0, 1.0, 2.0];
-        let l = cholesky_decompose(&a, 2).expect("SPD matrix");
+        let mut l = vec![0.0f32; 4];
+        try_cholesky_strict_f32(&mut l, &a, 2).expect("SPD matrix");
         // Verify L L^T == A
         let r00 = l[0] * l[0];
         let r01 = l[2] * l[0];
@@ -584,13 +404,15 @@ mod tests {
         }
     }
 
-    /// T2.4 — blocked Cholesky path must activate for t >= CHOLESKY_BLOCK_SIZE.
+    /// T2.4 lineage — large-`t` fit must hold reconstruction through the
+    /// shared kernel (the retired local blocked/unblocked split is gone;
+    /// `CHOLESKY_BLOCK_SIZE` survives as the trace's eligibility metric).
     /// Synthetic SPD matrix `A = M·M^T + n·I` (with random M) is PD by
-    /// construction; both the blocked and unblocked paths must produce L
-    /// such that `L·L^T == A` to within numerical tolerance.
+    /// construction; the factorised `L` must satisfy `L·L^T == A` to within
+    /// numerical tolerance.
     #[test]
     fn test_cholesky_blocked_path_activated() {
-        let t = CHOLESKY_BLOCK_SIZE + 8; // exercises the blocked path
+        let t = CHOLESKY_BLOCK_SIZE + 8; // the historical blocked threshold
         let mut seed = 31415u32;
         let mut rng = || {
             seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
@@ -610,7 +432,8 @@ mod tests {
             }
             a[i * t + i] += t as f32;
         }
-        let l = cholesky_decompose(&a, t).expect("A is PD by construction");
+        let mut l = vec![0.0f32; t * t];
+        try_cholesky_strict_f32(&mut l, &a, t).expect("A is PD by construction");
         // Verify L·L^T == A.
         for i in 0..t {
             for j in 0..t {
@@ -628,37 +451,6 @@ mod tests {
                 );
             }
         }
-    }
-
-    /// Blocked Cholesky must agree with unblocked to within numerical
-    /// tolerance — they should produce identical L for the same input.
-    #[test]
-    fn test_cholesky_blocked_matches_unblocked() {
-        let t = CHOLESKY_BLOCK_SIZE * 2; // multiple blocks
-        let mut seed = 2718u32;
-        let mut rng = || {
-            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
-            (seed as f32) / (u32::MAX as f32) * 2.0 - 1.0
-        };
-        let m: Vec<f32> = (0..t * t).map(|_| rng()).collect();
-        let mut a = vec![0.0f32; t * t];
-        for i in 0..t {
-            for j in 0..t {
-                let mut s = 0.0f32;
-                for k in 0..t {
-                    s += m[i * t + k] * m[j * t + k];
-                }
-                a[i * t + j] = s;
-            }
-            a[i * t + i] += t as f32;
-        }
-        let l_blocked = cholesky_decompose(&a, t).expect("blocked");
-        let l_unblocked = cholesky_decompose_unblocked(&a, t).expect("unblocked");
-        let mut max_diff = 0.0f32;
-        for i in 0..t * t {
-            max_diff = max_diff.max((l_blocked[i] - l_unblocked[i]).abs());
-        }
-        assert!(max_diff < 1e-4, "blocked/unblocked L max diff: {max_diff}");
     }
 
     /// Regression test for the Cholesky numerical cliff-edge (commit `f978a20b`).
@@ -717,14 +509,15 @@ mod tests {
         }
         let cfg = ValueFitConfig::default();
         let result = fit_cv_least_squares(&x, &y, n, t, d, &cfg);
-        // The solution should reconstruct Y to high accuracy. Scalar Cholesky
-        // produces <1e-4 error on this system. If dot_8wide is re-introduced
-        // into the Cholesky inner loops, the jitter fallback kicks in and the
-        // error degrades to ~0.01-0.1 — well above this threshold.
+        // The solution should reconstruct Y to high accuracy (<1e-3). This
+        // guards the Issue 995 solver swap: the shared leaf kernel must hold
+        // the same near-singular quality the retired scalar copy delivered
+        // (the `f978a20b` cliff-edge class). If the relative-error floors are
+        // breached here, the G5 gate posture (relative-error, never bit-pin)
+        // is the adjudicator — see the module numerics note.
         assert!(
             result.relative_error < 1e-3,
-            "near-singular consistent system should reconstruct with <1e-3 error, got {}; \
-             if this fails, check that Cholesky inner loops use scalar (NOT dot_8wide)",
+            "near-singular consistent system should reconstruct with <1e-3 error, got {}",
             result.relative_error
         );
     }

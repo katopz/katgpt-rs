@@ -161,7 +161,8 @@ pub fn compact(
 /// computation (Stage 1 input), which routes across CpuScalar / CpuSimd /
 /// CpuRayon / Gpu based on `t_len`. The compact-key matrix (`n × t`) is
 /// small enough that scalar always wins. Cholesky dispatch is by size
-/// (blocked vs unblocked) — see `value_fitter::cholesky_decompose`.
+/// (blocked vs unblocked) — see the `value_fitter` module numerics note
+/// (the factorisation is now the shared `katgpt_core::linalg` kernel, Issue 995).
 ///
 /// # Arguments
 /// * `keys`, `values`, `queries`, `t_len`, `d`, `n`, `config` — same as [`compact`].
