@@ -15,10 +15,13 @@
 //!    order, sequential `+=` (the Issue-940 determinism law) — the emitted
 //!    scalar is bit-reproducible for the BLAKE3-committable snapshot
 //!    posture (riir-ai Plan 646 T1.2).
-//! 3. **Walk-time selector** (paper Alg. 4) and 4. the **φ_τ-driven batch
-//!    selector** over [`crate::set_admission`]'s kernel — later phases;
-//!    scaffold below carries the type seams only (T1.1), their bodies land
-//!    with their own task rows (T1.5/T1.6).
+//! 3. **Walk-time selector** (paper Alg. 4, T1.5) and 4. the **φ_τ-driven
+//!    batch selector** ([`batch_select_diffusion`], T1.6) — the consumer
+//!    (riir-ai Plan 646 T2.1) operator: the spectral coordinates `e_τ`
+//!    feed [`crate::set_admission`]'s greedy log-det kernel (cosine on
+//!    `e_τ` = truncated normalized φ_τ — the T1.6 identity, tested not
+//!    assumed), so the SAME admission machinery selects a
+//!    coverage-maximizing batch. One kernel, one plug.
 //!
 //! Boundary: general weighted similarity graphs live HERE; geometric
 //! `CellComplex` operators stay in `katgpt-dec` (heat/wave kernel
@@ -455,6 +458,107 @@ impl DiffusionEmbedding {
         }
         out
     }
+}
+
+/// φ_τ-driven batch selector — Plan 634 T1.6's consumer-facing operator
+/// (riir-ai Plan 646 T2.1 wires this). Builds the spectral embedding
+/// ([`DiffusionEmbedding::build`], n ≤ [`SPECTRAL_N_CAP`]), gathers each
+/// pooled node's spectral coordinates `e_τ` ([`D ≤ 64`]), and drives
+/// [`crate::set_admission`]'s greedy log-det kernel over them — cosine on
+/// `e_τ` is the truncated normalized φ_τ (the T1.6 identity, pinned by the
+/// module test), so the admitted batch maximizes cross-cluster coverage
+/// exactly as the paper's M′(x, τ) does in walk space. One kernel, one
+/// plug: the input vectors are the seam, the admission kernel is fixed
+/// cosine (T0.1 unchanged).
+///
+/// The η floor (the batch analog of Alg. 4's `μ_y ≥ η/deg` mass floor): a
+/// pooled node whose truncated kernel self-mass `vol_scale·‖e_τ(x)‖²`
+/// falls below `eta` is not eligible — too weakly represented to carry a
+/// cluster representative. `eta = 0` admits off mass alone.
+///
+/// Config: `alpha_align = 0` (no query anchor — a diversity-only batch),
+/// `kappa_div = 1` (pure log-det gain ranking), `theta_coll` keeps the
+/// `ColinearityBatchGate` 0.95 precedent (one representative per
+/// near-identical cluster). Admission order is the kernel's own pinned
+/// single-pass argmax with lowest-index tie-break — same (graph, pool, τ,
+/// η, D) ⇒ byte-identical `out` (the Issue-940 tie law).
+///
+/// `out` slots carry POOL SLOTS (u16) in admission order, `u16::MAX`
+/// sentinel beyond the admitted count (the [`crate::set_admission`]
+/// convention — the consumer maps slot → node id through `pool`). Returns
+/// the admitted count.
+///
+/// # Panics
+/// Panics above `D = 64` (the spectral_pencil precedent cap), above
+/// [`SPECTRAL_N_CAP`] nodes (the spectral posture's own cap), or over the
+/// u16 pool encoding — each refuses loud, never silently degrades.
+///
+/// Allocation class: build-time (the embedding's `Vec`s + one candidate
+/// array per call) — a per-batch operation, not a per-tick hot path; the
+/// greedy itself runs in caller-independent fixed `[[f32; D]; D]` work.
+pub fn batch_select_diffusion<const D: usize>(
+    g: &SimGraph,
+    pool: &[usize],
+    tau: usize,
+    eta: f32,
+    out: &mut [u16],
+) -> usize {
+    assert!(D <= 64, "spectral coordinate cap D={D} > 64");
+    assert!(
+        pool.len() <= u16::MAX as usize,
+        "pool exceeds the u16 index encoding"
+    );
+    let emb = DiffusionEmbedding::build(g);
+    let vectors: Vec<[f32; D]> = pool
+        .iter()
+        .map(|&x| emb.spectral_coordinates::<D>(x, tau))
+        .collect();
+    // The η floor: truncated kernel self-mass = vol_scale·‖e_τ(x)‖²
+    // (the coordinates carry the 1/√π(x) scaling but not the build's
+    // vol(G) factor — the mass analog of Alg. 4's η/deg floor).
+    // Refuse the below-floor candidates by masking them out of the pool
+    // the kernel sees (the mass floor is OUR contract, applied before the
+    // greedy; keep the pool-slot mapping so `out` stays pool-addressed).
+    let mut kept: Vec<[f32; D]> = Vec::with_capacity(vectors.len());
+    let mut slot_map: Vec<u16> = Vec::with_capacity(vectors.len());
+    for (i, v) in vectors.iter().enumerate() {
+        let mass = v.iter().map(|c| c * c).sum::<f32>() * emb.vol_scale as f32;
+        if mass >= eta {
+            kept.push(*v);
+            slot_map.push(i as u16);
+        }
+    }
+    let cfg = crate::set_admission::SetAdmissionConfig {
+        // A diversity-only batch: no query anchor, pure log-det gain
+        // ranking. Colinearity cap + ρ keep their defaults (the 0.95
+        // precedent; admission is ρ-invariant).
+        alpha_align: 0.0,
+        kappa_div: 1.0,
+        ..crate::set_admission::SetAdmissionConfig::default()
+    };
+
+    let mut scratch = crate::set_admission::AdmissionScratchCore::new();
+    let query = [0.0_f32; D]; // α = 0 — the anchor term is inert
+    let quality = vec![0.0_f32; kept.len()]; // the neutral prior (score is
+    // pure κ·log-det gain; the recovery path's quality-None is the same 0)
+    let mut kept_out = vec![u16::MAX; out.len()];
+    let admitted = crate::set_admission::admit_into(
+        &cfg,
+        &kept,
+        &quality,
+        &query,
+        &mut kept_out,
+        &mut scratch,
+    );
+    // Remap kept-slots back to POOL slots; sentinel slots stay sentinel.
+    for (dst, &src) in out.iter_mut().zip(kept_out.iter()) {
+        *dst = if src == u16::MAX {
+            u16::MAX
+        } else {
+            slot_map[src as usize]
+        };
+    }
+    admitted
 }
 
 /// Walk-time diversity-maximizing neighbor selector — paper Alg. 4 (plan

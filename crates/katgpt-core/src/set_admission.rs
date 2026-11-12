@@ -67,6 +67,15 @@
 //!   and loses exactness — out of scope.
 //! - **d = 8 ceiling** ([`DIM`]): Vendi ≤ min(K, d) — the depth ceiling is
 //!   reported as [`CertificateReport::saturated`], never hidden.
+//! - **Pluggable input vectors, kernel fixed cosine** (Plan 634 T1.6): the
+//!   whole core is generic over `const D: usize` — every item below takes
+//!   its dimension from the caller's arrays (a `[[f32; 8]]` pool compiles
+//!   at the shipped [`DIM`] posture unchanged; `AdmissionScratch` stays a
+//!   type alias for the D = [`DIM`] core so existing construction sites
+//!   infer it). What the seam buys: [`crate::diversity::diffusion`] feeds
+//!   spectral coordinates `e_τ` (D ≤ 64) so the SAME greedy log-det kernel
+//!   drives the diffusion batch selector — the input is the plug, never the
+//!   kernel (RBF/Nyström stay excluded by T0.1).
 //! - Zero-alloc on the hot path: all linear algebra runs in caller-owned
 //!   fixed arrays; the two reusable lists inside [`AdmissionScratch`]
 //!   reserve once (warmup) and are reused across cycles.
@@ -148,36 +157,45 @@ pub struct CertificateReport {
 /// Caller-owned scratch for [`admit_into`] / [`certify_scratch`]: fixed
 /// linear algebra, reusable lists that keep their allocations across
 /// cycles.
+///
+/// Generic over the admission dimension `D` (Plan 634 T1.6's pluggable-input
+/// seam). [`AdmissionScratch`] is the shipped `D = 8` alias — existing
+/// construction sites infer it unchanged.
 #[derive(Clone)]
-pub struct AdmissionScratch {
+pub struct AdmissionScratchCore<const D: usize> {
     /// Dual Gram `G = X̂ᵀX̂` of the admitted set (row-major).
-    pub gram: [[f32; DIM]; DIM],
+    pub gram: [[f32; D]; D],
     /// `M⁻¹ = (I + G)⁻¹`, maintained by Sherman–Morrison rank-1 updates
     /// (the admitted Gram alone can be singular; `I + G` never is).
-    pub minv: [[f32; DIM]; DIM],
+    pub minv: [[f32; D]; D],
     /// Normalized admitted latents (the colinearity cap's members).
-    pub admitted: Vec<[f32; DIM]>,
+    pub admitted: Vec<[f32; D]>,
     /// Normalized pool (cleared and refilled per cycle — the allocation
     /// persists).
-    pub pool_hats: Vec<Option<[f32; DIM]>>,
+    pub pool_hats: Vec<Option<[f32; D]>>,
     /// Running trace of `G`.
     pub tr_g: f32,
     /// Running trace of `G²`.
     pub tr_g2: f32,
 }
 
-impl Default for AdmissionScratch {
+/// The shipped admission dimension's scratch — every existing consumer
+/// keeps this exact type (Plan 634 T1.6 keeps the default posture
+/// codegen-identical; T2.7 pins the consumer-protection arms).
+pub type AdmissionScratch = AdmissionScratchCore<DIM>;
+
+impl<const D: usize> Default for AdmissionScratchCore<D> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl AdmissionScratch {
+impl<const D: usize> AdmissionScratchCore<D> {
     /// Fresh scratch: `G = 0`, `M⁻¹ = I`.
     #[must_use]
     pub fn new() -> Self {
         Self {
-            gram: [[0.0; DIM]; DIM],
+            gram: [[0.0; D]; D],
             minv: identity(),
             admitted: Vec::new(),
             pool_hats: Vec::new(),
@@ -188,7 +206,7 @@ impl AdmissionScratch {
 
     /// Reset for a fresh cycle (keeps every allocation).
     pub fn clear(&mut self) {
-        self.gram = [[0.0; DIM]; DIM];
+        self.gram = [[0.0; D]; D];
         self.minv = identity();
         self.admitted.clear();
         self.pool_hats.clear();
@@ -198,8 +216,8 @@ impl AdmissionScratch {
 }
 
 #[inline]
-fn identity() -> [[f32; DIM]; DIM] {
-    let mut m = [[0.0_f32; DIM]; DIM];
+fn identity<const D: usize>() -> [[f32; D]; D] {
+    let mut m = [[0.0_f32; D]; D];
     for (i, row) in m.iter_mut().enumerate() {
         row[i] = 1.0;
     }
@@ -211,7 +229,7 @@ fn identity() -> [[f32; DIM]; DIM] {
 /// `pub(crate)`: the re-freeze lane (set_admission_freeze) reuses the exact
 /// shell normalization — a second copy would be a second convention.
 #[inline]
-pub(crate) fn normalize(x: &[f32; DIM]) -> Option<[f32; DIM]> {
+pub(crate) fn normalize<const D: usize>(x: &[f32; D]) -> Option<[f32; D]> {
     if x.iter().any(|v| !v.is_finite()) {
         return None;
     }
@@ -219,7 +237,7 @@ pub(crate) fn normalize(x: &[f32; DIM]) -> Option<[f32; DIM]> {
     if !n.is_finite() || n < 1e-12 {
         return None;
     }
-    let mut out = [0.0_f32; DIM];
+    let mut out = [0.0_f32; D];
     for (o, v) in out.iter_mut().zip(x) {
         *o = v / n;
     }
@@ -227,14 +245,14 @@ pub(crate) fn normalize(x: &[f32; DIM]) -> Option<[f32; DIM]> {
 }
 
 #[inline]
-fn dot(a: &[f32; DIM], b: &[f32; DIM]) -> f32 {
+fn dot<const D: usize>(a: &[f32; D], b: &[f32; D]) -> f32 {
     a.iter().zip(b).map(|(u, v)| u * v).sum()
 }
 
 /// One Sherman–Morrison rank-1 update of `M⁻¹` in place:
 /// `M⁻¹ ← M⁻¹ − (M⁻¹x)(M⁻¹x)ᵀ / (1 + xᵀM⁻¹x)`.
-fn sherman_morrison_rank1(minv: &mut [[f32; DIM]; DIM], x: &[f32; DIM]) {
-    let mut mx = [0.0_f32; DIM];
+fn sherman_morrison_rank1<const D: usize>(minv: &mut [[f32; D]; D], x: &[f32; D]) {
+    let mut mx = [0.0_f32; D];
     for (row, mrow) in mx.iter_mut().zip(minv.iter()) {
         *row = dot(mrow, x);
     }
@@ -251,17 +269,17 @@ fn sherman_morrison_rank1(minv: &mut [[f32; DIM]; DIM], x: &[f32; DIM]) {
 
 /// Admit one unit latent into the scratch: rank-1 Gram update, PR traces,
 /// Sherman–Morrison, member list.
-fn admit_latent(scratch: &mut AdmissionScratch, x: &[f32; DIM]) {
+fn admit_latent<const D: usize>(scratch: &mut AdmissionScratchCore<D>, x: &[f32; D]) {
     // xᵀGx on the PRIOR Gram — the tr(G²) update needs the old product.
-    let mut gx = [0.0_f32; DIM];
+    let mut gx = [0.0_f32; D];
     for (gxi, row) in gx.iter_mut().zip(scratch.gram.iter()) {
         *gxi = dot(row, x);
     }
     let xgx = dot(&gx, x);
 
     // G ← G + xxᵀ.
-    for i in 0..DIM {
-        for j in 0..DIM {
+    for i in 0..D {
+        for j in 0..D {
             scratch.gram[i][j] += x[i] * x[j];
         }
     }
@@ -277,13 +295,13 @@ fn admit_latent(scratch: &mut AdmissionScratch, x: &[f32; DIM]) {
 /// Greedy admission core — `quality = None` scores every candidate with a
 /// neutral modular prior of 0 (the recovery path admits straight off the
 /// snapped corpus, where no caller prior exists).
-fn admit_core(
+fn admit_core<const D: usize>(
     cfg: &SetAdmissionConfig,
-    pool: &[[f32; DIM]],
+    pool: &[[f32; D]],
     quality: Option<&[f32]>,
-    query: &[f32; DIM],
+    query: &[f32; D],
     out_indices: &mut [u16],
-    scratch: &mut AdmissionScratch,
+    scratch: &mut AdmissionScratchCore<D>,
 ) -> usize {
     if let Some(q) = quality {
         assert_eq!(pool.len(), q.len(), "pool/quality length mismatch");
@@ -323,7 +341,7 @@ fn admit_core(
                 continue;
             }
             // Exact marginal log-det gain: log(1 + x̂ᵀM⁻¹x̂).
-            let mut mx = [0.0_f32; DIM];
+            let mut mx = [0.0_f32; D];
             for (row, mrow) in mx.iter_mut().zip(scratch.minv.iter()) {
                 *row = dot(mrow, x);
             }
@@ -356,13 +374,13 @@ fn admit_core(
 /// # Panics
 /// Panics if `pool.len() != quality.len()` or `pool.len() > u16::MAX`
 /// (the index encoding).
-pub fn admit_into(
+pub fn admit_into<const D: usize>(
     cfg: &SetAdmissionConfig,
-    pool: &[[f32; DIM]],
+    pool: &[[f32; D]],
     quality: &[f32],
-    query: &[f32; DIM],
+    query: &[f32; D],
     out_indices: &mut [u16],
-    scratch: &mut AdmissionScratch,
+    scratch: &mut AdmissionScratchCore<D>,
 ) -> usize {
     admit_core(cfg, pool, Some(quality), query, out_indices, scratch)
 }
@@ -371,7 +389,10 @@ pub fn admit_into(
 /// dual-Gram eigenvalues through the pinned Jacobi, Vendi over them, the
 /// maintained participation ratio, and the collapse / saturation flags
 /// against `min(K, DIM)` (K = the admitted count).
-pub fn certify_scratch(cfg: &SetAdmissionConfig, scratch: &AdmissionScratch) -> CertificateReport {
+pub fn certify_scratch<const D: usize>(
+    cfg: &SetAdmissionConfig,
+    scratch: &AdmissionScratchCore<D>,
+) -> CertificateReport {
     let k = scratch.admitted.len();
     if k == 0 {
         return CertificateReport {
@@ -381,13 +402,13 @@ pub fn certify_scratch(cfg: &SetAdmissionConfig, scratch: &AdmissionScratch) -> 
             collapsed: false,
         };
     }
-    let cap = k.min(DIM) as f32;
+    let cap = k.min(D) as f32;
     let participation_ratio = if scratch.tr_g2 > 0.0 {
         scratch.tr_g * scratch.tr_g / scratch.tr_g2
     } else {
         0.0
     };
-    let mut dense = crate::spectral_pencil::dense::DenseScratch::<DIM>::new();
+    let mut dense = crate::spectral_pencil::dense::DenseScratch::<D>::new();
     let _ = jacobi_eigen(&scratch.gram, false, &mut dense);
     let vendi = vendi_diversity(&dense.values);
     CertificateReport {
@@ -400,8 +421,11 @@ pub fn certify_scratch(cfg: &SetAdmissionConfig, scratch: &AdmissionScratch) -> 
 
 /// Certificate for a caller-held set (no greedy pass) — the detection
 /// surface consumers and audits use on already-delivered sets.
-pub fn certify_set(cfg: &SetAdmissionConfig, set: &[[f32; DIM]]) -> CertificateReport {
-    let mut scratch = AdmissionScratch::new();
+pub fn certify_set<const D: usize>(
+    cfg: &SetAdmissionConfig,
+    set: &[[f32; D]],
+) -> CertificateReport {
+    let mut scratch = AdmissionScratchCore::new();
     certify_set_into(cfg, set, &mut scratch)
 }
 
@@ -409,10 +433,10 @@ pub fn certify_set(cfg: &SetAdmissionConfig, set: &[[f32; DIM]]) -> CertificateR
 /// scratch — zero steady-state allocation for set-certify hot paths (the
 /// `admit_into`/`certify_scratch` split, applied to the owned convenience;
 /// riir-ai Issue 966's zone-attention triad is the first consumer).
-pub fn certify_set_into(
+pub fn certify_set_into<const D: usize>(
     cfg: &SetAdmissionConfig,
-    set: &[[f32; DIM]],
-    scratch: &mut AdmissionScratch,
+    set: &[[f32; D]],
+    scratch: &mut AdmissionScratchCore<D>,
 ) -> CertificateReport {
     scratch.clear();
     scratch.admitted.reserve(set.len());

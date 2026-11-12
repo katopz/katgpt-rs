@@ -4479,6 +4479,15 @@ required-features = ["diffusion_diversity"]
 name = "plan634_t14_div_normalization_spec"
 required-features = ["diffusion_diversity"]
 
+# Plan 634 T1.6: the batch selector's seam fixtures — the T1.6 identity
+# (cosine on e_τ = truncated normalized φ_τ, measured) + the selector
+# contract smoke (coverage, determinism, η floor, dimension transparency).
+# The standing F5 battery with its planted-clique-graph pinned bars is
+# Phase 2's T2.5, not this file.
+[[test]]
+name = "plan634_t16_batch_selector"
+required-features = ["diffusion_diversity"]
+
 # Issue 988 T1 — the graft apply hot path's G4 alloc census (the
 # repo-birth gate discipline: the row rides the SAME commit as the
 # gated target — a missing row is the green-zero trap).
