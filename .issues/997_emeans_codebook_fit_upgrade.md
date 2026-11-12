@@ -1,0 +1,27 @@
+# 997 — e-means codebook-fit upgrade PoC (split revival + EMA arm + defect fix)
+
+**Status:** OPEN — filed 2026-11-12 from Research 665 (arXiv:2611.09501) · GOAT demote-on-fail · consumer surfaces: `katgpt-core::factorized_action::fit_codebook_kmeans_into` + `gmm_support::fit_diag_gmm` (one change, two consumers — the GMM seed rides the codebook upgrade through its existing `fit_codebook_kmeans_into` call at `em.rs` L100–102; building a parallel GMM seed path is FORBIDDEN)
+
+**Verdict provenance:** Claude ping-pong 2026-11-12, R1 REVISE → R2 AGREE (+ final close), session `65c0ee85-095b-4730-b57d-2d33c37c78ad`.
+
+## Context
+
+e-means (mini-batch EMA k-means, Meta FAIR) beats Lloyd's loss in 1.4–2.6 epochs at embedding scale and eliminates dead clusters via proportional-split revival. The stack's offline k-means (`factorized_action/codebook.rs`) is full-batch Lloyd + k-means++ + **farthest-patch reinit** for dead centroids. All e-means components are closed-form/modelless. The paper's ablation NEVER compared split against farthest-reinit, so the head-to-head has real information value. Primary tested hypothesis: **farthest-point revival is outlier-biased; split revival seeds from dense mass.**
+
+**En-route defect (verified in-source):** when several clusters are empty in the same Lloyd pass, `d2_nearest` is recomputed ONCE before the per-cluster placement loop (codebook.rs L232–245), and each placement only zeroes its chosen point (L259) — a second empty cluster selects from stale distances and can clump onto the first revival's outlier position. Fix benefits the incumbent regardless of the split verdict.
+
+## Tasks
+
+- [ ] **T1 — standalone defect fix (do first, independent of e-means):** in `fit_codebook_kmeans_into`'s revival loop, update `d2_nearest` against each newly placed centroid before the next empty cluster picks (incremental update or per-placement recompute; keep the f64/last-index tie rules). Add a regression test: a fixture forcing TWO empty clusters in one pass must place the two revived centroids in distinct clusters (not the same clump), plus `kmeans_deterministic_from_seed` must stay green.
+- [ ] **T2 — four-arm PoC harness** on the bench_375 patch corpus posture (K=128, D=32, 16K patches, release profile, isolated `CARGO_TARGET_DIR`): arms = shipped / fixed-farthest (T1) / split / split+EMA. Primary metric: **final SSE** (sum of squared nearest-centroid distances, plain sequential f64 fold — never a SIMD reduction). Report per arm: SSE, wall-time, revival count (DIAGNOSTIC ONLY — never a veto at unequal SSE), G1 no-regression (must hold the 4.9× factorized-vs-monolithic margin). Feature-gate the split/EMA arms (opt-in), keep default byte-identical.
+- [ ] **T3 — stuck-rate fixture:** ~50 seeds per arm on an uneven multi-blob fixture (two blobs of very different mass + a light middle blob — the paper's pathology class); a seed is STUCK when its final SSE lands > 1% above the best-of-arms SSE; report COUNTS (e.g. `shipped 15/50, split 2/50`), never bare percentages.
+- [ ] **T4 — EMA arm + scaling-law constants:** mini-batch EMA updates (fixed contiguous batch schedule, cosine anneal α₀→0.1α₀, finalization = exact last-epoch mean) behind the same opt-in feature. The (B, α₀) constants from arXiv:2611.09501 are recorded as OUT-OF-RANGE EXTRAPOLATIONS (fitted at n≥10⁶; here n≈16K, K=128 → B≈hundreds). Include a ~5×5 (B, α₀) sanity grid; "no sweep needed" is NOT claimed at stack scale until this grid shows the law's (B, α₀) sits in the low-loss band.
+- [ ] **T5 — GMM consumer check:** with the upgraded seed, measure `fit_diag_gmm` EM final log-likelihood + iterations-to-tol on the existing gmm_support fixtures (must be ≥ shipped seed on final LL; EM iteration count reported). Rides T1/T2 — no separate seed path.
+- [ ] **T6 — determinism gate:** BLAKE3 parity test — two runs at the same seed produce byte-identical codebooks for every arm; sequential f64 accumulation asserted (no platform-lane SIMD paths); size-proportional sampling keeps the last-index tie rule.
+- [ ] **T7 — verdict:** record raw numbers in Research 665 §"PoC Addendum" in the SAME commit as the outcome. Split arm beats fixed-farthest on SSE at ≤ wall-time AND stuck-rate improves ⇒ GOAT stands, promote the winner behind its feature flag per the flag discipline. Otherwise ⇒ strike the GOAT grade in 665 (demote), keep only T1, record the negative.
+
+## Notes
+
+- The paper's quality claims are scale-independent (escape + revival); its speed claims are NOT expected to transfer to 16K patches — do not gate on speedup, gate on SSE at ≤ wall-time.
+- `bench_375` G1 is a no-regression check only — it is a downstream abstraction ratio, not a fit-quality metric (verdict R1 correction).
+- Bench numbers quote `scripts/bench_preflight.sh` PROVENANCE (or the riir-reflex equivalent) beside them.
