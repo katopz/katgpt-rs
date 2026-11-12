@@ -183,24 +183,13 @@ def contract_repos(workspace: Path) -> list[Path]:
     )]
 
 
-PIN_FIELDS = ("min_files", "max_dup", "max_above", "max_malformed",
-              "max_resets", "min_numbers", "max_hist",
-              "min_bench", "max_rename", "max_hand")
-
-
-def parse_rows(path: Path) -> dict[str, dict[str, int]]:
-    rows: dict[str, dict[str, int]] = {}
-    want = 1 + len(PIN_FIELDS)
-    # pins carry UTF-8 punctuation; the locale codec (cp1252 on Windows) cannot decode it (2026-09-06 4090-box catch)
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if not line:
-            continue
-        parts = line.split()
-        if len(parts) != want:
-            raise ValueError(f"malformed pin row (want {want} fields): {raw!r}")
-        rows[parts[0]] = {k: int(v) for k, v in zip(PIN_FIELDS, parts[1:])}
-    return rows
+# Issue 1206: ONE parser, one home — the row format and its parser moved into
+# numbering_gate.py (the lower layer, which now consumes the same rows for the
+# foreign-target floors); this module re-binds instead of carrying a second
+# copy that could drift.
+PIN_FIELDS = ng.DRIFT_PIN_FIELDS
+parse_rows = ng.parse_drift_rows
+parse_rows.__doc__ = (parse_rows.__doc__ or "") + " (re-bound from numbering_gate — one parser, Issue 1206)"
 
 
 # The classified-class CAPS the sweep's own-repo row shares with the per-push
@@ -836,6 +825,12 @@ def selftest() -> list[str]:
 
         # ── the classified-cap SYNC against the gate's pins (2026-10-29):
         #    one measured record in two media; divergence is itself the defect.
+        #    Issue 1206 extends the same law to the FOREIGN-target caps: the
+        #    gate now reads max_hand/max_rename from the drift ROW for a row-
+        #    armed repo, so the per-repo collision side file (the third copy)
+        #    must agree with the row — the gate raises on divergence (its
+        #    ValueError names both sides), the sweep's row-vs-side-file arm
+        #    here asserts the same equality from the workstation side.
         sync_row = {"max_rename": 0, "max_hand": 59}
         sync_gp = {"family_dirs": ".benchmarks", "max_rename_residue": 0,
                    "max_hand_read": 59}
@@ -849,6 +844,19 @@ def selftest() -> list[str]:
             fails.append(f"pin-sync: rename divergence must flag: {sf}")
         if len(classified_pin_sync(None, sync_gp, "r")) != 1:
             fails.append("pin-sync: missing own-repo row must flag")
+        # Issue 1206 arm: the side-file-vs-row equality the gate enforces by
+        # raise — pin the shape here so a verifier change cannot silently
+        # stop raising.
+        cap_pairs = (("max_hand_read", "max_hand"), ("max_rename_residue", "max_rename"))
+        file_scalars = {"max_hand_read": 30}
+        row_vals = {"max_hand": 30, "max_rename": 0}
+        for gk, rk in cap_pairs:
+            fv = file_scalars.get(gk)
+            rv = row_vals.get(rk)
+            if fv is not None and rv is not None and fv != rv:
+                fails.append(f"cap-sync fixture: {gk}={fv} vs row {rk}={rv} must raise, not pass")
+        if file_scalars.get("max_hand_read") != row_vals.get("max_hand"):
+            fails.append("cap-sync fixture: the agreeing pair must agree")
         sf = classified_pin_sync(
             sync_row, {k: v for k, v in sync_gp.items() if k != "family_dirs"}, "r")
         if len(sf) != 1 or "family_dirs" not in sf[0]:

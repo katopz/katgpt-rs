@@ -1,7 +1,7 @@
 # Issue 1206: numbering_gate.py on a foreign repo applies katgpt-rs-only pins — structurally exit 1
 
-**Status:** In progress — repair design adjudicated (verdict round pending record); filed 2026-11-12 by the plan-373 overflow-continuation housekeeping unit (amo). Evidence reproduced same-day, both runs captured; no instrument change landed yet.
-**Claimed:** zed-plan373-cont@amo, 1794574500, expires 2026-11-14T18:00:00+00:00
+**Status:** Closed — LANDED 2026-11-12 (verdict ping-pong 3 rounds: REVISE ×2 → AGREE; the row-armed foreign-target design). The foreign floors live in `scripts/numbering_gate.py` (`foreign_pins_for` + the main() foreign posture): a foreign target is ARMED from its own `numbering_drift_floors.txt` row (min_files over the serial scan-n sum, min_bench over tracked .benchmarks, min_numbers over the history walk — the sweep's exact populations), row floors HARD, katgpt-rs per-dir floors demoted to named advisory lines, empty walk still refuses exit 2; the row parser moved into the gate (`parse_drift_rows`/`DRIFT_PIN_FIELDS`) and the sweep re-binds it (`ng.parse_drift_rows`) — one parser, one-direction imports; the row lookup goes through `repo_alias` at module scope (contract names, alias-codec safe); the hand/rename caps are ONE record in two media — the row is authoritative, a `number_collisions_<repo>.txt` scalar must EQUAL the row (the gate raises naming both sides; measured agree: riir-ai 30=30, riir-infer 7=7, riir-game-sdk 0=0), row value is the fallback; allocator-integrity checks + the COLLISION wall + `collision_verdict` stay hard everywhere; self-target unchanged. Selftest: `foreign_arms()` (parser incl. loud malformed-row refusal, contract-name identity, row resolution, missing-floors-file raise) + the sweep's cap-sync arms. Measured: katgpt-rs self PASS 37/37 docs-gate checks (cross-module-attr + import-health green), riir-train/riir-ai/riir-reflex/riir-infer all exit 0 ARMED. AGENTS.md + docs_gate.sh CHECKS row extended in-commit.
+**Lease closed:** zed-plan373-cont@amo, epoch 1794574500, claimed 2026-11-12 ~18:1xZ, was expires 2026-11-14T18:00:00+00:00 — landed same session, see the landing commit (claim record: zed-plan373-cont@amo, epoch 1794574500, was expires 2026-11-14T18:00:00+00:00).
 
 ## Premise
 
@@ -19,10 +19,10 @@
 
 ## Tasks
 
-- [ ] Adjudicate the repair shape: (A) per-repo floors side files (`numbering_floors_<repo>.txt`) mirroring the d6f996199 collision pattern, with scalar overrides extended to `min_numbers`/`min_dirs` — honest but ~33 files of data authoring; (B) for `target != REPO_NAME` with no side file, SKIP the floors half with a LOUD named deferral line (never a silent green — the skip-loud convention) and run the collision half on per-repo scalars only; (C) doc-only: narrow the doc-sync skill wording to each repo's own sanctioned instrument (riir-train: `scripts/numbering_duplicate_gate.py`, guard last layer).
-- [ ] Land the chosen repair with a fixture proving the foreign-target verdict shape (exit 0, or a LOUD deferral — never the current unactionable exit 1).
-- [ ] Re-run the doc-sync-skill cross-repo invocation on a small repo (riir-train class) and confirm the green-or-loud-deferral verdict.
-- [ ] On adoption of (B) or (A): reconcile `numbering_drift_sweep.py`'s cross-repo half, which shares the assembly seam (`collision_pins_for` is documented as the ONE home both call).
+- [x] Adjudicate the repair shape — verdict ping-pong 3 rounds (REVISE ×2 → AGREE, 2026-11-12): row-armed foreign targets from the EXISTING `numbering_drift_floors.txt` rows (no new file family — the reviewer's substrate-first correction of this issue's original A/B/C list), caps one-record-two-media, parser into the lower layer, contract-name lookup via `repo_alias`.
+- [x] Land the repair with selftest arms proving the foreign-target verdict shapes (`foreign_arms()` + the sweep's cap-sync arms).
+- [x] Re-run the doc-sync-skill cross-repo invocation on small repos — riir-train/riir-reflex/riir-infer all exit 0 (ARMED or row-armed-hard paths verified live).
+- [x] Reconcile the sweep: `parse_rows` re-bound from `ng` (one parser); the cap equality is asserted sweep-side too. The sweep's own floors rows were ALREADY per-repo — no sweep data change needed.
 
 ## Evidence
 

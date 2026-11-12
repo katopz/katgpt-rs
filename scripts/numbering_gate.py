@@ -32,6 +32,10 @@ import sys
 from pathlib import Path
 import pathlib
 
+import repo_alias  # noqa: E402  (Issue 1206: the foreign-target row lookup is keyed on
+#                   CONTRACT names; this module's only deps are sys+pathlib, and
+#                   import_health_gate covers module-scope imports only)
+
 # ── vocabulary: DATA, not derived from the tree ────────────────────────────
 # Deriving both the scope and the population from one walk is what makes a
 # gate permanently green (the workspace rule). The scope is pinned; only the
@@ -128,6 +132,60 @@ def classify_groups(by_num: dict) -> dict:
 
 
 REPO_NAME = Path(__file__).resolve().parent.parent.name  # the repo this instrument ships in ("katgpt-rs")
+
+# ── the cross-repo drift-floors ROW (Issue 1206) ──────────────────────────
+# The floors half of this gate is katgpt-rs-scoped (numbering_floors.txt,
+# Issue 724 T4) — but numbering_drift_floors.txt already carries a measured
+# per-repo row for every contract repo (the workstation sweep's pins, Issue
+# 725). A FOREIGN target (repo != REPO_NAME) takes its floors from THAT row
+# instead of katgpt-rs's per-dir floors: the sweep's population derivation is
+# `repo_alias.apply` over the same SERIAL_DIRS this gate walks, so one row is
+# the single source for both instruments and they cannot drift apart. The
+# parser lives HERE (the lower layer) and the sweep re-binds it from `ng` —
+# one parser, imports in one direction, and the per-push gate never loads the
+# sweep's workstation-only module chain (the Issue 848 T3 cost class).
+DRIFT_FLOORS_PATH = Path(__file__).resolve().parent / "numbering_drift_floors.txt"
+DRIFT_PIN_FIELDS = ("min_files", "max_dup", "max_above", "max_malformed",
+                    "max_resets", "min_numbers", "max_hist",
+                    "min_bench", "max_rename", "max_hand")
+
+
+def parse_drift_rows(path: Path) -> dict[str, dict[str, int]]:
+    """-> {repo: {field: int}} over numbering_drift_floors.txt's row format:
+    `<repo> <10 int fields>` with `#` comments. ONE parser for both this gate
+    and numbering_drift_sweep (which re-binds it as `ng.parse_drift_rows`).
+    A malformed row is a loud ValueError — a silently-dropped row would drop
+    a repo to the advisory path, which is the silent direction."""
+    rows: dict[str, dict[str, int]] = {}
+    want = 1 + len(DRIFT_PIN_FIELDS)
+    # UTF-8-explicit: pins carry UTF-8 punctuation the cp1252 codec cannot decode (2026-09-06 4090-box catch)
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) != want:
+            raise ValueError(f"malformed drift-floors pin row (want {want} fields): {raw!r}")
+        rows[parts[0]] = {k: int(v) for k, v in zip(DRIFT_PIN_FIELDS, parts[1:])}
+    return rows
+
+
+def contract_name_of(repo: Path) -> str:
+    """The CONTRACT name for an on-disk repo dir (repo_alias.apply, the same
+    seam the sweep's population derivation uses, so rows are keyed identically
+    on both instruments). Alias content must never reach stdout — callers print
+    only contract names, which are the tracked vocabulary."""
+    return repo_alias.apply([repo.resolve().name])[0]
+
+
+def foreign_pins_for(repo: Path) -> dict[str, int] | None:
+    """The drift-floors row for a FOREIGN target, or None when the repo has no
+    row. The lookup is by CONTRACT name (alias codec safe); a missing floors
+    file is an instrument defect and raises (never a silent advisory)."""
+    if not DRIFT_FLOORS_PATH.is_file():
+        raise OSError(f"drift-floors pin file missing: {DRIFT_FLOORS_PATH}")
+    name = contract_name_of(repo)
+    return parse_drift_rows(DRIFT_FLOORS_PATH).get(name)
 
 
 def parse_pins(path: Path) -> dict:
@@ -432,6 +490,76 @@ def selftest() -> list[str]:
     # it — nine collision_verdict decisions read SURVIVED with the arms
     # already written and passing).
     fails += collision_arms()
+    fails += foreign_arms()
+
+    return fails
+
+
+def foreign_arms() -> list[str]:
+    """The Issue 1206 verdict's OWN arithmetic: the foreign-target posture.
+
+    Four arms (verdict round 2, re-scoped round 3): a foreign target WITH a
+    drift-floors row is ARMED (row floors hard, katgpt-rs floors advisory);
+    one WITHOUT a row runs its floors advisory with the loud line; an empty
+    walk refuses exit 2 on every path; and the row lookup is keyed on the
+    CONTRACT name through repo_alias (alias codec boxes must find their row).
+    """
+    import subprocess as _sp, tempfile as _tf, pathlib as _pl
+    fails: list[str] = []
+
+    def eq(label, got, want):
+        if got != want:
+            fails.append(f"    {label}: got {got!r}, want {want!r}")
+
+    # 1. the parser: a malformed row is a loud ValueError, never a silent drop
+    #    (a dropped row silently demotes its repo to advisory — the silent
+    #    direction).
+    with _tf.TemporaryDirectory() as _td:
+        p = _pl.Path(_td) / "rows.txt"
+        p.write_text("# comment\nrepo_a 10 0 0 0 0 40 0 8 0 1  # a row\n", encoding="utf-8")
+        rows = parse_drift_rows(p)
+        eq("one well-formed row parses", rows,
+           {"repo_a": {"min_files": 10, "max_dup": 0, "max_above": 0,
+                        "max_malformed": 0, "max_resets": 0, "min_numbers": 40,
+                        "max_hist": 0, "min_bench": 8, "max_rename": 0,
+                        "max_hand": 1}})
+        p.write_text("repo_b 9 0 0 0 0  # a SHORT row\n", encoding="utf-8")
+        try:
+            parse_drift_rows(p)
+            fails.append("parse_drift_rows accepted a malformed (short) row")
+        except ValueError:
+            pass
+
+    # 2. the contract-name lookup: repo_alias is identity for unmapped names,
+    #    so the fixture path is safe on every box (the alias module's own law).
+    with _tf.TemporaryDirectory() as _td:
+        fake = _pl.Path(_td) / "some_repo_dir"
+        fake.mkdir()
+        eq("contract_name_of is identity off an alias box",
+           contract_name_of(fake), "some_repo_dir")
+
+    # 3. foreign_pins_for: a row-bearing repo resolves; a missing floors FILE
+    #    raises (instrument defect, never silent advisory).
+    with _tf.TemporaryDirectory() as _td:
+        fake = _pl.Path(_td) / "pinless"
+        fake.mkdir()
+        saved = DRIFT_FLOORS_PATH
+        try:
+            globals()["DRIFT_FLOORS_PATH"] = _pl.Path(_td) / "absent.txt"
+            try:
+                foreign_pins_for(fake)
+                fails.append("foreign_pins_for accepted a missing floors file")
+            except OSError:
+                pass
+            p = _pl.Path(_td) / "rows.txt"
+            p.write_text("pinless 10 0 0 0 0 40 0 8 0 1  # the repo's own row\n",
+                         encoding="utf-8")
+            globals()["DRIFT_FLOORS_PATH"] = p
+            row = foreign_pins_for(fake)
+            eq("a row-bearing foreign repo resolves by contract name",
+               (row is not None and row["min_files"]), 10)
+        finally:
+            globals()["DRIFT_FLOORS_PATH"] = saved
 
     return fails
 
@@ -660,16 +788,48 @@ def collision_pins_for(repo: Path) -> tuple[dict, dict[str, int], dict[tuple[str
         stripped[(rowdir, num)] = reason
     pins_overrides: dict[str, int] = {}
     # The family ratchets (max_hand_read / max_rename_residue) are measured per
-    # repo; the shared scalars carry katgpt-rs's. A per-repo file that declares
-    # its own value overrides for this target (riir-ai measures 30, katgpt-rs
-    # 59 — one shared cap prints a permanent re-pin-DOWN note under the other
-    # repo's run, Issue 1205's 2026-11-12 finding).
+    # repo; the shared scalars carry katgpt-rs's. ONE RECORD, TWO MEDIA (Issue
+    # 1206, verdict round 2 bullet 3): the drift-floors ROW is authoritative
+    # for a foreign target, and a per-repo file scalar of the same meaning must
+    # EQUAL the row — the sweep's sync check exits 2 on a mismatch (the two
+    # copies are hand-maintained and could otherwise drift silently). The file
+    # value is a FALLBACK only for the keys the row's repo has no row for (a
+    # repo absent from numbering_drift_floors.txt keeps today's file-override
+    # behavior). Pre-landing measured: riir-ai 30=30, riir-infer 7=7,
+    # riir-game-sdk 0=0 — all three agree.
+    row = None
+    if target_name != self_name:
+        try:
+            row = foreign_pins_for(repo)
+        except OSError:
+            row = None
+    if target_name != self_name and row is not None:
+        # Row-authoritative even when the side file is ABSENT (a repo with a
+        # row but no number_collisions_<repo>.txt still gets its own caps,
+        # never katgpt-rs's 59/64 — the riir-train re-pin-DOWN-not-mine note
+        # Issue 1206 measured).
+        for key, row_key in (("max_hand_read", "max_hand"),
+                             ("max_rename_residue", "max_rename")):
+            cscalars[key] = row[row_key]
+            pins_overrides[key] = row[row_key]
     if target_name != self_name and per_repo_file.is_file():
         extra_scalars, _rows = parse_collision_pins(per_repo_file)
-        for key in ("max_hand_read", "max_rename_residue"):
-            if key in extra_scalars:
-                cscalars[key] = extra_scalars[key]
-                pins_overrides[key] = extra_scalars[key]
+        for key, row_key in (("max_hand_read", "max_hand"),
+                             ("max_rename_residue", "max_rename")):
+            file_val = extra_scalars.get(key)
+            row_val = row.get(row_key) if row is not None else None
+            if row_val is not None:
+                if file_val is not None and file_val != row_val:
+                    raise ValueError(
+                        f"cap drift for {target_name}: {key} = {file_val} in "
+                        f"{per_repo_file.name} vs {row_key} = {row_val} in "
+                        f"numbering_drift_floors.txt — ONE record, two media; "
+                        f"fix the stale copy in the commit that grew the population")
+                cscalars[key] = row_val
+                pins_overrides[key] = row_val
+            elif file_val is not None:
+                cscalars[key] = file_val
+                pins_overrides[key] = file_val
     return cscalars, pins_overrides, stripped
 
 
@@ -1107,6 +1267,30 @@ def main() -> int:
         return 2
     pins = parse_pins(pins_path)
 
+    # ── the foreign-target posture (Issue 1206) ──────────────────────────
+    # This gate's floors half is katgpt-rs-scoped. A foreign target is ARMED
+    # from its own numbering_drift_floors.txt row (one record, two instruments)
+    # or, absent a row, runs its floors as ADVISORY — never katgpt-rs's floors
+    # wearing another repo's name, and never a silent pass over a blind walk.
+    foreign = repo.resolve().name != REPO_NAME
+    frow = foreign_pins_for(repo) if foreign else None
+    if foreign:
+        cname = contract_name_of(repo)
+        if frow is not None:
+            print(f"· foreign target '{cname}': floors ARMED from its "
+                  f"numbering_drift_floors.txt row "
+                  f"(min_files {frow['min_files']}, min_bench {frow['min_bench']}, "
+                  f"min_numbers {frow['min_numbers']}; katgpt-rs per-dir floors not applied)")
+        else:
+            print(f"⚠ foreign target '{cname}' has NO numbering_drift_floors.txt "
+                  f"row — population/walk floors report ADVISORY, never a pass "
+                  f"over a blind walk; pin the repo's row to arm them")
+        # Row-armed caps ride pins_overrides through collision_pins_for below;
+        # surface them here so the ARM line is the one line a reader needs.
+        if frow is not None:
+            print(f"· foreign target '{cname}': caps from the same row "
+                  f"(max_hand {frow['max_hand']}, max_rename {frow['max_rename']})")
+
     dirs = sorted(k.split(".", 1)[1] for k in pins if k.startswith("min_files."))
     if not dirs:
         print("✗ pins file declares NO directories — an empty scope is refused")
@@ -1146,12 +1330,18 @@ def main() -> int:
     below_floor: list[str] = []
     fam_groups: list[tuple[str, dict]] = []
     total = 0
+    serial_total = 0   # Issue 1206: the foreign-row min_files floor adjudicates THIS
+    bench_tracked = 0  # Issue 1206: ... and the row's min_bench adjudicates THIS
 
     for dirname in dirs:
         by_num, hw, n, hw_bad = scan(repo, dirname, tracked)
         total += n
         if dirname in fam_dirs:
             fam_groups.append((dirname, classify_groups(by_num)))
+        if dirname in serial_dirs:
+            serial_total += n           # the foreign-row min_files population (same scan-n base as the sweep's n_files)
+        if dirname == ".benchmarks":
+            bench_tracked += sum(1 for files in by_num.values() for _nm, tr in files if tr)  # tracked-only, the sweep's n_bench base
         if hw_bad is not None:
             malformed.append(
                 f"{dirname}/.highwater is not a bare integer: {hw_bad!r} — the "
@@ -1192,10 +1382,52 @@ def main() -> int:
     if len(dirs) < cscalars["min_dirs"]:
         cfails.append(f"scope FLOOR: {len(dirs)} dir(s) < {cscalars['min_dirs']} "
                       f"— the collision walk went blind")
-    if cwalked < cscalars["min_numbers"]:
-        cfails.append(f"walk FLOOR: {cwalked} number(s) < {cscalars['min_numbers']}"
+    # Issue 1206: the walk floor for a foreign target is the ROW's min_numbers
+    # (one record, two instruments); katgpt-rs's 1200 describes katgpt-rs only.
+    foreign_walk_floor = frow["min_numbers"] if (foreign and frow is not None) else cscalars["min_numbers"]
+    if cwalked < foreign_walk_floor:
+        cfails.append(f"walk FLOOR: {cwalked} number(s) < {foreign_walk_floor}"
                       f" — a git-history regression empties this and every "
                       f"ceiling above passes")
+
+    # Issue 1206: for a foreign target the population-size verdicts split by
+    # SOURCE — an ARMED row's floor breach is a HARD finding (the repo's own
+    # measured pin reds like katgpt-rs's own do), while every katgpt-rs-
+    # derived floor (the per-dir min_files floors, the shared walk/scope
+    # floors) is ADVISORY, never a failure. The FLOOR'S PURPOSE is kept on
+    # every path: an empty walk still refuses loud (exit 2), because every
+    # ceiling above an empty walk is a confident green over nothing.
+    if foreign:
+        advisory_floors: list[str] = []
+        if frow is not None:
+            if serial_total < frow["min_files"]:
+                cfails.append(
+                    f"population FLOOR breached (row-armed): serial {serial_total} "
+                    f"< min_files {frow['min_files']} — the repo's own "
+                    f"numbering_drift_floors.txt row reds like katgpt-rs's own")
+            if bench_tracked < frow["min_bench"]:
+                cfails.append(
+                    f"bench population FLOOR breached (row-armed): tracked "
+                    f".benchmarks {bench_tracked} < min_bench {frow['min_bench']}")
+        for r in list(below_floor):
+            advisory_floors.append(f"katgpt-rs per-dir floor, not this repo's: {r}")
+        below_floor = []
+        for r in [c for c in cfails if c.startswith(("walk FLOOR:", "scope FLOOR:"))]:
+            advisory_floors.append(f"katgpt-rs-derived walk floor, not this repo's: {r}")
+        cfails = [c for c in cfails if not c.startswith(("walk FLOOR:", "scope FLOOR:"))]
+        if total == 0:
+            print("✗ numbering gate REFUSES — the foreign target's walk found ZERO "
+                  "numbered files: every ceiling above an empty walk is a "
+                  "confident green over nothing (the floor's purpose, kept even "
+                  "on the advisory path)")
+            return 2
+        if advisory_floors:
+            print("  ⚠ foreign-target floors (ADVISORY — never a pass over a "
+                  "blind walk; pin the repo's numbering_drift_floors.txt row "
+                  "or re-pin the stale one to arm them): "
+                  f"{len(advisory_floors)} advisory finding(s), never failures)")
+            for r in advisory_floors:
+                print(f"      {r}")
 
     ffails, fnotes = ([], [])
     if fam_groups:
