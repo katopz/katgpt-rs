@@ -43,6 +43,14 @@ the cadence.
 - **Do own misreads in one clause.** "— sorry, I misread it as a main issue
   earlier" and move on. Over-apologizing reads worse.
 - **Do patch existing comments (API PATCH) instead of posting duplicates.**
+- **Do reply to the reviewer's inline thread, not the main PR discussion.**
+  A review comment is a thread — reply with `POST /repos/{repo}/pulls/{n}/
+  comments` carrying `in_reply_to: <their comment id>`, so the answer lands
+  under their line where they read it. A reply posted as an issue comment or
+  a top-level review comment orphans the thread and reads wrong (measured:
+  the #3025 maintainer round — our first replies went to the main discussion
+  and the owner called it out; the fix round went `in_reply_to` and the
+  threads read clean).
 - **Do re-grep the touched FILE for the pattern a review comment flagged
   before pushing.** A review comment is a CLASS signal, not a line signal.
   (Failure: maintainer flagged the hardcoded literal + manual read in the
@@ -78,6 +86,19 @@ carries over only in one shape is scoped to that shape IN THE BODY.
   "not addressed". (Miss: the issue said "avoid overreacting to transient
   slowness"; our body never said how correlated timeouts under parallelism
   don't trip the gate at once.)
+- **Do run a stale-event audit on any state machine your diff adds.** Every
+  async completion path (a timeout, a cancel, a drop guard, a late response)
+  that clears or resets shared gate/reservation state must carry the
+  identity it belongs to — an admission id, a generation counter — so an
+  OLDER read's completion cannot clear a NEWER reservation. Walk the overlap
+  yourself before sending: cooldown shorter than the timeout, a read
+  admitted pre-gate still pending, the reservation armed meanwhile — whose
+  timeout lands next, and what does it clear? Ship the overlap regression
+  in the same PR (measured: the #3025 maintainer round caught exactly this
+  — our half-open recovery cleared the probe window on ANY timeout, so an
+  older read's late timeout admitted a second probe while the first was
+  pending; one generation counter + one identity-checked clear + one
+  regression walking the maintainer's sequence closed it).
 - **Do verify a zero before claiming it.** A "clean / 0 findings" claim
   carries its completion marker — the tool's build-finished/success line,
   a non-empty capture, stderr collected (never /dev/null). A command that
@@ -206,7 +227,10 @@ carries over only in one shape is scoped to that shape IN THE BODY.
    states is answered or explicitly not addressed.
 4. Re-grep the touched files for the patterns already flagged in review; the
    composite layers routing through your changed seams are adjudicated; new
-   env knobs have their docs rows.
+   env knobs have their docs rows; every async completion path that clears
+   shared state in your diff carries the identity it belongs to (the
+   stale-event walk: an older read's timeout/cancel must not clear a newer
+   reservation), and the overlap has a regression.
 5. Their MSRV: tests green, their CI clippy flags clean, fmt clean — every
    zero carries its completion marker (build-finished/success + non-empty
    capture + stderr collected), and the pristine-main baseline was
@@ -215,5 +239,9 @@ carries over only in one shape is scoped to that shape IN THE BODY.
    body.
 7. Diff contains only intended hunks (`git diff` read top to bottom).
 8. If perf claim: bench exists, box provenance recorded.
-9. If review response: every inline comment answered, reply is short/plain,
-   commit shas in the reply match what you're pushing.
+9. If review response: every inline comment answered IN ITS OWN THREAD
+   (in_reply_to, never the main discussion), reply is short/plain,
+   commit shas in the reply match what you're pushing, and the delegated
+   verdict ran BEFORE the fix and the reply (diagnosis + planned fix +
+   reply drafts go to the verdict first; the implemented diff goes back
+   for a second round before push).
