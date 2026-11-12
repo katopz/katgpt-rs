@@ -2,6 +2,7 @@
 
 **Status:** OPEN — filed 2026-11-12 from Research 665 (arXiv:2611.09501) · GOAT demote-on-fail · consumer surfaces: `katgpt-core::factorized_action::fit_codebook_kmeans_into` + `gmm_support::fit_diag_gmm` (one change, two consumers — the GMM seed rides the codebook upgrade through its existing `fit_codebook_kmeans_into` call at `em.rs` L100–102; building a parallel GMM seed path is FORBIDDEN)
 **Lease closed:** T1 landed by zed-84acf899@amo (2026-11-12, this commit); T2-T7 remain open for the PoC lane / a free window
+**Claimed:** zed-84acf899@amo, 1794462741, expires 2026-11-14T05:52:21Z (T2-T7: the PoC harness + stuck-rate + determinism + verdict; note — T1 landed between filing and execution, so "shipped" == fixed-farthest at HEAD and the four arms collapse to three; the split+EMA arm lands with T4's (B, a0) grid since EMA constants without the grid are arbitrary)
 
 **Verdict provenance:** Claude ping-pong 2026-11-12, R1 REVISE → R2 AGREE (+ final close), session `65c0ee85-095b-4730-b57d-2d33c37c78ad`.
 
