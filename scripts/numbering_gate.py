@@ -127,6 +127,9 @@ def classify_groups(by_num: dict) -> dict:
     return out
 
 
+REPO_NAME = Path(__file__).resolve().parent.parent.name  # the repo this instrument ships in ("katgpt-rs")
+
+
 def parse_pins(path: Path) -> dict:
     """-> {key: int-or-str}. `family_dirs` is a comma-list of directory names,
     so a value that does not parse as an int is KEPT AS ITS STRING rather than
@@ -613,6 +616,61 @@ def historical_collisions(repo: Path, dirs: list[str],
             if len(live) > 1:
                 rows.append((dirname, num, sorted(live)))
     return rows, walked
+
+
+def collision_pins_for(repo: Path) -> tuple[dict, dict[str, int], dict[tuple[str, int], str]]:
+    """The collision pins ASSEMBLED FOR `repo` — the shared file's scalars plus
+    (a) `number_collisions_<repo>.txt`'s rows when the file exists (a number's
+    pin lives beside the repo that holds it; absent = no extra rows),
+    (b) shared-file rows keyed `<repo>/<dir>` admitted under the bare dir,
+    (c) shared-file rows keyed `<other-repo>/<dir>` DROPPED — a pin whose dir
+    names a repo the walk cannot witness reds both ways otherwise (the
+    STALE-here/UNPINNED-there shape riir-ai Issue 1205 measured live
+    2026-11-12 when re-keying the 791/795 divergence rows).
+
+    ONE home for the assembly: `main` and `numbering_drift_sweep`'s T3
+    cross-check both call this, so the gate and the sweep can never disagree
+    about which rows a verdict sees.
+    """
+    cpins_path = Path(__file__).resolve().parent / "number_collisions_expected.txt"
+    if not cpins_path.is_file():
+        raise OSError(f"collision pins file missing: {cpins_path}")
+    cscalars, cpins = parse_collision_pins(cpins_path)
+    target_name = repo.resolve().name
+    self_name = REPO_NAME
+    per_repo_file = Path(__file__).resolve().parent / f"number_collisions_{target_name}.txt"
+    if target_name != self_name:
+        per_repo = per_repo_file
+        if per_repo.is_file():
+            _extra_scalars, extra_rows = parse_collision_pins(per_repo)
+            for key, reason in extra_rows.items():
+                if key in cpins:
+                    raise ValueError(
+                        f"collision pin for {key} exists in BOTH the shared file "
+                        f"and the per-repo file — one home per number")
+                cpins[key] = reason
+    self_prefix = f"{self_name}/"
+    target_prefix = f"{target_name}/"
+    stripped: dict[tuple[str, int], str] = {}
+    for (rowdir, num), reason in cpins.items():
+        if rowdir.startswith(self_prefix) and target_name != self_name:
+            continue                     # another repo's row, not this target's
+        if rowdir.startswith(target_prefix):
+            rowdir = rowdir[len(target_prefix):]
+        stripped[(rowdir, num)] = reason
+    pins_overrides: dict[str, int] = {}
+    # The family ratchets (max_hand_read / max_rename_residue) are measured per
+    # repo; the shared scalars carry katgpt-rs's. A per-repo file that declares
+    # its own value overrides for this target (riir-ai measures 30, katgpt-rs
+    # 59 — one shared cap prints a permanent re-pin-DOWN note under the other
+    # repo's run, Issue 1205's 2026-11-12 finding).
+    if target_name != self_name and per_repo_file.is_file():
+        extra_scalars, _rows = parse_collision_pins(per_repo_file)
+        for key in ("max_hand_read", "max_rename_residue"):
+            if key in extra_scalars:
+                cscalars[key] = extra_scalars[key]
+                pins_overrides[key] = extra_scalars[key]
+    return cscalars, pins_overrides, stripped
 
 
 def collision_verdict(rows, scalars, pins) -> tuple[list[str], list[str]]:
@@ -1119,15 +1177,15 @@ def main() -> int:
         if hw is not None and by_num and max(by_num) > hw:
             above.append(f"{dirname}: max {max(by_num)} > .highwater {hw} — `value + 1` is already taken")
 
-    # ── historical collisions (Issue 795) ──────────────────────────────────
-    cpins_path = Path(__file__).resolve().parent / "number_collisions_expected.txt"
-    if not cpins_path.is_file():
-        print(f"✗ collision pins file missing: {cpins_path}")
-        return 2
+    # ── historical collisions (Issue 795) ──────────────────────────────
     try:
-        cscalars, cpins = parse_collision_pins(cpins_path)
+        cscalars, scalars_overrides, cpins = collision_pins_for(repo)
+        pins.update(scalars_overrides)
     except ValueError as e:
         print(f"✗ collision pins file is malformed: {e}")
+        return 2
+    except OSError as e:
+        print(f"✗ {e}")
         return 2
     crows, cwalked = historical_collisions(repo, serial_dirs)
     cfails, cnotes = collision_verdict(crows, cscalars, cpins)

@@ -1316,8 +1316,7 @@ def main() -> int:
         if repo.name == REPO_ROOT.name:
             try:
                 rows, _ = ng.historical_collisions(repo, list(SERIAL_DIRS))
-                scalars, cpins = ng.parse_collision_pins(
-                    REPO_ROOT / "scripts" / "number_collisions_expected.txt")
+                scalars, _ovr, cpins = ng.collision_pins_for(repo)
                 gate_fails, _notes = ng.collision_verdict(rows, scalars, cpins)
             except (OSError, ValueError, KeyError) as e:
                 bad = True

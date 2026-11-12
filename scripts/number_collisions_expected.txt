@@ -47,7 +47,18 @@ era_boundary = 700
 # 61 -> 60 2026-09-24 (Issue 881 T2.4): `.research/383` Latent_Forcing_Pixel_Diffusion_PASS
 # -> Latent_Forcing_Multi_Time_Scheduling is ONE document retitled in one commit
 # (verdict revised), now recognised as a rename rather than a second holder.
-legacy_ratchet = 60
+# 60 -> 64 2026-11-12 (riir-ai Issue 1205's reconciliation, katgpt-rs this
+# commit): measured at riir-ai origin — 35 sub-boundary `.issues` numbers are
+# doubly held in riir-ai's full history: 34 genuine early-era dual allocations
+# (dt=0 same-day adds, near-zero stem overlap — the pre-gate archive; 12 of
+# them triple-held) + 1 rename-collapse under the Issue 881 rule (`.issues/650`
+# ternary_weight_block_contiguous_ → ternary_weight_format_block_cont,
+# retitled within the hour). Together with the 6 above-boundary riir-ai
+# events pinned with real rows in this same commit (702/753/959/1035/1111/1177)
+# the historical total is 64 = the ratchet. Ratchet at MEASURED — the
+# pre-gate archive is Issue 785's unread bucket, pinned by count and never by
+# invented reasons.
+legacy_ratchet = 64
 min_dirs = 4
 min_numbers = 1200
 
@@ -61,15 +72,36 @@ min_numbers = 1200
 # stay pinned because the collision is a fact about history that no rewrite
 # undoes. Six were adjudicated and deliberately NOT renumbered; the reason is
 # on each row.
-collision = .issues 741 Issue 795 divergence — this session's alloc-gate profile issue vs the threat-dialect one; weight +21/26 to alloc_gates, both CLOSED and removed
-collision = .issues 775 Issue 795 divergence — platform_dead_code verdict half vs dual_wave_kernel_pcalm; citation_weight DECLINES (UNRESOLVED 31 > 28 decided), so no rewrite was made on a verdict the instrument withheld
-collision = .issues 776 Issue 791 — RESOLVED, this session's side renumbered to 792; the other session's file keeps 776
-collision = .issues 777 Issue 795 divergence — filesystem_walk_population vs modality_additive_belief_superposition; +5 over 36 decided, under the margin worth rewriting 36 citations for
-collision = .issues 778 Issue 795 divergence — subprocess locale vs subspace_intervention layer affinity; citation_weight returns TIE (lead 1 of 18 decided, inside TIE_FRACTION)
-collision = .issues 779 Issue 791 — RESOLVED, this session's side renumbered to 793; the other side kept 779 despite losing on weight (renumbering OPEN work needs agreement). ⚑ This row was removed at c6f5fb4f as "stale" when that file was closed, and the gate went RED: Issue 795's whole finding is that a collision where BOTH holders have been removed is the MAJORITY case and is recovered from git history, so closing a holder is exactly when the pin starts being the only record. The recovered both-removed pair: sweep_family_partial_clone (removed 5878d51d0, 2026-09-14) × subspace_intervention_followup (removed 2026-09-16 at T3 close)
-collision = .issues 780 Issue 791 — RESOLVED, this session's side renumbered to 794; citation_weight declined the pair and the coordination-free side moved
-collision = .issues 781 Issue 795 divergence — heading_oracle house style vs slt_wbic_selection; +2 over 17 decided with 47% UNRESOLVED, which is noise, not a verdict
-collision = .issues 782 Issue 795 divergence — pinned-repo-absent vs slt_noise_sweep; +4 over 11 decided with a 3-site loser, below the rewrite threshold
+# ⚠ The 791/795 divergence rows (741, 775–782) and the same-day 819 pair were
+# REMOVED 2026-11-12 (riir-ai Issue 1205's reconciliation, katgpt-rs this
+# commit): a katgpt-rs-wide full-history walk proved NO .issues/<n>_* path was ever
+# ADDED in riir-ai for ANY of the ten numbers — git-log --follow on the pins'
+# filenames answers with the PIN'S row, not the file's real history (path
+# lines are the history of the PIN ITSELF). The divergence was a katgpt-rs
+# event pinned with riir-ai dir keys; the numbers' real holders are katgpt-rs's
+# own (741_alloc_gates… x 741_load_bearing…, 775_dual_wave… x 775_platform…,
+# 776_contrastive… x 776_docs_gate…, 819_sigmoid_prior… x 819_x86_64_arm…),
+# and THE COLLISION IS STILL LIVE IN THE WALK — so each row is RESTORED at
+# katgpt-rs's own dir key in the block below, with the gate's own verdict
+# ("no longer one" for riir-ai) discharged. A pin whose dir key names a repo
+# that never held the number REDS BOTH WAYS: the holder repo's gate reports
+# STALE (nothing to pin) while the true holder's sweep reports UNPINNED.
+# Full pickaxe table: riir-ai .issues/1205's landing note. Do not re-add a
+# row keyed to a dir the walk cannot witness — re-key it to the holder.
+
+# ── the 791/795 divergence + the same-day 819, RE-KEYED 2026-11-12 to the
+# TRUE holder's dir key (katgpt-rs itself — see the block above): the walk
+# witnesses these ten numbers' double-holding HERE, never in riir-ai.
+collision = katgpt-rs/.issues 741 Issue 795 divergence — this session's alloc-gate profile issue vs the threat-dialect one; weight +21/26 to alloc_gates, both CLOSED and removed [741_alloc_gates_only_measurable_in_a_profile_nobody_ships x 741_load_bearing_vocabulary_misses_the_threat_dialect]
+collision = katgpt-rs/.issues 775 Issue 795 divergence — platform_dead_code verdict half vs dual_wave_kernel_pcalm; citation_weight DECLINES (UNRESOLVED 31 > 28 decided), so no rewrite was made on a verdict the instrument withheld [775_platform_dead_code_verdict_half x 775_dual_wave_kernel_pcalm]
+collision = katgpt-rs/.issues 776 Issue 791 — RESOLVED, this session's side renumbered to 792; the other session's file keeps 776 [776_contrastive_matched_swap_norm_matched_noise x 776_docs_gate_cpu_self_timing_not_a_measurement_on_windows]
+collision = katgpt-rs/.issues 777 Issue 795 divergence — filesystem_walk_population vs modality_additive_belief_superposition; +5 over 36 decided, under the margin worth rewriting 36 citations for [777_filesystem_walk_population x 777_modality_additive_belief_superposition]
+collision = katgpt-rs/.issues 778 Issue 795 divergence — subprocess locale vs subspace_intervention layer affinity; citation_weight returns TIE (lead 1 of 18 decided, inside TIE_FRACTION) [778_subprocess_text_true_locale x 778_subspace_intervention_layer_affinity_poc]
+collision = katgpt-rs/.issues 779 Issue 791 — RESOLVED, this session's side renumbered to 793; the other side kept 779 despite losing on weight (renumbering OPEN work needs agreement). ⚑ This row was removed at c6f5fb4f as "stale" when that file was closed, and the gate went RED: Issue 795's whole finding is that a collision where BOTH holders have been removed is the MAJORITY case and is recovered from git history, so closing a holder is exactly when the pin starts being the only record. The recovered both-removed pair: sweep_family_partial_clone (removed 5878d51d0, 2026-09-14) × subspace_intervention_followup (removed 2026-09-16 at T3 close) [779_sweep_family_partial_clone x 779_subspace_intervention_followup]
+collision = katgpt-rs/.issues 780 Issue 791 — RESOLVED, this session's side renumbered to 794; citation_weight declined the pair and the coordination-free side moved [780_online_linear_readout_primitive x 780_misattributed_is_computed_only_in_the_cross_bucket]
+collision = katgpt-rs/.issues 781 Issue 795 divergence — heading_oracle house style vs slt_wbic_selection; +2 over 17 decided with 47% UNRESOLVED, which is noise, not a verdict [781_the_heading_oracle_matches_one_house_style x 781_slt_wbic_selection_primitive]
+collision = katgpt-rs/.issues 782 Issue 795 divergence — pinned-repo-absent vs slt_noise_sweep; +4 over 11 decided with a 3-site loser, below the rewrite threshold [782_a_pinned_repo_absent_from_the_walk_is_never_visited x 782_slt_noise_sweep_lambda_estimator]
+collision = katgpt-rs/.issues 819 two same-day allocations off one counter value — sigmoid prior-logit forecast (KEEPS it, 7 of 10 sites, 0% unresolved) vs the x86_64 lint lane (CLOSED+removed at b07fb7d6; its 3 citations disambiguated in place per Issue 794's rule) [819_sigmoid_prior_logit_lane_sink_margin_forecast x 819_x86_64_arm_is_linted_by_nothing]
 
 # ── 2026-09-17: a TENTH, and it is a fresh event, not the 791/795 divergence ─
 # Two sessions allocated 819 the same day from the same counter value. This
@@ -86,10 +118,13 @@ collision = .issues 782 Issue 795 divergence — pinned-repo-absent vs slt_noise
 # because a margin that survives a targeted check is worth more than one that
 # was never questioned.
 #
-# The loser is CLOSED and REMOVED (819_x86_64_arm_is_linted_by_nothing, closed
-# at b07fb7d6), so there is no file to `git mv` and the `-M` rename exclusion
-# has nothing to exclude: this pair is PERMANENT in the recovery walk. That is
-# the Issue 779 row's lesson restated — closing a holder is when the pin starts
-# being the only record — and it is why the repair here is a pin plus a
-# three-site disambiguation in the losing prose, not a renumber.
-collision = .issues 819 two same-day allocations off one counter value — sigmoid prior-logit forecast (KEEPS it, 7 of 10 sites, 0% unresolved) vs the x86_64 lint lane (CLOSED+removed at b07fb7d6; its 3 citations disambiguated in place per Issue 794's rule)
+# REMOVED 2026-11-12 with the row it pinned (riir-ai Issue 1205's reconciliation):
+# the walk proves riir-ai's .issues never held an 819 at all (the number's
+# only ever-path is .benchmarks/819_plan582_*, a family-lane holder); the
+# pair and its 6-3 citation_weight were katgpt-rs's own .issues/819, pinned
+# with a riir-ai dir key. See the block above this one.
+
+# riir-ai's OWN six above-boundary historical collisions moved 2026-11-12
+# to scripts/number_collisions_riir_ai.txt — the per-repo pins file
+# (collision pins are PER-REPO; one shared file cannot carry both keys).
+

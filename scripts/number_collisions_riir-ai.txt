@@ -1,0 +1,23 @@
+# riir-ai's OWN collision pins — read by katgpt-rs numbering_gate.py when it
+# gates riir-ai (per-repo pins; the shared number_collisions_expected.txt
+# carries katgpt-rs's own rows after the 2026-11-12 re-keying, riir-ai Issue
+# 1205's reconciliation). Format identical: `collision = <dir> <number> <reason>`.
+# Family ratchets (riir-ai's own measurement, 2026-11-12): the shared
+# floors file's 59 serves katgpt-rs's families; riir-ai measures 30.
+max_hand_read = 30
+
+# All six numbers are above the era boundary (700); both holders verified in
+# riir-ai's full history; all twelve holders closed/removed except 1177's
+# league lane (LIVE) — no live file, no citation rewrite; the pin is the record.
+# ── riir-ai's OWN six above-boundary historical collisions, pinned 2026-11-12 ─
+# (riir-ai Issue 1205's reconciliation, this commit). All six numbers are
+# above the era boundary, both holders verified in riir-ai's full history by
+# the same walk that outranked the ten stale rows above. All twelve holders
+# are closed and removed; no live file, no citation rewrite — the pin is the
+# only record, exactly the Issue 795 shape.
+collision = .issues 702 l2_normalize_suite_order_numeric_divergence (added 61d1fde00, closed cb1f00fe3) x persistent_grid_stride_gemv (added a482482b7, closeout RENUMBERED to 705 at 921396aaf) — same-day 2026-08-16 dual allocation
+collision = .issues 753 qwen38_cudarc_kv_dtype_f32_lever (added 17168e277, f16-KV gates ALL PASS closed 53df25bb6) x webrtc_tier_gate_too_narrow_for_whip_client_server (added 73265844b, resolved 4cf57e893) — same-day 2026-08-24 dual allocation
+collision = .issues 959 feature_gap_dead_code_consumer_sweep (added b4eb6ea23, closed COMPLETE 76bca147c) x heart_icon_text2d_raster_hierarchy_traps (added 13e6eff53, owner call dropped c91733301) — same-day 2026-09-15 dual allocation
+collision = .issues 1035 bonsai_decode_rearm_cell_ambiguous_ambient (added bcd71d741, superseded ->1036, removed 8360b9ee0) x shot_flight_lead_of_int_sigmoid_copy (added 14e94c4f8, landed+closed 3ab803b92) — same-day 2026-10-07 dual allocation
+collision = .issues 1111 fishing_walk_never_repins_dead_belief_ray (added 4bf6c8c59 — the recycled-number slip; repaired by renumber to 1119 at f59c107f8) x split_the_three_7k_line_combat_files (added 8305fa859, closed deb904344) — the sweep floors row's recorded 2026-10-22/24 event
+collision = .issues 1177 hero_combo_breaks_the_brains_grid_walk (added 70cac1845, REFUTED + removed same day 811721871 — "the rig had no executor") x league_agent_arm_proposal_lane (added 9f6812150, LIVE) — same-day 2026-11-05 dual allocation

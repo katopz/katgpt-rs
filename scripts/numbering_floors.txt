@@ -68,7 +68,12 @@ min_files.issues = 0           # measured 0 (2026-09-05) — and 0 is the SUCCES
                                # returns nothing, and `.issues/.highwater`
                                # parses (727), which proves the dir is reached.
                                # Raise this again if issues become long-lived"
-min_files.research = 450       # measured 511
+min_files.research = 200       # measured 511 (2026-09-04); 205 (2026-11-12) —
+                               # pruned-closed notes shrank the on-disk
+                               # population below the 450 floor riir-ai Issue
+                               # 1205 measured live; re-pinned DOWN at ~80% of
+                               # measured per the header rule. Raise again if
+                               # the distill program re-grows the tree
 min_files.proposals = 10       # measured 13
 min_files.benchmarks = 400     # measured 491 (2026-10-29) — the family lane's
                                # walk floor: the classified classes are
