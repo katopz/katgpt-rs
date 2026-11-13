@@ -80,6 +80,8 @@ The paper's own Related Work names the class:
 
 Teacher/student pairings on the serving family: Instinct-as-student is NOT SSD-able (modelless, no weights — ESC is already the routing rule at decision level, inference-time); the usable pieces are C4 (post-hoc escalation-band sweep) and the C2 corpus-folding decay analog. The ENCODER pairing (laya + the carried criteria block) is actionable but is CONTEXT distillation (Snell et al. 2022) — score-matching with no rollouts, SSD routing N/A — filed as Plan 496 T5 with a modelless-first T5.0 go/no-go — exact prefix caching of the criteria block is RULED OUT (the lane is a bidirectional ModernBERT with a symmetric sliding-window mask, so no zero-training shortcut exists), leaving the criteria token-share/latency measurement as the gate before any training.
 
+**Within-rethink lanes (2026-11-13):** the sibling's riir-train Plan 498 (SteerDistill, arXiv:2611.13410) is the THIRD same-encoder lane — teacher = F16 head, student = Q4 head, divergence mining + verified retention to re-open the Q4 posture; its case-level divergence mining is SteerDistill's transpose of the same inflection idea SSD applies at token level. T5 (criteria context) and 498 (Q4 rescue) are disjoint: T5 edits the PROMPT the head sees; 498 edits the WEIGHTS' quantization posture. Both keep the F16 artifact byte-identical.
+
 ## References
 
 - SSD paper + code (pin above); SDFT (Shenfeld et al., ICML 2026 — baseline + codebase parent)
