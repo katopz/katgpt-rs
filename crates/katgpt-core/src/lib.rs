@@ -300,6 +300,9 @@ pub mod scale_invariant;
 #[cfg(feature = "logit_regime")]
 pub mod logit_regime;
 
+#[cfg(feature = "sparse_kl_bound")]
+pub mod sparse_kl;
+
 pub mod simd_lut_dequant;
 
 pub mod similarity;

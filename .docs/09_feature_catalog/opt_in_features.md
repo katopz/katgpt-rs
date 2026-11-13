@@ -6635,3 +6635,41 @@ Closed-form fact-write (MEMIT-family, Research 659: wsp @ `39265dbc`, NO LICENSE
 The four-part sidecar overlay (Research 658, Circuit grafts — Levi Foster, 2026-11-07): **reads** (closed-form ridge linear probes over activation slices, fitted through the SHARED `linalg` solver — never a second factorisation), **rules** (per-output-cell decision tables — authored, or mined from solved examples by minimal-deciding-set search: ascending subset size, lexicographic ids, the k ≤ 3 cap PINNED with `Undecidable` refused loud, already-found subsets reused across cells — one rule serves many facts), **writes** (computed logit bias at the sampling seam — never residual-stream surgery; the FPCG constraint is untouched, not lifted), and **switches** (`exact_sigmoid` gates fitted against {0,1} labels, same closed-form family as `SigmoidGateCalibrator`). Model-agnostic callbacks (`ActivationReader`/`LogitWriter`); no model coupling in katgpt-core. All-or-nothing decide: one undecided cell abstains the whole graft (the model still writes its own reply); the unarmed no-op law (`disarm()` + a never-arming switch both leave the writer untouched, fixture-pinned); zero-alloc apply (G4 fixture); sequential scalar folds per the Issue-940 determinism law; quantization = round-half-away-from-zero + domain clamp (pinned). The scramble arm (`Graft::scrambled(seed)` — splitmix64-permuted wiring, same weights/entries) is the at/below-baseline control's in-repo instrument. T2a synthetic fixture BLAKE3-pinned; the T2b real-activation cell LANDED (riir-infer issue 1206 / Bench 971: graft 0.3925 vs baseline 0.1250, +26.75pp ≥ the +20pp bar; scramble 0.3975 disclosed). T5 LANDED 2026-11-12: the `GraftArtifact` sidecar (versioned canonical binary encoding — weights as raw bit patterns per the Issue-940 bit-identity pin, semantic order preserved where order is semantic, sorted fields canonical, decode rebuilds through every validating constructor + re-encode-compares so non-canonical input refuses `NonCanonical`) pinned by BLAKE3 (`graft_digest` — the corruption boundary; `from_canonical` alone does not detect body corruption by design), caller-supplied monotonic epoch (this crate reads no wall clock), and the `GraftSlot` mount: advance/idempotent, fork + downgrade refused loud, digest-verified BEFORE lineage, refusals leave the mount untouched, disarm posture never serialized (a decoded graft boots armed). Honest scope: the validation domain is tasks whose answers are decided by small tables over linearly-readable state — the primitive claims the mechanism, not any task.
 
 🔧 Feature flag: `grafts` (katgpt-core) — **PROMOTED TO DEFAULT 2026-11-12** (issue 998 T4 posture 3): the task-detector switch's off-task no-harm gate PASSED — 0 false ARMS on the fresh 600-row P3 corpus (CP UB 0.0050 ≤ 0.5%), 0/200 hard-negative, dev-200 contract 0 disarms, sealed-400 capture-only 400/400 armed (Bench 971 accuracy pins stay valid), bench_988 G1/G2/G3(a)/G3(b)/G4 ALL PASS (G2 7.73 µs ≤ 30, G4 0 allocs); threshold = calibration-max × M=2.0 raw score space, frozen a priori (verdict session 40a812a8; posture-1/2 FAILs recorded, never re-thresholded). Default-on = compile availability; byte-identical off unless a `GraftSlot` mounts an artifact. Gates: 33 lib fixtures (T1: fit recovery ±bias, switch separation + the fixture digest pin, rank-deficient solve, quantize pins, minimal-subset/reuse/undecidable/cap mining, dup refusals, e2e apply/abstain/disarm/never-arm/scramble/replay; T5: round-trip + decoded-apply bit-identity, golden artifact digest pin `a84025e7…`, version/magic/truncation/trailing/non-canonical/non-finite refusals, disarm-not-serialized, scramble-changes-digest, slot monotonic laws incl. corrupt-artifact-first + mount-untouched) + `tests/graft_g4_alloc.rs` + the bench_988 frozen-read replay (posture-3 fixture, graft digest `53638776…`).
+
+## 167. sparse_kl_bound — Sparse LOWER-bounded KL over top-K logit unions (Issue 1210 C6, 2026-11-13)
+
+The Speculative Self-Distillation extraction (arXiv:2611.12016, NeurIPS 2026,
+Apache-2.0 pinned `cccf657b`): evaluate `KL(teacher ‖ student)` only on
+`union(top-K(teacher), top-K(student))` + one tail bucket per side — a
+COARSENED KL that is ≤ the true KL by the log-sum inequality (**error sign
+KNOWN: a lower bound, never an estimate**), tightening in k. Union-of-both-
+top-Ks is load-bearing (single-side truncation buries the other direction's
+head mass in the tail — strictly weaker, regression-pinned). Numerics riders
+permanent: finite `-1e9` sentinel never `-inf`; tail clamp `1e-12` before
+log, STUDENT side only (clamp UP weakens, never inverts — the teacher tail
+is never clamped, the term is not monotone in p); raw logits in,
+shift-invariance pinned; sequential f64 folds ascending-index (the Issue-940
+order law). Normalization uses a PRIVATE f64 two-pass logsumexp — the shared
+f32 `simd::logsumexp_parts` kernel's ln_z error (measured: kept masses
+overshooting 1 by ~6e-8 on a 64-token fixture) makes recovered tails go
+NEGATIVE and the floor clamp fire spuriously, inverting the bound at high
+coverage; the gmm_support f64-accumulator precedent carries the same
+divergence. `kept_mass` per side = the honest coverage floor, never a hidden
+normalization. `sparse_kl_lower_bound(teacher, student, k) ->
+Result<SparseKlBound, SparseKlError>` — typed loud refusals (length
+mismatch, non-finite logit, k=0, k ≥ vocab — that posture IS the exact KL).
+
+🔧 Feature flag: `sparse_kl_bound` (katgpt-core) — opt-in, member of the
+`diagnostics` family umbrella. **NO GOAT claim** (Issue 1210 ungoat
+discipline): consumers are staged lanes — C1 divergence-threshold gates, C4
+post-hoc τ-sweep, ESC escalation-band tuning (`seat_rerank`/ESC); promote
+per-primitive only when a wired consumer passes its pre-registered gate.
+
+📖 Issue: [`1210`](../../.issues/1210_ssd_modelless_extractions.md) ·
+Provenance: SSD NeurIPS 2026 (code pinned `cccf657b`, read +
+coordinator-verified before filing) ·
+Substrate: `crates/katgpt-core/src/sparse_kl.rs` — 9 fixtures (k=V−1
+exactness vs the f64 dense oracle, monotone tightening in k, union dominates
+single-side, sentinel finiteness + the clamp-firing arm, shift invariance,
+coverage floors spiked+uniform, degenerate refusals, first-index tie rule,
+refusal battery).
