@@ -840,10 +840,16 @@ mod tests {
         let mut b: EffectCodebook<6, 2> = EffectCodebook::zeroed();
         fit_codebook_kmeans_into(&patches, 6, 42, 20, &mut a);
         fit_codebook_kmeans_into(&patches, 6, 42, 20, &mut b);
-        assert_eq!(a.centroids, b.centroids, "two-dead-cluster fit must be deterministic");
+        assert_eq!(
+            a.centroids, b.centroids,
+            "two-dead-cluster fit must be deterministic"
+        );
         for kk in 0..6 {
             for d in 0..2 {
-                assert!(a.centroids[kk][d].is_finite(), "centroid {kk} drifted non-finite");
+                assert!(
+                    a.centroids[kk][d].is_finite(),
+                    "centroid {kk} drifted non-finite"
+                );
             }
         }
     }

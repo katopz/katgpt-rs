@@ -222,7 +222,11 @@ impl std::error::Error for NotPositiveDefinite {}
 /// degrade-by-retry policy; use [`try_cholesky_f32`] when a clamped
 /// pseudo-inverse solve is acceptable.
 #[inline]
-pub fn try_cholesky_strict_f32(l: &mut [f32], a: &[f32], k: usize) -> Result<(), NotPositiveDefinite> {
+pub fn try_cholesky_strict_f32(
+    l: &mut [f32],
+    a: &[f32],
+    k: usize,
+) -> Result<(), NotPositiveDefinite> {
     // Zero the lower-triangle scratch we are about to fill.
     for v in l.iter_mut().take(k * k) {
         *v = 0.0;
@@ -236,15 +240,17 @@ pub fn try_cholesky_strict_f32(l: &mut [f32], a: &[f32], k: usize) -> Result<(),
         };
         let diag = a[j_row + j] - sum;
         if diag <= 0.0 {
-            return Err(NotPositiveDefinite { pivot: diag, tol: 0.0 });
+            return Err(NotPositiveDefinite {
+                pivot: diag,
+                tol: 0.0,
+            });
         }
         let d_sqrt = diag.sqrt();
         l[j_row + j] = d_sqrt;
         let inv = 1.0 / d_sqrt;
         for i in (j + 1)..k {
             let i_row = i * k;
-            let s =
-                a[i_row + j] - simd_dot_f32(&l[i_row..i_row + j], &l[j_row..j_row + j], j);
+            let s = a[i_row + j] - simd_dot_f32(&l[i_row..i_row + j], &l[j_row..j_row + j], j);
             l[i_row + j] = s * inv;
         }
     }
