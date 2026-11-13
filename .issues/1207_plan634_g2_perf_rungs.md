@@ -1,7 +1,8 @@
 # Issue: Plan 634 G2 perf rungs — per-edge division hoist + (τ+1)-ball restriction
 
 **Date:** 2026-11-12
-**Status:** Open — filed by the T2.6 G2 measurement (bench `plan634_div_g2_latency`, this commit)
+**Status:** Open — filed by the T2.6 G2 measurement (bench `plan634_div_g2_latency`, this commit) · R2 claimed below
+**Claimed:** zed-7d880162@amo, 1794534955, expires 2026-11-15T01:55:00Z (scope: R2 + the post-R2 R4 ladder re-run)
 **Origin:** katgpt-rs Plan 634 T2.6 (the G2/G4 gate); the measured ladder refuted the module doc's "fixture-scale G2 latency is µs either way" premise.
 
 ## The measured facts (release, τ=4, amo under disclosed load — mins quoted)
