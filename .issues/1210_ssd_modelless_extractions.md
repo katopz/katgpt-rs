@@ -1,6 +1,7 @@
 # Issue 1210: SSD modelless extraction candidates (arXiv:2611.12016)
 
 **Status:** OPEN — fusion ideas from katgpt-rs Research 669; training-track adoption rides riir-train Plan 496
+**Claimed:** amo-idle-i1210@amo, 1794592804, expires 2026-11-15T18:00:04+00:00 — unit: C6 (sparse lower-bounded KL) first; C1 next if the cycle allows
 **Provenance:** Speculative Self-Distillation (NeurIPS 2026), Apache-2.0 code pinned `cccf657b` (`src/ssd/teacher_cache.py`, `strategies.py`, `config.py`, `generation.py` read + coordinator-verified before filing)
 
 Seven closed-form extractions from the SSD paper. Each carries a proof path (fixture + falsification arm + pre-registered gate). NO GOAT claims — consumers are staged lanes; promote per-primitive only when a wired consumer passes its gate (ungoat discipline). Coordinates stay in distribution space; sigmoid never softmax.
