@@ -76,6 +76,10 @@ The paper's own Related Work names the class:
 - **Track (b) self-adaptive runtime — DISCARD.** The decay mechanism needs mutated weights; the modelless residue (escalation-rate decay on corpus folding, a dynamics signal on genuinely mutated state) is recorded as C2's rider. One-line auditable reason: a frozen student's divergence field is stationary by construction, so the paper's central dynamic cannot ship without GD or corpus-mutation.
 - **Track (c) model-based training — GOAT → riir-train Plan 496.** The incumbent capture-once posture is literally the paper's `PureTeacherStrategy` — its WORST arm on forgetting (−6.6 vs −1.38). The recipe (divergence-gated mixed-policy rollouts + dense FKL + EMA teacher + provenance) ports to the draft-model LoRA lane with a deployment-meaningful gate (acceptance rate), and the grammar lane is the cheapest exact-KL harness proof (closed vocab ⇒ the top-K lower bound is near-exact). GPU-hours: 1–3 (grammar harness) → 5–25 (draft cell, target-size dependent) on the 4090; fits one session each.
 
+## Follow-ups (2026-11-13, owner question)
+
+Teacher/student pairings on the serving family: Instinct-as-student is NOT SSD-able (modelless, no weights — ESC is already the routing rule at decision level, inference-time); the usable pieces are C4 (post-hoc escalation-band sweep) and the C2 corpus-folding decay analog. The ENCODER pairing (laya + the carried criteria block) is actionable but is CONTEXT distillation (Snell et al. 2022) — score-matching with no rollouts, SSD routing N/A — filed as Plan 496 T5 with a modelless-first T5.0 go/no-go — exact prefix caching of the criteria block is RULED OUT (the lane is a bidirectional ModernBERT with a symmetric sliding-window mask, so no zero-training shortcut exists), leaving the criteria token-share/latency measurement as the gate before any training.
+
 ## References
 
 - SSD paper + code (pin above); SDFT (Shenfeld et al., ICML 2026 — baseline + codebase parent)
