@@ -61,13 +61,19 @@ impl LogitWriter for NullWriter {
 fn built_graft() -> Graft {
     let reads = vec![
         GraftRead::new(
-            vec![ReadSegment { layer: 0, weights: vec![1.0, 0.0, 0.0, 0.0] }],
+            vec![ReadSegment {
+                layer: 0,
+                weights: vec![1.0, 0.0, 0.0, 0.0],
+            }],
             0.0,
             5,
         )
         .expect("read0"),
         GraftRead::new(
-            vec![ReadSegment { layer: 0, weights: vec![0.0, 1.0, 0.0, 0.0] }],
+            vec![ReadSegment {
+                layer: 0,
+                weights: vec![0.0, 1.0, 0.0, 0.0],
+            }],
             0.0,
             5,
         )
@@ -82,15 +88,23 @@ fn built_graft() -> Graft {
     }
     let rule = CellRule::new(0, &[0, 1], entries).expect("rule");
     let table = GraftTable::from_rules(vec![rule]).expect("table");
-    let writes = vec![GraftWrite::new(
-        0,
-        (0..5u16)
-            .map(|v| WriteEntry { value: v, biases: vec![(100 + u32::from(v), 1.0)] })
-            .collect(),
-    )
-    .expect("write")];
+    let writes = vec![
+        GraftWrite::new(
+            0,
+            (0..5u16)
+                .map(|v| WriteEntry {
+                    value: v,
+                    biases: vec![(100 + u32::from(v), 1.0)],
+                })
+                .collect(),
+        )
+        .expect("write"),
+    ];
     let switch = GraftSwitch::new(
-        vec![ReadSegment { layer: 1, weights: vec![1.0] }],
+        vec![ReadSegment {
+            layer: 1,
+            weights: vec![1.0],
+        }],
         0.0,
         0.5,
     )
