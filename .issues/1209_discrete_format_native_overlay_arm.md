@@ -1,6 +1,7 @@
 # Issue 1209 — Discrete format-native overlay arm (Tree-Ising authoring lane)
 
 **Status:** OPEN — poc/proof task (fixture-scale only; no real-model claim; the Bench-976 serving veto stands byte-identical)
+**Claimed:** amo-bosshk-d1209@amo, 1794534380, expires 2026-11-13T09:26:20+00:00 (scope: T1–T5 fixture-scale authoring arm + gate battery; T6 stays deferred)
 
 > **Research:** [`.research/668_Tree_Ising_Discrete_Format_Native_Weight_Repair.md`](../.research/668_Tree_Ising_Discrete_Format_Native_Weight_Repair.md) — arXiv:2611.14210 (Salloum & Ali, 2026-11-10)
 > **Carrier (shipped):** katgpt-core `weight_edit_overlay` (Issue 980, Bench 976 GOAT, opt-in) + `weight_edit_overlay::lp_authoring` (Issue 993, LANDED `eb33e08e4`)
