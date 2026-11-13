@@ -318,17 +318,15 @@ impl SimGraph {
 /// across components.
 ///
 /// The `(τ+1)`-ball RESTRICTION (the paper's O(|B|·deg) efficiency half)
-/// is deliberately NOT implemented in this pass: full sparse matvecs are
-/// equally exact at every pair. ⚠ The T2.6 G2 ladder (`.benchmarks/980`)
-/// measured the full-graph posture EDGE-linear — planted battery fixture
-/// ~72 µs/similarity (n=64), 22 ms–1.4 s per walk pick at k=23/47 —
-/// REFUTING this doc's original "µs either way" premise. Issue 1207's R1
-/// (the build-time `w/deg(z)` transport fold, landed 2026-11-13) cut the
-/// matvec-class costs 18–110× (battery-scale sim now ~4 µs, µs-class;
-/// the pick ms-class at planted degree); the ball rung (R2) remains the
-/// remaining lane for dense n≥1000 walk-time consumers — land it only
-/// when a consumer demands it (the walk-time selector's per-step cost is
-/// the named demand).
+/// lives in [`neighbor_diversity_pick`]'s kernel assembly (Issue 1207 R2:
+/// every query support sits in the walk node's (τ+1)-ball, so the pick
+/// diffuses each neighbor once over a ball-local CSR and dots pairwise —
+/// bit-exact vs the k² pair loop; the G2 ladder's pick rungs carry the
+/// measured margins). THIS
+/// function stays the full-graph exact pair primitive: full sparse
+/// matvecs are equally exact at every pair, and the T2.2 battery pins it
+/// (issue 1207's R1 build-time transport fold cut the matvec-class costs
+/// 18–110×; battery-scale sim ~4 µs, µs-class).
 ///
 /// `scratch` is caller-owned ([`LocalScratch`]) — zero per-call
 /// allocation. Accumulations fold in the CSR ascending-column order (the
@@ -386,11 +384,51 @@ fn diffuse_into(g: &SimGraph, input: &[f32], out: &mut [f32]) {
 /// Caller-owned work buffers for the local posture — one build, many
 /// queries, zero steady-state allocation (the plan's "caller-provided
 /// scratch" made structural).
+///
+/// The Issue-1207 R2 walk-kernel buffers (`ball_*`/`v*`/`pk`) provision
+/// lazily on the FIRST pick call (an allocation absorbed by any warm-up;
+/// the G4 census counts steady-state passes only) and reuse their
+/// capacity thereafter — steady-state zero-alloc, the same contract as
+/// `p`/`q`/`r`.
 #[derive(Clone, Debug)]
 pub struct LocalScratch {
     p: Vec<f32>,
     q: Vec<f32>,
     r: Vec<f32>,
+    /// Ascending ball node ids ([`neighbor_diversity_pick`]'s restricted
+    /// (τ+1)-ball of the walk node).
+    ball_nodes: Vec<u32>,
+    /// node → ball slot, [`u32::MAX`] = off-ball; reset to [`u32::MAX`]
+    /// for the previous ball's nodes at each build (panic-safe reuse).
+    ball_rank: Vec<u32>,
+    /// Ball-local CSR: row offsets (ball+1), columns (ball slots), and
+    /// the transport weights `w(x,z)/deg(z)` parallel to the columns —
+    /// the same build-time fold [`SimGraph::row_normed`] carries, copied
+    /// in the row's ascending slot order (the fold-order pin).
+    b_row: Vec<u32>,
+    b_col: Vec<u32>,
+    b_wn: Vec<f32>,
+    /// Compact ball-length work vectors (seed + two-buffer matvec).
+    vp: Vec<f32>,
+    vr: Vec<f32>,
+    /// The k neighbor diffusions, row-major `pk[i·b..(i+1)·b]` — each
+    /// neighbor diffused ONCE and shared across the whole kernel row
+    /// (the k² pair loop re-diffused each side k times; the values are
+    /// deterministic, so sharing them is bit-exact).
+    pk: Vec<f32>,
+    /// `vol(G)/deg(z)` per ball slot (ascending node order) — the dot
+    /// fold's weight, computed once per pick instead of per pair.
+    bwd: Vec<f32>,
+}
+
+/// Capacity floor in TOTAL terms — a no-op once `v` has held the shape
+/// before, an allocation only on the first call that needs it (the
+/// `Vec::reserve` spare-capacity form would re-grow every call on a
+/// buffer the caller left full).
+fn reserve_total<T>(v: &mut Vec<T>, need: usize) {
+    if v.capacity() < need {
+        v.reserve(need - v.len());
+    }
 }
 
 impl LocalScratch {
@@ -400,6 +438,109 @@ impl LocalScratch {
             p: vec![0.0; n],
             q: vec![0.0; n],
             r: vec![0.0; n],
+            ball_nodes: Vec::new(),
+            ball_rank: Vec::new(),
+            b_row: Vec::new(),
+            b_col: Vec::new(),
+            b_wn: Vec::new(),
+            vp: Vec::new(),
+            vr: Vec::new(),
+            pk: Vec::new(),
+            bwd: Vec::new(),
+        }
+    }
+
+    /// Provision the R2 buffers to the graph's worst-case shape (first
+    /// call per scratch allocates; steady state reuses the capacity —
+    /// this is capacity checks only, never a per-call allocation). The
+    /// checks are against TOTAL capacity, not spare capacity: the pick
+    /// leaves content in the buffers between calls, so a spare-capacity
+    /// `reserve(n)` would re-grow every call when the ball fills the
+    /// graph.
+    fn ball_reserve(&mut self, n: usize, edges: usize, k: usize) {
+        if self.ball_rank.len() < n {
+            self.ball_rank = vec![u32::MAX; n];
+        }
+        reserve_total(&mut self.ball_nodes, n);
+        reserve_total(&mut self.b_row, n + 1);
+        // Ball-local columns are a subset of the graph's directed edges.
+        reserve_total(&mut self.b_col, edges);
+        reserve_total(&mut self.b_wn, edges);
+        reserve_total(&mut self.vp, n);
+        reserve_total(&mut self.vr, n);
+        reserve_total(&mut self.pk, k * n);
+        reserve_total(&mut self.bwd, n);
+    }
+
+    /// Build the (τ+1)-ball of `x` (level-order BFS, depth ≤ τ+1 — the
+    /// support bound for every query `p_τ(y)`, `y ∈ N(x)`), sorted
+    /// ascending (the fold-order pin), then its ball-local CSR. Resets
+    /// the previous ball's rank entries first, so a panicked pick never
+    /// poisons the next build.
+    fn ball_build(&mut self, g: &SimGraph, x: usize, tau: usize) {
+        for &v in &self.ball_nodes {
+            self.ball_rank[v as usize] = u32::MAX;
+        }
+        self.ball_nodes.clear();
+        self.ball_nodes.push(x as u32);
+        self.ball_rank[x] = 0;
+        let (mut head, mut level_end) = (0usize, 1usize);
+        let mut depth = 0usize; // depth of the current frontier
+        while head < level_end && depth <= tau {
+            // Expanding the depth-`depth` frontier discovers depth
+            // `depth + 1` nodes; the last expansion reaches τ+1 exactly.
+            for i in head..level_end {
+                let v = self.ball_nodes[i] as usize;
+                let (cols, _) = g.row(v);
+                for &z in cols {
+                    if self.ball_rank[z] == u32::MAX {
+                        self.ball_rank[z] = self.ball_nodes.len() as u32;
+                        self.ball_nodes.push(z as u32);
+                    }
+                }
+            }
+            head = level_end;
+            level_end = self.ball_nodes.len();
+            depth += 1;
+        }
+        debug_assert!(self.ball_nodes.len() <= g.n);
+        self.ball_nodes.sort_unstable();
+        for (i, &v) in self.ball_nodes.iter().enumerate() {
+            self.ball_rank[v as usize] = i as u32;
+        }
+        self.b_row.clear();
+        self.b_row.push(0);
+        self.b_col.clear();
+        self.b_wn.clear();
+        for &v in &self.ball_nodes {
+            let v = v as usize;
+            let (cols, _) = g.row(v);
+            let wns = g.row_normed(v);
+            for (&z, &wn) in cols.iter().zip(wns.iter()) {
+                let rz = self.ball_rank[z];
+                if rz != u32::MAX {
+                    self.b_col.push(rz);
+                    self.b_wn.push(wn);
+                }
+            }
+            self.b_row.push(self.b_col.len() as u32);
+        }
+    }
+
+    /// One ball-local transposed matvec step: reads `self.vp` wholly,
+    /// writes `self.vr` wholly — `vr[i] = Σ_z wn·vp[z]` over the ball
+    /// slots, each row's fold in the same ascending-column subset order
+    /// the full matvec walks (off-ball terms are exact zeroes — skipping
+    /// them is bit-exact, never a reassociation).
+    fn diffuse_ball_step(&mut self) {
+        let b = self.ball_nodes.len();
+        for (i, slot) in self.vr.iter_mut().enumerate().take(b) {
+            let mut acc = 0.0_f32;
+            let (s, e) = (self.b_row[i] as usize, self.b_row[i + 1] as usize);
+            for l in s..e {
+                acc += self.b_wn[l] * self.vp[self.b_col[l] as usize];
+            }
+            *slot = acc;
         }
     }
 }
@@ -632,6 +773,16 @@ pub fn batch_select_diffusion<const D: usize>(
 /// within a cluster, so mass moves to the frontier — Prop 5.6's Θ(M/r²)
 /// spectral-gap enlargement on clique-cluster graphs).
 ///
+/// Kernel assembly (Issue 1207 R2): every query `p_τ(y)`, `y ∈ N(x)` is
+/// supported inside `x`'s (τ+1)-ball, and the same neighbor diffusion
+/// serves the whole kernel row — so the assembly diffuses each neighbor
+/// ONCE over a ball-local CSR (`k` diffusions + `k(k+1)/2` compact dots)
+/// instead of running `k²` full-graph similarity calls (`2k²` τ-matvec
+/// pairs over all E edges). Bit-exact vs the pair loop: identical
+/// summands (`wn·p[z]`, `p·q·vol/deg`), identical ascending folds — the
+/// restriction only skips terms that are exact zeroes, and the shared
+/// diffusions are deterministic replays of the same computation.
+///
 /// Solver: deterministic active-set KKT loop — all-free equality solve,
 /// then clip the LOWEST-INDEX floor violator and re-solve over the free
 /// set, repeated until no violator remains (at most k iterations, k =
@@ -642,10 +793,11 @@ pub fn batch_select_diffusion<const D: usize>(
 /// ⇒ bit-identical `out` (the Issue-940 tie law).
 ///
 /// `out` is caller-provided, length = |N(x)|; `out[i]` pairs with
-/// neighbor i in the graph's ascending column order. Zero per-call
-/// allocation beyond the solver's small fixed work (O(k²) f64 cells,
-/// k ≤ 64 asserted — a node with more neighbors refuses loud; the
-/// paper's walk nodes are small-degree).
+/// neighbor i in the graph's ascending column order. Zero steady-state
+/// allocation: the solver's work is O(k²) f64 stack cells (k ≤ 64
+/// asserted — a node with more neighbors refuses loud; the paper's walk
+/// nodes are small-degree) and the ball/compact buffers live in
+/// `scratch`, provisioned once on the first call.
 ///
 /// # Panics
 /// Panics if `out.len() != |N(x)|`, a neighbor degree > 64, or the
@@ -666,13 +818,46 @@ pub fn neighbor_diversity_pick(
     if k == 0 {
         return; // a dead node picks nothing
     }
-    // Kernel row-by-row: M′[i][j] = φ_τ(y_i, y_j) — the local posture
-    // with ONE scratch (queries are sequential; each result lands in the
-    // f64 kernel cells immediately).
-    let mut kernel = [[0.0_f64; 64]; 64];
+    // Ball + compact buffers for this pick's shape (first call per
+    // scratch provisions; steady state reuses the capacity).
+    scratch.ball_reserve(g.n, g.col.len(), k);
+    scratch.ball_build(g, x, tau);
+    let b = scratch.ball_nodes.len();
+    scratch.bwd.clear();
+    scratch.bwd.resize(b, 0.0);
+    let vol = g.total_weight as f32;
+    for (i, &v) in scratch.ball_nodes.iter().enumerate() {
+        scratch.bwd[i] = vol / g.degree(v as usize);
+    }
+    scratch.pk.clear();
+    scratch.pk.resize(k * b, 0.0);
+    scratch.vp.clear();
+    scratch.vp.resize(b, 0.0);
+    scratch.vr.clear();
+    scratch.vr.resize(b, 0.0);
     for (i, &yi) in cols.iter().enumerate() {
-        for (j, &yj) in cols.iter().enumerate().skip(i) {
-            let phi = diffusion_similarity_local(g, yi, yj, tau, scratch) as f64;
+        let seed = scratch.ball_rank[yi];
+        debug_assert!(seed != u32::MAX, "N(x) ⊆ B₁(x) ⊆ the pick's ball");
+        // p ← e_{y_i} restricted to the ball, then τ × (Pᵀ·p) ball-local.
+        scratch.vp.fill(0.0);
+        scratch.vp[seed as usize] = 1.0;
+        for _ in 0..tau {
+            scratch.diffuse_ball_step();
+            scratch.vp.swap_with_slice(&mut scratch.vr);
+        }
+        scratch.pk[i * b..(i + 1) * b].copy_from_slice(&scratch.vp);
+    }
+    // Kernel row-by-row: M′[i][j] = φ_τ(y_i, y_j) = Σ_b p_i·p_j·vol/deg —
+    // the local posture's ℓ2(1/π) fold over the ball's ascending nodes,
+    // f32 exactly as the pair loop folds it, one diffusion pair shared.
+    let mut kernel = [[0.0_f64; 64]; 64];
+    for (i, pi) in scratch.pk.chunks_exact(b).enumerate() {
+        for (j, pj) in scratch.pk.chunks_exact(b).enumerate().skip(i) {
+            let mut acc = 0.0_f32;
+            for bb in 0..b {
+                acc += pi[bb] * pj[bb] * scratch.bwd[bb];
+            }
+            let phi = acc as f64;
             kernel[i][j] = phi;
             kernel[j][i] = phi; // symmetric kernel
         }
