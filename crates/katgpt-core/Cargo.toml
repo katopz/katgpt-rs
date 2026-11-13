@@ -4418,6 +4418,18 @@ required-features = ["gain_cost_halt"]
 name = "issue993_lp_authored_overlay_gates"
 required-features = ["gain_cost_halt"]
 
+# Issue 1209 — the DISCRETE format-native authoring arm's gate battery
+# (T3–T4, Research 668 Tree-Ising distill): the greedy + SA arms author
+# carrier repairs by format-native moves on the SAME seeded-degeneracy
+# world (shared fixture `tests/wsp980_common`), held-out separation,
+# dose grid, footprint axis (report-only bits), SA determinism,
+# greedy-vs-SA gap, random-move control + twin refusal + exactness-
+# boundary falsifiers. Green-zero rule: required-features + whole-file
+# #![cfg] pairing.
+[[test]]
+name = "issue1209_discrete_authoring_gates"
+required-features = ["gain_cost_halt"]
+
 # Issue 979 T1–T4 — the regret_guard gate battery (arXiv:2603.28499): the
 # deterministic-BR probe (Lem 2.2), the 8-distribution battery (Ber(1/3),
 # Ber(2/3), both regime-switch orders, sine drifts ϕ ∈ {T/2, T/5, T/10,

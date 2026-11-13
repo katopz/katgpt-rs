@@ -1093,6 +1093,15 @@ pub mod probe_circuit_grammar;
 // (the Issue-992/Plan-635 budget).
 pub mod lp_authoring;
 
+// Issue 1209 — the DISCRETE format-native authoring arm (Research 668,
+// the Tree-Ising distill): sign flips + ×2^k scale shifts — each exact in
+// binary floats, the exactness boundary refused loud — over the paper's
+// forward-statistics QUBO (dose along u, input-collateral, L0), solved
+// seed-deterministically (greedy descent + pinned-seed SA) and emitted as
+// COO specs on the EXISTING carrier apply path. Fixture-scale; the
+// Bench-976 veto stands; no new feature flag (the 993 precedent).
+pub mod discrete_authoring;
+
 // ─────────────────────────────────────────────────────────────────────
 // Unit tests
 // ─────────────────────────────────────────────────────────────────────

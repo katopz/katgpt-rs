@@ -6382,6 +6382,42 @@ stay as the submodule `weight_edit_overlay::probe_circuit_grammar` — the attri
 no separate feature (728 → 727 total flags). A revival is a NEW pre-registration
 (katgpt-rs `abbb22d57`).
 
+**Discrete format-native authoring arm (Issue 1209, Research 668 — the Tree-Ising
+distill, arXiv:2611.14210):** the authoring half's third arm — `weight_edit_overlay::
+discrete_authoring` authors carrier repairs by DISCRETE optimization over format-native
+moves: `SignFlip` + `Scale2k(k)` per candidate weight (each exact in binary floats; the
+exactness boundary named and refused — overflow/subnormal shifts are inadmissible, the
+predicate never assumes exactness) over the paper's forward-statistics QUBO per output
+row (γ-dose along `u` on the region's mean input profile + input-collateral from the
+deployment-distribution Gram + L0 λ), one spin per weight (kinds mutually exclusive,
+the colliding-move refusal is by construction), solved seed-deterministically: greedy
+single-flip descent (strictly-better, first-index ties) and seeded SA (16 replicas ×
+sequential sweeps, pinned SplitMix64 — same seed ⇒ bit-identical emitted spec, the
+Issue-809/940 laws). Emission = COO specs on the EXISTING carrier apply path (one
+`DirectionSubtraction` per moved element, `direction: e_r` — the dequant-domain delta,
+never requantize; the retention law rides along as a bit-exact no-op outside the
+region). The γ/λ calibration is the paper's doubling ladder with BOTH floors + the
+behavioral obstacle rate checked per rung, and the cleared dose is BAKED into the
+emitted overlay (the tanh fixture's behavioral basin is narrow — the repair must
+≈ cancel the injection; the dose axis is how the coarse move lattice lands inside it,
+disclosed in the battery header). The retention law enters authoring as an
+admissibility predicate (per-column keep mean-|h| × |ΔW| ≤ tol — the discrete twin of
+the LP arm's ε=0 keep constraints). Report-only format-bit accounting per move
+(sign bit = 1; Scale2k = the exponent-run bound) with the pre-registered caveat: on
+f32 fixtures the accounting is ILLUSTRATIVE — not a deployment gain until T6's
+packed-checkpoint patcher exists. Fixture-scale ONLY (the 990 precedent); T6 (real-
+model rung) deferred behind the Bench-976 veto's loop-class gate + the Research-668
+repo-re-verification precondition. Demotion law pre-registered: if the discrete arm
+fails battery arms the hand (980) or LP (993) edits pass, record the negative, strike
+the arm, close NEGATIVE — no zombie arm (the hand/LP paths untouched either way).
+Gate battery: `tests/issue1209_discrete_authoring_gates.rs` (6 tests over the SAME
+`tests/wsp980_common` fixture — greedy passes the load-bearing arms incl. held-out
+separation 1.000/1.000 and the behavioral obstacle floor at the calibrated dose;
+SA determinism bit-identical; greedy-vs-SA gap recorded (measured 0 — both solvers
+land the same single spin at γ=8); footprint axis {hand, LP, greedy, SA} with the
+caveat printed; falsifiers green — 0/16 random-move arms cleared, the twin refuses,
+the exactness boundary fires).
+
 ### `regret_guard` — adversary-aware serving gate (Issue 979)
 
 `regret_guard = []` — **opt-in** (zero new deps).
@@ -6596,6 +6632,6 @@ Closed-form fact-write (MEMIT-family, Research 659: wsp @ `39265dbc`, NO LICENSE
 
 ## 166. grafts — Fitted Rule-Circuit Overlay Primitive (issue 988, 2026-11-12)
 
-The four-part sidecar overlay (Research 658, Circuit grafts — Levi Foster, 2026-11-07): **reads** (closed-form ridge linear probes over activation slices, fitted through the SHARED `linalg` solver — never a second factorisation), **rules** (per-output-cell decision tables — authored, or mined from solved examples by minimal-deciding-set search: ascending subset size, lexicographic ids, the k ≤ 3 cap PINNED with `Undecidable` refused loud, already-found subsets reused across cells — one rule serves many facts), **writes** (computed logit bias at the sampling seam — never residual-stream surgery; the FPCG constraint is untouched, not lifted), and **switches** (`exact_sigmoid` gates fitted against {0,1} labels, same closed-form family as `SigmoidGateCalibrator`). Model-agnostic callbacks (`ActivationReader`/`LogitWriter`); no model coupling in katgpt-core. All-or-nothing decide: one undecided cell abstains the whole graft (the model still writes its own reply); the unarmed no-op law (`disarm()` + a never-arming switch both leave the writer untouched, fixture-pinned); zero-alloc apply (G4 fixture); sequential scalar folds per the Issue-940 determinism law; quantization = round-half-away-from-zero + domain clamp (pinned). The scramble arm (`Graft::scrambled(seed)` — splitmix64-permuted wiring, same weights/entries) is the at/below-baseline control's in-repo instrument. T2a synthetic fixture BLAKE3-pinned; **accuracy claims wait for the T2b real-activation cell (riir-infer-hosted, files its own issue)**. T5 LANDED 2026-11-12: the `GraftArtifact` sidecar (versioned canonical binary encoding — weights as raw bit patterns per the Issue-940 bit-identity pin, semantic order preserved where order is semantic, sorted fields canonical, decode rebuilds through every validating constructor + re-encode-compares so non-canonical input refuses `NonCanonical`) pinned by BLAKE3 (`graft_digest` — the corruption boundary; `from_canonical` alone does not detect body corruption by design), caller-supplied monotonic epoch (this crate reads no wall clock), and the `GraftSlot` mount: advance/idempotent, fork + downgrade refused loud, digest-verified BEFORE lineage, refusals leave the mount untouched, disarm posture never serialized (a decoded graft boots armed). Honest scope: the validation domain is tasks whose answers are decided by small tables over linearly-readable state — the primitive claims the mechanism, not any task.
+The four-part sidecar overlay (Research 658, Circuit grafts — Levi Foster, 2026-11-07): **reads** (closed-form ridge linear probes over activation slices, fitted through the SHARED `linalg` solver — never a second factorisation), **rules** (per-output-cell decision tables — authored, or mined from solved examples by minimal-deciding-set search: ascending subset size, lexicographic ids, the k ≤ 3 cap PINNED with `Undecidable` refused loud, already-found subsets reused across cells — one rule serves many facts), **writes** (computed logit bias at the sampling seam — never residual-stream surgery; the FPCG constraint is untouched, not lifted), and **switches** (`exact_sigmoid` gates fitted against {0,1} labels, same closed-form family as `SigmoidGateCalibrator`). Model-agnostic callbacks (`ActivationReader`/`LogitWriter`); no model coupling in katgpt-core. All-or-nothing decide: one undecided cell abstains the whole graft (the model still writes its own reply); the unarmed no-op law (`disarm()` + a never-arming switch both leave the writer untouched, fixture-pinned); zero-alloc apply (G4 fixture); sequential scalar folds per the Issue-940 determinism law; quantization = round-half-away-from-zero + domain clamp (pinned). The scramble arm (`Graft::scrambled(seed)` — splitmix64-permuted wiring, same weights/entries) is the at/below-baseline control's in-repo instrument. T2a synthetic fixture BLAKE3-pinned; the T2b real-activation cell LANDED (riir-infer issue 1206 / Bench 971: graft 0.3925 vs baseline 0.1250, +26.75pp ≥ the +20pp bar; scramble 0.3975 disclosed). T5 LANDED 2026-11-12: the `GraftArtifact` sidecar (versioned canonical binary encoding — weights as raw bit patterns per the Issue-940 bit-identity pin, semantic order preserved where order is semantic, sorted fields canonical, decode rebuilds through every validating constructor + re-encode-compares so non-canonical input refuses `NonCanonical`) pinned by BLAKE3 (`graft_digest` — the corruption boundary; `from_canonical` alone does not detect body corruption by design), caller-supplied monotonic epoch (this crate reads no wall clock), and the `GraftSlot` mount: advance/idempotent, fork + downgrade refused loud, digest-verified BEFORE lineage, refusals leave the mount untouched, disarm posture never serialized (a decoded graft boots armed). Honest scope: the validation domain is tasks whose answers are decided by small tables over linearly-readable state — the primitive claims the mechanism, not any task.
 
-🔧 Feature flag: `grafts` (katgpt-core). Gates: 33 lib fixtures (T1: fit recovery ±bias, switch separation + the fixture digest pin, rank-deficient solve, quantize pins, minimal-subset/reuse/undecidable/cap mining, dup refusals, e2e apply/abstain/disarm/never-arm/scramble/replay; T5: round-trip + decoded-apply bit-identity, golden artifact digest pin `a84025e7…`, version/magic/truncation/trailing/non-canonical/non-finite refusals, disarm-not-serialized, scramble-changes-digest, slot monotonic laws incl. corrupt-artifact-first + mount-untouched) + `tests/graft_g4_alloc.rs`.
+🔧 Feature flag: `grafts` (katgpt-core) — **PROMOTED TO DEFAULT 2026-11-12** (issue 998 T4 posture 3): the task-detector switch's off-task no-harm gate PASSED — 0 false ARMS on the fresh 600-row P3 corpus (CP UB 0.0050 ≤ 0.5%), 0/200 hard-negative, dev-200 contract 0 disarms, sealed-400 capture-only 400/400 armed (Bench 971 accuracy pins stay valid), bench_988 G1/G2/G3(a)/G3(b)/G4 ALL PASS (G2 7.73 µs ≤ 30, G4 0 allocs); threshold = calibration-max × M=2.0 raw score space, frozen a priori (verdict session 40a812a8; posture-1/2 FAILs recorded, never re-thresholded). Default-on = compile availability; byte-identical off unless a `GraftSlot` mounts an artifact. Gates: 33 lib fixtures (T1: fit recovery ±bias, switch separation + the fixture digest pin, rank-deficient solve, quantize pins, minimal-subset/reuse/undecidable/cap mining, dup refusals, e2e apply/abstain/disarm/never-arm/scramble/replay; T5: round-trip + decoded-apply bit-identity, golden artifact digest pin `a84025e7…`, version/magic/truncation/trailing/non-canonical/non-finite refusals, disarm-not-serialized, scramble-changes-digest, slot monotonic laws incl. corrupt-artifact-first + mount-untouched) + `tests/graft_g4_alloc.rs` + the bench_988 frozen-read replay (posture-3 fixture, graft digest `53638776…`).
