@@ -11,8 +11,13 @@
 #
 # Family ratchet (riir-infer's own measurement, matching the sweep row's
 # hand-read column): the shared floors file's 59 serves katgpt-rs's families;
-# riir-infer measures 7.
-max_hand_read = 7
+# riir-infer measures 8 (2026-11-14: the eighth hand-read group is
+# .benchmarks/1209 — i1117_128k_trio_cpu_valid_metal_rho_void x
+# weight_audit_zoo_baseline, two disjoint plans' cells sharing one serial;
+# the landing session grew the population without this re-pin — repaired
+# after the fact in the commit that carries it, one record two media with
+# the sweep row's max_hand 7→8).
+max_hand_read = 8
 
 # One above-boundary historical event, both holders verified in full history
 # (fresh citation_weight re-run 2026-11-12 reproduces the recorded verdict):
