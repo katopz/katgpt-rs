@@ -71,6 +71,11 @@ dspy-wsp's winning cell — the DECISION HEAD surface × direct task-metric read
 
 ## 6. Follow-ups
 
-- riir-infer `.issues/1216` — the head-surface PoC (unclaimed, queueable; local laya checkpoints + local solve; light enough for m3, rig-queueable for the paired cells).
+- riir-infer `.issues/1216` — the head-surface PoC — **EXECUTED + KILLED 2026-11-14**
+  (T0 headroom gate, Bench 1217 in riir-infer): P1 −2.22 pt / P2 −0.89 pt paired on the
+  train-split gate slice, the probe loses even in-sample → objective misspecification;
+  the simulate_head extrapolation does NOT survive its T0. The five-backend family
+  resolution stands (the laya surface stays unclaimed externally — now also measured
+  dead internally on the closed-form axis).
 - riir-train `.issues/665` — addendum appended (external evidence vs the two Law-4 kills; T7 certificate corroboration).
 - `vocab.md` §10 — the "not yet distilled" line resolved → this note; the family row resolved (identity refuted); the GEPA row gains `gepa_reflective`.
