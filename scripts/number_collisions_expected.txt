@@ -58,7 +58,17 @@ era_boundary = 700
 # the historical total is 64 = the ratchet. Ratchet at MEASURED — the
 # pre-gate archive is Issue 785's unread bucket, pinned by count and never by
 # invented reasons.
-legacy_ratchet = 64
+# 64 -> 60 2026-11-14 (Research 670 filing commit, verdict round 2): the
+# shared scalar is katgpt-rs's OWN count, and katgpt-rs measures 60 — at
+# this commit, at origin/develop, AND at d6f996199 itself (verified in clean
+# worktrees). The 64 set 2026-11-12 was riir-ai's count (Issue 1205's
+# reconciliation) leaking into the home repo's scalar — exactly what the
+# Issue 1208 block below says must not happen. Decoupled this commit:
+# riir-ai's 64 now lives in scripts/number_collisions_riir-ai.txt
+# (legacy_ratchet = 64, the per-repo channel), the shared scalar returns to
+# katgpt-rs's own measured 60. Foreign repos without a per-repo scalar read
+# the shared value — measured counts today are well below it except riir-ai.
+legacy_ratchet = 60
 min_dirs = 4
 min_numbers = 1200
 

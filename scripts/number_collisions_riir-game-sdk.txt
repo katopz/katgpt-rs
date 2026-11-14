@@ -5,4 +5,15 @@
 
 max_hand_read = 0
 
-collision = .issues 055 asset_vessel_lean_hash_only (added 04b3aa2 2026-11-06, "asset_vessel takes the 32-byte hash — drop the riir-games-mmorpg edge"; removed bad3a4e same day) x gated_predicate_refuses_the_authoritys_own_trjr (added a6f53e4 2026-11-06, LIVE — the sdk 055 issue) — same-day dual allocation; the loser closed+removed, no live file, no citation rewrite; the pin is the record
+# sdk's OWN legacy ratchet (2026-11-14, katgpt-rs Research 670 filing commit
+# set): measured 1 — the 055 group below. Per Issue 1208 the per-repo scalar
+# decouples sdk from the shared value (katgpt-rs's own 60).
+legacy_ratchet = 1
+
+# The 055 collision row REMOVED 2026-11-14 per the gate's STALE-pin verdict
+# (the walk no longer classifies the group — one holder LIVE, the loser
+# removed same day; below the era boundary the row was double-keeping the
+# record). Full row text preserved in sdk .issues/060 and in git history:
+# collision = .issues 055 asset_vessel_lean_hash_only (added 04b3aa2
+# 2026-11-06; removed bad3a4e same day) x gated_predicate_refuses_the_authoritys_own_trjr
+# (added a6f53e4 2026-11-06, LIVE) — same-day dual allocation.

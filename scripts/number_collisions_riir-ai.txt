@@ -6,6 +6,15 @@
 # floors file's 59 serves katgpt-rs's families; riir-ai measures 30.
 max_hand_read = 30
 
+# riir-ai's OWN legacy ratchet (2026-11-14, Research 670 filing commit —
+# verdict round 2): the 64 pinned to the SHARED scalar on 2026-11-12
+# (d6f996199, Issue 1205's reconciliation — 35 sub-boundary doubly-held
+# .issues numbers + 6 above-boundary events) is riir-ai's count, not
+# katgpt-rs's (60). Per Issue 1208 the counts are decoupled: this per-repo
+# scalar is the record for riir-ai; the shared scalar carries katgpt-rs's
+# own 60. Growth reds here; re-pins follow MEASURED.
+legacy_ratchet = 64
+
 # All six numbers are above the era boundary (700); both holders verified in
 # riir-ai's full history; all twelve holders closed/removed except 1177's
 # league lane (LIVE) — no live file, no citation rewrite; the pin is the record.
