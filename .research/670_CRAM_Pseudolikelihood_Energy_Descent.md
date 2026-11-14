@@ -64,23 +64,33 @@ Pinned claim: **rating-energized repair/composition descent** — Elo/Beta per-i
 - **Game half — honest negative:** per-NPC energy descent at 20 Hz × crowd is the wrong altitude — the brain+FSM+sigmoid-drive doctrine occupies NPC decision-making (behaviour flows perception→belief→drives→FSM; no hard edges beside the FSM), and a descent loop per NPC violates the frame budget. The compute-adapts-to-difficulty evidence corroborates frame-sampling/ESC instead. No filing.
 
 
-### 2.3a The win base (owner-directed reframe, 2026-11-14)
+### 2.3a The win base (owner-directed reframe, 2026-11-14; verdict-revised same day)
 
-The owner's challenge on the first filing stands: the fusion was framed on its LOSERS (pick_latch, entropic tilt, TetherFit, SA) when the territory around it is dominated by WINS. Corrected — the composition stands on the win stack; the negatives are boundary conditions (the shapes that lost TO these winners), not the prior. Tracked home: `riir-ai/.docs/04_supergoat_candidates/rating_energized_descent.md` (candidate bet — substrate primitives ship; the composed gate has not run).
+The owner's challenge on the first filing stands: the fusion was framed on its LOSERS (pick_latch, entropic tilt, TetherFit, SA) when the territory around it is dominated by WINS. Corrected — and then corrected again at verdict (session 5eca383a round 1): the anchors split by what they contribute, the game-pillar rows moved to the unfiled line (they contradicted this note's own §2.3 game-half negative), the conformal row was refreshed from the candidate's own header (Super-GOAT DEFAULT-ON; 2 PASS / 2 FAIL / 1 MIXED), and "never-wrong" is scoped to exact-constraint / verifier-backed surfaces. Tracked home: `riir-ai/.docs/04_supergoat_candidates/rating_energized_descent.md` (candidate bet — substrate ships; the composed gate has not run).
+
+**A. Substrate actually consumed by the cells:**
 
 | Winner (shipped) | Win evidence | What the fusion adds on top |
 |---|---|---|
-| Pillar 1 Fourier Spatial AI (GOAT pillar) | Position invariance 100%; 5 MMO domains at scale — Fourier-hashed MCTS, no neural net | energy-shaped move ordering + a fitted-level stop for the pillar's own search |
-| Pillar 4 Frame-Sampling Bridge (GOAT pillar) | Bridges turn-based MCTS/Bandit to 20Hz ticks | difficulty-proportional compute inside the frame budget (CRAM: 22× growth easy→hard) |
-| Conformal UQ candidate (primitive ships as the floor) | "Replaces magnitude thresholds with calibration" — a tracked bet, 2 of 5 consumers closed honestly | its SEARCH-TERMINATION consumer: the fitted-level stop (CRAM: 0% wrong-halts) |
-| katgpt-assign (GOAT verdict, 607/620) | Modelless constrained-assignment local search | K chains + abstain-on-budget (Issue 1211's deltas) |
-| Rating substrate (elo_k_eff / katgpt-core rating) | DEFAULT selection stack — BetaPosterior beat every measured alternative (Bench 042's sweep verdict) | the landscape weights: ratings → B_i, co-outcome → K_ij |
+| katgpt-assign (research-tier GOAT verdict, 607; G1/G2/G4 PASS — Bench 924: local dominates FFD 3–47×, NO-GO refuted; Plan 620, opt-in) | Modelless constrained-assignment local search, integer-exact, seeded | K chains + lowest-score pick + abstain-on-budget (Issue 1211's deltas) |
+| Rating substrate (elo_k_eff / katgpt-core rating) | The DEFAULT selection stack — BetaPosterior survived its own sweep (Bench 042: no headroom in ρ; the blend weight was never a live lever) | landscape weights: ratings → B_i, co-outcome → K_ij. **Low-headroom prior for cell 237 — it must win by SHAPE change, not re-tuning** |
 | decision_wire | Abstention first-class in the shipped contract | abstain-on-budget is already a typed answer |
-| ESC ladder (production) | Per-suite fitted-LEVEL escalation thresholds | the same level law applied to search termination |
-| bet_search (GOAT → katgpt-extract default) | Exhaustive + floor demotion WON; PUCT demoted | the local/exhaustive shape precedent — hard-move descent is the winning family |
-| Scalar-drive doctrine (phase separation GOAT default-on; crowd sheaf Super-GOAT default-on) | One modelless scalar drives behavior — the house pattern | one scalar (the landscape energy) driving stop/abstain/commit |
+| Conformal floor (Plan 340 G1–G4 PASS, DEFAULT-ON via Plan 468) | The canonical conformal-naive floor | the fitting rule for the stop level (quantile of solved-case scores) |
 
-The §3 tier (Gain today; nothing measured for the composition) is unchanged — the reframe relocates the fusion from negative-prior framing to a tracked candidate bet on the win stack, and sharpens Q4 (force multiplier): the mechanism plausibly touches two GOAT pillars, one tracked candidate, and the decision lanes.
+**B. Law precedent (the same LAW won elsewhere; not consumed here):**
+
+| Precedent | Win evidence | The law re-applied |
+|---|---|---|
+| Conformal UQ candidate (✅ Super-GOAT DEFAULT-ON 2026-07-20, Plan 468; 5 consumers: 2 PASS / 2 FAIL / 1 MIXED) | **Nearest neighbor: MCTS collapse (Bench 564, G3 PASS) — per-NPC calibrated τ beats fixed τ=0.1**; the FAILs' lesson: the overlay adds calibration, not information where a direct observation decides hit/miss | calibrated-τ-replaces-fixed-τ, applied to search termination. **Signal-diff:** 564 calibrates τ on the collapse DETECTOR's confidence; this fusion fits a LEVEL of a solution-cost landscape from outcome statistics — different signal, same law |
+| ESC ladder (production) | Per-suite fitted-LEVEL escalation thresholds | the same level law applied to search termination |
+| bet_search (GOAT → default) | Exhaustive + floor demotion WON; PUCT demoted — small-set enumeration won | scope datum for the small-set regime the descent targets |
+| Scalar-drive doctrine (phase separation GOAT default-on; crowd sheaf Super-GOAT default-on) | One modelless scalar drives behavior — house pattern | one scalar (the landscape energy) driving stop/abstain/commit — house-law fit, not win evidence |
+
+**C. Unfiled targets (design-argument only, consistent with §2.3):** Pillar 1 (Fourier-hashed MCTS) and Pillar 4 (frame-sampling MCTS/Bandit bridge) are NOT consumed by any filed cell and carry no new evidence since §2.3's game-half negative. The ideas are recorded so they are not lost; they become anchors only via a pre-registered pillar cell that reverses §2.3's negative with a stated reason. The fusion's measured scope: **refine (237) + grams (001) + the decision-lane stop law (via 1211's primitive).**
+
+**Never-wrong, scoped:** CRAM's 0% wrong-halts holds because its energy is an exact constraint cost — the level coincides with solved. The transfer claim is scoped to **exact-constraint or verifier-backed surfaces** (1211 fixtures, grams wire walk, refine's compile verify); on rating-shaped landscapes the stop is a noisy proxy and the verifier — not the level — carries never-wrong. What transfers everywhere: compute follows difficulty under a level stop.
+
+**Pinned Super-GOAT opening condition (one wording, everywhere):** the question opens iff **≥2 of the three filed cells pass their pre-registered gates AND the class metrics are demonstrated on those cells' own surfaces** — never-wrong abstention on exact-constraint/verifier-backed surfaces + difficulty-proportional compute at matched accuracy. **Pillar surfaces are not part of the condition (unfiled).** Gates pass but metrics don't differentiate → the phase-separation shape (GOAT as insurance), not Super-GOAT.
 
 ### 2.4 Closest cousins (why they don't kill)
 

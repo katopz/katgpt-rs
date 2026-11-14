@@ -5,7 +5,7 @@
 > **Source:** arXiv:2611.17309 "CRAM" (Hoover, Blayney, Whittington, 2026-11-12)
 > **Substrate:** `crates/katgpt-assign` (Research 607 / Plan 620) — the driver SHIPS; this issue extends it, never forks it
 > **Consumers:** riir-refine Issue 237 (composition cell); riir-grams Issue 001 (Repair act seam)
-> **Win base (owner reframe 2026-11-14):** this extends the WIN stack — katgpt-assign (GOAT verdict), Pillar 1's Fourier MCTS, Pillar 4's MCTS/Bandit frame bridge, the conformal-UQ candidate (its search-termination consumer), the rating substrate, decision_wire's first-class abstention. Tracked as the rating-energized-descent candidate: `../riir-ai/.docs/04_supergoat_candidates/rating_energized_descent.md`.
+> **Win base (owner reframe 2026-11-14; verdict-revised):** this extends the consumed win stack — katgpt-assign (gates G1/G2/G4 PASS, Bench 924), the rating substrate (BetaPosterior default), decision_wire's first-class abstention, and the conformal floor; law precedents: the conformal-UQ candidate's Bench 564 (calibrated τ beats fixed τ — the nearest occupied neighbor, signal-diffed in Research 670 §2.3a), ESC's level law, bet_search's exhaustive win. Never-wrong is scoped to exact-constraint/verifier-backed surfaces. Pillar wiring (Fourier MCTS, frame budget) is UNFILED design argument. Tracked: `../riir-ai/.docs/04_supergoat_candidates/rating_energized_descent.md`.
 
 ## What
 
