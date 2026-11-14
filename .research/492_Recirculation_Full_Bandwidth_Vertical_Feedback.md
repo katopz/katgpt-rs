@@ -206,3 +206,5 @@ Honest caveats (binding for any reopen): session-scaled counts (192–480 tokens
   year    = {2026}
 }
 ```
+
+> Update 2026-11-14 (riir-train Research 497, riir-train Issue 690): the budget-fair redo of this family landed — latent feedback (additive top-layer state via learned W) priced against a Transformer spending the same FLOPs on MORE EPOCHS over repeated data, closing the exact gap this note and the 073/241 redirects flagged ("none repeats data"): kappa <= 1.91x compute, mu <= 1.69x data, one coupled law (v = 1.14 capacity factor, held-out 778M <= 0.29% err), UTPP break-even 75/33/20/12. The trained cell routes to riir-train Plan 344 (Issue 690 T3); a constraint pointer line was appended to that plan.
