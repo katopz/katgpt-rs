@@ -1,6 +1,6 @@
 # Issue 1211: Descent-search policy extension for katgpt-assign — K chains, abstain-on-budget, fitted-level stop
 
-> **Status:** OPEN — T1 LANDED 2026-11-15 (`496fcbaaf`, zed-07a26ed5@amo — the extension module + the proof battery); T2 (the GOAT gate rows vs outside baselines + katgpt-core count-pin note) open below
+> **Status:** OPEN — T1 LANDED 2026-11-15 (`496fcbaaf`, zed-07a26ed5@amo — the extension module + the proof battery); **T2 LANDED 2026-11-15 (`ba4fa2381`, zed-07a26ed5@amo — the GOAT gate rows vs the outside baselines, bench 981: descent dominates incumbent (4.8–24.8× on the decoy family) and FFD (~69–278×) everywhere, greedy 4.8× on the consumer family; MEASURED NEGATIVE pinned: the unit-demand synthetic family is constructive-closed — greedy IS the optimum, randomized posture loses at n≥48 (the shifted-yardstick caveat measured on the true fold; gate row 3 scoped to the consumer class, losses pinned as a test); seed-only no-op finding extended to shard_topology — descent == incumbent exactly; LEVEL arm fires at chain 0 in every point, never above the fitted level).** Promotion rides a consumer (riir-refine 237)
 > **Claimed:** zed-07a26ed5@amo, 1794681902, expires 2026-11-16T18:45:00+00:00
 > **Research:** [katgpt-rs/.research/670_CRAM_Pseudolikelihood_Energy_Descent.md](../.research/670_CRAM_Pseudolikelihood_Energy_Descent.md)
 > **Source:** arXiv:2611.17309 "CRAM" (Hoover, Blayney, Whittington, 2026-11-12)
