@@ -24,7 +24,16 @@ categories = ["algorithms", "science"]
 # module compile in --release so the G4 zero-alloc gate can run against
 # optimised code. Off in every shipped build.
 alloc_tracking = []
+# Issue 1211 descent lane: K-chain orchestration + abstain-on-budget + the
+# fitted-level outcome gate (`descent.rs`). Opt-in; feature-off builds are
+# byte-identical to the incumbent (the module compiles to nothing; no
+# solver/types surface changes ride the feature).
+descent = []
 
 [[bench]]
 name = "bench_924_assignment_g2_baselines"
 harness = false
+
+[[test]]
+name = "issue1211_descent"
+required-features = ["descent"]

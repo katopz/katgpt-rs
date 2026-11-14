@@ -95,6 +95,8 @@
 
 #[cfg(any(debug_assertions, feature = "alloc_tracking"))]
 pub mod alloc;
+#[cfg(feature = "descent")]
+pub mod descent;
 pub mod expr;
 pub mod fixtures;
 pub mod rng;
@@ -102,6 +104,8 @@ pub mod solver;
 mod specs;
 pub mod types;
 
+#[cfg(feature = "descent")]
+pub use descent::{AbstainReason, DescentConfig, DescentOutcome, DescentStopped, solve_descent};
 pub use solver::{
     Move, Solver, eval_assignment,
     explain::{CapacityRowRead, MoveReport, Rejection, diff},
