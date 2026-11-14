@@ -1,6 +1,7 @@
 # Issue 1211: Descent-search policy extension for katgpt-assign — K chains, abstain-on-budget, fitted-level stop
 
-> **Status:** OPEN — filed 2026-11-14; no lease (claim per AGENTS.md §claim-lease before implementing)
+> **Status:** OPEN — filed 2026-11-14; claimed 2026-11-15 (zed-07a26ed5@amo — the amo lane behind riir-refine Issue 237's sequencing)
+> **Claimed:** zed-07a26ed5@amo, 1794681902, expires 2026-11-16T18:45:00+00:00
 > **Research:** [katgpt-rs/.research/670_CRAM_Pseudolikelihood_Energy_Descent.md](../.research/670_CRAM_Pseudolikelihood_Energy_Descent.md)
 > **Source:** arXiv:2611.17309 "CRAM" (Hoover, Blayney, Whittington, 2026-11-12)
 > **Substrate:** `crates/katgpt-assign` (Research 607 / Plan 620) — the driver SHIPS; this issue extends it, never forks it
