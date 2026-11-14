@@ -5,6 +5,7 @@
 > **Source:** arXiv:2611.17309 "CRAM" (Hoover, Blayney, Whittington, 2026-11-12)
 > **Substrate:** `crates/katgpt-assign` (Research 607 / Plan 620) — the driver SHIPS; this issue extends it, never forks it
 > **Consumers:** riir-refine Issue 237 (composition cell); riir-grams Issue 001 (Repair act seam)
+> **Win base (owner reframe 2026-11-14):** this extends the WIN stack — katgpt-assign (GOAT verdict), Pillar 1's Fourier MCTS, Pillar 4's MCTS/Bandit frame bridge, the conformal-UQ candidate (its search-termination consumer), the rating substrate, decision_wire's first-class abstention. Tracked as the rating-energized-descent candidate: `../riir-ai/.docs/04_supergoat_candidates/rating_energized_descent.md`.
 
 ## What
 

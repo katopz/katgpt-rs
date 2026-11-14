@@ -63,6 +63,25 @@ Pinned claim: **rating-energized repair/composition descent** — Elo/Beta per-i
 - **House-law checks:** sigmoid-not-softmax → ship the zero-temperature/hard-move variant (CRAM's Maze mode is the precedent; a softmax-belief form needs a documented exception and is never a default). Negative-result priors honored: pick_latch (test-time statefulness CAN lose — reflex Bench 176), entropic Boltzmann tilt (NEGATIVE, refine Bench 035), opus softmax ban, AND simulated annealing (recorded negative in `katgpt-assign` in-source, Research 607 — CRAM's noisy focused-Gibbs chains inherit that prior; hard moves stay the default) — so the gates are pre-registered demote-on-loss against a tuned one-shot incumbent, never a strawman.
 - **Game half — honest negative:** per-NPC energy descent at 20 Hz × crowd is the wrong altitude — the brain+FSM+sigmoid-drive doctrine occupies NPC decision-making (behaviour flows perception→belief→drives→FSM; no hard edges beside the FSM), and a descent loop per NPC violates the frame budget. The compute-adapts-to-difficulty evidence corroborates frame-sampling/ESC instead. No filing.
 
+
+### 2.3a The win base (owner-directed reframe, 2026-11-14)
+
+The owner's challenge on the first filing stands: the fusion was framed on its LOSERS (pick_latch, entropic tilt, TetherFit, SA) when the territory around it is dominated by WINS. Corrected — the composition stands on the win stack; the negatives are boundary conditions (the shapes that lost TO these winners), not the prior. Tracked home: `riir-ai/.docs/04_supergoat_candidates/rating_energized_descent.md` (candidate bet — substrate primitives ship; the composed gate has not run).
+
+| Winner (shipped) | Win evidence | What the fusion adds on top |
+|---|---|---|
+| Pillar 1 Fourier Spatial AI (GOAT pillar) | Position invariance 100%; 5 MMO domains at scale — Fourier-hashed MCTS, no neural net | energy-shaped move ordering + a fitted-level stop for the pillar's own search |
+| Pillar 4 Frame-Sampling Bridge (GOAT pillar) | Bridges turn-based MCTS/Bandit to 20Hz ticks | difficulty-proportional compute inside the frame budget (CRAM: 22× growth easy→hard) |
+| Conformal UQ candidate (primitive ships as the floor) | "Replaces magnitude thresholds with calibration" — a tracked bet, 2 of 5 consumers closed honestly | its SEARCH-TERMINATION consumer: the fitted-level stop (CRAM: 0% wrong-halts) |
+| katgpt-assign (GOAT verdict, 607/620) | Modelless constrained-assignment local search | K chains + abstain-on-budget (Issue 1211's deltas) |
+| Rating substrate (elo_k_eff / katgpt-core rating) | DEFAULT selection stack — BetaPosterior beat every measured alternative (Bench 042's sweep verdict) | the landscape weights: ratings → B_i, co-outcome → K_ij |
+| decision_wire | Abstention first-class in the shipped contract | abstain-on-budget is already a typed answer |
+| ESC ladder (production) | Per-suite fitted-LEVEL escalation thresholds | the same level law applied to search termination |
+| bet_search (GOAT → katgpt-extract default) | Exhaustive + floor demotion WON; PUCT demoted | the local/exhaustive shape precedent — hard-move descent is the winning family |
+| Scalar-drive doctrine (phase separation GOAT default-on; crowd sheaf Super-GOAT default-on) | One modelless scalar drives behavior — the house pattern | one scalar (the landscape energy) driving stop/abstain/commit |
+
+The §3 tier (Gain today; nothing measured for the composition) is unchanged — the reframe relocates the fusion from negative-prior framing to a tracked candidate bet on the win stack, and sharpens Q4 (force multiplier): the mechanism plausibly touches two GOAT pillars, one tracked candidate, and the decision lanes.
+
 ### 2.4 Closest cousins (why they don't kill)
 
 1. **Research 663 / EBR** — concurrent (5 days earlier); owns "energy descent replaces recurrence" at neural scale. Signal-diffs that keep CRAM's deltas alive: (a) tabular PL energy with NO BPTT vs learned neural energy + BPTT (the speed edge IS the local objective); (b) fitted-LEVEL stop vs ‖∇E‖ dynamics stop — different signal class, measured 0% vs 0.05–3.54% wrong-halts, and EBR's stop fails on Maze; (c) the discrete descent driver is absent from 663's occupied census (halter/cadence/select_best_belief/seat_rerank are selection-or-halt, none is a landscape search); 663's parked "sigmoid convergence score" row cited no consumer — the grams/composition consumers found here are new surfaces.
