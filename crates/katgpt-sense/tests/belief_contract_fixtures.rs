@@ -218,6 +218,135 @@ fn f3_consistency_additive_floor_is_flat_in_kappa() {
     );
 }
 
+/// F1δ — the measured observation-noise surrogate (plan 637 T1, Issue 1000
+/// T3's noise-input unblock): hold a bounded disturbance stream on ONE kind
+/// channel against a clean twin and read the STEADY-STATE residual per dim —
+/// the filter's own δ_m, normalized to the ball radius. At ℓ = 0 the floor
+/// is FLAT in κ (F3's consistency arm), so the surrogate is a measured
+/// number, not a derived law: δ_m = max-dim steady |noisy − clean| after a
+/// warm horizon, under the SAME alternating worst-case disturbance shape F3
+/// primary uses (deterministic stand-in for a bounded noise process, per the
+/// Issue-940 determinism law — no RNG anywhere). NOTE the kernel's
+/// positivity guard (`k = max(0, activation)`) makes the alternation
+/// `+d / 0` — a HALF-cycle, whose two-cycle offset is correspondingly
+/// larger than a signed ± cycle; the analytic record below uses the same
+/// guard, so the fit is verified against the kernel's REAL arithmetic.
+///
+/// Returns the per-channel surrogate and asserts its two load-bearing
+/// properties IN-FIXTURE (a number nobody bounds is not a surrogate):
+/// (a) IDEMPOTENCE — re-running the fit reproduces the same bytes (the fit
+/// is a function of the stream, not of timing);
+/// (b) MONOTONE BOUND — a disturbance at 2× the measured bound produces a
+/// steady residual above the surrogate (the bound is load-bearing), and a
+/// disturbance at half the bound settles BELOW it (the surrogate is not
+/// under-fit). Falsification arm: the fit against a stream at HALF the
+/// surrogate's own disturbance must NOT reproduce the surrogate (a fit that
+/// ignores its input magnitude is decorative).
+///
+/// The digest pin rides T1's landing commit (637 T1), never a fixture-time
+/// stdout print — the value is ASSERTED against, not merely reported.
+fn fit_delta_surrogate(alpha: f32, drive_disturbance: f32, warm: usize) -> f32 {
+    // Disturbance rides kind channel 0 only — per-channel surrogate shape.
+    let clean_drive = [0.0f32; 6];
+    let mut noisy_drive = [0.0f32; 6];
+    noisy_drive[0] = drive_disturbance;
+
+    let mut clean = state_with_retention(alpha, [0.0; 8]);
+    let mut noisy = state_with_retention(alpha, [0.0; 8]);
+
+    // Alternating ±d on the disturbed channel (zero-mean worst-case shape);
+    // the twin sees the clean stream. Sign alternation keeps the steady
+    // state OFF the clamp wall so the residual reads contraction, not
+    // saturation.
+    let mut residual = 0.0f32;
+    for t in 0..warm {
+        let sign = if t % 2 == 0 { 1.0 } else { -1.0 };
+        let mut d = noisy_drive;
+        d[0] = drive_disturbance * sign;
+        clean.evolve_belief_additive(&clean_drive);
+        noisy.evolve_belief_additive(&d);
+        if t >= warm / 2 {
+            residual = residual.max(
+                (0..8)
+                    .map(|i| (noisy.belief()[i] - clean.belief()[i]).abs())
+                    .fold(0.0f32, f32::max),
+            );
+        }
+    }
+    residual
+}
+
+#[test]
+fn f1_delta_surrogate_is_measured_load_bearing_and_deterministic() {
+    let alpha = 0.9f32;
+    let disturbance = 0.5f32;
+    let warm = 2_000usize;
+
+    // The surrogate fit — measured, not derived (ℓ = 0 floor is flat in κ).
+    let delta_fit = fit_delta_surrogate(alpha, disturbance, warm);
+    assert!(
+        delta_fit > 0.0 && delta_fit.is_finite(),
+        "surrogate must be a finite positive number: {delta_fit}"
+    );
+    // The fit lives in the ball and well under the radius — it is a
+    // per-channel disturbance residual, not a saturation artifact.
+    assert!(
+        delta_fit < ADDITIVE_BALL_RADIUS,
+        "surrogate {delta_fit} at/over the ball radius — the fit read saturation, not contraction"
+    );
+
+    // (b) load-bearing: at half the disturbance the residual settles BELOW
+    // the surrogate (scaled input ⇒ scaled floor, roughly linearly at ℓ=0 —
+    // the additive map is affine in the drive); at double it is ABOVE.
+    let delta_half = fit_delta_surrogate(alpha, disturbance / 2.0, warm);
+    let delta_double = fit_delta_surrogate(alpha, disturbance * 2.0, warm);
+    assert!(
+        delta_half < delta_fit,
+        "half-disturbance residual {delta_half} must sit under the surrogate {delta_fit}"
+    );
+    assert!(
+        delta_double > delta_fit,
+        "double-disturbance residual {delta_double} must sit over the surrogate {delta_fit}"
+    );
+
+    // Falsification arm: a fit that ignored its input magnitude would
+    // reproduce the same number for both scales — refuse that shape by
+    // asserting the ratio is strictly ordered (never within f32 equality).
+    assert!(
+        (delta_half - delta_fit).abs() > 1e-6 && (delta_double - delta_fit).abs() > 1e-6,
+        "surrogate did not move with the input magnitude — the fit is decorative"
+    );
+
+    // (a) determinism: the identical call reproduces the same bytes.
+    let delta_again = fit_delta_surrogate(alpha, disturbance, warm);
+    assert_eq!(
+        delta_fit.to_bits(),
+        delta_again.to_bits(),
+        "surrogate fit not deterministic"
+    );
+
+    // The T1 record: the surrogate at the shipped pins has its ANALYTIC
+    // closed form under the kernel's own positivity guard (`k = max(0, a)`
+    // ⇒ the alternating disturbance rides +d / 0, a HALF-cycle): the
+    // two-cycle offsets are x₁ = 0.40084, x₂ = 0.36076 at α = 0.9,
+    // d = 0.5 — the recurrence solved in-fixture from the guard-shaped
+    // drive pair (+0.7616 / 0.0) — asserted at 1% tolerance, so the
+    // fit is a VERIFIED measurement of the kernel's REAL arithmetic, not
+    // an unbounded read.
+    let dp = fast_sigmoid(4.0 * disturbance); // σ(η·d) = 0.8808 → drive 0.7616
+    let dp_drive = 2.0 * dp - 1.0;
+    let zero_drive = 2.0 * fast_sigmoid(0.0) - 1.0; // the guard's 0-activation arm
+    let x1 =
+        (alpha * (1.0 - alpha) * zero_drive + (1.0 - alpha) * dp_drive) / (1.0 - alpha * alpha);
+    let x2 =
+        (alpha * (1.0 - alpha) * dp_drive + (1.0 - alpha) * zero_drive) / (1.0 - alpha * alpha);
+    let expect = x1.abs().max(x2.abs());
+    assert!(
+        (delta_fit - expect).abs() < 0.01 * expect,
+        "surrogate {delta_fit} vs analytic two-cycle offset {expect} — the fit drifted off the kernel's own arithmetic"
+    );
+}
+
 /// F4 — disturbance-fade settling: after a disturbance episode ends and clean
 /// observations resume, the estimate error crosses ε at the S2-predicted
 /// tick (the additive kernel fades at the FULL κ_m — the exact-linear rate).
