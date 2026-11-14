@@ -37,3 +37,7 @@ harness = false
 [[test]]
 name = "issue1211_descent"
 required-features = ["descent"]
+
+[[test]]
+name = "issue1211_t2_baselines"
+required-features = ["descent"]

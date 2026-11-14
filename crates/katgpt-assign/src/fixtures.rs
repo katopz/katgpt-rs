@@ -196,6 +196,109 @@ pub fn overpacked_one_bin(num_containers: usize, limit: i64, excess_objects: usi
     }
 }
 
+/// The Issue-1211 two-basin landscape: N unit objects all start packed in
+/// container 0 (over capacity by exactly one object — the shallow decoy),
+/// capacity permits them spread over `num_containers`; the GOAL layer is
+/// MinimizeMovement (weight W_move) fighting a strong Balance pull
+/// (weight W_bal). The shallow basin = "move the one overflow object,
+/// leave the rest" (low movement, high imbalance); the planted optimum =
+/// "spread evenly" (higher movement, near-zero imbalance). With
+/// W_bal·imbalance > W_move·(spread moves − 1), the even spread is the
+/// planted optimum while the one-move repair is an adversarial local
+/// minimum: every single-object move from it is accepted only if it
+/// improves balance enough to cover its movement cost — the decoy's
+/// neighbors are all downhill or level, so first-improvement descent
+/// stalls there unless the tie-break trajectory (seeded) walks the
+/// plateau out.
+pub fn two_basin(n: usize, containers: usize, w_bal: i64, w_move: i64) -> Problem {
+    Problem {
+        num_objects: n,
+        num_containers: containers,
+        num_dims: 1,
+        demands: vec![1; n],
+        initial: vec![0 as ContainerId; n],
+        specs: vec![
+            Spec::capacity(0, (n - 1) as i64), // over capacity by exactly 1
+            Spec::Balance {
+                dim: 0,
+                weight: w_bal,
+            },
+            Spec::MinimizeMovement { weight: w_move },
+        ],
+    }
+}
+
+/// Greedy construction baseline (balance-aware, index order): objects in
+/// index order, each into the least-loaded container (total demand across
+/// all dims; ties: lowest index) that keeps non-negative residual capacity
+/// in EVERY capacity dim; if nothing fits, the container with the largest
+/// min-residual (least violation) — mirroring [`first_fit_decreasing`]'s
+/// fallback. Deterministic. The second G2 outside baseline: where FFD is
+/// capacity-first, this arm is balance-first — it bounds what a 10-line
+/// constructive heuristic reaches WITHOUT search, so a search lane's GOAT
+/// row cannot hide behind a weak comparator.
+pub fn greedy_least_loaded(problem: &Problem) -> Vec<ContainerId> {
+    let b = problem.num_containers;
+    let odims = problem.num_dims;
+    let caps: Vec<(usize, i64)> = problem
+        .specs
+        .iter()
+        .filter_map(|s| match *s {
+            Spec::Capacity { dim, limit, .. } => Some((dim, limit)),
+            _ => None,
+        })
+        .collect();
+    let mut load = vec![0i64; b * odims];
+    let mut out = vec![0 as ContainerId; problem.num_objects];
+    let demand = |o: u32, d: usize| problem.demands[o as usize * odims + d];
+    for o in 0..problem.num_objects as u32 {
+        let min_residual = |c: usize| -> i64 {
+            let mut mr = i64::MAX;
+            for &(dim, limit) in &caps {
+                let r = limit - (load[c * odims + dim] + demand(o, dim));
+                mr = mr.min(r);
+            }
+            if mr == i64::MAX {
+                mr = 0; // no capacity specs: every container fits
+            }
+            mr
+        };
+        let total_load = |c: usize| -> i64 { (0..odims).map(|d| load[c * odims + d]).sum() };
+        let mut chosen: Option<usize> = None;
+        let mut best_load = i64::MAX;
+        for c in 0..b {
+            if min_residual(c) >= 0 {
+                let l = total_load(c);
+                if l < best_load {
+                    best_load = l;
+                    chosen = Some(c);
+                }
+            }
+        }
+        let chosen = match chosen {
+            Some(c) => c,
+            None => {
+                // Nothing fits: least-violating container (max residual).
+                let mut best_c = 0;
+                let mut best_r = i64::MIN;
+                for c in 0..b {
+                    let r = min_residual(c);
+                    if r > best_r {
+                        best_r = r;
+                        best_c = c;
+                    }
+                }
+                best_c
+            }
+        };
+        for d in 0..odims {
+            load[chosen * odims + d] += demand(o, d);
+        }
+        out[o as usize] = chosen as ContainerId;
+    }
+    out
+}
+
 /// Greedy construction baseline (classic first-fit-decreasing): objects
 /// by total demand descending (ties: lowest index), each into the FIRST
 /// container (index order) with non-negative residual capacity in EVERY

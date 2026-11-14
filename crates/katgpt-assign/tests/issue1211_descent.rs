@@ -19,40 +19,12 @@
 #![cfg(feature = "descent")]
 
 use katgpt_assign::descent::{DescentConfig, DescentOutcome, DescentStopped, solve_descent};
-use katgpt_assign::types::{ContainerId, Limits, Problem, Seed, Spec};
+use katgpt_assign::fixtures::two_basin;
+use katgpt_assign::types::{Limits, Seed};
 use katgpt_assign::{StopReason, solve};
 
-/// A two-basin landscape: N unit objects all start packed in container 0
-/// (over capacity by exactly one object — the shallow decoy), capacity
-/// permits them spread over `num_containers`; the GOAL layer is
-/// MinimizeMovement (weight W_move) fighting a strong Balance pull
-/// (weight W_bal). The shallow basin = "move the one overflow object,
-/// leave the rest" (low movement, high imbalance); the planted optimum =
-/// "spread evenly" (higher movement, near-zero imbalance). With
-/// W_bal·imbalance > W_move·(spread moves − 1), the even spread is the
-/// planted optimum while the one-move repair is an adversarial local
-/// minimum: every single-object move from it is accepted only if it
-/// improves balance enough to cover its movement cost — the decoy's
-/// neighbors are all downhill or level, so first-improvement descent
-/// stalls there unless the tie-break trajectory (seeded) walks the
-/// plateau out.
-fn two_basin(n: usize, containers: usize, w_bal: i64, w_move: i64) -> Problem {
-    Problem {
-        num_objects: n,
-        num_containers: containers,
-        num_dims: 1,
-        demands: vec![1; n],
-        initial: vec![0 as ContainerId; n],
-        specs: vec![
-            Spec::capacity(0, (n - 1) as i64), // over capacity by exactly 1
-            Spec::Balance {
-                dim: 0,
-                weight: w_bal,
-            },
-            Spec::MinimizeMovement { weight: w_move },
-        ],
-    }
-}
+// The two-basin fixture now lives in `fixtures` (shared with the T2
+// baseline rows).
 
 /// The landscape probe (kept as the record — printed, asserted softly):
 /// (a) SEED-ONLY chains are a NO-OP on this landscape class (identical
