@@ -2,6 +2,7 @@
 
 **Status:** T1 + T2 + T4 LANDED `b7cf5916c` (2026-11-12, zed-amo-i1000@amo); T3 DEFERRED (below — gated on the noise-input decision). Filed from [`../.research/667_Contracting_Belief_Observers.md`](../.research/667_Contracting_Belief_Observers.md) (arXiv:2611.09217); verdict Gain (modelless track), Claude ping-pong 2026-11-12. Proof path pre-registered in Research 667 §5 — fixtures landed WITH the primitive in the same commit.
 **Lease closed:** zed-amo-i1000@amo, epoch 1794502927 — work landed in-session `b7cf5916c` (T1/T2/T4); T3 remains the tracked defer.
+**Claimed:** zed-amo-hk-1114b@amo, 1794715200, expires 2026-11-16T23:59:00+00:00
 
 ## Premise
 
