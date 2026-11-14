@@ -837,7 +837,14 @@ pub enum BudgetAdaptation {
     /// Low inter-branch entropy → confident → contract budget.
     /// High inter-branch entropy → uncertain → expand budget.
     /// Signal is the consistency gate entropy, scaled by its own threshold.
-    #[cfg(feature = "echo_env_predictor")]
+    ///
+    /// The VARIANT is unconditional on purpose: enum shape must not be
+    /// feature-dependent, or a foreign consumer that arms this crate's
+    /// `echo_env_predictor` through another path (the `decoding` umbrella,
+    /// Plan 635 Tranche 2) arms the variant while a sibling crate's match
+    /// arm — gated on ITS OWN feature — compiles out, and the match goes
+    /// non-exhaustive (E0004). The ECHO *signal* plumbing stays gated in
+    /// its producing module; this variant is vocabulary.
     EchoConsistency,
 }
 

@@ -72,7 +72,13 @@ pub fn adaptive_tree_budget(base_budget: usize, signal: f32, mode: BudgetAdaptat
             let adapted = (base_budget as f32 * scale) as usize;
             adapted.max(base_budget / 2).min(base_budget * 2)
         }
-        #[cfg(feature = "echo_env_predictor")]
+        // The arm is unconditional to mirror the (unconditional) enum
+        // variant: the body is the same scaling curve as Entropy — pure
+        // arithmetic, no ECHO plumbing — and a cfg here would break
+        // exhaustiveness whenever a foreign consumer arms katgpt-core's
+        // `echo_env_predictor` without this crate's feature (the katgpt-rs
+        // Issue-class that broke riir-infer's entropy_bounded_commit lane,
+        // found 2026-11-14). The ECHO signal stays gated at its producer.
         BudgetAdaptation::EchoConsistency => {
             // ECHO consistency gate: same scaling curve, but signal is branch entropy
             // from PredictionConsistencyGate. Uses the config's threshold directly.
