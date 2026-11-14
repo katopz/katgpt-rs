@@ -28,3 +28,4 @@ grant katgpt-core formats_weights   # Plan 635 Tranche 2 family umbrella (verdic
 grant katgpt-core grafts            # issue-988 overlay family umbrella (reads/rules/writes/switches + artifact — the Plan 025 deterministically-constructed-overlay family's fitted instance)
 grant katgpt-core emeans_poc        # issue-997 measured-negative PoC lane (mini-batch EMA k-means fit; closed negative, opt-in forever — negative_results.md)
 grant katgpt-core sparse_kl_bound   # Issue 1210 C6 — the SSD sparse lower-bounded KL extraction (arXiv:2611.12016); member of the diagnostics family umbrella, granted individually per the one-feature growth
+grant katgpt-core assignment_descent # Issue 1211 — the descent lane through the assign re-export (K chains + abstain-on-budget + the fitted-level gate; Research 670/CRAM); implies `assignment`, granted individually per the one-feature growth
