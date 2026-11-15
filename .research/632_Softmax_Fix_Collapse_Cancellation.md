@@ -3,7 +3,7 @@
 > **Source:** "A Fix for Softmax and Cross-Entropy" — Jonathan T. Barron, Dan Gnanapragasam, Michael Tschannen (Google DeepMind), [arXiv:2610.31642](https://arxiv.org/abs/2610.31642), 2026-10-22
 > **Date:** 2026-10-23
 > **Status:** Active
-> **Related Research:** — (closest in-house cousins are code, not notes: `katgpt-core/src/ssmax.rs`, `katgpt-attn/src/dash_attn/asentmax.rs`, `noisy_or_stable` in `katgpt-core/src/lib.rs`)
+> **Related Research:** 673 (companion verification arc — Lean RP certificates + the rounding-bug atlas: TorchLean/FloatLib/LeanSoftmax; residue filed as Issues 1220/1221 + riir-refine Research 412) — (closest in-house cousins are code, not notes: `katgpt-core/src/ssmax.rs`, `katgpt-attn/src/dash_attn/asentmax.rs`, `noisy_or_stable` in `katgpt-core/src/lib.rs`)
 > **Related Plans:** — (filed as issues: katgpt-rs Issue 959 — modelless numerics primitives; riir-train Issue 645 — training-loss fixes)
 > **Cross-ref (riir-train):** Issue 645
 > **Classification:** Public
