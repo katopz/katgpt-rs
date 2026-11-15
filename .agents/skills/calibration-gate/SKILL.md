@@ -45,20 +45,24 @@ classes, groups, and bar vocabulary. The skill removes the re-derivation, not th
    posture), it never invents.
 
 3. **Pre-register the decision rule before pair 1.** Bars, thresholds, floors, falsifiers,
-   promotion bar, stop rule — written and committed BEFORE the run (sr1095's rule: the
-   promotion bar + stop rule bound before pair 1; riir-infer plan 633 landed every gate
-   explicit — G1 FAIL +1.46 CER, G2 FAIL 0.57× vs the CPU lane, G4 PASS). A post-hoc bar is
+   promotion bar, stop rule — written and committed BEFORE the run (the riir-ai
+   coverage_seek A/B pre-registration — issue 1095, `d45e061bd` — bound the promotion bar
+   + stop rule before pair 1; riir-infer plan 633 landed every gate explicit — G1 FAIL
+   +1.46 CER, G2 FAIL 0.57× vs the CPU lane, G4 PASS). A post-hoc bar is
    a tune-to-pass, and a tune-to-pass measures the tuner. Include up front: the small-group
    rule (e.g. n < 20 → Sparse; the 30/30 two-class label-census floor), the permutation-null
-   or canary falsifier that proves the gate CAN fail, and the demote literal (env-switch law:
-   a promoted arm's env is DEMOTE-ONLY, an opt-in arm's PROMOTE-ONLY — spell it now).
+   or canary falsifier that proves the gate CAN fail, and the demote literal (the
+   env-switch posture several repos pin — e.g. riir-infer / riir-refine / riir-rethink:
+   a promoted arm's env is DEMOTE-ONLY, an opt-in arm's PROMOTE-ONLY — spell yours now).
 
 4. **Separate the calibration cell from the production cell.** Bars are pinned FROM the
-   calibration run; the production cell (N=100, real contention, don't go easy) then runs
+   calibration run; the production cell (sprint#029's example: N=100, real contention,
+   don't go easy) then runs
    UNDER those bars — never the reverse (sprint#029 tasks 6/8; bars are never read off the
    calibration load). A green production run that never stressed the thing it claims to
    stress is a SKIP, not a pass. And a calibration law discovered in the calibration cell
-   PROPAGATES to the production cell BY NAME (fresh press + money-only pre-mint + account
+   PROPAGATES to the production cell BY NAME (sprint#029's example: fresh press +
+   money-only pre-mint + account
    key are load-bearing for purchases — a reused old vessel SKIPs on zero purchases by
    construction).
 
@@ -74,34 +78,44 @@ classes, groups, and bar vocabulary. The skill removes the re-derivation, not th
 6. **Measure with provenance and stability.** Every quoted bar carries its
    `bench_preflight` PROVENANCE line (box state, power source, load class). A/B pairs are
    interleaved and two-run stable (`katgpt-rs/scripts/sequential_ab_timing_audit.py` — two
-   sequential arms measure the scheduler, +5–22%); paired non-inferiority δ = max(1.0pp,
-   2.5·SE). Queue long cells via `agent-mail rig run --exclusive --est <estimate>
-   --timeout <bound>` on a verified-quiet rig — never bench a BUSY box, never bench beside
-   a GPU consumer, and re-run any row a contender touched ALONE before quoting it.
+   sequential arms measure the scheduler, +5–22%); paired non-inferiority (the
+   riir-rethink bar δ = max(1.0pp, 2.5·SE) is one house example — carry your lane's own).
+   Queue long cells via `agent-mail rig run --exclusive --timeout <bound>` on
+   a verified-quiet rig, the estimate named in `--title`/the plan (the owner's tiered-queue
+   decree, 2026-11-12, wants per-job estimates — pass `--est` only where the rig's
+   agent-mail build supports it; a build without it refuses the invocation at launch,
+   verified on m3 2026-11-15). Never bench a BUSY box,
+   never bench beside a GPU consumer, and re-run any row a contender touched ALONE before
+   quoting it.
 
 7. **Classify per group, never pool; withhold on absent evidence.** The verdict vocabulary
-   is the calibrated_dispatch shape — **Calibrated** (Wilson 95% LCB ≥ τ over ≥ N labeled),
+   is the calibrated_dispatch shape — **Calibrated** (Wilson 95% LCB ≥ τ over ≥ N labeled —
+   riir-refine i233's values were τ 0.6 over n ≥ 20; pin yours),
    **Fallback** (measured under-floor → demote the lever), **Sparse** (n < N → withhold;
    narrowing stays OFF — the evidence DEMOTES the unproven lever, it never hopes).
    Conservative per-bit: one non-Calibrated bit falls the whole surface back to the full
    posture (the dispatch narrows, never widens). An undecidable cell prints NO VERDICT
-   (exit 3, every envelope term named) — never fold it into a pass; count unknowns loud;
-   pool nothing across groups, ever (the per-predicate law).
+   with every envelope term named (a distinct non-zero exit where the lane defines one —
+   seal-remake i201's T2 verdict machinery uses exit 3) — never fold it into a pass; count
+   unknowns loud; pool nothing across groups, ever (the per-predicate law).
 
 8. **Pin, inherit, demote, record.** Pin the bars beside their PROVENANCE; carry the
    inherited laws into the next cell's plan (named, not folklore); demote the losing arm
    (never delete it); record verdict + re-open conditions in the plan/issue so the next
-   lane starts at step 4. A negative calibration is a RESULT — i1216's head-surface PoC
-   died at its own T0 headroom gate; plan 498's QAD head collapsed; the i237 composition
-   cell NO-GO — the record IS the yield.
+   lane starts at step 4. A negative calibration is a RESULT — riir-infer i1216's
+   head-surface PoC died at its own T0 headroom gate (file removed; T0 record `ca9e7fcb`,
+   bench 1217); riir-train plan 498's QAD head collapsed; riir-refine i237's composition
+   cell NO-GO (file removed `505dffd5`; record `af5dd5f3`, bench 151) — the record IS the
+   yield.
 
 ## The orchestration half — watched, not babysat
 
-Long calibrations are park-and-notify: `agent-mail rig run` with `--est` (the tiered queue
-sorts by estimate) + a timeout; END the turn; mail arrives at start/poison/end. Continuity
-across context overflow is the plan's Status line — a successor thread reads the plan and
-the out-dirs, never re-derives; fold superseded claims into `Lease-closed` rows so exactly
-one Claimed line remains. Watchdog pickups poll on their cadence; a backstop wake is
+Long calibrations are park-and-notify: `agent-mail rig run --exclusive
+--timeout <bound>`, the estimate named in `--title`/the plan; END the turn; mail arrives
+at start/poison/end. Continuity across context overflow is the plan's Status line — a
+successor thread reads the plan and the out-dirs, never re-derives; fold superseded claims
+into `**Lease closed:**` rows (the lint's exact spelling) so exactly one Claimed line
+remains. Watchdog pickups poll on their cadence; a backstop wake is
 `agent-mail send --to <own-inbox>@<rig> --at <time> "check <job>"` then END the turn.
 Verdict pickups answer the verdict round in the SAME session, not a new thread. Rig log
 purges completed jobs — check the WORK DIR before declaring a job vanished (the duel
@@ -127,19 +141,22 @@ windows only; they never re-run or re-adjudicate a live lease.
   conservative per-bit narrowing, the re-run census instrument.
 - katgpt-rs bench 982 (i1210 C2) — the census-floor NO VERDICT + permutation-null falsifier,
   re-open conditions recorded.
-- riir-rethink ESC ρ gates (issues 052/054/064) — per-suite gate-rho tables, rate-targeted
-  fit, collapse caveats carried on the promote-eligible verdict.
+- riir-rethink ESC ρ gates (issues 052/054/064 — files removed; 064's landing `1a45ae6`,
+  close-out `65e32b8`; the live posture is the ESC block in riir-rethink AGENTS.md) —
+  per-suite gate-rho tables, rate-targeted fit, collapse caveats on the verdict.
 - seal-remake sprint!053 — drive weights past the sigmoid ceiling → the zeroing form;
   verdicts as lane-posture pins with an armed witness row.
-- riir-train plan 497 — the +700% artifact re-attributed to +131.5% real (per-dispatch
-  shader compiles + blocking readbacks), paired harness as the record.
+- riir-train plan 497 — the LoRA trial-shift gain re-attributed from an instrumentation
+  artifact (+700% claimed, landing commits `5a082a21`/`7568e6df`) to +131.5% measured
+  (per-dispatch shader compiles + blocking readbacks), paired harness as the record.
 - riir-infer plan 633 — every gate explicit and honest, negatives quoted beside positives.
 - sprint#029 tasks 6/8 — calibration cell separate from the chaos cell, SKIP-not-pass,
   PROVENANCE beside every bar.
 
 ## Instruments
 
-- `agent-mail rig status` / `agent-mail rig run --exclusive --est` — queue, quiet-gate, tiers.
+- `agent-mail rig status` / `agent-mail rig run --exclusive --timeout` — queue +
+  quiet-gate; estimates ride `--title` until the rig's build carries the decree's `--est`.
 - `riir-reflex/scripts/bench_preflight.sh` — the PROVENANCE line (power, load, box state).
 - `katgpt-rs/scripts/sequential_ab_timing_audit.py` — the interleaved-A/B law.
 - Wilson/Beta LCB precedents — katgpt-core `beta_lcb_order_into`, riir-instinct `src/stats.rs`.
