@@ -126,7 +126,7 @@ pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
         // buf[j] = 0.044715 * g via fused SIMD copy+scale (single pass)
         crate::simd::simd_fused_decay_write(&mut buf, 0.0, &gate[i..i + CHUNK], 0.044715);
         crate::simd::simd_scale_mul_inplace(&mut buf, &gate[i..i + CHUNK], 1.0); // buf = 0.044715 * g²
-                                                                                 // Finish cubic via SIMD: buf = 1 + 0.044715*g², then buf = scale_2 * g * (1 + 0.044715*g²)
+        // Finish cubic via SIMD: buf = 1 + 0.044715*g², then buf = scale_2 * g * (1 + 0.044715*g²)
         crate::simd::simd_add_scalar_inplace(&mut buf, 1.0);
         crate::simd::simd_scale_mul_inplace(&mut buf, &gate[i..i + CHUNK], -SCALE_2);
         // buf[j] = exp(−2·inner[j]) via SIMD — the reciprocal σ spelling:
@@ -136,9 +136,9 @@ pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
         // already closed; issue 1223 aligned the body to it).
         crate::simd::simd_exp_inplace(&mut buf);
         crate::simd::simd_add_scalar_inplace(&mut buf, 1.0); // buf = 1 + exp(−2·inner)
-                                                             // hidden = gate * up / buf — σ folded into the one divide.
-                                                             // Slice up front so the CHUNK-length bounds checks hoist out of the
-                                                             // inner loop and LLVM can vectorize the divide.
+        // hidden = gate * up / buf — σ folded into the one divide.
+        // Slice up front so the CHUNK-length bounds checks hoist out of the
+        // inner loop and LLVM can vectorize the divide.
         {
             let h = &mut hidden[i..i + CHUNK];
             let g = &gate[i..i + CHUNK];

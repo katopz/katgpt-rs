@@ -14,9 +14,7 @@
 
 #[cfg(all(feature = "factorized_action", feature = "emeans_poc"))]
 mod t4 {
-    use katgpt_core::factorized_action::codebook::{
-        fit_codebook_kmeans_ema_into, EmeansConfig,
-    };
+    use katgpt_core::factorized_action::codebook::{EmeansConfig, fit_codebook_kmeans_ema_into};
     use katgpt_core::factorized_action::types::EffectCodebook;
 
     const K: usize = 128;
@@ -147,9 +145,7 @@ mod t4 {
         }
         println!(
             "  low-loss band: B={} α₀={} (SSE {:.4e}) — the law's (B≈hundreds, α₀ from the paper) must sit inside this band for the OUT-OF-RANGE extrapolation to hold",
-            bs[best.1],
-            alphas[best.2],
-            best.0
+            bs[best.1], alphas[best.2], best.0
         );
 
         // ── the fit at the grid's best point + the 50-seed stuck-rate ──
@@ -164,7 +160,8 @@ mod t4 {
         let (cb_f, sse_f, wall_f) = run(&patches, &cfg_best, 2024);
         println!("T4 fit @ the grid point: SSE {sse_f:.6e} wall {wall_f:?}");
 
-        let blobs: [(f32, usize, f32); 3] = [(0.0, 400, 40.0), (300.0, 100, 60.0), (150.0, 40, 25.0)];
+        let blobs: [(f32, usize, f32); 3] =
+            [(0.0, 400, 40.0), (300.0, 100, 60.0), (150.0, 40, 25.0)];
         let mut state = 0xFEED_FACEu64;
         let next = |st: &mut u64| -> f32 {
             *st ^= *st >> 30;
