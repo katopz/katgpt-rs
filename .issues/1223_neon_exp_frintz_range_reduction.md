@@ -1,6 +1,7 @@
 # Issue 1223 — `simd_exp_inplace` NEON range reduction uses FRINTZ (toward-zero), not nearest — ~2.4e−5 systematic relative error on aarch64
 
 **Status:** OPEN — kernel accuracy bug (found by the katgpt-rs Issue 1220 lane's `exp_kernel_census` probe, 2026-11-16); load-bearing: this exp backs every softmax/attention/activation on native aarch64 (M3/M5 lanes), and the module doc claims ~1 ULP.
+**Claimed:** zed-m3-i1223@m3, 1794771404, expires 2026-11-18T19:36:44Z
 
 ## The defect
 
