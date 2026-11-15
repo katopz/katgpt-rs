@@ -6673,3 +6673,53 @@ exactness vs the f64 dense oracle, monotone tightening in k, union dominates
 single-side, sentinel finiteness + the clamp-firing arm, shift invariance,
 coverage floors spiked+uniform, degenerate refusals, first-index tie rule,
 refusal battery).
+
+## 168. verify_cache — Verify-cache posture + probability-weighted cache error (Issue 1210 C7, 2026-11-16)
+
+The SSD extraction's VALIDATION DOCTRINE (arXiv:2611.12016, NeurIPS 2026,
+Apache-2.0 pinned `cccf657b`, the paper's `teacher_cache ∈ {off, verify,
+on}` contract): the closed-form half of the contract — one verify pass
+(cached row vs fresh row) → a `CacheVerifyReport` whose errors are weighted
+by the producer's FRESH probability (never-emitted tokens discount to
+exactly zero via the `-1e9` sentinel underflow; weighting by the cached
+probability would discount the very corruption signal verify exists to
+catch), the alignment (large sporadic — a mass-bearing token materially
+misread) vs truncation (small systematic — coarsened-tail) taxonomy typed
+as `CacheErrorClass`, and the typed `verify → on` promotion gate. THE ERROR
+UNIT IS PROBABILITY, NOT NATS — the fixtures caught the nat-space draft
+before landing: a `-1e9` sentinel against a fresh −40 reads as a 1e9-nat
+arithmetic lie while the behavioral difference is ~4e−18, which would make
+every legitimate coarsened cache permanently unpromotable; in probability
+space the sentinel reads as the honest zero it means. The input contract
+enforces logprob ≤ 0 (`PositiveLogprob` typed refusal — probabilities
+cannot exceed 1; `0.0` certainty is valid), bounding every `exp` to [0, 1].
+A fully-sentinel fresh row (mass exactly 0) defines the weighted mean as
+exactly 0.0 — nothing emits, nothing can be behaviorally wrong; the raw
+legs still witness whatever the cache claimed. The gate is deliberately
+STRICT beyond the issue's single-bar sentence: alignment refuses outright
+even when its weighted mean rides under any bar (the aggregate bar can
+average away one locally-wrong token; a cache that is locally wrong at a
+mass-bearing token cannot be trusted to be locally right elsewhere) —
+consumers wanting the bare weighted-bar semantics read the report fields
+directly. Bars are consumer calibration knobs (pre-registered per consumer
+gate — no universal bar claim). Sequential f64 folds ascending-index
+(Issue-940), zero allocation, non-finite refusals loud.
+
+🔧 Feature flag: `verify_cache` (katgpt-core) — opt-in, member of the
+`diagnostics` family umbrella. **NO GOAT claim** (Issue 1210 ungoat
+discipline): consumers are staged lanes — multi-host/draft-harness cache
+surfaces, decision-serving caches; promote per-primitive only when a wired
+consumer passes its pre-registered gate.
+
+📖 Issue: [`1210`](../../.issues/1210_ssd_modelless_extractions.md) ·
+Provenance: SSD NeurIPS 2026 (code pinned `cccf657b`, read +
+coordinator-verified before filing) ·
+Substrate: `crates/katgpt-core/src/verify_cache.rs` — 14 fixtures
+(identical-rows Clean + mass ≈ 1, the never-emitted discount arm, high-mass
+misalignment refusal, truncation under/over the bar, the strictness arm
+(alignment refuses under a passing weighted bar), cached-sentinel honesty
+(promotes), fresh-sentinel exact-zero weighting, all-sentinel fresh row
+(mean defined 0.0), the refusal battery (length/positive/non-finite/empty +
+certainty-is-valid), 4096-token bitwise determinism, weighted-error
+monotonicity, mass vs a sequential reference fold, posture-gate Off/On
+refusals).

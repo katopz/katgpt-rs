@@ -303,6 +303,9 @@ pub mod logit_regime;
 #[cfg(feature = "sparse_kl_bound")]
 pub mod sparse_kl;
 
+#[cfg(feature = "verify_cache")]
+pub mod verify_cache;
+
 pub mod simd_lut_dequant;
 
 pub mod similarity;
