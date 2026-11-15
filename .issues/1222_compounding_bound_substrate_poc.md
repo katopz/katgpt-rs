@@ -1,5 +1,6 @@
 # Issue 1222: `katgpt-core::compounding` — the coverage-factor bound substrate POC (Research 674)
 **Status:** Open — POC tier. Self-contained; no consumer is blocked on it. Escalates to a GOAT plan the day a consumer wires it (refine campaign bound is the first candidate).
+**Claimed:** zed-m3-i1222@m3, 1794822000, expires 2026-11-18T05:40:00+00:00 — T1–T6 (the whole POC) this session.
 **Unclaimed** — routable to any katgpt-rs primitive session. Fixture + falsification arm are fully specified below; implementation is ~150 LOC + tests.
 
 Source: arXiv:2609.19465 (Research 674) — Lemma 5.1 / Prop B.2 / §5.2, distilled modelless by the no-GD advocate and coordinator-verified. Every input is a histogram the consumers already persist; zero gradients involved.
