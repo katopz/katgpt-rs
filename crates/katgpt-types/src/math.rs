@@ -127,7 +127,7 @@ pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
         // buf[j] = 0.044715 * g via fused SIMD copy+scale (single pass)
         crate::simd::simd_fused_decay_write(&mut buf, 0.0, &gate[i..i + CHUNK], 0.044715);
         crate::simd::simd_scale_mul_inplace(&mut buf, &gate[i..i + CHUNK], 1.0); // buf = 0.044715 * g²
-        // Finish cubic via SIMD: buf = 1 + 0.044715*g², then buf = scale_2 * g * (1 + 0.044715*g²)
+                                                                                 // Finish cubic via SIMD: buf = 1 + 0.044715*g², then buf = scale_2 * g * (1 + 0.044715*g²)
         crate::simd::simd_add_scalar_inplace(&mut buf, 1.0);
         crate::simd::simd_scale_mul_inplace(&mut buf, &gate[i..i + CHUNK], SCALE_2);
         // buf[j] = exp(2*inner[j]) via SIMD
@@ -136,9 +136,9 @@ pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
         // Compute denominator (exp + 1) via SIMD, then SIMD tanh + fused mul
         buf2[..CHUNK].copy_from_slice(&buf);
         crate::simd::simd_add_scalar_inplace(&mut buf2, 1.0); // buf2 = exp + 1
-        // hidden = gate * up, then hidden *= tanh(inner).
-        // Slice up front so the CHUNK-length bounds checks hoist out of the
-        // inner loop and LLVM can vectorize both the divide and the multiply.
+                                                              // hidden = gate * up, then hidden *= tanh(inner).
+                                                              // Slice up front so the CHUNK-length bounds checks hoist out of the
+                                                              // inner loop and LLVM can vectorize both the divide and the multiply.
         {
             let h = &mut hidden[i..i + CHUNK];
             let g = &gate[i..i + CHUNK];
@@ -152,20 +152,25 @@ pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
         }
         i += CHUNK;
     }
-    // Scalar remainder
-    // NOTE: uses standard `tanh`, NOT `fast_tanh`. The analytic backward
-    // (`gemma2_train::gegelu_backward_into`) also uses standard `tanh`, so they
-    // MUST match for FD gradient checks to pass. The chunked path above
-    // computes tanh exactly via exp(2x)/(exp(2x)+1), which also matches.
-    // `fast_tanh` (Padé [2/2], ~2.5% worst-case) was a perf shortcut that
-    // broke analytic-vs-FD agreement on the scalar path; the scalar path is
-    // cold in production (mlp_hidden is always a multiple of 64) so this
-    // costs nothing.
+    // Scalar remainder — σ FORM, matching the chunked body above: the body
+    // computes g·up·σ(2·inner) via exp(2x)/(exp(2x)+1), and the tail must
+    // spell the same form, not the algebraically-equal `0.5·g·(1+tanh inner)`.
+    // The tanh spelling cancels: `1 + tanh(inner)` rounds to a zero when
+    // 2·exp(−2·inner) < half-ulp-below-1 (inner ≲ −9.16, g ≲ −5.2), so the
+    // tail read −0.0 where the body kept the true value — a row's answer
+    // depended on len % 64 (issue 1220; Research 673 §4.1 atlas row).
+    // History note: `fast_tanh` (Padé [2/2], ~2.5% worst-case) was a perf
+    // shortcut that broke analytic-vs-FD agreement on this path; the scalar
+    // path is cold in production (mlp_hidden is always a multiple of 64) so
+    // this costs nothing.
     for i in i..hidden.len() {
         let g = gate[i];
         let inner = SQRT_2_OVER_PI * (g + 0.044715 * g * g * g);
-        let gelu_val = 0.5 * g * (1.0 + inner.tanh());
-        hidden[i] = gelu_val * up[i];
+        // Reciprocal σ spelling: 1/(1+exp(−2·inner)) never overflows (the
+        // direct e/(e+1) form NaNs when exp(+2·inner) = inf; tanh was
+        // inf-tolerant and the training fixtures exercise that range).
+        let e = (-2.0 * inner).exp();
+        hidden[i] = g * up[i] / (1.0 + e);
     }
 }
 
