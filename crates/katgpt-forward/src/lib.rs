@@ -748,7 +748,8 @@ pub mod diffusion_sampler;
 #[cfg(all(feature = "dllm", feature = "tri_mode"))]
 pub use diffusion_sampler::{
     DiffusionSampler, N_STABILITY_FEATURES, SamplerDecision, SamplerFeatures, SamplerTrajectory,
-    SamplerVariant, StabilityTracker, TOPK_DRIFT_K, collect_trajectories,
+    SamplerVariant, StabilityObservation, StabilityReason, StabilityTracker, TOPK_DRIFT_K,
+    collect_trajectories,
 };
 
 // ── Issue 859 (2026-09-20): Jev structured reads ──

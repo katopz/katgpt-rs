@@ -330,6 +330,10 @@ impl StabilityTracker {
     /// [`SamplerFeatures::from_logits_into`] emit); `idx[0]` is the argmax
     /// over non-mask tokens. Returns `(stable_age, topk_drift)` for the
     /// step.
+    ///
+    /// Delegates to [`Self::observe_row`] — the row form is the primary
+    /// seam and names the boundary branch that fired; this projection
+    /// keeps the historical `(u8, f32)` signature byte-identical.
     pub fn observe(
         &mut self,
         idx: &[u32; TOPK_DRIFT_K],
@@ -338,45 +342,8 @@ impl StabilityTracker {
         tau_min: f32,
         remasked: bool,
     ) -> (u8, f32) {
-        if remasked {
-            self.prev_valid = false;
-            self.age = 0;
-            return (0, 0.0);
-        }
-        // `is_nan()` spelled out (not a negated comparison): a NaN
-        // top1_prob must DISARM — through `<` it would silently arm.
-        if top1_prob < tau_min || top1_prob.is_nan() {
-            self.age = 0;
-            return (0, 0.0);
-        }
-
-        // Restricted JSD between the last armed set and this one. Both sets
-        // are copied and index-sorted (the sets arrive in probability
-        // order; `jsd_topk_sets` wants ascending indices). K = 3 → two
-        // fixed-size sorts, no allocation.
-        let drift = if self.prev_valid {
-            let mut a: [(u32, f32); TOPK_DRIFT_K] =
-                std::array::from_fn(|i| (self.prev_idx[i], self.prev_masses[i]));
-            let mut b: [(u32, f32); TOPK_DRIFT_K] = std::array::from_fn(|i| (idx[i], masses[i]));
-            a.sort_unstable_by_key(|t| t.0);
-            b.sort_unstable_by_key(|t| t.0);
-            let mut d = 0.0f32;
-            jsd_topk_sets(&a, &b, &mut d);
-            d
-        } else {
-            0.0
-        };
-
-        self.age = if self.prev_valid && idx[0] == self.prev_idx[0] {
-            self.age.saturating_add(1)
-        } else {
-            0
-        };
-
-        self.prev_idx = *idx;
-        self.prev_masses = *masses;
-        self.prev_valid = true;
-        (self.age, drift)
+        let row = self.observe_row(idx, masses, top1_prob, tau_min, remasked);
+        (row.stable_age, row.topk_drift)
     }
 
     /// Clear all state (the in-band form is `observe(.., remasked = true)`;
@@ -390,6 +357,139 @@ impl StabilityTracker {
 impl Default for StabilityTracker {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ── Provenance rows (Issue 1210 C2) ─────────────────────────
+
+/// Which boundary law produced a [`StabilityTracker`] reading — the
+/// receipt half of the observation (Issue 1210 C2's provenance rows;
+/// the fleet's typed-reason-at-the-observation-seam pattern —
+/// `MoveReport::rejection`, `AbstainReason`, `closure::RejectionReason`,
+/// `escalation_guard::receipt` — applied to the tracker's branches, which
+/// [`StabilityTracker::observe`]'s bare `(u8, f32)` discards).
+///
+/// Branch-exact: every variant names a branch the item-5 laws already
+/// take; none adds a decision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StabilityReason {
+    /// First observation at this position (or the first after any reset):
+    /// no comparison side exists. Age 0, drift 0.0 by the neutrality law —
+    /// a max-drift ln 2 reading here would poison the stability signal.
+    FirstObservation,
+    /// Armed step whose argmax equals the previous armed step's: the
+    /// stable case. Age incremented (saturating), drift measured.
+    ArgmaxHeld,
+    /// Armed step whose argmax differs from the previous armed step's:
+    /// the inflection event itself. Age reset to 0, drift measured
+    /// against the last armed set (the row carries the magnitude, so a
+    /// consumer can read flip-only or flip-or-spike without a second
+    /// seam).
+    ArgmaxFlip,
+    /// Below the arming mass floor, or a non-finite `top1_prob` (which
+    /// must disarm — through `<` it would silently arm): no commitment
+    /// information, the noisy set is NOT adopted and the next armed step
+    /// compares against the last ARMED side (the item-5 mass-floor law).
+    /// Age reset, no drift measured.
+    Disarmed,
+    /// A remask cleared all state (the item-5 remask law — TSD's
+    /// unique-commit-time assumption breaks under remasking). Age reset,
+    /// no drift; the next observation is a first observation.
+    RemaskReset,
+}
+
+/// One provenance row: which law fired, and what it measured —
+/// [`StabilityTracker::observe`]'s `(stable_age, topk_drift)` with the
+/// branch that produced them named (Issue 1210 C2). Zero allocation;
+/// `Copy` so a capture can hold rows in a flat buffer.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StabilityObservation {
+    /// The boundary branch that fired (see [`StabilityReason`]).
+    pub reason: StabilityReason,
+    /// The stable-age half of the reading (identical to `observe`'s
+    /// first element — the row is a superset, never a recomputation).
+    pub stable_age: u8,
+    /// The drift half of the reading (identical to `observe`'s second
+    /// element; 0.0 wherever the law does not measure — first
+    /// observation, disarmed step, post-remask).
+    pub topk_drift: f32,
+}
+
+impl StabilityTracker {
+    /// [`Self::observe`] with the branch that fired named — the primary
+    /// seam; the bare-tuple form delegates here, so the two can never
+    /// disagree (one computation, two projections).
+    ///
+    /// Same contract as [`Self::observe`]: `idx` / `masses` are the
+    /// step's top-3 set in probability order, `idx[0]` the argmax over
+    /// non-mask tokens.
+    pub fn observe_row(
+        &mut self,
+        idx: &[u32; TOPK_DRIFT_K],
+        masses: &[f32; TOPK_DRIFT_K],
+        top1_prob: f32,
+        tau_min: f32,
+        remasked: bool,
+    ) -> StabilityObservation {
+        if remasked {
+            self.prev_valid = false;
+            self.age = 0;
+            return StabilityObservation {
+                reason: StabilityReason::RemaskReset,
+                stable_age: 0,
+                topk_drift: 0.0,
+            };
+        }
+        // `is_nan()` spelled out (not a negated comparison): a NaN
+        // top1_prob must DISARM — through `<` it would silently arm.
+        if top1_prob < tau_min || top1_prob.is_nan() {
+            self.age = 0;
+            return StabilityObservation {
+                reason: StabilityReason::Disarmed,
+                stable_age: 0,
+                topk_drift: 0.0,
+            };
+        }
+
+        // Restricted JSD between the last armed set and this one. Both sets
+        // are copied and index-sorted (the sets arrive in probability
+        // order; `jsd_topk_sets` wants ascending indices). K = 3 → two
+        // fixed-size sorts, no allocation.
+        let (drift, prev_valid, prev_argmax_held) = if self.prev_valid {
+            let mut a: [(u32, f32); TOPK_DRIFT_K] =
+                std::array::from_fn(|i| (self.prev_idx[i], self.prev_masses[i]));
+            let mut b: [(u32, f32); TOPK_DRIFT_K] = std::array::from_fn(|i| (idx[i], masses[i]));
+            a.sort_unstable_by_key(|t| t.0);
+            b.sort_unstable_by_key(|t| t.0);
+            let mut d = 0.0f32;
+            jsd_topk_sets(&a, &b, &mut d);
+            (d, true, idx[0] == self.prev_idx[0])
+        } else {
+            (0.0, false, false)
+        };
+
+        self.age = if prev_valid && prev_argmax_held {
+            self.age.saturating_add(1)
+        } else {
+            0
+        };
+
+        let reason = if !prev_valid {
+            StabilityReason::FirstObservation
+        } else if prev_argmax_held {
+            StabilityReason::ArgmaxHeld
+        } else {
+            StabilityReason::ArgmaxFlip
+        };
+
+        self.prev_idx = *idx;
+        self.prev_masses = *masses;
+        self.prev_valid = true;
+        StabilityObservation {
+            reason,
+            stable_age: self.age,
+            topk_drift: drift,
+        }
     }
 }
 
@@ -1507,6 +1607,82 @@ mod tests {
             drift > 0.0 && drift < std::f32::consts::LN_2,
             "partial-overlap drift {drift}"
         );
+    }
+
+    // ── Provenance rows (Issue 1210 C2): the row form names the branch;
+    // these twins pin the reason for every item-5 law the tuple tests
+    // above already pin numerically.
+
+    #[test]
+    fn stability_row_names_every_boundary_branch() {
+        let mut t = StabilityTracker::new();
+        let (idx, m) = set(4, 7, 9);
+
+        // First observation: neutral, named.
+        let r = t.observe_row(&idx, &m, 0.7, TAU, false);
+        assert_eq!(r.reason, StabilityReason::FirstObservation);
+        assert_eq!((r.stable_age, r.topk_drift), (0, 0.0));
+
+        // Held: ages, drift measured (identical set → bitwise 0).
+        let r = t.observe_row(&idx, &m, 0.7, TAU, false);
+        assert_eq!(r.reason, StabilityReason::ArgmaxHeld);
+        assert_eq!((r.stable_age, r.topk_drift), (1, 0.0));
+
+        // Flip: argmax changed, age reset, drift strictly inside (0, ln 2)
+        // (the set {5,7,9} overlaps {4,7,9} in two of three slots).
+        let (idx2, m2) = set(5, 7, 9);
+        let r = t.observe_row(&idx2, &m2, 0.7, TAU, false);
+        assert_eq!(r.reason, StabilityReason::ArgmaxFlip);
+        assert_eq!(r.stable_age, 0);
+        assert!(r.topk_drift > 0.0 && r.topk_drift < std::f32::consts::LN_2);
+
+        // Disarmed below floor: named, no adoption, no drift.
+        let r = t.observe_row(&idx2, &m2, TAU * 0.5, TAU, false);
+        assert_eq!(r.reason, StabilityReason::Disarmed);
+        assert_eq!((r.stable_age, r.topk_drift), (0, 0.0));
+
+        // Disarmed on NaN: the same law (must not arm through the
+        // comparison).
+        let r = t.observe_row(&idx2, &m2, f32::NAN, TAU, false);
+        assert_eq!(r.reason, StabilityReason::Disarmed);
+
+        // Post-disarm armed step compares against the last ARMED side:
+        // {5,7,9} again → held, age 1, drift bitwise 0.
+        let r = t.observe_row(&idx2, &m2, 0.7, TAU, false);
+        assert_eq!(r.reason, StabilityReason::ArgmaxHeld);
+        assert_eq!((r.stable_age, r.topk_drift), (1, 0.0));
+
+        // Remask: named reset, then a named first observation.
+        let r = t.observe_row(&idx2, &m2, 0.7, TAU, true);
+        assert_eq!(r.reason, StabilityReason::RemaskReset);
+        assert_eq!((r.stable_age, r.topk_drift), (0, 0.0));
+        let r = t.observe_row(&idx2, &m2, 0.7, TAU, false);
+        assert_eq!(r.reason, StabilityReason::FirstObservation);
+    }
+
+    #[test]
+    fn stability_row_is_a_superset_of_the_tuple_form() {
+        // One scripted sequence through BOTH forms on identical trackers:
+        // every step's (age, drift) pair must match exactly — the row is
+        // a projection of one computation, never a recomputation.
+        type Step = (([u32; 3], [f32; 3]), f32, bool);
+        let script: [Step; 8] = [
+            (set(4, 7, 9), 0.7, false),
+            (set(4, 7, 9), 0.3, false),
+            (set(4, 7, 9), 0.7, false),
+            (set(1, 2, 3), 0.7, false),
+            (set(1, 2, 3), f32::NAN, false),
+            (set(1, 2, 3), 0.7, false),
+            (set(1, 2, 3), 0.7, true),
+            (set(9, 8, 7), 0.7, false),
+        ];
+        let mut tuple_t = StabilityTracker::new();
+        let mut row_t = StabilityTracker::new();
+        for (step, ((idx, m), p, remasked)) in script.iter().enumerate() {
+            let (a, d) = tuple_t.observe(idx, m, *p, TAU, *remasked);
+            let r = row_t.observe_row(idx, m, *p, TAU, *remasked);
+            assert_eq!((a, d), (r.stable_age, r.topk_drift), "step {step}");
+        }
     }
 
     #[test]

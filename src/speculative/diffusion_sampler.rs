@@ -15,7 +15,8 @@
 
 pub use katgpt_forward::diffusion_sampler::{
     DiffusionSampler, N_STABILITY_FEATURES, SamplerDecision, SamplerFeatures, SamplerTrajectory,
-    SamplerVariant, StabilityTracker, TOPK_DRIFT_K, collect_trajectories,
+    SamplerVariant, StabilityObservation, StabilityReason, StabilityTracker, TOPK_DRIFT_K,
+    collect_trajectories,
 };
 
 use crate::speculative::d2f::D2fDecodeConfig;
