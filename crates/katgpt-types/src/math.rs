@@ -120,7 +120,6 @@ pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
     const SQRT_2_OVER_PI: f32 = 0.797_884_6; // (2.0f32 / π).sqrt()
     const SCALE_2: f32 = 1.595_769_2; // 2.0 * SQRT_2_OVER_PI
     let mut buf = [0.0f32; CHUNK];
-    let mut buf2 = [0.0f32; CHUNK];
 
     let mut i = 0;
     while i + CHUNK <= hidden.len() {
@@ -129,35 +128,34 @@ pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
         crate::simd::simd_scale_mul_inplace(&mut buf, &gate[i..i + CHUNK], 1.0); // buf = 0.044715 * g²
                                                                                  // Finish cubic via SIMD: buf = 1 + 0.044715*g², then buf = scale_2 * g * (1 + 0.044715*g²)
         crate::simd::simd_add_scalar_inplace(&mut buf, 1.0);
-        crate::simd::simd_scale_mul_inplace(&mut buf, &gate[i..i + CHUNK], SCALE_2);
-        // buf[j] = exp(2*inner[j]) via SIMD
+        crate::simd::simd_scale_mul_inplace(&mut buf, &gate[i..i + CHUNK], -SCALE_2);
+        // buf[j] = exp(−2·inner[j]) via SIMD — the reciprocal σ spelling:
+        // σ(2x) = 1/(1+exp(−2x)) stays finite for every finite gate (the old
+        // body spelled exp(2x)/(exp(2x)+1), which NaNs at exp overflow for
+        // |inner| ≳ 44.35 — the hole the scalar tail's issue-1220 fix
+        // already closed; issue 1223 aligned the body to it).
         crate::simd::simd_exp_inplace(&mut buf);
-        // hidden[j] = g * exp(2x) / (exp(2x) + 1) * up[j]
-        // Compute denominator (exp + 1) via SIMD, then SIMD tanh + fused mul
-        buf2[..CHUNK].copy_from_slice(&buf);
-        crate::simd::simd_add_scalar_inplace(&mut buf2, 1.0); // buf2 = exp + 1
-                                                              // hidden = gate * up, then hidden *= tanh(inner).
-                                                              // Slice up front so the CHUNK-length bounds checks hoist out of the
-                                                              // inner loop and LLVM can vectorize both the divide and the multiply.
+        crate::simd::simd_add_scalar_inplace(&mut buf, 1.0); // buf = 1 + exp(−2·inner)
+                                                             // hidden = gate * up / buf — σ folded into the one divide.
+                                                             // Slice up front so the CHUNK-length bounds checks hoist out of the
+                                                             // inner loop and LLVM can vectorize the divide.
         {
             let h = &mut hidden[i..i + CHUNK];
             let g = &gate[i..i + CHUNK];
             let u = &up[i..i + CHUNK];
             for j in 0..CHUNK {
-                // Branch-free tanh: exp(2x) / (exp(2x) + 1) via division
-                buf[j] /= buf2[j];
-                h[j] = g[j] * u[j];
+                h[j] = g[j] * u[j] / buf[j];
             }
-            crate::simd::simd_scale_mul_inplace(h, &buf, 1.0);
         }
         i += CHUNK;
     }
-    // Scalar remainder — σ FORM, matching the chunked body above: the body
-    // computes g·up·σ(2·inner) via exp(2x)/(exp(2x)+1), and the tail must
-    // spell the same form, not the algebraically-equal `0.5·g·(1+tanh inner)`.
-    // The tanh spelling cancels: `1 + tanh(inner)` rounds to a zero when
-    // 2·exp(−2·inner) < half-ulp-below-1 (inner ≲ −9.16, g ≲ −5.2), so the
-    // tail read −0.0 where the body kept the true value — a row's answer
+    // Scalar remainder — σ FORM, matching the chunked body above (both lanes
+    // spell 1/(1+exp(−2·inner)); issue 1223 aligned the body to the tail's
+    // reciprocal spelling — the old body's exp(2x)/(exp(2x)+1) NaN'd at exp
+    // overflow). History: the tail ORIGINALLY spelled the algebraically-equal
+    // `0.5·g·(1+tanh inner)`, whose `1+tanh` sum cancels to a rounded zero
+    // when 2·exp(−2·inner) < half-ulp-below-1 (inner ≲ −9.16, g ≲ −5.2), so
+    // the tail read −0.0 where the body kept the true value — a row's answer
     // depended on len % 64 (issue 1220; Research 673 §4.1 atlas row).
     // History note: `fast_tanh` (Padé [2/2], ~2.5% worst-case) was a perf
     // shortcut that broke analytic-vs-FD agreement on this path; the scalar

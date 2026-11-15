@@ -1,47 +1,57 @@
 //! Issue 1220 — `gegelu_tanh` lane-parity property test (the falsification arm).
 //!
-//! The SIMD body computes the sigmoid form `g·up·σ(2·inner)` via
-//! `exp(2x)/(exp(2x)+1)`; the scalar remainder must stay in the same FORM so a
-//! row's answer does not depend on `len % 64`. The old tail spelled the
-//! algebraically-equal `0.5·g·(1+tanh inner)`, whose `1+tanh` sum cancels to a
-//! rounded zero in the deep negative tail (scalar read −0.0 from g ≈ −5.2
-//! while the body kept the true value). Research 673 §4.1 has the atlas row.
+//! Both lanes spell the sigmoid form `g·up·σ(2·inner)` as `1/(1+exp(−2·inner))`
+//! (the body since issue 1223, the scalar tail since issue 1220), so a row's
+//! answer does not depend on `len % 64`. History: the tail ORIGINALLY spelled
+//! the algebraically-equal `0.5·g·(1+tanh inner)`, whose `1+tanh` sum cancels
+//! to a rounded zero in the deep negative tail (scalar read −0.0 from g ≈ −5.2
+//! while the body kept the true value); the body ORIGINALLY spelled
+//! `exp(2x)/(exp(2x)+1)`, which NaNs at exp overflow for |inner| ≳ 44.35.
+//! Research 673 §4.1 has the atlas row.
 //!
 //! Falsification predicate: per-element lane gap bounded by a RELATIVE band.
 //! A plain absolute cap cannot serve: the pre-fix gaps (≈7e−8 peak) fit under
 //! `1e−7·|up|` — the relative band is what makes the cancellation visible
-//! (it failed at a relative 100% pre-fix). The band's floor is NOT ulp-class:
-//! the body's exp is the NEON kernel, whose measured accuracy vs libm is
-//! ~2.8e−5 worst-case relative (a range-reduction defect — `vrndq_f32` is
-//! round-toward-zero, not nearest; see the exp-kernel issue filed from the
-//! `exp_kernel_census` probe below and Research 673 §4.1's follow-up note).
-//! The two exps are therefore the honest floor under every post-alignment
-//! lane gap, and the band pins that measured class (≈252 ulps) rather than
-//! the doc's ~1-ulp claim. Any FORM divergence (cancellation = relative 100%,
-//! a fast_tanh regression = relative ~2.5%) fails the band by orders of
-//! magnitude.
+//! (it failed at a relative 100% pre-fix).
 //!
-//! Oracle (pinned from the verdict-round measurement, Research 673 §4.1 — do
-//! not re-derive by hand; the `probe` arm re-prints the table for re-pins):
-//! length 65, up = 1: g −5.0 → SIMD −2.29e−7 / old tail −2.98e−7;
-//! −5.2 → −5.69e−8 / −0.0 (onset); −5.5 → −5.93e−9 / −0.0;
-//! −6.0 → −8.44e−11 / −0.0; +5.0 → +5.0 / 4.9999995 (one ulp of 5.0).
+//! Band floor: the exp difference as it propagates through σ. Issue 1223
+//! fixed the exp kernel's range reduction (the NEON path truncated with
+//! `vrndq_f32`/FRINTZ where nearest was intended — 236 ulps measured vs
+//! libm; the post-fix census reads 2 ulps), so the floor is no longer
+//! kernel-class: it is the two lanes' ~2-ulp exp difference scaled by the
+//! σ propagation factor (sub-ulp mid-band, up to |inner| ulps in the deep
+//! tail — see CAP_ULPS below). Any regression — a return to FRINTZ,
+//! a fast_tanh spelling (~2.5% relative), or a form divergence (relative
+//! 100%) — fails the band by orders of magnitude.
+//!
+//! Oracle (pinned at 3 significant figures from the verdict-round
+//! measurement, Research 673 §4.1 — do not re-derive by hand; the `probe`
+//! arm re-prints the table for re-pins; values re-confirmed identical
+//! post-1223, the kernel fix moved them only in the 4th+ digit):
+//! length 65, up = 1: g −5.0 → SIMD −2.29e−7; −5.2 → −5.69e−8 (onset);
+//! −5.5 → −5.93e−9; −6.0 → −8.44e−11; +5.0 → +5.0 (one ulp of 5.0).
 
 use katgpt_types::gegelu_tanh;
 use katgpt_types::simd::simd_exp_inplace;
 
-/// Relative lane-parity band. Two parts:
-/// - ulp floor: rounding of the shared-form arithmetic around the answers.
-/// - EXP-KERNEL floor: the body's exp is the NEON kernel, measured at ~2.81e−5
-///   worst-case relative vs libm (`exp_kernel_census` below — the vrndq
-///   truncation defect filed as its own issue). Until that kernel is fixed,
-///   this measured class is the honest floor under any post-alignment lane
-///   gap; a 1-ulp-class band would pin a false promise. The cap stays 4×
-///   below the exp kernel's own error so a kernel fix (or a form regression)
-///   re-judges the band against a real boundary, not slack.
+/// Relative lane-parity band. Post-1223 the exp kernel is nearest-rounded
+/// (census 2 ulps vs libm; pre-fix 236), so the honest floor is the exp
+/// difference as it propagates through σ. dσ/σ = de/(1+e) ≈ ε·min(e, 1):
+/// sub-ulp mid-band, but in the deep tail (|e| ≫ 1) the kernel's absolute
+/// exp error rides the answer at up to |inner| ulps (measured: gaps ≈ 24
+/// ulps of the answer at the grid's deepest g, ≈ 47 with the up = −2 arm).
+/// The cap therefore scales with |inner| — the same ε·|inner| association
+/// scale the probe reports — with ~4× headroom over the measured worst.
+/// Every regression still fails by orders of magnitude: a FRINTZ return
+/// (236-ulp exp error → ~24k-ulp-class gaps here), fast_tanh ≈ 2.5%
+/// relative, cancellation = relative 100%.
 const CAP_ULPS: f32 = 4.0;
-/// Measured NEON-exp accuracy class (worst 2.81e−5 in the census; +14% headroom).
-const EXP_KERNEL_REL: f32 = 3.2e-5;
+/// The exp kernel's own pinned accuracy floor: the measured census class plus
+/// headroom. Pre-1223 this was 3.2e−5 (236 ulps) and it DOMINATED this band —
+/// the kernel bug's measured class was the honest floor then. Post-fix it
+/// sits BELOW the cap, so the cap drives; the constant stays as the kernel's
+/// honest record and the regression tripwire.
+const EXP_KERNEL_REL: f32 = 3.0e-7;
 
 /// The verdict-round g values (the test's oracle grid, Research 673 §4.1).
 const ORACLE_G: [f32; 5] = [-5.0, -5.2, -5.5, -6.0, 5.0];
@@ -61,8 +71,8 @@ fn lane_answer(g: f32, up: f32, len: usize) -> f32 {
     hidden[len - 1]
 }
 
-fn ulp_band(v: f32) -> f32 {
-    let rel = CAP_ULPS * f32::EPSILON * v.abs().max(f32::MIN_POSITIVE);
+fn ulp_band(v: f32, inner: f32) -> f32 {
+    let rel = CAP_ULPS * f32::EPSILON * inner.abs().max(1.0) * v.abs().max(f32::MIN_POSITIVE);
     rel.max(EXP_KERNEL_REL * v.abs())
 }
 
@@ -118,10 +128,11 @@ fn lanes_agree_within_the_pinned_relative_band() {
             let body = lane_answer(g, 1.0, 64);
             let tail = lane_answer(g, 1.0, len);
             let gap = (body - tail).abs();
-            let bound = ulp_band(body.abs().max(tail.abs()));
+            let inner = 0.797_884_6 * (g + 0.044715 * g * g * g);
+            let bound = ulp_band(body.abs().max(tail.abs()), inner);
             assert!(
                 gap <= bound,
-                "lane gap {gap:e} > {bound:e} (4 ulp) at g={g}, len={len}: body={body:e} tail={tail:e}"
+                "lane gap {gap:e} > {bound:e} (4·|inner| ulp) at g={g}, len={len}: body={body:e} tail={tail:e}"
             );
             g += 0.05;
         }
@@ -136,7 +147,8 @@ fn lanes_agree_with_a_negative_up_operand() {
         let body = lane_answer(g, -2.0, 64);
         let tail = lane_answer(g, -2.0, 65);
         let gap = (body - tail).abs();
-        let bound = ulp_band(body.abs().max(tail.abs()));
+        let inner = 0.797_884_6 * (g + 0.044715 * g * g * g);
+        let bound = ulp_band(body.abs().max(tail.abs()), inner);
         assert!(
             gap <= bound,
             "lane gap with up=−2 at g={g}: body={body:e} tail={tail:e} gap={gap:e} bound={bound:e}"
@@ -181,7 +193,9 @@ fn probe() {
 
 /// Exp-kernel census: simd_exp_inplace vs libm `f32::exp` over the lane's
 /// working range. Backs the lane-parity band — the two exps are the floor
-/// under every post-alignment lane gap. `#[ignore]`d like `probe`.
+/// under every post-alignment lane gap. Post-1223 measured class: ~2 ulp
+/// worst (pre-fix: 236 ulps — the `vrndq_f32` truncation, issue 1223).
+/// `#[ignore]`d like `probe`.
 #[test]
 #[ignore]
 fn exp_kernel_census() {

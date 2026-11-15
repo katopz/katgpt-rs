@@ -1,7 +1,12 @@
 //! SIMD activation kernels — exp, sigmoid, tanh-clamp, reciprocal, fast_sigmoid.
 //!
 //! Backed by the 6th-order Cephes polynomial for `exp` (accurate to ~1 ULP for
-//! `|x| < 88`). Mixed NEON/AVX2/scalar dispatch.
+//! `|x| < 88`; the range reduction rounds nearest — `vrndnq_f32` on NEON,
+//! `_MM_FROUND_TO_NEAREST_INT` on AVX2, `f32x4_nearest` on wasm32; issue 1223
+//! fixed the NEON path that had used `vrndq_f32`/FRINTZ and measured ~2.8e−5
+//! systematic relative error, 236 ulps vs libm — `exp_kernel_census` in
+//! `tests/gegelu_lane_parity.rs` is the standing witness). Mixed
+//! NEON/AVX2/scalar dispatch.
 //!
 //! AVX2 paths share horizontal reducers from `super::horizontal`.
 
@@ -21,9 +26,10 @@ const CEPHES_INV_LN2: f32 = std::f32::consts::LOG2_E;
 
 /// SIMD-accelerated in-place exp: `x[i] = exp(x[i])` for all `i`.
 ///
-/// Uses a 6th-order Cephes polynomial approximation with range reduction,
-/// accurate to ~1 ULP for inputs in [-88, 88]. Sufficient for softmax
-/// where inputs are shifted by max (range [0, ~30]).
+/// Uses a 6th-order Cephes polynomial approximation with range reduction
+/// (`n = round(x·log2e)`, round-to-NEAREST — issue 1223), accurate to ~1 ULP
+/// for inputs in [-88, 88]. Sufficient for softmax where inputs are shifted
+/// by max (range [0, ~30]).
 ///
 /// NEON: 4× f32 per iteration. AVX2: 8× f32 per iteration.
 #[inline(always)]
@@ -1063,7 +1069,7 @@ unsafe fn avx2_exp_sum_inplace(x: &mut [f32]) -> f32 {
 unsafe fn neon_exp_inplace(x: &mut [f32]) {
     use core::arch::aarch64::{
         vaddq_f32, vaddq_s32, vcvtq_s32_f32, vdupq_n_f32, vdupq_n_s32, vld1q_f32, vmaxq_s32,
-        vminq_s32, vmulq_f32, vreinterpretq_f32_s32, vrndq_f32, vshlq_n_s32, vst1q_f32, vsubq_f32,
+        vminq_s32, vmulq_f32, vreinterpretq_f32_s32, vrndnq_f32, vshlq_n_s32, vst1q_f32, vsubq_f32,
     };
     unsafe {
         let v_inv_ln2 = vdupq_n_f32(CEPHES_INV_LN2);
@@ -1082,8 +1088,11 @@ unsafe fn neon_exp_inplace(x: &mut [f32]) {
         for _ in 0..chunks {
             let vx = vld1q_f32(x.as_ptr().add(i));
 
-            // Range reduction: n = round(x * inv_ln2)
-            let vn_f = vrndq_f32(vmulq_f32(vx, v_inv_ln2));
+            // Range reduction: n = round(x * inv_ln2) — vrndnq_f32 is FRINTN
+            // (round-to-nearest); the old vrndq_f32 (FRINTZ, toward-zero)
+            // truncated and put |g| up to ln2, outside the polynomial's range
+            // (~2.8e−5 systematic relative error; issue 1223).
+            let vn_f = vrndnq_f32(vmulq_f32(vx, v_inv_ln2));
             let vn_i = vcvtq_s32_f32(vn_f);
 
             // g = x - n * ln2_hi - n * ln2_lo
@@ -1147,7 +1156,7 @@ unsafe fn neon_sigmoid_tanh_clamp(out: &mut [f32], a: &[f32], q: &[f32], clamp: 
     use core::arch::aarch64::{
         vaddq_f32, vaddq_s32, vcvtq_s32_f32, vdivq_f32, vdupq_n_f32, vdupq_n_s32, vld1q_f32,
         vmaxq_f32, vmaxq_s32, vminq_f32, vminq_s32, vmulq_f32, vnegq_f32, vreinterpretq_f32_s32,
-        vrndq_f32, vshlq_n_s32, vst1q_f32, vsubq_f32,
+        vrndnq_f32, vshlq_n_s32, vst1q_f32, vsubq_f32,
     };
     unsafe {
         let v_inv_ln2 = vdupq_n_f32(CEPHES_INV_LN2);
@@ -1177,7 +1186,7 @@ unsafe fn neon_sigmoid_tanh_clamp(out: &mut [f32], a: &[f32], q: &[f32], clamp: 
             // 2^n path identical to neon_exp_inplace.
             let vx = vnegq_f32(vy);
 
-            let vn_f = vrndq_f32(vmulq_f32(vx, v_inv_ln2));
+            let vn_f = vrndnq_f32(vmulq_f32(vx, v_inv_ln2));
             let vn_i = vcvtq_s32_f32(vn_f);
 
             let vg = vsubq_f32(
@@ -1250,7 +1259,7 @@ unsafe fn neon_sigmoid_tanh_clamp(out: &mut [f32], a: &[f32], q: &[f32], clamp: 
 unsafe fn neon_sigmoid_inplace(x: &mut [f32]) {
     use core::arch::aarch64::{
         vaddq_f32, vaddq_s32, vcvtq_s32_f32, vdivq_f32, vdupq_n_f32, vdupq_n_s32, vld1q_f32,
-        vmaxq_s32, vminq_s32, vmulq_f32, vnegq_f32, vreinterpretq_f32_s32, vrndq_f32, vshlq_n_s32,
+        vmaxq_s32, vminq_s32, vmulq_f32, vnegq_f32, vreinterpretq_f32_s32, vrndnq_f32, vshlq_n_s32,
         vst1q_f32, vsubq_f32,
     };
     unsafe {
@@ -1274,7 +1283,7 @@ unsafe fn neon_sigmoid_inplace(x: &mut [f32]) {
             // σ(x) = 1/(1 + exp(-x)). Compute exp(-x) via the Cephes polynomial.
             let vx = vnegq_f32(vld1q_f32(x.as_ptr().add(i)));
 
-            let vn_f = vrndq_f32(vmulq_f32(vx, v_inv_ln2));
+            let vn_f = vrndnq_f32(vmulq_f32(vx, v_inv_ln2));
             let vn_i = vcvtq_s32_f32(vn_f);
 
             let vg = vsubq_f32(
@@ -1326,7 +1335,7 @@ unsafe fn neon_sigmoid_inplace(x: &mut [f32]) {
 unsafe fn neon_exp_sum_inplace(x: &mut [f32]) -> f32 {
     use core::arch::aarch64::{
         vaddq_f32, vaddq_s32, vaddvq_f32, vcvtq_s32_f32, vdupq_n_f32, vdupq_n_s32, vld1q_f32,
-        vmaxq_s32, vminq_s32, vmulq_f32, vreinterpretq_f32_s32, vrndq_f32, vshlq_n_s32, vst1q_f32,
+        vmaxq_s32, vminq_s32, vmulq_f32, vreinterpretq_f32_s32, vrndnq_f32, vshlq_n_s32, vst1q_f32,
         vsubq_f32,
     };
     unsafe {
@@ -1356,7 +1365,7 @@ unsafe fn neon_exp_sum_inplace(x: &mut [f32]) -> f32 {
             macro_rules! step {
                 ($acc:expr, $off:expr) => {{
                     let vx = vld1q_f32(x.as_ptr().add(i + $off));
-                    let vn_f = vrndq_f32(vmulq_f32(vx, v_inv_ln2));
+                    let vn_f = vrndnq_f32(vmulq_f32(vx, v_inv_ln2));
                     let vn_i = vcvtq_s32_f32(vn_f);
                     let vg = vsubq_f32(
                         vsubq_f32(vx, vmulq_f32(vn_f, v_ln2_hi)),
@@ -1391,7 +1400,7 @@ unsafe fn neon_exp_sum_inplace(x: &mut [f32]) -> f32 {
         let remaining = (len - i) / 4;
         for _ in 0..remaining {
             let vx = vld1q_f32(x.as_ptr().add(i));
-            let vn_f = vrndq_f32(vmulq_f32(vx, v_inv_ln2));
+            let vn_f = vrndnq_f32(vmulq_f32(vx, v_inv_ln2));
             let vn_i = vcvtq_s32_f32(vn_f);
             let vg = vsubq_f32(
                 vsubq_f32(vx, vmulq_f32(vn_f, v_ln2_hi)),
@@ -1433,7 +1442,7 @@ unsafe fn neon_exp_sum_inplace(x: &mut [f32]) -> f32 {
 // Mapping notes (NEON → WASM SIMD128):
 //   vld1q_f32       → v128_load (with .cast())
 //   vst1q_f32       → v128_store (with .cast())
-//   vrndq_f32       → f32x4_nearest          (round to nearest-even, ties to even)
+//   vrndnq_f32      → f32x4_nearest          (round to nearest-even, ties to even)
 //   vcvtq_s32_f32   → i32x4_trunc_sat_f32x4  (saturating; identical for in-range n)
 //   vmulq/vaddq/vsubq_f32 → f32x4_mul/add/sub
 //   vdivq_f32       → f32x4_div
