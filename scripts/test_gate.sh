@@ -161,6 +161,13 @@ katgpt-core:2085:distance_abstain
 katgpt-core:2074:template_decode
 katgpt-core:2161:runetrace
 katgpt-core:2158:escalation_guard
+# Issue 1222: the estimators UMBRELLA row — compounding lands under the
+# estimators parent cfg (zero feature-key growth per the Plan 635 ratchet:
+# katgpt-core holds at ceiling+grants exactly). Measured 2788 passed / 16
+# ignored (aarch64 M3, dev); arch-invariant by inspection — no estimators
+# member carries cfg(target_arch). Floors fire DOWNWARD only, so member
+# growth never reds.
+katgpt-core:2788:estimators
 katgpt-dec:249:pca_global
 katgpt-dec:257:loop_straightness
 katgpt-types:139

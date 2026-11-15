@@ -1678,6 +1678,15 @@ pub mod anchored_reach;
 #[cfg(feature = "anti_common_mode")]
 pub mod anti_common_mode;
 
+#[cfg(feature = "estimators")]
+pub mod compounding;
+#[cfg(feature = "estimators")]
+pub use compounding::{
+    BoundRefusal, ContextKey, CoverageFactor, CtxErr, CtxHist, FoldScratch, StepHist,
+    compound_failure_bound, coverage_factor, coverage_factor_with, direct_bound, error_budget,
+    first_step_bound, horizon_floor, scratch_capacity_hint, support_gap,
+};
+
 pub mod numeric_stability;
 
 pub mod kinematics;
