@@ -2,6 +2,10 @@
 
 **Status:** OPEN — poc/proof task (arXiv:2610.31642 companion arc, Research 673 §2/§5; the `request_verdict` review of Research 673 flagged the proof-path scope as the weakest point — this issue IS the runnable proof path)
 
+**Claimed:** zed-1bde0a3b@amo, 1794801013, expires 2026-11-19T04:18:00+00:00
+
+Claim note: candidate A picked per the issue's own scoping rule; zero-contention phase first — theorem statement + format model, then the Lean module, then the paired Rust test; the amo box is mid-fit so this lane is compile-light by design — no benchmarks involved.
+
 - [ ] Scope the theorem before any Lean work: candidate A (sign theorem, cheapest) — `fixed_log_softmax_target`'s target log-prob is finite, negative, and nonzero whenever the target logit is maximal and at least one rival logit is finite (any IEEE format modeled in FloatLib-style rationals; the f32/f64 instantiations are `decide`-checkable concrete instances). Candidate B (mixed bound, harder) — `|computed − exact| ≤ r·|exact| + a` for the argmax-excluded-LSE + softplus form under the repo's pinned fold (first-index argmax + sequential ascending-j, Issue 940). Pick A for the poc; B is the follow-up only if A lands clean.
 - [ ] Model the format the repo way: a simplified binary-float → ℝ model (`Float e m` + `toReal` + `round`) suffices — the companion arc proves the softmax certificate with exactly this shape (MiniFloat 4/3, `Real.log (8/7)` roundRP); no need to formalize full IEEE 754.
 - [ ] Land in `.proofs/KatgptProof/` per the Plan-293/441 conventions: new spec module + `SpecTests.lean` concrete instances + `PrintAxioms` line + the axiom-budget bump in the gate script (no `sorry`; `[propext, Classical.choice, Quot.sound]` only).
