@@ -1,6 +1,7 @@
 # Issue 1220 — `gegelu_tanh` tail-lane divergence: SIMD sigmoid-form vs scalar `1+tanh` cancellation form
 
 **Status:** OPEN — poc/audit task (arXiv:2610.31642 companion arc, Research 673 §4.1; band/cap re-pinned per the verdict-round EXECUTED measurement, 2026-11-15)
+**Claimed:** zed-m3-i1220@m3, 1794769201, expires 2026-11-17T19:00:01+00:00
 
 **Measured lane divergence** (verdict round, length 65, up = 1 — these numbers are the test's oracle, do not re-derive by hand):
 
