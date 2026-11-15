@@ -75,3 +75,39 @@ No semantic change to `from_ref_major` or the sidecar lane; no
 `zha_chunk_sidecar` promotion talk (owner-gated separately); no
 riir-train T3/T4 work here (that lane stays owner-gated spend in ITS
 issue).
+
+## Evidence addendum 2026-11-15 — the bisection premise is FALSIFIED (direct execution, two lanes)
+
+The issue's central claim ("before `42adf44ec` this posture was clippy-clean") does not
+reproduce. Two independent lanes verified:
+
+1. **Direct clippy runs, fresh compile each time** (detached worktree, dedicated target dir;
+   the warning TEXT printed — not a fingerprint-fresh skip): fires at `2ea2930f6` (=42adf44ec~1),
+   `42adf44ec`, `8c3349bfb`, `4a074958e`, and HEAD (second target dir in the main tree). All five.
+   The issue's two "0 warnings" rows are inconsistent with the source structure (next point) and
+   are plausibly the warm-fingerprint silent-skip class — the bisect swapped only katgpt-core
+   content, so katgpt-attn stayed fresh at some checkouts and clippy printed nothing.
+2. **The structural argument** (independently re-verified by the boss-run lane zed-84db451f):
+   `chunk_summary` is UNGATED (`pub mod chunk_summary;`, dash_attn/mod.rs:21), `from_ref_major`
+   has no cfg/allow history (`git log -L` empty), and its ONLY caller (chunk_summary_sidecar.rs:240)
+   has been `#[cfg(feature = "zha_chunk_sidecar")]`-gated since the lane's birth `917c06c83`. The
+   warning is structurally unavoidable at dash_attn-only at EVERY commit since `917c06c83`.
+3. **The named mechanism is impossible**: katgpt-attn's dash_attn-only posture builds katgpt-core
+   with DEFAULT features only (no feature forwards on that path), and katgpt-core's default list is
+   byte-identical across all five commits (verified; only `grafts` drops in the 8c bake and returns
+   at HEAD). The caller's gate is katgpt-attn's OWN feature — no core-side spell can change the warning.
+
+**Consequence:** fix direction (1) (re-spell the dep-feature handoff) has no reachable target —
+drop it. Direction (2) (the file-local, comment-guarded `#[cfg_attr(not(feature =
+"zha_chunk_sidecar"), allow(dead_code))]` on `from_ref_major`, naming its one caller + posture)
+IS the root-cause fix: the constructor is genuinely unreachable outside the zha posture, by
+design. Direction (3) (the dash_attn-only clippy-clean fence row) stands unchanged. The
+"trips standing gates" framing stays true as a present-state fact — it is a posture artifact
+since `917c06c83`, not a `42adf44ec` regression.
+
+**Lease note:** the filing session's inbox (`zed-amo-hk-1114b@amo`) is dead — this addendum was
+routed there first and recovered by the boss run (zed-84db451f, verified + folded here). The
+`**Claimed:**` lease above still reads the filing session and expires 2026-11-17T23:59Z; the
+next claimer (post-expiry) should implement direction (2) + (3) directly — do NOT re-run the
+bisection and do NOT chase direction (1). Evidence lanes: zed-956aca89@amo (execution: clippy at
+4 SHAs + HEAD, static analysis) + zed-84db451f@amo (independent structural re-verification).
