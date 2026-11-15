@@ -1,5 +1,6 @@
 # Issue 999: R/S lens fit-and-validate PoC (neuron-lens distill, Research 666)
-**Status:** in progress — T1 done, T2a done (`16d50c46`), T2b done (`11fb57de`), T2c done (`c85210fa`), T2d done (riir-infer `d4cf53c8`, see the T2d record below). T3 (the ~1k-doc real-corpus fit, hours-class) + T4/T5 (real gates + verdict) remain; the machinery is proven at smoke scale. The riir-infer-laya stability lane (`src/laya/riir/stability.rs` + its two tests) has the explicitly DEFERRED "headful lens variant" this PoC fills.
+**Status:** in progress — T1 done, T2a done (`16d50c46`), T2b done (`11fb57de`), T2c done (`c85210fa`), T2d done (riir-infer `d4cf53c8`, see the T2d record below). T3 claimed (the ~1k-doc real-corpus fit, hours-class); T4/T5 (real gates + verdict) gated on T3; the machinery is proven at smoke scale. The riir-infer-laya stability lane (`src/laya/riir/stability.rs` + its two tests) has the explicitly DEFERRED "headful lens variant" this PoC fills.
+**Claimed:** zed-amo-lens3@amo, 1794750249, expires 2026-11-17T13:44:09Z
 **Lease closed:** zed-amo-lens@amo, 1794740784, claimed 2026-11-15T11:06:24Z, expired 2026-11-17T11:06:24Z — T2b + T2c landed same session; T2d re-claimable
 **Lease closed:** zed-amo-lens2@amo, 1794746864, claimed 2026-11-15T12:47:44Z, expired 2026-11-17T12:47:44Z — T2d landed same session (riir-infer `d4cf53c8`); T3/T4/T5 re-claimable
 
