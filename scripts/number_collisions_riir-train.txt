@@ -1,0 +1,16 @@
+# riir-train's OWN legacy ratchet (Issue 1208 per-repo channel) — read by
+# katgpt-rs numbering_gate.py when it gates riir-train. The shared value
+# (katgpt-rs's own 60) never leaks here.
+
+legacy_ratchet = 10
+
+# 2026-11-15 (amo idle lane, the Issue-689 hygiene close): the gate measured
+# 10 legacy collisions on this repo's walk — re-pinned DOWN from the shared
+# 60 per the discipline (the ratchet only ever tightens on a measured,
+# reasoned landing; growth above 10 re-pins UP with the reason in the growing
+# commit). The .plans/497 two-holder group (497_dspine_head_distill_q4km_target
+# x 497_t3_trial_step_repeated_pass_cells, the plan's own T3-cells sub-part)
+# is a LIVE-LEASE finding routed to the plan-497 lane holder
+# (zed-84db451f@amo, exp 2026-11-17T02:38Z): renumber at lane close or pin as
+# the family/sub-part class — not adjudicated in THIS commit (a renumber
+# under a live lease breaks the holder's frame).
