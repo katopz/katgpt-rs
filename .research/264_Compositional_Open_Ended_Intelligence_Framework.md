@@ -6,6 +6,7 @@
 > **Related Research:** 172 (MUSE skill lifecycle), 191 (Prism capability substrate), 211 (Bayesian posterior skill evolution), 171 (FrontierCS open-ended arena), 116 (LLM sleep consolidation), 240 (SGS self-play), 194 (CaDDTree)
 > **Related Plans:** 215 (Regime-Transition w/ MDL gate), 274 (CGSP self-play), 282 (Dual-Pool CGSP), 191 (Open-ended arena), 094 (TIES merging)
 > **Cross-ref (riir-ai):** Research 059 (MUSE validators), Plan 299 (NPC curiosity runtime), `riir-ai/crates/riir-engine/src/cgsp_runtime/cross_game_transfer.rs` (TaR — exact paper primitive already shipped)
+> **PASS-Redirects (synthesis):** He, Li, Wang, Vitercik [arXiv:2609.19465 "Compositional Reasoning in Language Models under Reinforcement Learning Post-Training"] — the evaluation-side sibling of this note's PTG framework: dependency DAGs over skills (three levels: horizon / skill-switching / non-local dependency) plus a coverage-factor transfer bound; distilled at [Research 674](674_Compositional_RL_Asymmetry_Coverage.md) (Gain — the bound substrate POC + the training-data-design law).
 > **Classification:** Public
 
 ---
