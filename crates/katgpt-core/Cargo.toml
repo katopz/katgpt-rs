@@ -3408,6 +3408,49 @@ name = "bench_708_imbalance_goat"
 harness = false
 required-features = ["knn_entropy"]
 
+# Plan 638 — conditional geometry gates (Research 675; the riir-refine
+# Issue 239 axis-(i) primitives): G1 synthetic-manifold accuracy (known-d
+# balls d ∈ {1,2,4,8,16} in D=64 + the d-sphere arm reported separately,
+# never pooled), G1b subset-conditioning identity + the disclosed
+# estimand gap, G1c planted-reorganization detection with the
+# falsification arm. Run at --release (O(n²·d) arms). The green-zero
+# rule: without the row, a plain `cargo test` prints `ok. 0 passed` over
+# the cfg'd-empty binary.
+[[test]]
+name = "cond_geometry_g1_manifolds"
+required-features = ["estimators"]
+
+[[test]]
+name = "cond_geometry_g1b_conditioning"
+required-features = ["estimators"]
+
+[[test]]
+name = "cond_geometry_g1c_reorganization"
+required-features = ["estimators"]
+
+# Plan 638 G5 — the incumbent kill-switch: cond_id vs
+# within_class_effective_rank + subspace_phase_gate on the
+# manifold-vs-linear planted contrast and the 8-D rule-embed fixture
+# (sibling path, skip loud when absent). Posture: the geometry incumbent
+# rides `sink_aware_attn` (geometry.rs is gated there), so this gate
+# needs BOTH features — the module itself stays estimators-gated (D1).
+[[test]]
+name = "cond_geometry_g5_incumbents"
+required-features = ["estimators", "sink_aware_attn"]
+
+# Plan 638 G4 — the zero-alloc canary (separate binary:
+# #[global_allocator] is crate-binary-unique).
+[[test]]
+name = "cond_geometry_g4_alloc"
+required-features = ["estimators"]
+
+# Plan 638 G2 — the offline document posture (n=1218, D=64): the ball
+# pass + one cond_id + one cond_imbalance ≤ 50 ms release, single-shot.
+[[bench]]
+name = "bench_638_cond_geometry_goat"
+harness = false
+required-features = ["estimators"]
+
 # Issue 687 — Orthogonal Factorization Primitives GOAT gate (G1 determinism
 # ×3 bit-identical + Hadamard dyadic exactness anchors — Parseval residual
 # exactly 0.0 + bit-exact recompose; G2 GS < 5µs @ d=64/K=14 + hinge observe

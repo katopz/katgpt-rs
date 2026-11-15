@@ -142,6 +142,18 @@ pub mod entropy;
 #[cfg(feature = "knn_entropy")]
 pub mod imbalance;
 
+/// Conditional geometry (Plan 638, Research 675 — the riir-refine Issue 239
+/// axis-(i) primitives): subset-conditional intrinsic dimension via the
+/// BIDE two-ball restriction (arXiv:2608.25166) + cross-space information
+/// imbalance (Glielmo et al., arXiv:2104.15079). NOT the collapse monitor
+/// above — a different instrument (estimators over labeled populations;
+/// the shared word is a vocabulary collision). Gates:
+/// `cond_geometry_g1_manifolds` / `_g1b_conditioning` /
+/// `_g1c_reorganization` / `_g5_incumbents` + the `_g4_alloc` canary +
+/// `bench_638_cond_geometry_goat`.
+#[cfg(feature = "estimators")]
+pub mod cond_geometry;
+
 // ── Re-exports (always-on items) ────────────────────────────────────────
 
 pub use claim::{ClaimCard, Intervention, ValidityVerdict};
