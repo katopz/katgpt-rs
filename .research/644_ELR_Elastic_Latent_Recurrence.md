@@ -13,6 +13,7 @@
 > **PASS-Redirects (synthesis):** You et al. [arXiv:2609.35748 "Improving Test-Time Scaling with Adaptive Looped Transformers (TaH2)"] (Sep 2026) — independent documentation of the one-loop tax ten days before ELR; evidence the parity property was open landscape-wide.
 > **PASS-Redirects (synthesis):** Alabdulmohsin & Zhai [arXiv:2502.07503 "Recursive Inference Scaling" (RINS)] (NeurIPS 2025) — the closest published non-inferiority result: stochastic recursion dropout + depth-specific linear adapters (<1% params) gives "no-regret" (recursion-dropped inference still beats baseline) at 600M. Kills the Super-GOAT Q2 (capability class exists); ELR's delta is parity WITHOUT depth-specific parameters + latent-state loops + budget dial.
 > **PASS-Redirects (synthesis):** Yang et al. [arXiv:2605.26733 "STARS: Stabilizing Recurrent Dynamics for Test-Time Scalable Latent Reasoning in Looped Language Models"] (ICML 2026) — Jacobian-spectral-radius regularization + random loop sampling; the stability-constraint sibling of our Bench-699 damping toolbox (Issue 717).
+> **PASS-Redirects (synthesis):** Fishman et al. [arXiv:2611.03998 "Dory1.0-4B: A Looped Normalized-GPT"] (NVIDIA, Nov 2026) — the scaled post-trained instantiation of THIS recipe (6T tokens, RLVR + difficulty-aware loop curriculum, 256K ctx, open BF16/MXFP8/NVFP4/GGUF checkpoints). Full distillation: katgpt-rs `.research/672_Dory_Looped_nGPT_Elastic_Depth.md`; the open checkpoints unblock this note's §4 contingent fusions and riir-infer Issue 1221.
 
 ---
 
