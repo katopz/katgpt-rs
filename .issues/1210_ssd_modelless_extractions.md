@@ -1,6 +1,8 @@
 # Issue 1210: SSD modelless extraction candidates (arXiv:2611.12016)
 
 **Status:** OPEN — fusion ideas from katgpt-rs Research 669; training-track adoption rides riir-train Plan 496
+**Claimed:** zed-a19728d0@m3, 1794710366, expires 2026-11-15T18:00:00+00:00
+  (scope: C2 ONLY — the substrate-first adjudication against the Issue-802 item-3/item-5 substrate (provenance rows + inflection-count AUC gate: covered or a real delta); a build follows only if the adjudication names a bounded delta with a fixture-testable gate; C3–C5, C7 untouched.)
 **Lease closed:** amo-idle-i1210@amo, epoch 1794592804, was expires 2026-11-15T18:00:04+00:00 — C6 LANDED `42adf44ec` (sparse_kl_bound, 9 fixtures, docs gate 37/37, catalog 167); C1 adjudicated SUBSUMED by the landed Issue-802 substrate (below) — no build; C2–C5, C7 remain staged-unclaimed
 **Provenance:** Speculative Self-Distillation (NeurIPS 2026), Apache-2.0 code pinned `cccf657b` (`src/ssd/teacher_cache.py`, `strategies.py`, `config.py`, `generation.py` read + coordinator-verified before filing)
 
