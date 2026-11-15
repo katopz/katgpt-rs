@@ -33,3 +33,23 @@ Wall (records): two_basin descent up to 1.36 s at n=96 (4 serial chains) vs incu
 ## Scope law + promotion posture
 
 The lane's GOAT case on this evidence: start-anchored repair + decoy escape + compute-shape (fitted-level early answers), NOT accuracy-over-constructives on unit-demand synthetic families (closed — the greedy IS the optimum). Promotion stays gated on a consumer wiring it (riir-refine Issue 237's composition cell is the designed first consumer); the crate feature stays opt-in (`descent`).
+
+## Addendum — 2026-11-15, the promotion landed
+
+The posture above was written against riir-refine Issue 237's composition
+cell (closed NO-GO — the CRAM shape does not transfer to that surface).
+The condition was "a consumer wiring it": riir-grams Issue 001 T1
+(`af529cd`) landed the Repair act seam — `grammaturgy::descent_repair`
+consuming `katgpt_core::assign::descent` through the
+`assignment_descent` forward, gate battery green (it caught the
+inverted-affinity encoding en route; record: riir-grams `.issues/001`).
+Delegated-owner verdict **AGREE** (5 conditions) → `descent` promoted to
+katgpt-assign leaf DEFAULT (compile availability; inert unless
+`solve_descent` is called; explicit `--no-default-features`
+byte-identical; the G4 differential pin
+`descent_k1_orchestration_allocates_identically_to_solve` rides the flip
+commit). katgpt-core's `assignment` re-export stays opt-in per Plan
+620's protocol — descent rides its compile via the leaf default. The
+scope law stands unchanged: start-anchored repair + decoy escape +
+compute-shape, never accuracy-over-constructives on unit-demand
+families.

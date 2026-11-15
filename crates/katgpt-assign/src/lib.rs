@@ -90,6 +90,13 @@
 //! precedent). The feature stays opt-in until the GOAT gate
 //! (G1+G2 vs outside baselines) passes AND a real consumer wires it
 //! (riir-chain Issue 164 minimum) — see Plan 620's verdict protocol.
+//!
+//! The leaf `descent` lane is DEFAULT-ON since 2026-11-15 (issue 1211
+//! promotion; delegated-owner verdict AGREE — GOAT bench 981 + the
+//! riir-grams Repair-act consumer), the `heat_kernel_trajectory`
+//! precedent: default in the leaf crate, the katgpt-core forwarding
+//! flag stays opt-in. Inert unless `solve_descent` is called; explicit
+//! `--no-default-features` compiles it out byte-identically.
 
 #![deny(rustdoc::broken_intra_doc_links)]
 

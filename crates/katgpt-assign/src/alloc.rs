@@ -148,4 +148,33 @@ mod tests {
             total,
         );
     }
+
+    /// Issue-1211 promotion pin: the descent orchestration adds NOTHING
+    /// beyond the pass-through at K=1 — `chain_seed(master, 0)` IS the
+    /// master seed, so chain 0 runs the incumbent `solve()` verbatim and
+    /// the allocation profile must be IDENTICAL. Any orchestration-layer
+    /// allocation (a clone, a scratch Vec) shows here.
+    #[cfg(feature = "descent")]
+    #[test]
+    fn descent_k1_orchestration_allocates_identically_to_solve() {
+        let problem = fixtures::random_instance(95, 200, 10, 2, 50);
+        let limits = Limits::default();
+        reset();
+        let _base = crate::solve(&problem, Seed(95), &limits).unwrap();
+        let base = get();
+        reset();
+        let _out = crate::solve_descent(
+            &problem,
+            Seed(95),
+            &crate::DescentConfig::default(),
+            &limits,
+        )
+        .unwrap();
+        let descent = get();
+        assert_eq!(
+            descent, base,
+            "K=1 descent must allocate exactly what its pass-through solve() \
+             allocates (solve={base:?}, descent={descent:?})"
+        );
+    }
 }

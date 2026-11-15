@@ -41,10 +41,12 @@
 //! buffers; this module adds O(1) beyond the K `Solution`s it returns
 //! one of.
 //!
-//! **Default posture:** feature-off builds compile this module to
-//! nothing; with the feature on but `DescentConfig::default()` (1 chain,
-//! no abstain, no level) the outcome is the incumbent `solve()` result
-//! byte-identically — the tests pin it.
+//! **Default posture:** DEFAULT-ON since the 2026-11-15 issue-1211
+//! promotion (compile availability — nothing calls in unless a consumer
+//! does); explicit `--no-default-features` builds compile this module to
+//! nothing. With `DescentConfig::default()` (1 chain, no abstain, no
+//! level) the outcome is the incumbent `solve()` result byte-identically
+//! — the tests pin it, allocation profile included.
 
 use crate::types::{InvalidProblem, Problem, Seed, Solution, StopReason};
 

@@ -20,14 +20,20 @@ categories = ["algorithms", "science"]
 # cannot be retrofitted — the API never carries float accumulation.
 
 [features]
+default = ["descent"]
 # Opt-in measurement axis (Issue 741 class): makes the alloc-tracking test
 # module compile in --release so the G4 zero-alloc gate can run against
 # optimised code. Off in every shipped build.
 alloc_tracking = []
 # Issue 1211 descent lane: K-chain orchestration + abstain-on-budget + the
-# fitted-level outcome gate (`descent.rs`). Opt-in; feature-off builds are
-# byte-identical to the incumbent (the module compiles to nothing; no
-# solver/types surface changes ride the feature).
+# fitted-level outcome gate (`descent.rs`). DEFAULT-ON 2026-11-15 (issue
+# 1211 promotion; delegated-owner verdict AGREE — GOAT bench 981 G1/G2
+# rows + the riir-grams `descent_repair` consumer landed `af529cd`; the
+# compile-availability promotion — inert unless `solve_descent` is
+# called, the fitted_v_reconstruct precedent). Explicit
+# `--no-default-features` restores the byte-identical incumbent build
+# (the module compiles to nothing); no solver/types surface changes ride
+# the feature.
 descent = []
 
 [[bench]]

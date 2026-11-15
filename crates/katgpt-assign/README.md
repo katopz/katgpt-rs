@@ -104,3 +104,10 @@ moves into the same window; replayable results always run time-unbounded.
 precedent). Promotion to default requires the GOAT gate (G1+G2 vs
 outside baselines) AND a wired consumer (riir-chain Issue 164 minimum) —
 Plan 620's verdict protocol.
+
+The leaf `descent` lane (issue 1211 — K chains, abstain-on-budget,
+fitted-level gate) is **default-on** since 2026-11-15 (delegated-owner
+verdict AGREE; GOAT bench 981 + the riir-grams Repair-act consumer):
+compile availability, zero runtime cost unless `solve_descent` is
+called. Explicit `--no-default-features` restores the byte-identical
+incumbent build.
