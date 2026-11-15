@@ -149,6 +149,16 @@ set -u
 # on whole test functions, so the count is the same on aarch64 and x86_64 —
 # which matters because AGENTS.md tells you to run this script locally, and a
 # floor derived from one arch would red on the other.
+#
+# Issue 1222: the estimators UMBRELLA row — compounding lands under the
+# estimators parent cfg (zero feature-key growth per the Plan 635 ratchet:
+# katgpt-core holds at ceiling+grants exactly). Measured 2788 passed / 16
+# ignored (aarch64 M3, dev); arch-invariant by inspection — no estimators
+# member carries cfg(target_arch). Floors fire DOWNWARD only, so member
+# growth never reds. ⚠ Comment lines live OUTSIDE the ROWS="…" string — the
+# row parser iterates whitespace-separated words and a comment inside it
+# becomes failing rows (measured at HEAD 2026-11-16: 60 FAIL rows of
+# comment words; the same class bit this file's PERF_ROWS the same day).
 ROWS="
 katgpt-rs:203
 katgpt-core:2060
@@ -161,12 +171,6 @@ katgpt-core:2085:distance_abstain
 katgpt-core:2074:template_decode
 katgpt-core:2161:runetrace
 katgpt-core:2158:escalation_guard
-# Issue 1222: the estimators UMBRELLA row — compounding lands under the
-# estimators parent cfg (zero feature-key growth per the Plan 635 ratchet:
-# katgpt-core holds at ceiling+grants exactly). Measured 2788 passed / 16
-# ignored (aarch64 M3, dev); arch-invariant by inspection — no estimators
-# member carries cfg(target_arch). Floors fire DOWNWARD only, so member
-# growth never reds.
 katgpt-core:2788:estimators
 katgpt-dec:249:pca_global
 katgpt-dec:257:loop_straightness
@@ -174,12 +178,17 @@ katgpt-types:139
 "
 
 # See the PERF_ROWS comment above (Issue 858 T3) for why these exist.
+# Issue 1221 — the SoftmaxFix Lean sign-certificate pairing (the Plan-441
+# discipline; the cfg_gated machinery treats *_spec_match as load-bearing).
+# 4 tests, sub-second at --release; the floor is the full population since
+# a silent zero on a spec-match pairing is a promotion argument, not noise.
 PERF_ROWS="
 katgpt-rs:12:belief_drafter_goat
 katgpt-core:4:memory_store_falsification_gate:distance_abstain
 katgpt-core:1:compression_drafter_alloc_gate:compression_drafter
 katgpt-core:1:state_option_scoring_alloc_check:distance_abstain
 katgpt-core:1:state_option_head_alloc_check:distance_abstain
+katgpt-core:4:softmax_fix_spec_match:fixed_log_softmax
 "
 
 canary=0

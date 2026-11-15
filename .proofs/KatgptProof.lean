@@ -37,3 +37,5 @@ import KatgptProof.ScaleInvariant.Dominates
 import KatgptProof.ScaleInvariant.SpecTests
 import KatgptProof.Sst.Basic
 import KatgptProof.Sst.SpecTests
+import KatgptProof.SoftmaxFix.Basic
+import KatgptProof.SoftmaxFix.SpecTests

@@ -46,6 +46,8 @@ import KatgptProof.ScaleInvariant.Sigmoid
 import KatgptProof.ScaleInvariant.Dominates
 import KatgptProof.Sst.Basic
 import KatgptProof.Sst.SpecTests
+import KatgptProof.SoftmaxFix.Basic
+import KatgptProof.SoftmaxFix.SpecTests
 
 open KatgptProof.Bridge
 open KatgptProof.Hope
@@ -141,3 +143,8 @@ open KatgptProof.Sst
 #print axioms level_set_aligned_no_leak
 #print axioms two_by_two_diagonal_leaks
 #print axioms leak_complement_component
+
+-- SoftmaxFix (Issue 1221): the exact-form sign trinity for the
+-- fixed_log_softmax argmax branch (finite, negative, nonzero over the
+-- unbounded finite-logit region, parametric in the format bound).
+#print axioms KatgptProof.SoftmaxFix.logTarget_sign

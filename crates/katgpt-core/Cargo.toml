@@ -4357,6 +4357,13 @@ required-features = ["qrr_convergence"]
 name = "softmax_fix_g4_alloc"
 required-features = ["fixed_log_softmax"]
 
+# Issue 1221 — the SoftmaxFix Lean sign-certificate spec-match test (the
+# Plan-441 pairing discipline): the Rust computes the Lean logTarget form,
+# the exact-form trinity over unbounded sweeps, the computed posture.
+[[test]]
+name = "softmax_fix_spec_match"
+required-features = ["fixed_log_softmax"]
+
 # Issue 959 T5 — the fixed_log_softmax G2 release parity bench:
 # ns/call vs the incumbent max-subtract form (log1p vs log same cost
 # class), interleaved A/B pairs (the Issue-723 treatment), box-state
