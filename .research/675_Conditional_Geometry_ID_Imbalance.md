@@ -2,7 +2,7 @@
 
 > **Source:** "The Changing Geometry of Grammar: Dimensionality and Neighborhood Reorganization across Transformer Layers" — Vallisa*, Ravenda*, Palominos, He, Raballo, Mira, Homan, Hinzen; arXiv:2608.25166, 2026-08-25, cs.CL, 11 pp. (0 citations per OpenAlex 2026-11-14; near-contemporary for the scientific claim: Domenichelli, Brunato & Dell'Orletta, CoNLL 2026, "Linguistic Profiling of Transformer Embedding Geometry")
 > **Date:** 2026-11-15
-> **Status:** Active — Plan 638 filed
+> **Status:** CLOSED 2026-11-16 — Plan 638 executed (Phase 1 + all gates); **T2.7 DEMOTE adjudicated (delegated verdict 2 rounds AGREE, session 8ba704f4): `cond_id` demotes to Gain/diagnostic reference** — the shipped incumbents (within_class_effective_rank, participation_ratio/numerical_rank) read the planted contrast near-exactly wherever they can lose, and at the genuinely-curved decision arm (ω=3, ≈0.2% linear) BOTH estimators fail (incumbents mis-order PR 7.53→11.11; cond_id d̂_B 8.86 ≫ the 4-plant at n=128). Module stays opt-in `estimators` (landed `3eb1cb713`); no promotion talk; 4 re-open triggers in the plan record. `cond_imbalance` carried separately (no incumbent comparison run; G1c signal 0.89 vs 0.0000 + flip; it is the G2 miss's 41 ms — 68 ms vs the 50 ms bar, recorded FAIL with a disposition note).
 > **Related Research:** 279 (spectral intrinsic dim + N≥d gate), 394 (within-class effective rank), 409 (TwoNN sketch), 449 (M1 mutual-kNN probe), 437 (knn_entropy source line)
 > **Related Plans:** 301 (subspace_phase_gate — shipped), 415 (within_class_effective_rank — shipped), 426 (manifold erasure), **638 (this filing: cond_geometry)**
 > **Classification:** Public

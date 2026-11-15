@@ -1,32 +1,41 @@
 #![cfg(all(feature = "estimators", feature = "sink_aware_attn"))]
-//! Plan 638 T2.7 — the G5 incumbent kill-switch.
+//! Plan 638 T2.7 — the G5 incumbent kill-switch (ω-sweep amendment).
 //!
-//! **Arm 1 — the synthetic decision (the planted contrast):** group A is
-//! an isotropic LINEAR 8-dim cloud; group B is a CURVED 4-dim manifold
-//! (the image of R⁴ through 16 fixed seeded sinusoidal directions — an
-//! immersion, so the local dimension stays 4 while the covariance SPREAD
-//! spans up to 16 directions). Planted truth: A is higher-dimensional
-//! than B even though B's linear spread is wider. `cond_id` must recover
-//! the plant: |d̂_A − 8| ≤ 1.5, |d̂_B − 4| ≤ 1.5, d̂_A ≥ d̂_B + 1.
-//! The incumbents' readings are the RECORD (printed, never asserted):
-//! `within_class_effective_rank` reads SPREAD — on this shape it is
-//! expected to order the groups the WRONG way round (B above A), which
-//! is exactly the complementary-signal case; if it instead orders them
-//! right, the pre-registered demotion clause of Plan 638 T2.7 fires and
-//! the plan record adjudicates.
+//! **Amendment (delegated verdict round 1, session 8ba704f4, REVISE):**
+//! the original arm-1 plant (`sin(dot)`, dot ~ N(0,1)) is ~85% linear by
+//! variance — a NULL regime where the spectral incumbents cannot lose —
+//! and the arm ran at 32 dims where the plan's D3 prose says 64. This
+//! gate now runs the pre-fixed frequency sweep.
 //!
-//! **Arm 2 — the real-shape calibration (disclosed):** the frozen rule
-//! embed (`../riir-refine/assets/rule_embed_frozen_v1.bin`, BLAKE3-
-//! verified before parse; the integrity contract stays refine-side
-//! `decode_verified`). 268 rules × 64 dims, v1 layout (magic | ver |
-//! buckets | dim | tau | n_rules | span_scale | span tower | rules |
-//! blake3). No domain labels are derivable from the kebab-case rule ids,
-//! so this arm records each estimator's reading on the real population —
-//! the dense-core contrast (64 rows nearest the centroid vs the rest)
-//! plus the full population — and NEVER a pass/fail on a label
-//! contrast. Disclosed deviation: the Plan-638 prose calls this fixture
-//! "8-D"; the shipped v1 artifact is 64-DIM — the gate reads the real
-//! file (the plan's dimension note predates the shipped fixture).
+//! **PRE-REGISTERED READ (pinned BEFORE the sweep ran — plan T3.1):**
+//! B = `(ω·dot).sin()` through 16 fixed seeded directions, u ∈ R⁴
+//! gaussian; SPACE_D = 64 (the plan's prose, disclosed); n = 128 per
+//! group; τ = 0.9. ω ∈ {1, 2, 3}: ω = 1, 2 are descriptive rungs; **the
+//! DECISION arm is ω = 3** (linear fraction ≈ 0.2% — the regime the arm
+//! was designed for).
+//!
+//! - **HOLD** (complementary signal exists) iff at ω = 3 ALL of:
+//!   incumbents mis-order (PR_B > PR_A) AND |d̂_B − 4| ≤ 1.5 AND
+//!   d̂_A ≥ d̂_B + 1. Re-open triggers then = a labeled real shape + the
+//!   G2 bar.
+//! - **DEMOTE** otherwise (the incumbents still order the plant right at
+//!   ω = 3, or cond_id breaks its own bars there) — now with a real
+//!   counter-instance.
+//!
+//! The gate asserts finiteness of every reading and prints the decision
+//! line; the verdict itself is recorded in the plan (T3.1), never
+//! asserted here — a self-verdicting test proves nothing.
+//!
+//! **Arm 2 — the real-shape calibration (disclosed, never pass/fail):**
+//! the frozen rule embed (`../riir-refine/assets/rule_embed_frozen_v1.bin`,
+//! BLAKE3-verified before parse; the integrity contract stays refine-side
+//! `decode_verified`). 268 rules × 64 dims, v1 layout. No domain labels
+//! are derivable from the kebab-case rule ids, so this arm records each
+//! estimator's reading on the real population — the dense-core contrast
+//! (64 rows nearest the centroid vs the rest) plus the full population —
+//! and NEVER a pass/fail on a label contrast. Disclosed deviation: the
+//! Plan-638 prose calls this fixture "8-D"; the shipped v1 artifact is
+//! 64-DIM — the gate reads the real file.
 //!
 //! ⚠ Run at `--release` (O(n²·d) arms; the debug wall proves nothing).
 
@@ -43,12 +52,13 @@ use katgpt_core::subspace_phase_gate::{
 };
 
 const GROUP: usize = 128;
-const SPACE_D: usize = 32;
+const SPACE_D: usize = 64;
 const TAU: f32 = 0.9;
 
-// ── Arm 1 — the synthetic planted contrast ─────────────────────────────
+// ── Arm 1 — the pre-fixed frequency sweep (the decision arm is ω = 3) ─
 
-/// Group A: isotropic LINEAR cloud in 8 dims (spread dim = intrinsic dim).
+/// Group A: isotropic LINEAR cloud in 8 dims (spread dim = intrinsic dim),
+/// embedded in SPACE_D.
 fn linear_cloud(seed: u64) -> Vec<f32> {
     let mut pts = vec![0.0f32; GROUP * SPACE_D];
     let mut rng = Lcg::new(seed);
@@ -62,9 +72,10 @@ fn linear_cloud(seed: u64) -> Vec<f32> {
 }
 
 /// Group B: the CURVED 4-manifold — u ∈ R⁴ gaussian, embedded through 16
-/// fixed seeded sinusoidal directions (an immersion: local dim stays 4;
-/// linear spread spans up to 16 directions).
-fn curved_manifold(seed: u64) -> Vec<f32> {
+/// fixed seeded sinusoidal directions at frequency `omega`. At ω = 1 the
+/// plant is ~85% linear by variance (the null regime the round-1 verdict
+/// named); at ω = 3 it is ≈ 0.2% linear — genuinely curved.
+fn curved_manifold(seed: u64, omega: f64) -> Vec<f32> {
     let mut rng = Lcg::new(seed);
     // 16 fixed directions w_j ∈ R⁴, unit-normalized.
     let mut dirs = [[0.0f64; 4]; 16];
@@ -87,7 +98,7 @@ fn curved_manifold(seed: u64) -> Vec<f32> {
         let row = &mut pts[i * SPACE_D..(i + 1) * SPACE_D];
         for (c, w) in dirs.iter().enumerate() {
             let dot: f64 = u.iter().zip(w.iter()).map(|(a, b)| a * b).sum();
-            row[c] = dot.sin() as f32;
+            row[c] = (omega * dot).sin() as f32;
         }
     }
     pts
@@ -122,50 +133,60 @@ fn spectral_incumbents(pts: &[f32], dim: usize) -> (f32, usize) {
 }
 
 #[test]
-fn g5_planted_contrast_and_incumbent_record() {
+fn g5_frequency_sweep_and_incumbent_record() {
     const {
         assert!(GROUP >= MIN_GROUP_TOKENS);
     }
 
-    // ── the planted contrast, cond_id's claim ──
-    let a = linear_cloud(0x638_5001);
-    let b = curved_manifold(0x638_5002);
-    let d_a = cond_id_of_group(&a);
-    let d_b = cond_id_of_group(&b);
-    println!("G5 cond_id: d̂(linear-8) = {d_a:.3}   d̂(curved-4) = {d_b:.3}");
-    assert!(
-        (d_a as f64 - 8.0).abs() <= 1.5,
-        "G5 FAILED: cond_id missed the linear-8 plant (d̂_A = {d_a})"
-    );
-    assert!(
-        (d_b as f64 - 4.0).abs() <= 1.5,
-        "G5 FAILED: cond_id missed the curved-4 plant (d̂_B = {d_b})"
-    );
-    assert!(
-        d_a >= d_b + 1.0,
-        "G5 FAILED: cond_id does not separate the planted contrast (Δ = {})",
-        d_a - d_b
-    );
+    // ── the sweep: ω ∈ {1, 2, 3}; the DECISION arm is ω = 3 (pre-fixed) ──
+    let mut decision = String::new();
+    for (omega, seed_a, seed_b) in [
+        (1.0f64, 0x638_5001u64, 0x638_5002u64),
+        (2.0, 0x638_5011, 0x638_5012),
+        (3.0, 0x638_5021, 0x638_5022),
+    ] {
+        let a = linear_cloud(seed_a);
+        let b = curved_manifold(seed_b, omega);
+        let d_a = cond_id_of_group(&a);
+        let d_b = cond_id_of_group(&b);
 
-    // ── the incumbent record (printed, never asserted) ──
-    let mut combined = a.clone();
-    combined.extend_from_slice(&b);
-    let labels: Vec<usize> = (0..GROUP).map(|_| 0).chain((0..GROUP).map(|_| 1)).collect();
-    let eff = within_class_effective_rank(&combined, SPACE_D, &labels);
-    let (pr_a, nr_a) = spectral_incumbents(&a, SPACE_D);
-    let (pr_b, nr_b) = spectral_incumbents(&b, SPACE_D);
-    println!(
-        "G5 incumbents: within_class_effective_rank(A vs B labels) = {eff:.2} | participation_ratio A={pr_a:.2} B={pr_b:.2} | numerical_rank A={nr_a} B={nr_b}"
-    );
-    let incumbent_orders_right = pr_a > pr_b && nr_a >= nr_b;
-    println!(
-        "G5 incumbent verdict: {} (the pre-registered demotion clause fires only on BOTH shapes ordering right — see the plan record)",
-        if incumbent_orders_right {
-            "ORDERS THE PLANT RIGHT — demotion-candidate reading"
-        } else {
-            "ORDERS THE PLANT WRONG (spread ≠ dimension) — the complementary-signal case"
+        let mut combined = a.clone();
+        combined.extend_from_slice(&b);
+        let labels: Vec<usize> = (0..GROUP).map(|_| 0).chain((0..GROUP).map(|_| 1)).collect();
+        let eff = within_class_effective_rank(&combined, SPACE_D, &labels);
+        let (pr_a, nr_a) = spectral_incumbents(&a, SPACE_D);
+        let (pr_b, nr_b) = spectral_incumbents(&b, SPACE_D);
+
+        println!(
+            "G5 ω={omega}: d̂_A={d_a:.3} d̂_B={d_b:.3} | PR_A={pr_a:.2} PR_B={pr_b:.2} | nr A={nr_a} B={nr_b} | eff_rank={eff:.2}"
+        );
+        assert!(
+            d_a.is_finite() && d_b.is_finite(),
+            "ω={omega}: non-finite reading"
+        );
+
+        if omega == 3.0 {
+            let incumbents_misorder = pr_b > pr_a;
+            let cond_id_holds_b = (f64::from(d_b) - 4.0).abs() <= 1.5;
+            let cond_id_separates = f64::from(d_a) >= f64::from(d_b) + 1.0;
+            decision = if incumbents_misorder && cond_id_holds_b && cond_id_separates {
+                "HOLD — complementary signal exists (incumbents mis-order, cond_id holds its bars)"
+                    .into()
+            } else {
+                "DEMOTE — no complementary signal (the incumbents still order the plant right, or cond_id breaks its bars)".into()
+            };
+            println!(
+                "G5 DECISION ARM ω=3 (pre-fixed read): incumbents mis-order={} (PR_B {pr_b:.2} vs PR_A {pr_a:.2}) | |d̂_B−4|={:.3}≤1.5={} | d̂_A≥d̂_B+1={} → {}",
+                incumbents_misorder,
+                (f64::from(d_b) - 4.0).abs(),
+                cond_id_holds_b,
+                cond_id_separates,
+                decision
+            );
         }
-    );
+    }
+    println!("G5 T2.7 verdict (recorded in the plan): {decision}");
+    assert!(!decision.is_empty(), "the decision arm never ran");
 
     // ── Arm 2 — the real-shape calibration (disclosed, never pass/fail) ──
     real_shape_calibration();
