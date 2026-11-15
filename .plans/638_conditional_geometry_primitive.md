@@ -4,7 +4,8 @@
 **Research:** [katgpt-rs/.research/675_Conditional_Geometry_ID_Imbalance.md](../.research/675_Conditional_Geometry_ID_Imbalance.md)
 **Source paper:** [arXiv:2608.25166](https://arxiv.org/abs/2608.25166) — "The Changing Geometry of Grammar" (Vallisa, Ravenda et al. 2026); estimator lineage ABIDE (arXiv:2405.15132), Information Imbalance (Glielmo et al. 2022, arXiv:2104.15079)
 **Target:** `katgpt-rs/crates/katgpt-core/src/data_probe/cond_geometry.rs` (new module) — **gated on the EXISTING `estimators` family umbrella feature; NO new `[features]` key** (feature_cap_gate: katgpt-core 290/300, 10 headroom; Plan 635 growth guard + verdict amendment)
-**Status:** Active — unclaimed; Phase 1 not started
+**Status:** Active — Phase 1 in flight
+**Claimed:** zed-m3-p638@m3, 1794779174, expires 2026-11-17T22:00:00Z
 
 **Verdict provenance:** Research 675 §5 Claude verdict, 2 rounds, AGREE (`request_verdict` claude_code backend, session 28954393, 2026-11-15). Four binding amendments are folded into the gate design below.
 
