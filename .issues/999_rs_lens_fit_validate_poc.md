@@ -1,6 +1,6 @@
 # Issue 999: R/S lens fit-and-validate PoC (neuron-lens distill, Research 666)
-**Status:** in progress — T1 done (checkpoint probed + recorded below), T2a done (op maps landed in riir-infer `16d50c46`), T2b/T2c/T2d remain. Claimed by m3 (see lease line); the riir-infer-laya stability lane (`src/laya/riir/stability.rs` + its two tests) has the explicitly DEFERRED "headful lens variant" this PoC fills.
-**Claimed:** m3, 1794485961, expires 2026-11-14T12:19:22Z
+**Status:** in progress — T1 done (checkpoint probed + recorded below), T2a done (op maps landed in riir-infer `16d50c46`), T2b in progress (amo re-claim after m3 lease expiry), T2c/T2d remain. The riir-infer-laya stability lane (`src/laya/riir/stability.rs` + its two tests) has the explicitly DEFERRED "headful lens variant" this PoC fills.
+**Claimed:** zed-amo-lens@amo epoch=1794740784 expires=2026-11-17T11:06:24Z
 
 ## T1 record — checkpoint probed (2026-11-12)
 
