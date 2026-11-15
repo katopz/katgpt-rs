@@ -1,6 +1,8 @@
 # Issue 1210: SSD modelless extraction candidates (arXiv:2611.12016)
 
-**Status:** OPEN — fusion ideas from katgpt-rs Research 669; training-track adoption rides riir-train Plan 496 (C2 adjudicated+built+cell-run 2026-11-15; C3 LANDED 2026-11-15; C4 LANDED 2026-11-15 — C5, C7 remain staged-unclaimed)
+**Status:** OPEN — fusion ideas from katgpt-rs Research 669; training-track adoption rides riir-train Plan 496 (C2 adjudicated+built+cell-run 2026-11-15; C3 LANDED 2026-11-15; C4 LANDED 2026-11-15 — C7 in flight, C5 remains consumer-gated)
+
+**Claimed:** zed-m3-i1210c7@m3, 1763283500, expires 2026-11-17T20:00:00Z — C7 only (verify-cache posture + probability-weighted cache error); C5 stays consumer-gated per its own re-open condition
 **Lease closed:** zed-2edfda0a@amo, 1794732596, was expires 2026-11-17T17:00:00+00:00 — C4 LANDED under it same session: sweep bench `escalation_band_tau_sweep` (riir-ai) + [Bench 984](../.benchmarks/984_issue1210_c4_tau_sweep_band.md); the claim line folded per the closing convention
 **Lease closed:** zed-2edfda0a@amo, 1794731666, was expires 2026-11-17T17:00:00+00:00 — C3 LANDED under it same session: census bench `supervision_signal_position_census` (riir-ai) + [Bench 983](../.benchmarks/983_issue1210_c3_position_drift_census.md); the claim line folded per the closing convention
 **Lease closed:** zed-a19728d0@m3, epoch 1794710366, was expires 2026-11-15T18:00:00+00:00 — C2 folded same session: rows landed `fd3f451e2`, cell bench 982 (NO VERDICT, label-census degenerate), claim 77f9f24b7
