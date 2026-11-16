@@ -1,0 +1,19 @@
+# seal-game-editor's OWN legacy-collision ratchet — the per-repo channel
+# collision_pins_for() reads (katgpt-rs issue 1208, landed 2026-11-13).
+#
+# The SHARED number_collisions_expected.txt legacy_ratchet (60) is
+# katgpt-rs's own pre-gate archive count; without this file a foreign repo
+# inherits it, the gate prints a permanent `re-pin DOWN` note the repo
+# cannot act on, and the GROWTH direction is blind (a first legacy re-spend
+# here would stay green against 60 forever).
+#
+# Measured 2026-11-17 at seal-game-editor develop ad5cbc7f8 (m3, clean tree,
+# the numbering-gate run inside the boundary-496 housekeeping unit; the same
+# run's separate finding — the malformed 4-line .plans/.highwater allocator —
+# is routed to the seal-sprints filing lane, it does not affect the
+# collision census):
+#   18 legacy collision(s), none above the era boundary.
+# A NEW legacy collision here breaches this ratchet and reds the gate —
+# the commit that grows the count re-pins UP with the reason, per the
+# legacy_ratchet discipline.
+legacy_ratchet = 18
