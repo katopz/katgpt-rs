@@ -393,6 +393,12 @@ def main() -> None:
         payload = json.dumps(doc, indent=1)
         target = out_dir / f"forward_{name}.json"
         target.write_text(payload + "\n", encoding="utf-8")
+        # The encoder's input bytes ride the fixture set too — the Rust gate
+        # feeds these verbatim through its own grid encoder and compares the
+        # committed grid hex (the stage-(a) surface). The JSON's sha256 pins
+        # them; pins.json pins their bytes.
+        text_target = out_dir / f"snippet_{name}.txt"
+        text_target.write_text(code, encoding="utf-8")
         summary = doc["heads"]
         index_rows.append(
             {
@@ -401,6 +407,8 @@ def main() -> None:
                 "num_lines": doc["snippet"]["num_lines"],
                 "file": target.name,
                 "blake3": blake3_hex(target.read_bytes()),
+                "snippet_file": text_target.name,
+                "snippet_blake3": blake3_hex(text_target.read_bytes()),
             }
         )
         print(
@@ -426,6 +434,7 @@ def main() -> None:
         "init_py_blake3": init_digest,
         "weights_npz_blake3": npz_digest,
         **{row["file"]: row["blake3"] for row in index_rows},
+        **{row["snippet_file"]: row["snippet_blake3"] for row in index_rows},
         "index.json": blake3_hex(index_path.read_bytes()),
     }
     (out_dir / "pins.json").write_text(

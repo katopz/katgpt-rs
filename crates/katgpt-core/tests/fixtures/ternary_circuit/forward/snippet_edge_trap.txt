@@ -1,0 +1,13 @@
+func	wide(line int) int {
+	// tabs expand to two columns; this comment rides a tab stop
+	pad	:=	line	*	4
+	naéve := pad - 1 + 0x7f
+	mark := "résumé 😀" // accents + astral clamp to 127
+	return naéve + wide(longline)
+}
+
+// the next line is 131 columns and gets clipped at 128 by the grid
+const longline = 1111111111 + 2222222222 + 3333333333 + 4444444444 + 5555555555 + 6666666666 + 7777777777 + 8888888888 + 9999999999
+
+
+func after_formfeed() int { return 1 }

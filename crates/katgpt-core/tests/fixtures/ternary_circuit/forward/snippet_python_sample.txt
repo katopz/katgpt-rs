@@ -1,0 +1,24 @@
+import json
+
+
+class HandlerFactory:
+    """Builds handlers."""
+
+    def make(self, kind):
+        handler = None
+        try:
+            handler = HANDLERS[kind]
+        except KeyError:
+            pass
+        return handler or default_handler
+
+
+HANDLERS = {"a": lambda x: x, "b": lambda x: [y for y in sorted(x, reverse=True) if y is not None and str(y).strip() != "" and y not in SEEN]}
+
+def default_handler(x):
+    rows = json.loads(x)
+    out = []
+    # iterate rows and append each row to the out list
+    for row in rows:
+        out.append(row)
+    return out

@@ -719,7 +719,7 @@ kpt_archive = []
 # Implies `kpt_archive` (the compiled net's container). Opt-in per the
 # issue's consumer-gated mandate: NO default promotion; first candidate
 # consumer is the compiled lane class (riir-rethink .proposals/006).
-ternary_circuit = ["kpt_archive"]
+ternary_circuit = ["kpt_archive", "katgpt-types/ternary_group_scale"]
 
 # switch_cost (Issue 663, 2026-08-17): SwitchCostTable — directed pairwise
 # switch-difficulty table, the modelless skill-entropy distillation
@@ -4652,6 +4652,10 @@ required-features = ["grafts"]
 # arm. The row rides the SAME commit as the gated target (green-zero trap).
 [[test]]
 name = "ternary_circuit_transcode_gates"
+required-features = ["ternary_circuit"]
+
+[[test]]
+name = "ternary_circuit_forward_gates"
 required-features = ["ternary_circuit"]
 
 # Issue 1225 T1b — the transcode converter (fixture builder): reads the

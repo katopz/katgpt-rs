@@ -286,6 +286,8 @@ pub mod kpt_archive;
 // (T1 transcode now; Arm A forward + Arm B builder later arms).
 #[cfg(feature = "ternary_circuit")]
 pub mod ternary_circuit;
+#[cfg(feature = "ternary_circuit")]
+pub mod ternary_circuit_forward;
 
 pub mod proof_cache;
 

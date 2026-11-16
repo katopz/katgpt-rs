@@ -1,0 +1,44 @@
+use std::collections::HashMap;
+
+// TODO: rename this before the audit
+pub struct Slot {
+    pub id: u64,
+    pub label: String,
+}
+
+fn pick(mut slots: Vec<Slot>, key: &str) -> Option<Slot> {
+    let mut idx = 0;
+    for s in slots.iter() {
+        if s.label == key {
+            break;
+        }
+        idx += 1;
+    }
+    if idx >= slots.len() {
+        return None;
+    }
+    let mut best = None;
+    let mut score = -1;
+    let mut i = 0;
+    while i < slots.len() {
+        if slots[i].id > 0 {
+            if slots[i].id % 2 == 0 {
+                if score < 0 {
+                    score = 1;
+                    best = Some(slots[i].clone());
+                }
+            }
+        }
+        i += 1;
+    }
+    match best {
+        Some(s) => Some(s),
+        None => {
+            let _ = slots.pop();
+            None
+        }
+    }
+}
+
+fn dup(a: &Slot) -> String { format!("{}-{}", a.id, a.label) }
+fn dup2(a: &Slot) -> String { format!("{}-{}", a.id, a.label) }

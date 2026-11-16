@@ -1,0 +1,38 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+func run(items []string, mode int) (string, error) {
+	out := ""
+	for _, it := range items {
+		if err := check(it); err != nil {
+			if mode == 1 {
+				err = nil
+			} else if mode == 2 {
+				err = nil
+			} else {
+				return "", err
+			}
+		}
+		out += fmt.Sprintf("%s,", it)
+	}
+	switch mode {
+	case 1:
+		return out, nil
+	case 2:
+		return out, nil
+	case 3:
+		return out, errors.New("mode 3")
+	}
+	return out, nil
+}
+
+func check(s string) error {
+	if len(s) == 0 {
+		return errors.New("empty")
+	}
+	return nil
+}
