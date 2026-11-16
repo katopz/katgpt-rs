@@ -5,10 +5,13 @@
 
 max_hand_read = 0
 
-# sdk's OWN legacy ratchet (2026-11-14, katgpt-rs Research 670 filing commit
-# set): measured 1 — the 055 group below. Per Issue 1208 the per-repo scalar
+# sdk's OWN legacy ratchet: measured 1 at the 2026-11-14 filing (the 055
+# same-day dual-allocation group); re-pinned DOWN to 0 on 2026-11-17 (the
+# 055 arming-close commit set removed the LIVE holder — the walk now reads
+# 0 historical collisions over 72 numbers; the group's full record stays in
+# sdk .issues/060 + git history). Per Issue 1208 the per-repo scalar
 # decouples sdk from the shared value (katgpt-rs's own 60).
-legacy_ratchet = 1
+legacy_ratchet = 0
 
 # The 055 collision row REMOVED 2026-11-14 per the gate's STALE-pin verdict
 # (the walk no longer classifies the group — one holder LIVE, the loser
