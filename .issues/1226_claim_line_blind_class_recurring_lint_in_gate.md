@@ -1,6 +1,7 @@
 # Issue 1226 — claim-line blind class keeps recurring across repos: lint the claim lines inside a gate sessions already run
 
 **Status:** Open (2026-11-16) — the write-time/discipline gap, not a script bug; `claim_lease_check.py --lint` itself works.
+**Claimed:** zed-a90003f9@amo, 1794870527, expires 2026-11-18T23:08:00Z
 
 ## The measured class
 
