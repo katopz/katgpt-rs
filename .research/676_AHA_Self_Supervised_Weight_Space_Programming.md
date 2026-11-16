@@ -1,0 +1,106 @@
+# Research 676: AHA — Self-Supervised Weight-Space Programming (the no-LLM completion of the WSP line)
+
+> **Source:** "Who Needs an LLM to Program an LLM? Introducing AHA!" — Ahmed Khamis, Rasul Tutunov, Haitham Bou Ammar, blog post 2026-11-15 (<https://haithamb.github.io/aha/>; code <https://github.com/Eppy-EpHard/AHA>, MIT). No arXiv ID — the blog + repo are the pins; every number with s.e. lives in the repo's `docs/RESULTS.md`.
+> **Date:** 2026-11-16
+> **Status:** Active
+> **Related Research:** 648 (the parent — Takehi et al. agent edit), 664 (Barry's LP), 668 (Tree-Ising, the discrete sibling), 671 (dspy-wsp decision-model instantiation), 649 (probe-authored circuit grammar)
+> **Related Issues:** 980 (the overlay lane, GOAT G1–G4, Bench 976), 993 (LP authoring arm, LANDED `eb33e08e4`), 1209 (discrete arm) · **new: 1224** (matched-pair arm + headroom gate, filed by this note)
+> **Classification:** Public
+
+---
+
+## TL;DR
+
+AHA removes the LAST two agent inputs from the weight-space loop-repair edit. Barry's no-LLM diff-of-means direction got ~93% of the agent's numbers (65.4/47.8/60.4); AHA's **matched pairs** — the model's own resampled branches from one shared prefix, detector-labeled looping vs productive — reach **parity with the agent's edit** (largest gap 3.0 pts ≈ 1 s.e.) while beating Barry's direction by 5.8/4.0/2.3 points (GSM8K test/MATH-500/IFEval). A **layer search** (solve the LP at every layer, rank by held-out hit rate, edit the top two) removes the layer inheritance — and four comparisons show the outcome barely depends on placement at all. The family now has a zero-egress, zero-LLM, no-GD authoring pipeline end to end (detector → matched pairs → diff-of-means → LP → layer rank) at ~22 min / $0.30 on a 4090. The negative results are as load-bearing as the positive: the whitened direction with the BEST held-out separation (AUC 0.953) made the WORST edit (21.9 vs 64.1 on the dev split) — **separability ≠ edit quality**; three intermediate metrics pointed opposite the task result.
+
+**Distilled for katgpt-rs (modelless, authoring-time):**
+Three transfers. (1) The **matched-pair construction law** — both sides of a behavioral contrast must come from the SAME prefix (content cancels within a pair; the behaviour is what is left), with both branches sampled under the SAME sampler (the paper's presence-penalty trap: the eval's penalty 1.5 suppresses loops so resampling under it yields 12 loops/1800 continuations; the mixed-penalty build scored 64.1 vs 68.0 clean AND carried a sampler confound). This is a direction-mining discipline our steering/attribution lanes can consume, and the design-level answer to what `LatentConfounderAudit` (Bench 194) detects post hoc. (2) The **cut-off-rate headroom bound** — max recoverable = the base model's truncation rate, measurable with one ungraded generation pass — as a quantitative upgrade of the 980 lane's obstacle-telemetry arming precondition. (3) Doctrine: task-over-intermediate-metric (three measured inversions), partial suppression suffices (as the blog states it: a 2B edit whose LP hit rates were only 0.267/0.075 gained 14.1 pts on its rerun — the hit rates and the +14.1 come from different rows of the paper's negative table). Files: **Issue 1224** (the matched-pair authoring arm + headroom gate, fixture-scale per the 993/1209 posture).
+
+---
+
+## 1. The mechanism (blog-verbatim numbers)
+
+**The edit class is unchanged (648/664):** rank-1 `ΔW = u vᵀ` on MLP `down_proj` in two layers; at each token the edit adds `(v·h_t)·u`. What changed is WHERE the three inputs come from:
+
+| Input | Takehi et al. (11-02) | Barry (11-09) | **AHA (11-15)** |
+|---|---|---|---|
+| direction u | agent (4 hand-written pairs) | agent's; offers diff-of-means heuristic (~93%) | **matched pairs — the model's own branches** |
+| layers | agent (15, 19) | inherited (15, 19) | **LP solved at every layer, ranked by hit rate** |
+| neurons/strengths v | agent (~8 h search) | LP (~1 min) | same LP, unchanged |
+
+**Matched pairs:** cut a looping base trace 8 tokens before its detected onset (Barry's 16-token copy window, 80% loop-density onset); sample 8 continuations (≤ 3,072 tokens) from that IDENTICAL prefix; keep the prefix iff ≥ 1 continuation loops and ≥ 1 does not; pair the earliest-looping branch with the longest productive branch; run both branches back through the UNEDITED model and, per layer, difference the mean residual stream over an aligned 160-token window (tokens 64–224 of each branch per the blog; the repo README words the same window onset-relative — 160 tokens starting 64 after the looping branch's onset — the two wordings are carried as-is, the README's anchor is the more precise); `u = normalise(mean over 80% of pairs)`, 20% held out. Nobody labels anything; the model writes both sides. Yield: 0.8B 228 pairs / 300 prefixes; 2B 35 pairs / 80 prefixes (still enough).
+
+**The sampler trap (nearly sank it):** the eval protocol's `presence_penalty=1.5` suppresses repetition — resampling under it gives 12 loops in 1,800 continuations. First fix (half the continuations at penalty 0, half at 1.5) raised yield but introduced a CONFOUND: looping branches came almost entirely from the penalty-0 half. Clean version = ALL continuations at penalty 0 (~60% loop, ~37% productive, both branches from the same sampler): better (68.0 vs 64.1 dev) AND unconfounded. The penalty shapes which tokens get sampled; residuals are read by replaying finished text, where sampling plays no part.
+
+**The whitened negative:** a Fisher-whitened direction (coordinate-wise variance-normalized difference of means over UNMATCHED tokens) achieved the best held-out separation of anything built — AUC 0.953 vs 0.895 plain diff-of-means — and made the WORST edit: 21.9 dev vs 64.1 matched; pushing it much harder (README's figure: 2.5×; the blog reports only that a larger push does not rescue it): 22.7. Sharper separation of unmatched tokens fits whatever else distinguishes them. What helps is a contrast whose two sides share everything except the behaviour.
+
+**Layer search:** solve the LP at every layer; rank by hit rate (share of HELD-OUT looping tokens pushed past −δ); tiebreak by productive displacement relative to push; edit the top two. 0.8B → layers 9+21 (another run 7+13); 2B → 2+4. The agent's 15+19 ranked 16th/19th of 19 (0.8B) and 19th/21st of 22 (2B) — and FOUR derived-vs-agent comparisons with everything else held fixed found no detectable difference (all deltas < 1.6 pts). Placement hardly matters; the direction carries the effect (consistent with 664's random-direction null).
+
+**Results (held-out; edit built only from GSM8K/MATH train traces; 1 sample, seed 0, Barry's harness/grader; base and edited measured on the same machine):**
+
+| unedited → edited | GSM8K test (500) | MATH-500 | IFEval (541) |
+|---|---|---|---|
+| Qwen3.5-0.8B | 14.0 → **71.2** (+57.2, 18.3 s.e.) | 9.8 → **51.8** (+42.0, 14.4 s.e.) | 19.6 → **62.7** (+43.1, 14.4 s.e.) |
+| Qwen3.5-2B | 75.8 → **88.4** (+12.6, 5.2 s.e.) | 69.6 → **79.6** (+10.0, 3.6 s.e.) | 61.4 → **77.1** (+15.7, 5.6 s.e.) |
+
+- IFEval transfer: the direction was built from maths traces ALONE and recovers +43.1 on a task with no maths — it encodes looping, not maths.
+- vs the agent's edit: parity (largest gap 3.0 pts on GSM8K test ≈ 1 s.e.); vs Barry's no-LLM direction: +5.8/+4.0/+2.3 (~2 s.e. / under 2 / under 2).
+- MATH-500 0.8B: fixes 212, breaks 2; of 241 problems only the edited model finished, it solved 216 (89.6%) — the problems hidden behind loops were nearly as solvable as the ones the base model reached.
+- **The cut-off-rate bound:** a limit-hitting trace is scored wrong, so max recoverable = the base model's truncation rate. Gain sits below that bound everywhere; the harder the benchmark the further below (MATH-500 gain 60.5 pts at L1 → 20.1 at L5; residual truncation 9% → 70%). MedQA: multiple-choice barely loops (0.17 cut-off) and gained 5.5; open-ended gained 2.7 — both under the 2-s.e. bar the authors wrote down IN ADVANCE: no detectable effect, and the open-ended run shows why (cut-off 0.46 → 0.01, answers 55% → 99%, but the rescued questions were 6.2% correct vs 11.7% for the ones the base model answered — knowledge was missing, not access). The cut-off rate is a cheap go/no-go: one generation pass, nothing graded, below ~8 points little to recover.
+- **Scale beats editing:** the UNEDITED 2B (69.6 MATH-500) outscores every edited 0.8B.
+
+**Negative table (judge an edit by the task; dev-split baselines are the MIXED-PENALTY direction's 64.1 — the clean build scores 68.0, so the deltas below are against the confounded arm):** per-token LP targets improved every diagnostic (hit rate 0.267→0.573 at L15, 0.075→0.453 at L19, less collateral) and WORSENED the model (78.1 vs 86.7, 2B dev); δ = 10× the gap: 60.9 vs 64.1; tighter ε = 0.25: the solver met its loop constraint on NONE of the held-out looping tokens, 32.0; 64 neurons instead of 8: 58.6 vs 64.1; ranking layers by u-separation: flat (Cohen's d 0.86–1.17), useless; a "skip models with cut-off rate < 0.40" gate wrongly stopped the first 2B run (rerun at 0.23 gained 14.1 pts). Partial suppression suffices to break a loop; a constant push that overshoots beats per-token targets that fix each token by a hair.
+
+**Cost + determinism:** ~22 min on one RTX 4090 ($0.30) once base traces exist; the whole 0.8B study $7.50. Machines disagree — vLLM is not bitwise deterministic across GPUs (base MATH-500 9.8 here vs 7.0 on Barry's box; IFEval 19.6 vs 22.9), so every edit is compared against a same-machine unedited arm; the edited IFEval arm reproduced to within 0.2 on a second machine.
+
+---
+
+## 2. The delta vs the family (signal-diffs, not name matches)
+
+| Family piece | What it ships | AHA's delta (mechanism-level) |
+|---|---|---|
+| 664 LP arm (LANDED, `lp_authoring.rs`) | `min ‖v‖₁` under push/keep constraints, PDHG, `compose_direction_overlay` — **consumes a GIVEN u** | AHA supplies the u-construction RECIPE (matched pairs) and closes Barry's ~93% heuristic gap to agent parity. Also new laws for the arm's docs: partial suppression suffices (LP hit rate is NOT a quality predictor — matching 993's fixture finding that the oscillation statistic is non-monotone in the coefficient); per-token constraint targets improved every diagnostic and worsened the task. |
+| 668 discrete arm + layer question | Tree-Ising closed layer inheritance with a FORWARD write-score layer scan (reference-free, transferred to 2B) | AHA closes it a SECOND way: rank layers by LP constraint satisfaction on held-out looping tokens (no eval run). Different signal (forward write score vs LP hit rate), same purpose — and BOTH papers converge on the practical law: placement is not load-bearing (668 transferred layers reference-free; AHA's four comparisons show insensitivity). Fixture-scale arms can stop agonizing over layer choice. |
+| 648 obstacle law + 980 arming | `GainCostLoopHalter` telemetry arms the lane; REFUSES "no obstacle found" | AHA QUANTIFIES the ceiling: max recoverable = base cut-off rate (one ungraded pass). Arming upgrade: obstacle telemetry ∧ reported headroom; hard-refuse only at ~0 recoverable — the paper's own <0.40 fixed-rate gate is the falsifier (it wrongly skipped the 2B). |
+| 649 + Bench 194 confound doctrine | `probe_circuit_grammar` "the estimate is confounded — never trust the slope estimate alone"; LatentConfounderAudit REJECTS confounded directions post hoc | AHA's matched-pair design PREVENTS at construction what the audit detects post hoc, and its whitened negative is the missing EMPIRICAL PROOF that the best-separating direction can be the most confounded (AUC 0.953 → worst edit). Design law for every mined-direction consumer in the Bench-194 table (MAG, TILR, Latent Field Steering, HLA `evolve_hla`, personality blends). |
+
+**Published prior art (subagent sweep + §4 searches, 2026-11-16):** every INGREDIENT is published — rank-one closed-form MLP edits (ROME 2202.05262, MEMIT 2210.07229; behavioral rank-one precedent 2211.13317), contrastive directions (ActAdd 2308.10248, CAA 2312.06681 — human-written pairs; ICV 2311.06668 — self-derived from curated exemplars, activation-level, the nearest self-direction cousin), loop detection + inference-time anti-loop work (Xu et al. "Learning to Break the Loop" 2206.02369 — DIT; unlikelihood 1908.04319; CTRL 1909.05858 penalty lineage; SpecRA; "Don't Repeat Yourself" 2608.22761 semantic-vs-verbatim), no-gradient weight repair (2611.11894 distilling-instructions-into-weights, robotics, ≤2 hand-closed-form candidates; 2611.11604 WSP + probabilistic model checking), weight-arithmetic behavior directions (Fierro et al. 2025, arXiv ID unverified this pass — requires two fine-tunes), context≡rank-1-patch expressivity (2511.17864), steering/model-editing surveys (2604.14090 — names no LLM-free WSP competitor). **No found work combines self-resampled matched pairs + mechanical detector labels + LP-chosen neurons + automatic layer choice.** Concurrent-work risk is high (four of these are Nov 2026); full-text reads of 2611.11894 / 2611.11604 not done this pass — flagged, not adjudicated.
+
+---
+
+## 3. Path 0 inventory (component table, per-track outcomes)
+
+| Component | Coverage (analog ships?) | Extraction (computable without GD?) | Signal-diff verdict | Outcome |
+|---|---|---|---|---|
+| Matched-pair u construction (same-prefix resampled branches, detector-labeled, aligned-window residual diff) | **NO** — `latent_field_steering`/CNA mine directions from game corpora, never from self-resampled trace branches; the wsp980_common fixture carries detector LABELING (the 16-token class recipe rode 993) but no pair construction | YES — closed-form means + normalization; the resampling is generation, not optimization | Ours labels GIVEN traces; AHA MANUFACTURES the contrast so the label is the only difference | **Filed — Issue 1224 T1–T2** (pair builder + direction + comparison/falsifier arms) |
+| Layer search (LP hit-rate ranker, top two) | **IN-CLASS** — 668's forward write-score scan is the no-agent layer answer | YES — one LP solve per layer (~1 min each) | 668 ranks by forward write statistics; AHA ranks by constraint satisfaction on held-out looping tokens — different signals, same purpose; both find placement insensitive | Variant noted in Issue 1224 T4 as a doc row (the fixture is layer-agnostic by construction — no fixture test possible); no separate filing |
+| Cut-off-rate headroom bound | **NO** — halter telemetry DETECTS the obstacle, does not bound recoverable gain | YES — one generation pass, nothing graded | Obstacle binary vs recoverable-share quantitative | **Filed — Issue 1224 T3** (arming refinement + pre-registered anti-falsifier: no fixed-rate skip gate) |
+| Whitened negative, sampler purity, task-over-metric | Doctrine rows (Bench 194 consumers; reflex synth-corpus echo gates; the pre-registration law) | n/a | The paper supplies measured evidence for laws we hold by convention | **Folded into this note** (§2/§4); no code |
+
+**Track verdicts:** Track A (modelless authoring arm + headroom gate): **Gain → filed** (Issue 1224). Track B (doctrine): folded. **No training track exists** — zero gradient steps anywhere in the pipeline; Path 0.5 not reached (documented for the record). Three-track adversarial panel skipped with reason: the classification never touched training framing (the paper's headline IS the absence of any LLM/GD), so the model-based advocate has no brief.
+
+---
+
+## 4. Honest caveats (must ride any filing)
+
+1. **The 0.8B held-out numbers come from the earliest build** (mixed-penalty direction on the agent's layers); the clean direction + derived layers are held-out-tested only on the 2B's GSM8K and MATH-500 arms — the 2B IFEval edit still uses the agent's layers 15+19 (README results note). The authors read this as understating the method; we carry it as a provenance caveat.
+2. **Parity, not victory — and nominally AHA is the one ahead.** The blog: "the largest gap is 3.0 points over the agent's own edit on GSM8K test, which is about one standard error" — AHA 71.2 vs the agent's 68.2, indistinguishable at ~1 s.e. (the 68.2 agent row comes via Barry's harness, 664's table; the AHA page itself never prints the agent's GSM8K score).
+3. **Machines disagree** — vLLM cross-GPU nondeterminism moved the BASE score by 2.8–3.3 pts between machines; every comparison must be same-machine. Our box-state law (riir-reflex Issue 021 lineage) is the same discipline.
+4. **Two models, one family** — the 2B numbers have no outside reference.
+5. **It removes an obstacle and adds nothing** — the cut-off rate is the ceiling; below ~8 points there is little to recover. The Gemma-3-270M "could not be improved" control (648) is the same law from the other side.
+6. **The 976 promotion veto stands (re-verified 2026-11-16):** no served lane documents the trace-looping class. The only documented degenerate-generation cases are the Bonsai Go arena's position-bias (riir-ai Bench 866 — an OFFLINE arena lane, single-token output bias, a different failure class, worked via trained LoRA: riir-ai Plan 528, riir-ai Bench 618) and riir-ai Bench 696's drafter correctly PREDICTING a target's repetition quirks (spec-dec behavior, not a defect). Adjacent evidence, not a consumer.
+7. **Concurrent-work risk** — §2's Nov-2026 neighbors (2611.11894, 2611.11604) unread in full this pass.
+
+---
+
+## 5. Verdict
+
+**Pinned novelty claim (one sentence):** *the no-LLM completion of the WSP loop-repair lane — matched-pair self-supervised direction construction (same-prefix resampled branches, detector-labeled) closing Barry's ~93% heuristic gap to agent parity, an LP-hit-rate layer search, and a cut-off-rate headroom bound — consumed as the third authoring arm spec of the shipped `weight_edit_overlay` lane (fixture-scale per the 993/1209 posture), distinguished from 664's LP arm by the u-construction recipe and from 668's layer scan by its ranker signal, with the whitened-direction negative filed as confounder-audit doctrine.*
+
+**Novelty gate:** Q1 formulation-level — the matched-pair construction + layer rank + headroom gate are new TO THE STACK and unclaimed as a combination in the literature (search above), but the paper publishes them; our filing CONSUMES, never claims. Q2 new behavior class — **no** (authoring-arm extension of an existing GOAT lane; the 664 shape exactly). Q3 selling point — partial and strictly better than 664's ("loop-class biases repairable end-to-end with zero LLM, zero egress, deterministic authoring, artifact-committed — at $0.30"). Q4 force multiplier — **yes** (overlay carrier + halter arming + LatentConfounderAudit + steering lane, ≥2 pillars). **⇒ Gain (on the GOAT lane), not GOAT, not Super-GOAT** — no new behavior class, and the wired-consumer veto stands.
+
+**Step-4 reframes (both done):** *game context* — the matched-pair design law maps onto per-NPC direction mining (HLA `evolve_hla`, MAG, personality blends consume mined directions; the shared-prefix contrast is the cheap way to mine one that survives the confounder audit), the 16-token copy detector is a closed-form sibling for degenerate NPC text/action streams (the halters measure oscillation already), and the headroom bound generalizes to any repair lane's go/no-go. *Consumer context (priority #1)* — rulewright surfaces: no consumer (batch activation-trace authoring vs online Elo/Beta selection — the 664 verdict re-stated and re-checked; zero authoring-shaped hits); the score-bench-adjacent takeaway is doctrine only (judge by the task metric; the paper's three intermediate-metric inversions corroborate our pre-registered-bars law). Decision-serving family: rethink's LAYA rung remains single-question encoder serving — no autoregressive surface, no loop class → the veto-gated consumer posture unchanged.
+
+**MOAT gate:** note + issue in katgpt-rs — public base-primitive family home; zero game/chain/shard IP; no rethink-class content (the serving posture appears only as the unchanged veto-gated consumer). Correct public home per the §10 vocabulary table's standing convention.
+
+**Files:** this note · `katgpt-rs/.issues/1224_aha_matched_pair_authoring_arm.md` (proof path + falsifiers + demotion law pre-registered inside; filed UNCLAIMED — the fixture-scale arm is claimable by any quiet lane; real-model work stays veto-gated) · follow-up rows: 648 §9, 664 §7 · vocab §10 one-liner. **Demotion law (pre-registered):** if the matched-pair arm fails battery arms the heuristic direction passes, or its confound falsifiers fail to fire AND the fixture is shown to lack confound structure entirely, record the negative and strike the arm from the lane docs — the LP arm (993) and discrete arm (1209) are untouched either way.
