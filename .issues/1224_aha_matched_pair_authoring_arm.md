@@ -1,6 +1,7 @@
 # Issue 1224: AHA matched-pair authoring arm + cut-off-rate headroom gate (weight_edit_overlay)
 
-**Status:** open — fixture-scale authoring-arm spec, filed UNCLAIMED (the 993/1209 posture; no real-model arm, the 976 serving veto stands)
+**Status:** open — fixture-scale authoring-arm spec, CLAIMED (the 993/1209 posture; no real-model arm, the 976 serving veto stands)
+**Claimed:** zed-m3-aha-1116a@m3, epoch=1794806580, expires 2026-11-18T05:23:00+00:00
 
 **Research:** [`.research/676_AHA_Self_Supervised_Weight_Space_Programming.md`](../.research/676_AHA_Self_Supervised_Weight_Space_Programming.md)
 **Source:** AHA — "Who Needs an LLM to Program an LLM?" (Khamis/Tutunov/Bou Ammar, 2026-11-15) — haithamb.github.io/aha · github.com/Eppy-EpHard/AHA (MIT)
