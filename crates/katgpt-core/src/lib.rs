@@ -282,6 +282,11 @@ pub mod freeze;
 #[cfg(feature = "kpt_archive")]
 pub mod kpt_archive;
 
+// Issue 1225 / Research 677 — the circuit→ternary compiled-lane family
+// (T1 transcode now; Arm A forward + Arm B builder later arms).
+#[cfg(feature = "ternary_circuit")]
+pub mod ternary_circuit;
+
 pub mod proof_cache;
 
 #[cfg(feature = "parallax_attn")]

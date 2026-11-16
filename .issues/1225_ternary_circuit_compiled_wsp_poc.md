@@ -1,6 +1,7 @@
 # Issue 1225: ternary_circuit — compiled WSP PoC (two arms: full-forward reproduction + exact-circuit builder)
 
-**Claimed:** zed-ddc61e9c@amo, 1794846279, expires 2026-11-18T16:00:00Z — scope: T1 (the npz→.cact transcode lane: lossless intermediate emitter + kpt_archive assembly + BLAKE3 pins, meta-driven shapes); G2-A's pre-registered QUIET-m3 posture will be re-boxed WITH disclosure at its run (m3 takes no jobs from this lane — bmo/amo quiet-window substitute, box delta recorded); Arm B untouched by this lease.
+**Claimed:** zed-ddc61e9c@amo, 1794846279, expires 2026-11-18T16:00:00Z
+Claim scope: T1 (the npz→.cact transcode lane: lossless intermediate emitter + kpt_archive assembly + BLAKE3 pins, meta-driven shapes); G2-A's pre-registered QUIET-m3 posture will be re-boxed WITH disclosure at its run (m3 takes no jobs from this lane — bmo/amo quiet-window substitute, box delta recorded); Arm B untouched by this lease.
 **Status:** Open — filed from [Research 677](../.research/677_codehygiene_Compiled_Ternary_System_One.md) (GOAT fusion; delegated-owner verdict AGREE 2026-11-16, reviewer `katgpt-rs-07@m3`, session `7a0b3b4e-dd69-46b4-b71a-8367d9f7292f`).
 
 **Source attribution:** ported-from brianbell-x/codehygiene @ `423c7e1f02ef409bbaea209268bfcde36e0f1cb0` — **MIT declared only at `pyproject.toml:10`; no LICENSE file in the source tree — attribution recorded HERE.** All fixtures remain original minimal reproductions; Arm A is a disclosed reference reimplementation.

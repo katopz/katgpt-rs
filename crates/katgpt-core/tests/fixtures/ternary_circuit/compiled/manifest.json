@@ -1,0 +1,817 @@
+{
+  "format": "kpt1",
+  "source_pin": "423c7e1f02ef409bbaea209268bfcde36e0f1cb0",
+  "layer_count": 73,
+  "layers": [
+    {
+      "idx": 0,
+      "name": "tok_emb",
+      "kind": "trit",
+      "dims": [
+        128,
+        46
+      ],
+      "rows": 128,
+      "cols": 46
+    },
+    {
+      "idx": 1,
+      "name": "col_emb",
+      "kind": "trit",
+      "dims": [
+        128,
+        46
+      ],
+      "rows": 128,
+      "cols": 46
+    },
+    {
+      "idx": 2,
+      "name": "pre_conv3_w",
+      "kind": "trit",
+      "dims": [
+        3,
+        46,
+        16
+      ],
+      "rows": 3,
+      "cols": 736
+    },
+    {
+      "idx": 3,
+      "name": "pref1_proj",
+      "kind": "trit",
+      "dims": [
+        62,
+        4
+      ],
+      "rows": 62,
+      "cols": 4
+    },
+    {
+      "idx": 4,
+      "name": "W_causal1",
+      "kind": "trit",
+      "dims": [
+        128,
+        128
+      ],
+      "rows": 128,
+      "cols": 128
+    },
+    {
+      "idx": 5,
+      "name": "W_causal2",
+      "kind": "trit",
+      "dims": [
+        128,
+        128
+      ],
+      "rows": 128,
+      "cols": 128
+    },
+    {
+      "idx": 6,
+      "name": "gate1_w",
+      "kind": "trit",
+      "dims": [
+        66,
+        50
+      ],
+      "rows": 66,
+      "cols": 50
+    },
+    {
+      "idx": 7,
+      "name": "pref2_proj",
+      "kind": "trit",
+      "dims": [
+        50,
+        4
+      ],
+      "rows": 50,
+      "cols": 4
+    },
+    {
+      "idx": 8,
+      "name": "col_fuse_w",
+      "kind": "trit",
+      "dims": [
+        116,
+        52
+      ],
+      "rows": 116,
+      "cols": 52
+    },
+    {
+      "idx": 9,
+      "name": "col_sum_proj",
+      "kind": "trit",
+      "dims": [
+        52,
+        16
+      ],
+      "rows": 52,
+      "cols": 16
+    },
+    {
+      "idx": 10,
+      "name": "conv3_w",
+      "kind": "trit",
+      "dims": [
+        3,
+        52,
+        64
+      ],
+      "rows": 3,
+      "cols": 3328
+    },
+    {
+      "idx": 11,
+      "name": "conv7_w",
+      "kind": "trit",
+      "dims": [
+        7,
+        52,
+        128
+      ],
+      "rows": 7,
+      "cols": 6656
+    },
+    {
+      "idx": 12,
+      "name": "conv13_w",
+      "kind": "trit",
+      "dims": [
+        13,
+        52,
+        86
+      ],
+      "rows": 13,
+      "cols": 4472
+    },
+    {
+      "idx": 13,
+      "name": "sketch_w",
+      "kind": "trit",
+      "dims": [
+        5,
+        52,
+        80
+      ],
+      "rows": 5,
+      "cols": 4160
+    },
+    {
+      "idx": 14,
+      "name": "lmlp1_w",
+      "kind": "trit",
+      "dims": [
+        294,
+        124
+      ],
+      "rows": 294,
+      "cols": 124
+    },
+    {
+      "idx": 15,
+      "name": "lmlp2_w",
+      "kind": "trit",
+      "dims": [
+        124,
+        146
+      ],
+      "rows": 124,
+      "cols": 146
+    },
+    {
+      "idx": 16,
+      "name": "attn1_wq",
+      "kind": "trit",
+      "dims": [
+        226,
+        128
+      ],
+      "rows": 226,
+      "cols": 128
+    },
+    {
+      "idx": 17,
+      "name": "attn1_wk",
+      "kind": "trit",
+      "dims": [
+        226,
+        128
+      ],
+      "rows": 226,
+      "cols": 128
+    },
+    {
+      "idx": 18,
+      "name": "attn1_wv",
+      "kind": "trit",
+      "dims": [
+        226,
+        96
+      ],
+      "rows": 226,
+      "cols": 96
+    },
+    {
+      "idx": 19,
+      "name": "attn1_wo",
+      "kind": "trit",
+      "dims": [
+        96,
+        226
+      ],
+      "rows": 96,
+      "cols": 226
+    },
+    {
+      "idx": 20,
+      "name": "cmlp1_w",
+      "kind": "trit",
+      "dims": [
+        226,
+        96
+      ],
+      "rows": 226,
+      "cols": 96
+    },
+    {
+      "idx": 21,
+      "name": "cmlp1_2_w",
+      "kind": "trit",
+      "dims": [
+        96,
+        226
+      ],
+      "rows": 96,
+      "cols": 226
+    },
+    {
+      "idx": 22,
+      "name": "attn2_wq",
+      "kind": "trit",
+      "dims": [
+        226,
+        128
+      ],
+      "rows": 226,
+      "cols": 128
+    },
+    {
+      "idx": 23,
+      "name": "attn2_wk",
+      "kind": "trit",
+      "dims": [
+        226,
+        128
+      ],
+      "rows": 226,
+      "cols": 128
+    },
+    {
+      "idx": 24,
+      "name": "attn2_wv",
+      "kind": "trit",
+      "dims": [
+        226,
+        128
+      ],
+      "rows": 226,
+      "cols": 128
+    },
+    {
+      "idx": 25,
+      "name": "attn2_wo",
+      "kind": "trit",
+      "dims": [
+        128,
+        226
+      ],
+      "rows": 128,
+      "cols": 226
+    },
+    {
+      "idx": 26,
+      "name": "cmlp2_w",
+      "kind": "trit",
+      "dims": [
+        226,
+        64
+      ],
+      "rows": 226,
+      "cols": 64
+    },
+    {
+      "idx": 27,
+      "name": "cmlp2_2_w",
+      "kind": "trit",
+      "dims": [
+        64,
+        226
+      ],
+      "rows": 64,
+      "cols": 226
+    },
+    {
+      "idx": 28,
+      "name": "sq_w",
+      "kind": "trit",
+      "dims": [
+        226,
+        8
+      ],
+      "rows": 226,
+      "cols": 8
+    },
+    {
+      "idx": 29,
+      "name": "pool_gate_w",
+      "kind": "trit",
+      "dims": [
+        226,
+        1
+      ],
+      "rows": 226,
+      "cols": 1
+    },
+    {
+      "idx": 30,
+      "name": "doc1_w",
+      "kind": "trit",
+      "dims": [
+        452,
+        64
+      ],
+      "rows": 452,
+      "cols": 64
+    },
+    {
+      "idx": 31,
+      "name": "doc2_w",
+      "kind": "trit",
+      "dims": [
+        64,
+        31
+      ],
+      "rows": 64,
+      "cols": 31
+    },
+    {
+      "idx": 32,
+      "name": "pre_conv3_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        16
+      ],
+      "rows": 16,
+      "cols": 0
+    },
+    {
+      "idx": 33,
+      "name": "pre_conv3_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        16
+      ],
+      "rows": 16,
+      "cols": 0
+    },
+    {
+      "idx": 34,
+      "name": "gate1_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        50
+      ],
+      "rows": 50,
+      "cols": 0
+    },
+    {
+      "idx": 35,
+      "name": "gate1_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        50
+      ],
+      "rows": 50,
+      "cols": 0
+    },
+    {
+      "idx": 36,
+      "name": "col_fuse_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        52
+      ],
+      "rows": 52,
+      "cols": 0
+    },
+    {
+      "idx": 37,
+      "name": "col_fuse_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        52
+      ],
+      "rows": 52,
+      "cols": 0
+    },
+    {
+      "idx": 38,
+      "name": "col_sum_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        16
+      ],
+      "rows": 16,
+      "cols": 0
+    },
+    {
+      "idx": 39,
+      "name": "conv3_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        64
+      ],
+      "rows": 64,
+      "cols": 0
+    },
+    {
+      "idx": 40,
+      "name": "conv3_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        64
+      ],
+      "rows": 64,
+      "cols": 0
+    },
+    {
+      "idx": 41,
+      "name": "conv7_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        128
+      ],
+      "rows": 128,
+      "cols": 0
+    },
+    {
+      "idx": 42,
+      "name": "conv7_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        128
+      ],
+      "rows": 128,
+      "cols": 0
+    },
+    {
+      "idx": 43,
+      "name": "conv13_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        86
+      ],
+      "rows": 86,
+      "cols": 0
+    },
+    {
+      "idx": 44,
+      "name": "conv13_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        86
+      ],
+      "rows": 86,
+      "cols": 0
+    },
+    {
+      "idx": 45,
+      "name": "sketch_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        80
+      ],
+      "rows": 80,
+      "cols": 0
+    },
+    {
+      "idx": 46,
+      "name": "sketch_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        80
+      ],
+      "rows": 80,
+      "cols": 0
+    },
+    {
+      "idx": 47,
+      "name": "lmlp1_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        124
+      ],
+      "rows": 124,
+      "cols": 0
+    },
+    {
+      "idx": 48,
+      "name": "lmlp1_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        124
+      ],
+      "rows": 124,
+      "cols": 0
+    },
+    {
+      "idx": 49,
+      "name": "lmlp2_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        146
+      ],
+      "rows": 146,
+      "cols": 0
+    },
+    {
+      "idx": 50,
+      "name": "attn1_wq_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        128
+      ],
+      "rows": 128,
+      "cols": 0
+    },
+    {
+      "idx": 51,
+      "name": "attn1_wk_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        128
+      ],
+      "rows": 128,
+      "cols": 0
+    },
+    {
+      "idx": 52,
+      "name": "attn1_wv_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        96
+      ],
+      "rows": 96,
+      "cols": 0
+    },
+    {
+      "idx": 53,
+      "name": "attn1_brel",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        8,
+        65
+      ],
+      "rows": 520,
+      "cols": 0
+    },
+    {
+      "idx": 54,
+      "name": "attn1_bsink",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        8
+      ],
+      "rows": 8,
+      "cols": 0
+    },
+    {
+      "idx": 55,
+      "name": "cmlp1_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        96
+      ],
+      "rows": 96,
+      "cols": 0
+    },
+    {
+      "idx": 56,
+      "name": "cmlp1_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        96
+      ],
+      "rows": 96,
+      "cols": 0
+    },
+    {
+      "idx": 57,
+      "name": "cmlp1_2_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        226
+      ],
+      "rows": 226,
+      "cols": 0
+    },
+    {
+      "idx": 58,
+      "name": "attn2_wq_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        128
+      ],
+      "rows": 128,
+      "cols": 0
+    },
+    {
+      "idx": 59,
+      "name": "attn2_wk_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        128
+      ],
+      "rows": 128,
+      "cols": 0
+    },
+    {
+      "idx": 60,
+      "name": "attn2_wv_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        128
+      ],
+      "rows": 128,
+      "cols": 0
+    },
+    {
+      "idx": 61,
+      "name": "attn2_brel",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        8,
+        65
+      ],
+      "rows": 520,
+      "cols": 0
+    },
+    {
+      "idx": 62,
+      "name": "attn2_bsink",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        8
+      ],
+      "rows": 8,
+      "cols": 0
+    },
+    {
+      "idx": 63,
+      "name": "cmlp2_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        64
+      ],
+      "rows": 64,
+      "cols": 0
+    },
+    {
+      "idx": 64,
+      "name": "cmlp2_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        64
+      ],
+      "rows": 64,
+      "cols": 0
+    },
+    {
+      "idx": 65,
+      "name": "cmlp2_2_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        226
+      ],
+      "rows": 226,
+      "cols": 0
+    },
+    {
+      "idx": 66,
+      "name": "sq_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        8
+      ],
+      "rows": 8,
+      "cols": 0
+    },
+    {
+      "idx": 67,
+      "name": "sq_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        8
+      ],
+      "rows": 8,
+      "cols": 0
+    },
+    {
+      "idx": 68,
+      "name": "pool_gate_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        1
+      ],
+      "rows": 1,
+      "cols": 0
+    },
+    {
+      "idx": 69,
+      "name": "pool_gate_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        1
+      ],
+      "rows": 1,
+      "cols": 0
+    },
+    {
+      "idx": 70,
+      "name": "doc1_s",
+      "kind": "vec",
+      "role": "scale",
+      "dims": [
+        64
+      ],
+      "rows": 64,
+      "cols": 0
+    },
+    {
+      "idx": 71,
+      "name": "doc1_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        64
+      ],
+      "rows": 64,
+      "cols": 0
+    },
+    {
+      "idx": 72,
+      "name": "doc2_b",
+      "kind": "vec",
+      "role": "data",
+      "dims": [
+        31
+      ],
+      "rows": 31,
+      "cols": 0
+    }
+  ]
+}

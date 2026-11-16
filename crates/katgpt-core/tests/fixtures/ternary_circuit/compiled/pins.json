@@ -1,0 +1,14 @@
+{
+  "source_pin": "423c7e1f02ef409bbaea209268bfcde36e0f1cb0",
+  "npz_blake3": "118cb02b922195867c873b16052ebbf91790a1fb9b73ba14d78a0785752e65be",
+  "trits_blake3": "0e85d697767d5367afb5d6e42d04b376d2e406574396a139cbf633f1fdd5562c",
+  "vecs_blake3": "815925071926e3bb09fd314cc2896934d8cf398f8bfbac729052503e069eb942",
+  "meta_blake3": "a62b9b4415b63f1e3baf81b869cb2c83068d792f09b25b9eee103c650fc9ec7d",
+  "cact_blake3": "8d76b3bcfb8d09425032cb63170057a673e0b253fb1c4bfbbaa7f25adfa6fa07",
+  "cact_archive_id": "43a1e3082d1594159835c7a0016ea9532c5958d1253ce7ecb637e0318a94b048",
+  "cact_bytes": 201248,
+  "layer_count": 73,
+  "trit_layers": 32,
+  "vec_layers": 41,
+  "zero_frac": 0.934921058452205
+}

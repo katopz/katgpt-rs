@@ -713,6 +713,14 @@ limit_fixture = []
 # that wants single-file mmap hot-swap.
 kpt_archive = []
 
+# ternary_circuit (Issue 1225, Research 677 GOAT fusion): the circuit→ternary
+# compiled-lane family — the npz→.cact transcode (T1), the forward port
+# (Arm A) and the exact-circuit builder (Arm B) land under this feature.
+# Implies `kpt_archive` (the compiled net's container). Opt-in per the
+# issue's consumer-gated mandate: NO default promotion; first candidate
+# consumer is the compiled lane class (riir-rethink .proposals/006).
+ternary_circuit = ["kpt_archive"]
+
 # switch_cost (Issue 663, 2026-08-17): SwitchCostTable — directed pairwise
 # switch-difficulty table, the modelless skill-entropy distillation
 # (Research 484 / arXiv:2608.05139). Opt-in per the issue's GOAT-gate
@@ -4637,3 +4645,18 @@ required-features = ["grafts"]
 name = "bench_988_grafts_goat"
 harness = false
 required-features = ["grafts"]
+
+# Issue 1225 T1 — the npz→.cact transcode gate: determinism (re-derive vs
+# committed artifact byte-identity), the input + output BLAKE3 pins, the
+# archive/manifest laws, the bitplane round-trip, the container-level tamper
+# arm. The row rides the SAME commit as the gated target (green-zero trap).
+[[test]]
+name = "ternary_circuit_transcode_gates"
+required-features = ["ternary_circuit"]
+
+# Issue 1225 T1b — the transcode converter (fixture builder): reads the
+# committed npz + intermediate, writes compiled/{weights.cact, manifest.json,
+# pins.json}. Deterministic — a re-run is byte-identical.
+[[example]]
+name = "ternary_circuit_transcode"
+required-features = ["ternary_circuit"]
