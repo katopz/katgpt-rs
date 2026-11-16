@@ -79,6 +79,22 @@ Rules:
    per-iteration logs kept. Every timed row verifies the BINARY SHA CHANGED —
    a comment/mtime touch does not relink under incremental; that row is
    INVALID, not slow.
+5. **[kache](https://github.com/kunobi-ninja/kache) — the job-lane build cache
+   (ADOPTED 2026-11-16, m3 pilot bench 157 PASS: 26/26 rlib blake3-identical
+   across worktrees; per-added-worktree disk 92 MB → ≈0 via CoW clone restore;
+   warm-store new-worktree ~3.7-4.3x, warm clippy 0.02 s vs 3.4 s; dev-loop
+   ~9%/edit → dev loops stay incumbent).** JOB LANES ONLY: arm via
+   `RUSTC_WRAPPER=kache` + `KACHE_CACHE_DIR`/`KACHE_RUNTIME_DIR` env (per-lane
+   isolated store; NEVER blanket `kache init` on dev boxes; install needs BOTH
+   `kache` + `kache-engine`). Verdict-bearing gates run `KACHE_DISABLED=1` and
+   their provenance names the kache state — and T0's disclosed delta: even
+   disabled strips `-C incremental` + sets child `CARGO_INCREMENTAL=0`
+   (`KACHE_PRESERVE_INCREMENTAL=1` restores parity), so wrapper-REMOVAL (env
+   unset) is the byte-incumbent path, not disable. Armed and unarmed lanes
+   NEVER share a target dir. Disk accounting: du lies across CoW clones —
+   account by df + `kache stats`; the store is a GC-bounded regenerable class
+   (`kache clean --orphans` = the dead-worktree detector); the kache CLI needs
+   the lane's env for store-scoped reads.
 
 ## 3. Compile-time technique table
 
