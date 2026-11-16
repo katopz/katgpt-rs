@@ -1,0 +1,74 @@
+{
+ "provenance": {
+  "source_pin": "423c7e1f02ef409bbaea209268bfcde36e0f1cb0",
+  "init_py_blake3": "b0dd344a6a4726d83a8c4804354f0948151d86346e78dfab412bb261a2d2922c",
+  "numpy_version": "2.4.6",
+  "python_version": "3.11.17",
+  "platform": "macOS-27.2-arm64-arm-64bit",
+  "emitted_utc": "2026-11-16T21:32:32Z"
+ },
+ "weights_npz_blake3": "118cb02b922195867c873b16052ebbf91790a1fb9b73ba14d78a0785752e65be",
+ "threshold": 0.55,
+ "squiggle_kinds": [
+  "deep_nesting",
+  "poor_naming",
+  "noisy_comment",
+  "swallowed_error",
+  "dense_line",
+  "special_casing",
+  "duplicate_block",
+  "cramped_layout"
+ ],
+ "score_names": [
+  "flatness",
+  "naming",
+  "simplicity",
+  "comments",
+  "error_handling",
+  "layout"
+ ],
+ "archetype_names": [
+  "minimal",
+  "clean",
+  "enterprise",
+  "dense",
+  "slop"
+ ],
+ "snippets": [
+  {
+   "name": "rust_sample",
+   "lang": "rust",
+   "num_lines": 44,
+   "file": "forward_rust_sample.json",
+   "blake3": "a3972384321b9a55a38cb466a787890765aeef5c32ce47a91e4228ecc8e6a423"
+  },
+  {
+   "name": "python_sample",
+   "lang": "python",
+   "num_lines": 24,
+   "file": "forward_python_sample.json",
+   "blake3": "0277f9ddfe71d031e751bbedd7d222f41dd799b48dff5b9c4e83658cebe68112"
+  },
+  {
+   "name": "go_sample",
+   "lang": "go",
+   "num_lines": 38,
+   "file": "forward_go_sample.json",
+   "blake3": "707b781b226d8ed6d71bbb982fec48043fe1e7c3f64f5be3285830711041b45e"
+  },
+  {
+   "name": "edge_trap",
+   "lang": "go",
+   "num_lines": 14,
+   "file": "forward_edge_trap.json",
+   "blake3": "b4ed650ffefadc911b1a78d561efc440dd3d38dca6a308230f169294759ac236"
+  },
+  {
+   "name": "edge_empty",
+   "lang": "text",
+   "num_lines": 1,
+   "file": "forward_edge_empty.json",
+   "blake3": "0a0d436239d7f803c2a31ba5dd37e302d3781fb3b3ce569256f32dbd7842dfe2"
+  }
+ ]
+}

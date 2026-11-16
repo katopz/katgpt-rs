@@ -1,0 +1,122 @@
+{
+ "provenance": {
+  "source_pin": "423c7e1f02ef409bbaea209268bfcde36e0f1cb0",
+  "init_py_blake3": "b0dd344a6a4726d83a8c4804354f0948151d86346e78dfab412bb261a2d2922c",
+  "numpy_version": "2.4.6",
+  "python_version": "3.11.17",
+  "platform": "macOS-27.2-arm64-arm-64bit",
+  "emitted_utc": "2026-11-16T21:32:32Z"
+ },
+ "snippet": {
+  "name": "edge_empty",
+  "lang": "text",
+  "bytes": 0,
+  "num_lines": 1,
+  "sha256_source": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+ },
+ "grid": {
+  "num_lines": 1,
+  "cols": 128,
+  "hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+ },
+ "heads": {
+  "noul": [
+   {
+    "value": 0.8099984413232572,
+    "bits_le_hex": "0f5c4f3f"
+   },
+   {
+    "value": 0.8641271057902129,
+    "bits_le_hex": "6f375d3f"
+   }
+  ],
+  "subscores": {
+   "flatness": {
+    "value": 0.8992922562279629,
+    "bits_le_hex": "0438663f"
+   },
+   "naming": {
+    "value": 0.8992922562279629,
+    "bits_le_hex": "0438663f"
+   },
+   "simplicity": {
+    "value": 0.8992922562279629,
+    "bits_le_hex": "0438663f"
+   },
+   "comments": {
+    "value": 0.8992922562279629,
+    "bits_le_hex": "0438663f"
+   },
+   "error_handling": {
+    "value": 0.8992922562279629,
+    "bits_le_hex": "0438663f"
+   },
+   "layout": {
+    "value": 0.8992922562279629,
+    "bits_le_hex": "0438663f"
+   }
+  },
+  "style_probs": {
+   "minimal": {
+    "value": 0.45308625028479693,
+    "bits_le_hex": "ecfae73e"
+   },
+   "clean": {
+    "value": 0.50073775913322,
+    "bits_le_hex": "5a30003f"
+   },
+   "enterprise": {
+    "value": 0.015896239959199414,
+    "bits_le_hex": "d538823c"
+   },
+   "dense": {
+    "value": 0.015896239959199414,
+    "bits_le_hex": "d538823c"
+   },
+   "slop": {
+    "value": 0.014383510663584195,
+    "bits_le_hex": "d1a86b3c"
+   }
+  },
+  "archetype_argmax": {
+   "name": "clean",
+   "top1": {
+    "value": 0.50073775913322,
+    "bits_le_hex": "5a30003f"
+   },
+   "top2": {
+    "value": 0.45308625028479693,
+    "bits_le_hex": "ecfae73e"
+   },
+   "margin": 0.04765150884842312
+  }
+ },
+ "line_probs": {
+  "shape": [
+   1,
+   8
+  ],
+  "values": [
+   [
+    0.06297335324328955,
+    0.06297335324328955,
+    0.06297335324328955,
+    0.06297335324328955,
+    0.06297335324328955,
+    0.06297335324328955,
+    0.06297335324328955,
+    0.06297335324328955
+   ]
+  ],
+  "argmax_kind": [
+   "deep_nesting"
+  ],
+  "row_max": [
+   0.06297335324328955
+  ]
+ },
+ "squiggles_at_threshold": {
+  "threshold": 0.55,
+  "rows": []
+ }
+}
