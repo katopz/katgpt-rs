@@ -647,6 +647,13 @@ pub struct ObstacleArmConfig {
     /// (the gain/cost scissors' cost side; the halter needs the full signal
     /// even though only the oscillation channel arms this lane).
     pub cost_flat_tax: f32,
+    /// Hard-refuse floor on the headroom readout's recoverable share
+    /// (Issue 1224 T3 — the AHA cut-off-rate bound). The ONLY headroom
+    /// refusal is ≈0 recoverable — never a fixed intermediate rate (the
+    /// anti-falsifier law: the paper's own "<0.40 skip" gate wrongly
+    /// skipped its best edit, a 0.23-cut-off model that gained +14.1 pts).
+    /// Ignored when outcome telemetry is absent. Default 0.01.
+    pub headroom_floor: f32,
 }
 
 impl Default for ObstacleArmConfig {
@@ -655,6 +662,7 @@ impl Default for ObstacleArmConfig {
             oscillation_rate_threshold: 0.5,
             halter_patience: 2,
             cost_flat_tax: 0.01,
+            headroom_floor: 0.01,
         }
     }
 }
@@ -668,6 +676,36 @@ pub enum ArmRefusal {
         /// The measured rate (for the record).
         oscillation_rate: f32,
     },
+    /// The headroom readout's recoverable share sits below the config
+    /// floor — ≈0 recoverable mass, so the loop blocks nothing repairable
+    /// (Issue 1224 T3). This fires ONLY at ≈0: a fixed intermediate-rate
+    /// skip gate is the lane's pre-registered anti-falsifier (the paper's
+    /// <0.40 gate wrongly skipped its best edit). Requires outcome
+    /// telemetry; the outcomes-absent posture never fires it.
+    HeadroomBelowFloor {
+        /// The measured recoverable share (for the record).
+        recoverable_share: f32,
+    },
+}
+
+/// The cut-off-rate headroom readout (Issue 1224 T3 — the AHA bound: max
+/// recoverable ≈ the base model's truncation rate, measurable with one
+/// ungraded pass). A ceiling REPORT beside the arm verdict — the lane's
+/// go/no-go input, never a behavior threshold.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HeadroomReport {
+    /// Obstacle (oscillation-halted) episodes in the telemetry.
+    pub obstacle_episodes: usize,
+    /// Obstacle episodes that ended truncated (ran out of budget without
+    /// completing) — the repairable mass.
+    pub obstacle_truncated: usize,
+    /// Recoverable share = `obstacle_truncated / obstacle_episodes`.
+    /// `None` when no obstacle episode exists (or outcomes were absent).
+    pub recoverable_share: Option<f32>,
+    /// Truncation rate over ALL supplied episodes (the AHA cut-off-rate
+    /// analog over the whole trace population). `None` when outcomes
+    /// were absent.
+    pub truncation_rate: Option<f32>,
 }
 
 /// The arming verdict.
@@ -676,11 +714,22 @@ pub enum ArmVerdict {
     Armed {
         oscillation_rate: f32,
         episodes: usize,
+        /// The headroom readout — `None` when outcome telemetry was not
+        /// supplied (the outcomes-absent posture; the bare
+        /// [`arm_from_telemetry`] keeps its pre-1224 semantics).
+        headroom: Option<HeadroomReport>,
     },
     Refused(ArmRefusal),
 }
 
 /// Arm (or refuse) the lane from the eval protocol's obstacle telemetry.
+///
+/// The outcomes-ABSENT posture: headroom is unmeasured (`Armed.headroom
+/// = None`) and the headroom floor never fires — byte-identical to the
+/// pre-1224 semantics, so every existing battery verdict stands. With
+/// rollout outcomes available, prefer [`arm_from_telemetry_with_outcomes`]
+/// (Issue 1224 T3): the same oscillation verdict plus the cut-off-rate
+/// headroom readout and its ≈0-only refusal.
 ///
 /// `episodes` is the rollout protocol's per-episode hidden-state sequences
 /// (`episodes[e][r]` = step `r`'s hidden vector). Each episode runs a fresh
@@ -692,13 +741,48 @@ pub enum ArmVerdict {
 /// This is the shipped obstacle telemetry CONSUMED, not a parallel
 /// detector — the substrate-first decision behind the whole lane.
 pub fn arm_from_telemetry(episodes: &[Vec<Vec<f32>>], cfg: &ObstacleArmConfig) -> ArmVerdict {
+    arm_from_telemetry_inner(episodes, None, cfg)
+}
+
+/// The outcomes-aware arming half (Issue 1224 T3): `truncated[e]` says
+/// whether episode `e` ended truncated (ran out of its generation budget
+/// without completing — the fixture's `!success`; the real-model analog
+/// is the trace hitting the token cap). Supplies the
+/// [`HeadroomReport`] beside the verdict and arms the ONLY headroom
+/// refusal — [`ArmRefusal::HeadroomBelowFloor`] at ≈0 recoverable share,
+/// never at a fixed intermediate rate.
+///
+/// `truncated.len()` must equal `episodes.len()` (a programming error —
+/// asserted loud, the [`norm_matched_random_direction`] convention).
+pub fn arm_from_telemetry_with_outcomes(
+    episodes: &[Vec<Vec<f32>>],
+    truncated: &[bool],
+    cfg: &ObstacleArmConfig,
+) -> ArmVerdict {
+    assert_eq!(
+        episodes.len(),
+        truncated.len(),
+        "truncated must name every episode"
+    );
+    arm_from_telemetry_inner(episodes, Some(truncated), cfg)
+}
+
+/// The shared arming body. `truncated` supplies the headroom axis; the
+/// oscillation verdict is identical in both postures (same loop, same
+/// rate, same refusals) — the outcomes half only ADDS the readout and
+/// the ≈0 floor on the Armed path.
+fn arm_from_telemetry_inner(
+    episodes: &[Vec<Vec<f32>>],
+    truncated: Option<&[bool]>,
+    cfg: &ObstacleArmConfig,
+) -> ArmVerdict {
     if episodes.is_empty() {
         return ArmVerdict::Refused(ArmRefusal::NoObstacleFound {
             oscillation_rate: 0.0,
         });
     }
-    let mut oscillating = 0usize;
-    for steps in episodes {
+    let mut osc_flags = vec![false; episodes.len()];
+    for (e, steps) in episodes.iter().enumerate() {
         if steps.len() < 3 {
             // Fewer than 3 hidden states cannot show a reversal.
             continue;
@@ -708,7 +792,6 @@ pub fn arm_from_telemetry(episodes: &[Vec<Vec<f32>>], cfg: &ObstacleArmConfig) -
         let mut prev_step = vec![0.0f32; dim];
         let mut curr_step = vec![0.0f32; dim];
         let mut first_step_size = 0.0f32;
-        let mut fired = false;
         for r in 1..steps.len() {
             let (h_prev, h_curr) = (&steps[r - 1], &steps[r]);
             let gain = step_size(h_curr, h_prev);
@@ -721,7 +804,7 @@ pub fn arm_from_telemetry(episodes: &[Vec<Vec<f32>>], cfg: &ObstacleArmConfig) -
                 let decision =
                     halter.halt_decision(r, gain, cfg.cost_flat_tax * first_step_size, 1.0);
                 if matches!(decision, HaltDecision::Halt { .. }) {
-                    fired = true;
+                    osc_flags[e] = true;
                     break;
                 }
                 continue;
@@ -738,19 +821,49 @@ pub fn arm_from_telemetry(episodes: &[Vec<Vec<f32>>], cfg: &ObstacleArmConfig) -
                     reason: crate::gain_cost_halt::HaltReason::Oscillation
                 }
             ) {
-                fired = true;
+                osc_flags[e] = true;
                 break;
             }
         }
-        if fired {
-            oscillating += 1;
-        }
     }
+    let oscillating = osc_flags.iter().filter(|&&f| f).count();
     let rate = oscillating as f32 / episodes.len() as f32;
     if rate >= cfg.oscillation_rate_threshold {
+        // Headroom half (Issue 1224 T3): the cut-off-rate readout over the
+        // supplied outcomes, and the ≈0-only floor. Absent outcomes →
+        // unmeasured, never refusing (the anti-falsifier law: no
+        // fixed-rate skip gate exists in this lane).
+        let headroom = truncated.map(|t| {
+            let obstacle_truncated = osc_flags
+                .iter()
+                .zip(t.iter())
+                .filter(|(osc, trunc)| **osc && **trunc)
+                .count();
+            let recoverable_share = if oscillating == 0 {
+                None
+            } else {
+                Some(obstacle_truncated as f32 / oscillating as f32)
+            };
+            let truncation_rate = Some(t.iter().filter(|&&x| x).count() as f32 / t.len() as f32);
+            HeadroomReport {
+                obstacle_episodes: oscillating,
+                obstacle_truncated,
+                recoverable_share,
+                truncation_rate,
+            }
+        });
+        if let Some(report) = &headroom
+            && let Some(share) = report.recoverable_share
+            && share < cfg.headroom_floor
+        {
+            return ArmVerdict::Refused(ArmRefusal::HeadroomBelowFloor {
+                recoverable_share: share,
+            });
+        }
         ArmVerdict::Armed {
             oscillation_rate: rate,
             episodes: episodes.len(),
+            headroom,
         }
     } else {
         ArmVerdict::Refused(ArmRefusal::NoObstacleFound {
@@ -1102,6 +1215,24 @@ pub mod lp_authoring;
 // Bench-976 veto stands; no new feature flag (the 993 precedent).
 pub mod discrete_authoring;
 
+// Issue 1224 — the MATCHED-PAIR direction-construction arm (Research 676,
+// the AHA distill "Who Needs an LLM to Program an LLM?"): the
+// u-construction recipe the 993 LP was missing — same-prefix resampled
+// branch contrasts, detector-shaped behavioral labels, aligned-window
+// mean differences (onset-relative anchor, y2 stream), 80/20 index-
+// modulus holdout, closed-form normalize. Plus the cut-off-rate headroom
+// readout on the arming gate (`arm_from_telemetry_with_outcomes` — the
+// outcomes-aware half; the bare fn keeps its pre-1224 semantics, headroom
+// unmeasured, floor never fired). Fixture verdict (bench 985): the
+// pre-registered PARITY bar MET (the mined direction recovers the loop
+// axis, cos ≈ 0.97, and passes the full 993 battery); the confound
+// falsifiers cannot fire on this fixture, so the claim is scoped
+// CONSTRUCTION-ONLY (no confound-robustness claim, no recipe-value claim
+// beyond the fixture). Fixture-scale authoring-time-only; the Bench-976
+// serving veto stands; no new feature flag (the 992/Plan-635 budget, the
+// 993/1209 precedent).
+pub mod matched_pair_authoring;
+
 // ─────────────────────────────────────────────────────────────────────
 // Unit tests
 // ─────────────────────────────────────────────────────────────────────
@@ -1371,6 +1502,107 @@ mod tests {
             arm_from_telemetry(&[], &cfg),
             ArmVerdict::Refused(_)
         ));
+    }
+
+    /// Issue 1224 T3 — the outcomes-aware arming half: the headroom
+    /// readout beside the verdict, the ≈0-only floor refusal, and the
+    /// anti-falsifier arm (an intermediate recoverable share NEVER
+    /// refuses — no fixed-rate skip gate exists in this lane).
+    #[test]
+    fn outcomes_aware_arming_reports_headroom_and_refuses_only_at_zero() {
+        let cfg = ObstacleArmConfig::default();
+        // Oscillating: steps alternate ±e (the halter fires).
+        let osc: Vec<Vec<f32>> = (0..10)
+            .map(|r| {
+                let mut v = vec![0.0f32; 4];
+                v[0] = if r % 2 == 0 { 1.0 } else { -1.0 };
+                v
+            })
+            .collect();
+        // Monotone: steps march in +e.
+        let mono: Vec<Vec<f32>> = (0..10)
+            .map(|r| {
+                let mut v = vec![0.0f32; 4];
+                v[0] = r as f32;
+                v
+            })
+            .collect();
+
+        // (1) All obstacle episodes truncated → recoverable 1.0 → Armed.
+        let armed = arm_from_telemetry_with_outcomes(std::slice::from_ref(&osc), &[true], &cfg);
+        let ArmVerdict::Armed {
+            headroom: Some(rep),
+            ..
+        } = armed
+        else {
+            panic!("all-truncated obstacles must arm with headroom: {armed:?}");
+        };
+        assert_eq!(rep.recoverable_share, Some(1.0));
+        assert_eq!(rep.truncation_rate, Some(1.0));
+        assert_eq!(rep.obstacle_episodes, 1);
+        assert_eq!(rep.obstacle_truncated, 1);
+
+        // (2) Obstacle episodes that all completed → recoverable 0 → the
+        // ONLY headroom refusal (≈0 recoverable: the loop blocks nothing
+        // repairable).
+        let refused = arm_from_telemetry_with_outcomes(std::slice::from_ref(&osc), &[false], &cfg);
+        assert_eq!(
+            refused,
+            ArmVerdict::Refused(ArmRefusal::HeadroomBelowFloor {
+                recoverable_share: 0.0
+            })
+        );
+
+        // (3) The anti-falsifier arm: an intermediate recoverable share
+        // (0.25) NEVER refuses — the paper's fixed-rate <0.40 skip gate
+        // is the forbidden shape.
+        let four_osc = vec![osc.clone(), osc.clone(), osc.clone(), osc.clone()];
+        let mixed = arm_from_telemetry_with_outcomes(&four_osc, &[true, false, false, false], &cfg);
+        let ArmVerdict::Armed {
+            headroom: Some(rep3),
+            ..
+        } = mixed
+        else {
+            panic!("an intermediate recoverable share must never refuse: {mixed:?}");
+        };
+        assert!((rep3.recoverable_share.unwrap() - 0.25).abs() < 1e-6);
+
+        // (4) Mixed telemetry: the oscillation rate counts obstacle
+        // episodes only; the truncation rate counts ALL episodes.
+        let mixed2 = arm_from_telemetry_with_outcomes(&[osc.clone(), mono], &[true, true], &cfg);
+        let ArmVerdict::Armed {
+            oscillation_rate,
+            headroom: Some(rep4),
+            ..
+        } = mixed2
+        else {
+            panic!("mixed telemetry at threshold must arm: {mixed2:?}");
+        };
+        assert!((oscillation_rate - 0.5).abs() < 1e-6);
+        assert_eq!(rep4.truncation_rate, Some(1.0));
+        assert_eq!(rep4.recoverable_share, Some(1.0));
+
+        // (5) The bare fn (outcomes absent) keeps its pre-1224 semantics:
+        // same oscillation verdict, headroom unmeasured, floor never fired.
+        let bare_osc = vec![
+            vec![1.0, 0.0, 0.0, 0.0],
+            vec![-1.0, 0.0, 0.0, 0.0],
+            vec![1.0, 0.0, 0.0, 0.0],
+            vec![-1.0, 0.0, 0.0, 0.0],
+            vec![1.0, 0.0, 0.0, 0.0],
+        ];
+        let bare = arm_from_telemetry(&[bare_osc], &cfg);
+        let ArmVerdict::Armed { headroom: None, .. } = bare else {
+            panic!("the outcomes-absent posture must carry no headroom: {bare:?}");
+        };
+
+        // (6) A truncated slice that does not name every episode is a
+        // programming error — asserted loud.
+        let one = vec![osc.clone()];
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            arm_from_telemetry_with_outcomes(&one, &[], &cfg)
+        }));
+        assert!(result.is_err(), "length mismatch must assert");
     }
 
     #[test]

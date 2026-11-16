@@ -122,13 +122,16 @@ impl Fixture {
         h1_out: Option<&mut Vec<f32>>,
         h2_out: Option<&mut Vec<f32>>,
     ) -> [f32; 4] {
-        self.forward_ext(x, overlay_delta, 0.0, h1_out, h2_out)
+        self.forward_ext(x, overlay_delta, 0.0, h1_out, h2_out, None)
     }
 
     /// The general forward: `y2[i] += y2_bias` before the second tanh (the
     /// steering-probe hook — a constant inference-time push on a decision
     /// channel, the frozen-model quadrant). `y2_bias == 0.0` skips the add
-    /// entirely, keeping the plain path bit-identical.
+    /// entirely, keeping the plain path bit-identical. `y2_out` snapshots
+    /// the layer-2 PRE-ACTIVATION stream (the Issue-1224 branch half — the
+    /// residual-stream analog AND the exact space the overlay direction
+    /// indexes).
     pub fn forward_ext(
         &self,
         x: &[f32],
@@ -136,6 +139,7 @@ impl Fixture {
         y2_bias: f32,
         h1_out: Option<&mut Vec<f32>>,
         h2_out: Option<&mut Vec<f32>>,
+        y2_out: Option<&mut Vec<f32>>,
     ) -> [f32; 4] {
         let mut h1 = vec![0.0f32; H];
         for (i, slot) in h1.iter_mut().enumerate() {
@@ -181,6 +185,13 @@ impl Fixture {
         }
         if let Some(o) = h2_out {
             *o = h2;
+        }
+        if let Some(o) = y2_out {
+            // The pre-activation stream is snapshotted AFTER the overlay
+            // delta and the bias add, BEFORE the tanh — the residual-stream
+            // reading position. Recomputed from the same folds (no second
+            // pass): the snapshot equals the y2 the tanh consumed.
+            *o = y2.clone();
         }
         logits
     }
@@ -314,7 +325,7 @@ pub fn rollout_with_bias(model: &Fixture, start: (f32, f32), y2_bias: f32) -> Ro
     for _ in 0..MAX_STEPS {
         let inp = make_input(x, y);
         let mut h2 = Vec::new();
-        let logits = model.forward_ext(&inp, None, y2_bias, None, Some(&mut h2));
+        let logits = model.forward_ext(&inp, None, y2_bias, None, Some(&mut h2), None);
         let a = argmax_first_index(&logits);
         match a {
             0 => y += 1.0,
@@ -333,6 +344,117 @@ pub fn rollout_with_bias(model: &Fixture, start: (f32, f32), y2_bias: f32) -> Ro
         actions,
         success,
         hidden,
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Issue-1224 additions: branch manufacture for matched-pair authoring
+// (the fixture analog of AHA's same-prefix resampled continuations)
+// ─────────────────────────────────────────────────────────────────────
+
+/// The fixture detector's ONSET: the start index of the first oscillating
+/// 3-window (None when the episode never oscillates). The prefix cut and
+/// the aligned-pair window anchor both key on this.
+pub fn oscillation_onset(actions: &[usize]) -> Option<usize> {
+    if actions.len() < 3 {
+        return None;
+    }
+    for (i, w) in actions.windows(3).enumerate() {
+        let vert = |a: &usize| *a == 0 || *a == 1;
+        if vert(&w[0]) && vert(&w[1]) && vert(&w[2]) && w[0] != w[1] && w[1] != w[2] {
+            return Some(i);
+        }
+    }
+    None
+}
+
+/// [`rollout`] with seeded ε-greedy exploration, recording the layer-2
+/// PRE-ACTIVATION stream — the fixture analog of sampling continuation
+/// BRANCHES from one prefix state (AHA's 8-continuation resample). Per
+/// step, with probability `explore_rate` (drawn from the seed's
+/// BLAKE3-seeded LCG) the branch takes a uniformly random action instead
+/// of the argmax; otherwise the argmax. EXACT mirror of [`rollout`]'s
+/// loop otherwise — same inputs, same argmax fallback, same move
+/// semantics, same stop condition — so `explore_rate = 0.0` IS the
+/// deterministic greedy rollout (the sampler-purity baseline). Branches
+/// replay through the UNEDITED model (the paper's replay law; no overlay
+/// parameter). The recorded stream is `y2` (pre-tanh) — the residual-
+/// stream analog at the edit layer and the exact space the overlay
+/// direction indexes (`forward_delta_into` shifts `y2`); the post-tanh
+/// `h2` stream would saturate the contrast and waste the direction's
+/// norm on the tanh's compressive tail.
+pub struct BranchTrace {
+    /// The branch's chosen actions (the labeling + onset input).
+    pub actions: Vec<usize>,
+    /// Whether the branch reached the goal.
+    pub success: bool,
+    /// Per decision step, the y2 state the decision was made FROM
+    /// (pre-move snapshot — the [`TraceStep`] convention).
+    pub states: Vec<Vec<f32>>,
+}
+
+/// The branch sampler's pinned random-move table over actions
+/// `[up, down, left, right]` (draws of 10). The paper samples branches
+/// from the model's own next-token distribution; the fixture policy is a
+/// deterministic argmax with no distribution, so the branch sampler is a
+/// PINNED goal-adjacent prior — and the basin geometry makes uniform
+/// draws useless (a symmetric x-random-walk never reaches the goal
+/// within `MAX_STEPS`), so the right weight is load-bearing. The purity
+/// law holds by construction: every branch of every prefix draws from
+/// this ONE table.
+pub const BRANCH_RANDOM_DRAW: [u64; 4] = [2, 2, 1, 5];
+
+pub fn rollout_branch_y2(
+    model: &Fixture,
+    start: (f32, f32),
+    seed: u64,
+    explore_rate: f32,
+) -> BranchTrace {
+    let mut rng = Lcg::new(katgpt_core::blake3_seed(b"issue1224/branch", seed));
+    let explore_ppm = (explore_rate.clamp(0.0, 1.0) * 10_000.0) as u64;
+    let total: u64 = BRANCH_RANDOM_DRAW.iter().sum();
+    let mut x = start.0;
+    let mut y = start.1;
+    let mut actions = Vec::with_capacity(MAX_STEPS);
+    let mut states = Vec::with_capacity(MAX_STEPS);
+    let mut success = false;
+    for _ in 0..MAX_STEPS {
+        let inp = make_input(x, y);
+        let mut y2 = Vec::new();
+        let logits = model.forward_ext(&inp, None, 0.0, None, None, Some(&mut y2));
+        let a = if rng.bucket(10_000) < explore_ppm {
+            // Weighted random move through the pinned table.
+            let draw = rng.bucket(total);
+            let mut acc = 0u64;
+            let mut picked = 0usize;
+            for (i, w) in BRANCH_RANDOM_DRAW.iter().enumerate() {
+                acc += w;
+                if draw < acc {
+                    picked = i;
+                    break;
+                }
+            }
+            picked
+        } else {
+            argmax_first_index(&logits)
+        };
+        states.push(y2);
+        actions.push(a);
+        match a {
+            0 => y += 1.0,
+            1 => y -= 1.0,
+            2 => x -= 1.0,
+            _ => x += 1.0,
+        }
+        if x >= GOAL_X {
+            success = true;
+            break;
+        }
+    }
+    BranchTrace {
+        actions,
+        success,
+        states,
     }
 }
 

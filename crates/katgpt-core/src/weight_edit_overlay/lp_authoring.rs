@@ -100,6 +100,20 @@
 //! the `weight_edit_overlay` lane (Issue 980); corroborates 309's
 //! α ≤ 0.3 narrow-window caveat — narrow viable strength bands are a
 //! family trait.
+//!
+//! # Layer choice (Issue 1224 T4 — the no-agent answers, recorded once)
+//!
+//! The fixture is layer-agnostic by construction (one editable layer),
+//! so no fixture test pins layer choice — the two no-agent answers are
+//! recorded here for the lane: **668's forward write-score scan** (the
+//! Tree-Ising arm's reference-free layer ranking) and **AHA's
+//! LP-hit-rate ranker** (solve the LP at every layer, rank by held-out
+//! constraint satisfaction, edit the top two — Research 676 §1). Two
+//! different signals, same purpose; both papers converge on the
+//! practical law that PLACEMENT IS NOT LOAD-BEARING (668 transferred
+//! layers reference-free; AHA's four derived-vs-agent comparisons all
+//! landed < 1.6 pts). Fixture-scale arms stop agonizing over layer
+//! choice.
 
 use super::{EditForm, WeightEditOverlay, WeightEditSpec};
 

@@ -57,6 +57,18 @@
 //! Instrument-grade: fixture-scale authoring arm; never claims model
 //! quality (the Issue-990 precedent).
 //!
+//! # Layer choice (Issue 1224 T4 — the no-agent answers, recorded once)
+//!
+//! The fixture is layer-agnostic by construction (one editable layer),
+//! so no fixture test pins layer choice. The two no-agent answers on
+//! record: **this arm's forward write-score scan** (the Tree-Ising
+//! reference-free layer ranking — the layer question closes WITHOUT an
+//! agent here) and **AHA's LP-hit-rate ranker** (solve the LP at every
+//! layer, rank by held-out constraint satisfaction — Research 676 §1).
+//! Different signals, same purpose; both converge on placement
+//! insensitivity (AHA's four derived-vs-agent comparisons all < 1.6
+//! pts). Fixture-scale arms stop agonizing over layer choice.
+//!
 //! # Demotion law (pre-registered in Issue 1209)
 //!
 //! If the discrete arm fails battery arms that hand-authored (980) or

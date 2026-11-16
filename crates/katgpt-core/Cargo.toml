@@ -4483,6 +4483,21 @@ required-features = ["gain_cost_halt"]
 name = "issue1209_discrete_authoring_gates"
 required-features = ["gain_cost_halt"]
 
+# Issue 1224 — the MATCHED-PAIR authoring arm's gate battery (Research 676,
+# the AHA distill "Who Needs an LLM to Program an LLM?"): same-prefix
+# resampled branch contrasts (detector-labeled looping vs productive), the
+# aligned-window mean difference (onset-relative anchor, y2 stream), the
+# 80/20 index-modulus holdout, and the cut-off-rate headroom gate on the
+# SAME seeded-degeneracy world (shared fixture `tests/wsp980_common`).
+# Arms: T1 pair-builder yield/pairing/determinism, T2 u_matched through the
+# UNCHANGED 993 LP + the full 993 battery (PARITY bar), T2b the confound
+# falsifiers (F1 mismatched-prefix, F2 sampler-split), T3 the outcomes-
+# aware arming readout + ≈0-only floor. Green-zero rule: required-features
+# + whole-file #![cfg] pairing.
+[[test]]
+name = "issue1224_matched_pair_authoring_gates"
+required-features = ["gain_cost_halt"]
+
 # Issue 979 T1–T4 — the regret_guard gate battery (arXiv:2603.28499): the
 # deterministic-BR probe (Lem 2.2), the 8-distribution battery (Ber(1/3),
 # Ber(2/3), both regime-switch orders, sine drifts ϕ ∈ {T/2, T/5, T/10,
