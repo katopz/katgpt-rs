@@ -280,6 +280,74 @@ def scan(repo: Path, dirname: str, tracked: set[str]):
     return by_num, hw, n, hw_bad
 
 
+def claim_lint_findings(repo: Path):
+    """-> (walls, advisories, files_linted) — the lease checker's claim-line
+    half, run INSIDE the numbering gate (Issue 1226).
+
+    Walls are the two read-time BLIND classes only: a MALFORMED claim-shaped
+    line makes `claim_lease_check` exit 1 for EVERY lane in this repo (one
+    bad line blinds the whole adjudication — measured twice on 2026-11-16:
+    riir-infer `e7dea61e`, then riir-ai `943551e2e` the same day), and
+    AMBIGUOUS (>1 distinct open lease in one file) is the scanner's other
+    exit-1 blind. STALE-CLAIM — a lease whose session is retired by a
+    `Lease closed:` row while the line remains — adjudicates CLOSED at read
+    time, so it is ADVISORY here, never a wall; EXPIRED adjudicates fine and
+    prints nothing. Templates (`<...>`) and prose continuations are ignored
+    exactly as at read time. An unreadable file/dir is a wall — a blind
+    instrument must not print a confident green.
+
+    Local import: both scripts live in one directory, and the checker is
+    side-effect-free at import; an ImportError surfaces loud (the arm
+    refuses rather than skips).
+    """
+    try:
+        import claim_lease_check as clc
+    except ImportError as exc:
+        return [f"claim lint REFUSED: claim_lease_check not importable ({exc})"], [], 0
+    walls: list[str] = []
+    advisories: list[str] = []
+    n = 0
+    for dname in clc.SCAN_DIRS:
+        base = repo / dname
+        if not base.is_dir():
+            continue
+        try:
+            files = sorted(base.glob("*.md"))
+        except OSError as exc:
+            walls.append(f"{dname}/: unreadable ({exc}) — the claim lint went blind")
+            continue
+        for f in files:
+            try:
+                lines = f.read_text(encoding="utf-8").splitlines()
+            except (OSError, UnicodeError) as exc:
+                walls.append(f"{dname}/{f.name}: unreadable ({exc}) — the claim lint went blind")
+                continue
+            n += 1
+            closed = clc.closed_sessions(lines)
+            open_leases: list[tuple] = []
+            for lineno, line in enumerate(lines, 1):
+                parsed = clc.parse_claim_line(line)
+                if parsed == "malformed":
+                    walls.append(
+                        f"{dname}/{f.name}:{lineno} MALFORMED claim line — every "
+                        f"lease read in this repo is BLIND until it is reshaped: "
+                        f"{line.strip()[:110]}")
+                elif isinstance(parsed, tuple):
+                    if clc.is_closed(parsed, closed):
+                        advisories.append(
+                            f"{dname}/{f.name}:{lineno} STALE-CLAIM — {parsed[0]}'s "
+                            f"lease is closed by a `Lease closed:` row but the line "
+                            f"remains (read-time sees CLOSED; fold it)")
+                    elif parsed not in open_leases:
+                        open_leases.append(parsed)
+            if len(open_leases) > 1:
+                walls.append(
+                    f"{dname}/{f.name}: AMBIGUOUS — {len(open_leases)} distinct "
+                    f"open leases ({', '.join(s for s, _e, _x in open_leases)}); "
+                    f"the lease scanner cannot adjudicate this file")
+    return walls, advisories, n
+
+
 def group_numbered(names, dirname: str, tracked: set[str]):
     """-> (numbers -> [(name, is_tracked)], n_numbered). PURE over a LISTING.
 
@@ -483,6 +551,46 @@ def selftest() -> list[str]:
         hw, bad = read_highwater(d)
         if (hw, bad) != (872, None):
             fails.append(f"padded/zero-padded highwater misread: {(hw, bad)}")
+
+    # 7. the claim-line lint arm (Issue 1226): the two BLIND classes are
+    #    walls, STALE-CLAIM is advisory, templates/prose are ignored, and a
+    #    clean lease passes. Known-answer fixtures mirror the shapes that
+    #    actually recurred (a 13-digit ms epoch was measured live in
+    #    seal-sprints; the scope-tail class in riir-ai 1153/1177).
+    with tempfile.TemporaryDirectory() as td:
+        iss = Path(td) / ".issues"
+        iss.mkdir()
+        _w = (lambda p, t: (iss / p).write_text(t, encoding="utf-8"))
+        _w("001_clean.md",
+           "# x\n\n**Status:** Open\n"
+           "**Claimed:** sess-a, 1794870527, expires 2026-11-18T23:08:00Z\n")
+        _w("002_ms_epoch.md",
+           "# x\n**Claimed:** zed-x@amo, 1794827991000, expires 2026-11-16T13:19:51Z\n")
+        _w("003_scope_tail.md",
+           "# x\n**Claimed:** zed-y@amo, 1794870528, expires 2026-11-18T00:00:00Z — scope: stuff\n")
+        _w("004_ambiguous.md",
+           "**Claimed:** alpha, 1794870527, expires 2026-11-18T23:08:00Z\n"
+           "**Claimed:** beta, 1794870529, expires 2026-11-18T23:08:00Z\n")
+        _w("005_template.md",
+           "    **Claimed:** <session>, <epoch digits>, expires <ISO-UTC>\n")
+        _w("006_stale.md",
+           "**Claimed:** old, 1794000000, expires 2026-11-01T00:00:00Z\n"
+           "**Lease closed:** old, epoch 1794000000\n")
+        cw, ca, cn = claim_lint_findings(Path(td))
+        if cn != 6:
+            fails.append(f"claim lint walked {cn} file(s), expected 6")
+        for want, tag in (("002_ms_epoch", "ms-epoch"), ("003_scope_tail", "scope-tail"),
+                          ("004_ambiguous", "AMBIGUOUS")):
+            if not any(want in w for w in cw):
+                fails.append(f"claim lint missed the {tag} wall")
+        if any("001_clean" in w for w in cw):
+            fails.append("claim lint walled a clean lease")
+        if any("005_template" in w for w in cw):
+            fails.append("claim lint walled a template")
+        if not any("006_stale" in a for a in ca):
+            fails.append("claim lint missed the STALE-CLAIM advisory")
+        if any("006_stale" in w for w in cw):
+            fails.append("claim lint walled a STALE-CLAIM — advisory class, not a wall")
 
     # Called from HERE, not from main(): `arm_reach_audit` invokes an arm
     # only by the names in its vocabulary, so a helper wired into main()
@@ -1438,6 +1546,17 @@ def main() -> int:
         if hw is not None and by_num and max(by_num) > hw:
             above.append(f"{dirname}: max {max(by_num)} > .highwater {hw} — `value + 1` is already taken")
 
+    # ── the claim-line lint arm (Issue 1226) ─────────────────────────
+    # The lease checker's two read-time BLIND classes, enforced at the one
+    # gate every numbered-file session already runs: a MALFORMED claim-shaped
+    # line blinds EVERY lane's adjudication in this repo, and AMBIGUOUS is
+    # the scanner's other exit-1 blind. Measured twice on 2026-11-16
+    # (riir-infer e7dea61e, then riir-ai 943551e2e the same day) — repair at
+    # read time is a treadmill; the wall fires at the landing. STALE-CLAIM
+    # (a closed lease whose line remains) adjudicates CLOSED at read time —
+    # advisory, never a wall.
+    claim_walls, claim_advisories, claim_files = claim_lint_findings(repo)
+
     # ── historical collisions (Issue 795) ──────────────────────────────
     try:
         cscalars, scalars_overrides, cpins = collision_pins_for(repo)
@@ -1524,6 +1643,13 @@ def main() -> int:
         print(f"✗ {len(malformed)} malformed .highwater file(s) (pinned ≤ {max_malformed}):")
         for r in malformed:
             print(f"    {r}")
+    if claim_walls:
+        bad = True
+        print(f"✗ {len(claim_walls)} claim-line WALL finding(s) over {claim_files} linted file(s) — "
+              f"a MALFORMED or AMBIGUOUS claim line makes the repo-wide lease check "
+              f"exit 1 for EVERY lane (the blind class, Issue 1226):")
+        for r in claim_walls:
+            print(f"    {r}")
     if cfails:
         bad = True
         print(f"✗ {len(cfails)} HISTORICAL numbering collision finding(s) — a "
@@ -1538,7 +1664,7 @@ def main() -> int:
               f"cannot (FAMILY-EXPLICIT is the convention and is silent):")
         for r in ffails:
             print(f"    {r}")
-    for r in cnotes + fnotes:
+    for r in cnotes + fnotes + claim_advisories:
         print(f"  ⚠ {r}")
     if below_floor:
         bad = True
@@ -1567,6 +1693,8 @@ def main() -> int:
     print(
         f"✓ numbering gate PASSED — {total} numbered file(s) over {len(dirs)} dir(s), "
         f"0 tracked duplicates, 0 stale allocators, 0 malformed allocators; "
+        f"claim lint clean over {claim_files} file(s) "
+        f"({len(claim_advisories)} stale-claim advisor(y/ies)); "
         f"{len(crows)} historical collision(s) over {cwalked} number(s), "
         f"{len(cpins)} pinned above the era boundary"
         + fam_line

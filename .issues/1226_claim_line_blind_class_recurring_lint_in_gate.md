@@ -1,6 +1,6 @@
 # Issue 1226 — claim-line blind class keeps recurring across repos: lint the claim lines inside a gate sessions already run
 
-**Status:** Open (2026-11-16) — the write-time/discipline gap, not a script bug; `claim_lease_check.py --lint` itself works.
+**Status:** FIXED 2026-11-16 (zed-a90003f9@amo, epoch 1794870527, lease folded at removal) — the claim-line lint arm LANDED in `scripts/numbering_gate.py` (`claim_lint_findings` + the unconditional selftest arm + the main() wall): MALFORMED and AMBIGUOUS are WALLS naming file:line, STALE-CLAIM advisory, templates/prose ignored; first live catches fixed same day (riir-ai 1153 AMBIGUOUS two-line residue `ade42519`; riir-rethink 041/048 ms-epoch/scope-tail lines `12f286cf`); canary proven (planted ms-epoch fixture → gate exit 1).
 **Claimed:** zed-a90003f9@amo, 1794870527, expires 2026-11-18T23:08:00Z
 
 ## The measured class

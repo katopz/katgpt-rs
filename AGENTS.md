@@ -184,7 +184,7 @@ work. One line per check:
 | `cfg_gated_floor_gate.py` | `#![cfg]`-gated targets that report a green 0-pass (Issue 713) |
 | `orphaned_attr_gate.py` | a `#[cfg]` separated from its item by a blank line |
 | `percentile_floor_gate.py` | a percentile index that lands on n-1 and so reports the MAX |
-| `numbering_gate.py` | a number allocated twice, or a stale/malformed `.highwater` — walled by membership above the era boundary, ratcheted below it; `.benchmarks/` stem-CLASSIFIED: COLLISION walls at zero unpinnable, rename/hand-read ratchets at measured, FAMILY-EXPLICIT silent (Issues 724, 725, 795); a FOREIGN target is ARMED from its own `numbering_drift_floors.txt` row (one record, two instruments; caps equality-synced with `number_collisions_<repo>.txt`), row floors hard / katgpt-rs floors advisory / empty walk refuses (Issue 1206, landed `2eee300c8`); a per-repo `legacy_ratchet` scalar gives a foreign repo its OWN ratchet — the shared 64 never leaks (Issue 1208) |
+| `numbering_gate.py` | a number allocated twice, or a stale/malformed `.highwater` — walled by membership above the era boundary, ratcheted below it; `.benchmarks/` stem-CLASSIFIED: COLLISION walls at zero unpinnable, rename/hand-read ratchets at measured, FAMILY-EXPLICIT silent (Issues 724, 725, 795); a FOREIGN target is ARMED from its own `numbering_drift_floors.txt` row (one record, two instruments; caps equality-synced with `number_collisions_<repo>.txt`), row floors hard / katgpt-rs floors advisory / empty walk refuses (Issue 1206, landed `2eee300c8`); a per-repo `legacy_ratchet` scalar gives a foreign repo its OWN ratchet — the shared 64 never leaks (Issue 1208); a MALFORMED or AMBIGUOUS `**Claimed:**` line in `.issues/`/`.plans/` is a WALL — it blinds the repo-wide lease check for every lane (the e7dea61e/943551e2e blind class, Issue 1226), STALE-CLAIM advisory |
 | `dual_allocation_gate.py` | this checkout and its upstream both allocated a numbered document since their merge base — TWIN (same stem, the rebased own line) annotates exit-neutral, INDEPENDENT (two documents claiming one number) exits 1 naming both sides' adding commits (Issue 796) COUNTER exits non-zero too: the first two verdicts compare DOCUMENTS, and a number allocated and CLOSED in one commit never has a file in any tree, so the counters are the only thing that sees it. A one-sided bump stays green by construction; armed on every push with the reader injected and by a real two-repo fixture under --prove-fires (Issue 850) |
 | `docs_gate_paths_sync.py` | docs_gate.yml's two hand-duplicated trigger `paths:` lists stay identical (Issue 724 T4b) |
 | `required_features_static_gate.py` | a required-features row naming a feature its package cannot enable (riir-train Issue 513) |
@@ -901,7 +901,10 @@ git fetch origin && py ../katgpt-rs/scripts/dual_allocation_gate.py
   recovers both sides from `git log -M --diff-filter=D --full-history`.
 - Verdict: `scripts/numbering_gate.py` (docs gate), two regimes in
   `scripts/number_collisions_expected.txt`: ≥ `era_boundary = 700` a WALL by
-  MEMBERSHIP with reasons; below it a RATCHET. Take SCOPE from
+  MEMBERSHIP with reasons; below it a RATCHET. The gate also walls a MALFORMED
+  or AMBIGUOUS `**Claimed:**` line in `.issues/`/`.plans/` (it blinds the
+  repo-wide lease check for every lane — the e7dea61e/943551e2e blind class,
+  Issue 1226; STALE-CLAIM advisory). Take SCOPE from
   `scripts/numbering_floors.txt`, never a tree walk. Cross-repo half:
   `scripts/numbering_drift_sweep.py` (`max_hist` ratchet; `min_numbers` floors
   the history walk; `min_bench`). **Per-repo ratchet channel (issue 1208,
