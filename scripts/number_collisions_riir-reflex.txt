@@ -1,0 +1,20 @@
+# riir-reflex's OWN collision pins — read by katgpt-rs numbering_gate.py when it
+# gates riir-reflex (per-repo pins; same channel as number_collisions_riir-game-sdk.txt,
+# the Issue 1208 per-repo scalar law — the shared value (katgpt-rs's own 60) never
+# leaks into another repo's verdict).
+#
+# Reflex's OWN legacy ratchet (2026-11-17, the amo idle hygiene lane's numbering-gate
+# run): measured 2 historical collision groups, both HAND-READ (ratchets 0/2, 0
+# above-boundary) per the gate's own enumeration. The advisory "legacy collisions 2 <
+# ratchet 60 — re-pin DOWN" fires on every gate run until this scalar exists; per
+# Issue 1208 the per-repo file is the fix, never a re-pin of the shared value.
+
+legacy_ratchet = 2
+
+# The two hand-read groups (the gate's enumeration at the pin run; both below the
+# era boundary, both holders' full lives recoverable via git log -M --diff-filter=D):
+#   .benchmarks 73: 073_drex_lane_t5_suite_pass x 073_nli_m1_validation
+#   .benchmarks 89: 089_corpus_ab_v5_anchor_void x 089_paw_ft_typed_m3
+# (the walk also lists .issues 14 and .issues 25 as HAND-READ groups in the same
+# enumeration shape; the verdict's counted population at the pin run is 2 — re-pin
+# UP with the reason if a future run counts more, never silently.)
