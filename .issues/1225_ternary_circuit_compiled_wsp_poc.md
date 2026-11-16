@@ -2,6 +2,7 @@
 
 **Lease closed:** zed-ddc61e9c@amo, epoch 1794846279, closed 2026-11-17T03:30Z, expires 2026-11-18T16:00:00Z — T1 scope COMPLETE (emitter `084772e5c` + assembly/pins `c5f061677`); Arm A/B untouched by this lease.
 Claim scope was: T1 (the npz→.cact transcode lane: lossless intermediate emitter + kpt_archive assembly + BLAKE3 pins, meta-driven shapes); G2-A's pre-registered QUIET-m3 posture will be re-boxed WITH disclosure at its run (m3 takes no jobs from this lane — bmo/amo quiet-window substitute, box delta recorded).
+**Claimed:** zed-b9d1042a@amo, epoch 1794972000, expires 2026-11-19T03:30:00Z — T1b scope only (the Arm A forward fixtures: the pinned-source Python fixture-builder + the committed full-precision JSON pins; the Rust forward port + G1-A/B stay UNCLAIMED by this lease).
 **Status:** Open — filed from [Research 677](../.research/677_codehygiene_Compiled_Ternary_System_One.md) (GOAT fusion; delegated-owner verdict AGREE 2026-11-16, reviewer `katgpt-rs-07@m3`, session `7a0b3b4e-dd69-46b4-b71a-8367d9f7292f`).
 
 **Source attribution:** ported-from brianbell-x/codehygiene @ `423c7e1f02ef409bbaea209268bfcde36e0f1cb0` — **MIT declared only at `pyproject.toml:10`; no LICENSE file in the source tree — attribution recorded HERE.** All fixtures remain original minimal reproductions; Arm A is a disclosed reference reimplementation.
