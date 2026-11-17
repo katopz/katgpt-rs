@@ -6723,3 +6723,65 @@ misalignment refusal, truncation under/over the bar, the strictness arm
 certainty-is-valid), 4096-token bitwise determinism, weighted-error
 monotonicity, mass vs a sequential reference fold, posture-gate Off/On
 refusals).
+
+## 169. ternary_circuit — the compiled-WSP PoC family (Issue 1225 / Research 677, DEMOTED 2026-11-17)
+
+🔧 Feature flag: `ternary_circuit` (katgpt-core) — opt-in, implies `kpt_archive`
++ `katgpt-types/ternary_group_scale`. Consumer-gated from birth (NO default
+promotion; the first candidate consumer was the compiled lane class,
+riir-rethink `.proposals/006` — unseated, see below). The fourth weight
+class: a circuit→ternary COMPILER — hand-written mathematical circuits
+compiled at build time into packed ternary programs (5 trits/byte), loaded
+through the existing `kpt_archive` + ternary matvec substrate. Landed as a
+two-arm PoC from brianbell-x/codehygiene @ `423c7e1f02` (MIT declared only
+at pyproject.toml:10 — attribution in Issue 1225; Arm A is a disclosed
+reference reimplementation, all fixtures original).
+
+**The PoC verdict (closed 2026-11-17, delegated-owner AGREE 2026-11-16
+pre-registered the ungoat law): 4 gates PASS, G2-A FAIL — DEMOTED.**
+
+- **T1 PASS** — the npz→.cact transcode: lossless intermediate emitter +
+  deterministic assembler + BLAKE3 pins on both sides; 73 layers (32 trit +
+  41 vec degenerate), archive_id `43a1e308…`, digit law re-verified at the
+  pin.
+- **G1-A PASS** (all four stages + both falsifiers) — the full forward port
+  (`ternary_circuit_forward.rs`) replays the pinned Python-oracle fixtures:
+  grid bytes EXACT upstream of the first float op, every probability surface
+  at |Δp| ≤ 1e-4 ABSOLUTE (band pre-registered in the issue), argmax +
+  threshold rows exact, fold order pinned sequential-ascending (Issue 940);
+  a single trit flip AND a one-byte grid rewrite each move outputs beyond
+  band.
+- **G1-B PASS 13/13** — the exact-circuit builder (`ternary_circuit_build.rs`):
+  threshold templates at the exact integer max-margin law, causal
+  prefix-scan matrices, Paley-Hadamard ±1 projections with the EXACT i64
+  orthogonality anchor refusing the build on drift; all programs pack at the
+  ONE shared 5-trit digit law (`POW3` pub; `pack_trits` = `trit_at`'s exact
+  inverse). Zero-alloc apply paths, fixed `[T; N]` storage, `#[repr(u8)]`
+  enums — counting-allocator canaries G4 PASS at BOTH profiles.
+- **G2-A FAIL — 623.6 ms/file on quiet bmo vs the ≤10 ms pre-registration
+  (62× over)**; busy-amo release corroboration 643.4 ms (±3%, same silicon
+  class). Preflight PASSED (`power=AC load=1.47 swap=66006.38M
+  canary=skipped powermode=0(auto)` — swap disclosed; the verdict is
+  box-robust). Cause is STRUCTURAL, not a defect: the deterministic scalar
+  fold (Issue 940/650 pinned order — the G1-A fixture replay is a
+  replay-compare, so the law binds) at ~1.8 GMAC per 44-line file ≈
+  3 GMAC/s; the ≤10 ms bar was the SOURCE's numpy self-claim (vectorized,
+  order-free) and does not transfer to the deterministic port. In-repo
+  remediation ceilings, both ≪ the gap: the bit-identical NEON LUT kernel
+  (`bitcos_matvec_lut` — the only exact-equality SIMD in the house,
+  `assert_eq`-tested) ≈ ≤4×; the order-free `simd_ternary_group_matvec`
+  (1e-6 relative) is inadmissible under the Issue-940 law and ≈ 8×.
+
+**Re-open triggers (Research 677 §3):** a bit-identical SIMD kernel with
+≥60× headroom (none exists in-repo), a consumer batch/order-free lane with
+the Issue-940 reclassification recorded at the site, or a deterministic
+re-derivation of a BLAS-class kernel.
+
+📖 Issue: [`1225`](../../.issues/1225_ternary_circuit_compiled_wsp_poc.md)
+(closed with the verdict) · Research:
+[`.research/677_codehygiene_Compiled_Ternary_System_One.md`](../../.research/677_codehygiene_Compiled_Ternary_System_One.md)
+(§3 the demote, §5 the unseated lane class) · Negative-result record:
+[`negative_results.md` §48](negative_results.md) · Substrate:
+`crates/katgpt-core/src/ternary_circuit_forward.rs` +
+`ternary_circuit_build.rs` + `ternary_circuit/` (transcode lane) · Gates:
+`tests/ternary_circuit_{transcode,forward,forward_alloc,forward_g2,build,build_alloc}_gates.rs`-family.

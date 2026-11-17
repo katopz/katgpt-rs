@@ -1127,3 +1127,47 @@ G2 latency bars (write/read/audit), the interference-envelope sizer (G5a
 PROMOTED, sub-saturation regime), and the signal-only uncertainty posture
 (G5b: the CI dropped, the floor took CRPS). The cell ships as a
 diagnostic-grade opt-in with its falsifier on record.
+
+## 48. ternary_circuit compiled-WSP seating — G2-A FAIL 62×: the deterministic port cannot meet the source's numpy cost class (Issue 1225, Research 677)
+
+**Feature flag:** `ternary_circuit` (opt-in, consumer-gated — stays opt-in;
+the compiled-lane seating is UNSEATED). The full arc (T1 transcode + Arm A
+forward port + Arm B exact-circuit builder, every gate but one PASS) is
+[`opt_in_features.md` §169](opt_in_features.md); this section records the
+negative.
+
+**The claim G2-A was built to falsify:** the source's "~10 ms warm CPU
+forward" selling point (13 KB embedded weights, no GPU, deterministic) —
+Research 677's Q3 — transfers to our port: "our decision lanes can seat
+13 KB weight-space-compiled System One models — 10 ms CPU".
+
+**What measured:** the pre-registered quiet-box cell — **623,594,509 ns/file
+(623.6 ms) on quiet bmo vs the 10,000,000 ns bar, 62× over** — gate
+`ternary_circuit_forward_g2` (per-snippet best-of-3-windows, black_boxed
+taps, population floors); bmo preflight PASSED (`power=AC load=1.47
+swap=66006.38M canary=skipped powermode=0(auto)`, swap disclosed);
+busy-amo release corroboration 643.4 ms (±3%) — box-robust. The forward is
+~1.8 GMAC per 44-line file; the number matches the scalar house fold's
+~3 GMAC/s. The mechanism is exact (G1-A: every probability surface at
+|Δp| ≤ 1e-4 vs the pinned oracle; both falsifiers fire) — the COST is
+structural.
+
+**Mechanism reading (the durable finding):** the ≤10 ms bar was the
+SOURCE's numpy self-claim — vectorized, order-free, folding through BLAS
+with a different reduction order. Our port's exactness surface (the
+Issue-940/650 pinned sequential-ascending fold, load-bearing because the
+G1-A fixture replay IS a replay-compare) forbids the fast kernels: the
+in-repo bit-identical SIMD ceiling is ~≤4× (`bitcos_matvec_lut`,
+`assert_eq`-tested exact) and the order-free SIMD (1e-6 relative,
+`neon_matches_scalar_reference`) is inadmissible at ~8×. **Re-open bar
+(Research 677 §3): a bit-identical kernel with ≥60× headroom (none
+exists), a consumer batch/order-free lane carrying the Issue-940
+reclassification at the site, or a deterministic BLAS-class re-derivation —
+a different claim, never a re-read of this one.**
+
+**What survived:** the transcode+archive lane (T1, byte-exact pins), the
+exact-circuit builder (G1-B 13/13 — the compiler idiom kit works), the
+zero-alloc apply posture (G4 both profiles), and the fixture-exactness
+methodology (the band + falsifier pattern). The primitives stay opt-in
+under `ternary_circuit`; no consumer exists; the compiled-lane class waits
+on the §3 triggers.
