@@ -4,7 +4,7 @@
 > **Date:** 2026-11-17
 > **Status:** Active — **Gain** (evidence + two instruments; no mechanism-novelty claim — the WSP class is published and fully distilled internally)
 > **Related Research:** 648 (WSP parent — this paper is the paper version of its §2 row-1 companion repo), 649 (probe author — the no-LLM authoring posture), 664 + 668 + 676 (LP / Tree-Ising / AHA — the solver successors), 671 (dspy-wsp — the decision-model instantiation, cell killed), 655 (model zoos)
-> **Cross-ref:** `riir-refine/.issues/241_rule_rebuild_description_fidelity_audit.md` (the rebuild-metric adoption idea, filed this session with a pre-registered kill bar)
+> **Cross-ref:** `riir-refine/.issues/242_rule_rebuild_description_fidelity_audit.md` (the rebuild-metric adoption idea, filed this session with a pre-registered kill bar; first allocated 241, renumbered before landing)
 > **Classification:** Public
 
 ---
@@ -41,7 +41,7 @@ iWSP (interpretable weight-space programming) has an LLM agent iteratively WRITE
 |---|---|---|
 | Agent-write loop + fixed evaluator | EXISTS (980 lane; fix_verify accept/reject) | — |
 | Interpretability audit battery | none | instrument recorded (note §1.1); no in-stack consumer with a documented author-leakage failure — no code lane |
-| Text-bottleneck rebuild metric | none | instrument recorded; ONE mapped consumer filed (riir-refine Issue 241) |
+| Text-bottleneck rebuild metric | none | instrument recorded; ONE mapped consumer filed (riir-refine Issue 242) |
 | Compression phase | none | audited non-filing — no measured model/rule-size axis exists in the stack; the finding is proposer-capability corroboration |
 | Confound discovery | EXISTS as doctrine (contamination/echo gates) | no primitive |
 | Training track | n/a — the paper is anti-training (its method is an alternative to training); Path 0.5 not triggered | weight-PRODUCTION evidence corroborates riir-train Issue 665's authored-brain lane; NO addendum (671's addendum is the bar: genuinely new evidence bearing on a Law — this paper changes no Law's evidence state) |
@@ -61,8 +61,8 @@ The family composition is unchanged by this paper (648 §5's fusion — loop-rep
 
 - **Pinned claim (one sentence, pre-§4):** the text-bottleneck rebuild metric (describe an interpretable model in ≤200 words → a fresh agent rebuilds executable behavior from the description alone → performance preserved within a measured bound) applied as a description-fidelity audit for riir-refine's rule corpus, distinguished from neuron-explanation eval frameworks (which score descriptions of learned units, never rebuild executable behavior) by the rebuild protocol. No mechanism-novelty claim — the metric is published; only the rule-corpus application is an adoption idea.
 - **Novelty gate:** Q1 no (class published; the metric is the paper's), Q2/Q3/Q4 n/a for the mechanism (already GOAT via 980) — the instruments are recordings + one idea file, correctly sized per the ungoat discipline.
-- **Files:** this note; [Research 648](648_Weight_Space_Programming.md) §10 pointer; `riir-refine/.issues/241_rule_rebuild_description_fidelity_audit.md`.
-- **Verdict path:** `request_verdict` (claude_code backend), round 1 **AGREE** with four conditions on Issue 241, all baked into the issue (kill bar Δ < 10 pts fix-match over the description-less control → close NEGATIVE; first run capped 20–30 rules with a hosted-token budget; free redundancy pre-check before any tokens; report-only until it shows a defect the existing gates missed). Session 1eef961b-5552-47cf-94f2-b87e80914a6b.
+- **Files:** this note; [Research 648](648_Weight_Space_Programming.md) §10 pointer; `riir-refine/.issues/242_rule_rebuild_description_fidelity_audit.md` (allocated 241 in an unpushed commit whose pre-allocation gate skipped the fetch and missed the upstream 241_disk_clean allocation — renumbered 242 before landing).
+- **Verdict path:** `request_verdict` (claude_code backend), round 1 **AGREE** with four conditions on the issue, all baked into it (kill bar Δ < 10 pts fix-match over the description-less control → close NEGATIVE; first run capped 20–30 rules with a hosted-token budget; free redundancy pre-check before any tokens; report-only until it shows a defect the existing gates missed). Session 1eef961b-5552-47cf-94f2-b87e80914a6b.
 
 ## 7. Doctrine validation reading
 
