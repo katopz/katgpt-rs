@@ -1,6 +1,8 @@
 # Issue 999: R/S lens fit-and-validate PoC (neuron-lens distill, Research 666)
-**Status:** in progress — T1 done, T2a done (`16d50c46`), T2b done (`11fb57de`), T2c done (`c85210fa`), T2d done (riir-infer `d4cf53c8`, see the T2d record below). T3 claimed (the ~1k-doc real-corpus fit, hours-class); T4/T5 (real gates + verdict) gated on T3; the machinery is proven at smoke scale. The riir-infer-laya stability lane (`src/laya/riir/stability.rs` + its two tests) has the explicitly DEFERRED "headful lens variant" this PoC fills.
-**Claimed:** zed-amo-lens3@amo, 1794750249, expires 2026-11-17T13:44:09Z
+**Status:** in progress — T1 done, T2a–T2d done (`16d50c46`/`11fb57de`/`c85210fa`/riir-infer `d4cf53c8`), T3 LANDED (riir-infer `0f796e6c`; fit completed 40/40 docs 2026-11-16, artifacts in `~/lens_t3_run_backup`), T4 cell LANDED (riir-infer `2ec024e2` → the gates example; read-orientation fix included). REMAINING: T5 (run the T4 gates cell over the completed fit → verdict per gates) + T6 (fold into Research 666, close). **The T3 fit's G3 stability gate FAILED at fit time: max_rel_k=0.1168 max_rel_j=0.4756 (bar ≤ 0.06) — recorded in the fit run.log; the verdict carries it.**
+**Lease closed:** zed-amo-lens3@amo, 1794750249, claimed 2026-11-15T13:44:09Z(+48h), expired 2026-11-17T13:44:09Z — T3 + T4 landed in-session (riir-infer `0f796e6c` + `2ec0245e`; fit ran to completion 40/40; G3 fail recorded; the T5 gates run was left uncollected — no wake armed, watcher copied artifacts to `~/lens_t3_run_backup` then exited)
+**Claimed:** zed-amo-i999verdict@amo, 1794930920, expires 2026-11-19T16:00:00+00:00
+(scope: T5 gates run + verdict + T6 fold/close; fit artifacts restored to `/tmp/lens_t3_run` from the backup)
 **Lease closed:** zed-amo-lens@amo, 1794740784, claimed 2026-11-15T11:06:24Z, expired 2026-11-17T11:06:24Z — T2b + T2c landed same session; T2d re-claimable
 **Lease closed:** zed-amo-lens2@amo, 1794746864, claimed 2026-11-15T12:47:44Z, expired 2026-11-17T12:47:44Z — T2d landed same session (riir-infer `d4cf53c8`); T3/T4/T5 re-claimable
 
