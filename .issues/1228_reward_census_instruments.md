@@ -1,6 +1,8 @@
 # Issue 1228 — Reward-census instruments: closed-form TD/overlap/sparsity/readout kit (katgpt-core)
 
-**Status:** OPEN — unclaimed. Opt-in instrumentation joining the existing `diagnostics` family (I4's readout lands in katgpt-pruners); pure-math fixtures are the proof path (no model, no capture lane required to land the primitives).
+**Status:** OPEN — unclaimed.
+**Claimed:** amo-zed, 1794956551, expires 2026-11-18T01:02:31Z
+(claim scope: I1–I4 as pure-math fixtures + falsifiers per the issue's own bars; feature placement = the `diagnostics` family, I4 beside the shipped constructor in katgpt-pruners.) Opt-in instrumentation joining the existing `diagnostics` family (I4's readout lands in katgpt-pruners); pure-math fixtures are the proof path (no model, no capture lane required to land the primitives).
 **Source:** riir-reflex `.research/018_Sparse_Reward_Subsystem_Probes.md` (arXiv:2602.00986, sparse reward subsystem) — the paper's measurement layer made generic. Companion consumers: katgpt-core `mb_value.rs` (Issue 767 — the RPE-learning sibling that consumes these signals), reflex esc-capture significance arms (I2).
 **Date filed:** 2026-11-17
 
