@@ -1,0 +1,8 @@
+# riir-refab's per-repo legacy-collision ratchet channel (Issue 1208's
+# per-repo scalar mechanism — the shared 60 is katgpt-rs's own count and
+# never leaks into a foreign repo's verdict).
+# Measured 2026-11-18 by the numbering gate on riir-refab at commit c3c0748
+# (the Bench-004 P0 landing): 1 historical collision below the era boundary,
+# so this repo's own ratchet is 1 — growth above 1 reds (a NEW legacy
+# collision must re-pin UP with its reason in the growing commit).
+legacy_ratchet = 1
