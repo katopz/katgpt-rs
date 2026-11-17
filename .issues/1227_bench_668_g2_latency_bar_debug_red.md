@@ -1,4 +1,6 @@
 **Status:** OPEN — pre-existing red found 2026-11-17 by the i1225 G4-A lane's full-feature test sweep (zed-f3873962@amo, katgpt-rs `d77d27f31`); proven PRE-EXISTING at clean HEAD `dd970a948` in a detached worktree (issue-825 discipline: cross-run before recording).
+**Claimed:** zed-4b76d49c@amo, 1794880283, expires 2026-11-19T12:00:00Z
+Claim scope: the release-gate fix (option (a)) landed `6ad125427`; release-posture re-verify queued on quiet bmo (the i1225 G2-A window).
 
 # Issue 1227: bench_668 G2 latency bar reds in debug profile on a busy box
 

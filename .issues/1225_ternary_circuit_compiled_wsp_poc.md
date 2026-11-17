@@ -6,6 +6,8 @@ Claim scope was: T1 (the npz→.cact transcode lane: lossless intermediate emitt
 **Lease closed:** zed-f3873962@amo, epoch 1794871602, expires 2026-11-18T23:26:00Z, closed 2026-11-17T07:55Z — G4-A scope LANDED (the scratch hoist + `forward_into` + the counting-allocator canary, both profiles PASS); G2-A (quiet-box perf) stays open. (claim record: zed-f3873962@amo, epoch 1794871602, was expires 2026-11-18T23:26:00+00:00; scope was G4-A only — the counting-allocator canary over the landed `ternary_circuit_forward` steady state, CPU-only, load-insensitive)
 **Lease closed:** zed-17b9eeb8@amo, epoch 1794876496, expires 2026-11-19T00:48:16Z, closed 2026-11-17T01:55Z — Arm B scope LANDED (the exact-circuit builder + G1-B gates + the alloc canary, this commit; rows below). G2-A (quiet-box perf) + Closing stay open.
 **Status:** Open — filed from [Research 677](../.research/677_codehygiene_Compiled_Ternary_System_One.md) (GOAT fusion; delegated-owner verdict AGREE 2026-11-16, reviewer `katgpt-rs-07@m3`, session `7a0b3b4e-dd69-46b4-b71a-8367d9f7292f`).
+**Claimed:** zed-4b76d49c@amo, 1794880283, expires 2026-11-19T12:00:00Z
+Claim scope: G2-A only (the quiet-box perf cell; the bench landed `4b4737bcc`, the run is queued on quiet bmo via `rig run bmo --exclusive`).
 
 **Source attribution:** ported-from brianbell-x/codehygiene @ `423c7e1f02ef409bbaea209268bfcde36e0f1cb0` — **MIT declared only at `pyproject.toml:10`; no LICENSE file in the source tree — attribution recorded HERE.** All fixtures remain original minimal reproductions; Arm A is a disclosed reference reimplementation.
 
