@@ -4672,3 +4672,19 @@ required-features = ["ternary_circuit"]
 [[example]]
 name = "ternary_circuit_transcode"
 required-features = ["ternary_circuit"]
+
+# Issue 1225 Arm B — the exact-circuit builder: G1-B integer fixtures
+# (threshold bit-plane stamps + max-margin law, causal scans, Paley core +
+# block + exact orthogonality, row-sign laws). The row rides the SAME
+# commit as the gated target (green-zero trap).
+[[test]]
+name = "ternary_circuit_build_gates"
+required-features = ["ternary_circuit"]
+
+# Issue 1225 Arm B — the counting-allocator canary over the builder's apply
+# paths. Its OWN target (separate process): the counter is process-global,
+# so a shared binary would let sibling fixtures' allocations pollute the
+# steady window (the Arm-A gate split).
+[[test]]
+name = "ternary_circuit_build_alloc_gates"
+required-features = ["ternary_circuit"]

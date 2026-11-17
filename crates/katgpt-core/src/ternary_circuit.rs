@@ -55,7 +55,9 @@ use serde::Serialize;
 pub const SOURCE_PIN: &str = "423c7e1f02ef409bbaea209268bfcde36e0f1cb0";
 
 /// `_POW3` — the source's per-byte digit divisors, ascending (`__init__.py:27`).
-const POW3: [u8; 5] = [1, 3, 9, 27, 81];
+/// Shared by the archive unpacker and the Arm-B builder packer (the one
+/// digit law; `ternary_circuit_build::pack_trits` is its exact inverse).
+pub const POW3: [u8; 5] = [1, 3, 9, 27, 81];
 
 /// Everything that can go wrong transcribing the npz triple into layers.
 #[derive(Debug)]
