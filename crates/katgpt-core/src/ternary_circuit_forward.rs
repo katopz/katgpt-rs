@@ -715,6 +715,25 @@ pub struct ForwardScratch {
     pub gate_col: Vec<f32>,
     pub relu_state: Vec<f32>,
     pub probs: Vec<f32>,
+    // Per-call temporaries hoisted out of the block bodies (G4-A): each is
+    // `clear()`/`resize()`d to its exact width before use, so after the
+    // first call at a given line count every resize lands inside the
+    // already-grown capacity and the steady state allocates nothing.
+    pub xcol: Vec<f32>,
+    pub ycol: Vec<f32>,
+    pub gate_out: Vec<f32>,
+    pub fuse_out: Vec<f32>,
+    pub col_sum_out: Vec<f32>,
+    pub lmlp_out: Vec<f32>,
+    pub lmlp_out2: Vec<f32>,
+    pub q_tmp: Vec<f32>,
+    pub k_tmp: Vec<f32>,
+    pub v_tmp: Vec<f32>,
+    pub attn_acc: Vec<f32>,
+    pub wo_out: Vec<f32>,
+    pub ctx_h_tmp: Vec<f32>,
+    pub ctx_o_tmp: Vec<f32>,
+    pub sq_out: Vec<f32>,
 }
 
 /// The forward's four output surfaces — what the G1-A fixtures pin.
@@ -909,23 +928,19 @@ impl CodeHygieneModel {
         );
 
         // lex_cat = [emb, lex] (62) → proj1 = lex_cat @ pref1_proj (4).
-        s.lex_cat.clear();
         s.proj1.clear();
-        let lex_cat_dim = EMB_DIM + LEX_DIM;
-        let mut row = Vec::new();
         for l in 0..lines {
             for c in 0..width {
                 let ebase = (l * width + c) * EMB_DIM;
                 let lbase = (l * width + c) * LEX_DIM;
-                row.clear();
-                row.extend_from_slice(&s.emb[ebase..ebase + EMB_DIM]);
-                row.extend_from_slice(&s.lex[lbase..lbase + LEX_DIM]);
+                s.lex_cat.clear();
+                s.lex_cat.extend_from_slice(&s.emb[ebase..ebase + EMB_DIM]);
+                s.lex_cat.extend_from_slice(&s.lex[lbase..lbase + LEX_DIM]);
                 let mut out1 = [0.0f32; PREFIX_DIM];
-                ternary_group_matvec_scalar(&self.pref1_proj, &row, &mut out1);
+                ternary_group_matvec_scalar(&self.pref1_proj, &s.lex_cat, &mut out1);
                 s.proj1.extend_from_slice(&out1);
             }
         }
-        let _ = (&mut s.lex_cat, lex_cat_dim);
 
         // prefix1 = W_causal1 @ proj1 per line: 4 sequential matvecs of the
         // (128, 128) causal matrix — ORIGINAL orientation (y = W @ x). The
@@ -934,16 +949,18 @@ impl CodeHygieneModel {
         s.prefix1.clear();
         s.prefix1.resize(lines * MAX_COLS * PREFIX_DIM, 0.0);
         {
-            let mut xcol = vec![0.0f32; MAX_COLS];
-            let mut ycol = vec![0.0f32; MAX_COLS];
+            s.xcol.clear();
+            s.xcol.resize(MAX_COLS, 0.0);
+            s.ycol.clear();
+            s.ycol.resize(MAX_COLS, 0.0);
             for l in 0..lines {
                 for j in 0..PREFIX_DIM {
                     for c in 0..MAX_COLS {
-                        xcol[c] = s.proj1[(l * MAX_COLS + c) * PREFIX_DIM + j];
+                        s.xcol[c] = s.proj1[(l * MAX_COLS + c) * PREFIX_DIM + j];
                     }
-                    ternary_group_matvec_scalar(&self.w_causal1_g, &xcol, &mut ycol);
+                    ternary_group_matvec_scalar(&self.w_causal1_g, &s.xcol, &mut s.ycol);
                     for r in 0..MAX_COLS {
-                        s.prefix1[(l * MAX_COLS + r) * PREFIX_DIM + j] = ycol[r];
+                        s.prefix1[(l * MAX_COLS + r) * PREFIX_DIM + j] = s.ycol[r];
                     }
                 }
             }
@@ -953,20 +970,23 @@ impl CodeHygieneModel {
         s.gates.clear();
         s.gates.resize(lines * MAX_COLS * GATE_DIM, 0.0);
         {
-            let mut xin = vec![0.0f32; EMB_DIM + LEX_DIM + PREFIX_DIM];
-            let mut yout = vec![0.0f32; GATE_DIM];
+            s.gate_in.clear();
+            s.gate_in.reserve(EMB_DIM + LEX_DIM + PREFIX_DIM);
+            s.gate_out.clear();
+            s.gate_out.resize(GATE_DIM, 0.0);
             for l in 0..lines {
                 for c in 0..MAX_COLS {
                     let ebase = (l * MAX_COLS + c) * EMB_DIM;
                     let lbase = (l * MAX_COLS + c) * LEX_DIM;
                     let pbase = (l * MAX_COLS + c) * PREFIX_DIM;
-                    xin.clear();
-                    xin.extend_from_slice(&s.emb[ebase..ebase + EMB_DIM]);
-                    xin.extend_from_slice(&s.lex[lbase..lbase + LEX_DIM]);
-                    xin.extend_from_slice(&s.prefix1[pbase..pbase + PREFIX_DIM]);
-                    matvec_scaled(&self.gate1, &self.gate1_s, &xin, &mut yout);
+                    s.gate_in.clear();
+                    s.gate_in.extend_from_slice(&s.emb[ebase..ebase + EMB_DIM]);
+                    s.gate_in.extend_from_slice(&s.lex[lbase..lbase + LEX_DIM]);
+                    s.gate_in
+                        .extend_from_slice(&s.prefix1[pbase..pbase + PREFIX_DIM]);
+                    matvec_scaled(&self.gate1, &self.gate1_s, &s.gate_in, &mut s.gate_out);
                     let gbase = (l * MAX_COLS + c) * GATE_DIM;
-                    for (gi, yv) in yout.iter().enumerate() {
+                    for (gi, yv) in s.gate_out.iter().enumerate() {
                         s.gates[gbase + gi] = (*yv + self.gate1_b[gi]).max(0.0);
                     }
                 }
@@ -994,16 +1014,18 @@ impl CodeHygieneModel {
                         .copy_from_slice(&yout);
                 }
             }
-            let mut xcol = vec![0.0f32; MAX_COLS];
-            let mut ycol = vec![0.0f32; MAX_COLS];
+            s.xcol.clear();
+            s.xcol.resize(MAX_COLS, 0.0);
+            s.ycol.clear();
+            s.ycol.resize(MAX_COLS, 0.0);
             for l in 0..lines {
                 for j in 0..PREFIX_DIM {
                     for c in 0..MAX_COLS {
-                        xcol[c] = s.proj2[(l * MAX_COLS + c) * PREFIX_DIM + j];
+                        s.xcol[c] = s.proj2[(l * MAX_COLS + c) * PREFIX_DIM + j];
                     }
-                    ternary_group_matvec_scalar(&self.w_causal2_g, &xcol, &mut ycol);
+                    ternary_group_matvec_scalar(&self.w_causal2_g, &s.xcol, &mut s.ycol);
                     for r in 0..MAX_COLS {
-                        s.prefix2[(l * MAX_COLS + r) * PREFIX_DIM + j] = ycol[r];
+                        s.prefix2[(l * MAX_COLS + r) * PREFIX_DIM + j] = s.ycol[r];
                     }
                 }
             }
@@ -1013,22 +1035,31 @@ impl CodeHygieneModel {
         s.cells.clear();
         s.cells.resize(lines * MAX_COLS * CELL_DIM, 0.0);
         {
-            let mut xin = vec![0.0f32; EMB_DIM + LEX_DIM + GATE_DIM + PREFIX_DIM];
-            let mut yout = vec![0.0f32; CELL_DIM];
+            s.fuse_in.clear();
+            s.fuse_in.reserve(EMB_DIM + LEX_DIM + GATE_DIM + PREFIX_DIM);
+            s.fuse_out.clear();
+            s.fuse_out.resize(CELL_DIM, 0.0);
             for l in 0..lines {
                 for c in 0..MAX_COLS {
                     let ebase = (l * MAX_COLS + c) * EMB_DIM;
                     let lbase = (l * MAX_COLS + c) * LEX_DIM;
                     let gbase = (l * MAX_COLS + c) * GATE_DIM;
                     let pbase = (l * MAX_COLS + c) * PREFIX_DIM;
-                    xin.clear();
-                    xin.extend_from_slice(&s.emb[ebase..ebase + EMB_DIM]);
-                    xin.extend_from_slice(&s.lex[lbase..lbase + LEX_DIM]);
-                    xin.extend_from_slice(&s.gates[gbase..gbase + GATE_DIM]);
-                    xin.extend_from_slice(&s.prefix2[pbase..pbase + PREFIX_DIM]);
-                    matvec_scaled(&self.col_fuse, &self.col_fuse_s, &xin, &mut yout);
+                    s.fuse_in.clear();
+                    s.fuse_in.extend_from_slice(&s.emb[ebase..ebase + EMB_DIM]);
+                    s.fuse_in.extend_from_slice(&s.lex[lbase..lbase + LEX_DIM]);
+                    s.fuse_in
+                        .extend_from_slice(&s.gates[gbase..gbase + GATE_DIM]);
+                    s.fuse_in
+                        .extend_from_slice(&s.prefix2[pbase..pbase + PREFIX_DIM]);
+                    matvec_scaled(
+                        &self.col_fuse,
+                        &self.col_fuse_s,
+                        &s.fuse_in,
+                        &mut s.fuse_out,
+                    );
                     let cbase = (l * MAX_COLS + c) * CELL_DIM;
-                    for (ci, yv) in yout.iter().enumerate() {
+                    for (ci, yv) in s.fuse_out.iter().enumerate() {
                         s.cells[cbase + ci] = (*yv + self.col_fuse_b[ci]).max(0.0);
                     }
                 }
@@ -1045,14 +1076,13 @@ impl CodeHygieneModel {
         let width = MAX_COLS;
         // conv3/7/13: each `conv_relu` writes (lines·width, out); then the
         // column sum folds the width axis ascending.
-        let mut per_line = vec![0.0f32; 0];
-        let mut fold = |w: &TernaryGroupWeights,
-                        sc: &[f32],
-                        b: &[f32],
-                        k: usize,
-                        out_dim: usize,
-                        dst: &mut Vec<f32>,
-                        buf: &mut Vec<f32>| {
+        let fold = |w: &TernaryGroupWeights,
+                    sc: &[f32],
+                    b: &[f32],
+                    k: usize,
+                    out_dim: usize,
+                    dst: &mut Vec<f32>,
+                    buf: &mut Vec<f32>| {
             conv_relu(w, sc, b, &s.cells, lines, width, CELL_DIM, k, out_dim, buf);
             dst.clear();
             dst.resize(lines * out_dim, 0.0);
@@ -1097,18 +1127,25 @@ impl CodeHygieneModel {
         s.col_sums.clear();
         s.col_sums.resize(lines * COL_SUM_DIM, 0.0);
         {
-            let mut col_acc = vec![0.0f32; CELL_DIM];
-            let mut yout = vec![0.0f32; COL_SUM_DIM];
+            s.col_sum_acc.clear();
+            s.col_sum_acc.resize(CELL_DIM, 0.0);
+            s.col_sum_out.clear();
+            s.col_sum_out.resize(COL_SUM_DIM, 0.0);
             for l in 0..lines {
-                col_acc.fill(0.0);
+                s.col_sum_acc.fill(0.0);
                 for c in 0..width {
                     let base = (l * width + c) * CELL_DIM;
                     for j in 0..CELL_DIM {
-                        col_acc[j] += s.cells[base + j];
+                        s.col_sum_acc[j] += s.cells[base + j];
                     }
                 }
-                matvec_scaled(&self.col_sum_proj, &self.col_sum_s, &col_acc, &mut yout);
-                s.col_sums[l * COL_SUM_DIM..(l + 1) * COL_SUM_DIM].copy_from_slice(&yout);
+                matvec_scaled(
+                    &self.col_sum_proj,
+                    &self.col_sum_s,
+                    &s.col_sum_acc,
+                    &mut s.col_sum_out,
+                );
+                s.col_sums[l * COL_SUM_DIM..(l + 1) * COL_SUM_DIM].copy_from_slice(&s.col_sum_out);
             }
         }
 
@@ -1148,17 +1185,19 @@ impl CodeHygieneModel {
         s.line_stats.clear();
         s.line_stats.resize(lines * LINE_STATS_DIM, 0.0);
         {
-            let mut yout = vec![0.0f32; LMLP_HIDDEN];
-            let mut yout2 = vec![0.0f32; LINE_STATS_DIM];
+            s.lmlp_out.clear();
+            s.lmlp_out.resize(LMLP_HIDDEN, 0.0);
+            s.lmlp_out2.clear();
+            s.lmlp_out2.resize(LINE_STATS_DIM, 0.0);
             for l in 0..lines {
                 let fbase = l * feat_dim;
                 matvec_scaled(
                     &self.lmlp1,
                     &self.lmlp1_s,
                     &s.line_feats[fbase..fbase + feat_dim],
-                    &mut yout,
+                    &mut s.lmlp_out,
                 );
-                for (hi, yv) in yout.iter().enumerate() {
+                for (hi, yv) in s.lmlp_out.iter().enumerate() {
                     s.line_hidden[l * LMLP_HIDDEN + hi] = (*yv + self.lmlp1_b[hi]).max(0.0);
                 }
                 let hbase = l * LMLP_HIDDEN;
@@ -1168,9 +1207,9 @@ impl CodeHygieneModel {
                     &self.lmlp2,
                     &[],
                     &s.line_hidden[hbase..hbase + LMLP_HIDDEN],
-                    &mut yout2,
+                    &mut s.lmlp_out2,
                 );
-                for (si, yv) in yout2.iter().enumerate() {
+                for (si, yv) in s.lmlp_out2.iter().enumerate() {
                     s.line_stats[l * LINE_STATS_DIM + si] = *yv + self.lmlp2_b[si];
                 }
             }
@@ -1191,7 +1230,6 @@ impl CodeHygieneModel {
                 s.state[sbase + LINE_STATS_DIM + SKETCH_DIM + j] = half[SKETCH_DIM + j] * inv2;
             }
         }
-        let _ = (&mut per_line, &mut fold);
     }
 
     /// One sink-attention pass + context MLP on `state` (Block 2's layer
@@ -1209,32 +1247,35 @@ impl CodeHygieneModel {
         s.k.resize(lines * QK_DIM, 0.0);
         s.v.resize(lines * hd_v * NUM_HEADS, 0.0);
         {
-            let mut yq = vec![0.0f32; QK_DIM];
-            let mut yk = vec![0.0f32; QK_DIM];
-            let mut yv = vec![0.0f32; hd_v * NUM_HEADS];
+            s.q_tmp.clear();
+            s.q_tmp.resize(QK_DIM, 0.0);
+            s.k_tmp.clear();
+            s.k_tmp.resize(QK_DIM, 0.0);
+            s.v_tmp.clear();
+            s.v_tmp.resize(hd_v * NUM_HEADS, 0.0);
             for l in 0..lines {
                 let sbase = l * STATE_DIM;
                 matvec_scaled(
                     &attn.wq,
                     &attn.wq_s,
                     &s.state[sbase..sbase + STATE_DIM],
-                    &mut yq,
+                    &mut s.q_tmp,
                 );
                 matvec_scaled(
                     &attn.wk,
                     &attn.wk_s,
                     &s.state[sbase..sbase + STATE_DIM],
-                    &mut yk,
+                    &mut s.k_tmp,
                 );
                 matvec_scaled(
                     &attn.wv,
                     &attn.wv_s,
                     &s.state[sbase..sbase + STATE_DIM],
-                    &mut yv,
+                    &mut s.v_tmp,
                 );
-                s.q[l * QK_DIM..(l + 1) * QK_DIM].copy_from_slice(&yq);
-                s.k[l * QK_DIM..(l + 1) * QK_DIM].copy_from_slice(&yk);
-                s.v[l * hd_v * NUM_HEADS..(l + 1) * hd_v * NUM_HEADS].copy_from_slice(&yv);
+                s.q[l * QK_DIM..(l + 1) * QK_DIM].copy_from_slice(&s.q_tmp);
+                s.k[l * QK_DIM..(l + 1) * QK_DIM].copy_from_slice(&s.k_tmp);
+                s.v[l * hd_v * NUM_HEADS..(l + 1) * hd_v * NUM_HEADS].copy_from_slice(&s.v_tmp);
             }
         }
 
@@ -1244,7 +1285,8 @@ impl CodeHygieneModel {
         s.attn_out.clear();
         s.attn_out.resize(lines * hd_v * NUM_HEADS, 0.0);
         {
-            let mut logits = vec![0.0f32; MAX_LINES + 1];
+            s.logits.clear();
+            s.logits.resize(MAX_LINES + 1, 0.0);
             for h in 0..NUM_HEADS {
                 let q_off = h * hd_qk;
                 let k_off = h * hd_qk;
@@ -1261,13 +1303,13 @@ impl CodeHygieneModel {
                         let clipped = (rel.clamp(-(MAX_REL_DIST as i64), MAX_REL_DIST as i64)
                             + MAX_REL_DIST as i64) as usize;
                         let logit = dot / scale + attn.b_rel[h * REL_TABLE + clipped];
-                        logits[key] = logit;
+                        s.logits[key] = logit;
                         if logit > max {
                             max = logit;
                         }
                     }
                     let sink = attn.b_sink[h];
-                    logits[lines] = sink;
+                    s.logits[lines] = sink;
                     if sink > max {
                         max = sink;
                     }
@@ -1275,22 +1317,23 @@ impl CodeHygieneModel {
                     // sink excluded from the output.
                     let mut sum = 0.0f32;
                     for key in 0..=lines {
-                        let e = (logits[key] - max).exp();
-                        logits[key] = e;
+                        let e = (s.logits[key] - max).exp();
+                        s.logits[key] = e;
                         sum += e;
                     }
-                    let mut acc = vec![0.0f32; hd_v];
+                    s.attn_acc.clear();
+                    s.attn_acc.resize(hd_v, 0.0);
                     for key in 0..lines {
-                        let wgt = logits[key] / sum;
+                        let wgt = s.logits[key] / sum;
                         if wgt != 0.0 {
                             let vbase = key * hd_v * NUM_HEADS + v_off;
                             for d in 0..hd_v {
-                                acc[d] += wgt * s.v[vbase + d];
+                                s.attn_acc[d] += wgt * s.v[vbase + d];
                             }
                         }
                     }
                     let obase = q * hd_v * NUM_HEADS + v_off;
-                    s.attn_out[obase..obase + hd_v].copy_from_slice(&acc);
+                    s.attn_out[obase..obase + hd_v].copy_from_slice(&s.attn_acc);
                 }
             }
         }
@@ -1299,14 +1342,15 @@ impl CodeHygieneModel {
         s.ctx_hidden.clear();
         s.ctx_hidden.resize(lines * STATE_DIM, 0.0);
         {
-            let mut yout = vec![0.0f32; STATE_DIM];
+            s.wo_out.clear();
+            s.wo_out.resize(STATE_DIM, 0.0);
             for l in 0..lines {
                 let vbase = l * hd_v * NUM_HEADS;
                 let merged = &s.attn_out[vbase..vbase + hd_v * NUM_HEADS];
-                matvec_scaled(&attn.wo, &[], merged, &mut yout);
+                matvec_scaled(&attn.wo, &[], merged, &mut s.wo_out);
                 let sbase = l * STATE_DIM;
                 for si in 0..STATE_DIM {
-                    s.ctx_hidden[sbase + si] = s.state[sbase + si] + yout[si];
+                    s.ctx_hidden[sbase + si] = s.state[sbase + si] + s.wo_out[si];
                 }
             }
         }
@@ -1317,22 +1361,24 @@ impl CodeHygieneModel {
         s.mlp_out.resize(lines * STATE_DIM, 0.0);
         let w1_dim = ctx.hidden;
         {
-            let mut yh = vec![0.0f32; w1_dim];
-            let mut y2 = vec![0.0f32; STATE_DIM];
+            s.ctx_h_tmp.clear();
+            s.ctx_h_tmp.resize(w1_dim, 0.0);
+            s.ctx_o_tmp.clear();
+            s.ctx_o_tmp.resize(STATE_DIM, 0.0);
             for l in 0..lines {
                 let sbase = l * STATE_DIM;
                 matvec_scaled(
                     &ctx.w1,
                     &ctx.w1_s,
                     &s.state[sbase..sbase + STATE_DIM],
-                    &mut yh,
+                    &mut s.ctx_h_tmp,
                 );
-                for (hi, yv) in yh.iter_mut().enumerate() {
+                for (hi, yv) in s.ctx_h_tmp.iter_mut().enumerate() {
                     *yv = (*yv + ctx.b1[hi]).max(0.0);
                 }
-                matvec_scaled(&ctx.w2, &ctx.w2_s, &yh, &mut y2);
+                matvec_scaled(&ctx.w2, &ctx.w2_s, &s.ctx_h_tmp, &mut s.ctx_o_tmp);
                 for si in 0..STATE_DIM {
-                    s.mlp_out[sbase + si] = s.state[sbase + si] + y2[si] + ctx.b2[si];
+                    s.mlp_out[sbase + si] = s.state[sbase + si] + s.ctx_o_tmp[si] + ctx.b2[si];
                 }
             }
         }
@@ -1348,27 +1394,23 @@ impl CodeHygieneModel {
 
 impl CodeHygieneModel {
     /// Block 3 — the per-line squiggle sigmoid, the pooled doc MLP, and the
-    /// three heads. Writes into `out`.
-    pub fn block3(
-        &self,
-        lines: usize,
-        s: &mut ForwardScratch,
-        out: &mut ForwardOutput,
-    ) -> ForwardOutput {
+    /// three heads. Writes into `out` (the caller owns its storage).
+    pub fn block3(&self, lines: usize, s: &mut ForwardScratch, out: &mut ForwardOutput) {
         // line_probs = sigmoid(state @ sq + sq_b) — (lines, 8).
         out.line_probs.clear();
         out.line_probs.resize(lines * NUM_KINDS, 0.0);
         {
-            let mut y = vec![0.0f32; NUM_KINDS];
+            s.sq_out.clear();
+            s.sq_out.resize(NUM_KINDS, 0.0);
             for l in 0..lines {
                 let sbase = l * STATE_DIM;
                 matvec_scaled(
                     &self.sq,
                     &self.sq_s,
                     &s.state[sbase..sbase + STATE_DIM],
-                    &mut y,
+                    &mut s.sq_out,
                 );
-                for (ki, yv) in y.iter().enumerate() {
+                for (ki, yv) in s.sq_out.iter().enumerate() {
                     out.line_probs[l * NUM_KINDS + ki] = sigmoid(yv + self.sq_b[ki]);
                 }
             }
@@ -1464,30 +1506,46 @@ impl CodeHygieneModel {
             softmax_into(&logits[SCORE_LOGIT_END..STYLE_LOGIT_END], &mut sm);
             out.style_probs.copy_from_slice(&sm);
         }
-        out.clone()
     }
 
-    /// The full pinned forward: encode the caller's grid (they may also pass
-    /// their own), then blocks 0–3.
+    /// The zero-alloc apply path: every per-call temporary lives in
+    /// `scratch` (added for G4-A) and the caller reuses `out`, whose
+    /// `line_probs` capacity persists across calls at a fixed line count.
+    /// Steady state — after one warm call — performs ZERO heap
+    /// allocations; the counting-allocator canary
+    /// (`ternary_circuit_forward_alloc_gates`) pins it.
+    pub fn forward_into(
+        &self,
+        grid: &[[u8; MAX_COLS]],
+        scratch: &mut ForwardScratch,
+        out: &mut ForwardOutput,
+    ) -> Result<(), ForwardError> {
+        let lines = grid.len();
+        if lines > MAX_LINES {
+            return Err(ForwardError::GridShape { lines });
+        }
+        self.block0(grid, scratch);
+        self.block1(lines, scratch);
+        self.block2(lines, scratch);
+        self.block3(lines, scratch, out);
+        Ok(())
+    }
+
+    /// Convenience form — allocates a fresh [`ForwardOutput`] every call
+    /// (the pinned G1-A exactness gate replays through this path).
+    /// Steady-state serving uses [`forward_into`].
     pub fn forward(
         &self,
         grid: &[[u8; MAX_COLS]],
         scratch: &mut ForwardScratch,
     ) -> Result<ForwardOutput, ForwardError> {
-        let lines = grid.len();
-        if lines > MAX_LINES {
-            return Err(ForwardError::GridShape { lines });
-        }
         let mut out = ForwardOutput {
             line_probs: Vec::new(),
             noul: [0.0; NOUL_HEADS],
             subscores: [0.0; NUM_SCORES],
             style_probs: [0.0; NUM_ARCHETYPES],
         };
-        self.block0(grid, scratch);
-        self.block1(lines, scratch);
-        self.block2(lines, scratch);
-        let done = self.block3(lines, scratch, &mut out);
-        Ok(done)
+        self.forward_into(grid, scratch, &mut out)?;
+        Ok(out)
     }
 }

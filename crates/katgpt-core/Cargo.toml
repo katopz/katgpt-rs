@@ -4658,6 +4658,14 @@ required-features = ["ternary_circuit"]
 name = "ternary_circuit_forward_gates"
 required-features = ["ternary_circuit"]
 
+# Issue 1225 Arm A G4 — the counting-allocator canary: `forward_into` is
+# zero-alloc in steady state (3-call warm-up, then 100 alloc-free calls),
+# `forward()` is the allocating convenience form (positive control). The row
+# rides the SAME commit as the gated target (green-zero trap).
+[[test]]
+name = "ternary_circuit_forward_alloc_gates"
+required-features = ["ternary_circuit"]
+
 # Issue 1225 T1b — the transcode converter (fixture builder): reads the
 # committed npz + intermediate, writes compiled/{weights.cact, manifest.json,
 # pins.json}. Deterministic — a re-run is byte-identical.
