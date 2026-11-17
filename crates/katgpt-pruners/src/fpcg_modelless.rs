@@ -181,6 +181,124 @@ pub fn construct_probe_via_mean_difference(
     Ok(FutureBehaviorProbe::new(direction, bias, layer, behavior))
 }
 
+// ── I4 (Issue 1228): the difference-of-means direction READOUT ───────────────
+//
+// CONSUME, don't re-derive: the direction comes from the shipped constructor
+// above; this half scores labeled activations through it (σ((h − b)·d) — the
+// probe's own forecast shape) and reads the separation as an AUC, refusing a
+// no-signal direction TYPED — a promotion never rides a silent AUC ≈ 0.5
+// pass. The no-signal arm is wider than the constructor's ZeroNormDirection
+// (identical centroids): a non-zero direction can still rank no better than
+// chance on the samples it was built from — that census refuses loud too.
+
+/// One [`behavior_readout`] refusal.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReadoutError {
+    /// The constructor refused (mirror the typed cause; no re-derivation).
+    Construction(MeanDifferenceError),
+    /// The scored AUC reads at-or-under the chance band (+`band`) — the
+    /// direction separates nothing on these samples; promotion refuses.
+    NoSignal { auc: f32, band: f32 },
+    /// The samples need at least one of each label for an AUC to exist.
+    SingleClass,
+}
+
+impl std::fmt::Display for ReadoutError {
+    #[cold]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Construction(e) => write!(f, "probe construction refused: {e}"),
+            Self::NoSignal { auc, band } => {
+                write!(
+                    f,
+                    "no signal: AUC {auc:.4} at or under the chance band +{band:.2} — this direction separates nothing; promotion refuses"
+                )
+            }
+            Self::SingleClass => write!(f, "the samples need one of each label for an AUC"),
+        }
+    }
+}
+
+impl std::error::Error for ReadoutError {}
+
+/// Mann-Whitney AUC of the positive-class scores over the negative-class
+/// scores: P(score(pos) > score(neg)) + ½·P(equal). Rank-sum form, deterministic
+/// (ties credit ½, sort by `total_cmp` then FIRST-INDEX within ties — the
+/// determinism law). O(n log n), one scratch Vec (off the hot path).
+#[must_use]
+pub fn auc_mann_whitney(pos: &[f32], neg: &[f32]) -> f32 {
+    if pos.is_empty() || neg.is_empty() {
+        return 0.5;
+    }
+    // One merged (score, is_pos, index) sort; ties keep insertion order.
+    let mut all: Vec<(f32, bool, usize)> = Vec::with_capacity(pos.len() + neg.len());
+    all.extend(pos.iter().enumerate().map(|(i, &s)| (s, true, i)));
+    all.extend(neg.iter().enumerate().map(|(i, &s)| (s, false, i)));
+    all.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.2.cmp(&b.2)));
+    // Rank-sum over the positives; ties credit half a win per tied pair.
+    let mut rank_sum = 0.0f64;
+    let mut i = 0usize;
+    while i < all.len() {
+        let mut j = i;
+        while j < all.len() && all[j].0 == all[i].0 {
+            j += 1;
+        }
+        // Ranks are 1-based, averaged within the tie block: r = (i+1 + j) / 2.
+        let avg_rank = ((i + 1 + j) as f64) / 2.0;
+        for item in &all[i..j] {
+            if item.1 {
+                rank_sum += avg_rank;
+            }
+        }
+        i = j;
+    }
+    let n_pos = pos.len() as f64;
+    let n_neg = neg.len() as f64;
+    // U = R − n_pos(n_pos+1)/2; AUC = U / (n_pos·n_neg).
+    let u = rank_sum - n_pos * (n_pos + 1.0) / 2.0;
+    (u / (n_pos * n_neg)) as f32
+}
+
+/// The census readout over the SHIPPED constructor's probe: build the probe
+/// from `samples`, score every sample through it, read the AUC, and refuse a
+/// direction whose AUC sits at or under the chance band (`0.5 + band`; the
+/// kit's calibrated floor is `band = 0.05`, the fixture's planted margin is
+/// far above it). Returns `(auc, probe)` — the caller reuses the probe only
+/// after the refusal is cleared (a refused readout never yields a probe worth
+/// promoting).
+///
+/// # Errors
+/// [`ReadoutError::Construction`] mirrors the constructor's typed refusals;
+/// [`ReadoutError::SingleClass`] for an AUC with no contrast;
+/// [`ReadoutError::NoSignal`] for the chance-band AUC — loud, never silent.
+pub fn behavior_readout(
+    samples: &[LabeledActivation<'_>],
+    layer: usize,
+    behavior: impl Into<Box<str>>,
+    band: f32,
+) -> Result<(f32, FutureBehaviorProbe), ReadoutError> {
+    let probe = construct_probe_via_mean_difference(samples, layer, behavior)
+        .map_err(ReadoutError::Construction)?;
+    let mut pos: Vec<f32> = Vec::new();
+    let mut neg: Vec<f32> = Vec::new();
+    for s in samples {
+        let score = probe.forecast(s.activation).probability;
+        if s.label {
+            pos.push(score);
+        } else {
+            neg.push(score);
+        }
+    }
+    if pos.is_empty() || neg.is_empty() {
+        return Err(ReadoutError::SingleClass);
+    }
+    let auc = auc_mann_whitney(&pos, &neg);
+    if auc <= 0.5 + band {
+        return Err(ReadoutError::NoSignal { auc, band });
+    }
+    Ok((auc, probe))
+}
+
 /// Errors from modelless probe construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MeanDifferenceError {
@@ -442,5 +560,137 @@ mod tests {
         let mut act_neg = vec![0.0_f32; d];
         act_neg[0] = -1.5;
         assert!(probe.forecast(&act_neg).probability < 0.1);
+    }
+
+    /// I4 fixture (Issue 1228): a planted direction → the readout's AUC meets
+    /// the analytic linear-Bayes bound on the fixture. Equal-variance noise
+    /// σ around class means ±c·u: the projection along the (recovered)
+    /// direction reads d′ = 2c‖u‖/σ and the Bayes AUC = Φ(d′/2) — the
+    /// rank-based AUC on a finite sample must land at/above it minus the
+    /// sampling band (the bound is the CEILING; the empirical AUC of the
+    /// Bayes direction converges down to it, so the assertion pins ≥ bound − ε).
+    #[test]
+    fn planted_direction_auc_meets_the_bayes_bound() {
+        // Deterministic LCG — no RNG dep (the deltanet fixture recipe).
+        let mut x = 0x1228_0098_6u64;
+        let mut next = move || {
+            x = x
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (x >> 40) as f32 / 16_777_216.0
+        };
+        const D: usize = 8;
+        const N_PER: usize = 256;
+        let c = 1.0f32;
+        let sigma = 0.5f32;
+        // Planted direction u (unit-ish, non-axis so the mean-difference
+        // genuinely has to find it).
+        let u: [f32; D] = [0.3, -0.5, 0.2, 0.6, -0.1, 0.4, -0.3, 0.2];
+        let norm_sq: f32 = u.iter().map(|v| v * v).sum();
+        let norm = norm_sq.sqrt();
+        let mut pos_acts: Vec<[f32; D]> = Vec::with_capacity(N_PER);
+        let mut neg_acts: Vec<[f32; D]> = Vec::with_capacity(N_PER);
+        for _ in 0..N_PER {
+            let mut pos_act = [0.0f32; D];
+            let mut neg_act = [0.0f32; D];
+            for dim in 0..D {
+                // Equal spherical covariance: per-dim uniform noise scaled to
+                // ~unit variance (3.464/2 ≈ the uniform half-width of a
+                // var-1 sum-of-uniforms), aligned ±c·u on the planted axis.
+                pos_act[dim] = c * u[dim] + sigma * (next() - 0.5) * 3.464;
+                neg_act[dim] = -c * u[dim] + sigma * (next() - 0.5) * 3.464;
+            }
+            pos_acts.push(pos_act);
+            neg_acts.push(neg_act);
+        }
+        let mut samples = Vec::with_capacity(2 * N_PER);
+        for i in 0..N_PER {
+            samples.push(LabeledActivation {
+                activation: &pos_acts[i],
+                label: true,
+            });
+            samples.push(LabeledActivation {
+                activation: &neg_acts[i],
+                label: false,
+            });
+        }
+        let (auc, _probe) = behavior_readout(&samples, 3, "planted", 0.05).expect("readout");
+        // The analytic bound at the POPULATION level: d′ = 2c·‖u‖/σ_effective,
+        // where the spherical noise of half-width 3.464·σ/2 ≈ σ_eff·(uniform
+        // sum) — the fixture's per-dim noise std is (3.464/2)·σ/√3 ≈ σ. With
+        // ‖u‖ over D dims, the projected separation d′ = 2c·‖u‖/σ and the
+        // Bayes AUC = Φ(d′/2). Φ via the erf-free logistic pin: the fixture
+        // asserts the EMPIRICAL AUC against the bound MINUS the finite-sample
+        // band (128-vs-128 ranks, ±0.05 generous).
+        let d_prime = 2.0 * c * norm / sigma;
+        // Φ(d′/2) via tanh approximation of the error function — closed form,
+        // no libm dep: Φ(z) ≈ 0.5·(1 + tanh(0.797885·(z + 0.044715·z³)))
+        let z = d_prime * 0.5;
+        let phi = 0.5 * (1.0 + (0.797_885 * (z + 0.044_715 * z * z * z)).tanh());
+        assert!(
+            auc >= phi - 0.05,
+            "AUC {auc:.4} must meet the Bayes bound {phi:.4} minus the finite-sample band"
+        );
+    }
+
+    /// I4 falsifier: identical class centroids (the constructor's own
+    /// ZeroNormDirection) and a near-tie direction both refuse TYPED — never
+    /// a silent AUC ≈ 0.5 pass.
+    #[test]
+    fn no_signal_refuses_typed() {
+        // Identical centroids → the constructor's typed refusal, mirrored:
+        // both classes centered on the same point.
+        let a = [1.0f32, 2.0];
+        let b = [3.0f32, 4.0];
+        let samples = vec![
+            LabeledActivation {
+                activation: &a,
+                label: true,
+            },
+            LabeledActivation {
+                activation: &b,
+                label: true,
+            },
+            LabeledActivation {
+                activation: &a,
+                label: false,
+            },
+            LabeledActivation {
+                activation: &b,
+                label: false,
+            },
+        ];
+        match behavior_readout(&samples, 0, "identical", 0.05) {
+            Err(ReadoutError::Construction(MeanDifferenceError::ZeroNormDirection)) => {}
+            other => panic!("expected the mirrored ZeroNormDirection refusal, got {other:?}"),
+        }
+        // A direction that separates nothing ON THE SAMPLES (labels
+        // scrambled against pure noise) → NoSignal at the chance band. Many
+        // samples: the in-sample AUC of a noise direction concentrates at
+        // ~0.5 (± the 1/√n rank noise), so the arm lands IN the band
+        // reliably — a small sample would flatter the direction (the
+        // in-sample overfit the band exists to catch).
+        let mut x = 0x516_4A1u64.wrapping_add(1);
+        let mut next = move || {
+            x = x
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (x >> 40) as f32 / 16_777_216.0
+        };
+        let raw: Vec<[f32; 2]> = (0..512).map(|_| [next() - 0.5, next() - 0.5]).collect();
+        let samples: Vec<LabeledActivation<'_>> = raw
+            .iter()
+            .enumerate()
+            .map(|(i, act)| LabeledActivation {
+                activation: act,
+                label: i % 2 == 0,
+            })
+            .collect();
+        match behavior_readout(&samples, 0, "scrambled", 0.05) {
+            Err(ReadoutError::NoSignal { auc, band }) => {
+                assert!(auc <= 0.5 + band, "the scrambled arm must land in the band");
+            }
+            other => panic!("expected NoSignal, got {other:?}"),
+        }
     }
 }

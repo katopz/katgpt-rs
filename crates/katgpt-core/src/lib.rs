@@ -312,6 +312,13 @@ pub mod logit_regime;
 #[cfg(feature = "sparse_kl_bound")]
 pub mod sparse_kl;
 
+// Issue 1228: the reward-census instruments (I1 TD-delta + gate, I2
+// hypergeometric overlap null, I3 pruning-knee census) — one feature, one
+// module, the sparse_kl_bound shape; I4's readout lands in katgpt-pruners
+// beside the shipped constructor.
+#[cfg(feature = "reward_census")]
+pub mod reward_census;
+
 #[cfg(feature = "verify_cache")]
 pub mod verify_cache;
 
