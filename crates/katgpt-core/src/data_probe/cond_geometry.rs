@@ -143,7 +143,10 @@ impl core::fmt::Display for CondGeometryError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::SubsetTooSmall { got, min } => {
-                write!(f, "cond_geometry: group support {got} < MIN_GROUP_TOKENS {min} — refusing the estimate (paper Appendix A.1 discard)")
+                write!(
+                    f,
+                    "cond_geometry: group support {got} < MIN_GROUP_TOKENS {min} — refusing the estimate (paper Appendix A.1 discard)"
+                )
             }
             Self::NonFinite { at } => {
                 write!(f, "cond_geometry: non-finite coordinate at flat index {at}")
