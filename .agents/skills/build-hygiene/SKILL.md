@@ -19,7 +19,7 @@ The canonical five-profile shape for a workspace that runs many build postures
 |---|---|---|
 | `[profile.dev.package."*"]` | deps fast, own code debuggable | `opt-level = 3`, `debug = false` — `*` never touches workspace members |
 | `[profile.dev]` | the daily build | `debug = "line-tables-only"` — the EXPLICIT string spelling, never `debug = 1`; backtraces keep file/line, debugger locals are the deliberate loss |
-| `[profile.dev-full]` | the debugger escape hatch | `inherits = "dev"`, `debug = true` |
+| `[profile.dev-full]` | the debugger escape hatch | `inherits = "dev"`, `debug = true` — consumed by the rust-developer skill §8 one-attach lldb lane |
 | `[profile.gate]` | multi-posture CI/guard runs | `inherits = "dev"`, `incremental = false`; deps at `opt-level = 0` in ONE shared cache instead of dozens of opt-3 dep copies |
 | `[profile.dist]` | shipped binaries | `inherits = "release"`, `opt-level = 3` (never `"s"` on a real-time renderer), `lto = "fat"`, `codegen-units = 1`, `strip = true` |
 

@@ -165,7 +165,7 @@ rust-lldb --batch \
 # at the stop: frame variable / p <expr> / bt / c — `rust-gdb` is the Linux twin
 ```
 
-- **Profile coupling (fleet law):** the build-hygiene discipline sets
+- **Profile coupling (fleet law):** the build-hygiene skill sets
   `[profile.dev] debug = "line-tables-only"` with deps at `debug = false` —
   backtraces keep file/line, LOCALS DO NOT EXIST. Real inspection needs the
   `[profile.dev-full]` escape hatch (`inherits = "dev"`, `debug = true`;
