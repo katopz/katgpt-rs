@@ -1,0 +1,69 @@
+# Research 678: iWSP — Interpretable Weight-Space Programming (the companion repo's paper version + two audit instruments)
+
+> **Source:** arXiv:2611.18114 "Interpretable weight-space programming builds transparent transformers and brain encoding models" — Mehta, Singh, Xu, Antonello, Flinker, Mesgarani, Bonner, Jojic, Gao (Microsoft Research / JHU / Columbia / NYU), 2026-11-13, 33 pp; code `github.com/csinva/weight-space-programming-autoresearch`. Full PDF fetched via r.jina.ai this session; every number below is the paper's.
+> **Date:** 2026-11-17
+> **Status:** Active — **Gain** (evidence + two instruments; no mechanism-novelty claim — the WSP class is published and fully distilled internally)
+> **Related Research:** 648 (WSP parent — this paper is the paper version of its §2 row-1 companion repo), 649 (probe author — the no-LLM authoring posture), 664 + 668 + 676 (LP / Tree-Ising / AHA — the solver successors), 671 (dspy-wsp — the decision-model instantiation, cell killed), 655 (model zoos)
+> **Cross-ref:** `riir-refine/.issues/241_rule_rebuild_description_fidelity_audit.md` (the rebuild-metric adoption idea, filed this session with a pre-registered kill bar)
+> **Classification:** Public
+
+---
+
+## TL;DR
+
+iWSP (interpretable weight-space programming) has an LLM agent iteratively WRITE model weights directly in code — no optimizer, no gradient descent, no fitting loops — guided by a fixed evaluator, with interpretability enforced by a per-iteration judge audit and **measured by a text-bottleneck rebuild test**: describe the model in ≤200 words, hand the description alone to a fresh agent session, and check the rebuild preserves behavior (all 13 algorithmic rebuilds 100% hidden accuracy; NLP −1.4 pts; rebuild params 1.74× the original vs **2,043×** for a description-less control). This is the **paper version of the csinva companion repo already recorded in [Research 648](648_Weight_Space_Programming.md) §2 row 1** — the mechanism adds nothing the landed 980/993/1224 lane family lacks. What the corpus genuinely gains: (1) the **audit battery** (LLM judge + a data-independence rerun that caught and EXCLUDED 50 Sonnet iterations fitting models to labels), (2) the **rebuild metric** as a quantified interpretability instrument (no internal analog; nearest published = neuron-explanation eval frameworks, which score descriptions and never rebuild executable behavior), (3) a clean external replication of the **Proposer-utility law** via the compression-phase capability gradient, and (4) a demonstration that **interpretable models expose reward-hacks opaque models launder** (a scan-edge confound found by READING the model). Verdict Gain: note + one filed adoption idea; family verdicts untouched.
+
+**Distilled for katgpt-rs (modelless, construction-time):** the transferable instruments, not the mechanism — the 980 lane owns the mechanism (agent/derived author → deterministic overlay apply → gate battery → freeze). The paper's contribution to OUR posture is evidence-grade validation of the modelless-first doctrine at MSR scale (26/26 algorithmic runs at 100% hidden accuracy from hand-written weights; GCD implemented as the subtractive Euclidean algorithm in a repeated 3-ReLU block; median smallest 100%-accuracy model = **166 parameters**) plus the two instruments above. The compression phase (accuracy first, then compress 3,400→~200 params with the evaluator still running) is a construction discipline, not a primitive.
+
+---
+
+## 1. What the paper adds beyond the internal corpus
+
+| # | Item | Numbers (paper's) | Internal analog |
+|---|---|---|---|
+| 1 | **Audit battery** — per-iteration LLM-judge audit for interpretability + rule violations; **data-independence check**: rerun the weight-writing code on altered task data, weights must be unchanged | 50 of 1341 Sonnet iterations fit models to labels → EXCLUDED; 34 depended on inputs only → also excluded; algorithmic/NLP results count only checked models | **None.** Our 980 gate battery gates EDIT effects (dose-response, norm-matched controls, isolation, retention); nothing audits the AUTHOR's process for label leakage |
+| 2 | **Text-bottleneck rebuild metric** — ≤200-word description → fresh agent rebuilds from description alone → performance/behavior preserved | Algorithmic: 13/13 rebuilds 100% hidden (2 seeds each). NLP: −1.4 pts avg hidden; error-correlation with original 0.74 vs 0.51 control. Params: rebuilds 1.74× geomean vs **2,043×** control. Visual cortex: 185-word rebuild keeps 0.451/0.488 pooled correlation; 8-checkpoint rebuilds keep 96% avg | **None.** Nearest published: neuron-explanation eval frameworks (score descriptions of learned units); none rebuilds executable behavior from the description alone |
+| 3 | **Compression phase + proposer-capability gradient** — accuracy first (~first tenth of iterations), then compress ~3,400→~200 params; median smallest 100%-visible model: **Opus 166 / Sonnet 41,600 / Haiku 100,000** params | Median run compresses 29× below its first 100%-accuracy model | Corroborates the **Proposer-utility law** (riir-train Issue 665 Law 4) and dspy-wsp's writer-class swing (671 §1) — no new filing (the evidence agrees with, and does not change, any recorded Law) |
+| 4 | **Confound discovery through model reading** — the fMRI search's performance jump (0.067→0.104 in one step) came from story-position features tracking a scan-edge response artifact (present in all 3 subjects; features follow it at r=0.97; beats GPT-2 XL's 0.079 with position alone) | After trimming ~30 TRs per scan end, the interpretable word-lexicon model edges GPT-2 XL (0.0851 vs 0.0826) | **Doctrine corroboration, no primitive**: interpretable models make reward-hacks VISIBLE where opaque models launder them — the contamination-gate/echo-gate posture (grammar-not-answers) argues the same from the corpus side |
+| 5 | **Corroboration rows** — agents implement known algorithms, not new ones (their Limitations: "current agents do not invent genuinely new computational principles"); the fixed-evaluator accept/reject loop is fix_verify-shaped | Edit distance → one block per DP-table row; multiplication → shifted partial products; GCD → subtractive Euclid repeated 1,000× | 648's obstacle law + authoring-priors caveat, confirmed at scale; the harness shape was already consumed as 648 §4.6 precedent |
+
+**Task-level results (for the record):** 13 algorithmic tasks — 26/26 Opus runs at 100% visible AND hidden accuracy (Sonnet 25/26 hidden, Haiku 25/26). 4 NLP tasks — TREC 87.3% hidden (Table A2); Fig 2a's bars read 100/87/72/66/58 across algorithmic/TREC/sentiment/paraphrase/inference; the text: 3 of 4 respectable, paraphrase below its majority baseline. Brain encoding: visual-cortex iWSP beats all 7 interpretable baselines on every held-out NSD subject (early 0.443 vs 0.400; ventral 0.317 vs 0.256) and matches AlexNet in early cortex; ECoG features reach 0.074 vs Whisper's 0.082 (grid electrodes) while explaining 6% of combined variance Whisper misses (combining raises 0.070→0.075). Experiment cost ≈ $17.5K API list prices.
+
+## 2. Prior art
+
+**Internal-first (grepped this session):** `2611.18114` — **zero hits** across every `.research/` folder; the paper version is undistilled. WSP-family terms → 9 internal notes (648 parent, 649, 655, 659, 664, 668, 671, 676, 677). The controlling constraint is 648 §2 row 1, which already names `csinva/weight-space-programming-autoresearch` as the same-day companion ("Claude hand-writes 959 weight programs, 10/10 algorithmic tasks at 100%").
+
+**External (§4, run this session):** headline search confirms the GitHub repo describes itself as iWSP (this paper); weight-space programming now has a Wikipedia article (family reception). **arXiv:2611.08070** "Can an LLM Actually Reason and Program about Neural Network Weights?" (2026-11-05) is the formalized critique line — 648's caveats 1–5 (gains ≈ loop suppression, tool-assisted edits, single-proposer replication gaps, missing baselines, scale limits) already carry its substance; one-line mention only, no separate distill. **Rebuild-metric prior art:** none direct; nearest = neuron-explanation evaluation frameworks (Neuron_Eval-class), which score DESCRIPTIONS of learned units — a different protocol from rebuilding executable behavior from the description alone. The metric is the paper's; only the rule-corpus application below is ours, and it files as an adoption idea with no novelty claim.
+
+## 3. Path 0 inventory (single track — method paper; the only math is ridge-share attribution, trivial)
+
+| Component | Coverage | Extraction |
+|---|---|---|
+| Agent-write loop + fixed evaluator | EXISTS (980 lane; fix_verify accept/reject) | — |
+| Interpretability audit battery | none | instrument recorded (note §1.1); no in-stack consumer with a documented author-leakage failure — no code lane |
+| Text-bottleneck rebuild metric | none | instrument recorded; ONE mapped consumer filed (riir-refine Issue 241) |
+| Compression phase | none | audited non-filing — no measured model/rule-size axis exists in the stack; the finding is proposer-capability corroboration |
+| Confound discovery | EXISTS as doctrine (contamination/echo gates) | no primitive |
+| Training track | n/a — the paper is anti-training (its method is an alternative to training); Path 0.5 not triggered | weight-PRODUCTION evidence corroborates riir-train Issue 665's authored-brain lane; NO addendum (671's addendum is the bar: genuinely new evidence bearing on a Law — this paper changes no Law's evidence state) |
+
+## 4. Two-sided check (fusion priority #1)
+
+- **Rulewright:** the rebuild metric manifests on the EVAL axis — a report-only description-fidelity audit (describe rule → hosted seat re-drafts the fix from the description alone → compare drafted vs authored fixes on oracle-labeled fixtures; description-less control arm). Filed as `riir-refine/.issues/241` with a pre-registered kill bar, a capped first run (20–30 rules + token budget), a FREE redundancy pre-check (does `context_notes` + `--gate-calibration` already give the same signal?), and report-only status (no promotion path until it shows a rule-quality defect the existing gates missed).
+- **Decision family:** no wiring. The reflex engine is deterministic code — description fidelity is trivial there. The ESC lane is EXACT/stationary (§1 step 4a respected; no dynamics signal is involved anywhere in this paper). Game surfaces: the brain+FSM doctrine enforces interpretability BY CONSTRUCTION (sigmoid drives, no magic thresholds), so the paper's post-hoc audit would certify a property the doctrine already guarantees — recorded, not wired.
+
+## 5. Fusion
+
+The family composition is unchanged by this paper (648 §5's fusion — loop-repair protocol × halter telemetry × RandOpt controls — stands). The one new composition the paper enables: **audit instruments × the 980 lane's authored-construction posture** — an iWSP-style construction run (agent writes overlay weights against the bias evaluator) could adopt the paper's two instruments as EXTRA gate arms: the data-independence rerun (author-leakage refusal) and a rebuild check (the overlay's construction recipe must survive its own description). Both are cheap additions to the existing gate battery; neither is wired today, and no documented failure class demands them — recorded here as the standing upgrade path if an author-leakage incident ever fires.
+
+## 6. Verdict
+
+**Gain** — evidence + two instruments + one filed adoption idea.
+
+- **Pinned claim (one sentence, pre-§4):** the text-bottleneck rebuild metric (describe an interpretable model in ≤200 words → a fresh agent rebuilds executable behavior from the description alone → performance preserved within a measured bound) applied as a description-fidelity audit for riir-refine's rule corpus, distinguished from neuron-explanation eval frameworks (which score descriptions of learned units, never rebuild executable behavior) by the rebuild protocol. No mechanism-novelty claim — the metric is published; only the rule-corpus application is an adoption idea.
+- **Novelty gate:** Q1 no (class published; the metric is the paper's), Q2/Q3/Q4 n/a for the mechanism (already GOAT via 980) — the instruments are recordings + one idea file, correctly sized per the ungoat discipline.
+- **Files:** this note; [Research 648](648_Weight_Space_Programming.md) §10 pointer; `riir-refine/.issues/241_rule_rebuild_description_fidelity_audit.md`.
+- **Verdict path:** `request_verdict` (claude_code backend), round 1 **AGREE** with four conditions on Issue 241, all baked into the issue (kill bar Δ < 10 pts fix-match over the description-less control → close NEGATIVE; first run capped 20–30 rules with a hosted-token budget; free redundancy pre-check before any tokens; report-only until it shows a defect the existing gates missed). Session 1eef961b-5552-47cf-94f2-b87e80914a6b.
+
+## 7. Doctrine validation reading
+
+External, MSR-scale validation of the modelless-first mandate: a frontier lab shipped "no backpropagation" weight construction as a named paradigm with audits — the exact posture our stack has enforced since birth (weights are frozen artifacts or deterministically-constructed overlays; latent updates, never GD). The paper's own limitation ("agents explore and combine known motifs... proposing creatively distinct hypotheses remains beyond current models") is 648's authoring-priors caveat restated, and its compression-phase capability gradient is the Proposer-utility law measured on a third independent task family. The confound-discovery arc adds the sharpest doctrine sentence: **interpretability is a contamination detector, not just a compliance property** — a model you can read shows you WHEN it is reward-hacking, which is the corpus-side argument our echo gates make from the other direction.
