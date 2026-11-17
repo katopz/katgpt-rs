@@ -32,3 +32,5 @@ The multi-generation chain, custody, and meta level are the consumers' work (rii
 ## What this repo does NOT take
 
 LLM-in-the-loop evolution and free-form harness rewriting (the private tier's guard laws forbid both); the meta level stays a consumer composition (ESC grammar + never-lever guards live in the private tier's surfaces).
+
+> **PASS-Redirects (synthesis):** Wang, Wang, Ye et al. [arXiv:2611.07624 "Beneath the Surface: What We Overlook When We Talk About Agent Evolution"] — the audit-grade evaluation paper for this loop family (16 lineages: coverage is a flow, strictness discards alternatives, the D.4 preservation×size×identity trinity); loop-side coverage here, keeper-discipline mapping in riir-refine `.research/416` (its one gap filed as riir-refine Issue 243).
