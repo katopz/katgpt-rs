@@ -4688,3 +4688,12 @@ required-features = ["ternary_circuit"]
 [[test]]
 name = "ternary_circuit_build_alloc_gates"
 required-features = ["ternary_circuit"]
+
+# Issue 1225 Arm A G2-A — the warm per-file latency bar (≤ 10 ms/file).
+# The bar half is #[ignore]d (quiet-box runbook in the module docs: the
+# bench_preflight PROVENANCE line is part of the claim); the wiring
+# selfcheck half runs in every armed sweep. The row rides the SAME commit
+# as the gated target (green-zero trap).
+[[test]]
+name = "ternary_circuit_forward_g2"
+required-features = ["ternary_circuit"]
