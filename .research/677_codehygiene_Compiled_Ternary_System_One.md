@@ -4,7 +4,7 @@
 > **Date:** 2026-11-16
 > **Status:** Active — **GOAT (fusion)** — delegated-owner verdict, Claude reviewer (`katgpt-rs-07@m3`, session `7a0b3b4e-dd69-46b4-b71a-8367d9f7292f`), 3 rounds REVISE → AGREE → close, 2026-11-16
 > **Related Research:** 648 (WSP parent — the obstacle-vs-ability law), 649 (probe-authored circuits — the no-LLM author posture, value-refuted for repair), 671 (dspy-wsp — decision-head closed-form edits), 676 (AHA — self-supervised WSP authoring), 664 + 655 + 659/668 (author-solver siblings + zoo hygiene), 562 + 573 (TypeSafe System One / Jev — the calibrated-decision record; the shared noul/choice/score wire shape)
-> **Related Plans/Issues:** katgpt-rs `.issues/1225_ternary_circuit_compiled_wsp_poc.md` (the two-arm PoC, proof path inline) · riir-rethink `.proposals/006_compiled_system_one_lane_class.md` (the serving posture) · riir-refine `.distill/001_mining_queue_snapshot.md` (the distill verdict line)
+> **Related Plans/Issues:** katgpt-rs Issue `1225` (the two-arm PoC, proof path inline — closed 2026-11-17, file removed at close per the noise-reduction rule; the verdict is §6's P0 row here) · riir-rethink `.proposals/006_compiled_system_one_lane_class.md` (the serving posture) · riir-refine `.distill/001_mining_queue_snapshot.md` (the distill verdict line)
 > **Classification:** Public
 
 ---
@@ -69,7 +69,7 @@ The transferable primitive is the **circuit→ternary compilation idiom kit** �
 
 ## 6. Routing + files created this session
 
-- `katgpt-rs/.issues/1225_ternary_circuit_compiled_wsp_poc.md` — the two-arm PoC with the pre-registered proof path.
+- katgpt-rs Issue `1225` — the two-arm PoC with the pre-registered proof path (file removed at close 2026-11-17; git history holds it).
 - `riir-rethink/.proposals/006_compiled_system_one_lane_class.md` — the serving-posture proposal (owner-gated adoption).
 - `riir-refine/.distill/001_mining_queue_snapshot.md` — the distill verdict line.
 - **P0:** Issue 1225 Arms A/B → verdict. **VERDICT RECORDED 2026-11-17 (zed-4b76d49c@amo): 4 gates PASS (T1 transcode+BLAKE3 pins, G1-A exactness all four stages + both falsifiers, G1-B 13/13, G4-A zero-alloc both profiles), G2-A FAIL — 623.6 ms/file on quiet bmo vs the ≤10 ms pre-registration (62×; busy-amo corroboration 643.4 ms ±3%; preflight PASSED `power=AC load=1.47 swap=66006.38M canary=skipped powermode=0(auto)`, swap disclosed and verdict-robust). Cause structural: the deterministic scalar fold (Issue-940/650 pinned order — the G1-A fixture replay is a replay-compare) at ~1.8 GMAC/44-line file ≈ 3 GMAC/s; the bar was the source's numpy self-claim. Remediation ceiling in-repo ≈ 4× (bit-identical NEON LUT) / ~8× (order-free SIMD, inadmissible) — both ≪ 62×. DEMOTE executed §3/§5 this session (ungoat law, same fold as the verdict).** **P1:** eval surface for the lane (rethink 006 T1 — the gate). **DEAD — the P0 fail unseats the lane; rethink 006 adoption interest is moot at this posture.** **P2:** refine report-only rider IF the PoC passes AND an eval surface exists. **NOT TRIGGERED — both preconditions failed independently (G2-A fail + no eval surface).** **P3:** Paley/automaton idioms as standalone katgpt-core builders (only with a consumer). **Stays consumer-gated — unchanged, and no consumer can exist while the §3 verdict stands (a Paley/automaton STANDALONE builder has no 10 ms claim of its own; its re-open is independent of the §3 triggers but still waits a consumer).**

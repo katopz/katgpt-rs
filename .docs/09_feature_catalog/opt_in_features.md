@@ -6777,8 +6777,7 @@ pre-registered the ungoat law): 4 gates PASS, G2-A FAIL — DEMOTED.**
 the Issue-940 reclassification recorded at the site, or a deterministic
 re-derivation of a BLAS-class kernel.
 
-📖 Issue: [`1225`](../../.issues/1225_ternary_circuit_compiled_wsp_poc.md)
-(closed with the verdict) · Research:
+📖 Issue: `katgpt-rs 1225` (closed with the verdict 2026-11-17; file removed at close per the noise-reduction rule — git history holds the record) · Research:
 [`.research/677_codehygiene_Compiled_Ternary_System_One.md`](../../.research/677_codehygiene_Compiled_Ternary_System_One.md)
 (§3 the demote, §5 the unseated lane class) · Negative-result record:
 [`negative_results.md` §48](negative_results.md) · Substrate:
