@@ -282,46 +282,74 @@ fn best_of_3<F: FnMut()>(iters: usize, mut f: F) -> f64 {
     best
 }
 
+/// Fit-only cost (the (K+1)² solve + r basis evaluations), decode excluded —
+/// the decode is the consumer's cost, not the metric's.
+fn fit_per_path_ns(cfg: &EdConfig) -> f64 {
+    let mut nodes = vec![0.0f32; cfg.resolution];
+    randomized_cosine_nodes(cfg.resolution, cfg.seed, &mut nodes).unwrap();
+    let outputs: Vec<f32> = nodes.iter().map(|&a| a.powi(3) - 0.4 * a).collect();
+    best_of_3(200_000, || {
+        black_box(
+            effective_degree_along_path(black_box(&outputs), black_box(&nodes), cfg).unwrap(),
+        );
+    })
+}
+
 #[test]
 fn g2_per_path_latency_and_pair_scaling() {
-    // Fit-only cost (the (K+1)² solve + r basis evaluations), decode excluded —
-    // the decode is the consumer's cost, not the metric's.
-    for cfg in [EdConfig::cheap(), EdConfig::precise()] {
-        let mut nodes = vec![0.0f32; cfg.resolution];
-        randomized_cosine_nodes(cfg.resolution, cfg.seed, &mut nodes).unwrap();
-        let outputs: Vec<f32> = nodes.iter().map(|&a| a.powi(3) - 0.4 * a).collect();
-        let ns = best_of_3(200_000, || {
-            black_box(
-                effective_degree_along_path(black_box(&outputs), black_box(&nodes), &cfg).unwrap(),
-            );
-        });
-        println!(
-            "G2 fit r={} K={}: {ns:.1} ns/path",
-            cfg.resolution, cfg.max_degree
+    // Issue 1227 — profile split: the absolute ns bars are a RELEASE-posture
+    // claim (the standing law: run armed latency gates with `--release` — an
+    // unoptimized kernel body inflates a nanosecond-class wall-clock bar
+    // 3–10×, and box state is part of every latency claim). DEBUG asserts
+    // ORDER only: per-path cost grows with r (load-independent direction).
+    // The pair-scaling arm stays in BOTH profiles — its claim is a relative
+    // ratio (profile inflation cancels) and its 2.5× tolerance was sized for
+    // a loaded box (the 718(a) pricing note below).
+    let ns_cheap = fit_per_path_ns(&EdConfig::cheap());
+    let ns_precise = fit_per_path_ns(&EdConfig::precise());
+    println!(
+        "G2 fit r={} K={}: {ns_cheap:.1} ns/path",
+        EdConfig::cheap().resolution,
+        EdConfig::cheap().max_degree
+    );
+    println!(
+        "G2 fit r={} K={}: {ns_precise:.1} ns/path",
+        EdConfig::precise().resolution,
+        EdConfig::precise().max_degree
+    );
+    if cfg!(debug_assertions) {
+        assert!(
+            ns_cheap < ns_precise,
+            "r-scaling order broke: cheap {ns_cheap:.1} !< precise {ns_precise:.1} ns/path"
         );
+    } else {
         // Issue 668 T3 target is sub-µs at the cheap config; the precise
         // config gets 2× headroom so the gate is not load-flaky on a busy box.
-        let budget = if cfg.resolution <= 4 { 500.0 } else { 2000.0 };
         assert!(
-            ns < budget,
-            "r={} K={}: {ns} ns/path exceeds {budget} ns",
-            cfg.resolution,
-            cfg.max_degree
+            ns_cheap < 500.0,
+            "r=4 K=3: {ns_cheap} ns/path exceeds 500 ns"
+        );
+        assert!(
+            ns_precise < 2000.0,
+            "r=15 K=7: {ns_precise} ns/path exceeds 2000 ns"
         );
     }
 
-    // Node sampling cost (paid once per path by the driver).
+    // Node sampling cost (paid once per path by the driver). Same profile
+    // split: measured both, barred in release only.
     let cfg = EdConfig::cheap();
     let mut nodes = vec![0.0f32; cfg.resolution];
-    let ns = best_of_3(500_000, || {
+    let ns_nodes = best_of_3(500_000, || {
         randomized_cosine_nodes(black_box(cfg.resolution), black_box(cfg.seed), &mut nodes)
             .unwrap();
     });
     println!(
-        "G2 randomized_cosine_nodes r={}: {ns:.1} ns",
+        "G2 randomized_cosine_nodes r={}: {ns_nodes:.1} ns",
         cfg.resolution
     );
-    assert!(ns < 200.0, "node sampling {ns} ns");
+    if !cfg!(debug_assertions) {
+        assert!(ns_nodes < 200.0, "node sampling {ns_nodes} ns");
+    }
 
     // Pair-count scaling of the full driver (decode = one multiply-add chain).
     let mut prev: Option<(usize, f64)> = None;
