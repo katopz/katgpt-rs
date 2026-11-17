@@ -2,10 +2,10 @@
 
 > **Source:** `stdlogits/neuron-lens` @ `849bfe1678e28becceb1e3864afe5fc8297d02e4` (shallow clone to `.raw/`, provenance pinned, removed post-verdict; MIT code/docs, CC BY 4.0 catalog + lenses on HF, models Apache-2.0). Site: neuron-lens.com. Companion lens artifacts: `stdlogits/rs-lenses` (R + S per model/modality: text/image/audio for Gemma 4).
 > **Date:** 2026-11-12
-> **Status:** Active — **Gain** (GOAT-conditional on the Issue 999 PoC). NOT Super-GOAT: Q1 fails on dense class prior art (logit/tuned/J/R/K lenses, RelP, ω-J, AttnLRP/MambaLRP; internal 388/475/625). §5 ping-pong negotiated this session (record §6).
+> **Status:** CLOSED NEGATIVE for our stack — **DEMOTED** (PoC Issue 999 T5 verdict 2026-11-17, §7 Addendum; the machinery lands stay in riir-infer `lens` opt-in, promotion dead; G1/G2 real misses per the pre-registered law). §5 ping-pong negotiated 2026-11-12 (record §6).
 > **Related Research:** **388** (Jacobian-lens single-layer readout — closest internal cousin; its prefilter REFUTATION binds cost discipline but is single-layer finite-difference scope, restated §2.2), 475 (ICA Lens — direction mining from activations; not weight-only, not unit-catalogued), 625 (Path Kernel — gradient-space similarity lens over GD-learned models), 605 (Spike/Sparse/Sink — the massive-activation/sink census line this repo's finding 9 corroborates), 258 + 566 (attention-sink mechanism lines), **reflex 011** (Proprioception — binds "the 388 cost lesson" to every lens-sweep serving signal; the consumer lane for input-facing reads)
 > **Related Plans:** 409 (388's Fusion A PoC — COMPLETE, refuted as a FaithfulnessProbe prefilter)
-> **Related Issues:** **999** (this note's PoC: hand-rule fit + validate on a real stack checkpoint)
+> **Related Issues:** **999** (this note's PoC — CLOSED DEMOTED 2026-11-17, §7 Addendum; file removed per noise-reduction, git history is the record)
 > **Classification:** Public
 
 ---
@@ -139,6 +139,28 @@ Lens reads operate on latent directions and produce token-ranking diagnostics �
 ## 5. PoC pointer
 
 The runnable proof path lives in Issue 999 (hand-rule maps → fit on a real checkpoint → pre-registered gates G1–G4 → demote on miss). Source mechanics for the implementer, at the pinned sha: `neuron_lens/transport.py` (Accumulator/mean, d_model basis sweeps, dim_batch blocks), `neuron_lens/layers.py` (hand-written per-component maps — RMSNorm, softmax attention with grouped heads, q/k and value norms, partial RoPE, masks, GDN, gated/sparse MLPs — composed per model family), `neuron_lens/rules.py` (the same rules as autograd patches — the test reference for our finite-difference cross-check).
+
+---
+
+## 7. PoC Addendum — T5 verdict (2026-11-17, DEMOTED for our stack)
+
+The PoC ran to its pre-registered verdict (issue 999, T5 law: "any G1/G2 miss below bar demotes the primitive for our stack (UNSEEN does not demote — it re-scopes)"). Every gate number below is from the sealed run artifacts (`~/lens_t3_run_backup/` — fit `fit_*.k|j` + `manifest.json` + `run.log`; gates `t4_gates.json` + `t4_g1_poles_L0.json`), corpus digest blake3 `cf5915f5…`, model `Qwen3.5-0.8B-Base-Q8_0.gguf` (f32-dequantized at load), 40 docs × T=128, d=1024, 48 fit points, 1024 K directions (basis) + 64 J directions (embed_top_freq), even/odd halves 20/20.
+
+| Gate | Bar | Measured | Verdict |
+|---|---|---|---|
+| **G1 (S read)** L0 primary | top-10 hit ≥ 0.25, control < 0.01 | hit **0.00088**, control 0.00035 (poles 6781, detectors 104, `unseen:false`) | **FAIL** — 280× under bar |
+| G1 even/odd halves | stability | 0.00088 / 0.00088 | consistent (wrongly, stably) |
+| G1 mining-masked | beats the random-K null 0.309 | **0.0646** (control 0.0434) | **FAIL** — ~5× WORSE than random K |
+| **G2 (R read)** mid band | pooled r_mean ≥ 0.45, \|control\| ≤ 0.04 | **0.400**, control **0.047** | **FAIL** — both legs |
+| G2 per-point gradient | — | out:4→0.113, out:8→0.213, out:12→0.398, out:16→0.590, out:20→0.687 | depth gradient real (late layers alone clear the bar) but the pre-registered band fails |
+| **G3 (fit stability)** | max_rel ≤ 0.06 across even/odd halves | k **0.1168**, j **0.4756** | **FAIL** — the fit is corpus-dominated noise, j catastrophically |
+| G4 (zero-alloc reads) | counting allocator | library-pinned (`fit.rs`/`stack.rs` gates) | PASS (machinery property, not fit quality) |
+
+Box state: `PROVENANCE: power=AC Power load=4.16 swap=3934.25M canary=skipped powermode=0(auto) host=amo M5-Ultra-96GB` (amo, M5 Ultra, AC; gates cell 474 s G2 + 198 s G1; fit 50 734 s sweep over 40 960 prefix + 122 880 suffix passes, 2026-11-15→16).
+
+**Reading (why it failed, honestly):** the T4 cell's own smoke gave the null baselines — random-K masked hit 0.309, unmasked 0.001. The real fit's unmasked hit reproduces the null exactly (0.00088 ≈ 0.001): the fitted K ranks held-out poles no better than random directions. Masked, it is 5× WORSE than random — the fit learned large-norm-embedding structure that actively mis-ranks once the frequency confound is removed. G3's j-side 47.6% half-corpus drift says the J map mostly encodes corpus statistics, not weight geometry — the half-rule/true-derivative machinery composes faithfully (T2's FD/transpose gates all passed; the transport is correct), but the **corpus-averaged linearized read does not transfer across the fit/test corpus split on this model**. The one honest positive: G2's monotone depth gradient (0.11 → 0.69) matches the source repo's own depth pattern (R leads at mid/late layers) — a real signal at late layers worth one line in any future re-scope, not a rescue of the pre-registered band.
+
+**Disposition per the pre-registered law:** DEMOTED for our stack — the `lens` feature stays opt-in in riir-infer (`0f796e6c` T3 harness, `2ec0245e` T4 gates + read-orientation fix; promotion dead), the riir-infer-laya stability lane's deferred "headful lens variant" is REFUTED-BY-VERDICT (never build it; the deferral note in `stability.rs` can cite this Addendum), and no consumer lane should claim the primitive. Re-scope triggers (never a default-on promotion): a model family the source itself validates (Gemma-4-class), a fit/test protocol that removes the corpus-statistics channel (paired-document design), or a late-layer-only R read consumer with its own bars. Session: zed-amo-i999verdict@amo, epoch 1794930920; issue file removed per the noise-reduction rule (full text: `git log --follow -- .issues/999_rs_lens_fit_validate_poc.md`).
 
 ---
 
