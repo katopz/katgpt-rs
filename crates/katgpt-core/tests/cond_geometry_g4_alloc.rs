@@ -41,7 +41,7 @@ mod fixture;
 
 use fixture::Lcg;
 use katgpt_core::data_probe::cond_geometry::{
-    ball_counts, cond_id, cond_imbalance, BallCountScratch, ImbalanceScratch,
+    BallCountScratch, ImbalanceScratch, ball_counts, cond_id, cond_imbalance,
 };
 
 const N: usize = 512;

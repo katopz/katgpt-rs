@@ -44,11 +44,11 @@ mod fixture;
 
 use fixture::Lcg;
 use katgpt_core::data_probe::cond_geometry::{
-    ball_counts, cond_id, BallCountScratch, MIN_GROUP_TOKENS,
+    BallCountScratch, MIN_GROUP_TOKENS, ball_counts, cond_id,
 };
 use katgpt_core::data_probe::geometry::within_class_effective_rank;
 use katgpt_core::subspace_phase_gate::{
-    numerical_rank, participation_ratio, thin_svd_into, SvdResultScratch, SvdScratch,
+    SvdResultScratch, SvdScratch, numerical_rank, participation_ratio, thin_svd_into,
 };
 
 const GROUP: usize = 128;

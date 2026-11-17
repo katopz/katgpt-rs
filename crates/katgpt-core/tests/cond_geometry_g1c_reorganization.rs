@@ -22,7 +22,7 @@
 mod fixture;
 
 use fixture::Lcg;
-use katgpt_core::data_probe::cond_geometry::{cond_imbalance, ImbalanceScratch, MIN_GROUP_TOKENS};
+use katgpt_core::data_probe::cond_geometry::{ImbalanceScratch, MIN_GROUP_TOKENS, cond_imbalance};
 
 const N: usize = 512;
 const PER: usize = 64;

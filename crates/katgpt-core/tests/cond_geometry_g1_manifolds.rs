@@ -18,7 +18,7 @@
 mod fixture;
 
 use fixture::Lcg;
-use katgpt_core::data_probe::cond_geometry::{ball_counts, cond_id, BallCountScratch};
+use katgpt_core::data_probe::cond_geometry::{BallCountScratch, ball_counts, cond_id};
 
 const N: usize = 2000;
 const BIG_D: usize = 64;

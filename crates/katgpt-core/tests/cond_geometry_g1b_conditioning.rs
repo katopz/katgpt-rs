@@ -24,7 +24,7 @@ mod fixture;
 
 use fixture::Lcg;
 use katgpt_core::data_probe::cond_geometry::{
-    ball_counts, cond_id, BallCountScratch, MIN_GROUP_TOKENS,
+    BallCountScratch, MIN_GROUP_TOKENS, ball_counts, cond_id,
 };
 
 const CLUSTER: usize = 128;
