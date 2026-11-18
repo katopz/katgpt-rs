@@ -8,6 +8,7 @@
 > **Cross-ref (riir-ai):** Research 163 (Per-NPC Sleep-Time Query Anticipation Guide — the private selling point)
 > **Classification:** Public (katgpt-rs = open math primitive); the *selling-point guide* is private in riir-ai.
 > **Verdict: Super-GOAT — the fusion (paper's C/Q decomposition + predictability-gated allocation + multi-query amortization × KARC forecast × Plan 154 sleep substrate × Gain/Cost halting × Salience Tri-Gate × NeuronShard freeze × chain quorum commitment) is a new capability class with no shipped prior art for the COMBINATION.**
+> **PASS-Redirects (synthesis):** Behrouz, Javanmard, Mirrokni [arXiv:2606.03979 "Language Models Need Sleep: Learning to Self-Modify and Consolidate Memories"] (Google, Jun 2026; blog 2026-10-27) — the paper's own §2.3/A.3 differentiates itself from THIS lane: sleep-time compute summarizes past context in TEXT space for the next session (this note's charter), while 2606.03979 distills context into PARAMETRIC weight updates during a periodic sleep phase (Knowledge Seeding into fresh low-rank MoE experts + dreaming). The text-space anticipation lane stays ours; the parametric-consolidation lane is training-bound → riir-train Research 499 + Plan 502. ⚠ title collision with the CMU paper arXiv:2605.26099 (Research 116) — grep IDs, never the title.
 
 ---
 

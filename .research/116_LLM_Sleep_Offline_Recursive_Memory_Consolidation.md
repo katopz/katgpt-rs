@@ -5,6 +5,7 @@
 > **Related Research:** 070 (GDN2), 073 (LT2), 069 (AutoDreamer), 097 (Training-Free Loop), 051 (Deep Manifold)
 > **Related Plans:** 108 (LT2 Looped Inference), 105 (GDN2), 107 (AutoDreamer), 136 (Training-Free Loop)
 > **Verdict: CONDITIONAL ACCEPT — Direct architectural fit with our GDN2+LT2 pipeline. Sleep-time consolidation is the missing piece between our wake-time LT2 looping and our modelless AutoDreamer consolidation. Feature-gate as `sleep_consolidation`. GOAT proof required before default-on. NOT a GOAT pillar — model infrastructure, not game product. Goes to katgpt-rs (model-based domain).**
+> **PASS-Redirects (synthesis):** Behrouz, Javanmard, Mirrokni [arXiv:2606.03979 "Language Models Need Sleep: Learning to Self-Modify and Consolidate Memories"] (Google, Jun 2026; blog 2026-10-27) — the near-identical-title paper ONE MONTH LATER; ⚠ title collision, grep IDs not titles — 2605.26099 is THIS note (CMU, eviction-time N-pass into SSM fast weights), 2606.03979 is Google's periodic wake/sleep lifecycle (Knowledge Seeding = GKD+LTI upward self-distillation into freshly-unmasked low-rank MoE experts, prospective-base ordering, synaptic pruning, then dreaming = SEAL ReST-EM + random-expert injection + gradient dream selection). Training-bound throughout (no closed-form primitive over this note's consolidation lane) → riir-train Research 499 + Plan 502; the modelless lifecycle shape was already validated as shipped substrate by Research 199's NL redirect.
 
 ---
 
