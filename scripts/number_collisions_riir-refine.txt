@@ -13,4 +13,14 @@
 # A NEW legacy collision here breaches this ratchet and reds the gate —
 # the commit that grows the count re-pins UP with the reason, per the
 # legacy_ratchet discipline.
-legacy_ratchet = 9
+#
+# Re-pinned UP 9 -> 10 at the Batch-372 landing (riir-refine ecd9d82f,
+# 2026-11-18): the tenth is .issues/245 — TWO documents in one upstream
+# window: 245_rule_cofire_community_audit_poc (claimed+removed same day,
+# c65d0aa9 close(i245)) and 245_help_all_names_unbuilt_feature_verbs
+# (ae3f1945 file(i245)) — the allocators did not fetch between filing and
+# closing; both sides are upstream commits this box merged, none of this
+# lane's (the batch landed zero numbered docs). The discipline's
+# growth-red is the only witness: the tracked-duplicate check is blind
+# (both 245 holders are removed).
+legacy_ratchet = 10
