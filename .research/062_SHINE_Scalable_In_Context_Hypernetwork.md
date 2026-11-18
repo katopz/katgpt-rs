@@ -6,6 +6,7 @@
 > **Related Research:** 04 (LoRA Architecture), 19 (TTT), 37 (REAP Model-Based/Modelless), 38 (SDAR), 54 (ASFT), 55 (TriMode), 58 (GRAM), 59 (MoE Speculative), 60 (MeMo)
 > **Related Plans:** 025 (Model vs Modelless Bandit), 050 (Feature Gate Audit), 092 (Freeze/Thaw), 094 (MeMo Reflections + TIES), 097 (Delta Routing)
 > **Verdict: TECHNIQUE EXTRACTION — Two distillable components: (1) Meta LoRA context-to-adapter generation for instant expert creation, (2) Alternating sparse M2P attention pattern for parameter-space processing. Fits model-based path of our spectrum. Feature gate `shine_hypernet` on riir-ai side.**
+> **PASS-Redirects (synthesis):** Cohen & Shapira ["Can we compress backpropagation into a model?" — roicohen.org blog, Nov 2026, no arXiv] — the description→adapter learned map, MEASURED: a small trained meta-model writes ΔW for a frozen Qwen3.5-2B in one forward pass, beating base+description on 59/75 benchmarks and 16-row LoRA on 24/75 (loses from 64 rows up). Same class as this note (SHINE/T2L/HyperTuning family); its three-rung training-signal ladder (adapter-replication → through-base → intrinsic-reward RL) is recorded as evidence for the implemented-but-deferred `shine_d2l_train` pipeline in riir-train Issue 696 (Claude AGREE 2026-11-17); the modelless half is audited-discarded there with a served-arm re-open trigger.
 
 ---
 
