@@ -113,6 +113,13 @@ impl ChunkSummaryQuery {
     /// post-verification constructor). `head_cls.len()` must equal
     /// `n_refs * n_kv_head * head_dim` — the caller verified the wire shape
     /// before calling.
+    ///
+    /// The ONLY caller is `chunk_summary_sidecar.rs` (behind the opt-in
+    /// `zha_chunk_sidecar` feature), so at the dash_attn-only posture this
+    /// constructor is genuinely unreachable — i1219 (i1210-era posture
+    /// regression adjudicated a structural since-birth artifact, not a
+    /// feature-graph regression).
+    #[cfg_attr(not(feature = "zha_chunk_sidecar"), allow(dead_code))] // i1219: sole caller sits behind zha_chunk_sidecar (chunk_summary_sidecar.rs), unreachable at the dash_attn-only posture by design
     pub(crate) fn from_ref_major(
         head_cls: Vec<f32>,
         n_refs: usize,

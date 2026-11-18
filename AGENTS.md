@@ -66,6 +66,15 @@ cargo test -p katgpt-core --features <feature_name> --lib
 ./scripts/deny_gate.sh
 ```
 
+```bash
+# Narrow-posture clippy-clean fence (Issue 1219): the opt-in-feature postures
+# standing lanes compile (katgpt-attn dash_attn-only + zha_chunk_sidecar) at
+# -D warnings; `--canary` proves the floor fires (scratch unused-fn crate).
+# full_gate Layer 3 (--all-features) cannot see these — every feature is ON
+# there, so no constructor is dead.
+./scripts/clippy_posture_gate.sh
+```
+
 ### The full gate — none of the above is a whole-repo claim
 
 Every command above is narrow in at least one **independent** axis; a green
