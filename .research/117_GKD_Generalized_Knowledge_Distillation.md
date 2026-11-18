@@ -169,3 +169,7 @@ For games:
 - Related: SDAR (Research 038) — extends GKD with sigmoid-gated asymmetric trust
 - Related: ROPD (Research 036) — rubric-based on-policy distillation (no teacher logits needed)
 - Related: REAP (Research 037) — model-based/modelless duality
+
+---
+
+> **PASS-Redirects (synthesis):** Blondel, Sander, Vivier-Ardisson, Liu, Roulet [arXiv:2611.16736 "On the Difficulty of Sequence-Level Supervised Learning for Autoregressive Language Models"] (2026-11-12) — proves the decoding-aware sequence-level supervised losses (greedy-decoding and autoregressive-sampling forms) discontinuous/nonconvex and UNBOUNDED BELOW; the stop-grad "moment matching direction" a valid function-space descent direction that is NOT the gradient of any loss (high variance); concludes teacher forcing "may well be all you need" for supervised AR training — naming on-policy distillation (THIS note's subject, Agarwal et al.) and RL-with-external-reward as the only sound routes to sequence-level signal. Class landscape corroborated by Sriraman et al. [arXiv:2606.30923 "Behavior Cloning is Not All You Need: The Optimality of On-Policy Distillation for Noisy Expert Feedback"].

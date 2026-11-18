@@ -185,3 +185,7 @@ Plus the **gradient steering term** `∇_x Ψ` which composes with the existing 
 3. **Entropy reward needs density estimation** — defer that row of the table (MMD/moment/linear ship first); entropy-as-reward for crowd diversity can be approximated via kernel MMD to a uniform reference on the manifold instead.
 4. **Telemetry-calibrated targets (F1's punchline)** need a pipeline from player analytics to ν — riir-ai plan scope, post-G1.
 5. **Name collision hazard**: "mean field" is overloaded in-repo (`mean_field` order params ≠ measure-tilt control; Hellmann–Feynman ≠ Feynman-Kac). The module ships as `distributional_steering` to keep greps clean.
+
+---
+
+> **PASS-Redirects (synthesis):** Blondel et al. [arXiv:2611.16736 "On the Difficulty of Sequence-Level Supervised Learning for Autoregressive Language Models"] (2026-11-12) — theory annotation for direction-based control: the stop-grad moment-matching direction (match the model's self-rollout distribution to a Dirac/moments target) is PROVEN a valid descent direction that is NOT the gradient of any loss (Jacobian non-self-adjoint), with an exact-per-step-beats-trajectory-MC variance ordering that grows with horizon — this note's steering shape (direction-without-loss; cf. 347 LATENTSEEK), and a proof-grade reason the house prefers exact/frozen reads over trajectory-MC gates; function-space only (the Gram operator deforms parameter-space inner products), reinforcing report-only over latch wiring.

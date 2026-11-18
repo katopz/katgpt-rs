@@ -116,3 +116,7 @@ The 0% → 67.2% result is the strongest modelless fact: the gain was **imported
 - Issue: `../../riir-reflex/.issues/064_projection_ascent_corpus_synthesis.md`
 - 4090 queue: `../../riir-train/.issues/610_projection_sampling_scoring_queue.md`
 - Code provenance: cloned to `.raw/finetuning-with-sampling` `@ 6d3e9f0b`, deleted after distill.
+
+---
+
+> **PASS-Redirects (synthesis):** Blondel et al. [arXiv:2611.16736 "On the Difficulty of Sequence-Level Supervised Learning for Autoregressive Language Models"] (2026-11-12) — the theory twin of this note's remedy axis: intrinsic decoding-aware sequence-level LOSSES are unbounded below (greedy + sampling forms), so "change the data distribution, never the loss" (this note's projection-sampling SFT shaping; the paper's own §6 recommendation) is the proven-correct lever; also pins the scheduled-sampling inconsistency (sampled prefix + ground-truth target) that plan 501's design already avoids by re-querying the teacher under the perturbed prefix. Sweep lesson recorded 2026-11-18: two live mixed-provenance sites (`dflash2_chat_head_train --onpolicy-frac`, `dspine_distill onpolicy_frac`/MIXED-FRAC — both draft-correction objectives, sound as conditionals) were missed by an exposure-bias-vocabulary grep; mine by knob spelling (`onpolicy|frac`), not mechanism name.
