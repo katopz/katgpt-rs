@@ -850,7 +850,13 @@ consume it; if not, file an issue in the right repo FIRST.
 — a foreign live `Claimed:` line means yield. To claim, append
 `**Claimed:** <session>, <epoch>, expires <ISO-UTC>` under the Status line and
 push BEFORE implementing (48 h expiry; the push is the arbiter; exit 1 = could
-not read, never a silent pass). Lint first:
+not read, never a silent pass). **The lease line must be its OWN line, with
+NOTHING after the expiry token** — the checker is line-anchored: a claim
+embedded mid-line inside a `**Status:**` line parses NONE (the item reads
+UNCLAIMED fleet-wide while `--lint` still passes), and trailing prose after
+the expiry breaks the parse MALFORMED (both variants measured live 2026-11-18:
+riir-refine 385/387 for the first, 310 + seal-sprints 052 for the second —
+fixes fa53897e08a/6a1adc8f736/6f018b12/50bb856 in their repos). Lint first:
 `py ../katgpt-rs/scripts/claim_lease_check.py --lint <file>` (malformed or
 ambiguous lines blind the check for every lane). **Closing a lease FOLDS the
 claim line into the `**Lease closed:**` row** (delete `**Claimed:**`, carry
