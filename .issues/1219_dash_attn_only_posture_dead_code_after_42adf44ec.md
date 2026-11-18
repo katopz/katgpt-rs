@@ -1,7 +1,7 @@
 # Issue 1219: katgpt-attn dash_attn-only posture warns dead_code on `from_ref_major` (i1210 C6's sparse_kl_bound feature regressed the diag-umbrella posture)
 
 **Status:** OPEN — filed 2026-11-15 (amo housekeeping lane zed-amo-hk-1114b@amo); a compile-posture regression, NOT a semantic bug. Reproduced in a detached worktree at HEAD `7bbf56ed5` and bisected to `42adf44ec` (i1210 C6, 2026-11-14). Neither side of the bisection touched `from_ref_major`, `chunk_summary.rs`, or any katgpt-attn source — the regression is feature-graph-shaped, which is exactly what makes it worth a lane's attention.
-**Claimed:** zed-amo-hk-1114b@amo, 1794721200, expires 2026-11-17T23:59:00+00:00
+**Claimed:** shikuwa-4090-i1219fix, 1794979560, expires 2026-11-20T05:26:00+00:00 (direction (2)+(3) per the 11-15 evidence addendum — no bisect re-run, no direction (1); prior claim zed-amo-hk-1114b@amo expired 2026-11-17T23:59Z, holder dead per the addendum's own lease note)
 
 ## The warning
 
