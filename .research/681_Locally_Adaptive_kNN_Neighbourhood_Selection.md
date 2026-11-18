@@ -5,7 +5,7 @@
 > **Status:** Active — verdict GOAT-tier (selection layer, PoC-gated); filed as poc issue per the poc-first law, promotion talk after the gate runs.
 > **Related Research:** 549 (ASEntmax — the sibling closed-form adaptive-k arm, `compute_derived_k`), 392 (SSMax rolling Δ̂ — the level-gap statistic the derived arm consumes)
 > **Related Plans:** 256 (MSA adaptive k — the shipped sigmoid arm)
-> **Cross-ref:** riir-train `.issues/701` @ `11f52889` (training-track probe cells) · riir-ai `.issues/1239` @ `e4c6cc75a` (DEC-field agreement fusion, novelty TBD) · this note + katgpt-rs `.issues/1229`: commit `4fcc5013c`
+> **Cross-ref:** riir-train `.issues/701` @ `11f52889` (training-track probe cells) · riir-ai `.issues/1239` @ `e4c6cc75a` (DEC-field agreement fusion, novelty TBD) · katgpt-rs `.issues/1229` (this repo — poc + pre-registered gates; landed alongside this note)
 > **Classification:** Public
 
 ---
