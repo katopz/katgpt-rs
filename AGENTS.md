@@ -856,7 +856,7 @@ embedded mid-line inside a `**Status:**` line parses NONE (the item reads
 UNCLAIMED fleet-wide while `--lint` still passes), and trailing prose after
 the expiry breaks the parse MALFORMED (both variants measured live 2026-11-18:
 riir-refine 385/387 for the first, 310 + seal-sprints 052 for the second —
-fixes fa53897e08a/6a1adc8f736/6f018b12/50bb856 in their repos). Lint first:
+fixes fa53897e08a/6a1adc8f736/6f018b12/d46b1b3 in their repos). Lint first:
 `py ../katgpt-rs/scripts/claim_lease_check.py --lint <file>` (malformed or
 ambiguous lines blind the check for every lane). **Closing a lease FOLDS the
 claim line into the `**Lease closed:**` row** (delete `**Claimed:**`, carry
