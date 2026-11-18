@@ -7,11 +7,16 @@ max_hand_read = 0
 
 # sdk's OWN legacy ratchet: measured 1 at the 2026-11-14 filing (the 055
 # same-day dual-allocation group); re-pinned DOWN to 0 on 2026-11-17 (the
-# 055 arming-close commit set removed the LIVE holder — the walk now reads
-# 0 historical collisions over 72 numbers; the group's full record stays in
-# sdk .issues/060 + git history). Per Issue 1208 the per-repo scalar
-# decouples sdk from the shared value (katgpt-rs's own 60).
-legacy_ratchet = 0
+# 055 arming-close commit set removed the LIVE holder — the walk then read
+# 0 historical collisions over 72 numbers); re-pinned UP to 1 on 2026-11-18
+# (m3 hygiene lane, honest up-pin class): the group flipped to (removed,
+# removed) when the second holder's close landed 99e363d 2026-11-17 — BOTH
+# holders verified in full history: 055_asset_vessel_lean_hash_only (the
+# same-day loser, removed bad3a4e 2026-11-06) × 055_gated_predicate_refuses
+# _the_authoritys_own_trjr (removed 99e363d 2026-11-17). The re-pin-to-0 was
+# measured at a pre-close state; growth past 1 reds again. Per Issue 1208
+# the per-repo scalar decouples sdk from the shared value (katgpt-rs's own 60).
+legacy_ratchet = 1
 
 # The 055 collision row REMOVED 2026-11-14 per the gate's STALE-pin verdict
 # (the walk no longer classifies the group — one holder LIVE, the loser
