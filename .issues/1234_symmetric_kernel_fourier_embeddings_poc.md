@@ -1,6 +1,7 @@
 # Issue 1234: POC — symmetric-kernel Fourier latent embeddings (closed-form, Research 682)
 
 **Status:** open — poc/proof task filed from Research 682 (arXiv:2602.15029); Gain-tier extraction, GOAT gates pre-registered below
+**Claimed:** katgpt-rs-57@m3, 1795097735, expires 2026-11-21T14:15Z
 
 Modelless extraction of the paper's symmetry→geometry theorem: a deterministic closed-form toolkit for **cyclic and ordinal latent coordinates** in `katgpt-core` — construct Fourier-feature embeddings FROM a translation-invariant kernel (frequencies AND amplitudes derived analytically), select embedding width from the kernel spectrum, read the latent coordinate back by phase, and detect ring/symmetric structure. Distinct from RFF (random frequencies, approximate) and sinusoidal PEs (fixed ladder, no kernel): the world's own statistics pick the modes. Consumes shipped neighbors only (`spectral/continuation.rs` lane, DEC detectors live katgpt-dec-side); zero new deps.
 
