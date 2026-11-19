@@ -1,7 +1,7 @@
 # Plan 640: `relevance_core` — the ACE extraction primitive (whitened activity×relevance subspace)
 
 **Status:** OPEN — no `- [x]` yet. Research 683 (GOAT — Gain). Opt-in feature; promotion needs GOAT + a wired consumer (Feature Flag Discipline).
-**Claim lease:** none — fresh plan, filed and implemented in one lane.
+**Claimed:** katgpt-rs-57@m3, 1795096347, expires 2026-11-21T13:52Z
 **Paper:** arXiv:2602.22600 v3 (Schiffman, NeurIPS 2026); reference code `joshseth/cores @ 527948bb` (MIT) — the `_balanced_svd` form is the math of record (factored balanced SVD, f64, trace-relative jitter).
 
 ## Phase 0 — primitive (katgpt-core, feature `relevance_core` — a thin composition over `basis_split`)
