@@ -2,6 +2,7 @@
 
 **Status:** Open — Phase 1 DONE (`127a145dd`, 8/8 gates green); Phase 2 GOAT bench next (CPU fixture lane). Phase 1 = 0 GPU (m3/CPU: primitive + fixture + gate suite). GOAT bench = 0 GPU (CPU fixture lane). Consumer wiring (Phase 3) is gated on the GOAT verdict, owner-noted. Research: riir-train/.research/500 §4 (the modelless lattice census — surfaced by owner challenge, 2026-11-19). Mechanism provenance: input-gated decay is PUBLISHED (Mamba's input-dependent Δ; arXiv:2611.21608 §3.2.2's horizontal update) — this is an ADOPTION fused with our shipped novelty signal, GOAT-tier by construction, never claimed novel to the world.
 **Lease closed:** katgpt-rs-2b@m3, 1795068547, expires 2026-11-21T06:09:07+00:00 — Phase 1 landed 127a145dd; Phase 2 unclaimed
+**Claimed:** katgpt-rs-49@m3, 1795071538, expires 2026-11-21T06:58:58+00:00
 
 **Date:** 2026-11-19
 **Research:** [riir-train/.research/500_Latent_Lattice_Language_Models.md](../riir-train/.research/500_Latent_Lattice_Language_Models.md) §4
