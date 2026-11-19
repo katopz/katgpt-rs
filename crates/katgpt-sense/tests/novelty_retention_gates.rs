@@ -268,3 +268,56 @@ fn channel_freeze_never_locks_under_sustained_noise() {
         );
     }
 }
+
+/// Issue 1231: the FUSED armed kernel (drive → dual-EMA → g → belief in one
+/// per-kind loop) is bit-identical to the unfused composition it replaced —
+/// drive pass, `NoveltyRetention::gate` (padded 8-lane), then the belief pass
+/// over KIND_MAP — on every fixture case/seed and across gate configs. Also
+/// pins the gate's observable state (`last_gate`/sustained/transient).
+#[test]
+fn fused_kernel_is_bit_identical_to_gate() {
+    let cfg = ReconstructionConfig::default();
+    let base = NoveltyRetentionConfig::default();
+    let configs = [
+        base,
+        NoveltyRetentionConfig {
+            kappa: 0.8,
+            mu: 0.4,
+            beta: 16.0,
+            ..base
+        },
+        NoveltyRetentionConfig {
+            g_min: 0.5,
+            g_max: 0.6,
+            ..base
+        },
+    ];
+    for ncfg in configs {
+        for case in Case::ALL {
+            for seed in SEEDS {
+                let tr = trace(case, seed);
+                let mut st = ReconstructionState::with_config([0.0; 8], cfg);
+                if !st.arm_novelty_retention(ncfg) {
+                    return; // demoted by env — nothing armed to compare.
+                }
+                let mut gate = NoveltyRetention::new(ncfg).unwrap();
+                let mut reference = [0.0f32; 8];
+                let mut g = [0.0f32; 6];
+                for x in &tr.observed {
+                    st.evolve_belief_additive(x);
+                    let drive = drive_of(x, cfg.additive_drive_scale);
+                    gate.gate(&drive, &cfg.belief_retention, &mut g);
+                    for (b, &m) in reference.iter_mut().zip(TripleEvidence::KIND_MAP.iter()) {
+                        *b = (g[m] * *b + (1.0 - g[m]) * drive[m]).clamp(-1.0, 1.0);
+                    }
+                    assert_eq!(bits(st.belief()), bits(&reference), "{case:?} seed {seed}");
+                    let nr = st.novelty_retention().unwrap();
+                    let b6 = |a: &[f32; 6]| a.map(f32::to_bits);
+                    assert_eq!(b6(nr.last_gate()), b6(gate.last_gate()));
+                    assert_eq!(b6(nr.last_sustained()), b6(gate.last_sustained()));
+                    assert_eq!(b6(nr.last_transient()), b6(gate.last_transient()));
+                }
+            }
+        }
+    }
+}

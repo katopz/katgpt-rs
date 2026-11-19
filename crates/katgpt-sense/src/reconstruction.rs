@@ -1024,6 +1024,22 @@ impl ReconstructionState {
     #[cfg(feature = "modality_additive")]
     pub fn evolve_belief_additive(&mut self, activations: &[f32; 6]) {
         let eta = self.config.additive_drive_scale;
+        // Plan 639 armed arm, FUSED (Issue 1231): drive, the dual-EMA update,
+        // g and the belief update in one 8-lane kernel — no separate drive
+        // pass, no 6↔8 copies, no second belief pass. Same per-element ops
+        // as the unfused composition → bit-identical (pinned by the gate
+        // tests). Unarmed falls through to the incumbent code path.
+        #[cfg(feature = "novelty_retention")]
+        if let Some(ref mut nr) = self.novelty_retention {
+            nr.evolve_additive(
+                activations,
+                eta,
+                &self.config.belief_retention,
+                &TripleEvidence::KIND_MAP,
+                &mut self.belief,
+            );
+            return;
+        }
         // Per-KIND drive + retention (6 sigmoid calls), then gather to 8 dims —
         // kinds 0/1 wrap to dims 6/7 via KIND_MAP, so this saves 2 of 8 calls
         // per tick (~25% of the kernel's cost) with identical math.
@@ -1036,14 +1052,9 @@ impl ReconstructionState {
             drive[m] = 2.0 * katgpt_types::simd::fast_sigmoid(eta * k) - 1.0;
             alpha[m] = self.config.belief_retention[m];
         }
-        // Plan 639: armed → input-gated retention g_t replaces α_base. Unarmed
-        // (or feature off) the incumbent α_base above is used directly — the
-        // G1 identity is the CODE PATH, not an arithmetic reformulation.
-        #[cfg(feature = "novelty_retention")]
-        if let Some(ref mut nr) = self.novelty_retention {
-            let base = alpha;
-            nr.gate(&drive, &base, &mut alpha);
-        }
+        // Unarmed (or feature off): the incumbent α_base — the G1 identity is
+        // the CODE PATH, not an arithmetic reformulation (the armed arm
+        // returned above).
         for i in 0..8 {
             let m = TripleEvidence::KIND_MAP[i];
             self.belief[i] =
