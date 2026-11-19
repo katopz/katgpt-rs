@@ -117,7 +117,7 @@ arXiv ID + title greps across the workspace returned **zero** prior distillation
 | Q3 product selling point | moderate | "NPC beliefs are provably fading-memory observers with derived staleness-vs-noise tuning" — real, niche |
 | Q4 force multiplier | YES | belief kernels (sense) + ObservationGate (engine) + any residual latent update (core) + future W-cells |
 
-Not all 4 YES → **not Super-GOAT**. Gain (actionable, small, fixture-provable) — filed as katgpt-rs `.issues/1000` (T1 primitive, T2 fixtures, T3 consumer seam). Per ungoat discipline: smallest artifact that carries the verdict; no plan file (the issue's task list is the plan).
+Not all 4 YES → **not Super-GOAT**. Gain (actionable, small, fixture-provable) — filed as katgpt-rs `.issues/1000` (T1 primitive, T2 fixtures, T3 consumer seam). **Closed 2026-11-19:** T1/T2/T4 landed `b7cf5916c`; T3 discharged through Plan 637 (`8a42604a2` → riir-ai `faa643b1a`/`4222f3008`/`973595efd`, Bench 1173 green `9bca8fc16`, close `f8c6877bd`); issue file removed. Per ungoat discipline: smallest artifact that carries the verdict; no plan file (the issue's task list is the plan).
 
 **MOAT gate (katgpt-rs):** PASS — base primitive for belief/latent-residual updates, generic math, no game semantics in the primitive itself; the game wiring is the named riir-ai consumer, kept out of this repo.
 
