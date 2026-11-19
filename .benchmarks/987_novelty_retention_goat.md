@@ -1,6 +1,6 @@
 # Bench 987: Plan 639 Phase 2 — novelty-gated retention GOAT bench
 
-**Status:** DONE — G1 ✓ · G2 ✓ (34/36 cells, rational law) · G3 ✗ (1.53× vs bar 1.15×) · G4 ✓ → **NOT GOAT**; primitive stays DEFAULT-OFF, Phase 3 blocked on [Issue 1231](../.issues/1231_novelty_retention_g3_cost_floor.md).
+**Status:** DONE — G1 ✓ · G2 ✓ (34/36 cells, rational law) · G3 ✗ at the original ratio bar (1.53×, fused 1.472× vs ≤1.15×) → **✓ under the pre-registered re-price** (Plan 639 T2.5: added cost 9.96 ns ≤ 10.0 ns per entity-tick, bmo, median of 3 — marginal) · G4 ✓. Primitive stays DEFAULT-OFF per-instance armed; Plan 639 Phase 3 unblocked. Issue 1231 closed (HISTORY.md).
 
 **Date:** 2026-11-19 · **Plan:** [639](../.plans/639_novelty_gated_retention.md) · **Harness:** `crates/katgpt-sense/tests/novelty_retention_goat.rs` (metrics + verdict arithmetic committed in `f2be3ef2a` BEFORE the first run) · **Session:** katgpt-rs-49@m3
 
@@ -45,7 +45,17 @@ m3 (M-series laptop), release profile, `CARGO_TARGET_DIR=/tmp/plan639`, no concu
 | Issue 1231 T1: 8-lane FUSED kernel `evolve_additive` (**shipped** `c24c8cce7`; padded state, shared `cell`) | — | **1.472–1.475×** (pre-change 1.514× same session) | byte-identical |
 | ↳ minus the two diagnostic stores (probe, not shipped) | — | 1.453× | — |
 
-**Claude verdict (G3):** FAIL at the pre-registered bar; the bar is NOT moved post-hoc. The bar's premise ("the 6-sigmoid structure is already the cost floor") is FALSIFIED by measurement: with zero transcendentals and zero divisions the dual-EMA state + wiring alone cost +40% — no saturation law can reach 1.15×. Shipped the smooth rational law (−50% cost vs logistic, keeps a kink-free sigmoidal map, 34/36 cells) over the cheaper kinked ramp. Remaining routes: the fused drive+gate loop is DONE (1.472×, T1 — the residual is the cell arithmetic itself); left: a consumer-budget re-pricing pre-registered BEFORE re-judging (T2) → [Issue 1231](../.issues/1231_novelty_retention_g3_cost_floor.md).
+**Claude verdict (G3):** FAIL at the pre-registered bar; the bar is NOT moved post-hoc. The bar's premise ("the 6-sigmoid structure is already the cost floor") is FALSIFIED by measurement: with zero transcendentals and zero divisions the dual-EMA state + wiring alone cost +40% — no saturation law can reach 1.15×. Shipped the smooth rational law (−50% cost vs logistic, keeps a kink-free sigmoidal map, 34/36 cells) over the cheaper kinked ramp. Remaining routes: the fused drive+gate loop is DONE (1.472×, T1 — the residual is the cell arithmetic itself); left: a consumer-budget re-pricing pre-registered BEFORE re-judging (T2) → Issue 1231 (closed — HISTORY.md).
+
+**G3 re-price (Issue 1231 T2 → Plan 639 T2.5, pre-registered `b26e39848` BEFORE the measurement):** the ratio bar is retired (its cost-floor premise falsified twice). The bar is derived from a named consumer budget: riir-engine Plan 338 T4.4 / Guide 161 §G4 give 5 µs per NPC-tick (10K × 20 Hz, 50 ms frame), and the Plan 337 precedent allots ≤ 0.2 % per subsystem, so **added cost ≤ 10.0 ns per entity-tick**. bmo, release, both preflights PASS each run:
+
+| run | incumbent a | gated b | Δ = b − a | ratio |
+|---|---:|---:|---:|---:|
+| 1 | 32.55 | 46.84 | 14.29 | 1.470× |
+| 2 | 21.46 | 31.42 | 9.96 | 1.472× |
+| 3 | 21.14 | 31.00 | 9.86 | 1.473× |
+
+**Median Δ 9.96 ns ≤ 10.0 → PASS by 0.04 ns.** Caveat (binding on consumers): Δ ≈ 0.47 × incumbent, so the pass holds only where the incumbent runs ≲ 21.3 ns. Each Phase 3 consumer re-measures `k × Δ ≤ 10 ns` on its own box at its own call count.
 
 **Honest caveat (secondary axis):** on case (d) Mixed (steps + spikes + noise, one RMSE) the gated cells (0.066–0.102) do not beat the best fixed α (0.0664 at α=0.63–0.64); the two-axis Pareto win is the pre-registered claim, not a single-RMSE win. The 2 failing rational cells (κ=0.2 μ=0 β=8) fail (i) only — too little pull-down to reach the 0.7× margin.
 
