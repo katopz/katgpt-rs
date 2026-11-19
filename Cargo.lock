@@ -1961,6 +1961,7 @@ dependencies = [
 name = "katgpt-hla"
 version = "0.1.4"
 dependencies = [
+ "katgpt-sense",
  "katgpt-types",
  "serde",
 ]

@@ -31,6 +31,13 @@ katgpt-types = { path = "../katgpt-types", version = "0.3.0" }
 # uses this to bincode-serialize `MultiLayerHlaCache` for Cold Tier storage.
 serde = { version = "1", features = ["derive"], optional = true }
 
+# Optional novelty-gated decay (Plan 639 Phase 3 T3.3, Issue 1232). The law
+# lives in katgpt-sense (`novelty_retention::NoveltyChannel`) and is CONSUMED
+# here, never re-implemented. katgpt-sense is a katgpt-types leaf that does
+# not reach katgpt-hla, so the edge adds no cycle; off by default, so the
+# default dep graph is unchanged.
+katgpt-sense = { path = "../katgpt-sense", version = "0.3.1", default-features = false, features = ["novelty_retention"], optional = true }
+
 # Issue 940 HL-1/2/3 G2 duty — the ordered-fold cost at decode-loop scale.
 [[bench]]
 name = "bench_939_hla_ordered_dot_g2"
@@ -49,3 +56,16 @@ harness = false
 # (bincode-based Cold Tier persistence, gated by `turso_cold`).
 default = []
 serde = ["dep:serde"]
+
+# `novelty_gamma` (opt-in, Plan 639 T3.3 / Issue 1232): `HlaNoveltyGamma` — a
+# per-cache novelty gate on the decay γ (sustained query-regime change pulls
+# γ down, a one-tick outlier pushes it up). Per-instance ARMED; unarmed = the
+# caller's fixed γ (incumbent path untouched). LOCAL latent state only.
+# CLOSED NEGATIVE (Issue 1232): G2 0/36 cells under the Plan 639 T2.2 verdict
+# (gated cells ride the fixed-γ curve), G3 PASS (median Δ 7.87 ns, hd=8, bmo),
+# G1/G4 PASS — opt-in forever unless a re-gate passes G2.
+novelty_gamma = ["dep:katgpt-sense"]
+
+[[test]]
+name = "novelty_gamma_goat"
+required-features = ["novelty_gamma"]

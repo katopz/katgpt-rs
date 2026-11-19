@@ -1,6 +1,6 @@
 # Issue 1232: katgpt-hla cache γ novelty gate (Plan 639 Phase 3 T3.3)
 
-**Status:** Open — gates PRE-REGISTERED below (pushed before any measurement); implementing.
+**Status:** DONE-NEGATIVE — G1 ✓ · G2 ✗ (0/36 cells) · G3 ✓ (median Δ 7.87 ns ≤ 10.0, hd=8, bmo) · G4 ✓; `novelty_gamma` stays opt-in (measured-negative lane).
 **Claimed:** p639-t33@amo, 1795077881, expires 2026-11-20T08:44:41Z
 
 **Plan:** [639](../.plans/639_novelty_gated_retention.md) Phase 3 T3.3 · **Substrate:** `katgpt_sense::novelty_retention::NoveltyChannel` (landed `f907edece`) · **Bench precedent:** [987](../.benchmarks/987_novelty_retention_goat.md) (T2.2 matched-point verdict, T2.5 G3 re-price).
@@ -101,7 +101,37 @@ Promotion: NOT in scope — the feature stays opt-in whatever the verdict.
 
 ## Tasks
 
-- [ ] T1 `novelty_gamma` feature + `HlaNoveltyGamma` + surprise fold (katgpt-hla)
-- [ ] T2 G1/G2/G4 harness + run (amo)
-- [ ] T3 G3 × 3 on bmo (binaries only)
-- [ ] T4 record verdict, close (HISTORY.md row, lease folded)
+- [x] T1 `novelty_gamma` feature + `HlaNoveltyGamma` + surprise fold (katgpt-hla)
+- [x] T2 G1/G2/G4 harness + run (amo)
+- [x] T3 G3 × 3 on bmo (binaries only)
+- [x] T4 record verdict, close (HISTORY.md row, lease folded)
+
+## Results (2026-11-19)
+
+- **G1 ✓** — default-feature katgpt-hla tests 18/18, kernel.rs/types.rs
+  untouched (diff = Cargo.toml + lib.rs `cfg`-gated `mod`/`use` only);
+  identity arm bit-exact vs the fixed-clamped-base incumbent (3 seeds × 3
+  cases × 600 ticks, every cache buffer compared by bits); armed path
+  replay-deterministic.
+- **G2 ✗ — 0/36 cells.** Fixed curve (seed mean): γ 0.85 → adapt 14.44 /
+  noise 0.1251; γ 0.90 → 21.00 / 0.1002; γ 0.93 → 31.44 / 0.0825. Gated
+  cells land ON the curve: e.g. κ 0.8 μ 0 β 8 → 9.00 / 0.1806 (dominated by
+  γ 0.72); best κ 0.8 μ 0.4 β 8 g_max 0.995 → 9.44 / 0.1530, undominated,
+  +0.0061 below the curve, but (i) fails (no pinned γ gives ≤ 0.7×
+  adaptation at ≤ 1.1× noise). 12/36 cells pass (ii), 6/36 pass (iii), 0
+  pass (i). Mechanism read (not a claim): the surprise signal fluctuates on
+  the σ = 0.3 steady stream and the one-tick spikes enter the fast EMA, so
+  κ pulls γ down in steady state too — the gate behaves like a lower fixed
+  γ (a move along the curve, not below it). Full tables:
+  `cargo test --release -p katgpt-hla --features novelty_gamma --test
+  novelty_gamma_goat g2 -- --nocapture`.
+- **G3 ✓** — bmo, release binary only, preflight PASS at launch AND end
+  each run: Δ (hd = 8) **7.87 / 6.61 / 9.11 ns** (incumbent 65.58 / 53.67
+  / 52.14 ns) → **median 7.87 ns ≤ 10.0** (k = 1). hd = 64 reported:
+  Δ 9.96 / 13.93 / 2.79 ns over a ~1.22 µs kernel. PROVENANCE (all six):
+  `power=AC Power load=1.08–1.47 swap=18627.69M canary=skipped
+  powermode=0(auto) ane=ok`. Post-measurement change: clippy's
+  `chunks_exact_to_as_chunks` rewrite of the fold (`as_chunks::<8>`) — same
+  element order and arithmetic; G1/G2 re-run bit-identical tables.
+- **G4 ✓** — armed step + kernel over 599 ticks: 0 allocations.
+

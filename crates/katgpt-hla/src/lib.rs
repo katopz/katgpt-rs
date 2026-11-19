@@ -47,6 +47,8 @@
 //! Step 4 from `katgpt-rs/src/hla/{types,kernel}.rs`.
 
 pub mod kernel;
+#[cfg(feature = "novelty_gamma")]
+pub mod novelty_gamma;
 pub mod types;
 
 pub use kernel::{
@@ -58,3 +60,6 @@ pub use types::{
     MultiLayerHlaCache, MultiLayerParallaxAhlaCache, ParallaxAhlaLayerState,
     ParallaxAhlaQHeadState,
 };
+
+#[cfg(feature = "novelty_gamma")]
+pub use novelty_gamma::HlaNoveltyGamma;
