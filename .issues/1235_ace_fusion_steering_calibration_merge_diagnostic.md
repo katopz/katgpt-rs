@@ -1,6 +1,6 @@
 # Issue 1235: ACE fusion rows — adaptive steering calibration + core-space merge diagnostic
 
-**Status:** OPEN — fusion ideas from Research 683 (arXiv:2602.22600); novelty TBD; no burning consumer; claimable.
+**Status:** OPEN — fusion ideas from Research 683 (arXiv:2602.22600); novelty TBD; no burning consumer; claimable. **2026-11-19 (katgpt-rs-57@m3):** the producer landed (Plan 640 DONE, `relevance_core`, Bench 988), so ACE cores are now available to (a)/(b). Both rows remain CONSUMER-GATED by their own text: (a) needs a consumer to name its decision margin, and (b) needs a failing or contested merge lane plus two checkpoints with known outcomes. Routed: steering-consumer owners (riir-ai `latent_steering`/`subspace_steering` users) name a margin, which unblocks (a). Not claimed; (c) stays record-only.
 
 Two self-adaptive fusion rows from the ACE distillation that have named consumers-to-be but no burning need. File-level gating per the ungoat law: each row lands only with its own proof path.
 
