@@ -62,6 +62,15 @@ sync_bank = []
 # (FLYNN's linear sensory integration, distilled).
 modality_additive = []
 
+# Novelty-gated retention (Plan 639 Phase 1, riir-train Research 500 §4) —
+# input-gated decay for `evolve_belief_additive`: per-kind retention
+# g = clamp(α·(1 − κ·ŝ) + μ·n̂, g_min, g_max) from a per-kind dual fast/slow
+# EMA novelty signal (sustained divergence lowers g, unexplained transient
+# raises it). DEFAULT-OFF, per-instance ARMED (`arm_novelty_retention`);
+# unarmed = the incumbent fixed-α code path. `NOVELTY_RETENTION=0` is the
+# DEMOTE literal (arm refuses). GOAT bench = Plan 639 Phase 2.
+novelty_retention = ["modality_additive"]
+
 # Phase-carrying belief kernel POC (Issue 939, Research 620, arXiv:2610.13341)
 # — gates the `phase_belief` submodule: `ModularPhaseCounter` (the exact
 # undamped phase code: integer count mod m + cos/sin LUT — bit-deterministic,
@@ -122,6 +131,13 @@ required-features = ["modality_additive"]
 # this row makes the skip VISIBLE. (F3-primary + F5 live in katgpt-types'
 # belief_contract module tests — properties of the derived laws, not of this
 # kernel.)
+# Plan 639 T1.3/T1.4 — novelty-gated retention fixture + gate suite. Same
+# cfg-gated-target discipline: the row makes the skip VISIBLE.
+[[test]]
+name = "novelty_retention_gates"
+path = "tests/novelty_retention_gates.rs"
+required-features = ["novelty_retention"]
+
 [[test]]
 name = "belief_contract_fixtures"
 path = "tests/belief_contract_fixtures.rs"

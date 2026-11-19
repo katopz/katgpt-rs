@@ -454,6 +454,11 @@ pub struct ReconstructionState {
     /// `evolve_belief` tick once armed; read via [`sync_bank`](Self::sync_bank).
     #[cfg(feature = "sync_bank")]
     sync_bank: Option<SyncBank<8, 3>>,
+    /// Novelty-gated retention for `evolve_belief_additive` (Plan 639,
+    /// gated by `novelty_retention`). `None` = the incumbent fixed-α path;
+    /// armed via [`arm_novelty_retention`](Self::arm_novelty_retention).
+    #[cfg(feature = "novelty_retention")]
+    novelty_retention: Option<crate::novelty_retention::NoveltyRetention>,
 }
 
 impl ReconstructionState {
@@ -492,6 +497,8 @@ impl ReconstructionState {
             last_surprise: [0.0; 8],
             #[cfg(feature = "sync_bank")]
             sync_bank: None,
+            #[cfg(feature = "novelty_retention")]
+            novelty_retention: None,
         }
     }
 
@@ -573,6 +580,36 @@ impl ReconstructionState {
     /// back through [`sync_bank`](Self::sync_bank) — δ_level for
     /// formed/released hysteresis and salience, δ_surprise for relation
     /// change (riir-ai Issue 1049's two consumption scalars).
+    /// Arm novelty-gated retention for [`evolve_belief_additive`](Self::evolve_belief_additive)
+    /// (Plan 639). Returns `false` — and stays on the incumbent fixed-α path —
+    /// when `NOVELTY_RETENTION=0` (the DEMOTE literal, read once here, never
+    /// per tick) or the config breaks a guard invariant (`0 < g_min ≤ g_max < 1`).
+    #[cfg(feature = "novelty_retention")]
+    pub fn arm_novelty_retention(
+        &mut self,
+        config: crate::novelty_retention::NoveltyRetentionConfig,
+    ) -> bool {
+        if crate::novelty_retention::novelty_retention_demoted() {
+            self.novelty_retention = None;
+            return false;
+        }
+        self.novelty_retention = crate::novelty_retention::NoveltyRetention::new(config);
+        self.novelty_retention.is_some()
+    }
+
+    /// Disarm novelty-gated retention (back to the incumbent fixed-α path).
+    #[cfg(feature = "novelty_retention")]
+    pub fn disarm_novelty_retention(&mut self) {
+        self.novelty_retention = None;
+    }
+
+    /// The armed retention gate (per-kind signals + last `g_t`), `None` unarmed.
+    #[cfg(feature = "novelty_retention")]
+    #[inline]
+    pub fn novelty_retention(&self) -> Option<&crate::novelty_retention::NoveltyRetention> {
+        self.novelty_retention.as_ref()
+    }
+
     #[cfg(feature = "sync_bank")]
     pub fn arm_sync_bank(&mut self) {
         self.sync_bank = Some(SyncBank::new(SYNC_BANK_LADDER));
@@ -981,7 +1018,9 @@ impl ReconstructionState {
     /// divisive kernel's accumulation is only well-behaved because of its
     /// `1/total` self-scaling, which is exactly the coupling this kernel
     /// removes. Zero-allocation, deterministic, sigmoid (never softmax).
-    /// No surprise-kernel hook in v1 (post-GOAT wiring decides, Plan 277 F1).
+    /// No surprise-kernel hook in v1 (post-GOAT wiring decides, Plan 277 F1 —
+    /// Plan 639 is that wiring lane: armed `novelty_retention` derives α per
+    /// tick from a per-kind dual-EMA novelty signal; unarmed = this law).
     #[cfg(feature = "modality_additive")]
     pub fn evolve_belief_additive(&mut self, activations: &[f32; 6]) {
         let eta = self.config.additive_drive_scale;
@@ -996,6 +1035,14 @@ impl ReconstructionState {
             let k = activations[m].max(0.0);
             drive[m] = 2.0 * katgpt_types::simd::fast_sigmoid(eta * k) - 1.0;
             alpha[m] = self.config.belief_retention[m];
+        }
+        // Plan 639: armed → input-gated retention g_t replaces α_base. Unarmed
+        // (or feature off) the incumbent α_base above is used directly — the
+        // G1 identity is the CODE PATH, not an arithmetic reformulation.
+        #[cfg(feature = "novelty_retention")]
+        if let Some(ref mut nr) = self.novelty_retention {
+            let base = alpha;
+            nr.gate(&drive, &base, &mut alpha);
         }
         for i in 0..8 {
             let m = TripleEvidence::KIND_MAP[i];
