@@ -138,6 +138,12 @@ name = "novelty_retention_gates"
 path = "tests/novelty_retention_gates.rs"
 required-features = ["novelty_retention"]
 
+# Plan 639 Phase 2 — the GOAT bench (sweep verdict PRINTED, G4 alloc, T2.4 cost).
+[[test]]
+name = "novelty_retention_goat"
+path = "tests/novelty_retention_goat.rs"
+required-features = ["novelty_retention"]
+
 [[test]]
 name = "belief_contract_fixtures"
 path = "tests/belief_contract_fixtures.rs"
