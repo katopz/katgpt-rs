@@ -1,6 +1,7 @@
 # Issue 1231: novelty_retention G3 cost floor — fused kernel or a pre-registered re-price
 
-**Status:** open — opt/perf task; blocks Plan 639 Phase 3 (consumer wiring). Unclaimed.
+**Status:** open — opt/perf task; blocks Plan 639 Phase 3 (consumer wiring). T1 claimed.
+**Claimed:** katgpt-rs-49@amo, 1795076101, expires 2026-11-20T08:15:01Z
 
 **Origin:** [Bench 987](../.benchmarks/987_novelty_retention_goat.md) (Plan 639 Phase 2). G2 quality PASSES (34/36 cells,
 best: fixed-α≈0.55 adaptation speed at fixed-α≈0.93 noise), G1/G4 pass, **G3 FAILS: 1.53× kernel wall vs bar ≤ 1.15×**.
