@@ -436,6 +436,63 @@ fn sort_spectrum_desc(eigvals: &mut [f64], eigvecs: &mut [f64], d: usize) {
     }
 }
 
+/// The shared f64 symmetric eigensolve every caller in this family rides
+/// (`split`, `relevance_core` — one kernel, never a second copy).
+/// d ≤ [`JACOBI_MAX_DIM`] → `karc::jacobi_eigen`, otherwise
+/// `linalg::symmetric_eig`. On return `eigvals[..d]` is sorted DESCENDING
+/// and eigenvector j is the unit-norm ROW `eigvecs[j*d..(j+1)*d]` (the
+/// solvers' column layout is transposed here). Zero-alloc: `jacobi_scratch`
+/// ≥ `d*d` on the small arm; `sym_scratch` grows once to `d`.
+pub(crate) fn eigh_rows_desc(
+    a: &[f64],
+    d: usize,
+    eigvals: &mut [f64],
+    eigvecs: &mut [f64],
+    sym_scratch: &mut SymmetricEigScratch,
+    jacobi_scratch: &mut [f64],
+) -> Result<(), BasisSplitError> {
+    // Eigensolve. Deterministic; both solvers emit
+    // (near-)orthonormal vectors — normalized exact below.
+    if d <= JACOBI_MAX_DIM {
+        if jacobi_scratch.len() < d * d {
+            return Err(BasisSplitError::ScratchTooShort { required: d * d });
+        }
+        eigvals[..d].fill(0.0);
+        jacobi_eigen(eigvals, eigvecs, a, jacobi_scratch, d, 1e-14, 100);
+    } else {
+        sym_scratch.ensure_capacity(d);
+        symmetric_eig(eigvals, eigvecs, a, sym_scratch, d, 200);
+    }
+
+    // Both solvers store V row-major with eigenvector j as COLUMN j
+    // (`eigvecs[i*d + j]`). Everything below — the lockstep sort, the
+    // normalization, the basis copy, the caller's `eigvecs` output — reads
+    // eigenvector j as the contiguous ROW `j*d..(j+1)*d`. Transpose in place
+    // (Plan 640 probe, 2026-11-19: without this the variant basis was the
+    // rows of V, not its eigenvectors — on a rotated planted moment it
+    // captured 0.39/2.0 (d=8) and 0.20/2.0 (d=24) of the true block; the
+    // axis-aligned test surface could not see it because the permutation
+    // V of a diagonal moment is read correctly either way at those seeds).
+    transpose_square_in_place(eigvecs, d);
+
+    sort_spectrum_desc(eigvals, eigvecs, d);
+
+    // Pin orthonormality exact (the QL path is near-orthonormal).
+    for j in 0..d {
+        let col = j * d;
+        let norm: f64 = (0..d)
+            .map(|r| eigvecs[col + r] * eigvecs[col + r])
+            .sum::<f64>()
+            .sqrt();
+        if norm > 0.0 {
+            for r in 0..d {
+                eigvecs[col + r] /= norm;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Whitened-difference split over a finalized moment (T1.4).
 ///
 /// Whitening geometry (two forms):
@@ -546,53 +603,14 @@ pub fn split(
         }
     };
 
-    // Eigensolve the (whitened) moment. Deterministic; both solvers emit
-    // (near-)orthonormal vectors — normalized exact below.
-    if d <= JACOBI_MAX_DIM {
-        if jacobi_scratch.len() < d * d {
-            return Err(BasisSplitError::ScratchTooShort { required: d * d });
-        }
-        eigvals[..d].fill(0.0);
-        jacobi_eigen(
-            eigvals,
-            eigvecs,
-            solve_moment,
-            jacobi_scratch,
-            d,
-            1e-14,
-            100,
-        );
-    } else {
-        sym_scratch.ensure_capacity(d);
-        symmetric_eig(eigvals, eigvecs, solve_moment, sym_scratch, d, 200);
-    }
-
-    // Both solvers store V row-major with eigenvector j as COLUMN j
-    // (`eigvecs[i*d + j]`). Everything below — the lockstep sort, the
-    // normalization, the basis copy, the caller's `eigvecs` output — reads
-    // eigenvector j as the contiguous ROW `j*d..(j+1)*d`. Transpose in place
-    // (Plan 640 probe, 2026-11-19: without this the variant basis was the
-    // rows of V, not its eigenvectors — on a rotated planted moment it
-    // captured 0.39/2.0 (d=8) and 0.20/2.0 (d=24) of the true block; the
-    // axis-aligned test surface could not see it because the permutation
-    // V of a diagonal moment is read correctly either way at those seeds).
-    transpose_square_in_place(eigvecs, d);
-
-    sort_spectrum_desc(eigvals, eigvecs, d);
-
-    // Pin orthonormality exact (the QL path is near-orthonormal).
-    for j in 0..d {
-        let col = j * d;
-        let norm: f64 = (0..d)
-            .map(|r| eigvecs[col + r] * eigvecs[col + r])
-            .sum::<f64>()
-            .sqrt();
-        if norm > 0.0 {
-            for r in 0..d {
-                eigvecs[col + r] /= norm;
-            }
-        }
-    }
+    eigh_rows_desc(
+        solve_moment,
+        d,
+        eigvals,
+        eigvecs,
+        sym_scratch,
+        jacobi_scratch,
+    )?;
 
     let (verdict, k_from_gap) = check_rank_gate(&eigvals[..d], k, tau_gap);
     let pr = participation_ratio(&eigvals[..d]);

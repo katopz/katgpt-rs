@@ -1542,6 +1542,14 @@ pub use basis_split::{
     build_zca_whitener, check_rank_gate, held_out_leakage, project_invariant_into, split,
 };
 
+#[cfg(feature = "relevance_core")]
+pub mod relevance_core;
+#[cfg(feature = "relevance_core")]
+pub use relevance_core::{
+    CoreExtract, CoreScratch, RankRule, RelevanceCoreError, accumulate_sens, core_rank_energy,
+    extract_core_from_matrices,
+};
+
 #[cfg(feature = "sst_project")]
 pub mod sst_certified;
 #[cfg(feature = "sst_project")]
