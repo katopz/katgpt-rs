@@ -1,7 +1,7 @@
 # Issue 1231: novelty_retention G3 cost floor — fused kernel or a pre-registered re-price
 
-**Status:** open — opt/perf task; blocks Plan 639 Phase 3 (consumer wiring). T1 claimed.
-**Claimed:** katgpt-rs-49@amo, 1795076101, expires 2026-11-20T08:15:01Z
+**Status:** open — T1 LANDED `c24c8cce7` (1.514× → 1.472×, still > 1.15×) → **T2 next (unclaimed)**: the pre-registered re-price verdict. Blocks Plan 639 Phase 3.
+**Lease closed:** katgpt-rs-49@amo, 1795076101, expires 2026-11-20T08:15:01Z — T1 landed `c24c8cce7`; T2 left unclaimed
 
 **Origin:** [Bench 987](../.benchmarks/987_novelty_retention_goat.md) (Plan 639 Phase 2). G2 quality PASSES (34/36 cells,
 best: fixed-α≈0.55 adaptation speed at fixed-α≈0.93 noise), G1/G4 pass, **G3 FAILS: 1.53× kernel wall vs bar ≤ 1.15×**.
@@ -12,10 +12,11 @@ copies → gate → belief loop).
 
 ## Tasks
 
-- [ ] **T1** Fused kernel: compute drive, the dual-EMA update and `g` in ONE per-kind loop inside
+- [x] **T1** Fused kernel: compute drive, the dual-EMA update and `g` in ONE per-kind loop inside
   `evolve_belief_additive` (armed arm only; unarmed incumbent code path untouched — G1 is the code path). Keep all ops
   elementwise (Issue 940). Re-run `novelty_retention_goat` — G2 cells must be bit-identical to Bench 987 (same law),
   report the new G3 ratio.
+  **LANDED `c24c8cce7` (2026-11-19, katgpt-rs-49@amo): G3 1.514× → 1.472× — still FAILS ≤ 1.15×.** Fused in the 8-lane domain (`NoveltyRetention::evolve_additive`: padded state, one shared per-element `cell`, KIND_MAP shuffle once). A 6-wide scalar per-kind fusion measured 2.300× (lost the 8-lane autovectorization; rejected). Dropping the diagnostic stores saves ~1% — the residual ~+47% (~+7.5–12 ns over a 16–26 ns incumbent) is the dual-EMA cell arithmetic itself, so no further fusion closes the gap. G2 sweep table byte-identical to the pre-change run; pin `fused_kernel_is_bit_identical_to_gate`; G1/G4 green. PROVENANCE: `power=AC Power load=5.20 swap=3961.19M canary=skipped powermode=0(auto) ane=ok` (amo, release, 51 interleaved rounds, median).
 - [ ] **T2** If T1 still > 1.15×: Claude verdict on a re-price **pre-registered before re-judging** — derive the bar from a
   named consumer's per-tick budget (riir-engine goal_salience / belief kernel entities × tick rate), not from the
   observed ratio. Record the verdict in Plan 639; never move the bar to fit the measurement.
