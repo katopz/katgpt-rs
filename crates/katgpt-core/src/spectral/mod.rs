@@ -47,3 +47,6 @@ pub mod continuation;
 
 #[cfg(feature = "spectral_differentiation")]
 pub mod differentiation;
+
+#[cfg(feature = "kernel_fourier_features")]
+pub mod kernel_features;
