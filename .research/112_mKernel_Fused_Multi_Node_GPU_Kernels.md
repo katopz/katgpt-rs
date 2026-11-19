@@ -216,3 +216,5 @@ From `.raw/mKernel/include/`:
 3. MegaScale-MoE (communication overhead stats): EuroSys 2026
 4. Comet (MoE fine-grained overlap): MLSys 2025
 5. ThunderKittens (MMA code origin): HazyResearch, Stanford — our Research 077
+
+> **PASS-Redirects (synthesis):** Siavashi et al. [arXiv:2604.07609 "Blink: CPU-Free LLM Inference by Delegating the Serving Stack to GPU and SmartNIC"] — the serving-stack sibling of this note's verdict class: BlueField-3 DPU + ConnectX-6 + GPUDirect RDMA fabric we do not run; the persistent-scheduler control plane + GPU-initiated RDMA direction matches mKernel's host-off-the-critical-path thesis at serving granularity, and Blink's CPU-colocation immunity result (baselines lose 52–72% throughput under interference, Blink ~1.0×) corroborates our GPU-exclusivity/exclusive-lane bench law from the opposite direction. PASS — no files.
