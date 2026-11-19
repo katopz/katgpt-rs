@@ -1,6 +1,6 @@
 [package]
 name = "katgpt-core"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2024"
 license = "MIT"
 description = "Shared types and SIMD kernels for katgpt-rs and riir-engine"
@@ -87,7 +87,7 @@ katgpt-sleep = { path = "../katgpt-sleep", version = "0.1.4", optional = true }
 # `katgpt_core::sense::*` for backwards compatibility. `spectral_threat`
 # stays local in katgpt-core (depends on `linoss`) and is re-exported through
 # the `sense::spectral_threat` shim path.
-katgpt-sense = { path = "../katgpt-sense", version = "0.3.1", optional = true }
+katgpt-sense = { path = "../katgpt-sense", version = "0.3.2", optional = true }
 # Plan 299 T4.3: tokenizer compression (NFKC + lowercase collapse) for the
 # `engram` feature. Small dep, only compiled when `engram` is on.
 unicode-normalization = { version = "0.1", optional = true }

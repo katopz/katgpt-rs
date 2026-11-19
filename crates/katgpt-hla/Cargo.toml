@@ -1,6 +1,6 @@
 [package]
 name = "katgpt-hla"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 license = "MIT"
 description = "Higher-order Linear Attention (HLA) substrate — O(1) inference cache types and streaming kernels. Pure substrate, depends only on katgpt-types (Config + SIMD)."
@@ -36,7 +36,7 @@ serde = { version = "1", features = ["derive"], optional = true }
 # here, never re-implemented. katgpt-sense is a katgpt-types leaf that does
 # not reach katgpt-hla, so the edge adds no cycle; off by default, so the
 # default dep graph is unchanged.
-katgpt-sense = { path = "../katgpt-sense", version = "0.3.1", default-features = false, features = ["novelty_retention"], optional = true }
+katgpt-sense = { path = "../katgpt-sense", version = "0.3.2", default-features = false, features = ["novelty_retention"], optional = true }
 
 # Issue 940 HL-1/2/3 G2 duty — the ordered-fold cost at decode-loop scale.
 [[bench]]

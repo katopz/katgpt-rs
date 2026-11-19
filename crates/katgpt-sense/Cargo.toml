@@ -1,6 +1,6 @@
 [package]
 name = "katgpt-sense"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 license = "MIT"
 description = "KG Latent Octree Sense substrate — octree construction, reconstruction, BAKE precision-gated update, LOD routing, serialization. Spun out of katgpt-core::sense (Issue 007 Phase E Tier 2 #7). Depends only on katgpt-types (the leaf)."
