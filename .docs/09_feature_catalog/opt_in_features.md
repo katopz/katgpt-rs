@@ -6784,3 +6784,27 @@ re-derivation of a BLAS-class kernel.
 `crates/katgpt-core/src/ternary_circuit_forward.rs` +
 `ternary_circuit_build.rs` + `ternary_circuit/` (transcode lane) · Gates:
 `tests/ternary_circuit_{transcode,forward,forward_alloc,forward_g2,build,build_alloc}_gates.rs`-family.
+
+## 170. relevance_core — ACE whitened activity×relevance core (Plan 640 / Research 683, arXiv:2602.22600, 2026-11-19)
+
+Feature `relevance_core` (implies `basis_split`; member of the `diagnostics`
+umbrella) in `crates/katgpt-core/src/relevance_core.rs`. A label-free
+relevance subspace for a frozen downstream head: the top-r eigenspace of
+`Cov^{1/2}·S·Cov^{1/2}` (activity covariance × the streamed head-Jacobian
+moment `S = E[JᵀJ]`), mapped back as `Q = orth(Cov^{1/2} V_r)`.
+
+- `extract_core_from_matrices` — both eigensolves ride `basis_split`'s shared
+  kernel (`eigh_rows_desc`); `RankRule::{Fixed, Energy, Gap}` (Gap = the
+  `check_rank_gate` identifiability verdict); refuse-loud on non-finite /
+  zero activity / zero relevance / no gap / collapsed column. f64,
+  zero-alloc over the caller-owned `CoreScratch`.
+- `accumulate_sens` — the streaming `S += jᵀj` fold (no `J` matrix);
+  `core_rank_energy` — first-crossing energy rank.
+- OFFLINE analysis primitive, never a serving path.
+
+GOAT gate ([Bench 988](../../.benchmarks/988_relevance_core_goat.md)): G0–G6
+PASS on a planted nonlinear head. Zero-label ACE scores contrast +0.4658 vs the
+8-label ridge probe's −0.0151 (G5); PCA's top-1 lands on the decoy while ACE
+excludes it (G6). Disclosed: sample-Cov leak along high-variance directions
+(∝ amplitude/√N). Opt-in until a wired consumer passes its own gate
+(riir-infer Issue 1237).

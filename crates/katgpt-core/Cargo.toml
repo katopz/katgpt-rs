@@ -4018,6 +4018,12 @@ name = "bench_779_real_bank_affinity"
 [[test]]
 name = "bench_778_subspace_intervention_poc"
 
+# Plan 640 Phase 1 — relevance_core (ACE) GOAT gate on a planted nonlinear
+# head (G0–G6). Whole-file #![cfg] + this row (the green-zero rule).
+[[test]]
+name = "bench_640_relevance_core_poc"
+required-features = ["relevance_core"]
+
 # Plan 416 GOAT gate — region-conditioned subspace field (Issue 818: the
 # whole-file #![cfg] + this row; region_subspace_steering implies
 # subspace_steering, covering both imports).
