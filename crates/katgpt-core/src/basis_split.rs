@@ -377,8 +377,19 @@ pub fn participation_ratio(eigvals_desc: &[f64]) -> f64 {
 
 // ── the split (T1.4) ───────────────────────────────────────────────────────────
 
+/// In-place transpose of a d×d row-major matrix (zero-alloc; swaps the strict
+/// upper triangle with the lower).
+fn transpose_square_in_place(a: &mut [f64], d: usize) {
+    for i in 0..d {
+        for j in (i + 1)..d {
+            a.swap(i * d + j, j * d + i);
+        }
+    }
+}
+
 /// In-place descending heapsort of `eigvals` with lockstep permutation of the
-/// eigenvector COLUMNS of `eigvecs` (d×d row-major, column j at `j*d..`).
+/// eigenvectors in `eigvecs` (d×d row-major, eigenvector j is ROW `j*d..` —
+/// [`split`] transposes the solvers' column layout into this before sorting).
 /// Zero-alloc; O(d log d) column swaps (each O(d) — a calibration-time cost).
 /// MIN-heap + extract-to-end (the max-heap form yields ASCENDING order).
 fn sort_spectrum_desc(eigvals: &mut [f64], eigvecs: &mut [f64], d: usize) {
@@ -440,8 +451,8 @@ fn sort_spectrum_desc(eigvals: &mut [f64], eigvecs: &mut [f64], d: usize) {
 ///   silently wrong.
 ///
 /// Scratch contract (all caller-owned, zero-alloc on this path):
-/// - `eigvals` ≥ `d`, `eigvecs` ≥ `d*d` — outputs, sorted descending with
-///   column-aligned vectors on success (including the `Unidentified` arms —
+/// - `eigvals` ≥ `d`, `eigvecs` ≥ `d*d` — outputs, sorted descending; eigenvector
+///   j is ROW `j*d..(j+1)*d` (paired with `eigvals[j]`) on success (including the `Unidentified` arms —
 ///   the spectrum is still the caller's diagnostic),
 /// - `sym_scratch` — the `symmetric_eig` scratch (used at every d),
 /// - `jacobi_scratch` ≥ `d*d` f64 — the Jacobi work matrix (d ≤ 16 arm),
@@ -555,6 +566,17 @@ pub fn split(
         sym_scratch.ensure_capacity(d);
         symmetric_eig(eigvals, eigvecs, solve_moment, sym_scratch, d, 200);
     }
+
+    // Both solvers store V row-major with eigenvector j as COLUMN j
+    // (`eigvecs[i*d + j]`). Everything below — the lockstep sort, the
+    // normalization, the basis copy, the caller's `eigvecs` output — reads
+    // eigenvector j as the contiguous ROW `j*d..(j+1)*d`. Transpose in place
+    // (Plan 640 probe, 2026-11-19: without this the variant basis was the
+    // rows of V, not its eigenvectors — on a rotated planted moment it
+    // captured 0.39/2.0 (d=8) and 0.20/2.0 (d=24) of the true block; the
+    // axis-aligned test surface could not see it because the permutation
+    // V of a diagonal moment is read correctly either way at those seeds).
+    transpose_square_in_place(eigvecs, d);
 
     sort_spectrum_desc(eigvals, eigvecs, d);
 
@@ -1019,6 +1041,83 @@ mod tests {
                 h_mass < 0.05,
                 "whitened basis row carries {h_mass} of its mass on invariant axes"
             );
+        }
+    }
+
+    /// Rotated planted moment (Plan 640 probe, 2026-11-19): every other test
+    /// here plants an AXIS-ALIGNED block, where V is a permutation and a
+    /// row-vs-column eigenvector read is invisible. Plant a rank-2 block along
+    /// a random orthonormal frame at both solver arms (d = 8 → Jacobi,
+    /// d = 24 → symmetric_eig): the basis rows must span the planted block
+    /// (capture = Σ‖Qᵀb‖² = 2) and each row's Rayleigh quotient must equal the
+    /// planted eigenvalue. Pre-fix this read 0.39/2.0 and 0.20/2.0.
+    #[test]
+    fn split_recovers_a_rotated_planted_block_at_both_solver_arms() {
+        for &d in &[8usize, 24] {
+            let mut rng = Lcg(0x6255_0640 + d as u64);
+            // Random orthonormal frame q (rows) by Gram–Schmidt.
+            let mut q = vec![0.0; d * d];
+            for v in q.iter_mut() {
+                *v = rng.next_gauss();
+            }
+            for i in 0..d {
+                for p in 0..i {
+                    let dot: f64 = (0..d).map(|t| q[i * d + t] * q[p * d + t]).sum();
+                    for t in 0..d {
+                        q[i * d + t] -= dot * q[p * d + t];
+                    }
+                }
+                let n: f64 = (0..d).map(|t| q[i * d + t].powi(2)).sum::<f64>().sqrt();
+                for t in 0..d {
+                    q[i * d + t] /= n;
+                }
+            }
+            let lam = |k: usize| if k < 2 { 100.0 } else { 1.0 + 0.01 * k as f64 };
+            let mut m = vec![0.0; d * d];
+            for k in 0..d {
+                for i in 0..d {
+                    for j in 0..d {
+                        m[i * d + j] += lam(k) * q[k * d + i] * q[k * d + j];
+                    }
+                }
+            }
+            let ident: Vec<f64> = (0..d * d)
+                .map(|t| if t / d == t % d { 1.0 } else { 0.0 })
+                .collect();
+            let (mut ev, mut evec, mut basis) = (vec![0.0; d], vec![0.0; d * d], vec![0.0; 2 * d]);
+            let mut sym = SymmetricEigScratch::new();
+            let (mut jac, mut ms, mut w) = (vec![0.0; d * d], vec![0.0; d * d], vec![0.0; d * d]);
+            let (verdict, _) = split(
+                &m,
+                d,
+                Some(Whitening::Whitener(&ident)),
+                Some(2),
+                5.0,
+                &mut ev,
+                &mut evec,
+                &mut basis,
+                &mut sym,
+                &mut jac,
+                &mut ms,
+                &mut w,
+            )
+            .unwrap();
+            assert!(matches!(verdict, Verdict::SufficientVariation { k: 2, .. }));
+            let mut capture = 0.0;
+            for b in 0..2 {
+                for k in 0..2 {
+                    let dot: f64 = (0..d).map(|t| basis[b * d + t] * q[k * d + t]).sum();
+                    capture += dot * dot;
+                }
+                let x = &basis[b * d..(b + 1) * d];
+                let rq: f64 = (0..d)
+                    .map(|i| x[i] * (0..d).map(|j| m[i * d + j] * x[j]).sum::<f64>())
+                    .sum();
+                assert!((rq - 100.0).abs() < 1e-8, "d={d} row {b} Rayleigh {rq}");
+                // The eigvecs output carries the same rows (row j ↔ eigvals[j]).
+                assert_eq!(&evec[b * d..(b + 1) * d], x);
+            }
+            assert!((capture - 2.0).abs() < 1e-9, "d={d} capture {capture}");
         }
     }
 
