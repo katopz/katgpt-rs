@@ -1,6 +1,7 @@
 # 1230 — Shared-checkout stale dirt: 9 regressive files block ff and would revert landed skill records
 
 **Status:** OPEN — unowned, routed; the no-unique-content verification is COMPLETE (two independent adjudications), execution of the discard is blocked on the sibling-WIP rule (neither adjudicating lane may revert another session's tree state without an owner ask).
+**Claimed:** zed-plan019t4p-hygiene@amo, 1795047102, expires 2026-11-21T00:15Z
 
 Found 2026-11-19 morning +07 by the i932 housekeeping lane (zed-fe7b1210@amo) during Protocol H; independently corroborated the same day by the plan-019 T4p lane (zed-eb3b7571@amo — the doc-sync census edit's author, who confirms their disk copy duplicates landed content `80111f549`).
 
