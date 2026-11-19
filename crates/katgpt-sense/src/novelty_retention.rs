@@ -9,8 +9,16 @@
 //!
 //! ```text
 //! g_t[m] = clamp(α_base[m]·(1 − κ·ŝ_t[m]) + μ·n̂_t[m], g_min, g_max)
-//! ŝ = 2σ(β·s) − 1,  n̂ = 2σ(β·n) − 1          (both ∈ [0, 1) for s, n ≥ 0)
+//! ŝ = r(β·s/2),  n̂ = r(β·n/2),  r(u) = u/(1+u)   (both ∈ [0, 1) for s, n ≥ 0)
 //! ```
+//!
+//! **Saturation law (Plan 639 Phase 2 G3 verdict):** Phase 1 shipped the
+//! centered logistic `2σ(β·s) − 1`; it passed G2 (36/36 cells) but cost 3.06×
+//! the incumbent kernel (12 extra `fast_sigmoid`s per tick, bar ≤ 1.15×). The
+//! rational map `r` has the same zero (r(0) = 0 exactly), the same slope at 0
+//! (β/2) and the same range, is monotone and transcendental-free, and both
+//! signals share one division per channel. Both laws' tables are in the
+//! Phase 2 bench record.
 //!
 //! Per kind `m`, over the per-kind drive `x_t[m]` (the kernel's own sigmoid
 //! drive — no new pass over the input):
@@ -29,7 +37,7 @@
 //! **Centering (recorded deviation from the plan's literal law, Claude
 //! verdict in Plan 639):** the plan wrote `σ(β·s)`, which is 0.5 at zero
 //! novelty and so silently shifts the retention of a steady world to
-//! `α(1 − κ/2) + μ/2`. `2σ(β·s) − 1` maps 0 → 0, so a novelty-free channel
+//! `α(1 − κ/2) + μ/2`. A centered map (0 → 0) means a novelty-free channel
 //! keeps EXACTLY `α_base` (clamped) — the gate only acts on evidence. The
 //! κ = 0 ∧ μ = 0 arithmetic identity holds in both forms.
 //!
@@ -43,8 +51,6 @@
 //! NOT reused: its body folds with `simd_dot_f32`).
 //!
 //! [`evolve_belief_additive`]: crate::reconstruction::ReconstructionState::evolve_belief_additive
-
-use katgpt_types::simd::fast_sigmoid;
 
 /// The env-switch DEMOTE literal: `NOVELTY_RETENTION=0` refuses to arm the
 /// gate (the kernel stays on the incumbent fixed-α code path).
@@ -66,7 +72,7 @@ pub struct NoveltyRetentionConfig {
     /// Transient push-up μ ≥ 0: how far unexplained innovation raises
     /// retention (the belief holds through noise).
     pub mu: f32,
-    /// Sigmoid gain β on both signals.
+    /// Saturation gain β on both signals (`r(β·signal/2)`).
     pub beta: f32,
     /// Lower retention bound (`> 0`).
     pub g_min: f32,
@@ -179,6 +185,7 @@ impl NoveltyRetention {
 
     /// Observe this tick's per-kind drive and write the per-kind retention
     /// into `out`. O(1) per channel, alloc-free, scalar-ordered.
+    #[inline]
     pub fn gate(&mut self, drive: &[f32; 6], alpha_base: &[f32; 6], out: &mut [f32; 6]) {
         let c = self.config;
         if !self.seeded {
@@ -190,33 +197,63 @@ impl NoveltyRetention {
             }
             self.seeded = true;
         }
-        for m in 0..6 {
-            let x = drive[m];
-            if !x.is_finite() {
-                // NaN/inf input: leave the EMAs untouched, incumbent retention.
-                self.last_sustained[m] = 0.0;
-                self.last_transient[m] = 0.0;
-                out[m] = alpha_base[m];
-                self.last_gate[m] = out[m];
-                continue;
-            }
-            let e = x - self.fast[m];
-            let s = (self.fast[m] - self.slow[m]).abs();
+        let half_beta = 0.5 * c.beta;
+        // Padded to 8 lanes in locals (pad lanes: x = fast = slow = α = 0,
+        // finite, inert) so the body lowers to two 4-wide vectors; selects,
+        // never branches. Every op is ELEMENTWISE — no reduction, so lane
+        // grouping cannot change a bit (Issue 940).
+        let mut x8 = [0.0f32; 8];
+        let mut f8 = [0.0f32; 8];
+        let mut s8 = [0.0f32; 8];
+        let mut a8 = [0.0f32; 8];
+        x8[..6].copy_from_slice(drive);
+        f8[..6].copy_from_slice(&self.fast);
+        s8[..6].copy_from_slice(&self.slow);
+        a8[..6].copy_from_slice(alpha_base);
+        let mut g8 = [0.0f32; 8];
+        let mut sus8 = [0.0f32; 8];
+        let mut tr8 = [0.0f32; 8];
+        for m in 0..8 {
+            let x = x8[m];
+            let ok = x.is_finite();
+            let fast = f8[m];
+            let slow = s8[m];
+            // NaN/inf input: EMAs untouched, signals 0, incumbent retention.
+            let xs = if ok { x } else { fast };
+            let e = xs - fast;
+            let s = if ok { (fast - slow).abs() } else { 0.0 };
             let n = (e.abs() - s).max(0.0);
-            self.fast[m] += c.alpha_fast * e;
-            self.slow[m] += c.alpha_slow * (x - self.slow[m]);
-            let s_hat = 2.0 * fast_sigmoid(c.beta * s) - 1.0;
-            let n_hat = 2.0 * fast_sigmoid(c.beta * n) - 1.0;
-            let g = alpha_base[m] * (1.0 - c.kappa * s_hat) + c.mu * n_hat;
-            out[m] = if g.is_finite() {
-                g.clamp(c.g_min, c.g_max)
+            f8[m] = fast + c.alpha_fast * e;
+            s8[m] = if ok {
+                slow + c.alpha_slow * (xs - slow)
             } else {
-                alpha_base[m]
+                slow
             };
-            self.last_sustained[m] = s;
-            self.last_transient[m] = n;
-            self.last_gate[m] = out[m];
+            // Rational saturation r(u) = u/(1+u), u = β·signal/2: r(0) = 0
+            // exactly, slope β/2 at 0 (= the centered logistic's), range
+            // [0, 1). Both signals share ONE division:
+            // ŝ = a(1+b)/((1+a)(1+b)), n̂ = b(1+a)/((1+a)(1+b)).
+            let a = half_beta * s;
+            let b = half_beta * n;
+            let inv = 1.0 / ((1.0 + a) * (1.0 + b));
+            let s_hat = a * (1.0 + b) * inv;
+            let n_hat = b * (1.0 + a) * inv;
+            let g = a8[m] * (1.0 - c.kappa * s_hat) + c.mu * n_hat;
+            // max/min ≡ clamp on the finite branch (the only one selected).
+            g8[m] = if ok && g.is_finite() {
+                g.max(c.g_min).min(c.g_max)
+            } else {
+                a8[m]
+            };
+            sus8[m] = s;
+            tr8[m] = n;
         }
+        self.fast.copy_from_slice(&f8[..6]);
+        self.slow.copy_from_slice(&s8[..6]);
+        out.copy_from_slice(&g8[..6]);
+        self.last_gate.copy_from_slice(&g8[..6]);
+        self.last_sustained.copy_from_slice(&sus8[..6]);
+        self.last_transient.copy_from_slice(&tr8[..6]);
     }
 }
 
