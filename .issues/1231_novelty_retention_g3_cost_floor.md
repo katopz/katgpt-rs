@@ -1,6 +1,7 @@
 # Issue 1231: novelty_retention G3 cost floor — fused kernel or a pre-registered re-price
 
-**Status:** open — T1 LANDED `c24c8cce7` (1.514× → 1.472×, still > 1.15×) → **T2 next (unclaimed)**: the pre-registered re-price verdict. Blocks Plan 639 Phase 3.
+**Status:** open — T1 LANDED `c24c8cce7` (1.514× → 1.472×, still > 1.15×) → **T2 in flight (claimed)**: the pre-registered re-price verdict. Blocks Plan 639 Phase 3.
+**Claimed:** katgpt-rs-49@amo, 1795076856, expires 2026-11-20T08:27:36Z
 **Lease closed:** katgpt-rs-49@amo, 1795076101, expires 2026-11-20T08:15:01Z — T1 landed `c24c8cce7`; T2 left unclaimed
 
 **Origin:** [Bench 987](../.benchmarks/987_novelty_retention_goat.md) (Plan 639 Phase 2). G2 quality PASSES (34/36 cells,
