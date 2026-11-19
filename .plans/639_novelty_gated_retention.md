@@ -1,0 +1,58 @@
+# Plan 639: Novelty-Gated Retention — Input-Gated Decay for Persistent Latents
+
+**Status:** Open — staged, kill-gated. Phase 1 = 0 GPU (m3/CPU: primitive + fixture + gate suite). GOAT bench = 0 GPU (CPU fixture lane). Consumer wiring (Phase 3) is gated on the GOAT verdict, owner-noted. Research: riir-train/.research/500 §4 (the modelless lattice census — surfaced by owner challenge, 2026-11-19). Mechanism provenance: input-gated decay is PUBLISHED (Mamba's input-dependent Δ; arXiv:2611.21608 §3.2.2's horizontal update) — this is an ADOPTION fused with our shipped novelty signal, GOAT-tier by construction, never claimed novel to the world.
+
+**Date:** 2026-11-19
+**Research:** [riir-train/.research/500_Latent_Lattice_Language_Models.md](../riir-train/.research/500_Latent_Lattice_Language_Models.md) §4
+**Source papers:** [arXiv:2611.21608](https://arxiv.org/abs/2611.21608) §3.2.2 (affine horizontal update, input-derived g) · Mamba (Gu & Dao 2024, input-dependent Δ) — adoption framing, no world-novelty claim
+**Target:** `crates/katgpt-sense/src/` (retention law + `evolve_belief_additive` wiring). Feature `novelty_retention = ["modality_additive"]` (the kernel sits behind `modality_additive`, katgpt-sense Cargo.toml default-on; the new flag is default-off with DEMOTE literal `NOVELTY_RETENTION=0`).
+**Incumbent (the thing to beat):** `evolve_belief_additive` (reconstruction.rs:986–1004) — per-channel FIXED retention `config.belief_retention[m]` (default `[0.9; 6]`, reconstruction.rs:163), sigmoid-bounded drive. The incumbent is the GOAT loser candidate, never edited ungated.
+**Plan-277-F1 relationship:** reconstruction.rs documents "Plan 277 Fusion F1" for the dual-(fast−slow) derivative lane (:92, :433) with post-GOAT wiring deferred. **This plan IS that post-GOAT wiring lane** — the F1 deferral is satisfied/superseded by this plan's own pre-registered GOAT gate; cite this plan at the F1 hook sites when wiring lands.
+**Determinism law (Issue 940, binding):** the belief vector crosses the sync boundary (SyncBank observes the kernel — reconstruction.rs own doc; the SIMD sibling is deliberately routed to scalar code per Issue 940 SE-2). Therefore `g_t` and every per-channel novelty signal are computed with **fixed sequential ordered folds** (`dot_f32_ordered` or plain `+=`) — never `simd_dot_f32` lane-order sums. `sigmoid_surprise_gate`'s own body uses `simd_dot_f32` (katgpt-types/src/temporal.rs:210) and MUST NOT be reused as-is for this path.
+**Consumers (follow-ups, each its own issue only if the gate passes):** riir-engine goal_salience `reach_decay` 0.995 · desperation_dual EMA β · katgpt-hla cache γ (local half only — sync crossing untouched) · riir-refine `ema_step` α/β.
+
+---
+
+## Goal
+
+Close the one lattice delta the census found: the fleet's persistent latents all have **input-dependent drive, fixed retention**; the paper (and Mamba before it) derives retention `g` from the current input. Fuse a per-channel novelty signal (built ON the shipped dual-EMA machinery) into a deterministic retention law and prove on a fixture that gated retention **strictly dominates the incumbent's entire fixed-α trade-off curve** — adapting faster at every noise level the incumbent can reach by retuning α alone. GOAT gate below; the loser (fixed α) is demoted only per gate, incumbent bytes intact at `NOVELTY_RETENTION=0`.
+
+## Phase 1 — Primitive + fixture + gates (0 GPU, m3/CPU)
+
+### Tasks
+
+- [ ] **T1.1** Per-channel retention law behind `novelty_retention`: per kind m, `g_t[m] = clamp(α_base[m]·(1 − κ·σ(β·s_t[m])) + μ·σ(β·n_t[m]), g_min, g_max)` with **`g_max < 1` (default 0.995) and `g_min > 0`** — a saturated gate must never zero `(1−g)·drive` and freeze a channel (the stuck-behavior the brain/FSM law forbids). Signals per kind: `s_t[m]` = sustained novelty (per-kind SLOW-EMA displacement over the window — the world really changed for that kind), `n_t[m]` = transient share (per-kind fast−slow divergence not explained by slow movement — noise). This needs **new per-kind fast/slow EMA state (6×2 floats)** — O(1) per channel per tick, no new passes over the input beyond the existing accumulate; all folds sequential-ordered per the determinism law above. κ/μ/β/g_min/g_max fixed config. NaN → `g_t[m] = α_base[m]` (safe default: incumbent behavior).
+- [ ] **T1.2** Wire into `evolve_belief_additive` behind the flag. **G1 identity, named exactly:** flag-off takes the INCUMBENT CODE PATH (α_base used directly, `g_t` never computed) — not an arithmetic-equivalent reformulation; and the armed-path arithmetic identity holds at κ=0 **AND** μ=0 (both zero, else the `μ·σ(β·n)` term survives). `NOVELTY_RETENTION=0` is the exact DEMOTE literal (env-switch law).
+- [ ] **T1.3** Fixture: synthetic hidden world — (a) steady state + noise, (b) sustained steps at known ticks, (c) transient spikes (noise bursts), (d) mixed, **(e) sustained high noise (long run — the channel-freeze case)**. Belief-tracking error vs hidden state, per tick. Commit the fixture; it is the gate's only judge.
+- [ ] **T1.4** Gate suite: G1 identity arm (flag-off digest ≡ incumbent); arithmetic arm (κ=0 ∧ μ=0 ≡ incumbent on the fixture); polarity arms (sustained step must LOWER retention — belief adapts; pure-transient burst must RAISE effective retention vs drive — belief holds); NaN arm; boundary arm (`g_t ∈ [g_min, g_max]` always); **channel-freeze arm — under case (e), `(1−g_t[m])·drive` stays > 0 for every channel every tick** (no lock).
+
+## Phase 2 — GOAT bench (CPU fixture lane, pre-registered)
+
+### Tasks
+
+- [ ] **T2.1** **Incumbent trade-off curve first:** sweep fixed α ∈ {0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.93, 0.95, 0.97} × 3 seeds — the incumbent's (adaptation, noise-RMSE) Pareto curve, recorded as the baseline artifact. A pass against α=0.9 alone proves nothing that retuning `belief_retention` wouldn't.
+- [ ] **T2.2** Gated sweep (κ, μ, β, g_max) over a pinned grid (e.g. κ ∈ {0.2, 0.4, 0.8}, μ ∈ {0, 0.2, 0.4}, β ∈ {4, 8}, g_max ∈ {0.99, 0.995}), 3 seeds per cell. **Pre-registered bar — beat the curve, not the default point (and not the impossible corner):** a gated cell passes iff (i) there EXISTS a fixed-α point p on the T2.1 curve with `gated.adaptation ≤ 0.7·p.adaptation` AND `gated.noise_rmse ≤ 1.1·p.noise_rmse` — the matched-point margins, 3/3 seeds — AND (ii) **no fixed-α point dominates the cell** (`≤` on both axes for no single p — the cell lies on/below the curve, not strictly inside it). Also report the cell's distance below the straight-line curve between neighbouring α points, and make it a third passing condition (verdict-round-3 advisory, adopted): **distance-below-line > 0** — the sparse low-α grid must not let an interpolated fixed-α retune slip through the margins. If a candidate cell's neighbourhood is too sparse to compute the distance honestly, tighten the α grid around the passing cell and re-measure before claiming the cell. ≥1 passing cell = GOAT candidate; report the best cell + BOTH full tables (the sweep table is the artifact, no cherry-picks).
+- [ ] **T2.3** Honest falsifier: if NO gated cell satisfies (i)+(ii), the per-kind dual-EMA novelty signal is insufficient for retention gating — **close the plan DONE-NEGATIVE**, incumbent stands, both tables recorded in `.benchmarks/`. A "close but noisy" result without a passing cell is a FAIL, not a partial.
+- [ ] **T2.4** Cost row: per-tick overhead of the gated kernel (INCLUDING the new 6×2 per-kind EMA state) vs incumbent on the fixture (bar ≤1.15× kernel wall — the belief kernel is hot-path; the 6-sigmoid structure is already the cost floor).
+
+## Phase 3 — Consumer wiring (only if T2.2 passes; each its own issue + own gate)
+
+### Tasks
+
+- [-] **T3.1** goal_salience `reach_decay` gated variant (the same law, scalar tier) — separate issue at GOAT time.
+- [-] **T3.2** desperation_dual expectation-EMA β gated variant — separate issue.
+- [-] **T3.3** katgpt-hla cache γ novelty gate (LOCAL state only; the 5-scalar sync crossing and the bridge law untouched) — separate issue, careful posture.
+- [-] **T3.4** riir-refine `ema_step` rate gating (outcome-signed α/β → evidence-shaped) — separate issue; touches the durable learn-row format, needs its own determinism review.
+
+## GOAT gate (pre-registered)
+
+| Gate | Bar | Demote |
+|---|---|---|
+| **G1** identity | flag-off takes the incumbent code path (`g_t` never computed), fixture digest ≡ incumbent; armed path at κ=0 ∧ μ=0 ≡ incumbent | any drift = defect, fix before bench |
+| **G2** quality | ONE gated cell passing T2.2's (i)+(ii): matched-point margins vs SOME curve point (adaptation ≤0.7×, noise RMSE ≤1.1×, the SAME p) AND dominated by no fixed-α point, 3/3 seeds | no passing cell → DONE-NEGATIVE close, both tables recorded |
+| **G3** cost | gated kernel ≤1.15× incumbent wall on the fixture, new per-kind EMA state included | over → shrink the signal path before re-judging |
+| **G4** allocation | zero-alloc forward (fixture-asserted) | any per-tick alloc → fix before verdict |
+
+---
+
+**Discipline:** sigmoid everywhere (never softmax); all novelty-signal math in sequential ordered folds (Issue 940 — the belief crosses SyncBank); the per-channel `s_t/n_t/g_t` are REPORTED per tick in the debug pod when armed (observability before adoption); the incumbent's `belief_retention` config is never edited — the gated path reads it as `α_base`; every quoted number cites the fixture seed and cell.
