@@ -6808,3 +6808,23 @@ PASS on a planted nonlinear head. Zero-label ACE scores contrast +0.4658 vs the
 excludes it (G6). Disclosed: sample-Cov leak along high-variance directions
 (∝ amplitude/√N). Opt-in until a wired consumer passes its own gate
 (riir-infer Issue 1237).
+
+## 171. kernel_fourier_features — kernel-derived Fourier latent embeddings (Issue 1234 / Research 682, arXiv:2602.15029, 2026-11-19)
+
+Feature `kernel_fourier_features` in `crates/katgpt-core/src/spectral/kernel_features.rs`.
+Cyclic and ordinal latent coordinates embedded as `Σ_n a_n·(cos k_n x, sin k_n x)`, with
+frequencies and amplitudes derived from the exponential kernel's own spectrum (no random
+frequencies, no hand-set ladder).
+
+- `KernelSpectrum::periodic` — `k_n = πn`; Lorentzian (continuum) or discrete-exact
+  circulant amplitudes (the full-width Gram reproduces the sampled centered kernel).
+- `KernelSpectrum::open` — Sturm–Liouville modes on `[−1, 1]` by pinned-bracket
+  bisection; `OpenKernel::{Raw, Centered}` (even quantization measured: raw
+  `tan k = 1/(σk)`, centered `tan k = k/(1+σ(1+σ)k²)`).
+- `width_for_tolerance` (closed-form tail), `dims_for_phase_resolution` (Prop-4,
+  order-of-magnitude), `phase_readout_into` (atan2), `conjugate_pairing_score`
+  (translation-symmetry fingerprint, report-only). Zero-alloc.
+
+GOAT gate ([Bench 989](../../.benchmarks/989_kernel_fourier_features_goat.md)): G1/G1c/G1b/G2/G4 +
+open-BC eigenfunctions PASS. G2: 5.1 ns per (N·w) at N=4096, w=32. Opt-in until a wired consumer
+(riir-ai Issue 1245).

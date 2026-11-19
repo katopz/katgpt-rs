@@ -82,6 +82,8 @@ Strongest class per the skill: rows with no coverage + yes-extraction → the ro
 
 ## 6. Verdict
 
+**PoC 2026-11-19 (Issue 1234 CLOSED, [Bench 989](../.benchmarks/989_kernel_fourier_features_goat.md)):** construction, width law (as a conservative bound), phase readout and pairing fingerprint all PASS their pre-registered gates. The width claim stands (no G1c mismatch). Spec correction: the paper-form even quantization belongs to the double-centered kernel; raw = `tan k = 1/(σk)`. Noise robustness (§4) not measured.
+
 **Gain.** One-line reasoning: the mechanism class is published (deterministic Fourier features for a latent coordinate = sinusoidal PEs; kernel→features = RFF; the phenomenon = Engels et al. 2024/2025; the proof = this paper) — no new capability class; the DELTA is the fusion (DEC topological discovery × deterministic kernel-derived construction × game latents × the robustness bound as a corpus guard) plus packaging the width law and phase readout as modelless primitives.
 
 Novelty-gate scoring: Q1 prior art — YES published (class), the fusion delta is unclaimed but class-level novelty fails. Q2 new behavior class — marginal in-stack (zero-training structured latents for clocks/rings is new HERE, not in the literature). Q3 selling point — yes ("our NPCs gate on time-of-day and ring position with zero trained weights; the geometry is derived from world statistics"). Q4 force multiplier — yes (DEC + zone attention + corpus/retrieval). Not all-4 ⇒ **Gain**, fusion idea + POC issues (no Super-GOAT guide required).
