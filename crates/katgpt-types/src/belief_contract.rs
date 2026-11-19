@@ -2,6 +2,18 @@
 //! modality-additive belief-kernel family (Issue 1000; Research 667,
 //! arXiv:2611.09217).
 //!
+//! # The consumer seam (riir-engine, opt-in `gate_contraction_derived`)
+//!
+//! The certificates' first wired consumer is riir-engine's
+//! [`ObservationGate`](../../../riir-ai/crates/riir-engine/src/cwm_runtime/ns_csg_bridge.rs):
+//! `with_contraction` derives `(λ, threshold) = (κ_m, sigmoid(−κ_m·
+//! settling_ticks(α, ε, R)))` from this module's helpers, and
+//! `stalemate_drive` is the T3 modelless coupler over the gate's own
+//! certificate. Plan 637 T4's paired cell (Bench 1173): catch 1.0 = 1.0
+//! at 2.36× fewer observations, decision-path parity, zero-alloc. The
+//! feature stays opt-in — arming rides the first gated behavioural
+//! consumer (the `influence_ring` precedent).
+//!
 //! # Two spaces — every helper names its space
 //!
 //! The kernel iterates the **discrete map**
