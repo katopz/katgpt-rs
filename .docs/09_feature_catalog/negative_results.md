@@ -1171,3 +1171,20 @@ zero-alloc apply posture (G4 both profiles), and the fixture-exactness
 methodology (the band + falsifier pattern). The primitives stay opt-in
 under `ternary_circuit`; no consumer exists; the compiled-lane class waits
 on the §3 triggers.
+
+## 49. katgpt-hla cache γ novelty gate — G2 FAIL 0/36: the gated cells ride the fixed-γ curve (Issue 1232, Plan 639 T3.3)
+
+`katgpt_hla::novelty_gamma::HlaNoveltyGamma` (feature `novelty_gamma`,
+opt-in) gates the HLA cache decay γ with the Plan 639 law
+(`katgpt-sense` `NoveltyChannel`) over the query's surprise against the
+cache's own mean query `mQ/Z`. Pre-registered (`c4d03b05d`) on a
+regime-shift vs noisy-steady fixture over the REAL `hla_state_update`
+(hd = 8): **0/36 cells** pass the T2.2 verdict — best κ 0.8 μ 0.4 β 8
+(adapt 9.44 / noise 0.1530) is undominated and +0.006 below the curve but
+no pinned γ gives the 0.7× adaptation at ≤ 1.1× noise. G1/G3/G4 PASS (G3
+Δ median 7.87 ns at hd = 8 on bmo). Mechanism read: steady-state surprise
+noise + spike carry-over into the fast EMA pull γ down in steady state too,
+so the gate acts as a lower fixed γ. Kept: the harness
+(`crates/katgpt-hla/tests/novelty_gamma_goat.rs`) and the pinned-order
+surprise fold. Re-open only with a different observation signal, re-gated
+under a fresh pre-registration.
