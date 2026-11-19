@@ -287,6 +287,72 @@ impl NoveltyRetention {
     }
 }
 
+/// One scalar channel of the novelty-gated retention law (Plan 639 Phase 3,
+/// the scalar tier): a consumer with its own EMA rate / decay / retention
+/// scalar (goal_salience `reach_decay`, desperation_dual's expectation β,
+/// riir-refine `ema_step` rates, …) owns one `NoveltyChannel` per scalar and
+/// calls [`step`](Self::step) once per observation. Same law, same shared
+/// per-element [`cell`] as the 6-kind belief gate — the GOAT'd arithmetic,
+/// never a re-implementation. Zero-alloc, `Copy`, 12 bytes of state.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NoveltyChannel {
+    fast: f32,
+    slow: f32,
+    seeded: bool,
+}
+
+impl Default for NoveltyChannel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl NoveltyChannel {
+    /// Unseeded: the first [`step`](Self::step) seeds both EMAs at its
+    /// (finite) input, exactly like the belief gate's first tick.
+    pub const fn new() -> Self {
+        Self {
+            fast: 0.0,
+            slow: 0.0,
+            seeded: false,
+        }
+    }
+
+    /// Observe `x` and return the gated retention for a consumer whose
+    /// incumbent retention is `alpha_base`: `≈ alpha_base` on a steady
+    /// channel, pulled DOWN by sustained change (κ — adapt), pushed UP by a
+    /// transient burst (μ — hold), clamped to `[g_min, g_max]`; a non-finite
+    /// `x` returns `alpha_base` and leaves the EMAs untouched. `config` must
+    /// come from [`NoveltyRetentionConfig::validated`]. With κ = μ = 0 the
+    /// result is `alpha_base` clamped to `[g_min, g_max]` (the identity arm).
+    #[inline]
+    pub fn step(&mut self, config: &NoveltyRetentionConfig, x: f32, alpha_base: f32) -> f32 {
+        if !self.seeded {
+            let x0 = if x.is_finite() { x } else { 0.0 };
+            self.fast = x0;
+            self.slow = x0;
+            self.seeded = true;
+        }
+        let r = cell(
+            config,
+            0.5 * config.beta,
+            x,
+            self.fast,
+            self.slow,
+            alpha_base,
+        );
+        self.fast = r.fast;
+        self.slow = r.slow;
+        r.g
+    }
+
+    /// `|fast − slow|` — the sustained-change signal as of the last step.
+    #[inline]
+    pub fn sustained(&self) -> f32 {
+        (self.fast - self.slow).abs()
+    }
+}
+
 /// One channel's update, shared by [`NoveltyRetention::gate`] (padded 8-lane
 /// pass) and [`NoveltyRetention::step_kind`] (fused per-kind loop) — ONE
 /// definition, so the two paths cannot drift. Every op is elementwise
@@ -348,6 +414,33 @@ fn cell(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scalar_channel_is_bit_identical_to_the_belief_gate_lane() {
+        let cfg = NoveltyRetentionConfig::default();
+        let mut gate = NoveltyRetention::new(cfg).unwrap();
+        let mut ch = [NoveltyChannel::new(); 6];
+        let base = [0.9, 0.8, 0.95, 0.5, 0.99, 0.7];
+        let mut g = [0.0f32; 6];
+        let mut x = 0.123f32;
+        for t in 0..500 {
+            // deterministic LCG-ish drive with steps, spikes and a NaN
+            x = (x * 1.7 + 0.31).fract();
+            let mut d = [0.0f32; 6];
+            for (m, v) in d.iter_mut().enumerate() {
+                *v = if t == 77 && m == 2 {
+                    f32::NAN
+                } else {
+                    (x + 0.1 * m as f32).fract() * 2.0 - 1.0
+                };
+            }
+            gate.gate(&d, &base, &mut g);
+            for m in 0..6 {
+                let s = ch[m].step(&cfg, d[m], base[m]);
+                assert_eq!(s.to_bits(), g[m].to_bits(), "t {t} kind {m}");
+            }
+        }
+    }
 
     #[test]
     fn invalid_configs_refuse() {
