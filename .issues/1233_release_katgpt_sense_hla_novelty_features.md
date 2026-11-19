@@ -1,6 +1,7 @@
 # Issue 1233: release katgpt-sense + katgpt-hla so the Plan 639 features reach crates.io
 
-**Status:** OPEN — ready, release-gated (the only gate is the release credential: `scripts/release.sh` runs release-plz + the CI publish job). Unclaimed.
+**Status:** OPEN — ready, release-gated (the only gate is the release credential: `scripts/release.sh` runs release-plz + the CI publish job).
+**Claimed:** m3-zed-1233 epoch=1795084180 expires=2026-11-21T10:29:40Z
 
 ## Why
 
