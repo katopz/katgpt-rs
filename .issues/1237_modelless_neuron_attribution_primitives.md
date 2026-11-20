@@ -1,6 +1,8 @@
 # Issue 1237: Modelless neuron-attribution primitives — AUROC screen, typed control verdicts, decoy battery, ColumnScale edit form
 
-**Status:** open — poc primitives, unclaimed; the consumer lane is riir-infer Issue 1241 (the census cell + GOAT decide whether these ship or are demoted with it).
+**Status:** in progress — claimed by katgpt-rs-92@m3; consumer lane riir-infer Issue 1241.
+
+**Claimed:** katgpt-rs-92@m3, 1795184362, expires 2026-11-22T14:19:22+00:00
 
 **Filed from:** katgpt-rs Research 684 (Fermion "Mapping every neuron in Qwen3-8B" distill, 2026-11-20). The reviewer round-1 repo-split: these are modelless scoring primitives with zero riir deps — katgpt-rs owns them, riir-infer consumes. Carrier surfaces: katgpt-pruners `mech_attribution` (contrastive attribution already ships there, `cna_steering` feature) + katgpt-core `weight_edit_overlay` (Issue 980, `EditForm` family).
 
