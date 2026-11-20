@@ -104,7 +104,8 @@ demote to watch row (premise refuted at practical n). No third cell.
       selections — the "+log-n folds" guess above undercounts it), ratio vs the variance arm,
       mean k̂ per class. m3 read BUSY (12 contenders) → queued on amo.
 - [x] G4: alloc census zero.
-- [-] G3 (the promotion gate, separate cell): paired accuracy vs incumbent fixed-depth scoring
+- [-] G3 (the promotion gate, separate cell) — **ROUTED → riir-reflex Issue 130** (the harness
+      lives there; G3 is the reflex consumer's gate, not a katgpt-rs build): paired accuracy vs incumbent fixed-depth scoring
       on the reflex harness suite slice (cal + test, paired LB95, ONE frozen read) — runs on a
       quiet rig; no promotion talk before it runs.
 
@@ -143,10 +144,10 @@ the reflex-harness promotion cell route to a quiet amo/bmo lane. No promotion ta
       cliff → 4, 8-needle → 8, NaN → k₀, router == pure fn on the same retrieval and the
       selection is a prefix of it. Consumer-half G4: `tests/issue_1229_lepski_arm_alloc.rs`
       — arm allocations == inner-router allocations (PASS, dev).
-- [ ] reflex adaptive retrieval depth + abstain-on-cascade-failure (fusable with
+- [x] **ROUTED → riir-reflex Issue 130** (`a81bd5af`, owns the G3 cell + the premise check) — reflex adaptive retrieval depth + abstain-on-cascade-failure (fusable with
       `CorpusDistanceGate`; the honest open question — whether prefix-truncated corpus scoring
       degrades gracefully the way kNN regression does — is measured by G1/G3 before any wiring).
-- [ ] refine fan-out per-span adaptive K (prefix-form keeps ONE retrieval; Bench-126 call-count
+- [x] **ROUTED → riir-refine Issue 254** (`24c3155b`, kill-check vs refine Bench 141 first) — refine fan-out per-span adaptive K (prefix-form keeps ONE retrieval; Bench-126 call-count
       floor not re-paid).
 - [ ] Watch row (not a task): `elo_k_eff` per-rule adaptive evidence floors.
 
