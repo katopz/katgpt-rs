@@ -420,6 +420,54 @@ pub fn extract_core_from_matrices(
     })
 }
 
+/// Core-space merge-compatibility read (Issue 1235 row (b); Research 683
+/// §5): the principal-angle agreement of two relevance cores
+/// `‖Q_a Q_bᵀ‖²_F / max(r_a, r_b) ∈ [0, 1]` over orthonormal row-major
+/// cores `q_a` (`r_a × d`) and `q_b` (`r_b × d`) — 1.0 iff the spans are
+/// identical; a rank mismatch caps it at `min/max` (a merge between
+/// different-rank cores is not span-compatible); chance for independent
+/// random spans is `r_a·r_b / (d·max(r_a, r_b))`.
+///
+/// It is a ROTATION-gauge read: a function-preserving reparameterisation
+/// that moves only the non-core complement leaves it at 1.0 (weight
+/// interpolation is then safe for the head) while a raw weight-space
+/// distance calls the pair incompatible; a core rotated into the complement
+/// drops it toward 0 (interpolation leaves the solution manifold).
+/// REPORT-ONLY — read it BEFORE composing adapters; it decides nothing.
+/// f64 sequential folds, zero-alloc.
+pub fn core_subspace_agreement(
+    q_a: &[f64],
+    r_a: usize,
+    q_b: &[f64],
+    r_b: usize,
+    d: usize,
+) -> Result<f64, RelevanceCoreError> {
+    if d == 0 || d > MAX_DIM || r_a == 0 || r_b == 0 || r_a > d || r_b > d {
+        return Err(BasisSplitError::DimOutOfRange.into());
+    }
+    if q_a.len() < r_a * d {
+        return Err(BasisSplitError::DimensionMismatch { expected: r_a * d }.into());
+    }
+    if q_b.len() < r_b * d {
+        return Err(BasisSplitError::DimensionMismatch { expected: r_b * d }.into());
+    }
+    check_finite(&q_a[..r_a * d])?;
+    check_finite(&q_b[..r_b * d])?;
+    let mut fro = 0.0;
+    for i in 0..r_a {
+        let a = &q_a[i * d..(i + 1) * d];
+        for j in 0..r_b {
+            let b = &q_b[j * d..(j + 1) * d];
+            let mut dot = 0.0;
+            for k in 0..d {
+                dot += a[k] * b[k];
+            }
+            fro += dot * dot;
+        }
+    }
+    Ok(fro / r_a.max(r_b) as f64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -698,5 +746,34 @@ mod tests {
                 BasisSplitError::DimensionMismatch { .. }
             ))
         ));
+    }
+
+    #[test]
+    fn core_subspace_agreement_bounds() {
+        let d = 4;
+        let e = |i: usize| {
+            let mut v = vec![0.0; d];
+            v[i] = 1.0;
+            v
+        };
+        let q01 = [e(0), e(1)].concat();
+        let q10 = [e(1), e(0)].concat();
+        let q23 = [e(2), e(3)].concat();
+        let q0 = e(0);
+        assert_eq!(core_subspace_agreement(&q01, 2, &q10, 2, d).unwrap(), 1.0);
+        assert_eq!(core_subspace_agreement(&q01, 2, &q23, 2, d).unwrap(), 0.0);
+        assert_eq!(core_subspace_agreement(&q01, 2, &q0, 1, d).unwrap(), 0.5);
+        // symmetric
+        assert_eq!(
+            core_subspace_agreement(&q0, 1, &q01, 2, d).unwrap(),
+            core_subspace_agreement(&q01, 2, &q0, 1, d).unwrap()
+        );
+        // 45° in-plane mix of e0 into e2: cos² = 0.5 on that axis.
+        let h = core::f64::consts::FRAC_1_SQRT_2;
+        let mixed = [vec![h, 0.0, h, 0.0], e(1)].concat();
+        let a = core_subspace_agreement(&q01, 2, &mixed, 2, d).unwrap();
+        assert!((a - 0.75).abs() < 1e-12, "{a}");
+        assert!(core_subspace_agreement(&q01, 3, &q01, 2, d).is_err());
+        assert!(core_subspace_agreement(&q01, 0, &q01, 2, d).is_err());
     }
 }

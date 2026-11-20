@@ -1553,8 +1553,14 @@ pub mod relevance_core;
 #[cfg(feature = "relevance_core")]
 pub use relevance_core::{
     CoreExtract, CoreScratch, RankRule, RelevanceCoreError, accumulate_sens, core_rank_energy,
-    extract_core_from_matrices,
+    core_subspace_agreement, extract_core_from_matrices,
 };
+// Issue 1235 row (a): the ACE closed-form steering-strength controller rides
+// the ACE family gate (no new feature row — feature_cap ratchet, Plan 635 Q4).
+#[cfg(feature = "relevance_core")]
+pub mod steer_calibration;
+#[cfg(feature = "relevance_core")]
+pub use steer_calibration::{SteerCalibConfig, SteerCalibError, SteerDecision, calibrate_strength};
 
 #[cfg(feature = "sst_project")]
 pub mod sst_certified;

@@ -1713,6 +1713,11 @@ required-features = ["certified_frontier"]
 name = "chunked_store_basic"
 required-features = ["chunked_content_store"]
 
+# Issue 1235 row (b) — core-space merge-compatibility diagnostic report.
+[[example]]
+name = "ace_merge_compat_report"
+required-features = ["relevance_core"]
+
 # Issue 663 T7 — toy 5-mode FSM telemetry → SwitchCostTable → hardest
 # incoming-switch readout (the F1 trigger preview).
 [[example]]
@@ -4024,6 +4029,12 @@ name = "bench_778_subspace_intervention_poc"
 # head (G0–G6). Whole-file #![cfg] + this row (the green-zero rule).
 [[test]]
 name = "bench_640_relevance_core_poc"
+required-features = ["relevance_core"]
+
+# Issue 1235 row (a) — ACE closed-form steering-strength calibration GOAT
+# gate (hand-α vs calibrated s*, linear + curved planted margins).
+[[test]]
+name = "bench_1235_steer_calibration_goat"
 required-features = ["relevance_core"]
 
 # Issue 1234 — kernel_fourier_features GOAT gate (G1 round-trip, G1c width
