@@ -4,7 +4,7 @@
 > **Date:** 2026-11-08
 > **Status:** Done — 5 new papers distilled issue-first (2 GOAT-plan candidates, 3 Gain); 2 record corrections + 1 scoped reversal filed as the 571 amendment; 7 covered items delta-checked (3 no-delta, 2 filled, 2 partially filled)
 > **Related Research:** 571 (the 22-source sweep — controlling record) · 568 (.cact/CQ2 format) · 569 (Hadamard MLP → `kron_tile` SHIPPED GOAT-PASS) · 570 (SAN) · 065 (RotorQuant rotation hierarchy) · 200 (outlier collapse) · 159 (KVarN) · 109 (Shard-Drop KV)
-> **Related Issues:** katgpt-rs 841 (CLOSED `8e7c53f18` by owner call — 7 rows landed incl. `kv_sink_window` + calibration-staleness seam `2057ac3b`; `functional_embed` NOT landed) · riir-train 561 (OPEN — `unbiased_advantage` LANDED default-off with A/B example gates built) · NEW: katgpt-rs 987 (this batch's follow-ups)
+> **Related Issues:** katgpt-rs 841 (CLOSED `8e7c53f18` by owner call — 7 rows landed incl. `kv_sink_window` + calibration-staleness seam `2057ac3b`; `functional_embed` NOT landed) · riir-train 561 (OPEN — `unbiased_advantage` LANDED default-off with A/B example gates built) · katgpt-rs 987 (CLOSED 2026-11-20 — every lead landed, measured, or relocated to its owning repo; disposition table in katgpt-rs HISTORY.md)
 > **Method:** 7 subagents (5 new-paper explorers + 2 camera-ready delta-checkers); internal-first grep across all workspace `.research/`; per-paper ACCESS CONFIDENCE carried; every fusion lead tagged **[P]** (paper claim) vs **[ours]** (our construction from the analogy)
 > **Classification:** Public
 
@@ -135,6 +135,8 @@ Cactus's 2026 research page has grown past the September sweep. The five new pap
 No Super-GOATs this batch: each lead is single-axis actionable with prior art adjacent (the Q1 kills would be Monarch-class/swap-MoE-class/selective-prediction-class), and the fusions are consumer constructions, not paper-claimed capabilities. Every GOAT-plan candidate carries its proof path and a named falsification arm; none opens a plan file until its fixture exists.
 
 ## Issue leads (filed: `.issues/987_cactus_neurips2026_follow_ups.md` katgpt-rs; riir-train 561 append)
+
+> **Close-out 2026-11-20:** katgpt-rs Issue 987 removed; lead dispositions — ε-width census CLOSED (riir-infer 1185, KEEP pin) · CQ3 league cell → riir-infer Issue 1186 · arm B LOSS (riir-neuron-db `c37e4ee`, opt-in forever) · sensitivity ranking COMPLETE (riir-infer 1188, `45778ee` + `d825892a`) · AGCL gate + sidecar → katgpt-rs Plan 633 (T4 deferred) · pick_latch T0 `c9bdb533b`, consumer GOATs NEGATIVE (riir-reflex 116 / Bench 176; riir-instinct 032 `c1af2dd`) · lineage check NO COLLISION · engram delta → riir-ai Issue 1249 · limelight brain residency → riir-ai Issue 1250 · temporal-residency rule → riir-refine Issue 253 · transfer probe → riir-rethink Issue 065.
 
 katgpt-rs / league / healer: per-layer ε-width census (K/V seam + needle gate) · CQ3 league cell (matched-calibration arm) · riir-rag embedding arm B (TurboQuant A/B stays open) · mixed-precision sensitivity ranking · adoption/retention regression gate · adoption-proof envelope sidecar · temporal-residency rule (parked) · selection hysteresis latch · limelight brain residency · transfer probe (parked) · Bonsai-name lineage check.
 riir-train: AGCL accept-only SFT lane + adoption-proof envelope datum + JEL premise note.
