@@ -3810,6 +3810,12 @@ required-features = ["marginal_rewind"]
 name = "epiplexity_gain_g4_alloc"
 required-features = ["estimators"]
 
+# Plan 641 G2 — allocation-value cell (the promotion bar): three-arm bandit
+# + misspecification fixture; heavy arms #[ignore]d, release posture.
+[[test]]
+name = "epiplexity_gain_g2_bandit"
+required-features = ["estimators"]
+
 # Plan 593 T4.1 — GOAT gates: G2 decide() latency (≤500 ns/loop Continue
 # path; kick path + apply_kick reported) + G5 bit-reproducibility.
 # Convention: std::time::Instant + counting_allocator + harness = false.
