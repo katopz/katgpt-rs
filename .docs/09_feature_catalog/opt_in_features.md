@@ -6665,7 +6665,7 @@ discipline): consumers are staged lanes — C1 divergence-threshold gates, C4
 post-hoc τ-sweep, ESC escalation-band tuning (`seat_rerank`/ESC); promote
 per-primitive only when a wired consumer passes its pre-registered gate.
 
-📖 Issue: [`1210`](../../.issues/1210_ssd_modelless_extractions.md) ·
+📖 Issue: `1210` (closed 2026-11-20, [HISTORY](../../HISTORY.md)) ·
 Provenance: SSD NeurIPS 2026 (code pinned `cccf657b`, read +
 coordinator-verified before filing) ·
 Substrate: `crates/katgpt-core/src/sparse_kl.rs` — 9 fixtures (k=V−1
@@ -6711,7 +6711,7 @@ discipline): consumers are staged lanes — multi-host/draft-harness cache
 surfaces, decision-serving caches; promote per-primitive only when a wired
 consumer passes its pre-registered gate.
 
-📖 Issue: [`1210`](../../.issues/1210_ssd_modelless_extractions.md) ·
+📖 Issue: `1210` (closed 2026-11-20, [HISTORY](../../HISTORY.md)) ·
 Provenance: SSD NeurIPS 2026 (code pinned `cccf657b`, read +
 coordinator-verified before filing) ·
 Substrate: `crates/katgpt-core/src/verify_cache.rs` — 14 fixtures

@@ -44,7 +44,7 @@ The paper's own Related Work names the class:
 | 2 | Inflection provenance substrate | YES | Issue 1210-C2 (receipts + failure-prediction AUC gate) |
 | 3 | Positional supervision-signal diagnostic | YES as instrument; 3.3×/17× numbers are paper-only, re-measure locally | Issue 1210-C3 |
 | 4 | τ-interpolation law + JSD ≤ ln 2 bound; post-hoc τ-sweeps on logged divergences | YES — on a frozen two-lane capture the whole sweep is post-hoc (stationary divergence field) | Issue 1210-C4 (escalation-band sweep) |
-| 5 | Hidden-state-vs-logits transfer (~59×) + resident-head projection | YES (frozen serving posture needs no refresh; head = BLAKE3-pinned artifact) | Issue 1210-C5 pointer; nearest stack surface = riir-infer plan-623 multi-host wire (staged/opt-in — not a plan today) |
+| 5 | Hidden-state-vs-logits transfer (~59×) + resident-head projection | YES (frozen serving posture needs no refresh; head = BLAKE3-pinned artifact) | Issue 1210-C5 — CLOSED-BY-SUBSTRATE 2026-11-20: riir-infer Plan 623's landed activation channel already ships hidden rows (`ActivationFrame`, `VerifyStream` n_tok×hidden f32), the tail owns the head and replies `u32` argmax only — logits never cross the wire (strictly better than the 59× cut). Re-open only if a lane ships full logit rows cross-host (e.g. a riir-train Plan 496 remote teacher cache) |
 | 6 | Sparse-KL **lower bound** (top-K union + full-vocab lse + kept_mass) | YES — closed-form inequality + capture format, zero GD | Issue 1210-C6 (the strongest extraction; O(K) bounded divergence with known error sign) |
 | 7 | Union-of-top-K asymmetry law | YES | folds into C6 |
 | 8 | Dense divergence field + provenance-directional asymmetry census | measurement halves YES; the GD update NO | C3 rider |
@@ -88,3 +88,5 @@ Teacher/student pairings on the serving family: Instinct-as-student is NOT SSD-a
 - SKD arXiv:2410.11325 · AdaSwitch arXiv:2510.07842 · AdaSPEC arXiv:2510.19779 · GATES (Stein et al. 2026) · GKD (Agarwal et al. 2024)
 - OPSD studies: arXiv:2605.11458 · arXiv:2609.25623 · arXiv:2609.20612
 - Stack: Research 036/038/217/316 · Plans 120/121/169 · riir-train Plans 492/495 · riir-refine Plan 202 (seat_rerank) · riir-infer Issue 1182 (drift_guard), plan-623 multi-host
+
+**Issue 1210 CLOSED 2026-11-20** — C1 subsumed (Issue 802 `jsd_topk`), C2 `fd3f451e2` (Bench 982), C3 Bench 983, C4 Bench 984, C5 closed-by-substrate (riir-infer Plan 623 wire), C6 `42adf44ec` (`sparse_kl_bound`), C7 `e54b1623d` (`verify_cache`). No GOAT claim; consumers staged. Record: HISTORY.md § Issue 1210.
