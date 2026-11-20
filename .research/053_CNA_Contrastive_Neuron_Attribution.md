@@ -287,3 +287,5 @@ No new riir-ai plan needed — these are extension points in existing plans.
 - Code (planned): https://github.com/NousResearch/neural-steering
 - Related: CAA (Contrastive Activation Addition), RelP (Layer-wise Relevance Propagation), SAE (Sparse Autoencoders)
 - Our related plans: 021_screening_pruner, 022_sparse_mlp_twell, 049_g_zero_self_play, 086_simpletes_evaluation_driven_scaling
+
+> **PASS-Redirects (synthesis):** Fermion Research "Mapping every neuron in Qwen3-8B" (fermionresearch.com, 2026-11-16/18) — the interventional push census + matched-random control battery is the causal-twin confirmation step this note's contrastive screen lacks; see katgpt-rs [Research 684](684_Fermion_Neuron_Census_and_Targeted_Edits.md) + riir-infer Issue 1241.
