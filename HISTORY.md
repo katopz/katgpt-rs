@@ -1201,3 +1201,20 @@ C1 subsumed by Issue 802 `jsd_topk` (Bench 802 G3: no-gate baseline dominates at
 ## Issue 987 (2026-11-08 → closed 2026-11-20) — Cactus NeurIPS 2026 follow-up leads (Research 657)
 
 Consolidation issue; closed by disposition, every lead landed/measured or relocated (deferred, with its trigger) to its owning repo. ε-width census CLOSED (riir-infer 1185, Benches 957/958: width budgets are a census table, not a policy — keep the sink pin). CQ3 league cell → riir-infer Issue 1186 (4090 lane). Arm B recall LOSS (riir-neuron-db `c37e4ee`; opt-in forever; plan 338). Sensitivity ranking COMPLETE (riir-infer 1188, `45778ee` + `d825892a`). AGCL gate + sidecar → Plan 633 (T0–T3.4 landed, T4 promotion deferred, issue 994 tie-rule `>` closed). `pick_latch` T0 `c9bdb533b`; both consumer GOATs NEGATIVE (riir-reflex 116 / Bench 176 — bounded cosine scores hold forever at the defaults; riir-instinct 032 `c1af2dd` — structural no-op on evict-on-consult); primitive stays opt-in. Lineage check: NO COLLISION — cite `Ternary-Bonsai-2-27B-PQ2_0` vs "Cactus Bonsai (1-bit QAT)", never bare "Bonsai-27B". Relocated deferred leads: adoption-gated engram delta → riir-ai 1249, limelight-keyed brain residency → riir-ai 1250 (`d31c89852`), temporal-residency kernel_opt rule → riir-refine 253 (`6056ff99`), transfer probe → riir-rethink 065 (`806d158`). Removed issue text: `git log --diff-filter=D -- .issues/987_cactus_neurips2026_follow_ups.md`.
+
+## Issue 976 (2026-10-31 → closed 2026-11-20) — JetSpec++ outcome-distribution speculation cache (Research 641 modelless track)
+
+Owner directive "claim and fin" (katgpt-rs-3c@m3). This landing shipped `katgpt_speculative::outcome_cache`, opt-in feature `outcome_cache`:
+- P(k,a) is built from a cumprodsum chain over drafter confidences and BLAKE3-committed `BonusHistogramPod` freeze/thaw, KL-gated.
+- Bonus rows come from the drafter residual, with Katz backoff onto the Pod.
+- Selection is top-B or split-conformal λ, compared against two fixed baselines.
+- Recalibration is histogram-binning: counted, not fitted.
+
+[Bench 990](.benchmarks/990_issue976_outcome_cache_goat.md) ran every pre-registered gate on a frozen, BLAKE3-pinned, teacher-forced Austen bigram trace, and all PASS:
+- Prop 2b dominance at B 1..16 (B=8: 20.77% vs 16.63%);
+- coverage 0.906;
+- CRPS 0.365× the conformal-naive floor;
+- G4 0 B;
+- determinism.
+
+The gates also measured two negatives: the context-free Pod alone loses at B=16, and the residual without backoff loses at B≥8. Not promoted (no serving caller). **Re-open/promotion trigger:** the riir-infer `multi_host`/`disaggregated` lane moves to a serving posture, OR a real multi-request batch caller for Plan 339 lands. On either, re-run the battery on that caller's frozen trace. The repo-prose corpus question was answered NO (self-referential). The stranded ref `refs/wip/i976-stranded` was superseded and deleted. Full issue text: `git log --follow -- .issues/976_jetspecpp_outcome_cache_fusion.md`.

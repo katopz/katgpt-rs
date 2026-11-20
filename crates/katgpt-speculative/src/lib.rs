@@ -103,6 +103,9 @@ pub mod probe_artifact;
 // build_dd_tree seam.
 #[cfg(feature = "bigram_markov")]
 pub mod bigram_markov;
+// JetSpec++ outcome-distribution speculation cache (Issue 976).
+#[cfg(feature = "outcome_cache")]
+pub mod outcome_cache;
 // Pair-scored path selection — the modelless DFlash 2 selector (Issue 671,
 // Research 490): t-step marginal propagation (the U_t parallel drafter) +
 // adjacent-pair coherence from the same table, walked greedily.

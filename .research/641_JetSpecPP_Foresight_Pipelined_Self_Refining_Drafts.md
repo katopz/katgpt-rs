@@ -1,6 +1,6 @@
 # Research 641: JetSpec++ — Foresight Pipelined Self-Refining Drafts (the target-conditioned pipelining cell + the refinement training recipe)
 
-**Status:** GAIN — training track → riir-train Plan 376 amended (§JetSpec++ recipe, dated section, same family as the LoopUno amendments) + **riir-infer Issue 1158** (the mask-input-drafter audit, filed this session); modelless track → recorded here + katgpt-rs Issue 976 (fusion idea, novelty TBD, posture-gated). Not Super-GOAT: every mechanism cell is published; our contribution is consumption, a live mask-input audit finding, and the recipe transfer.
+**Status:** GAIN — training track → riir-train Plan 376 amended (§JetSpec++ recipe, dated section, same family as the LoopUno amendments) + **riir-infer Issue 1158** (the mask-input-drafter audit, filed this session); modelless track → recorded here + katgpt-rs Issue 976 (CLOSED 2026-11-20 — `outcome_cache` landed opt-in, Bench 990 gates PASS on a frozen proxy trace, promotion posture-gated; was: fusion idea, novelty TBD, posture-gated). Not Super-GOAT: every mechanism cell is published; our contribution is consumption, a live mask-input audit finding, and the recipe transfer.
 
 > **Source:** [arXiv:2610.19792v2 "JetSpec++: Foresight Parallel Drafting with Self Refinements"](https://arxiv.org/abs/2610.19792) — Feng, Hu, Yuan, Qian, Yang, Zhao, Zhu, Rosing, Zhang (UCSD/UIUC/Nanjing/Meta/StepFun; hao-ai-lab), 14–15 Oct 2026.
 > **Code:** [github.com/hao-ai-lab/JetSpec](https://github.com/hao-ai-lab/JetSpec) @ `673267e4faba71a63099c258f0802c2f3aa44f8e` (MIT, "The Parallel Tree Decoding authors"; shallow-cloned to `.raw/JetSpec`, **removed at landing** — structure read: `jetspec/` package + `bench/` + `examples/`; algorithm facts cited from the paper text at v2). Models: HF collection `JetSpec/jetspec-plus-plus-releases`.
@@ -62,7 +62,7 @@ JetSpec++ is the **third cell of the 2026 spec-decode wave to land in our corpus
 | T8 | **League intel: τ 8.94 published at budget 16, T=0** (J3-R3, Qwen3-8B; 12.35 @32 on 27B-class hybrid) | Table 1/2 | **Record** in 376's gate table — evidence the ≈8 tok/cycle self-drafter bar (Bench 824 arithmetic) is publishable; OUR bars stay pinned to 1.689 floor + decode row |
 | T9 | **Adapter training** (SmoothL1+cosine, ω^κ position weighting κ=1/2 from served verify-reach histograms, layer-copy init, 2.32B @8B / 4.47B @27B) | Appendix A | **Discard** — auditable: adapter lane extrapolates ~1,300+ GPU-h on the single 4090 and its payoff requires fused hidden-state capture in the serving forward (the capture hook today costs 5 stream-syncs + ~20 KB dtoh/token, diagnostic-only). Re-open trigger: fused capture ships in riir-gpu. The ω^κ *weighting idea* is recipe-portable to any state-prediction head and rides T1's arm if one exists |
 
-### Modelless track (→ recorded + Issue 976)
+### Modelless track (→ recorded + Issue 976 — LANDED opt-in 2026-11-20, [Bench 990](../.benchmarks/990_issue976_outcome_cache_goat.md); the gate run added a finding: the context-free Pod alone does NOT dominate (loses at B=16) — Prop 2b needs the round-conditioned drafter residual with Katz backoff onto the Pod)
 
 | # | Extraction | Math | Disposition |
 |---|---|---|---|

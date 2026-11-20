@@ -192,6 +192,12 @@ best_buddies = []
 # Opt-in until the riir-ai Bonsai consumer gate proves the gain (Issue 659 T4).
 # Zero deps beyond the crate's mandatory katgpt-types/katgpt-core.
 bigram_markov = []
+# JetSpec++ outcome-distribution speculation cache (Issue 976): P(k,a) =
+# chain-product accept distribution x BLAKE3-committed k-indexed bonus Pod,
+# per-round top-B / conformal selection + two fixed-allocation baselines.
+# Zero training (histogram-binning recalibration is counted, not fitted).
+# Opt-in: no serving caller yet (Issue 976 posture triggers gate promotion).
+outcome_cache = ["dep:blake3"]
 # Grid re-selection (Issue 966) — the DCOCO-class corrector over the
 # DRAFTER's own top-K candidate grid; prefix-first scored walk on the shared
 # pair_select core, transition-scored by the bigram_markov table. Zero
@@ -409,6 +415,14 @@ required-features = ["entropy_bounded_commit"]
 # Issue 966 G4 — zero-alloc steady state for grid_reselect's pool extraction
 # + prefix-first walk (the entropy_bounded convention: separate single-fn
 # binary so a CountingAllocator sees no parallel-test allocations).
+[[test]]
+name = "outcome_cache_trace_gates"
+required-features = ["outcome_cache", "bigram_markov"]
+
+[[test]]
+name = "outcome_cache_alloc_check"
+required-features = ["outcome_cache"]
+
 [[test]]
 name = "grid_reselect_alloc_check"
 required-features = ["grid_reselect"]
