@@ -61,6 +61,24 @@ of f₀ − f₀(x)|, τ_ℓ = σ√(log n/ℓ) at the TRUE σ.
 - Disclosed, NOT a verdict input: the same structure numbers at A = 1 (the paper's own
   experiment constant, outside the proved A ≥ 4 range).
 
+**Cell 1 RESULT (A = 4.5, 2026-11-20, katgpt-rs-9a, `/tmp` dev build, m3):** property
+PASS both fixtures (1.000/1.000); structure piecewise PASS (0.989, ρ 0.804); structure
+**Doppler FAIL** (0.536 < 0.80, ρ 0.318 < 0.5; upper end binding on 39.7% of queries);
+discrete σ̂ PASS (0.3836–0.4119 vs 0.4), copied-MAD degeneracy PASS (reads 0), Bayes
+agreement PASS (0.997), discrete **tracking FAIL** (k̂ = 512 near and far — the cascade
+never rejects: A·τ̂_ℓ ≥ 1 for ℓ ≲ 27 on a [0,1] vote share and ≥ 0.32 at ℓ = 256, above the
+boundary-induced shift). Verdict: **the pinned A = 4.5 is FALSIFIED as a serving constant**
+— the theory-admissible constant is too wide at n ≤ 4000 to see bias (the paper itself
+runs A = 1). The premise is NOT refuted by this cell: the disclosed A = 1 arm tracked
+Doppler (0.939, ρ 0.790) — disclosed, not a verdict input.
+
+**Cell 2 (pinned 2026-11-20 BEFORE its run, after cell 1):** the hypothesis "A = 1 (the
+paper's §5 constant, not a sweep pick) tracks" on FRESH seeds 0x1229_0101…0105, every
+cell-1 threshold unchanged (structure 0.80/0.5 per fixture, property (A+2)·τ̂_{k*} ≥ 99%,
+discrete σ̂ 5% + degeneracy + near < far + Bayes ≥ 95%). PASS ⇒ the module's serving
+constant is A = 1 with the A ≥ 4 theory constant kept for the oracle-bound reading; FAIL ⇒
+demote to watch row (premise refuted at practical n). No third cell.
+
 - [ ] G1 structure: selected k tracks planted smoothness within ONE grid step of the oracle
       k*_x on the Doppler + piecewise-constant fixtures (planted σ). **Falsifier:** no tracking
       ⇒ the agreement-is-smoothness premise is refuted on that surface ⇒ demote to watch row.
