@@ -1194,6 +1194,16 @@ T1/T2/T4 landed `b7cf5916c`; T3 discharged via Plan 637 (`8a42604a2`) + riir-ai 
 
 `kernel_fourier_features` landed `4eb832de9`; GOAT Bench 989 PASS (G2 on amo `f3df720a` 5.1 ns per N*w). Both open-BC kernel quantizations ship; T6 note-only. Opt-in; consumer candidate riir-ai Issue 1245.
 
+## Issue 1229 (2026-11-20 → closed 2026-11-20) — Lepski agreement cascade, the adaptive_k third arm (Research 681)
+
+- **Primitives:** katgpt-core `lepski_cascade` (`estimators` umbrella).
+- **G1:** A = 4.5 falsified as a serving constant (cell 1); A = 1 PASS on fresh seeds (cell 2).
+- **G4:** zero allocations.
+- **dash_attn arm:** `LepskiKRouter` + `compute_lepski_k` behind `msa_adaptive_k_lepski`, with the new `sigma_hat_bulk_mad_f32` (ranked-score σ̂; the NN-MAD collapses τ̂ on ranked values) — `e866932a1`. Consumer-half G4: arm allocations == inner router.
+- **G2 (pre-registered in the test header, amo bd6baf63): FAIL.** End-to-end Lepski/fixed-K_max = 0.591 PASS / 0.910 PASS / 1.027 FAIL at n = 64 / 256 / 1024. Route-only overhead is +6.7–11%; at n = 1024 the scattered k̂ = 32 saves nothing. The bar killed it — not re-tuned; the arm stays opt-in.
+- **Routed:** G3 + the reflex consumer → riir-reflex Issue 130 (`a81bd5af`); refine fan-out → riir-refine Issue 254 (`24c3155b`).
+- **Lease closed:** katgpt-rs-f3@m3, epoch 1795184321, expires 2026-11-22T14:18Z.
+
 ## Issue 1210 (2026-11-13 → closed 2026-11-20) — SSD modelless extractions (Research 669, arXiv:2611.12016)
 
 C1 subsumed by Issue 802 `jsd_topk` (Bench 802 G3: no-gate baseline dominates at micro scale). C2 `StabilityReason` rows `fd3f451e2` (Bench 982 NO VERDICT, label-degenerate). C3 Bench 983 (early lean 1.07, paper magnitude absent). C4 Bench 984 (knee τ≈0.48). C5 CLOSED-BY-SUBSTRATE: riir-infer Plan 623's dist wire ships hidden rows and replies `u32` argmax — logits never cross (re-open: a lane shipping full logit rows cross-host). C6 `sparse_kl_bound` `42adf44ec`. C7 `verify_cache` `e54b1623d`. All opt-in, no GOAT claim.
