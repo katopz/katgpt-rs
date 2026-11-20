@@ -1,7 +1,7 @@
 # Issue 1229: Lepski agreement cascade + MAD σ̂ — the adaptive_k third arm (Research 681 poc)
 
 **Status:** open — poc/proof task, GOAT-tier pending the pre-registered gates (Research 681 §4)
-**Claimed:** m3-research-lane, 1795019668, expires 2026-11-20T00:45Z
+**Claimed:** katgpt-rs-9a@m3, 1795177976, expires 2026-11-22T12:32Z
 
 Modelless extraction of arXiv:2611.22198 (*Training Neural Networks to be Locally Adaptive*):
 a selection-layer primitive — per-query adaptive neighbourhood size by **agreement cascade**
