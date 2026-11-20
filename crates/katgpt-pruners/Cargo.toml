@@ -433,3 +433,8 @@ mux_latent_context = []
 [[example]]
 name = "event_log_query_basic"
 required-features = ["event_log_query"]
+
+# Issue 1237 T1/T2 G4 — counting-allocator gate for the census screen.
+[[test]]
+name = "issue1237_census_screen_alloc"
+required-features = ["mech_attribution"]

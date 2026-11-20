@@ -13,6 +13,10 @@
 mod augmentation;
 #[cfg(feature = "mech_attribution")]
 mod catalyst;
+// Issue 1237 T1/T2 — census screen (AUROC vs scrambled-label searches) +
+// typed control verdicts; consumer riir-infer Issue 1241.
+#[cfg(feature = "mech_attribution")]
+pub mod census_screen;
 #[cfg(feature = "mech_attribution")]
 mod scoring;
 #[cfg(feature = "mech_attribution")]
@@ -25,6 +29,11 @@ mod integration;
 pub use augmentation::{CatalystTemplate, extract_template, generate_synthetic};
 #[cfg(feature = "mech_attribution")]
 pub use catalyst::{catalyst_score, detect_catalyst_pattern};
+#[cfg(feature = "mech_attribution")]
+pub use census_screen::{
+    BandStats, ControlParams, ControlVerdict, ScreenParams, ScreenScratch, ScreenUnderFloor,
+    ScreenVerdict, UnderFloor, UnitScreen, VerdictTally, control_verdict, screen_auroc,
+};
 #[cfg(feature = "mech_attribution")]
 pub use scoring::{ActivationInfluenceProxy, batch_influence_rank};
 #[cfg(feature = "mech_attribution")]

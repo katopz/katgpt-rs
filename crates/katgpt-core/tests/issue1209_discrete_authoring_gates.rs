@@ -678,7 +678,7 @@ fn scale_overlay(ov: &WeightEditOverlay, dose: f32) -> WeightEditOverlay {
                     direction: direction.clone(),
                     strength: strength * dose,
                 },
-                other @ EditForm::BypassRows { .. } => other.clone(),
+                other => other.clone(),
             },
         })
         .collect();

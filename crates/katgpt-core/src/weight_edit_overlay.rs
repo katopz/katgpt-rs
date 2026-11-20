@@ -13,6 +13,12 @@
 //!    (the blog's Exp-4 ramp fix). The gate is a SIGMOID DRIVE on a measured
 //!    quantity — never a hard switch-off (the measured oscillation shape;
 //!    plan-317-class precedent).
+//! 3. **Column scale (the fader, Issue 1237 T4)** — `W[:, S] ← f·W[:, S]`
+//!    with `f = (1−d) + d·scale`, dose `d ∈ [0, 1]`: a down_proj output
+//!    column (one MLP neuron's write) faded from identity (`d = 0`) to the
+//!    full push/ablation (`d = 1`) — Research 684's switch surface. The
+//!    captured base columns ride the spec, so the forward-domain delta needs
+//!    no base access and a stale base refuses loud at compose.
 //!
 //! # The law the lane obeys (obstacle-vs-ability)
 //!
@@ -61,7 +67,8 @@ use crate::gain_cost_halt::{GainCostLoopHalter, HaltDecision, angular_change, st
 
 /// One authored edit form.
 ///
-/// Encoding tags: `DirectionSubtraction = 1`, `BypassRows = 2`.
+/// Encoding tags: `DirectionSubtraction = 1`, `BypassRows = 2`,
+/// `ColumnScale = 3`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum EditForm {
     /// `ΔW[:, S] = −k·d` — rank-1, column-masked. `direction` has
@@ -95,6 +102,51 @@ pub enum EditForm {
         /// Layer output width.
         out_dim: u32,
     },
+    /// The fader (Issue 1237 T4): `W[i][c] ← f·W[i][c]` for every `c ∈ S`,
+    /// `f = `[`EditForm::fader_factor`]`(scale, dose) = (1−dose) + dose·scale`
+    /// — lerp form, so `dose = 0` gives `f = 1` and `dose = 1` gives
+    /// `f = scale` EXACTLY in f32 (bit-exact endpoints). `scale = 0` is the
+    /// ablation, `scale > 1` the push, `scale < 0` the sign flip.
+    ///
+    /// `base_columns` holds the captured base columns (`[|S|][out_dim]`,
+    /// `base_columns[k·out_dim + i] = W[i][columns[k]]`) — the Fermion
+    /// two-neuron artifact shape (the edited columns ARE the payload). The
+    /// forward delta reads them (no base access), and compose refuses a
+    /// live column that is not bit-identical to the captured one (stale
+    /// base = tamper class).
+    ColumnScale {
+        /// Column indices `S ⊂ [0, in_dim)` — distinct (duplicates refuse:
+        /// they would double-scale at compose but double-ADD at forward).
+        columns: Vec<u32>,
+        /// Captured base columns, `[|S|][out_dim]` column-major per entry.
+        base_columns: Vec<f32>,
+        /// Layer output width (`down_proj` rows).
+        out_dim: u32,
+        /// Full-dose multiplier.
+        scale: f32,
+        /// Dose `d ∈ [0, 1]`.
+        dose: f32,
+    },
+}
+
+impl EditForm {
+    /// The fader multiplier `f = (1−dose) + dose·scale` — lerp form so both
+    /// endpoints are exact: `f(0) = 1`, `f(1) = scale` bit-for-bit.
+    #[inline]
+    pub fn fader_factor(scale: f32, dose: f32) -> f32 {
+        (1.0 - dose) + dose * scale
+    }
+
+    /// The weight columns this form WRITES at compose (direction and fader
+    /// forms); `None` for forward-side forms (bypass). The single source of
+    /// the first-touch dedupe population (compose, revert, count).
+    fn written_columns(&self) -> Option<&[u32]> {
+        match self {
+            EditForm::DirectionSubtraction { columns, .. }
+            | EditForm::ColumnScale { columns, .. } => Some(columns),
+            EditForm::BypassRows { .. } => None,
+        }
+    }
 }
 
 /// One edit: which layer, which form.
@@ -165,7 +217,105 @@ impl WeightEditSpec {
                 }
                 Ok(())
             }
+            EditForm::ColumnScale {
+                columns,
+                base_columns,
+                out_dim,
+                scale,
+                dose,
+            } => {
+                if columns.is_empty() {
+                    return Err("column scale: empty column set");
+                }
+                if *out_dim == 0 {
+                    return Err("column scale: zero out_dim");
+                }
+                if base_columns.len() != *out_dim as usize * columns.len() {
+                    return Err("column scale: base length != out_dim × |S|");
+                }
+                if !scale.is_finite() {
+                    return Err("column scale: non-finite scale");
+                }
+                if !dose.is_finite() || !(0.0..=1.0).contains(dose) {
+                    return Err("column scale: dose outside [0, 1]");
+                }
+                if base_columns.iter().any(|v| !v.is_finite()) {
+                    return Err("column scale: non-finite base entry");
+                }
+                for (k, c) in columns.iter().enumerate() {
+                    if columns[..k].contains(c) {
+                        return Err("column scale: duplicate column");
+                    }
+                }
+                Ok(())
+            }
         }
+    }
+
+    /// Author a fader spec by capturing `columns` of the row-major
+    /// `weights` (`out_dim × in_dim`). `None` on a shape mismatch, an
+    /// out-of-range column, or any validation failure.
+    pub fn column_scale_from_weights(
+        layer: u8,
+        weights: &[f32],
+        out_dim: usize,
+        in_dim: usize,
+        columns: &[u32],
+        scale: f32,
+        dose: f32,
+    ) -> Option<Self> {
+        if weights.len() != out_dim * in_dim || out_dim > u32::MAX as usize {
+            return None;
+        }
+        let mut base_columns = Vec::with_capacity(columns.len() * out_dim);
+        for c in columns {
+            let col = *c as usize;
+            if col >= in_dim {
+                return None;
+            }
+            for i in 0..out_dim {
+                base_columns.push(weights[i * in_dim + col]);
+            }
+        }
+        let spec = Self {
+            layer,
+            form: EditForm::ColumnScale {
+                columns: columns.to_vec(),
+                base_columns,
+                out_dim: out_dim as u32,
+                scale,
+                dose,
+            },
+        };
+        spec.validate().ok()?;
+        Some(spec)
+    }
+
+    /// The same fader at another dose (the dose-ladder constructor). `None`
+    /// for non-fader forms or an invalid dose.
+    pub fn with_dose(&self, dose: f32) -> Option<Self> {
+        let EditForm::ColumnScale {
+            columns,
+            base_columns,
+            out_dim,
+            scale,
+            ..
+        } = &self.form
+        else {
+            return None;
+        };
+        let spec = Self {
+            layer: self.layer,
+            form: EditForm::ColumnScale {
+                columns: columns.clone(),
+                base_columns: base_columns.clone(),
+                out_dim: *out_dim,
+                scale: *scale,
+                dose,
+            },
+        };
+        spec.validate().ok()?;
+        Some(spec)
     }
 
     fn encode_into(&self, buf: &mut Vec<u8>) {
@@ -214,6 +364,26 @@ impl WeightEditSpec {
                     put_f32(buf, *v);
                 }
                 put_u32(buf, *out_dim as u64);
+            }
+            EditForm::ColumnScale {
+                columns,
+                base_columns,
+                out_dim,
+                scale,
+                dose,
+            } => {
+                buf.push(3);
+                put_u32(buf, columns.len() as u64);
+                for c in columns {
+                    put_u32(buf, *c as u64);
+                }
+                put_u32(buf, base_columns.len() as u64);
+                for v in base_columns {
+                    put_f32(buf, *v);
+                }
+                put_u32(buf, *out_dim as u64);
+                put_f32(buf, *scale);
+                put_f32(buf, *dose);
             }
         }
     }
@@ -269,6 +439,28 @@ impl WeightEditSpec {
                     pathway_columns,
                     pathway_readout,
                     out_dim,
+                }
+            }
+            3 => {
+                let n_cols = cursor.read_u32()? as usize;
+                let mut columns = Vec::with_capacity(n_cols.min(1 << 16));
+                for _ in 0..n_cols {
+                    columns.push(cursor.read_u32()?);
+                }
+                let n_base = cursor.read_u32()? as usize;
+                let mut base_columns = Vec::with_capacity(n_base.min(1 << 20));
+                for _ in 0..n_base {
+                    base_columns.push(cursor.read_f32()?);
+                }
+                let out_dim = cursor.read_u32()?;
+                let scale = cursor.read_f32()?;
+                let dose = cursor.read_f32()?;
+                EditForm::ColumnScale {
+                    columns,
+                    base_columns,
+                    out_dim,
+                    scale,
+                    dose,
                 }
             }
             _ => return None,
@@ -350,7 +542,7 @@ impl WeightEditOverlay {
             if e.layer != layer {
                 continue;
             }
-            let EditForm::DirectionSubtraction { columns, .. } = &e.form else {
+            let Some(columns) = e.form.written_columns() else {
                 continue;
             };
             for c in columns {
@@ -375,7 +567,7 @@ impl WeightEditOverlay {
                 break;
             }
             if e.layer == layer
-                && let EditForm::DirectionSubtraction { columns, .. } = &e.form
+                && let Some(columns) = e.form.written_columns()
                 && columns.contains(col)
             {
                 earlier = true;
@@ -386,7 +578,7 @@ impl WeightEditOverlay {
             return true;
         }
         // Earlier columns of the SAME edit.
-        if let EditForm::DirectionSubtraction { columns, .. } = &edit.form
+        if let Some(columns) = edit.form.written_columns()
             && let Some(pos) = columns.iter().position(|c| std::ptr::eq(c, col))
         {
             return columns[..pos].contains(col);
@@ -394,7 +586,7 @@ impl WeightEditOverlay {
         false
     }
 
-    /// Compose (apply at load) every direction-subtraction edit targeting
+    /// Compose (apply at load) every direction-subtraction AND fader edit targeting
     /// `layer` into the row-major weight matrix `weights` (`out_dim ×
     /// in_dim`). Touched elements are backed up into `backup` (original
     /// values, first-touch-per-column) so the revert is BIT-IDENTICAL —
@@ -421,6 +613,46 @@ impl WeightEditOverlay {
         let mut used = 0usize;
         for e in &self.edits {
             if e.layer != layer {
+                continue;
+            }
+            if let EditForm::ColumnScale {
+                columns,
+                base_columns,
+                out_dim: spec_out,
+                scale,
+                dose,
+            } = &e.form
+            {
+                if *spec_out as usize != out_dim {
+                    return None;
+                }
+                let f = EditForm::fader_factor(*scale, *dose);
+                for (k, c) in columns.iter().enumerate() {
+                    let col = *c as usize;
+                    if col >= in_dim {
+                        return None;
+                    }
+                    if !self.column_already_touched(layer, e, c) {
+                        // Stale-base refusal: the first touch must see the
+                        // exact column the spec captured.
+                        let base = &base_columns[k * out_dim..(k + 1) * out_dim];
+                        for (i, b) in base.iter().enumerate() {
+                            if weights[i * in_dim + col].to_bits() != b.to_bits() {
+                                return None;
+                            }
+                        }
+                        if used + out_dim > backup.len() {
+                            return None;
+                        }
+                        for i in 0..out_dim {
+                            backup[used] = weights[i * in_dim + col];
+                            used += 1;
+                        }
+                    }
+                    for i in 0..out_dim {
+                        weights[i * in_dim + col] *= f;
+                    }
+                }
                 continue;
             }
             let EditForm::DirectionSubtraction {
@@ -478,7 +710,7 @@ impl WeightEditOverlay {
             if e.layer != layer {
                 continue;
             }
-            let EditForm::DirectionSubtraction { columns, .. } = &e.form else {
+            let Some(columns) = e.form.written_columns() else {
                 continue;
             };
             for c in columns {
@@ -504,9 +736,39 @@ impl WeightEditOverlay {
     /// computed by the caller — packed base untouched). Edits fold in spec
     /// order; each edit folds its columns sequentially, then writes rows
     /// sequentially. Zero allocation; O(|S|·edits + out·edits).
+    ///
+    /// Fader edits add `(f−1)·Σ_k base[k]·h[c_k]` (k sequential, then rows)
+    /// from the CAPTURED base columns; `f == 1` (dose 0) is a bit-exact
+    /// no-op.
     pub fn forward_delta_into(&self, layer: u8, h: &[f32], y: &mut [f32]) {
         for e in &self.edits {
             if e.layer != layer {
+                continue;
+            }
+            if let EditForm::ColumnScale {
+                columns,
+                base_columns,
+                out_dim,
+                scale,
+                dose,
+            } = &e.form
+            {
+                let out = *out_dim as usize;
+                let g = EditForm::fader_factor(*scale, *dose) - 1.0;
+                if out > y.len() || g == 0.0 {
+                    continue;
+                }
+                for (k, c) in columns.iter().enumerate() {
+                    let j = *c as usize;
+                    if j >= h.len() || h[j] == 0.0 {
+                        continue;
+                    }
+                    let gh = g * h[j];
+                    let base = &base_columns[k * out..(k + 1) * out];
+                    for (yi, b) in y.iter_mut().zip(base.iter()) {
+                        *yi += gh * b;
+                    }
+                }
                 continue;
             }
             let EditForm::DirectionSubtraction {
@@ -1233,6 +1495,13 @@ pub mod discrete_authoring;
 // 993/1209 precedent).
 pub mod matched_pair_authoring;
 
+// Issue 1237 T3 — the TWO-SIDED decoy battery (Research 684, the Fermion
+// 20-decoy discipline): site-random + direction-random arms on ONE frozen
+// read, verdict `chosen ≥ best_decoy + margin`, arms never pooled. The
+// two-sided upgrade of this lane's single norm-matched control arm. No new
+// feature flag (the 992/Plan-635 budget); consumer riir-infer Issue 1241 T3.
+pub mod decoy_battery;
+
 // ─────────────────────────────────────────────────────────────────────
 // Unit tests
 // ─────────────────────────────────────────────────────────────────────
@@ -1671,5 +1940,171 @@ mod tests {
         }
         let norm: f32 = a.iter().map(|v| v * v).sum::<f32>().sqrt();
         assert!((norm - 1.0).abs() < 1e-5, "unit norm, got {norm}");
+    }
+
+    // ── Issue 1237 T4 — EditForm::ColumnScale (the fader) ──
+
+    fn fader_fixture() -> (Vec<f32>, usize, usize) {
+        let (out, inn) = (6usize, 10usize);
+        let w: Vec<f32> = (0..out * inn)
+            .map(|i| ((i as f32) * 0.37).sin() * 0.8 + 0.05)
+            .collect();
+        (w, out, inn)
+    }
+
+    fn matvec(w: &[f32], out: usize, inn: usize, h: &[f32]) -> Vec<f32> {
+        (0..out)
+            .map(|i| (0..inn).map(|j| w[i * inn + j] * h[j]).sum())
+            .collect()
+    }
+
+    #[test]
+    fn column_scale_endpoints_bit_exact() {
+        let (w, out, inn) = fader_fixture();
+        let cols = [2u32, 7];
+        let scale = 3.25f32;
+        assert_eq!(
+            EditForm::fader_factor(scale, 0.0).to_bits(),
+            1.0f32.to_bits()
+        );
+        assert_eq!(
+            EditForm::fader_factor(scale, 1.0).to_bits(),
+            scale.to_bits()
+        );
+        for (dose, expect_f) in [(0.0f32, 1.0f32), (1.0, scale)] {
+            let spec =
+                WeightEditSpec::column_scale_from_weights(4, &w, out, inn, &cols, scale, dose)
+                    .unwrap();
+            let ov = WeightEditOverlay::new(vec![spec]).unwrap();
+            let mut wm = w.clone();
+            let mut backup = vec![0.0f32; ov.touched_count(4, out, inn)];
+            assert_eq!(
+                ov.compose_layer_into(4, &mut wm, out, inn, &mut backup),
+                Some(cols.len() * out)
+            );
+            for i in 0..out {
+                for j in 0..inn {
+                    let want = if cols.contains(&(j as u32)) {
+                        w[i * inn + j] * expect_f
+                    } else {
+                        w[i * inn + j]
+                    };
+                    assert_eq!(wm[i * inn + j].to_bits(), want.to_bits());
+                }
+            }
+            // Revert is bit-identical.
+            ov.revert_layer(4, &mut wm, out, inn, &backup);
+            assert_eq!(f32_digest(&wm), f32_digest(&w));
+            // Forward at dose 0 is a bit-exact no-op.
+            if dose == 0.0 {
+                let h: Vec<f32> = (0..inn).map(|j| j as f32 * 0.1 - 0.3).collect();
+                let y0 = matvec(&w, out, inn, &h);
+                let mut y = y0.clone();
+                ov.forward_delta_into(4, &h, &mut y);
+                assert_eq!(f32_digest(&y), f32_digest(&y0));
+            }
+        }
+    }
+
+    #[test]
+    fn column_scale_dose_linearity_and_forward_roundtrip() {
+        let (w, out, inn) = fader_fixture();
+        let cols = [1u32, 4, 8];
+        let h: Vec<f32> = (0..inn).map(|j| ((j as f32) * 0.71).cos()).collect();
+        let y0 = matvec(&w, out, inn, &h);
+        let delta_at = |dose: f32| -> Vec<f32> {
+            let spec = WeightEditSpec::column_scale_from_weights(0, &w, out, inn, &cols, 0.0, dose)
+                .unwrap();
+            let ov = WeightEditOverlay::new(vec![spec]).unwrap();
+            let mut y = y0.clone();
+            ov.forward_delta_into(0, &h, &mut y);
+            y.iter().zip(y0.iter()).map(|(a, b)| a - b).collect()
+        };
+        let full = delta_at(1.0);
+        assert!(full.iter().any(|v| v.abs() > 1e-3), "fixture must move y");
+        // Dose linearity: Δ(d) ≈ d·Δ(1) within float-assoc tolerance.
+        const TOL: f32 = 1e-5;
+        for dose in [0.1f32, 0.25, 0.5, 0.7, 0.9] {
+            let dd = delta_at(dose);
+            for (a, b) in dd.iter().zip(full.iter()) {
+                assert!(
+                    (a - dose * b).abs() <= TOL * (1.0 + b.abs()),
+                    "dose {dose}: {a} vs {}",
+                    dose * b
+                );
+            }
+        }
+        // Round-trip: forward delta == compose-then-matvec (algebra pin).
+        for dose in [0.0f32, 0.3, 1.0] {
+            let spec = WeightEditSpec::column_scale_from_weights(0, &w, out, inn, &cols, 2.5, dose)
+                .unwrap();
+            let ov = WeightEditOverlay::new(vec![spec]).unwrap();
+            let mut wm = w.clone();
+            let mut backup = vec![0.0f32; ov.touched_count(0, out, inn)];
+            ov.compose_layer_into(0, &mut wm, out, inn, &mut backup)
+                .unwrap();
+            let y_compose = matvec(&wm, out, inn, &h);
+            let mut y_fwd = y0.clone();
+            ov.forward_delta_into(0, &h, &mut y_fwd);
+            for (a, b) in y_compose.iter().zip(y_fwd.iter()) {
+                assert!(
+                    (a - b).abs() <= TOL * (1.0 + a.abs()),
+                    "dose {dose}: {a} vs {b}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn column_scale_roundtrip_validation_and_stale_base() {
+        let (w, out, inn) = fader_fixture();
+        let spec =
+            WeightEditSpec::column_scale_from_weights(2, &w, out, inn, &[3, 5], 0.0, 0.6).unwrap();
+        let ov =
+            WeightEditOverlay::new(vec![spec.clone(), direction_edit(2, &[9], out, 0.5)]).unwrap();
+        let decoded = WeightEditOverlay::from_bytes(&ov.to_bytes()).expect("roundtrip");
+        assert_eq!(decoded, ov);
+        assert_eq!(decoded.digest(), ov.digest());
+        // Dose ladder constructor.
+        let d1 = spec.with_dose(1.0).unwrap();
+        assert!(matches!(d1.form, EditForm::ColumnScale { dose, .. } if dose == 1.0));
+        assert!(spec.with_dose(1.5).is_none());
+        assert!(spec.with_dose(-0.1).is_none());
+        assert!(direction_edit(2, &[9], out, 0.5).with_dose(0.5).is_none());
+        // Duplicate column / out-of-range refuse.
+        assert!(
+            WeightEditSpec::column_scale_from_weights(2, &w, out, inn, &[3, 3], 0.0, 1.0).is_none()
+        );
+        assert!(
+            WeightEditSpec::column_scale_from_weights(2, &w, out, inn, &[99], 0.0, 1.0).is_none()
+        );
+        // Stale base: the live column moved since capture → compose refuses.
+        let one = WeightEditOverlay::new(vec![spec]).unwrap();
+        let mut stale = w.clone();
+        stale[5] += 1.0; // row 0, col 5
+        let mut backup = vec![0.0f32; one.touched_count(2, out, inn)];
+        assert_eq!(
+            one.compose_layer_into(2, &mut stale, out, inn, &mut backup),
+            None
+        );
+    }
+
+    /// G3: the pre-1237 forms encode byte-identically — the new tag only
+    /// appends a variant; an overlay without a fader has the same bytes.
+    #[test]
+    fn column_scale_leaves_legacy_encoding_untouched() {
+        let ov = WeightEditOverlay::new(vec![direction_edit(1, &[4], 2, 2.0)]).unwrap();
+        let mut want = Vec::new();
+        want.extend_from_slice(b"WEOL");
+        want.extend_from_slice(&1u32.to_le_bytes());
+        want.push(1); // layer
+        want.push(1); // tag DirectionSubtraction
+        want.extend_from_slice(&1u32.to_le_bytes());
+        want.extend_from_slice(&4u32.to_le_bytes());
+        want.extend_from_slice(&2u32.to_le_bytes());
+        want.extend_from_slice(&0.5f32.to_le_bytes());
+        want.extend_from_slice(&0.5f32.to_le_bytes());
+        want.extend_from_slice(&2.0f32.to_le_bytes());
+        assert_eq!(ov.to_bytes(), want);
     }
 }
