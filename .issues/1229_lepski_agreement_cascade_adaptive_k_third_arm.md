@@ -42,6 +42,25 @@ above; the G3 reflex-harness cell routes to a quiet rig when it comes up.
 
 ## Gates (pre-registered; the falsifiers kill, they do not get re-tuned)
 
+**G1 operationalisation (pinned 2026-11-20 by katgpt-rs-9a BEFORE the first run; the issue
+text left the aggregation open):** n = 2000, X ~ U[0,1] (5 seeds, splitmix64), planted
+σ = 0.1 (the paper's verbatim §1.1 level), 200 equally spaced queries on [0,1], estimator =
+kNN mean, grid {4, 8, …, 512} (the paper's k-NN–Lepski grid family), A = 4.5 (the pinned
+default). Fixtures: Doppler f₀ = √(x(1−x))·sin(2.1π/(x+0.05)) (paper eq. 1.2) and
+piecewise-constant levels (0, 1, −0.5, 0.5) on quarters. Oracle k*ₓ = largest grid k with
+b_ℓ ≤ τ_ℓ for every ℓ ≤ k (paper eq. 4.6 as an initial segment), b_ℓ = |noiseless kNN mean
+of f₀ − f₀(x)|, τ_ℓ = σ√(log n/ℓ) at the TRUE σ.
+- **Structure** (per fixture, 1000 pooled queries): PASS iff (a) ≥ 80% of queries have
+  |log₂(k̂/k*)| ≤ 1 AND (b) Spearman ρ(k̂, k*) ≥ 0.5 (average ranks).
+- **Property** (per fixture): |f̂_k̂ − f₀(x)| ≤ (A+2)·τ̂_{k*} with σ̂ estimated from the
+  sample (consecutive-difference MAD) on ≥ 99% of pooled queries.
+- **Discrete**: n = 4000, p(x) = 0.2 below ½ and 0.8 above (planted σ = 0.4); per seed
+  σ̂ = √(D/2) within 5% of 0.4; the copied MAD form reads 0 (the degeneracy the derivation
+  names); vote-share cascade (A = 4.5): mean k̂ within 0.05 of the boundary < mean k̂ beyond
+  0.2; adaptive majority vote agrees with the Bayes label on ≥ 95% of pooled queries.
+- Disclosed, NOT a verdict input: the same structure numbers at A = 1 (the paper's own
+  experiment constant, outside the proved A ≥ 4 range).
+
 - [ ] G1 structure: selected k tracks planted smoothness within ONE grid step of the oracle
       k*_x on the Doppler + piecewise-constant fixtures (planted σ). **Falsifier:** no tracking
       ⇒ the agreement-is-smoothness premise is refuted on that surface ⇒ demote to watch row.
