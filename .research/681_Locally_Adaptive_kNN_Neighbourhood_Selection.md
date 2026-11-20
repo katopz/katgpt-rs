@@ -3,6 +3,7 @@
 > **Source:** [arXiv:2611.22198v1](https://arxiv.org/abs/2611.22198) — *Training Neural Networks to be Locally Adaptive*, Banerjee & Sarkar (NUS / ISI), 2026-11-17, math.ST.
 > **Date:** 2026-11-18
 > **Status:** Active — verdict GOAT-tier (selection layer, PoC-gated); filed as poc issue per the poc-first law, promotion talk after the gate runs.
+> **PoC (2026-11-20, Issue 1229):** primitives landed in katgpt-core `lepski_cascade` (`estimators` umbrella); G1 PASS at the paper's §5 constant A = 1 on pre-registered fresh seeds, the theory constant A = 4.5 FALSIFIED as a serving constant (Doppler structure 0.536; a [0,1] vote share never rejects at n ≤ 4000); G4 zero-alloc PASS; G2/G3 pending a quiet rig — no promotion yet. Constants verified against the TeX source (§4 eqs. 4.2/4.4/4.6, §5 eq. 5.1) — the selection rule is the every-pair-in-prefix form.
 > **Related Research:** 549 (ASEntmax — the sibling closed-form adaptive-k arm, `compute_derived_k`), 392 (SSMax rolling Δ̂ — the level-gap statistic the derived arm consumes)
 > **Related Plans:** 256 (MSA adaptive k — the shipped sigmoid arm)
 > **Cross-ref:** riir-train `.issues/701` @ `11f52889` (training-track probe cells) · riir-ai `.issues/1239` @ `e4c6cc75a` (DEC-field agreement fusion, novelty TBD) · katgpt-rs `.issues/1229` (this repo — poc + pre-registered gates; landed alongside this note)

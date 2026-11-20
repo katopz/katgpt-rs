@@ -312,6 +312,12 @@ pub mod logit_regime;
 #[cfg(feature = "sparse_kl_bound")]
 pub mod sparse_kl;
 
+// Issue 1229: the Lepski agreement cascade (adaptive_k third arm, Research 681)
+// — generic selection layer; dash_attn/reflex/refine consume, never fork.
+// Rides the `estimators` umbrella (no own key; feature-cap headroom).
+#[cfg(feature = "estimators")]
+pub mod lepski_cascade;
+
 // Issue 1228: the reward-census instruments (I1 TD-delta + gate, I2
 // hypergeometric overlap null, I3 pruning-knee census) — one feature, one
 // module, the sparse_kl_bound shape; I4's readout lands in katgpt-pruners
