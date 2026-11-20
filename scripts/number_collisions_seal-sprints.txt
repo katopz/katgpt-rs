@@ -5,4 +5,10 @@
 # seal-sprints' OWN legacy ratchet: measured 2 at the 2026-11-18 m3 hygiene run
 # (gate output: "2 historical collision(s) over 119 number(s)"). Growth past 2
 # reds; a dissolving group re-pins DOWN in the dissolving commit.
-legacy_ratchet = 2
+# 3 at 2026-11-20 (zed-m3-035cast@m3, the sprint!035 landing run): 087 held two
+# documents — 086_spawn_join_at_capacity_backow renumbered to 087 mid-push while
+# upstream allocated 086 (437d2c9's own note), then 087_agent_mail_poison_probe
+# withdrawn+removed and 087_rig_exclusive_sticky_poison allocated in the same
+# window (5353df5's delete/create pair). Both sides' adding commits named here;
+# the number is not reusable below the era boundary.
+legacy_ratchet = 3
