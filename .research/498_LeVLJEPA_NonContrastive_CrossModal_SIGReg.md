@@ -109,6 +109,8 @@ Gain. Two issues, no Super-GOAT guide.
 
 - Model-based finding #1's "EXACTLY ablation-#4 collapse shape" — **discarded** after coordinator read of `cross_game_edge.rs` L59-69 + `training.rs` L326-335: targets are recorded episodes (fixed data), not co-trained encoder outputs. Symmetric-collapse requires both sides gradient-coupled. Surviving half (distribution guard) filed as #743 with honest framing.
 
+> **PASS-Redirects (synthesis):** Ren, Wang, Hoang, Kuang, LeCun [AGL-TR-2026-04 "The Content–Geometry Tradeoff in World Models: When JEPA Learns Latent Maps"] — the floor-only sibling of SIGReg (one-sided variance hinge along random directions, trained WITHOUT stop-gradient). Confirms this note's distilled-diagnostic reading: the floor's diagnostic content is covered by shape-per-random-direction (this probe) + per-coordinate activity floors (#687) — a std≥1 floor without the training target is scale-arbitrary. Recipe → riir-train Plan 507. Verdict: **PASS** (modelless track). See [Research 686](686_Content_Geometry_Tradeoff_JEPA_Latent_Maps.md).
+
 ## References
 
 - Kuhn, Serra, Balestriero, Buettner. "LeVLJEPA: End-to-End Vision-Language Pretraining Without Negatives." arXiv:2607.00784, 2026.
