@@ -88,6 +88,9 @@ msa_sparse = ["vortex_flow"]
 msa_per_group = ["msa_sparse"]
 msa_kv_outer = ["msa_sparse"]
 msa_adaptive_k = ["msa_sparse"]
+# Issue 1229: Lepski agreement-cascade k arm (LepskiKRouter) — consumes katgpt-core's
+# lepski_cascade (the `estimators` umbrella). Opt-in until the G3 promotion cell.
+msa_adaptive_k_lepski = ["msa_adaptive_k", "katgpt-core/estimators"]
 # PISA pyramid Top-K + LSE block selection (Plan 612, Research 595 —
 # arXiv:2609.31093): mean-pooled coarse-to-fine key pyramid + root-seeded
 # bounded expansion + LSE block scoring (mean / +½Var / exact rungs).
@@ -410,3 +413,13 @@ required-features = ["flashmemory_margin_select"]
 [[test]]
 name = "flashmemory_budget_select"
 required-features = ["flashmemory_budget_select"]
+
+# Issue 1229 — Lepski agreement-cascade arm: G2 latency (end-to-end vs fixed-K_max,
+# pre-registered in the file header) + G4 consumer-half alloc census (own binary).
+[[test]]
+name = "issue_1229_lepski_g2_latency"
+required-features = ["msa_adaptive_k_lepski"]
+
+[[test]]
+name = "issue_1229_lepski_arm_alloc"
+required-features = ["msa_adaptive_k_lepski"]

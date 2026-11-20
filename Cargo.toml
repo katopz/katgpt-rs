@@ -229,6 +229,7 @@ msa_sparse = ["vortex_flow", "katgpt-attn/msa_sparse"]  # MSA blockwise sparse d
 msa_per_group = ["msa_sparse", "katgpt-attn/msa_per_group"]  # Per-GQA-group independent top-k (Plan 256 Phase 2 GOAT gate). Phase 12: primitives in katgpt-attn.
 msa_kv_outer = ["msa_sparse", "katgpt-attn/msa_kv_outer"]  # KV-outer sparse prefill (Plan 256 Phase 2 GOAT gate). Phase 12: primitives in katgpt-attn.
 msa_adaptive_k = ["msa_sparse", "katgpt-attn/msa_adaptive_k"]  # Adaptive k budget via sigmoid gate (Plan 256 Phase 2 GOAT gate). Phase 12: primitives in katgpt-attn.
+msa_adaptive_k_lepski = ["msa_adaptive_k", "katgpt-attn/msa_adaptive_k_lepski"]  # Lepski agreement-cascade k arm (Issue 1229, Research 681) — LepskiKRouter consumes katgpt-core lepski_cascade; G1/G4 + arm tests PASS, opt-in until the G3 promotion cell.
 rt_turbo = ["dash_attn", "katgpt-speculative/rt_turbo"]  # RTPurbo retrieval head sparse decode via low-dim indexing (Plan 126, Research 86). Phase 6: substrate moved to katgpt-speculative; root re-exports as `katgpt_rs::rt_turbo`.
 mls_aggregate = ["katgpt-forward/mls_aggregate"]  # MLS Multi-Layer Sum aggregation of last K layer residuals (Plan 104, Research 68). Forwarded to katgpt-forward so ForwardContext.mls_buf compiles (Issue 007 Phase F).
 dllm = ["katgpt-forward/dllm"]  # D2F Discrete Diffusion Forcing — mini dLLM research (Plan 066). Plan 398: forwarded to katgpt-forward so the extracted D2fContext + forward_block_causal_with + attention_forward_safe_into + denoising_accuracy substrate (moved from root src/dllm.rs) compiles.

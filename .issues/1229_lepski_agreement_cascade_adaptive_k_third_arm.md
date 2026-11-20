@@ -1,6 +1,6 @@
 # Issue 1229: Lepski agreement cascade + MAD σ̂ — the adaptive_k third arm (Research 681 poc)
 
-**Status:** open — primitives LANDED in katgpt-core `lepski_cascade` (rides the `estimators` umbrella); G1 PASS at A = 1 (cell 2) after A = 4.5 was FALSIFIED as a serving constant (cell 1); G4 PASS; G2 + G3 deferred to a quiet rig; consumers unwired — claimable
+**Status:** open — primitives LANDED (katgpt-core `lepski_cascade`, `estimators` umbrella); G1 PASS at A = 1 (cell 2); G4 PASS; dash_attn consumer arm `LepskiKRouter` LANDED (`msa_adaptive_k_lepski`, consumer-half G4 PASS); G2 pre-registered + queued on amo; G3 + reflex/refine consumers routed to their repos
 **Claimed:** katgpt-rs-f3@m3, 1795184321, expires 2026-11-22T14:18Z
 **Lease closed:** katgpt-rs-9a@m3, epoch 1795177976, expires 2026-11-22T12:32Z — primitives + G1/G4 landed; G2/G3/consumers left unclaimed for the next lane
 
@@ -95,7 +95,14 @@ demote to watch row (premise refuted at practical n). No third cell.
       **large-argument vector W(1e6)** for the Halley path).
 - [x] G1 discrete: disagreement-rate σ̂ analog on a labeled fixture (majority-vote estimator).
 - [-] G2: latency parity vs fixed-K incumbent at the serving posture (expected ≤ fixed-K_max —
-      one retrieval either way, +log-n folds).
+      one retrieval either way, +log-n folds). **Pre-registered 2026-11-20 (katgpt-rs-f3,
+      BEFORE any run)** in `katgpt-attn/tests/issue_1229_lepski_g2_latency.rs`: `--release`,
+      BlockTopK inner, hd 64, block 16, band [4, 32], n ∈ {64, 256, 1024}, 64 queries (½
+      focused 4-block cliff, ½ scattered); each call = route + sigmoid sparse attention over the
+      selected blocks; interleaved median-of-ratios; **PASS iff end-to-end Lepski/fixed-K_max
+      ≤ 1.00 at EVERY n**. Disclosed only: route-only ratio (the bulk-MAD σ̂ is two O(n)
+      selections — the "+log-n folds" guess above undercounts it), ratio vs the variance arm,
+      mean k̂ per class. m3 read BUSY (12 contenders) → queued on amo.
 - [x] G4: alloc census zero.
 - [-] G3 (the promotion gate, separate cell): paired accuracy vs incumbent fixed-depth scoring
       on the reflex harness suite slice (cal + test, paired LB95, ONE frozen read) — runs on a
@@ -122,8 +129,20 @@ the reflex-harness promotion cell route to a quiet amo/bmo lane. No promotion ta
 
 ## Consumers (wire the katgpt-core primitive; each consumer its own flag + gate)
 
-- [ ] `dash_attn::AdaptiveKRouter` — cascade arm beside the two shipped arms (estimates are
-      folds over already-computed block scores).
+- [x] `dash_attn::AdaptiveKRouter` — cascade arm beside the two shipped arms (estimates are
+      folds over already-computed block scores). **Landed 2026-11-20 (katgpt-rs-f3):**
+      `katgpt-attn/src/dash_attn/adaptive_k_lepski.rs` — `LepskiKRouter<R>` + pure
+      `compute_lepski_k`, feature `msa_adaptive_k_lepski` (katgpt-attn + root forward; implies
+      `msa_adaptive_k` + `katgpt-core/estimators`). f̂_k = prefix mean of the ranked block
+      scores (ONE retrieval at k_max, read through the decision's indices). **σ̂ is NOT the
+      NN-MAD here** — a ranked score vector has no covariate, and differencing ranked values
+      measures order-statistic spacing (O(σ/n)), collapsing τ̂ so every trend rejects (the
+      degeneracy, derived before the code). New core primitive `sigma_hat_bulk_mad_f32` =
+      median|v − median v|/0.6745 over all n_blocks (null "one level + noise"; robust to the
+      needle minority), in place, zero alloc. Unit tests: plateau → grid top (32), 4-needle
+      cliff → 4, 8-needle → 8, NaN → k₀, router == pure fn on the same retrieval and the
+      selection is a prefix of it. Consumer-half G4: `tests/issue_1229_lepski_arm_alloc.rs`
+      — arm allocations == inner-router allocations (PASS, dev).
 - [ ] reflex adaptive retrieval depth + abstain-on-cascade-failure (fusable with
       `CorpusDistanceGate`; the honest open question — whether prefix-truncated corpus scoring
       degrades gracefully the way kNN regression does — is measured by G1/G3 before any wiring).

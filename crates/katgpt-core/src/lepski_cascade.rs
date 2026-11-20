@@ -219,22 +219,59 @@ pub fn tau_hat_into(sigma_hat: f64, n: usize, grid: &[usize], out: &mut [f64]) -
 /// `None` on an empty slice. Total order (`f64::total_cmp`) — deterministic
 /// for any bit pattern, NaN sorts last.
 fn median_in_place(values: &mut [f64]) -> Option<f64> {
+    median_in_place_by(values, f64::total_cmp, |v| v)
+}
+
+/// [`median_in_place`] over any `Copy` element with a total order and a
+/// widening map to `f64` — one selection routine for the f64 and f32 forms.
+fn median_in_place_by<T: Copy>(
+    values: &mut [T],
+    cmp: fn(&T, &T) -> core::cmp::Ordering,
+    widen: fn(T) -> f64,
+) -> Option<f64> {
     let n = values.len();
     if n == 0 {
         return None;
     }
     let mid = n / 2;
-    let (lower, upper, _) = values.select_nth_unstable_by(mid, f64::total_cmp);
-    let upper = *upper;
+    let (lower, upper, _) = values.select_nth_unstable_by(mid, cmp);
+    let upper = widen(*upper);
     if n % 2 == 1 {
         return Some(upper);
     }
     let lower_max = lower
         .iter()
         .copied()
-        .max_by(f64::total_cmp)
+        .max_by(cmp)
+        .map(widen)
         .unwrap_or(upper);
     Some(0.5 * (lower_max + upper))
+}
+
+/// Bulk-MAD noise scale `σ̂ = median_i |v_i − median(v)| / 0.6745` over an
+/// f32 vector, computed IN PLACE (the slice is permuted and then overwritten
+/// with the absolute deviations; no allocation).
+///
+/// **Which σ̂ this is (derivation, not a copy of the NN form).** The paper's
+/// NN-MAD differences a response against its covariate neighbour, so a smooth
+/// `f₀` cancels and `Y_i − Y_nn(i) ~ N(0, 2σ²)` (hence `√2`). A RANKED score
+/// vector has no covariate: under the null "no structure" the regression
+/// function is one constant level and every value is `level + ε`, so the
+/// spread about the median is the noise itself — `|v − med| ~ |N(0, σ²)|`,
+/// median `0.6745σ`, no `√2`. Differencing RANKED values instead measures
+/// order-statistic spacing (`O(σ/n)`), not σ — that collapses `τ̂` and the
+/// cascade rejects on any trend (the degeneracy this form avoids).
+/// The median is robust to a minority of planted outliers (the "needles"),
+/// which is what makes it the null-noise scale rather than the total spread.
+///
+/// `None` on an empty slice. NaN sorts last under `f32::total_cmp`.
+pub fn sigma_hat_bulk_mad_f32(values: &mut [f32]) -> Option<f64> {
+    let widen = |v: f32| v as f64;
+    let med = median_in_place_by(values, f32::total_cmp, widen)?;
+    for v in values.iter_mut() {
+        *v = ((*v as f64) - med).abs() as f32;
+    }
+    median_in_place_by(values, f32::total_cmp, widen).map(|m| m / MAD_GAUSSIAN)
 }
 
 /// Nearest-neighbour MAD noise scale from caller-computed absolute
@@ -571,5 +608,22 @@ mod tests {
         }
         assert_eq!(kappa_sigma(0.1), 1.0);
         assert_eq!(kappa_sigma(0.5), 4.0);
+    }
+
+    #[test]
+    fn bulk_mad_f32_reads_null_noise_and_ignores_needles() {
+        // Level 2.0 + a symmetric ramp: median 2.0, MAD = 0.25 (the 51st of
+        // 101 sorted |i − 50|·0.01).
+        let mut v: Vec<f32> = (0..101).map(|i| 2.0 + (i as f32 - 50.0) * 0.01).collect();
+        // Needles at the extremes keep their side of the median, so neither
+        // the median nor the MAD moves (the robustness claim).
+        v[0] = -40.0;
+        v[1] = -30.0;
+        v[100] = 50.0;
+        let s = sigma_hat_bulk_mad_f32(&mut v).unwrap();
+        assert!((s - 0.25 / MAD_GAUSSIAN).abs() < 1e-5, "σ̂ = {s}");
+        // Constant vector reads exactly zero; empty reads None.
+        assert_eq!(sigma_hat_bulk_mad_f32(&mut [3.0_f32; 8]), Some(0.0));
+        assert_eq!(sigma_hat_bulk_mad_f32(&mut []), None);
     }
 }

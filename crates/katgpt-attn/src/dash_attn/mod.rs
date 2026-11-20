@@ -57,6 +57,9 @@ pub mod forward;
 // sat_analysis→katgpt-kv). All deps resolve cleanly; the original "stays root"
 // blocker dissolved when pruners/speculative/cache_prune landed in their leaves.
 pub mod adaptive_k;
+// Issue 1229: the Lepski agreement-cascade arm (consumes katgpt_core::lepski_cascade).
+#[cfg(feature = "msa_adaptive_k_lepski")]
+pub mod adaptive_k_lepski;
 pub mod block_topk;
 pub mod channel_aware;
 pub mod entmax_router;
