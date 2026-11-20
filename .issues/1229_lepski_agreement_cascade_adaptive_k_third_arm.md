@@ -1,6 +1,7 @@
 # Issue 1229: Lepski agreement cascade + MAD σ̂ — the adaptive_k third arm (Research 681 poc)
 
 **Status:** open — primitives LANDED in katgpt-core `lepski_cascade` (rides the `estimators` umbrella); G1 PASS at A = 1 (cell 2) after A = 4.5 was FALSIFIED as a serving constant (cell 1); G4 PASS; G2 + G3 deferred to a quiet rig; consumers unwired — claimable
+**Claimed:** katgpt-rs-f3@m3, 1795184321, expires 2026-11-22T14:18Z
 **Lease closed:** katgpt-rs-9a@m3, epoch 1795177976, expires 2026-11-22T12:32Z — primitives + G1/G4 landed; G2/G3/consumers left unclaimed for the next lane
 
 Modelless extraction of arXiv:2611.22198 (*Training Neural Networks to be Locally Adaptive*):
