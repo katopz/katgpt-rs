@@ -39,4 +39,4 @@
 
 ## Kinship (consume, never fork)
 
-`basis_split` (the eigen KERNEL consumed — pre-whiten + `split` + map back; the module doc names the composition, never a second solver) · `subspace_intervention` (protocol + `project_through_into` + `basis_similarity`) · `procrustes` (cross-frame alignment — NOT in this plan's scope, consumed later by Issue 1237) · `latent_steering`/`subspace_steering` (steering consumers — Issue 1235's territory).
+`basis_split` (the eigen KERNEL consumed — pre-whiten + `split` + map back; the module doc names the composition, never a second solver) · `subspace_intervention` (protocol + `project_through_into` + `basis_similarity`) · `procrustes` (cross-frame alignment — NOT in this plan's scope, consumed later by Issue 1237) · `latent_steering`/`subspace_steering` (steering consumers — Issue 1235's territory; rows (a)+(b) landed `49f5c5f49`, closed 2026-11-20 — Research 683 §5a).

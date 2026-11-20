@@ -2,7 +2,7 @@
 
 > **Source:** "Transformers converge to invariant algorithmic cores" — Joshua S. Schiffman, NeurIPS 2026, [arXiv:2602.22600](https://arxiv.org/abs/2602.22600) (v3, 2026-11-09). Code: github.com/joshseth/cores **@ `527948bb3573199d123d331cb2adc1e54647b317`**, MIT, clone read at the pin (`.raw/cores`, removed at close).
 > **Date:** 2026-11-19
-> **Status:** GOAT — Gain (modelless track: extraction-operator gap, Plan 640 filed, PoC pending). Self-adaptive track: fusion rows filed (katgpt-rs Issue 1235, riir-infer Issue 1237). Training track: **audited discard** (grokking law — mechanism diff in §6c).
+> **Status:** GOAT — Gain (modelless track: extraction-operator gap, Plan 640 filed, PoC pending). Self-adaptive track: katgpt-rs Issue 1235 rows (a)+(b) LANDED `49f5c5f49` (closed 2026-11-20; (c) record-only, §5 note); riir-infer Issue 1237 filed. Training track: **audited discard** (grokking law — mechanism diff in §6c).
 > **Related Research:** 557 (subspace intervention — the shipped protocol this extends), 501 (SVCCA — Issue 684), 618 (SplitJEPA/TILR/basis_split — the closest eigenform cousin), 388 (Jacobian lens — REFUTED as latency prefilter only), 475 (ICA lens), 039 (SpectralQuant low-rank law), 393 (BSF concepts-as-subspaces), 287 (probe/steering evidence ladder), 267 (FutureBehaviorProbe), 631 (subspace tuning SST composition)
 > **Related Plans:** 425 (`tilr_invariant_subspace`, DEFAULT-ON), 625 (`basis_split`), 301 (`subspace_phase_gate` — `jacobian_svd_at`), 412 (`subspace_steering`), 416 (`region_subspace`), 309 (`latent_steering`), 265 (SPLAT specialist projection)
 > **Classification:** Public
@@ -50,10 +50,10 @@ ACE (Algorithmic Core Extraction) is **balanced truncation (Kalman/Moore 1981) o
 | Rank selection: energy threshold, spectral gap, causal cutoff | R557 (energy/thin SVD), `basis_split` (τ-heuristic + eigengap refuse-loud gates) | **covered** |
 | Cross-model core alignment | SVCCA (Issue 684), `basis_similarity` (principal angles, Li et al. form) | **covered** |
 | Linear transport operator across models | `procrustes.rs` (closed-form cross-frame alignment, Newton-Schulz polar factor) + riir-engine `cross_game.rs` (f_cross functor from paired latents) — machinery exists, no task-core-conditioned consumer | **fusion row → riir-infer Issue 1237** |
-| Core steering (adaptive strength `s* = Δm/g`, gated) | Consumers ship: `latent_steering` (309), `subspace_steering` (412), `region_subspace` (416); the adaptive-strength calibration law does not | **fusion row → katgpt-rs Issue 1235** |
-| Operator identification in core coords | `KarcForecaster::fit_ridge` (delay-embedding ridge) — adjacent; no "fit A in core coords + spectrum report" instrument | **fusion row → Issue 1235(b) record only, no burning consumer** |
+| Core steering (adaptive strength `s* = Δm/g`, gated) | Consumers ship: `latent_steering` (309), `subspace_steering` (412), `region_subspace` (416); the adaptive-strength calibration law does not | **LANDED `49f5c5f49`** — `steer_calibration::calibrate_strength` (opt-in under `relevance_core`), GOAT `bench_1235_steer_calibration_goat` |
+| Operator identification in core coords | `KarcForecaster::fit_ridge` (delay-embedding ridge) — adjacent; no "fit A in core coords + spectrum report" instrument | **record only — no consumer (Issue 1235(c), closed; re-file only with a consumer)** |
 | Grokking law (`τ ∝ 1/(ωp)` via redundancy) | No analog; no grokking-regime consumer pipeline in the workspace | **audited discard (§6c)** |
-| Merge-compatibility via core alignment | `gauge_invariant.rs` (LoRA gauge-invariant compose) — the compose exists, the core-space diagnostic does not | **fusion row → katgpt-rs Issue 1235** |
+| Merge-compatibility via core alignment | `gauge_invariant.rs` (LoRA gauge-invariant compose) — the compose exists, the core-space diagnostic does not | **LANDED `49f5c5f49`** — `relevance_core::core_subspace_agreement` + `examples/ace_merge_compat_report` |
 
 ## 4. Signal-diffs on the closest cousins (the §3.6 defenses)
 
@@ -71,6 +71,13 @@ ACE (Algorithmic Core Extraction) is **balanced truncation (Kalman/Moore 1981) o
 - **ACE × latent/subspace steering (adaptive calibrated steering):** our steering primitives (309/412/416) consume discovered bases with hand-set α; ACE adds (a) a causally-validated axis discovery method and (b) the adaptive strength law `s* = (m_target − m0)/g` with task-mass gating — a closed-form controller for existing consumers. → katgpt-rs Issue 1235.
 - **ACE × gauge_invariant (merge compatibility):** the paper's merge discussion (cores orthogonal across seeds → interpolation leaves the solution manifold) + our gauge-invariant adapter compose suggests a diagnostic: merge compatibility measured as core-subspace agreement between the models being merged. Idea-class, no burning consumer. → katgpt-rs Issue 1235.
 - **ACE × kv_sensitivity / the lossy-surface gate family (core-directed fragility):** kv_sensitivity ranks CHANNELS by behavioral fragility; ACE ranks CORE DIRECTIONS. If a decision core is sufficient at rank r, the lossy-surface law (per-family retention) governs any arm that projects activations onto it — e.g. a dist-lane activation compression arm in the riir-infer multi-host pipeline would be the f16-B pattern (retention-gated, demote-only). Idea-class only; any such arm starts AFTER the census lane measures sufficiency. → recorded in riir-infer Issue 1237.
+
+### 5a. Issue 1235 close-out (2026-11-20, katgpt-rs-8e@m3, `49f5c5f49`)
+
+- **Consumer-gate verdict (Claude, delegated-owner):** the "consumer must name its margin" gate was a call-site argument, not a precondition — the margin is a closure the consumer passes, so the primitive and its proof path need no named consumer. Implemented; promotion/wiring stays consumer-side (riir-ai steering users pick their margin when they adopt it).
+- **(a) `steer_calibration`** (opt-in, rides `relevance_core` — no new feature row): gate (mass, already-at-target) → one probe `g` → `s* = clamp((m_target − m0)/g, 0, s_max)`, cap disclosed, `NoGain` refuses loud, zero-alloc, K=1 `SubspaceSteeringField` bit parity. GOAT `bench_1235_steer_calibration_goat` G0–G6 PASS vs a FAIR hand-α (median-state closed form): linear hit@0.05 **1.000 vs 0.084**, overshoot 0 vs 0.146 (uncapped max|err| 3.1e-6); curved tanh hit **0.684 vs 0.117**, mean|err| 0.067 vs 0.206, overshoot 0.003 vs 0.106 (70/171 capped at s_max — the one-probe secant under-reads gain on the convex flank; disclosed).
+- **(b) `core_subspace_agreement`** (`‖Q_aQ_bᵀ‖²_F / max(r_a, r_b)`): planted function-preserving pairs with merge outcomes MEASURED by interpolation — known-good complement rotation **0.994** (merge loss 0.000) vs known-bad core→complement rotation **0.001** (loss 0.090); the θ-sweep is monotone against measured loss; raw weight cosine MISRANKS the pair (0.273 good vs 0.455 bad). Synthetic planted family only — a real adapter-checkpoint cell needs a failing merge lane (re-file then).
+- **(c)** operator identification in core coords stays record-only (no consumer); do not re-file without one.
 
 ## 6. Per-track verdicts (one verdict per track)
 
