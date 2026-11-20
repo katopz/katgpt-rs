@@ -5,6 +5,7 @@
 **Verdict**: ✅ High Value — directly validates our modelless distillation, G-Zero self-play, and data selection pipeline; provides theoretical framework for `ScreeningPruner::relevance()` upgrade
 
 > **PASS-Redirects (synthesis):** Cowsik, Dolev, Li, De Luca, Cohen, Goodman, Levine [arXiv:2609.30063 "Self-Play Pretraining with Zero Data"] — uses epiplexity (S_T growth across generator checkpoints) as the generator-health instrument for a self-play pretraining loop (their Fig. 3), two years after this note shipped it as a data-selection pruner; full distill + fusion at `riir-train/.research/458` and `katgpt-rs/.research/591`.
+> **Follow-up (operationalization):** Su, Potapczynski, Qiu, Hughes, Wilson [arXiv:2608.11746 "Epiplexity Guided Data Selection and Generation for Out-of-Distribution Generalization"] — makes epiplexity an ONLINE signal (EpiSelect cross-domain scaling-law allocation; EpiGen buffer-grounded generator reward), refuting this note's "scaling law estimation not practical" caveat at <5% overhead; distilled + fused at `katgpt-rs/.research/685` (this note's Idea 1 upgraded from post-hoc area to marginal-gain allocation).
 
 ---
 
