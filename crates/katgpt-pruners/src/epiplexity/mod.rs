@@ -22,6 +22,12 @@ pub use factorization::{FactorizationOrder, FactorizationScorer};
 pub use loss_curve::{LossCurveTracker, PerPositionLossTracker};
 pub use screening::{EpiplexityScreeningPruner, EpiplexityWeight};
 
+// Plan 641: the online marginal-gain estimator lives katgpt-core-side under
+// the `estimators` umbrella; forwarded here behind the feature so consumers
+// of the epiplexity family find both halves at one path.
+#[cfg(feature = "epiplexity_gain")]
+pub use katgpt_core::epiplexity_gain;
+
 // ── EpiplexityEstimator ─────────────────────────────────────────
 
 /// Ring buffer for training step losses, computes epiplexity S_T.

@@ -738,6 +738,10 @@ Otherwise reclassify local-only with the decision recorded at the site.
 Census: `.docs/10_audits/float_reduction_order_tie_band_determinism_audit.md`.
 Precedent: `katgpt-core/src/closure/bridge_certified.rs`.
 
+## Epiplexity marginal-gain estimator — `katgpt-core/src/epiplexity_gain.rs` (Plan 641)
+
+Opt-in under the `estimators` umbrella (keyless — the Plan 635 Tranche 2 Q4 shape; pruners forward `epiplexity_gain`): `GainEstimator::fit` — the ONLINE allocation half of the epiplexity family (Research 685, arXiv:2608.11746 EpiSelect; the post-hoc screening half stays `katgpt-pruners::epiplexity`, Plan 130). Fits the error-gap resolution curve `u = ε + β·N^(−α)` (u = 1−accuracy; N = Σ γ_k·(n_k+1)) GD-free — grid over (α, ε) + coordinate descent on γ (log-space Huber, median/MAD robustness; deterministic: fixed grids, ascending folds, upper-median quickselect, strict-improvement ties → first). The mix-variation gate reads the centered Gram's singular spectrum (cyclic Jacobi, closed-form-tested pairing) — eff10 (σ ≥ 10%·σmax) ≥ K−1 arms the cross-domain γ; under the bar the typed `Saturation::Sparse(RankCensus)` verdict refuses γ and falls back to univariate per-domain curves (constant columns typed `GainCell::NoCurve` — never a silent γ). Gains: the guide's exposure-weighted `marginal_gain` + the FD-verified (≤ 1e-3) `derivative_gain`; weights sigmoid-tempered around the median (never softmax) + `momentum_into` hysteresis. Consumer + census verdict (SPARSE, eff10 = 1 vs bar 7 — the mining queue arms the univariate path): riir-refine Plan 392. Bounds: `MAX_DOMAINS` 16, `MAX_OBSERVATIONS` 4096, `MIN_OBSERVATIONS` 8; decision path alloc-free (G4 integration gate), refit bounded (grids × CD × K²·W). Stationary-surface ban: allocation surfaces only — never routes scan/decide. G2 (allocation value) is the open promotion bar.
+
 ## Fixed-form softmax numerics family — `katgpt-core/src/softmax_fix.rs` (Issue 959)
 
 `precision_cliff`/`PRECISION_CLIFF_NATS` (c_d = p·ln2 per accumulator format,

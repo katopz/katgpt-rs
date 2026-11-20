@@ -318,6 +318,13 @@ pub mod sparse_kl;
 #[cfg(feature = "estimators")]
 pub mod lepski_cascade;
 
+// Plan 641: the epiplexity marginal-gain estimator (Research 685, arXiv:2608.11746
+// EpiSelect) — the ONLINE allocation half of the epiplexity family; riir-refine
+// Plan 392's mining queue consumes, never forks. Rides the `estimators` umbrella
+// (no own key; feature-cap headroom).
+#[cfg(feature = "estimators")]
+pub mod epiplexity_gain;
+
 // Issue 1228: the reward-census instruments (I1 TD-delta + gate, I2
 // hypergeometric overlap null, I3 pruning-knee census) — one feature, one
 // module, the sparse_kl_bound shape; I4's readout lands in katgpt-pruners
