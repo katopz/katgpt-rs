@@ -2,6 +2,7 @@
 
 **Status:** OPEN — fusion ideas from katgpt-rs Research 669; training-track adoption rides riir-train Plan 496 (C2 adjudicated+built+cell-run 2026-11-15; C3 LANDED 2026-11-15; C4 LANDED 2026-11-15; C7 LANDED 2026-11-16 — C5 remains consumer-gated)
 
+**Claimed:** katgpt-rs-3b@m3, 1795184320, expires 2026-11-22T14:18:40Z
 **Lease closed:** zed-m3-i1210c7@m3, 1763283500, was expires 2026-11-17T20:00:00Z — C7 LANDED `e54b1623d` same session (catalog entry 168, counts 670→671); the claim line folded per the closing convention
 **Lease closed:** zed-2edfda0a@amo, 1794732596, was expires 2026-11-17T17:00:00+00:00 — C4 LANDED under it same session: sweep bench `escalation_band_tau_sweep` (riir-ai) + [Bench 984](../.benchmarks/984_issue1210_c4_tau_sweep_band.md); the claim line folded per the closing convention
 **Lease closed:** zed-2edfda0a@amo, 1794731666, was expires 2026-11-17T17:00:00+00:00 — C3 LANDED under it same session: census bench `supervision_signal_position_census` (riir-ai) + [Bench 983](../.benchmarks/983_issue1210_c3_position_drift_census.md); the claim line folded per the closing convention
