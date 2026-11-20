@@ -1202,6 +1202,7 @@ T1/T2/T4 landed `b7cf5916c`; T3 discharged via Plan 637 (`8a42604a2`) + riir-ai 
 - **dash_attn arm:** `LepskiKRouter` + `compute_lepski_k` behind `msa_adaptive_k_lepski`, with the new `sigma_hat_bulk_mad_f32` (ranked-score σ̂; the NN-MAD collapses τ̂ on ranked values) — `e866932a1`. Consumer-half G4: arm allocations == inner router.
 - **G2 (pre-registered in the test header, amo bd6baf63): FAIL.** End-to-end Lepski/fixed-K_max = 0.591 PASS / 0.910 PASS / 1.027 FAIL at n = 64 / 256 / 1024. Route-only overhead is +6.7–11%; at n = 1024 the scattered k̂ = 32 saves nothing. The bar killed it — not re-tuned; the arm stays opt-in.
 - **Routed:** G3 + the reflex consumer → riir-reflex Issue 130 (`a81bd5af`); refine fan-out → riir-refine Issue 254 (`24c3155b`).
+- **Consumer outcomes (2026-11-21):** refine 254 CLOSED NO-GAIN (watch row; re-open triggers in its record). reflex 130 CLOSED NEGATIVE — the compression-scoring premise REFUTED (riir-reflex bench 203 @ `9bba8aa3`: P-A 8/8 FAIL no depth headroom; σ̂ = 0 on 75–100% — LZ4 per-doc deltas are step functions, the noise scale the cascade needs does not exist; in-domain grids inert 160/160 at the ≤64-doc corpora; G3 never read — the pre-registered gates decided). Primitives UNHARMED (G1/G4 stand); the remaining open consumer is riir-ai Issue 1239 (DEC belief-field surface).
 - **Lease closed:** katgpt-rs-f3@m3, epoch 1795184321, expires 2026-11-22T14:18Z.
 
 ## Issue 1210 (2026-11-13 → closed 2026-11-20) — SSD modelless extractions (Research 669, arXiv:2611.12016)
