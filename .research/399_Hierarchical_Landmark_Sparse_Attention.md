@@ -441,3 +441,5 @@ remains for the FULL benefit (trained landmark queries → tighter Taylor
 centering → NIAH accuracy at 32K/128K), but is no longer a blocker.
 
 Training recipe → riir-train (`.research/399_HiLS_Attention_Training_Recipe.md`).
+
+> **PASS-Redirects (synthesis):** Wang et al. (HaoAI Lab) [arXiv:2611.07232 "Recursive Sparse Attention: Million-Token Length Extrapolation at Logarithmic Cost" — RecSA] — the ~81×-data-efficiency extrapolation cousin: 0.62B tokens all at 32K → RULER 60.5 @1M vs this note's 50B-token CPT lane; **candidate-local RoPE** (per-level candidate-index positions, distances <4K at any length) is the re-indexing lever sharing a genus with this note's HoPE replacement, applied per tree level instead of as a PE swap. Record: riir-infer `.research/033_RecSA_Recursive_Sparse_KV_Tree.md`.
