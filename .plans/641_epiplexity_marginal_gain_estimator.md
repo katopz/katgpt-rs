@@ -30,7 +30,7 @@ riir-refine and riir-reflex consume katgpt-core only (verified in their manifest
 
 ## Phase 3 — wiring notes (advisory, no code here)
 
-- [ ] ~~Consumers: riir-refine Plan 392 (mining queue), riir-reflex Issue 129 (corpus admission), riir-ai Issue 1247 (curiosity budget)~~ — **G2 FAIL (Bench 991) refuses the promotion; no consumer wiring happens on this evidence.** The consumers' own report-only lanes (riir-refine `epiplexity_census`) stay report-only; their queue orders stay incumbent.
+- [-] ~~Consumers: riir-refine Plan 392 (mining queue), riir-reflex Issue 129 (corpus admission), riir-ai Issue 1247 (curiosity budget)~~ — **G2 FAIL (Bench 991) refuses the promotion; no consumer wiring happens on this evidence.** The consumers' own report-only lanes (riir-refine `epiplexity_census`) stay report-only; their queue orders stay incumbent.
 - [x] goat-audit note: this filing gives the epiplexity family its first consumer OUTSIDE katgpt-rs (in-stack consumers already exist: the post-hoc screening pruner + default-on `epiplexity_bandit` context heuristic — corrected at verdict round 1); boundary direction is DOWN only (riir-* → katgpt-core), never a katgpt-rs dep on any riir-* crate.
 
 ## Out of scope (explicit)
