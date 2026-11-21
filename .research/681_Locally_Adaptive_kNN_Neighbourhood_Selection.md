@@ -7,7 +7,7 @@
 > **Consumer outcomes (2026-11-21):** riir-refine Issue 254 **CLOSED NO-GAIN** (watch row, cost axis unmoved at 8–1093 rules/domain; re-open triggers in its HISTORY row) · riir-reflex Issue 130 **CLOSED NEGATIVE — the premise REFUTED on the compression-scoring surface** (riir-reflex bench 203 @ `9bba8aa3`: no depth headroom — P-A 8/8 FAIL flat-to-worse; σ̂ = 0 on 75–100% of questions — the per-doc LZ4 deltas are step functions, not noisy measurements; in-domain grids structurally inert 160/160 domains at the ≤64-doc served corpora; the G3 test read never fired — the pre-registered gates decided). The selection layer itself is UNHARMED (G1/G4 stand); the compression-scoring consumer class is dead; the open consumer is riir-ai Issue 1239 (the DEC belief-field agreement fusion — the attention/belief surface, §2.3's pre-named fallback).
 > **Related Research:** 549 (ASEntmax — the sibling closed-form adaptive-k arm, `compute_derived_k`), 392 (SSMax rolling Δ̂ — the level-gap statistic the derived arm consumes)
 > **Related Plans:** 256 (MSA adaptive k — the shipped sigmoid arm)
-> **Cross-ref:** riir-train `.issues/701` @ `11f52889` (training-track probe cells) · riir-ai `.issues/1239` @ `e4c6cc75a` (DEC-field agreement fusion, novelty TBD) · katgpt-rs `.issues/1229` (this repo — poc + pre-registered gates; landed alongside this note)
+> **Cross-ref:** riir-train `.issues/701` @ `11f52889` (training-track probe cells) · riir-ai `.issues/1239` @ `e4c6cc75a` (DEC-field agreement fusion — **removed 2026-11-21, the fusion + trigger live in §2.5's DEC row above**) · katgpt-rs `.issues/1229` (this repo — poc + pre-registered gates; landed alongside this note)
 > **Classification:** Public
 
 ---
@@ -104,8 +104,7 @@ scalar folds over prefix aggregates. No second pass over the corpus, no per-cand
 selects per query how many neighbours to trust; the agreement statistic for a belief FIELD is
 the DEC divergence (`codifferential`) of the field between successive k — flux change below τ ⇒
 stable belief; divergence explosion ⇒ fog/contested region ⇒ confidence decays through the
-existing sigmoid law. Zero training; the operators ship in `katgpt-dec`. → fusion idea, novelty
-TBD: **riir-ai `.issues/1239`**.
+existing sigmoid law. Zero training; the operators ship in `katgpt-dec`. → fusion idea — **the riir-ai issue file was removed 2026-11-21 (defer-write-back); the fusion lives in §2.5's DEC row**.
 
 **Consumer (rulewright) context:** (a) retrieval index — per-span adaptive K in the fan-out
 (the measured K≥6 floor is global; the prefix-form keeps ONE retrieval at grid-max so the
@@ -143,7 +142,7 @@ the threshold-tuning habit, not a code change by itself).
 - × `adaptive_k.rs` → **third arm** beside the variance-sigmoid and the Lemma-2 closed form.
 - × `CorpusDistanceGate` → adaptive abstention: abstain-on-cascade-failure, fires exactly where
   kNN aggregation is provably unreliable (τ can no longer absorb the bias).
-- × `katgpt-dec` → belief-field agreement via DEC divergence (riir-ai issue).
+- × `katgpt-dec` → belief-field agreement via DEC divergence. **DEFERRED — the riir-ai issue file (1239) was removed 2026-11-21 per the defer-write-back law; this row is the record.** The fusion: the agreement cascade measured on a FIELD — per-NPC `GenericSpatialBelief` aggregates neighbour evidence at k = {k₀, 2k₀, …}; the agreement statistic between successive-k belief fields is the DEC divergence (`codifferential`) of the field difference — flux change below τ ⇒ stable belief (grow k, trust the wider aggregate); divergence explosion ⇒ unstable region (fog-of-war edge, contested zone) ⇒ stop AND decay confidence through the existing sigmoid law. Zero training; operators ship in `katgpt-dec` (`codifferential`, `exterior_derivative`, `hodge_decompose`); the DEC manifold-curse caveat holds (d ≤ 3 surfaces only — maps, belief regions, KG embeddings — never high-dim shards). Why it is more than a face on the belief-confidence law: the existing decay is TIME-keyed (sigmoid(−λ·(now − last_observed))); this is SAMPLE-SIZE-keyed — it fires where the aggregate is provably untrustworthy at ANY age. The two axes compose. **Novelty gate before any implementation** (grep vocabulary translation: agreement cascade / nested aggregation / divergence-of-difference / field instability across riir-ai + katgpt-rs + riir-neuron-db `.research/`/`.plans/`/`*.rs`; the stationary-surface test names the mutated state — the belief field itself mutates, a real consumer; G1 known-answer fixture: planted field discontinuity ⇒ the cascade abstains exactly at it, curl(grad)=0 / div(curl)=0 pins stay; real-boot PROGRESS test asserting no k-flapping oscillation — the cascade's monotone largest-k structure gives the hysteresis for free, verify, do not assume). Route: riir-ai runtime lane. **Post-1229 gate state: the scalar cascade's G1 PASSED and the primitives are landed (katgpt-core `lepski_cascade` + `LepskiKRouter`), but G2 FAILED at n=1024 and BOTH landed consumers went negative (refine 254 NO-GAIN, reflex 130 premise-REFUTED on the compression-scoring surface) — the selection layer stands, the consumer-class evidence is 0/2. Weight the DEC fusion's expectations accordingly: it must prove the FIELD surface has the headroom the compression surface lacked (P-A class) before any plan.
 - × `elo_k_eff` → per-rule adaptive evidence floors (watch row).
 - × quantization (training track) → per-block fitted pre-compensation as a candidate third
   head-class for the q4 re-open bar — riir-train issue, kill-on-tie screen only.
@@ -216,7 +215,7 @@ consuming only cross-k agreement and carrying an oracle inequality."*
 - `katgpt-rs/.issues/1229` — poc: agreement cascade + MAD σ̂ as the adaptive_k third arm (gates §4).
 - `riir-train/.issues/701` — training-track probe cells (frozen per-cluster NPC brain grids;
   per-block quant pre-compensation screen, kill-on-tie).
-- `riir-ai/.issues/1239` — DEC-field agreement fusion (novelty TBD).
+- `riir-ai/.issues/1239` — DEC-field agreement fusion — **REMOVED 2026-11-21 (defer-write-back; see §2.5's DEC row)**.
 - Shipped cousins: `katgpt-attn/src/dash_attn/adaptive_k.rs`; Research 549 (Lemma-2 derived k);
   Plan 256 (sigmoid arm); `katgpt-core::distance_abstain::CorpusDistanceGate`;
   `katgpt-core::compression_drafter::Lz4FlexDrafter`; riir-refine `elo_k_eff` (n_floor 16).
