@@ -7,6 +7,8 @@
 **Related Plans:** riir-train Plan 391 (vec2vec translator — this paper adjudicates its modelless arm), katgpt-rs Plan 625 (`basis_split`)
 **Classification:** Public
 
+> **PASS-Redirects (synthesis):** Myers Lantow & Miolane [arXiv:2511.19706 "Selective Disk Bispectrum: A Complete and Rotation Invariant Image Descriptor"] — PASS (in-session verdict, Claude AGREE 2026-11-21): a published **instance of the escape Prop 2(i) allows**, never a counterexample to the first-two-moment identification law — the bispectrum is a **third-order, compact-group** statistic (SO(2) on the disk) with analytic inversion (a recursive divide-chain recovering all disk-harmonic coefficients up to one free rotation — the free phase IS the group element), closed-form noise E/Var per coefficient, and the first bispectral multi-reference alignment on rotated images (average the invariants of many noisy rotated copies, invert once — exactly the "higher-order geometry CAN reveal it pair-free" finite-world caveat, realized). It does **NOT** reach GL(k) LLM spaces (Prop 4): the LoRA/embedding gauge is a general linear gauge, so the vec2vec/riir-train Plan 391 path stays the right tool there, with `katgpt-spectral/src/gauge_invariant.rs` rebalancing (R238) the suited mechanism for GL(r) LoRA composition.
+
 ---
 
 ## TL;DR
