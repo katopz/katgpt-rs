@@ -4603,6 +4603,10 @@ required-features = ["soft_read", "distance_abstain"]
 name = "issue990_closed_form_weight_write_gates"
 required-features = ["quant_error_lora"]
 
+[[test]]
+name = "issue996_surgical_read_patch_gates"
+required-features = ["formats_weights"]
+
 # Plan 634 T1.2/T1.3: the F2 core identity — local == spectral at k = n on
 # small fixtures (the normalization-validation run for the local/spectral
 # postures; the standing Phase-2 battery extends this file).

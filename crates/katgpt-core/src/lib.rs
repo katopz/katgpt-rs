@@ -1596,6 +1596,11 @@ pub mod quant_error_lora;
 #[cfg(feature = "quant_error_lora")]
 pub mod closed_form_weight_write;
 
+// Surgical read-patch artifact class (Issue 996, Research 492) — keyless
+// under the `formats_weights` umbrella (the Issue-1222 cap-era ride).
+#[cfg(feature = "formats_weights")]
+pub mod surgical_read_patch;
+
 // Issue 980 — WeightEditOverlay (Research 648 modelless half): implies
 // gain_cost_halt because the arming condition IS the halter's obstacle
 // telemetry (HaltReason::Oscillation rate).
