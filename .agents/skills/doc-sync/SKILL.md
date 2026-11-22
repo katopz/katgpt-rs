@@ -66,7 +66,7 @@ enter the census; a repo absent from the running box is UNVERIFIABLE, not correc
 | Repo | `.docs/` shape | README | Highwater | Branch |
 |---|---|---|---|---|
 | `katgpt-rs` | 10 numbered folders (01_orientation…10_audits), unnumbered files inside — the public book | large showcase + feature tables | same | develop |
-| `riir-ai` | 12 numbered folders (01…12; 02_inference renumbered 12_inference) — the private book | large showcase + crate table | same | develop |
+| `riir-ai` | 13 numbered folders (01…12_quest_style + 13_web_family; 02_inference renumbered 12_inference, then ebf30247a renamed 12_inference→12_quest_style 09-26 and dc9540e7f added 13_web_family 10-03 — the 11-19 census check caught both shape changes; this row is their contract backstop) — the private book | large showcase + crate table | same | develop |
 | `riir-chain` | 7 numbered folders (01…07_formal_verification; canonical chain self-description — riir-ai's `.docs/07_neuro_symbolic_chain/` is the fusion view, links here; 2 members: lib + chaind) | build + flags + wallet/RPC trust + merkle lesson | same | develop |
 | `riir-neuron-db` | 11 numbered folders (01…11_cli) | feature gates + FV summary + license | same | develop |
 | `riir-train` | 6 numbered folders (01…06_cross_cutting) | minimal: role + sibling layout | same | develop (default; `main` frozen) |
@@ -180,7 +180,7 @@ Apply the repo-specific rules:
 
 #### riir-ai (the private runtime)
 - **README.md**: crate table + feature showcase.
-- **`.docs/`**: 12 numbered folders — drop new docs in the right group, add one line to the group README.
+- **`.docs/`**: 13 numbered folders — drop new docs in the right group, add one line to the group README (`12_quest_style/` holds the Quest Style Bridge; `13_web_family/` the riir.ai family records).
 - Cross-repo: if a katgpt-rs primitive was consumed, note the fusion in the riir-ai doc AND the katgpt-rs doc (bidirectional cross-refs).
 
 #### riir-chain (7-folder `.docs/` book, reindexed 2026-08-08)
