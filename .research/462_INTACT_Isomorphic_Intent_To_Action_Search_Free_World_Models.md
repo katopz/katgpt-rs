@@ -6,6 +6,7 @@
 > **Classification:** Public (this note). Training recipe → riir-train.
 > **Related Research:** 358 (SMWM — **identical mechanism, identical PASS verdict**; INTACT cites SMWM [16] and lifts its `L_inv` as the "local physical intent" branch), 426 (Temporal Straightening — **same authors LeCun/Ren/Balestriero lineage, same LeWM benchmark, same PASS pattern**), 360 (AdaJEPA — same authors Wang/Bounou/LeCun/Ren, same JEPA PASS precedent), 138 (LeJEPA — same author Balestriero, LOW-MODERATE GAIN downgrade precedent), 123 (Latent Functor Runtime — **ships the INTACT deployment primitive as Super-GOAT**), 324 (GC-IDM distillation in riir-ai — **GC-IDM is INTACT's direct cited prior art [34]**, same amortized-planning pattern, Gain verdict)
 > **Domain:** katgpt-rs (this note, public). The distilled runtime primitives already ship — no new public or private file.
+> **PASS-Redirects (synthesis):** Zhang et al. [arXiv:2611.25927 "Fast-JEPA: Advancing the Success–Latency Frontier for Latent World Models"] — third-party INTACT-lineage follow-up: anchored multi-horizon substrate + terminal-only candidate scoring (2.41× vs the INTACT baseline here) + DynaGoal deadline/delay benchmark; PASS modelless (the substrate is trained; the rollout-free-evaluation class is published — 2611.05072/WoTE), training half completes deferred riir-train R408 with the dual-call λ replicated identically — see katgpt-rs Research 687.
 
 ---
 
