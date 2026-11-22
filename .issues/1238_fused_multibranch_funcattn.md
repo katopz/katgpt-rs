@@ -11,6 +11,46 @@
 - arXiv:2611.19800 "Multi-Branch Transformer" (Li, Chen, Deng, Xu, Chen, De Sa, He, Wang, Tong — UIUC/Rice/Michigan/Cornell, 2026-11-15). Training code + HF checkpoints public. Distilled 2026-11-22 under the research workflow; PASS-Redirect lines committed at riir-train `b89be9b77` (Joint-KV = the branch-axis member of the shared-KV family), riir-ai `14a0b05c4`, riir-infer `513795a6`.
 - Host substrate (all shipped): `katgpt-core::funcattn` (Research 257 / Plan 286; default-on `776000b9`; G1–G6 green), `katgpt-attn::funcattn_compose::{chiar_blend, freeze_thaw}`, `FuncAttnSnapshotStore` (BLAKE3 commitment, atomic Arc-swap).
 
+## Shipped composition-family inventory (corrected 2026-11-22, doc-surface hunts)
+
+The stack ships ≥3 composition-class members — NONE on the funcattn host (the host-scoped claim above stands):
+1. **Flow dual** — `get_or_compute_dual_postmax` (`katgpt-core/src/flow/cache.rs`): K=2 heterogeneous frozen branches (LEO teacher + UVFA student), unlearned convex fusion after the per-action max-pool, shared linear FFT coda (Plans 459/460 — see Cross-refs).
+2. **`GdnHolaTreeVerifier`** (`katgpt_core::gdn_tree_verify::hola_fusion`, Plan 430, feature `gdn_hola_tree_verify`) — K=2 heterogeneous paths (compressive GDN + exact-recall HOLA), parameter-free additive fusion `O[i] = O_gdn[i] + O_hola[i]`, shared committed prefix `S₀` read across all draft-tree branches (the Joint-KV shape on the specdec host).
+3. **`VelocityFieldEnsemble`** (`katgpt_core::velocity_field_ensemble`, Plan 376, UNGATED — always compiled, lib.rs; GOAT G1–G4) — `b̂ = Σηᵢ·bᵢ` with η SOLVED via ridge (`ridge_solve_direct_f32`): a LEARNED combiner that MBT Table 6 directly adjudicates; the uniform-η=1/P vs solved-η ablation has never run (rider below).
+
+**Design cites for the cell:** (a) `ScaleNormalizedFusion` (`katgpt-core/src/causal_head_importance/fusion.rs`, Plan 358) — the shipped per-head RMSNorm+γ fusion operator, γ=1.0 default = identity, currently unused: the ready-made operator for the heterogeneous-branch variant's unlearned normalized-sum policy. (b) Sum-arm ceiling failure — riir-ai `crates/riir-games-mmorpg/src/hero_routine_social_tests.rs::sum_arm_degrades_threat_response_vs_max` (Sum hunts where Max flees). Mean keeps Flee share 0.022 where Max/c=0 gives 0.000 (riir-ai `.benchmarks/799_spectral_promotion_brief.md` row 88). Together they back a bounded, normalized fusion over raw Σ. They do not rank Mean against Max for the funcattn cell.
+
+## Guard rows (MBT vocabulary as grep bait; each restates an existing law)
+
+- **G-1 `mbt_table6_not_an_artifact_blend_license`** — Table 6's scope is ACTIVATIONS within one model at matched params. Quoting it to blend decision ARTIFACTS (specialist heads, vessels, rulegram epochs) violates arsenal law A2 ("never blend — selection is monotonic atomic hot-swap") and the vessel monotonic-apply/digest-pin identity semantics: answers become unattributable (broken, not slow).
+- **G-2 `per_npc_branch_fusion_adverse_prior`** — "K personality branches per NPC, fused" breaks runetrace attribution (which branch drove the FSM transition?), HlaCacheProxy 5-scalar sync provenance (whose valence crosses?), and block-λ per-affect-block keying (undefined for a fused mixture). The legitimate form already exists: identity-keyed unit directions (Plan 514 / Issue 1239's substrate). W1-K2 (0.93–0.99×) is the named adverse prior; any proposal must pre-register against it AND extend runetrace rows + block-λ + the sync story to name the branch.
+- **G-3 `shared_cache_stays_local_compute`** — Joint-KV is in-process compute; at any sync/process seam the raw-scalars-only bridge law holds (dot+sigmoid projection, clamp; Issue-940 pins).
+- **G-4 MCGS position-invariance** — `multi_branch_aggregate`'s union stays parameter-free; any weighted-upgrade proposal must prove position-invariant weights or Plan 061/065's invariance property (the pillar's sloppy-test) breaks.
+
+## MBT→fleet translation record (canonical map, 2026-11-22 sweep)
+
+| MBT axis | Fleet operator names |
+|---|---|
+| BRANCH | BranchBank/BranchRouter (Plan 329, memory branches, non-interference) · BanditPruner arms · FusionArm (riir-games-mmorpg hero_routine) · tree-verify branches |
+| PRELUDE/CODA | LEO shared linear FFT coda (Plans 459/460) · OnlineCompactor prefix+suffix |
+| FUSION | CHIAR blend (routing) · DualLeoMixer (convex) · ScaleNormalizedFusion (unused operator) · hola_fusion (additive) · VelocityFieldEnsemble (learned η) · sigmoid_fuse_multi_branch_into (lookup multiplexing) |
+| JOINT-KV | gdn_tree_verify S₀ shared prefix · bekko shared-prefix (riir-infer 006) · mtp_shared_kv (LeviathanVerifier) · Plan 297 CrossGamePrefix (shared compact KV + per-game queries) · katgpt-kv SharedKV (within-attention K-as-V, different axis) · contextual_shared_pass |
+| ALLOCATION (width-depth) | guided_width (Issue 895) · bench_gram_width_depth + issue_407_t5 ("Depth dominates width": depth +6.46% vs width +0.16% — the cross-domain counterpoint at corpus scale) |
+| PLACEMENT (middle) | Plans 459 (pre-max, demoted) → 460 (post-max, promoted) — the in-stack placement precedent |
+| HEAD FOLD | head-gang ladder (mq8) · linking_fold · tree-nodes-folded-into-one-masked-solve (specdec) |
+| W1-K2 NEGATIVE | kernel_opt `fusion-payback-gated-on-per-dispatch-overhead` + `work-scaling-probe-launch-bound` (mined rules) · `min_npcs` gate (flow) · npc_brain router threshold invariant |
+| SPEEDUP MODEL | the Amdahl family: Plan 096 `SpecCostSnapshot` + bench_051 prediction-accuracy gate + kernel_opt `amdal_ceiling_wrapped_modules` (= the 1/(1−s) bound) · ane_roofline thresholds |
+
+## Advisory riders (doc-sync lanes own these; recorded here for greppability)
+
+- **MoA doc-rot:** the `04_supergoat_candidates/moa_activations.md` file carries the Attention-Matching (Plan 297) content, NOT the Research-126/Plan-158 MoA mechanism the README names — fix or split at next doc-sync. Same pass: `fusion_arm.rs`'s in-source "Bench 027" pointer is stale (riir-ai Bench 027 is gguf-model-loading; the figures live in riir-ai Bench 799).
+- **Two-brain guard-line:** MBT's shared-cache law is contra-indicated on think-brain caches — per-NPC belief privacy is the fog-of-war axiom, never a byte-saving opportunity.
+- **Fusion-policy scale boundary:** fusion-policy freedom exists at stack scale (Table 6), not at activation/FFN-layer scale (LA ⊊ MoA; W1-K2) — guards a future "simplify MoA's gates" proposal both theories predict loses.
+- **Uniform-mix-MoA falsifier** (proposer-gated, no consumer pull): uniform-mix vs learned-gate MoA at matched bytes on the Bench-049 FFN fixture.
+- **Plan 376 uniform-η ablation:** at the next Plan-376 touch, run η=1/P vs solved η — a tie records the Table-6 corroboration and retires the "learned fusion" claim (one cell, not a plan).
+- **Bench 027→799 corroboration leg:** at the next hero-fusion A/B rerun, record whether Spectral sits within noise of Max/Mean at K∈{2,3} (record-only).
+- **Gram-family all-orthogonal** (first dated sweep 2026-11-22): topogram hosts are discrete-document and selection-shaped (Compose+Abstain is ingestion, never sum-fusion); the repair descent's best-of-K IS the correct discrete fusion analog (randomized_starts caveat keeps every repair instance single-chain); bench 013's allocation curve is L-shaped to an entropy floor, not MBT's U; carrier needs no fusion term (closed v1 + two-instance bar). Re-open conditions: fill-leaf LLM seam with a real consumer; a start-independent multi-basin repair instance with a production caller.
+
 ## Why filed (Gain bar, honestly stated)
 
 1. **No shipped member** — the unblocks-support rests on this grep alone. CHIAR's blend is unlearned (fixed τ=0.865/β=12) but ROUTING-class: an input-dependent gate softly picks which of TWO operators dominates per token. COMPOSITION-class fusion (all K branches always execute at matched width; outputs aggregated at a fixed ratio) has no implementation anywhere in the stack.
