@@ -1,6 +1,7 @@
 # Issue 1239 — Conditioned-KARC correction bank (rank-1 readout corrections keyed by condition)
 
-**Status:** OPEN — unclaimed. Pre-registered GOAT cell below; no run scheduled. Verdict provenance: MBT (arXiv:2611.19800) research verdict package, KARC surface GAIN, reviewer AGREE final round (2026-11-22, session `42b5b2e6`) with four binding conditions folded in below.
+**Status:** OPEN — claimed, harness in progress. Pre-registered GOAT cell below; no run scheduled. Verdict provenance: MBT (arXiv:2611.19800) research verdict package, KARC surface GAIN, reviewer AGREE final round (2026-11-22, session `42b5b2e6`) with four binding conditions folded in below.
+**Claimed:** katgpt-rs-93@amo, 1795365988, expires 2026-11-24T16:46Z
 
 ## Pinned claim (§1.5 precondition)
 
@@ -66,7 +67,7 @@ A G1 pass is architecture evidence whose real consumers need the runtime wiring 
 
 ## Tasks
 
-- [ ] Claim: `git fetch origin && py ../katgpt-rs/scripts/claim_lease_check.py --item 1239`; append the `**Claimed:**` line (own line, nothing after the expiry token); push BEFORE implementing (48 h expiry)
+- [x] Claim: `git fetch origin && py ../katgpt-rs/scripts/claim_lease_check.py --item 1239`; append the `**Claimed:**` line (own line, nothing after the expiry token); push BEFORE implementing (48 h expiry)
 - [ ] Land `karc_conditioned_readout` inside the `estimators` umbrella in katgpt-core (NO top-level feature — cap 296/300; no `implies karc_forecaster`)
 - [ ] Pin the condition-signal `c` source (independent of the residual σ-gate) IN THIS FILE before any run
 - [ ] Implement the correction bank (closed-form fits; `chunked_gram_into` + `ridge_solve`; ascending sequential fold order)
