@@ -11,4 +11,13 @@
 # withdrawn+removed and 087_rig_exclusive_sticky_poison allocated in the same
 # window (5353df5's delete/create pair). Both sides' adding commits named here;
 # the number is not reusable below the era boundary.
-legacy_ratchet = 3
+# 4 at 2026-11-22 (zed-amo-071num@amo, the numbering-gate repair run): 108 was
+# allocated twice the same day — d0ccd82 (108_t9_gate_snap_budgets, first) and
+# b6edcfd (108_verify_lanes_tomllib_picker_and_strand_pin, second; the second
+# allocator read the stale 107 because neither allocation commit bumped
+# .issues/.highwater — the Issue-1205 bump-rides-the-allocation-commit class).
+# verify_lanes closed + removed same day (a1ed210); t9_gate_snap keeps the
+# number (first allocation, the heavier inbound citation set: TASKS 144/146 +
+# DONE plan-083 row). Highwater repair: seal-sprints de2bc7a. 108 is not
+# reusable below the era boundary.
+legacy_ratchet = 4
