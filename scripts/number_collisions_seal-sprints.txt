@@ -20,4 +20,9 @@
 # number (first allocation, the heavier inbound citation set: TASKS 144/146 +
 # DONE plan-083 row). Highwater repair: seal-sprints de2bc7a. 108 is not
 # reusable below the era boundary.
-legacy_ratchet = 4
+legacy_ratchet = 3
+# 3 re-pinned 2026-11-22 (zed-150ad484@amo): the 108 pair DISSOLVED at the sprint!108
+# close — both holders now removed (t9 closed+removed in the same commit as the re-pin;
+# verifylanes removed a1ed210) — the gate's re-pin-DOWN demand honored (4 -> 3) in the
+# dissolving commit. The same-day double allocation stays on record above (the number
+# is not reusable below the era boundary); the ratchet follows the LIVE collision set.
