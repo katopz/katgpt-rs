@@ -69,6 +69,7 @@ riir-llm                 0           0           0  # measured 0/0: no .py
 riir-mmorpg-examples     1           1           0  # measured 2/2
 riir-neuron-db           0           0           0  # measured 0/0: no .py
 riir-refab               0           0           0  # not on the landing box; unmeasured zero, re-pin at first measure
+riir-reframe               0 0 0  # registered 2026-11-22 (riir-ai Proposal 063 T7.2, after T0.0' + Phase-2 G1 PASS): the native media-reframe engine (SR/video/depth, Rust-only leaf); measured at registration measured 0/0: no .py
 riir-refine             16          16           0  # measured 31/31
 riir-reflex             20          20           0  # measured 37/37
 riir-reflexer            0           0           0  # measured 0/0: no .py

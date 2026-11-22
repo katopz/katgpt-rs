@@ -27,6 +27,7 @@ riir-llm
 riir-mmorpg-examples
 riir-neuron-db
 riir-refab
+riir-reframe
 riir-refine
 riir-reflex
 riir-reflexer
