@@ -25,6 +25,14 @@ Fold order: branch index ascending, sequential — the Issue-940 determinism law
 
 **Condition-signal provenance (pre-registered, advisory adopted as binding here):** the conditioning variable `c` MUST come from a channel INDEPENDENT of the correction-residual σ-gate (e.g., personality blend `z` from `committed_blend`, MindState/limelight tier, combat flag, time-of-day bucket). If `c` is derived from the same rolling residual that drives `g_b`, arm A4 degenerates into a smoothed A2 and the select-vs-composition comparison measures only smoothing — that outcome is a design failure, not a result. Pin the `c` source in this file before the run.
 
+**PINNED 2026-11-22 before any run (katgpt-rs-93@amo) — `c` source + harness:**
+- **`c` = an EXOGENOUS regime label** (the in-crate stand-in for a combat flag / time-of-day bucket): the corpus switches an exogenous drive on/off in fixed blocks and the forecaster is TOLD the block label. It is computed from the schedule, never from any residual, so it is independent of the σ-gate by construction.
+- **Gate deviation, disclosed:** `g_b` is an EWMA relative-gain σ-gate on correction b's own keyed residual (`σ(β·(gain − margin))`, β 30, margin 0.15, EWMA 0.05, abstain until 16 keyed obs). The full `ConformalIntervalCalibrator` is not wired; the calibration is split-conformal in SHAPE (gates warm on a calibration slice disjoint from fit and test).
+- **Corpora** (double-scroll ODE of `karc_g1_dh18720.rs`, normalised to [−1, 1]; D=3, K=4 delays, M=8 Chebyshev, d_h=96; ridge λ=1e-4 for every fit): **C1 regime-switching** = double-scroll + condition-keyed constant drive on dV1 (blocks of 200 steps, c∈{0,1}); 5 seeds of observation noise (σ=0.01 normalised) = the noise-robustness arm. **C2 pure double-scroll** (c ≡ 0; corrections must abstain — G3). **C3 periodic** (3-channel multi-sine, period 20; G3 + the G5 SeasonalNaive floor reported beside it). The riir-ai NPC mixed-regime corpus is OUT (cross-repo; katgpt-rs is upstream) — it belongs to the follow-up consumer row.
+- **Splits:** fit 0–60 %, gate calibration 60–70 %, test 70–100 %; one-step-ahead NRMSE; train NRMSE reported (gap check, Bench-992 lesson).
+- **Arms at matched bytes** (base Wout 288 f32; 2 corrections × 99 = 198 → 486): A1 base · A2 `KarcRegimeGate` KARC-vs-SeasonalNaive (the in-crate SELECT control; `karc_regime_mux` is riir-ai) · A3 uniform mean of both corrections · A3b uniform Σ/√2 (the Bench-992 scale control) · A4 keyed σ-gated · A5 single wide fit M=13 (468 f32) · A6 two private M=7 forecasters, forecast mean (504 f32). **Disclosed extra controls:** A1c base + per-condition bias (294 f32) and A1k per-condition full readouts (576 f32) — a keyed win must beat A1c to be credited to the rank-1 bank.
+- **Decision rule:** per seed r = 100·(NRMSE_arm − NRMSE_ref)/NRMSE_ref pp; δ = max(1.0, 2.5·SE); WIN r̄ < −δ, LOSS r̄ > δ. **G1 PASS** = A4 WIN vs A1 on C1 AND A5 not WIN vs A4 (A5 win ⇒ demote-to-null-record). **Attribution** = A4 vs A1c. **Promotion-bearing fixed-gate arm** = A3 WIN vs A1. **G3** = A4 not LOSS vs A1 on C2 and C3. **G2** = A4/A1 forecast-step wall ≤ 1.5× (interleaved; corpus shape + an HLA-ish shape D=8, d_h=192). **G4** = `apply_into` + `observe` alloc-free.
+
 **Gate provenance (pinned):** `g_b` = σ-gate over correction b's OWN conformal-calibrated rolling residual (reuses the DEFAULT-ON conformal substrate; abstain-first — a never-firing correction costs only its bytes). Sigmoid, never softmax.
 
 ## Feature home
@@ -69,7 +77,7 @@ A G1 pass is architecture evidence whose real consumers need the runtime wiring 
 
 - [x] Claim: `git fetch origin && py ../katgpt-rs/scripts/claim_lease_check.py --item 1239`; append the `**Claimed:**` line (own line, nothing after the expiry token); push BEFORE implementing (48 h expiry)
 - [ ] Land `karc_conditioned_readout` inside the `estimators` umbrella in katgpt-core (NO top-level feature — cap 296/300; no `implies karc_forecaster`)
-- [ ] Pin the condition-signal `c` source (independent of the residual σ-gate) IN THIS FILE before any run
+- [x] Pin the condition-signal `c` source (independent of the residual σ-gate) IN THIS FILE before any run — exogenous regime label, see PINNED block
 - [ ] Implement the correction bank (closed-form fits; `chunked_gram_into` + `ridge_solve`; ascending sequential fold order)
 - [ ] Harness: arms A1–A6 on the three corpora; run on amo/bmo (never m3 — job-lane law); quote `bench_preflight`'s PROVENANCE line
 - [ ] Record the verdict in `.benchmarks/` (next free number); demote-to-null-record on G1 failure in the same commit as the run
