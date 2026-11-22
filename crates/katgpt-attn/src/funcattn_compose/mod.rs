@@ -22,7 +22,8 @@
 //! | `funcattn_spectral_pre_rotate` | FUNCATTN × SpectralQuant eigenbasis | T5.1 |
 //! | `funcattn_chiar_blend`         | FUNCATTN × CHIAR spectral-entropy routing | T5.2 |
 //! | `funcattn_freeze_thaw`         | FUNCATTN × BLAKE3-committed snapshot hot-swap | T5.3 |
-//! | `funcattn_compose`             | parent — enables all three | — |
+//! | `funcattn_branch_parallel`     | K matched-width FUNCATTN branches, unlearned fusion | Issue 1238 |
+//! | `funcattn_compose`             | parent — enables the three Plan-286 compositions (NOT a manifest feature in this crate) | — |
 //!
 //! Per Plan 286 Phase 5 ("Each opt-in") and the plan's Gain-tier verdict, none
 //! of these promote to default-on until a composition-specific GOAT gate proves
@@ -44,3 +45,6 @@ pub mod chiar_blend;
 
 #[cfg(feature = "funcattn_freeze_thaw")]
 pub mod freeze_thaw;
+
+#[cfg(feature = "funcattn_branch_parallel")]
+pub mod branch_parallel;

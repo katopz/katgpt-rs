@@ -55,7 +55,8 @@ pub mod static_cal;
 #[cfg(any(
     feature = "funcattn_freeze_thaw",
     feature = "funcattn_spectral_pre_rotate",
-    feature = "funcattn_chiar_blend"
+    feature = "funcattn_chiar_blend",
+    feature = "funcattn_branch_parallel"
 ))]
 pub mod funcattn_compose;
 
