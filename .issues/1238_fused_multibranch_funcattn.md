@@ -1,6 +1,7 @@
 # Issue 1238 — Fused multi-branch FUNCATTN (branch-parallel composition cell)
 
-**Status:** OPEN — unclaimed. Pre-registered GOAT cell below; no run scheduled. Verdict provenance: MBT (arXiv:2611.19800) research verdict, modelless track PASS → GAIN, reviewer AGREE round 2 (2026-11-22) with both A6 conditions folded in below.
+**Status:** OPEN — claimed, harness in progress. Pre-registered GOAT cell below; no run scheduled. Verdict provenance: MBT (arXiv:2611.19800) research verdict, modelless track PASS → GAIN, reviewer AGREE round 2 (2026-11-22) with both A6 conditions folded in below.
+**Claimed:** katgpt-rs-93@amo, 1795364782, expires 2026-11-24T16:26Z
 
 ## Pinned claim (§1.5 precondition)
 
