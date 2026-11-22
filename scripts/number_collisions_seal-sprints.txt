@@ -20,9 +20,15 @@
 # number (first allocation, the heavier inbound citation set: TASKS 144/146 +
 # DONE plan-083 row). Highwater repair: seal-sprints de2bc7a. 108 is not
 # reusable below the era boundary.
-legacy_ratchet = 3
-# 3 re-pinned 2026-11-22 (zed-150ad484@amo): the 108 pair DISSOLVED at the sprint!108
-# close — both holders now removed (t9 closed+removed in the same commit as the re-pin;
-# verifylanes removed a1ed210) — the gate's re-pin-DOWN demand honored (4 -> 3) in the
-# dissolving commit. The same-day double allocation stays on record above (the number
-# is not reusable below the era boundary); the ratchet follows the LIVE collision set.
+# 4 re-pinned UP 2026-11-23 (zed-f50f3819@m3, the sprint#077 housekeeping lane): the
+# 11-22 dissolve verdict (zed-150ad484) was measured WRONG — the walk
+# (removed_by_number + rename collapse) still counts the 108 pair as a row: both
+# stems are non-rename documents and BOTH-REMOVED is exactly the
+# historical-collision class the gate counts (verified live: historical_collisions()
+# returns 4 rows incl. ('.issues', 108, [t9_gate_snap_budgets_predated_the_mobile_hero,
+# verify_lanes_tomllib_picker_and_strand_pin_dormant])). "Both removed" ≠ dissolved —
+# the gate's own docstring says so. Re-pin to the measured 4; the floors row's
+# max_hist 4 (zed-amo-071num's 11-22 pass) already agrees — one record, two media,
+# both at 4 from this commit. The same-day double allocation stays on record above
+# (the number is not reusable below the era boundary).
+legacy_ratchet = 4
