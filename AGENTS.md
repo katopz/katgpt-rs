@@ -867,7 +867,12 @@ the expiry breaks the parse MALFORMED (both variants measured live 2026-11-18:
 riir-refine 385/387 for the first, 310 + seal-sprints 052 for the second —
 fixes fa53897e08a/6a1adc8f736/6f018b12/d46b1b3 in their repos). Lint first:
 `py ../katgpt-rs/scripts/claim_lease_check.py --lint <file>` (malformed or
-ambiguous lines blind the check for every lane). **Closing a lease FOLDS the
+ambiguous lines blind the check for every lane). **The check also
+freshness-checks the enclosing dir's `.highwater` (Issue 1240): a counter
+below the dir's max allocated number — or a populated dir with no counter
+— refuses `--item` (bump the counter in the same commit as your
+allocation; `--allow-stale-highwater` is the read-only foreign-repo
+escape hatch) and warns under `--lint`/plain scan. **Closing a lease FOLDS the
 claim line into the `**Lease closed:**` row** (delete `**Claimed:**`, carry
 session/epoch/expiry); `--lint` reds leftovers as STALE-CLAIM.
 

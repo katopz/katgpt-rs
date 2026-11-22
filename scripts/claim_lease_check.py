@@ -58,6 +58,28 @@ reshape.
 Template placeholders (`Claimed: <session>, <epoch>, ...` spelled in prose)
 contain `<...>` and are ignored — a spec file that QUOTES the convention
 must not red the repo that defines it.
+
+Issue 1240 adds the HIGHWATER-FRESHNESS half: every scan-mode run also
+freshness-checks each scanned dir's `.highwater` against the dir's max
+allocated number (the same leading-number walk numbering_gate does — no
+new dependency, no separate script, it rides the existing invocation
+paths). A counter BELOW max is the pre-collision state — four
+stale-counter incidents in five days, every one caught reactively by a
+sweep or a forced collision, each after a lane ran (or should have run)
+this check hours earlier. The run prints a LOUD
+`⚠ .issues/.highwater 107 < max 108 — the next allocation collides`
+line, and `--item` mode REFUSES (exit 1) unless `--allow-stale-highwater`
+is passed — the escape hatch for a read-only lease check on a foreign
+repo; the default stays refuse-loud because a claim is the moment before
+an allocation. `--lint` prints the same warning for each linted file's
+directory (the write-time half: the missing bump dies at birth or the
+warning names it); lint's exit code stays findings-driven. A populated
+dir with NO counter refuses `--item` exactly like a stale one (the next
+allocation cannot read a counter); an unparsable counter warns only
+(numbering_gate.py owns the malformed-counter class); a dir with no
+numbered `.md` files is silently clean. numbering_gate.py stays the
+post-hoc authority — this is the alloc-time catch, never a second
+arbiter.
 """
 
 from __future__ import annotations
@@ -325,6 +347,78 @@ def target_rows(rows: list[dict], item: str) -> list[dict]:
     return picked
 
 
+def highwater_check(d: Path) -> dict:
+    """Issue 1240 — the highwater-freshness verdict for one numbered dir:
+    `clean` (silent), `stale` (counter < max — the pre-collision state),
+    `missing` (numbered files but no counter), `unparsable`, `blind`. Max
+    is the leading number across the dir's `*.md` files — the cheap walk
+    numbering_gate already does."""
+    out: dict = {"dir": str(d), "verdict": "clean", "hw": None, "top": None}
+    try:
+        names = os.listdir(d)
+    except OSError as exc:
+        out["verdict"] = "blind"
+        out["why"] = str(exc)
+        return out
+    top = None
+    for name in names:
+        if name.endswith(".md"):
+            m = NUM_RE.match(name)
+            if m:
+                n = int(m.group(1))
+                if top is None or n > top:
+                    top = n
+    if top is None:
+        return out                   # no numbered files — nothing to compare
+    out["top"] = top
+    try:
+        raw = (d / ".highwater").read_text(encoding="utf-8").strip()
+    except OSError:
+        out["verdict"] = "missing"
+        return out
+    try:
+        hw = int(raw)
+    except ValueError:
+        out["verdict"] = "unparsable"
+        out["hw"] = raw
+        return out
+    out["hw"] = hw
+    if hw < top:
+        out["verdict"] = "stale"
+    return out
+
+
+def highwater_line(row: dict) -> str | None:
+    """The loud warning for a non-clean freshness verdict; None = silent."""
+    v = row["verdict"]
+    if v == "clean":
+        return None
+    d = row["dir"]
+    if v == "stale":
+        return (f"⚠ {d}/.highwater {row['hw']} < max {row['top']} — the next "
+                f"allocation collides; bump the counter in the same commit "
+                f"as your allocation")
+    if v == "missing":
+        return (f"⚠ {d} has numbered files through {row['top']} but NO "
+                f".highwater — the next allocation cannot read a counter; "
+                f"create it at {row['top']}")
+    if v == "unparsable":
+        return (f"⚠ {d}/.highwater unparsable ({row['hw']!r}) — cannot "
+                f"freshness-check; numbering_gate.py owns the "
+                f"malformed-counter class")
+    return f"✗ BLIND — {d}: cannot list ({row.get('why', '?')})"
+
+
+def scan_highwater(repo: Path) -> list[dict]:
+    """Freshness rows for the repo's scanned dirs (existing paths only)."""
+    rows = []
+    for dname in SCAN_DIRS:
+        d = repo / dname
+        if d.is_dir():
+            rows.append(highwater_check(d))
+    return rows
+
+
 def selftest() -> list[str]:
     """Parse + boundary arms over synthetic lines; runs on EVERY invocation.
     An instrument whose own grammar is unasserted must not print verdicts."""
@@ -472,6 +566,60 @@ def selftest() -> list[str]:
         hint = reshape_hint("Claimed: lane-x, 1792085272, expires soon")
         if hint != "**Claimed:** lane-x, 1792085272, expires <ISO-UTC>":
             fails.append(f"reshape hint wrong: {hint!r}")
+    # Issue 1240 arms — the highwater-freshness half. Two fixture arms per
+    # the ask (counter-fresh = silent; counter-stale = warning + the
+    # --item exit), plus the missing-counter twin. The EXIT arms spawn the
+    # script itself; the nest guard stops the recursion (each child runs
+    # this same selftest on every invocation).
+    if os.environ.get("CLAIM_LEASE_SELTEST_NEST") != "1":
+        import subprocess as sp
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td) / ".issues"
+            d.mkdir()
+            (d / "107_old.md").write_text("x\n", encoding="utf-8")
+            (d / "108_new.md").write_text("x\n", encoding="utf-8")
+            (d / ".highwater").write_text("107\n", encoding="utf-8")
+            row = highwater_check(d)
+            if row["verdict"] != "stale" or row["hw"] != 107 or row["top"] != 108:
+                fails.append(f"stale counter not detected: {row}")
+            line = highwater_line(row)
+            if not (line and "107" in line and "108" in line
+                    and "bump the counter" in line):
+                fails.append(f"the stale warning lost its numbers: {line!r}")
+            (d / ".highwater").write_text("108\n", encoding="utf-8")
+            fresh = highwater_check(d)
+            if fresh["verdict"] != "clean" or highwater_line(fresh) is not None:
+                fails.append(f"a fresh counter reported stale: {fresh}")
+            (d / ".highwater").unlink()
+            if highwater_check(d)["verdict"] != "missing":
+                fails.append("a missing counter misclassified: "
+                             f"{highwater_check(d)}")
+            (d / "no_numbers.md").write_text("x\n", encoding="utf-8")
+            if highwater_check(d)["verdict"] != "missing":
+                fails.append("an unnumbered file changed the max walk: "
+                             f"{highwater_check(d)}")
+            (d / ".highwater").write_text("107\n", encoding="utf-8")
+            script = str(Path(__file__).resolve())
+            env = dict(os.environ, CLAIM_LEASE_SELTEST_NEST="1")
+
+            def run(*extra: str) -> sp.CompletedProcess:
+                return sp.run([sys.executable, script, *extra], cwd=str(td),
+                              env=env, capture_output=True, encoding="utf-8")
+            refused = run("--item", "108")
+            if refused.returncode != 1 or "REFUSED" not in refused.stdout:
+                fails.append(f"--item did not refuse on the stale counter: "
+                             f"rc={refused.returncode} "
+                             f"out={refused.stdout[-400:]!r}")
+            allowed = run("--item", "108", "--allow-stale-highwater")
+            if allowed.returncode != 0 or "collides" not in allowed.stdout:
+                fails.append(f"--allow-stale-highwater lost the warning or "
+                             f"the pass: rc={allowed.returncode} "
+                             f"out={allowed.stdout[-400:]!r}")
+            plain = run()
+            if plain.returncode != 0 or "collides" not in plain.stdout:
+                fails.append(f"plain scan lost the stale warning: "
+                             f"rc={plain.returncode} "
+                             f"out={plain.stdout[-400:]!r}")
     return fails
 
 
@@ -658,6 +806,7 @@ def main() -> int:
             print("usage: claim_lease_check.py --lint <file.md> [more.md ...]")
             return 1
         findings_total = 0
+        hw_seen: set = set()
         for p in paths:
             path = Path(p)
             if not path.exists():
@@ -675,6 +824,15 @@ def main() -> int:
                 findings_total += len(hits)
             else:
                 print(f"✓ lint {path}: clean")
+            # Issue 1240 — the write-time freshness half: the linted file's
+            # enclosing numbered dir. Warning only; lint's exit stays
+            # findings-driven (the ask scopes the refusal to --item mode).
+            hw_dir = path.resolve().parent
+            if hw_dir not in hw_seen:
+                hw_seen.add(hw_dir)
+                line = highwater_line(highwater_check(hw_dir))
+                if line:
+                    print(line)
         if findings_total:
             print(f"✗ lint: {findings_total} finding(s) — fix before the "
                   f"push: a malformed claim line makes the read-time check "
@@ -686,8 +844,8 @@ def main() -> int:
 
     if len(args) > 1:
         print("usage: claim_lease_check.py [repo] [--item NNN] "
-              "[--epoch N] | --lint <file.md> [...] | --prove-fires "
-              "| --self-test")
+              "[--epoch N] [--allow-stale-highwater] | --lint <file.md> "
+              "[...] | --prove-fires | --self-test")
         return 1
     repo = Path(args[0]).resolve() if args else Path.cwd()
     if not repo.is_dir():
@@ -705,6 +863,13 @@ def main() -> int:
         mark = "⚠" if age > 86400 else "·"
         print(f"{mark} fetch: FETCH_HEAD age {age // 3600}h{age % 3600 // 60:02d}m "
               f"({where})")
+    hw_rows = scan_highwater(repo)
+    for hw in hw_rows:
+        line = highwater_line(hw)
+        if line:
+            print(line)
+        if hw["verdict"] == "blind":
+            blind.append(f"{hw['dir']}: cannot list ({hw.get('why', '?')})")
     live = [r for r in rows if r["state"] == "LIVE"]
     expired = [r for r in rows if r["state"] == "EXPIRED"]
     bad = [r for r in rows if r["state"] == "MALFORMED"]
@@ -739,6 +904,16 @@ def main() -> int:
         else:
             verdict = warn_line(hit[0], item, own_epoch)
         print(verdict)
+    allow_stale = "--allow-stale-highwater" in sys.argv
+    if (item is not None and any(r["verdict"] in ("stale", "missing")
+                                 for r in hw_rows) and not allow_stale):
+        print("✗ REFUSED — a stale or missing highwater above is the "
+              "pre-collision state: a claim is the moment before an "
+              "allocation, and the next allocation would collide. Bump the "
+              "counter in the same commit as your allocation, or pass "
+              "--allow-stale-highwater for a read-only lease check on a "
+              "foreign repo.")
+        return 1
     if blind:
         print("✗ BLIND — the instrument could not read:")
         for b in blind:
