@@ -1,6 +1,7 @@
 # Issue 1240 — claim_lease_check gains a highwater-freshness half: the pre-collision state is checkable at the moment lanes actually run a gate
 
 **Status:** OPEN — filed 2026-11-22 (zed-amo-071num@amo, from the numbering-hygiene repair run). The repo layout: this is a `scripts/*.py` gate-adjacent tool, no cargo surface.
+**Claimed:** sprint-071-idle@amo, 1795366755, expires 2026-11-24T16:59Z
 
 ## The pattern (four incidents in five days, every one reactive)
 
