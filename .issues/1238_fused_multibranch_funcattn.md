@@ -86,6 +86,14 @@ Trained arms are small diagnostic models under the Plan-286 §Q3 FD-SGD preceden
 
 Snapshots are HALF-width so "matched total params" holds: two full-width frozen branches = 2P = A5's budget, not A1's.
 
+**PINNED 2026-11-22 before any training run (katgpt-rs-93@amo): posture (ii).** Reason: the cell is ONE FUNCATTN layer, so there is no separate stem/readout to freeze — each branch's in-proj `P_b` (d_b×8) and out-proj `R_b` (8×d_b) ARE its readout, and `FuncAttnWeightsSnapshot` stores only the FUNCATTN weights, so readouts are branch-local by construction. A6 = two independently trained half-width K=1 models, each a complete predictor; FUNCATTN weights round-trip through `FuncAttnWeightsSnapshot` (BLAKE3 commit + verify) via `FuncAttnSnapshotStore`, projections are held beside them by the harness; fusion = mean of final predictions (`BranchFusion::Mean`). Allocation-equivalent to A2 (same per-branch shapes).
+
+**Harness pins (same date, before the run):**
+- Shapes (d_model 8, n 64, k 8 per branch, α 0.01, τ 0.1 — the Plan-286 T3.2 task): A1 d_b=8 K=1 = 384 params (P); A2/A4/A6 d_b=5 K=2 = 390 (1.016 P); A3 = A2 + concat-projection W_f (8×16, init [I I]/√2 so A3 starts at A2's function) = 518 — disclosed: per-branch learned `R_b` already makes concat∘linear the SAME function class as the sum, so A3 tests optimisation geometry, not expressivity; A5 d_b=12 K=1 = 720 (1.875 P, the nearest width to 2P).
+- Metric: PRIMARY = held-out MSE on a fresh 64-token sequence from the same generator; train MSE reported beside it. The 150-step figure is the checkpoint of the 500-step trajectory (one run per arm×seed).
+- LR: one shared LR picked by a pilot seed (not a gate seed) — the largest of {1.0, 0.5, 0.25} for which every arm stays finite and lowers train MSE over 500 steps.
+- Statistics: 5 gate seeds; per seed r = 100·(MSE_arm − MSE_ref)/MSE_ref (pp); r̄, SE = sd/√5; δ = max(1.0, 2.5·SE); WIN r̄ < −δ, LOSS r̄ > δ, else TIE. G2 (A2 vs A1) and G3 (A2 vs A5) PASS = not LOSS at both budgets. A6 gate (promotion-bearing) = WIN vs A1 at both budgets. Non-finite MSE = LOSS.
+
 ## Pre-registered gates
 
 - **Step budgets (both, always):** 150 FD-SGD steps AND a ≥500-step convergence posture. Bench 058 caveat: SDPA closes to ~2× by 500+ — a pass claimed only at 150 steps is not a pass.
@@ -108,9 +116,9 @@ A G2/G3 pass is ARCHITECTURE evidence whose real consumers need trained branch w
 
 ## Tasks
 
-- [ ] Claim: `git fetch origin && py ../katgpt-rs/scripts/claim_lease_check.py --item 1238`; append the `**Claimed:**` line (own line, nothing after the expiry token); push BEFORE implementing (48 h expiry)
-- [ ] Add `funcattn_branch_parallel = []` to `katgpt-attn/Cargo.toml` (+ optional `funcattn_compose` parent sub-task)
-- [ ] Pin the A6 readout posture ((i) or (ii)) IN THIS FILE before any training run
+- [x] Claim (`da2bb7e0c`): `git fetch origin && py ../katgpt-rs/scripts/claim_lease_check.py --item 1238`; append the `**Claimed:**` line (own line, nothing after the expiry token); push BEFORE implementing (48 h expiry)
+- [x] Add `funcattn_branch_parallel = []` to `katgpt-attn/Cargo.toml` + the shipped `funcattn_compose::branch_parallel` primitive (`branch_parallel_forward`, `BranchFusion::{SumInvSqrtK, Mean}`); [-] the optional `funcattn_compose` parent sub-task stays deferred
+- [x] Pin the A6 readout posture ((i) or (ii)) IN THIS FILE before any training run — (ii), see PINNED block
 - [ ] Harness (reuse the Plan-286 T3.2 pattern): arms A1–A5, both step budgets, 5 seeds
 - [ ] A6 snapshot pipeline: train two half-width single-branch snapshots under the pinned posture; load via `FuncAttnSnapshotStore`; fuse Σhᵢ/K; optional A6b negative control
 - [ ] Run the cell on amo/bmo (never m3 — job-lane law); record paired stats + box state (quote `bench_preflight`'s PROVENANCE line)
