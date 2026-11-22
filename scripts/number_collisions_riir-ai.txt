@@ -13,7 +13,16 @@ max_hand_read = 30
 # katgpt-rs's (60). Per Issue 1208 the counts are decoupled: this per-repo
 # scalar is the record for riir-ai; the shared scalar carries katgpt-rs's
 # own 60. Growth reds here; re-pins follow MEASURED.
-legacy_ratchet = 64
+#
+# 64→65 2026-11-22 (sprint-071 idle, amo): the 65th sub-boundary event is
+# .proposals/63 — ONE document whose in-place rename refused the Issue-881
+# collapse bar: filed 8202bb81d (2026-11-21 22:04 +07) as
+# 063_riir_rescale_native_image_sr, renamed 0f8f97bee (22:19, same commit
+# adds the new name + deletes the old) to 063_riir_reframe_media_serving;
+# stem-token Jaccard 1/8 = 0.125 < the 0.25 bar, so the walk counts two
+# holders — hand-read class, ratchet at measured (walked 1799 numbers;
+# as-of d6f996199-era head 01f704c9a the identical walk read 64).
+legacy_ratchet = 65
 
 # All six numbers are above the era boundary (700); both holders verified in
 # riir-ai's full history; all twelve holders closed/removed except 1177's
