@@ -1,9 +1,9 @@
 # Issue 1241: Loop-lane cache-safety certificates + long-context recall fixtures (arXiv:2611.13378)
 
 > **Status:** OPEN — small Gain from [Research 688](../.research/688_Looped_CED_Placement_KV_Sharing.md). T1–T3 are buildable now on existing surfaces (fixture scaffolding + report-only census + typed verdicts); T4 is GATED on a contraction-trained looped checkpoint (riir-train [Issue 706](../../riir-train/.issues/706_stochastic_depth_contraction_recipe.md) → Issue 618's screen) and refuses to arm any schedule/quality arm without a §3.6 head-to-head PoC (the 0-for-3 negative class, Benches 847/850/906, governs). Poc/proof task.
+**Claimed:** katgpt-rs-61@amo, 1795414554, expires 2026-11-25T06:15Z
 > **Type:** Measurement lane + typed verdict fusion (modelless, inference-time).
 > **Source paper:** arXiv:2611.13378 "Looping Deeper Without Growing the KV Cache" (Leng et al., Nov 2026) — §5.4 fixed-point/KV-sharing, Appendix D fixed-point analysis, §5.3+Appendix H long-context protocol.
-> **Claim-lease:** unclaimed.
 
 ## Why (the two confirmed gaps)
 
