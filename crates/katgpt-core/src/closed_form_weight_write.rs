@@ -129,6 +129,28 @@ pub struct FactWriteConfig {
     /// Calibration gain clamp (wsp: [0.5, 8]).
     pub gain_lo: f64,
     pub gain_hi: f64,
+    /// Recipe-3 (plan 637): differential margin targets at the battle
+    /// position — the first position where the base greedy continuation
+    /// diverges from the answer. The flag changes the battle row's target
+    /// shape only; every other row, and every path under flag-off, keeps
+    /// the absolute form verbatim (byte-identity by construction).
+    pub margin_target: bool,
+    /// Recipe-3: ceiling of the battle-position margin target. The gap can
+    /// exceed `shortfall_cap_nats` (the plan-637 verdict amendment 3: a
+    /// ceiling below the margin it is aimed at truncates the ask below
+    /// what a flip requires, and a depth-zero read would reflect the cap,
+    /// not the objective — raise it from the phase-A margin read).
+    pub margin_cap_nats: f64,
+    /// Recipe-3: near-degeneracy threshold — the differential direction
+    /// collapses as the competitor's embedding approaches the answer's, so
+    /// `|Δ⊙g| < tau · |E[answer]⊙g|` falls back to the absolute target
+    /// (amendment 2; exact equality is the τ→0 face of the same rule).
+    pub degeneracy_tau: f64,
+    /// Recipe-3: battle-row movement clamp as a multiple of the absolute
+    /// path's maximum displacement — a scale-free bound against the
+    /// near-degeneracy band the tau threshold admits (amendment 2's
+    /// "bound the movement itself, not only D").
+    pub battle_movement_k: f64,
 }
 
 impl Default for FactWriteConfig {
@@ -155,6 +177,10 @@ impl Default for FactWriteConfig {
             shortfall_cap_nats: 5.0,
             gain_lo: 0.5,
             gain_hi: 8.0,
+            margin_target: false,
+            margin_cap_nats: 5.0,
+            degeneracy_tau: 0.1,
+            battle_movement_k: 3.0,
         }
     }
 }
@@ -183,6 +209,15 @@ impl FactWriteConfig {
             self.gain_lo > 0.0 && self.gain_hi >= self.gain_lo,
             "gain clamp invalid"
         );
+        assert!(self.margin_cap_nats >= 0.0, "margin_cap_nats must be >= 0");
+        assert!(
+            self.degeneracy_tau > 0.0 && self.degeneracy_tau <= 1.0,
+            "degeneracy_tau must be in (0, 1]"
+        );
+        assert!(
+            self.battle_movement_k >= 1.0,
+            "battle_movement_k must be >= 1"
+        );
     }
 }
 
@@ -196,6 +231,14 @@ pub struct FactSpec {
     pub train_asks: Vec<Vec<u32>>,
     pub answer: Vec<u32>,
     pub contrast_asks: Vec<Vec<u32>>,
+    /// Recipe-3 (plan 637): authored battle competitor per training ask —
+    /// overrides the auto-captured greedy token at the battle position
+    /// (the opponent the write pushes against, pinned by the author).
+    /// Absent/empty = auto-capture for every ask; present must carry one
+    /// entry per training ask (validated loud in `construct`). Authored
+    /// rows keep their token across refinement rounds; only auto-captured
+    /// rows re-capture (amendment 4).
+    pub competing_first_token: Option<Vec<u32>>,
 }
 
 /// General (unrelated) questions whose keys protect the covariance; their
@@ -449,6 +492,7 @@ impl ClosedFormWriteEnvelope {
                 put_u64(&mut b, ep.pair.out_dim as u64);
             }
         }
+        b.shrink_to_fit();
         b
     }
 }
@@ -497,6 +541,17 @@ pub struct FactWriteOutcome {
     pub round_fits: Vec<Vec<f64>>,
     pub miss: Vec<bool>,
     pub gain: Vec<f64>,
+    /// Recipe-3 diagnostics (plan 637; empty unless `margin_target`): per
+    /// fact, per training ask — the battle position, i.e. the first index
+    /// where the base greedy continuation diverges from the answer. `None`
+    /// when the base answers correctly (the ask's rows stay absolute).
+    pub battle_positions: Vec<Vec<Option<usize>>>,
+    /// Recipe-3 diagnostics: per fact, per solve round, per ask — the
+    /// competitor token that round's battle row pushed against (round 0 =
+    /// the pristine base-state capture; later rounds re-capture at the
+    /// current overlay state, plan-637 amendment 4). Authored overrides
+    /// repeat verbatim every round.
+    pub battle_competitors: Vec<Vec<Vec<u32>>>,
 }
 
 /// Run the closed-form write for every fact (sequential, per wsp). The model
@@ -515,6 +570,32 @@ pub fn construct<M: FactWriteModel>(
     let ff = model.key_dim();
     let g = model.final_norm_scale();
     assert_eq!(g.len(), d, "final_norm_scale length mismatch");
+
+    // Recipe-3 pre-pass (plan 637): base-state battle discovery — BEFORE
+    // any overlay install, so every fact's round-0 competitor is the
+    // pristine base's greedy token (the round-0 pin). Flag-off skips it
+    // whole: `battle` stays empty and every solve call sees `None`.
+    let mut battle: Vec<Vec<BattleAsk>> = if config.margin_target {
+        facts.iter().map(|f| battle_prepass(model, f)).collect()
+    } else {
+        Vec::new()
+    };
+    // Authored competitor overrides (the doc pins the opponent per ask).
+    if config.margin_target {
+        for (f, fact) in facts.iter().enumerate() {
+            if let Some(authored) = &fact.competing_first_token {
+                assert_eq!(
+                    authored.len(),
+                    fact.train_asks.len(),
+                    "fact {f}: competing_first_token must carry one entry per training ask"
+                );
+                for (w, tok) in authored.iter().enumerate() {
+                    battle[f][w].competitor = *tok;
+                    battle[f][w].authored = true;
+                }
+            }
+        }
+    }
 
     let mut svd_result = SvdResultScratch::with_capacity(ff, d);
     let mut svd_work = SvdScratch::with_capacity(d, ff);
@@ -540,6 +621,7 @@ pub fn construct<M: FactWriteModel>(
     let mut round_fits = Vec::new();
     let mut miss_all = Vec::new();
     let mut gain_all = Vec::new();
+    let mut per_fact_competitors: Vec<Vec<Vec<u32>>> = Vec::new();
 
     for (f, fact) in facts.iter().enumerate() {
         assert!(
@@ -550,6 +632,18 @@ pub fn construct<M: FactWriteModel>(
 
         // Initial spread (weights 1.0) — solve_fact installs as it goes.
         let init_w = vec![vec![1.0f64; fact.answer.len()]; fact.train_asks.len()];
+        // Recipe-3 (plan 637): round 0's competitors are the base pre-pass
+        // values; the flag-off shape below is unchanged.
+        let round0_competitors: Vec<u32> = if config.margin_target {
+            battle[f].iter().map(|b| b.competitor).collect()
+        } else {
+            Vec::new()
+        };
+        let mut competitors_log: Vec<Vec<u32>> = vec![round0_competitors.clone()];
+        let first_battle = config.margin_target.then(|| BattleRound {
+            rows: &battle[f],
+            competitors: &round0_competitors,
+        });
         let first = solve_fact(
             model,
             config,
@@ -560,6 +654,7 @@ pub fn construct<M: FactWriteModel>(
             &facts_pairs,
             &init_w,
             &g,
+            first_battle.as_ref(),
             &mut svd_result,
             &mut svd_work,
         );
@@ -577,6 +672,21 @@ pub fn construct<M: FactWriteModel>(
 
         let mut miss = false;
         for _round in 1..=config.max_rounds {
+            // Recipe-3 (plan 637 amendment 4): the competitor re-captures at
+            // the CURRENT overlay state each round — a base-frozen token
+            // goes stale the moment the write pushes the answer past it.
+            // Authored rows keep their pinned token.
+            let round_comps;
+            let round_battle = if config.margin_target {
+                round_comps = battle_competitors_now(model, fact, &battle[f]);
+                competitors_log.push(round_comps.clone());
+                Some(BattleRound {
+                    rows: &battle[f],
+                    competitors: &round_comps,
+                })
+            } else {
+                None
+            };
             let next = solve_fact(
                 model,
                 config,
@@ -587,6 +697,7 @@ pub fn construct<M: FactWriteModel>(
                 &facts_pairs,
                 &weights,
                 &g,
+                round_battle.as_ref(),
                 &mut svd_result,
                 &mut svd_work,
             );
@@ -643,6 +754,7 @@ pub fn construct<M: FactWriteModel>(
         round_fits.push(fits);
         miss_all.push(miss);
         gain_all.push(gain);
+        per_fact_competitors.push(competitors_log);
     }
 
     envelope.seal();
@@ -651,6 +763,19 @@ pub fn construct<M: FactWriteModel>(
         round_fits,
         miss: miss_all,
         gain: gain_all,
+        battle_positions: if config.margin_target {
+            battle
+                .iter()
+                .map(|rows| rows.iter().map(|b| b.position).collect())
+                .collect()
+        } else {
+            Vec::new()
+        },
+        battle_competitors: if config.margin_target {
+            per_fact_competitors
+        } else {
+            Vec::new()
+        },
     }
 }
 
@@ -668,6 +793,146 @@ fn install_fact<M: FactWriteModel>(
         per_layer.push(fact_pairs[li].clone());
         model.set_layer_overlays(gl, &per_layer);
     }
+}
+
+// ─── Battle position (plan 637, recipe-3) ───────────────────────────────
+
+/// The battle position of one training ask: the first index where the
+/// greedy continuation diverges from the answer — exactly the index
+/// `gen_fit`'s depth counter stops at (the write is scored on winning
+/// THIS token) — with the continuation's token there as the competitor.
+/// When the continuation stopped early (it hit the stop token, which
+/// `free_generate` omits), the competitor IS the stop token: the model's
+/// actual choice at that position. `None` when the base already
+/// generates the full answer (no battle; the ask's rows stay absolute).
+pub fn battle_of(answer: &[u32], generated: &[u32]) -> Option<(usize, u32)> {
+    let stop = *answer.last()?;
+    let n = answer.len();
+    let mut depth = 0usize;
+    while depth < n && depth < generated.len() && generated[depth] == answer[depth] {
+        depth += 1;
+    }
+    // The stop slot is never a battle: a continuation that covered every
+    // content token HAS produced the answer (its next choice — stop or
+    // junk — sits past the answer, where `update_weights` exempts the
+    // same position as "boosting it is pure noise").
+    if depth >= n.saturating_sub(1) {
+        return None;
+    }
+    let competitor = generated.get(depth).copied().unwrap_or(stop);
+    Some((depth, competitor))
+}
+
+/// Per-ask battle state. Round 0's rows come from the pristine-base
+/// pre-pass; `position` is fixed for the whole construction, while the
+/// competitor token re-captures every refinement round (amendment 4)
+/// unless the author pinned it.
+struct BattleAsk {
+    position: Option<usize>,
+    competitor: u32,
+    /// Authored overrides keep their token across rounds; only
+    /// auto-captured rows re-capture.
+    authored: bool,
+}
+
+/// The battle rows + ONE round's competitor tokens, handed to `solve_fact`.
+/// `None` under flag-off — every code path keeps its byte-identical shape.
+struct BattleRound<'a> {
+    rows: &'a [BattleAsk],
+    competitors: &'a [u32],
+}
+
+/// Base-state battle pre-pass (the round-0 pin): run BEFORE any overlay
+/// install, so every fact's round-0 competitor is the pristine base's
+/// greedy token. Same generation shape as `gen_fit` (deterministic
+/// greedy, first-index tie rule, stop-aware).
+fn battle_prepass<M: FactWriteModel>(model: &mut M, fact: &FactSpec) -> Vec<BattleAsk> {
+    let n = fact.answer.len();
+    let stop = *fact.answer.last().expect("answer nonempty");
+    fact.train_asks
+        .iter()
+        .map(|ask| {
+            let generated = model.free_generate(ask, n + 2, Some(stop));
+            let battle = battle_of(&fact.answer, &generated);
+            BattleAsk {
+                position: battle.map(|(p, _)| p),
+                competitor: battle.map(|(_, c)| c).unwrap_or(stop),
+                authored: false,
+            }
+        })
+        .collect()
+}
+
+/// Per-round competitor re-capture (amendment 4): the margin is read at
+/// the CURRENT overlay state, so the competitor must be too — a
+/// base-frozen token goes stale the moment the write pushes the answer
+/// past it. Authored rows keep their pinned token; asks with no battle
+/// keep their placeholder (never read — no battle row for that ask).
+fn battle_competitors_now<M: FactWriteModel>(
+    model: &mut M,
+    fact: &FactSpec,
+    battle: &[BattleAsk],
+) -> Vec<u32> {
+    let stop = *fact.answer.last().expect("answer nonempty");
+    battle
+        .iter()
+        .enumerate()
+        .map(|(w, b)| match (b.authored, b.position) {
+            (true, _) | (_, None) => b.competitor,
+            (false, Some(k)) => {
+                let generated = model.free_generate(&fact.train_asks[w], k + 1, Some(stop));
+                generated.get(k).copied().unwrap_or(stop)
+            }
+        })
+        .collect()
+}
+
+/// One battle-position target row's terms (plan 637, verdict-amended): the
+/// differential direction `unit((E[a] − E[c]) ⊙ g)` with the movement sized
+/// by the row's OWN normalizer — `movement = D_margin / |(E[a] − E[c])⊙g|`
+/// (the absolute path's `|E[a]⊙g|` divisor is the gain per unit of movement
+/// along a DIFFERENT direction; keeping it would mis-size every battle row,
+/// amendment 1) — clamped to `battle_movement_k · (cap + floor) / |E[a]⊙g|`,
+/// a scale-free bound against the near-degeneracy band the tau threshold
+/// admits. Returns `None` when the row falls back to the absolute form:
+/// `|Δ⊙g| < tau · |E[a]⊙g|` (exact equality is its τ→0 face), where the
+/// differential direction collapses and its normalizer explodes.
+fn margin_row(
+    emb_a: &[f32],
+    emb_c: &[f32],
+    g: &[f32],
+    margin_nats: f64,
+    config: &FactWriteConfig,
+) -> Option<(Vec<f64>, f64)> {
+    let floor = config.target_floor_nats;
+    let cap = config.margin_cap_nats;
+    let tau = config.degeneracy_tau;
+    let clamp_k = config.battle_movement_k;
+    assert_eq!(emb_a.len(), emb_c.len(), "embedding length mismatch");
+    assert_eq!(emb_a.len(), g.len(), "g length mismatch");
+    let mut dvec = vec![0.0f64; emb_a.len()];
+    let mut delta2 = 0.0f64;
+    let mut scale_a2 = 0.0f64;
+    for i in 0..emb_a.len() {
+        let dv = f64::from(emb_a[i]) - f64::from(emb_c[i]);
+        let v = dv * f64::from(g[i]);
+        dvec[i] = v;
+        delta2 += v * v;
+        let av = f64::from(emb_a[i]) * f64::from(g[i]);
+        scale_a2 += av * av;
+    }
+    let delta = delta2.sqrt();
+    let scale_a = scale_a2.sqrt().max(1e-9);
+    if delta < tau * scale_a {
+        return None; // near-degenerate: absolute fallback (amendment 2)
+    }
+    let d_margin = margin_nats.clamp(0.0, cap) + floor;
+    let movement_cap = clamp_k * (cap + floor) / scale_a;
+    let movement = (d_margin / delta).min(movement_cap);
+    for v in &mut dvec {
+        *v /= delta;
+    }
+    Some((dvec, movement))
 }
 
 // ─── Solve internals ────────────────────────────────────────────────────
@@ -708,6 +973,7 @@ fn solve_fact<M: FactWriteModel>(
     facts_pairs: &[Vec<QuantErrorLora>],
     weights: &[Vec<f64>],
     g: &[f32],
+    battle: Option<&BattleRound<'_>>,
     svd_result: &mut SvdResultScratch,
     svd_work: &mut SvdScratch,
 ) -> SolveResult {
@@ -783,6 +1049,30 @@ fn solve_fact<M: FactWriteModel>(
                 let movement = dj / dot_scale.max(1e-9) * weights[w][j];
                 for v in &dvec {
                     targets.push(v * movement);
+                }
+                // Recipe-3 (plan 637): the battle row REPLACES the just-
+                // pushed absolute target with the differential margin form
+                // (direction + its own normalizer + the near-degeneracy
+                // fallback — `margin_row` returning None leaves the
+                // absolute row standing, which IS the fallback). Flag-off
+                // never reaches this arm: byte-identity by construction.
+                if let Some(b) = battle.filter(|b| b.rows[w].position == Some(j)) {
+                    let competitor = b.competitors[w];
+                    let emb_c = model.token_out_embedding(competitor);
+                    // The competitor's logprob sits under the same
+                    // teacher-forced answer prefix, so the margin is the
+                    // exact logit gap at this position (the softmax
+                    // normalizer cancels).
+                    let mut seq_c = Vec::with_capacity(pi + 1);
+                    seq_c.extend_from_slice(&seq[..pi]);
+                    seq_c.push(competitor);
+                    let lp_c = model.token_logprob(&seq_c, pi);
+                    if let Some((dir, mv)) = margin_row(&emb, &emb_c, g, lp_c - lp, config) {
+                        let tlen = targets.len();
+                        for (i, v) in dir.iter().enumerate() {
+                            targets[tlen - d + i] = v * mv * weights[w][j];
+                        }
+                    }
                 }
                 resid.extend_from_slice(&res);
                 p += 1;
@@ -1203,5 +1493,97 @@ fn update_weights<M: FactWriteModel>(
                 }
             }
         }
+    }
+}
+
+// ─── Plan-637 unit tests (pure math — no model seam) ────────────────────
+
+#[cfg(test)]
+mod margin_row_tests {
+    use super::{FactWriteConfig, margin_row};
+
+    fn cfg(tau: f64, k: f64) -> FactWriteConfig {
+        FactWriteConfig {
+            degeneracy_tau: tau,
+            battle_movement_k: k,
+            ..FactWriteConfig::default()
+        }
+    }
+
+    fn cfg_cap(tau: f64, k: f64, cap: f64) -> FactWriteConfig {
+        FactWriteConfig {
+            degeneracy_tau: tau,
+            battle_movement_k: k,
+            margin_cap_nats: cap,
+            ..FactWriteConfig::default()
+        }
+    }
+
+    /// Exact-magnitude pin (plan-637 amendment 1): the movement divisor is
+    /// the differential direction's own gain |Δ⊙g|, never the answer
+    /// token's |E[a]⊙g|. Hand-solved fixture: emb_a=[1,0], emb_c=[0,1],
+    /// g=[1,1] → Δ⊙g=[1,−1], delta=√2, scale_a=1, D=(2 clamped to 10)+3=5,
+    /// movement=5/√2, direction=unit([1,−1]).
+    #[test]
+    fn movement_uses_the_differential_normalizer() {
+        let emb_a = [1.0f32, 0.0];
+        let emb_c = [0.0f32, 1.0];
+        let g = [1.0f32, 1.0];
+        let (dir, movement) = margin_row(&emb_a, &emb_c, &g, 2.0, &cfg(0.1, 3.0))
+            .expect("well-separated rows must not fall back");
+        let delta = 2.0f64.sqrt();
+        assert_eq!(movement.to_bits(), (5.0 / delta).to_bits());
+        let inv = 1.0 / delta;
+        assert_eq!(dir[0].to_bits(), inv.to_bits());
+        assert_eq!(dir[1].to_bits(), (-inv).to_bits());
+    }
+
+    /// Near-degeneracy (amendment 2): |Δ⊙g| < tau·|E[a]⊙g| falls back —
+    /// including the exact-equality face (the zero vector).
+    #[test]
+    fn near_degenerate_rows_fall_back() {
+        let g = [1.0f32, 1.0];
+        // Near band: emb_c = a − [0.005,0] → Δ⊙g=[0.005,0], delta=0.005
+        // < tau·scale_a = 0.1·0.1 = 0.01.
+        let emb_a = [0.1f32, 0.0];
+        let emb_c = [0.095f32, 0.0];
+        assert!(
+            margin_row(&emb_a, &emb_c, &g, 4.0, &cfg(0.1, 3.0)).is_none(),
+            "the near-degeneracy band must fall back"
+        );
+        // Exact equality: the differential is the zero vector.
+        assert!(
+            margin_row(&emb_a, &emb_a, &g, 4.0, &cfg(0.1, 3.0)).is_none(),
+            "identical embeddings must fall back (the graceful no-op)"
+        );
+    }
+
+    /// The movement clamp (amendment 2's "bound the movement itself"):
+    /// with margin at the cap and delta inside (tau, 1/k)·scale_a the raw
+    /// movement exceeds k·(cap+floor)/scale_a and must be clipped.
+    /// Fixture: emb_a=[1,0], g=[1,1] (scale_a=1), emb_c=a−[0.2,0]
+    /// (delta=0.2 ∈ (0.1, 1/3)); margin=cap=10 → D=13; raw=13/0.2=65;
+    /// clamp=3·13/1=39 → movement=39.
+    #[test]
+    fn movement_clamps_at_k_scale_free_bound() {
+        let emb_a = [1.0f32, 0.0];
+        let emb_c = [0.8f32, 0.0];
+        let g = [1.0f32, 1.0];
+        let (_, movement) = margin_row(&emb_a, &emb_c, &g, 10.0, &cfg_cap(0.1, 3.0, 10.0))
+            .expect("delta 0.2 ≥ tau·scale_a must not fall back");
+        assert_eq!(movement.to_bits(), 39.0f64.to_bits());
+    }
+
+    /// Negative margins clamp to zero shortfall — the floor is the whole
+    /// ask (the write is ahead; only the floor-sized nudge remains).
+    #[test]
+    fn negative_margin_asks_only_the_floor() {
+        let emb_a = [1.0f32, 0.0];
+        let emb_c = [0.0f32, 1.0];
+        let g = [1.0f32, 1.0];
+        let (_, movement) = margin_row(&emb_a, &emb_c, &g, -4.0, &cfg(0.1, 3.0))
+            .expect("well-separated rows must not fall back");
+        let delta = 2.0f64.sqrt();
+        assert_eq!(movement.to_bits(), (3.0 / delta).to_bits());
     }
 }

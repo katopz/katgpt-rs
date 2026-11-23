@@ -387,11 +387,13 @@ fn fixture_facts() -> Vec<FactSpec> {
             train_asks: vec![vec![1, 2, S1], vec![3, S1], vec![S1]],
             answer: ANSWER1.to_vec(),
             contrast_asks: vec![vec![1, C1], vec![3, 4, C1]],
+            competing_first_token: None,
         },
         FactSpec {
             train_asks: vec![vec![50, 51, S2], vec![52, S2], vec![S2]],
             answer: ANSWER2.to_vec(),
             contrast_asks: vec![vec![50, C2], vec![52, 53, C2]],
+            competing_first_token: None,
         },
     ]
 }
@@ -435,9 +437,13 @@ struct Fix {
 }
 
 fn run(config: &FactWriteConfig) -> Fix {
+    run_with_facts(config, fixture_facts())
+}
+
+fn run_with_facts(config: &FactWriteConfig, facts: Vec<FactSpec>) -> Fix {
     let base = ToyModel::new(0xC1F1);
     let mut trained = base.clone();
-    let outcome = construct(&mut trained, config, &fixture_facts(), &controls());
+    let outcome = construct(&mut trained, config, &facts, &controls());
     Fix {
         base,
         trained,
@@ -800,4 +806,209 @@ fn envelope_seal_freezes_and_refuses_mutation() {
         );
     }));
     assert!(result.is_err(), "sealed envelope accepted a mutation");
+}
+
+// ─── Plan-637 recipe-3 gates (margin targets) ───────────────────────────
+
+/// Pairs byte-equality: same layer order, same a/b/alpha/rank bits.
+fn pairs_bits(fix: &Fix) -> Vec<(usize, Vec<u8>)> {
+    let mut out = Vec::new();
+    for (layer, p) in fix.outcome.envelope.pairs_all() {
+        let mut h = Vec::new();
+        for v in p.a.iter().chain(p.b.iter()) {
+            h.extend_from_slice(&v.to_bits().to_le_bytes());
+        }
+        h.extend_from_slice(&f64::from(p.alpha).to_bits().to_le_bytes());
+        h.extend_from_slice(&p.rank.to_le_bytes());
+        out.push((layer, h));
+    }
+    out
+}
+
+/// (a) Flag-off inertia: the new config fields are DEAD under
+/// `margin_target = false` — a run with non-default margin fields must be
+/// byte-identical (envelope digest + pairs) to the default run. The sealed
+/// canonical encoding never folded them (they ride outside, the
+/// shortfall-cap precedent).
+#[test]
+fn p637_a_flag_off_fields_are_inert() {
+    let default = run(&FactWriteConfig::default());
+    let tuned = run(&FactWriteConfig {
+        margin_target: false,
+        margin_cap_nats: 99.0,
+        degeneracy_tau: 0.5,
+        battle_movement_k: 5.0,
+        ..FactWriteConfig::default()
+    });
+    assert_eq!(
+        default.outcome.envelope.digest(),
+        tuned.outcome.envelope.digest(),
+        "flag-off digest moved — a new field leaked into the flag-off path"
+    );
+    assert_eq!(pairs_bits(&default), pairs_bits(&tuned));
+}
+
+/// (b) Exact degeneracy: an authored competitor equal to the answer token
+/// collapses the differential to the zero vector → the flag-on run's pairs
+/// must be byte-identical to the flag-off run's (the graceful no-op).
+#[test]
+fn p637_b_exact_degeneracy_falls_back_byte_identical() {
+    let mut facts = fixture_facts();
+    for f in &mut facts {
+        let first = f.answer[0];
+        f.competing_first_token = Some(vec![first; f.train_asks.len()]);
+    }
+    let n_facts = facts.len();
+    let on = run_with_facts(
+        &FactWriteConfig {
+            margin_target: true,
+            ..FactWriteConfig::default()
+        },
+        facts.clone(),
+    );
+    let off = run_with_facts(&FactWriteConfig::default(), facts);
+    assert_eq!(
+        pairs_bits(&on),
+        pairs_bits(&off),
+        "competitor == answer must fall back to the absolute row verbatim"
+    );
+    // The telemetry is populated even on the no-op posture (the battle map
+    // is diagnostics, not behavior).
+    assert_eq!(on.outcome.battle_positions.len(), n_facts);
+}
+
+/// (c) Flag-on determinism: two margin-target constructions agree
+/// byte-wise, and the per-round competitor log reproduces exactly.
+#[test]
+fn p637_c_flag_on_determinism() {
+    let cfg = FactWriteConfig {
+        margin_target: true,
+        ..FactWriteConfig::default()
+    };
+    let a = run(&cfg);
+    let b = run(&cfg);
+    assert_eq!(
+        a.outcome.envelope.digest(),
+        b.outcome.envelope.digest(),
+        "flag-on construction is not deterministic"
+    );
+    assert_eq!(a.outcome.battle_competitors, b.outcome.battle_competitors);
+    assert_eq!(a.outcome.battle_positions, b.outcome.battle_positions);
+    // Every round carries one competitor entry per ask (the manifest echo's
+    // shape contract).
+    for (fi, rounds) in a.outcome.battle_competitors.iter().enumerate() {
+        let n_asks = fixture_facts()[fi].train_asks.len();
+        for comps in rounds {
+            assert_eq!(comps.len(), n_asks, "competitor log arity drifted");
+        }
+    }
+}
+
+/// (e) The tau threshold around its boundary: pick the competitor token's
+/// distance from the answer embedding as the knob — inside `tau·scale_a`
+/// the fallback fires (pairs == flag-off), just outside it the differential
+/// engages (pairs differ). Read the actual embeddings off the fixture's
+/// base model (the seam, not hard-coded numbers).
+#[test]
+fn p637_e_tau_threshold_boundary() {
+    let probe = ToyModel::new(0xC1F1);
+    let g = probe.final_norm_scale();
+    let answer_tok = ANSWER1[0];
+    let emb_a = probe.token_out_embedding(answer_tok);
+    let scale_a: f64 = {
+        let mut s = 0.0f64;
+        for i in 0..emb_a.len() {
+            let v = f64::from(emb_a[i]) * f64::from(g[i]);
+            s += v * v;
+        }
+        s.sqrt()
+    };
+    // A filler token at a TUNABLE distance: the threshold knob must stay
+    // inside validate()'s (0, 1] band on BOTH arms (tau·1.1 < 1, tau·0.9 >
+    // 0), so the pair's ratio needs ceiling < 0.9 — scan the unused vocab
+    // for the MOST-separated filler INSIDE that band (deterministic,
+    // first-index tie). Random rows can sit past the answer row's own
+    // scale (ratio > 1, unusable — no legal tau falls back there).
+    // Loud if the fixture's fillers collapsed or all sit outside the band.
+    let mut mid_tok = 0u32;
+    let mut mid_ratio = 0.0f64;
+    for t in 1..V as u32 {
+        if [S1, S2, C1, C2, answer_tok, ANSWER1[1], ANSWER1[2]].contains(&t) {
+            continue;
+        }
+        let emb_t = probe.token_out_embedding(t);
+        let mut d2 = 0.0f64;
+        for i in 0..emb_a.len() {
+            let v = f64::from(emb_a[i]) - f64::from(emb_t[i]);
+            let w = v * f64::from(g[i]);
+            d2 += w * w;
+        }
+        let ratio = d2.sqrt() / scale_a;
+        if (0.001..0.9).contains(&ratio) && ratio > mid_ratio {
+            mid_ratio = ratio;
+            mid_tok = t;
+        }
+    }
+    assert!(
+        mid_tok != 0,
+        "fixture lost its tunable filler (no token with ratio in (0.001, 0.9))"
+    );
+    let ratio = mid_ratio;
+    // ONE fact (the ratio the tau knob is read against is per-answer; a
+    // two-fact fixture would mix bands). The authored competitor pins
+    // mid_tok at every ask of that fact.
+    let mut facts_far = vec![fixture_facts().remove(0)];
+    for f in &mut facts_far {
+        f.competing_first_token = Some(vec![mid_tok; f.train_asks.len()]);
+    }
+    let inside = run_with_facts(
+        &FactWriteConfig {
+            margin_target: true,
+            degeneracy_tau: (ratio * 1.1).clamp(0.01, 1.0),
+            ..FactWriteConfig::default()
+        },
+        facts_far.clone(),
+    );
+    let off = run_with_facts(&FactWriteConfig::default(), facts_far.clone());
+    assert_eq!(
+        pairs_bits(&inside),
+        pairs_bits(&off),
+        "tau above the actual ratio must fall back to the absolute rows"
+    );
+    let outside = run_with_facts(
+        &FactWriteConfig {
+            margin_target: true,
+            degeneracy_tau: (ratio * 0.9).clamp(0.01, 1.0),
+            ..FactWriteConfig::default()
+        },
+        facts_far,
+    );
+    assert_ne!(
+        pairs_bits(&inside),
+        pairs_bits(&outside),
+        "tau below the actual ratio must engage the differential"
+    );
+}
+
+/// (f) The battle-position rule: first divergence (not literal 0), the
+/// early-stop competitor IS the stop token, full match → no battle, and
+/// the stop slot is never a battle (the update_weights exemption face).
+#[test]
+fn p637_f_battle_of_rules() {
+    use katgpt_core::closed_form_weight_write::battle_of;
+    // Diverges at 0.
+    assert_eq!(battle_of(&[13, 14, END], &[15, 13]), Some((0, 15)));
+    // Shared first subword — the rule engages at k=1, never 0.
+    assert_eq!(battle_of(&[13, 14, END], &[13, 15]), Some((1, 15)));
+    // Early stop mid-answer: the continuation ran out at a CONTENT
+    // position (the model chose END there) — the competitor IS the stop
+    // token, and the battle is real.
+    assert_eq!(battle_of(&[13, 14, END], &[13]), Some((1, END)));
+    // Full content covered (free generation stops BEFORE the stop token,
+    // so this IS the fully-correct generation) → no battle.
+    assert_eq!(battle_of(&[13, 14, END], &[13, 14]), None);
+    // Junk after the full content — past the answer, never a battle.
+    assert_eq!(battle_of(&[13, 14, END], &[13, 14, 17]), None);
+    // Empty answer → no battle (guard face).
+    assert_eq!(battle_of(&[], &[13]), None);
 }
