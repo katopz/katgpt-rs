@@ -40,4 +40,13 @@
 # scn_seal_007_scene — LIVE, the surviving holder. First allocation was mine;
 # citation-weight was never run because the other side's file is the only one in
 # the tree — keeping it. 119 is not reusable below the era boundary.
-legacy_ratchet = 5
+# 4 re-pinned DOWN 2026-11-23 (zed-77ee6f4d@m3, the sprint!110 housekeeping + queue-sweep
+# lane): the 119 history row dissolved by RENAME — 019639f (the sprint!120 renumber lane,
+# zed-a1129362@m3) moved 119_develop_red_layer10_stale_pin_and_scn_seal_007_scene to
+# 120_*, so the -M rename collapse no longer counts it as a 119 holder; the removed
+# a53defb side is now 119's only history holder (verified live: historical_collisions()
+# returns exactly the 4 rows .issues 23/49/87/108 over 208 numbers walked;
+# removed_by_number carries 119 -> the a53defb stem alone; tracked duplicates on disk 0).
+# The 5 row above recorded the pair while both sides stood. 119 stays not reusable below
+# the era boundary.
+legacy_ratchet = 4
