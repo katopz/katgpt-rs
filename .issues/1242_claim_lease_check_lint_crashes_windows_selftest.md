@@ -1,6 +1,7 @@
 # Issue 1242 — claim_lease_check.py `--lint` crashes on Windows: the mandatory selftest's nested subprocess returns stdout=None (py3.14 reader-thread death), blinding every Windows lint call
 
-**Status:** OPEN — filed 2026-11-23 (zed-989683dc@4090, from the live reflex 132 lint calls during the A3-republish build). The FILE verdicts are unaffected (the file scans parse fine — verified: the 132 file's claim line lints clean through the file path when the selftest is bypassed); the crash is the SELFTEST half, which every `--lint` invocation runs FIRST, so **every `--lint` call on this box dies before reading any file**. The lint works on amo/m3 (py3.10/3.13) — this is the Windows-py3.14 class.
+**Status:** OPEN — filed 2026-11-23 (zed-989683dc@4090, from the live reflex 132 lint calls during the A3-republish build).
+**Claimed:** zed-b175c253@m3 (m3), 1795460263, expires 2026-11-25T18:57:43Z The FILE verdicts are unaffected (the file scans parse fine — verified: the 132 file's claim line lints clean through the file path when the selftest is bypassed); the crash is the SELFTEST half, which every `--lint` invocation runs FIRST, so **every `--lint` call on this box dies before reading any file**. The lint works on amo/m3 (py3.10/3.13) — this is the Windows-py3.14 class.
 
 ## The crash (reproduced every invocation)
 
