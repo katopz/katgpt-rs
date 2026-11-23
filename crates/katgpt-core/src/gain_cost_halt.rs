@@ -536,7 +536,10 @@ impl GainCostLoopHalter {
         let Some(estimate) = fitter.estimate() else {
             return false;
         };
-        let verdict = crate::qrr_convergence::OscillationVerdict::from_mode(&estimate);
+        let verdict = crate::qrr_convergence::OscillationVerdict::from_mode_and_period(
+            &estimate,
+            fitter.period(),
+        );
         self.last_mode_verdict = Some(verdict);
         self.mode_verdict_enabled
             && verdict == crate::qrr_convergence::OscillationVerdict::OscillatingButSettling

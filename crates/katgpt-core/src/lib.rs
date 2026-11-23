@@ -1234,9 +1234,9 @@ pub use gain_cost_halt::{
 pub mod qrr_convergence;
 #[cfg(feature = "qrr_convergence")]
 pub use qrr_convergence::{
-    AlphaReplayVerdict, EnergySplit, ModeEstimate, ModeFitter, ModeKind, OscillationVerdict,
-    R1Certificate, SylvesterBlocks, alpha_replay_check, energy_split, replay_probe_state,
-    settling_steps, solve_sylvester, tolerance_for_budget,
+    AlphaReplayVerdict, CacheRefusal, CacheVerdict, EnergySplit, ModeEstimate, ModeFitter,
+    ModeKind, OscillationVerdict, R1Certificate, SylvesterBlocks, alpha_replay_check, energy_split,
+    replay_probe_state, settling_steps, solve_sylvester, tolerance_for_budget,
 };
 
 #[cfg(feature = "gain_cost_halt")]

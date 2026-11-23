@@ -189,6 +189,138 @@ fn step_fraction(prev: &[f32], cur: &[f32]) -> f32 {
     (d2 / c2).sqrt() as f32
 }
 
+/// Sustained-decay window of [`ContractionReport`]: the last this-many step
+/// ratios must all sit strictly below 1 (Issue 1241 T2 — "ρ̂ < 1 over a
+/// ≥ 4-round window", arXiv:2611.13378 App. D).
+pub const CONTRACTION_WINDOW: usize = 4;
+
+/// Issue 1241 T2 — the contraction census of one looped trajectory
+/// (arXiv:2611.13378 App. D, the per-checkpoint ρ_r measurement).
+///
+/// ⛔ REPORT-ONLY. **This ratio is not a halt signal (Issue 698 T4)** — loop
+/// states are RMSNorm-pinned (the Issue 717 T6 / Research 035 norm-pinned
+/// law), so a step-norm ratio describes the trajectory, it never decides
+/// when to stop. Its one consumer is the CACHE certificate:
+/// `decay_ok` feeds `qrr_convergence::OscillationVerdict::cache_verdict`.
+///
+/// Distinct from [`write_fractions`]: that is the residual form
+/// `‖Δh_τ‖/‖h_τ‖`; this is the ratio of CONSECUTIVE step norms
+/// `ρ̂_τ = ‖Δh_τ‖/‖Δh_{τ−1}‖`, whose sustained `< 1` is the contraction
+/// (Banach) certificate the paper ties to cache safety.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ContractionReport {
+    /// `ρ̂_τ` for τ = 2..n (two entries fewer than states). `0/0` reads 0
+    /// (already at the fixed point), `x/0` reads `+∞`, a non-finite or
+    /// length-mismatched state reads NaN.
+    pub rho_series: Vec<f32>,
+    /// The last [`CONTRACTION_WINDOW`] ratios are all finite and `< 1`.
+    pub decay_ok: bool,
+    /// The geometric model `‖Δh_{n+d}‖ ≤ ‖Δh_n‖·ρ̂^d` with `ρ̂` the WORST
+    /// ratio of the decay window (conservative). `None` unless `decay_ok`.
+    pub bound: Option<GeometricBound>,
+}
+
+/// The paper's geometric bound `ε ≤ C·ρ̂^d`, anchored at the last step.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GeometricBound {
+    /// Worst ratio over the decay window (`0 ≤ rho < 1`).
+    pub rho: f32,
+    /// The last step norm `‖Δh_n‖` (the `C` anchor).
+    pub last_step: f32,
+}
+
+impl GeometricBound {
+    /// Upper bound on the distance from the state after `extra` MORE rounds
+    /// to the fixed point: the geometric tail `‖Δh_n‖·ρ̂^{extra+1}/(1−ρ̂)`.
+    /// `extra = 0` bounds the current state's own distance.
+    #[inline]
+    pub fn residual_after(&self, extra: u32) -> f32 {
+        let (rho, last) = (self.rho as f64, self.last_step as f64);
+        (last * rho.powi(extra as i32 + 1) / (1.0 - rho)) as f32
+    }
+}
+
+impl ContractionReport {
+    /// Fill the census from consecutive loop states (`report` is reused —
+    /// its `rho_series` is cleared and refilled, zero-alloc once warm).
+    pub fn measure_into<'a, I>(states: I, report: &mut Self)
+    where
+        I: IntoIterator<Item = &'a [f32]>,
+    {
+        report.rho_series.clear();
+        report.decay_ok = false;
+        report.bound = None;
+        let mut prev: Option<&[f32]> = None;
+        let mut prev_step: Option<f64> = None;
+        let mut last_step = f64::NAN;
+        for cur in states {
+            if let Some(p) = prev {
+                let step = step_norm(p, cur);
+                if let Some(before) = prev_step {
+                    report.rho_series.push(step_ratio(step, before));
+                }
+                prev_step = Some(step);
+                last_step = step;
+            }
+            prev = Some(cur);
+        }
+        let n = report.rho_series.len();
+        if n < CONTRACTION_WINDOW {
+            return;
+        }
+        let window = &report.rho_series[n - CONTRACTION_WINDOW..];
+        if !window.iter().all(|r| r.is_finite() && *r < 1.0) {
+            return;
+        }
+        report.decay_ok = true;
+        // Sequential fold, first-max — deterministic order (Issue 940).
+        let rho = window
+            .iter()
+            .fold(0.0f32, |m, &r| if r > m { r } else { m });
+        report.bound = Some(GeometricBound {
+            rho,
+            last_step: last_step as f32,
+        });
+    }
+
+    /// Allocating convenience over [`Self::measure_into`].
+    pub fn measure<'a, I>(states: I) -> Self
+    where
+        I: IntoIterator<Item = &'a [f32]>,
+    {
+        let mut report = Self::default();
+        Self::measure_into(states, &mut report);
+        report
+    }
+}
+
+/// `‖cur − prev‖` in f64 (sequential fold); NaN on a length mismatch or a
+/// non-finite component.
+#[inline]
+fn step_norm(prev: &[f32], cur: &[f32]) -> f64 {
+    if prev.len() != cur.len() {
+        return f64::NAN;
+    }
+    let mut d2 = 0.0f64;
+    for (&p, &c) in prev.iter().zip(cur) {
+        let d = c as f64 - p as f64;
+        d2 += d * d;
+    }
+    if d2.is_finite() { d2.sqrt() } else { f64::NAN }
+}
+
+#[inline]
+fn step_ratio(step: f64, before: f64) -> f32 {
+    if !step.is_finite() || !before.is_finite() {
+        return f32::NAN;
+    }
+    match (step == 0.0, before == 0.0) {
+        (true, _) => 0.0,
+        (false, true) => f32::INFINITY,
+        (false, false) => (step / before) as f32,
+    }
+}
+
 /// First step index `τ` (0-based into a write-fraction spectrum) from which
 /// every remaining step writes at most `epsilon` — the loop has stalled.
 /// Returned as the **1-based loop count** that suffices (`τ + 1`: the state
@@ -389,6 +521,90 @@ impl<const N: usize> DepthHistogram<N> {
 
 #[cfg(test)]
 mod tests {
+    // ── Issue 1241 T2 — the contraction census ─────────────────────────
+
+    /// States converging geometrically: h_τ = h* + ρ^τ·v.
+    fn geometric(rho: f32, n: usize) -> Vec<Vec<f32>> {
+        (0..n)
+            .map(|t| {
+                let k = rho.powi(t as i32);
+                vec![1.0 + 0.5 * k, -2.0 - 0.25 * k, 0.75 * k]
+            })
+            .collect()
+    }
+
+    #[test]
+    fn i1241_contraction_recovers_rho_and_bounds_the_residual() {
+        let states = geometric(0.61, 9);
+        let r = ContractionReport::measure(states.iter().map(Vec::as_slice));
+        assert_eq!(r.rho_series.len(), 7);
+        for &x in &r.rho_series {
+            assert!((x - 0.61).abs() < 1e-4, "ρ̂ = {x}");
+        }
+        assert!(r.decay_ok);
+        let b = r.bound.expect("certified");
+        assert!((b.rho - 0.61).abs() < 1e-4);
+        // The bound holds against the true distance to h* (computed exactly).
+        let fixed = [1.0f32, -2.0, 0.0];
+        let dist = |s: &[f32]| {
+            s.iter()
+                .zip(fixed)
+                .map(|(a, b)| ((a - b) as f64).powi(2))
+                .sum::<f64>()
+                .sqrt()
+        };
+        let true_now = dist(states.last().unwrap());
+        assert!(
+            b.residual_after(0) as f64 >= true_now * (1.0 - 1e-4),
+            "{} < {true_now}",
+            b.residual_after(0)
+        );
+        assert!(b.residual_after(3) < b.residual_after(0));
+    }
+
+    #[test]
+    fn i1241_contraction_refuses_short_flat_growing_and_cyclic_trajectories() {
+        // Too short for the 4-round window.
+        let r = ContractionReport::measure(geometric(0.5, 5).iter().map(Vec::as_slice));
+        assert_eq!(r.rho_series.len(), 3);
+        assert!(!r.decay_ok && r.bound.is_none());
+        // Growth.
+        let r = ContractionReport::measure(geometric(1.2, 9).iter().map(Vec::as_slice));
+        assert!(!r.decay_ok);
+        // A period-2 cycle: constant step norm, ρ̂ = 1 — never certified.
+        let cyc: Vec<Vec<f32>> = (0..9)
+            .map(|t| vec![if t % 2 == 0 { 1.0 } else { -1.0 }, 0.5])
+            .collect();
+        let r = ContractionReport::measure(cyc.iter().map(Vec::as_slice));
+        assert!(r.rho_series.iter().all(|&x| x == 1.0));
+        assert!(!r.decay_ok);
+        // A diverged state reads NaN and refuses.
+        let mut bad = geometric(0.5, 9);
+        bad[7][0] = f32::NAN;
+        let r = ContractionReport::measure(bad.iter().map(Vec::as_slice));
+        assert!(r.rho_series.iter().any(|x| x.is_nan()));
+        assert!(!r.decay_ok);
+        // Exact fixed point reached: 0/0 reads 0 (contracted), x/0 reads ∞.
+        let mut fp = geometric(0.5, 6);
+        for _ in 0..4 {
+            fp.push(fp.last().unwrap().clone());
+        }
+        let r = ContractionReport::measure(fp.iter().map(Vec::as_slice));
+        assert!(r.decay_ok, "{:?}", r.rho_series);
+        assert_eq!(*r.rho_series.last().unwrap(), 0.0);
+    }
+
+    #[test]
+    fn i1241_measure_into_reuses_its_buffer() {
+        let mut r = ContractionReport::default();
+        ContractionReport::measure_into(geometric(0.5, 12).iter().map(Vec::as_slice), &mut r);
+        let cap = r.rho_series.capacity();
+        let ptr = r.rho_series.as_ptr();
+        ContractionReport::measure_into(geometric(0.6, 9).iter().map(Vec::as_slice), &mut r);
+        assert_eq!((r.rho_series.capacity(), r.rho_series.as_ptr()), (cap, ptr));
+        assert!(r.decay_ok);
+    }
+
     use super::*;
 
     #[test]

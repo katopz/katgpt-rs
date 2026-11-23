@@ -51,6 +51,8 @@
 //! claim; P4 rides `phase_belief` defer-until-pull (Issue 939), P6 is
 //! report-only offline (issue file carries the split).
 
+pub use katgpt_types::{CacheRefusal, CacheVerdict};
+
 /// Sliding-window triple count for the AR(2) fit. 16 triples ≈ 19 steps of
 /// history (2 priming deltas + 16 fitted) — long enough to average noise,
 /// short enough to track mode changes within a patience-scale loop budget.
@@ -77,6 +79,23 @@ pub const NEAR_ONE_EPS: f32 = 0.01;
 /// below `(last_gain × BLIND_FRAC)²` the channel carries no mode information
 /// (a near-90° rotation's projection is rounding noise) — refuse the verdict.
 const BLIND_FRAC: f32 = 1e-4;
+
+/// Lag range of the limit-cycle period scan ([`ModeFitter::period`]) —
+/// Issue 1241 T3 (arXiv:2611.13378 App. D: a cyclic looped core needs the
+/// period to average its cache over).
+pub const PERIOD_MIN: usize = 2;
+/// Upper lag of the period scan (inclusive). `2·PERIOD_MAX ≤ MODE_WINDOW`
+/// keeps at least one full period of comparisons at the longest lag.
+pub const PERIOD_MAX: usize = 8;
+const _: () = assert!(2 * PERIOD_MAX <= MODE_WINDOW);
+
+/// Relative lag-P residual under which the window repeats with period P:
+/// `Σ(δ_t − δ_{t−P})² / Σ(δ_t² + δ_{t−P}²)`. A limit cycle is only ever
+/// tagged when `r ≥ 1 − MODE_SETTLE_EPS`; at that modulus the decay alone
+/// contributes `(1 − r^P)²/(1 + r^{2P}) ≤ 3.2e-3` at P = 8, so the band
+/// admits every in-band cycle while a wrong lag of a sinusoid reads
+/// `1 − cos(2π·P/T) ≥ 0.1` for every integer period up to 8.
+pub const PERIOD_RESID_TOL: f64 = 1e-2;
 
 /// Relative Tikhonov ridge on the normal-equation diagonal — the
 /// identifiability repair for single-mode (rank-deficient) windows.
@@ -119,18 +138,66 @@ pub enum OscillationVerdict {
     /// suppressing a settling alternating mode DEGRADES the computation).
     OscillatingButSettling,
     /// `r ≥ 1 − MODE_SETTLE_EPS` — a true limit cycle; the incumbent
-    /// oscillation halt stands (maintained true-halt latency).
-    LimitCycle,
+    /// oscillation halt stands (maintained true-halt latency). `period` is
+    /// the smallest lag in `PERIOD_MIN..=PERIOD_MAX` at which the delta
+    /// window repeats ([`ModeFitter::period`]); `None` = aperiodic at that
+    /// scale (non-integer or longer period). Issue 1241 T3: the period is
+    /// what a cache read needs (`Mean` over exactly one period cancels the
+    /// periodic first-order residual), never a halt input.
+    LimitCycle { period: Option<u8> },
 }
 
 impl OscillationVerdict {
-    /// Classify a fitted mode against the settle band.
+    /// Classify a fitted mode against the settle band (no period read —
+    /// see [`Self::from_mode_and_period`]).
     #[inline]
     pub fn from_mode(mode: &ModeEstimate) -> Self {
+        Self::from_mode_and_period(mode, None)
+    }
+
+    /// Classify a fitted mode against the settle band, tagging a limit
+    /// cycle with its detected period. The MODULUS alone decides settling
+    /// vs cycle (the halter's verdict is unchanged by the period scan); the
+    /// period is carried only on a cycle.
+    #[inline]
+    pub fn from_mode_and_period(mode: &ModeEstimate, period: Option<u8>) -> Self {
         if mode.r < 1.0 - MODE_SETTLE_EPS {
             Self::OscillatingButSettling
         } else {
-            Self::LimitCycle
+            Self::LimitCycle { period }
+        }
+    }
+
+    /// Issue 1241 T3 — the cache projection, ORTHOGONAL to the halt reason
+    /// (arXiv:2611.13378 App. D: when to stop and what may be cached are
+    /// independent certificates). `oscillation` is this fitter's verdict
+    /// (`None` = no oscillation evidence); `contraction_certified` is the
+    /// sustained-decay test (`loop_depth_probe::ContractionReport::decay_ok`
+    /// under `kl_depth_probe` — passed as a bool so this module stays
+    /// independent of that feature).
+    ///
+    /// - a periodic limit cycle → [`CacheVerdict::MeanAtPeriod`] (the
+    ///   period-averaged rescue instead of silent last-round loss);
+    /// - an aperiodic limit cycle → refused, nothing is cache-safe;
+    /// - settling / no oscillation → `Last` iff contraction is certified,
+    ///   else refused (the shipped `CacheStrategy::Last` default assumes
+    ///   the very property this certifies).
+    ///
+    /// REPORT-ONLY: nothing consumes this to change the runtime cache path
+    /// (Issue 1241 T4 gates any arm behind a §3.6 head-to-head PoC).
+    #[inline]
+    pub fn cache_verdict(oscillation: Option<Self>, contraction_certified: bool) -> CacheVerdict {
+        match oscillation {
+            Some(Self::LimitCycle { period: Some(p) }) => CacheVerdict::MeanAtPeriod(p),
+            Some(Self::LimitCycle { period: None }) => {
+                CacheVerdict::Refused(CacheRefusal::AperiodicCycle)
+            }
+            Some(Self::OscillatingButSettling) | None if contraction_certified => {
+                CacheVerdict::Last
+            }
+            Some(Self::OscillatingButSettling) | None => {
+                CacheVerdict::Refused(CacheRefusal::NoContractionCertificate)
+            }
         }
     }
 }
@@ -265,6 +332,39 @@ impl ModeFitter {
     #[inline]
     pub fn near_one_streak(&self) -> u32 {
         self.near_one_streak
+    }
+
+    /// Issue 1241 T3 — the limit-cycle period: the smallest lag `P` in
+    /// [`PERIOD_MIN`]`..=`[`PERIOD_MAX`] whose relative lag-P residual over
+    /// the fitted delta window is at most [`PERIOD_RESID_TOL`] (the smallest
+    /// passing lag, so a multiple of the true period never wins). `None`
+    /// when the window holds fewer than `2·P` deltas at every lag, the
+    /// window is still, or no lag repeats. Pure (no streak side effects),
+    /// zero-alloc, sequential f64 fold in chronological order.
+    pub fn period(&self) -> Option<u8> {
+        let n = self.filled;
+        // Chronological j-th fitted delta (δ_{t+2} of each triple).
+        let at = |j: usize| -> f64 {
+            let slot = if n == MODE_WINDOW {
+                (self.head + j) % MODE_WINDOW
+            } else {
+                j
+            };
+            self.window[slot * 3 + 2] as f64
+        };
+        (PERIOD_MIN..=PERIOD_MAX)
+            .filter(|&lag| n >= 2 * lag)
+            .find(|&lag| {
+                let (mut num, mut den) = (0.0f64, 0.0f64);
+                for j in lag..n {
+                    let (cur, back) = (at(j), at(j - lag));
+                    let d = cur - back;
+                    num += d * d;
+                    den += cur * cur + back * back;
+                }
+                den > 0.0 && num <= PERIOD_RESID_TOL * den
+            })
+            .and_then(|lag| u8::try_from(lag).ok())
     }
 
     /// Fit the window and return the dominant mode, or `None` when the
@@ -733,6 +833,150 @@ pub fn alpha_replay_check(
 
 #[cfg(test)]
 mod tests {
+    // ── Issue 1241 T3 — the period scan + the cache projection ──────────
+
+    /// Feed `n` deltas of a waveform and return the fitter.
+    fn fed(n: usize, f: impl Fn(usize) -> f32) -> ModeFitter {
+        let mut m = ModeFitter::new();
+        for t in 0..n {
+            m.observe(f(t));
+        }
+        m
+    }
+
+    /// The pre-registered falsifier: synthetic oscillators of known integer
+    /// period P ∈ 2..=8 — the scan recovers P EXACTLY, sinusoid and
+    /// non-sinusoidal (a seeded arbitrary period-P pattern) alike.
+    #[test]
+    fn i1241_period_scan_recovers_every_known_period_exactly() {
+        for p in PERIOD_MIN..=PERIOD_MAX {
+            let w = 2.0 * std::f32::consts::PI / p as f32;
+            let sine = fed(40, |t| (w * t as f32 + 0.3).cos());
+            assert_eq!(sine.period(), Some(p as u8), "sinusoid P={p}");
+            // A non-sinusoidal cycle: a fixed LCG pattern repeated every p.
+            let pattern: Vec<f32> = (0..p)
+                .map(|k| {
+                    let x = (k as u64 + 1).wrapping_mul(6364136223846793005) >> 40;
+                    (x % 1000) as f32 / 500.0 - 1.0 + 0.01 * k as f32
+                })
+                .collect();
+            let cyc = fed(40, |t| pattern[t % p]);
+            assert_eq!(cyc.period(), Some(p as u8), "pattern P={p}");
+        }
+    }
+
+    #[test]
+    fn i1241_period_scan_abstains_on_settling_noninteger_still_and_cold() {
+        // Settling flip (r = 0.7) decays far outside the band at every lag.
+        assert_eq!(
+            fed(40, |t| 0.7f32.powi(t as i32)
+                * if t % 2 == 0 { 1.0 } else { -1.0 })
+            .period(),
+            None
+        );
+        // Non-integer period 7.5 has no integer lag ≤ 8 that repeats.
+        let w = 2.0 * std::f32::consts::PI / 7.5;
+        assert_eq!(fed(40, |t| (w * t as f32).sin()).period(), None);
+        // Exact stillness and a cold window.
+        assert_eq!(fed(40, |_| 0.0).period(), None);
+        assert_eq!(
+            fed(5, |t| if t % 2 == 0 { 1.0 } else { -1.0 }).period(),
+            None
+        );
+    }
+
+    /// The modulus alone decides settling vs cycle; the period rides only a
+    /// cycle — the halter's decision is unchanged by the scan.
+    #[test]
+    fn i1241_verdict_tags_the_period_only_on_a_limit_cycle() {
+        let mut flip = fed(40, |t| if t % 2 == 0 { 1.0 } else { -1.0 });
+        let mode = flip.estimate().expect("a unit flip fits");
+        assert_eq!(
+            OscillationVerdict::from_mode_and_period(&mode, flip.period()),
+            OscillationVerdict::LimitCycle { period: Some(2) }
+        );
+        let mut settle = fed(40, |t| {
+            0.7f32.powi(t as i32) * if t % 2 == 0 { 1.0 } else { -1.0 }
+        });
+        let mode = settle.estimate().expect("a settling flip fits");
+        assert_eq!(
+            OscillationVerdict::from_mode_and_period(&mode, Some(2)),
+            OscillationVerdict::OscillatingButSettling
+        );
+        assert_eq!(
+            OscillationVerdict::from_mode(&ModeEstimate {
+                kind: ModeKind::RealFlip,
+                r: 1.0,
+                omega: None
+            }),
+            OscillationVerdict::LimitCycle { period: None }
+        );
+    }
+
+    #[test]
+    fn i1241_cache_projection_is_orthogonal_to_the_halt_reason() {
+        use OscillationVerdict as V;
+        let cyc = |p| Some(V::LimitCycle { period: p });
+        // A periodic cycle gets the period average whatever contraction says.
+        assert_eq!(
+            V::cache_verdict(cyc(Some(3)), false),
+            CacheVerdict::MeanAtPeriod(3)
+        );
+        assert_eq!(
+            V::cache_verdict(cyc(Some(3)), true),
+            CacheVerdict::MeanAtPeriod(3)
+        );
+        // An aperiodic cycle is never cache-safe.
+        for c in [false, true] {
+            assert_eq!(
+                V::cache_verdict(cyc(None), c),
+                CacheVerdict::Refused(CacheRefusal::AperiodicCycle)
+            );
+        }
+        // Settling or no oscillation: Last only on a contraction certificate.
+        for osc in [Some(V::OscillatingButSettling), None] {
+            assert_eq!(V::cache_verdict(osc, true), CacheVerdict::Last);
+            assert_eq!(
+                V::cache_verdict(osc, false),
+                CacheVerdict::Refused(CacheRefusal::NoContractionCertificate)
+            );
+        }
+        assert_eq!(
+            CacheVerdict::MeanAtPeriod(4).strategy(),
+            Some(katgpt_types::CacheStrategy::Mean)
+        );
+        assert_eq!(
+            CacheVerdict::Last.strategy(),
+            Some(katgpt_types::CacheStrategy::Last)
+        );
+        assert_eq!(
+            CacheVerdict::Refused(CacheRefusal::AperiodicCycle).strategy(),
+            None
+        );
+    }
+
+    /// The aliasing argument behind `MeanAtPeriod`: over a period-P cycle
+    /// the mean of the last P rounds is phase-independent (it equals the
+    /// cycle's centre), while `Last` keeps one phase's offset.
+    #[test]
+    fn i1241_mean_over_one_period_cancels_the_periodic_residual() {
+        for p in PERIOD_MIN..=PERIOD_MAX {
+            let w = 2.0 * std::f64::consts::PI / p as f64;
+            let centre = 0.25f64;
+            for end in p..p + 2 * p {
+                let mean: f64 = (end - p..end)
+                    .map(|t| centre + (w * t as f64 + 0.4).cos())
+                    .sum::<f64>()
+                    / p as f64;
+                assert!((mean - centre).abs() < 1e-12, "P={p} end={end}: {mean}");
+            }
+            let last_off: f64 = (0..p)
+                .map(|t| (w * t as f64 + 0.4).cos().abs())
+                .fold(0.0, f64::max);
+            assert!(last_off > 0.1, "Last keeps a phase offset at P={p}");
+        }
+    }
+
     use super::*;
 
     /// Exact single-mode recovery through the ridge (the rank-deficiency

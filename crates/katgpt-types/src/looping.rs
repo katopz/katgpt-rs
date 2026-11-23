@@ -63,6 +63,50 @@ pub enum CacheStrategy {
     Mean,
 }
 
+/// Why a loop's cache read is refused (Issue 1241 T3).
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CacheRefusal {
+    /// No sustained contraction was certified — the last round is not known
+    /// to sit at the fixed point (arXiv:2611.13378 App. D: a fixed-depth
+    /// non-contractive core loses +0.0317 BPB under last-round KV).
+    NoContractionCertificate,
+    /// A limit cycle with no integer period in the scanned range — no
+    /// round, and no period average, is a cache-safe representative.
+    AperiodicCycle,
+}
+
+/// What a looped core may cache — the certificate ORTHOGONAL to the halt
+/// reason (Issue 1241 T3; when to stop and what to cache are independent,
+/// arXiv:2611.13378 App. D). Produced by katgpt-core's
+/// `OscillationVerdict::cache_verdict`; REPORT-ONLY until Issue 1241 T4's
+/// head-to-head PoC arms a consumer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CacheVerdict {
+    /// Contraction certified: the last round is cache-safe
+    /// ([`CacheStrategy::Last`]).
+    Last,
+    /// The cache read is refused.
+    Refused(CacheRefusal),
+    /// A limit cycle of period `P`: average the K/V over exactly the last
+    /// `P` rounds — a mean over one full period cancels the periodic
+    /// first-order residual (aliasing), where `Last` keeps one phase of it.
+    MeanAtPeriod(u8),
+}
+
+impl CacheVerdict {
+    /// The shipped strategy this verdict selects (`Mean` for a period —
+    /// the caller must window it to exactly `P` rounds); `None` = refused.
+    #[inline]
+    pub fn strategy(self) -> Option<CacheStrategy> {
+        match self {
+            Self::Last => Some(CacheStrategy::Last),
+            Self::MeanAtPeriod(_) => Some(CacheStrategy::Mean),
+            Self::Refused(_) => None,
+        }
+    }
+}
+
 /// Configuration for training-free loop wrapper (Plan 136).
 ///
 /// Pure inference-time retrofit: re-applies a contiguous mid-stack block of

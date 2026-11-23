@@ -297,10 +297,10 @@ fn p2_limit_cycle_halts_at_unchanged_latency() {
     assert_eq!(inc_halt, arm_halt, "true-halt latency must be maintained");
     let mut h = armed();
     let _ = run(&mut h, &stream);
-    assert_eq!(
+    assert!(matches!(
         h.last_oscillation_verdict(),
-        Some(OscillationVerdict::LimitCycle)
-    );
+        Some(OscillationVerdict::LimitCycle { .. })
+    ));
 }
 
 /// Expanding spiral (ρ = 1.1): a growth mode is a limit/exceeding cycle —
