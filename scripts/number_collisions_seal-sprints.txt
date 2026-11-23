@@ -31,4 +31,13 @@
 # max_hist 4 (zed-amo-071num's 11-22 pass) already agrees — one record, two media,
 # both at 4 from this commit. The same-day double allocation stays on record above
 # (the number is not reusable below the era boundary).
-legacy_ratchet = 4
+# 5 re-pinned UP 2026-11-23 (zed-glm5-flash@m3, the sprint!110 close-out run): the
+# 119 dual allocation — both sides read .highwater 118 the same evening. MINE
+# (a53defb, sprint!110's lane): 119_seal_remake_develop_red_sprint113_riir_ai_half
+# — closed + removed same evening by the owner's own lane (abec107: the red was
+# fixed by sprint!113's riir-ai half 3bbbdbd22/293f42db1 landing first). THEIRS
+# (75ec81b, the sge gate-debts lane): 119_develop_red_layer10_stale_pin_and_
+# scn_seal_007_scene — LIVE, the surviving holder. First allocation was mine;
+# citation-weight was never run because the other side's file is the only one in
+# the tree — keeping it. 119 is not reusable below the era boundary.
+legacy_ratchet = 5
