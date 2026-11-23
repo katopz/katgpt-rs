@@ -1638,6 +1638,15 @@ required-features = ["lt2_looped", "cadence_gate", "loop_stability_fix"]
 # pass per token deleted). Lossy-surface gate: k=1 degenerate bit-identity
 # (plumbing), per-position argmax stability + pinned max_abs band at k=4,
 # wall-clock speedup.
+# Issue 1241 T1 — the copy_recall long-context fixture (arXiv:2611.13378 §5.3
+# + App. H): scorer liveness arms + the decorative-loop control (random
+# weights, tf_loop k=4 reads ~0 offset-averaged copy gain). Fixture + scorer:
+# tests/common/copy_recall.rs. Run --release (3 x 2k-token decodes).
+[[test]]
+name = "issue_1241_t1_copy_recall"
+path = "tests/issue_1241_t1_copy_recall.rs"
+required-features = ["tf_loop"]
+
 [[test]]
 name = "issue_698_t5_kv_mean"
 path = "tests/issue_698_t5_kv_mean.rs"
