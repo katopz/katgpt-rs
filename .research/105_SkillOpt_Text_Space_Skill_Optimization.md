@@ -248,3 +248,5 @@ If we implement SkillOpt-style text optimization for game validators:
 - Our modelless duality: Research 037
 - Our rubric distillation: Research 036
 - GOAT pillars: riir-ai `.docs/27_mmo_goat_pillars_decision_matrix.md`
+
+> **PASS-Redirects (synthesis):** Mi et al. [arXiv:2602.01869 "Skill-Pro: Learning Reusable Skills from Experience via Non-Parametric PPO for LLM Agents"] — the same text-as-trainable-state loop with a pool of ⟨initiation, procedure, termination⟩ skills instead of one document; its accept-if-better gate is the `ValidationGate` role. Distilled as Research 689 (Gain, maintenance leg only).

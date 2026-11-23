@@ -256,3 +256,5 @@ the gate rolls back `DirectionDelta` mutations that DO change routing.
   Only the quality-parity claim (G2) is not sustained by this PoC run.
 
 Full benchmark report: `riir-ai/.benchmarks/313_step_attribution_goat.md`.
+
+> **PASS-Redirects (synthesis):** Mi et al. [arXiv:2602.01869 "Skill-Pro: Learning Reusable Skills from Experience via Non-Parametric PPO for LLM Agents"] — skill-pool hindsight attribution to an initiation / procedure / termination role, and score-based pruning as the pool-maintenance half this note's commit gate lacks. Distilled as Research 689 (Gain, maintenance leg only).
