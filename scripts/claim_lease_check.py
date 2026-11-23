@@ -88,7 +88,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -320,37 +319,22 @@ def classify(repo: Path, now: datetime) -> tuple[list[dict], list[str]]:
     return rows, blind
 
 
-def run_capture(argv: list[str], cwd: str | None = None,
-                env: dict | None = None) -> tuple[int, str, str]:
-    """File-backed subprocess capture, Issue 1242: Windows pipe readers can
-    die mid-read (the child's fast exit tears the pipe down under the
-    reader thread), landing stdout=None and an unguarded TypeError in the
-    caller; temp files have no reader thread to lose. PYTHONIOENCODING pins
-    the child's stdout encoding off the console's ANSI code page (the cp874
-    console class). Returns (returncode, stdout, stderr) decoded utf-8,
-    errors replaced — never raises on stream content."""
-    with tempfile.TemporaryDirectory() as td:
-        out_p = Path(td) / "out.bin"
-        err_p = Path(td) / "err.bin"
-        child_env = dict(env if env is not None else os.environ)
-        child_env.setdefault("PYTHONIOENCODING", "utf-8")
-        with out_p.open("wb") as out_f, err_p.open("wb") as err_f:
-            proc = subprocess.run(argv, cwd=cwd, env=child_env,
-                                  stdout=out_f, stderr=err_f)
-        out = out_p.read_bytes().decode("utf-8", errors="replace")
-        err = err_p.read_bytes().decode("utf-8", errors="replace")
-    return proc.returncode, out, err
-
-
 def fetch_head_age(repo: Path) -> tuple[int | None, str]:
     """(seconds since the last fetch landed, note). Reads FETCH_HEAD's mtime
     in the per-worktree git dir, then the common dir. Never fetches."""
     candidates: list[Path] = []
     for flag in ("--git-dir", "--git-common-dir"):
-        rc, out, _err = run_capture(
-            ["git", "-C", str(repo), "rev-parse", flag])
-        if rc == 0 and out.strip():
-            candidates.append(Path(out.strip()) / "FETCH_HEAD")
+        out = subprocess.run(["git", "-C", str(repo), "rev-parse", flag],
+                             capture_output=True, encoding="utf-8",
+                             errors="replace")
+        # Issue 1242: on a non-UTF-8 console (the Thai-locale Windows box
+        # class) git's own localized output can carry non-UTF-8 bytes; an
+        # errors-mode decode is the defense, and a None stdout (reader-thread
+        # death) is a typed skip, never an unguarded read.
+        if out.stdout is None:
+            continue
+        if out.returncode == 0 and out.stdout.strip():
+            candidates.append(Path(out.stdout.strip()) / "FETCH_HEAD")
     for fh in candidates:
         try:
             age = int(time.time() - fh.stat().st_mtime)
@@ -595,6 +579,7 @@ def selftest() -> list[str]:
     # script itself; the nest guard stops the recursion (each child runs
     # this same selftest on every invocation).
     if os.environ.get("CLAIM_LEASE_SELTEST_NEST") != "1":
+        import subprocess as sp
         with tempfile.TemporaryDirectory() as td:
             d = Path(td) / ".issues"
             d.mkdir()
@@ -622,27 +607,50 @@ def selftest() -> list[str]:
                              f"{highwater_check(d)}")
             (d / ".highwater").write_text("107\n", encoding="utf-8")
             script = str(Path(__file__).resolve())
-            env = dict(os.environ, CLAIM_LEASE_SELTEST_NEST="1")
+            # Issue 1242: PYTHONIOENCODING pins the nested child's stdout to
+            # UTF-8 regardless of the console locale (the Thai-locale Windows
+            # box printed ✓/✗/⚠ as cp874 and the parent's reader thread died
+            # decoding — stdout came back None and the unguarded read
+            # crashed); errors="replace" makes the parent's decode survive
+            # any byte class. Both halves are the corpus's documented
+            # child-encoder + decode defense.
+            env = dict(os.environ, CLAIM_LEASE_SELTEST_NEST="1",
+                       PYTHONIOENCODING="utf-8")
 
-            def run(*extra: str) -> tuple[int, str]:
-                # Issue 1242 — file-backed capture (run_capture): the
-                # Windows pipe-reader thread dies mid-read and stdout
-                # lands None; temp files have no reader thread to lose.
-                rc, out, err = run_capture(
-                    [sys.executable, script, *extra], cwd=str(td), env=env)
-                return rc, out + err
-            rc, out = run("--item", "108")
-            if rc != 1 or "REFUSED" not in out:
+            def run(*extra: str) -> tuple[bool, int, str]:
+                proc = sp.run([sys.executable, script, *extra], cwd=str(td),
+                              env=env, capture_output=True, encoding="utf-8",
+                              errors="replace")
+                if proc.stdout is None:
+                    # Reader-thread death for any other reason: a LOUD typed
+                    # failure the selftest reports, never a TypeError crash,
+                    # never a silent pass.
+                    return False, proc.returncode, (
+                        "nested run lost stdout (reader-thread death — the "
+                        "console-locale decode class, Issue 1242)")
+                return True, proc.returncode, proc.stdout
+
+            ok, rc, out = run("--item", "108")
+            if not ok:
+                fails.append(f"--item: {out}")
+            elif rc != 1 or "REFUSED" not in out:
                 fails.append(f"--item did not refuse on the stale counter: "
-                             f"rc={rc} out={out[-400:]!r}")
-            rc, out = run("--item", "108", "--allow-stale-highwater")
-            if rc != 0 or "collides" not in out:
+                             f"rc={rc} "
+                             f"out={out[-400:]!r}")
+            ok, rc, out = run("--item", "108", "--allow-stale-highwater")
+            if not ok:
+                fails.append(f"--allow-stale-highwater: {out}")
+            elif rc != 0 or "collides" not in out:
                 fails.append(f"--allow-stale-highwater lost the warning or "
-                             f"the pass: rc={rc} out={out[-400:]!r}")
-            rc, out = run()
-            if rc != 0 or "collides" not in out:
+                             f"the pass: rc={rc} "
+                             f"out={out[-400:]!r}")
+            ok, rc, out = run()
+            if not ok:
+                fails.append(f"plain scan: {out}")
+            elif rc != 0 or "collides" not in out:
                 fails.append(f"plain scan lost the stale warning: "
-                             f"rc={rc} out={out[-400:]!r}")
+                             f"rc={rc} "
+                             f"out={out[-400:]!r}")
     return fails
 
 
@@ -712,20 +720,13 @@ def prove_fires() -> list[str]:
         if lint_file(repo / ".issues" / "825_two_sessions_one_issue.md") != []:
             fails.append("the write-time lint flagged a valid lease")
         # (5) fetch-age on a real (tiny) git repo vs a bare dir.
+        import subprocess as sp
         shared = root / "shared.git"
-        rc, _out, err = run_capture(
-            ["git", "init", "-q", "-b", "main", "--bare", str(shared)])
-        if rc != 0:
-            fails.append(f"prove-fires git init failed: rc={rc} "
-                         f"err={err[-200:]!r}")
-            return fails
+        sp.run(["git", "init", "-q", "-b", "main", "--bare", str(shared)],
+               check=True, capture_output=True)
         clone = root / "clone"
-        rc, _out, err = run_capture(["git", "clone", "-q", str(shared),
-                                     str(clone)])
-        if rc != 0:
-            fails.append(f"prove-fires git clone failed: rc={rc} "
-                         f"err={err[-200:]!r}")
-            return fails
+        sp.run(["git", "clone", "-q", str(shared), str(clone)],
+               check=True, capture_output=True)
         age, where = fetch_head_age(clone)
         if age is None:
             fails.append("a fetched clone reported no FETCH_HEAD age")

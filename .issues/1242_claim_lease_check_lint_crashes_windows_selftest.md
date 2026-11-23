@@ -1,7 +1,7 @@
 # Issue 1242 — claim_lease_check.py `--lint` crashes on Windows: the mandatory selftest's nested subprocess returns stdout=None (py3.14 reader-thread death), blinding every Windows lint call
 
-**Status:** OPEN — filed 2026-11-23 (zed-989683dc@4090, from the live reflex 132 lint calls during the A3-republish build). The FILE verdicts are unaffected (the file scans parse fine — verified: the 132 file's claim line lints clean through the file path when the selftest is bypassed); the crash is the SELFTEST half, which every `--lint` invocation runs FIRST, so **every `--lint` call on this box dies before reading any file**. The lint works on amo/m3 (py3.10/3.13) — this is the Windows-py3.14 class.
-**Claimed:** zed-8fa4839b@amo, 1795470638, expires 2026-11-25T12:00:00Z
+**Status:** FIXED 2026-11-24 (zed-8fa4839b@amo, landed with the fix commit) — closes when shikuwa re-runs its lint lane clean (the box-verified half is the filer's re-run; the mechanism is fixed at the root). Originally filed 2026-11-23 (zed-989683dc@4090, from the live reflex 132 lint calls during the A3-republish build). The FILE verdicts are unaffected (the file scans parse fine — verified: the 132 file's claim line lints clean through the file path when the selftest is bypassed); the crash is the SELFTEST half, which every `--lint` invocation runs FIRST, so **every `--lint` call on this box dies before reading any file**. The lint works on amo/m3 (py3.10/3.13) — this is the Windows-py3.14 class.
+**Lease closed:** zed-8fa4839b@amo, 1795470638, was expires 2026-11-25T12:00:00Z — T0–T1 landed same session (the two-sided root-cause fix + the reproduced-class probe; see the landing row below).
 
 ## The crash (reproduced every invocation)
 
@@ -38,3 +38,13 @@ TypeError: argument of type 'NoneType' is not a container or iterable
 ## Repro
 
 Any `--lint <file>` call on shikuwa (Windows 11, py3.10.11 system + py3.14.6 launcher, Git Bash sh). The file verdicts themselves are irrelevant — the crash is in the selftest preamble.
+
+## FIXED 2026-11-24 (zed-8fa4839b@amo) — the two-sided root cause, reproduced then fixed
+
+**Root cause (both halves, the corpus's own `subprocess_encoding_gate` class):** (1) CHILD-ENCODER — the nested child printed the tool's ✓/✗/⚠ glyphs through the console-locale codec (cp874 on the Thai-locale box), so the pipe carried non-UTF-8 bytes; (2) DECODE — the parent's strict `encoding="utf-8"` reader thread died decoding them → `stdout=None` → the unguarded `refused.stdout` read crashed with TypeError. Reproduced the mechanism on amo (py3.9): a child emitting a truncated UTF-8 lead byte (`\xd1`) makes the strict parent RAISE `UnicodeDecodeError` in `communicate()` (on the py3.14-Windows build the same failure shape is the reader-thread death → stdout=None — the issue's traceback class); with `errors="replace"` the same bytes decode clean (`rc=0`, stdout never None).
+
+**The fix (`scripts/claim_lease_check.py`, one commit):**
+- selftest's nested spawn: `PYTHONIOENCODING=utf-8` into the child env (the child always writes UTF-8 regardless of console locale) + `errors="replace"` on the capture + the `run()` helper now returns a typed `(ok, rc, out)` triple — a None stdout (reader-thread death for ANY reason) lands as a LOUD named selftest failure ("nested run lost stdout — the console-locale decode class"), never a TypeError crash, never a silent pass;
+- `fetch_head_age`'s git spawn: `errors="replace"` + a None-stdout typed skip (git's own localized output is the child-side byte source on the same box class).
+
+**Verification:** selftest PASS + prove-fires PASS + a real lint clean through the fixed script; the four scripts-scanning gates green (subprocess-encoding 0 findings incl. 0 unpinned python children, python-syntax-floor 3.9 parse clean, console-encoding, locale-io); the end-to-end `--item` freshness run clean (holder-own-epoch posture correct). ⚠ The box-verified half (a real shikuwa lint lane) is the filer's re-run — the mechanism fix is proven here, the platform confirmation pending.
