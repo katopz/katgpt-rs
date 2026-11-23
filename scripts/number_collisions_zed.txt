@@ -1,0 +1,14 @@
+# zed's per-repo legacy-collision ratchet (Issue 1208 channel) — the shared
+# scalar (60) is katgpt-rs's OWN pre-gate archive count and must not govern a
+# foreign repo's verdict; without this file the re-pin-DOWN note is
+# unexpressable for zed and its growth direction is blind.
+#
+# 60 -> 11 2026-11-24 (zed numbering repair, m3 housekeeping): measured at the
+# post-repair origin/develop tip — the six LIVE .plans collisions (the
+# 0NN_openai_* series x the NN_* auto_prompt/web series, both numbered from 001)
+# were resolved by renumber this commit (061-066; first-allocation rule keeps
+# the 2026-04-25 NN_* family on 1-6 — zero inbound citations either family, so
+# citation weight had no award to make), and the rename-follow walk collapses
+# each renumbered pair to one document, leaving 11 historical rows. Ratchet at
+# MEASURED; a NEW legacy re-spend reds.
+legacy_ratchet = 11
