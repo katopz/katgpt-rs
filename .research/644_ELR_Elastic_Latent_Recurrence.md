@@ -79,3 +79,5 @@ Per-component verdicts (web advocate, 13 searches; caveat: abstract-level, compe
 - **Serving fusion:** recorded in §4, no product files (owner-gated).
 
 PoC: none required for the PASS track (no quality claim granted); the training-track proof path IS Plan 481's pre-registered gates + falsification arms.
+
+> **GAIN cross-ref:** Leng et al. [arXiv:2611.13378 "Looping Deeper Without Growing the KV Cache: Recurrent Depth for Causal Encoder-Decoders"] — validates this note's Track A shipping record (`CacheStrategy::Last` last-loop KV) AND supplies the condition it lacked: stochastic recurrence depth (Poisson(8), BPTT final-4) induces a contractive fixed point (ρ≈0.61/round) making last-round KV lossless ≤0.0002 BPB, while fixed-depth + truncated BPTT forms period-P limit cycles (+0.0317 BPB — the catastrophic arm of the `Last` posture). Track B recipe + acceptance gates → riir-train Issue 706 (alongside Plan 481's screen, adjudicating Plan 364's Poisson refusal on the new contraction axis); the modelless certificate + fixture half → katgpt-rs Issue 1241 / [Research 688](688_Looped_CED_Placement_KV_Sharing.md).

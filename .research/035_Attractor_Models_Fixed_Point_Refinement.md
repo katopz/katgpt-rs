@@ -344,3 +344,5 @@ Our BanditPruner Q-values have a similar convergence guarantee from regret bound
 - Geng et al. (2022). "On Training Implicit Models." arXiv:2111.05177
 - Blayney et al. (2026). "A Mechanistic Analysis of Looped Reasoning Language Models." arXiv:2604.11791
 - Jolicoeur-Martineau (2025). "Less is More: Recursive Reasoning with Tiny Networks." arXiv:2510.04871
+
+> **GAIN cross-ref:** Leng et al. [arXiv:2611.13378 "Looping Deeper Without Growing the KV Cache: Recurrent Depth for Causal Encoder-Decoders"] — the strongest confirmation instance yet of this note's fixed-point line AND of the norm-pinned relative-residual law: stochastic recurrence depth (Poisson(8), BPTT final-4) yields ρ_r ≈ 0.61×/round contraction, last-round KV lossless ≤0.0002 BPB, over-run safe to 4× trained depth; fixed-depth + truncated BPTT forms period-4 limit cycles (BPB flat only at r ≡ 0 mod 4; +0.0317 BPB under last-round KV) — the TBPTT-window→period causal datum QRR's `LimitCycle` classifier can now carry. Recipe + acceptance gates → riir-train Issue 706; certificates/fixtures → katgpt-rs Issue 1241 / [Research 688](688_Looped_CED_Placement_KV_Sharing.md).
