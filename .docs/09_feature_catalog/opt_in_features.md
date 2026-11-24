@@ -6837,9 +6837,11 @@ self-prediction gap as a macrostate gate: is a recorded latent summary `z` a
 CLOSED macrostate of its own dynamics (`z_t → z_{t+1}`), or is the un-summarized
 microstate remainder `x_t` load-bearing (`(z_t, x_t) → z_{t+1}`)?
 
-- Arms — an identical capacity menu per side: a ridge λ-sweep over closed-form
-  normal equations (Cholesky, f64 sequential folds per the Issue-940 law) +
-  kNN {1, 8, 64}. Blocked-FORWARD split (trajectory-major prefix trains, suffix
+- Arms — an identical capacity menu per side: a ridge λ-sweep (landed as the
+  spectral trace-expansion over the in-crate deterministic `symmetric_eig`,
+  agreeing with the closed-form Cholesky normal equations to 1e-9, fixture-
+  pinned; f64 sequential folds per the Issue-940 law) + kNN {1, 8, 64}.
+  Blocked-FORWARD split (trajectory-major prefix trains, suffix
   tests — never an iid shuffle). `gap = R²(best augmented) − R²(best summary)`.
 - Typed two-condition verdict: `Closed` iff gap ≤ ε AND R²(summary) ≥ floor;
   `Lossy` iff gap > ε AND fit ≥ floor; `Undecidable{NoMicrostate, WeakSupport,
@@ -6851,11 +6853,18 @@ microstate remainder `x_t` load-bearing (`(z_t, x_t) → z_{t+1}`)?
 - Deterministic: bit-identical reports fixture-asserted; `(distance², index)`
   kNN tie rule; evenly-spaced kNN ref cap landing exactly on min(cap, n_train).
 - NO GOAT claim (ungoat discipline): report-only consumers first (riir-ai
-  `.issues/1259` sync surface, riir-refine `.issues/256` fix trajectories).
-  G1 fixtures 14/14 (identity/noise/injection/degenerate plants pinning
-  closed-form theory — two earlier plant designs measured Closed, correctly,
-  and were replaced); G4 4/4; G2 floor bar (ridge sweep ≤ 50 ms at T=1e4, D=64
-  release) pending on the quiet-rig bench (`bench_1244_closure_audit_g2_goat`).
+  `.issues/1259` sync surface — UNBLOCKED; riir-refine `.issues/256` fix
+  trajectories — claimed). G1 fixtures 15/15 (identity/noise/injection/
+  degenerate plants pinning closed-form theory — two earlier plant designs
+  measured Closed, correctly, and were replaced); G4 4/4; **G2 budget floor
+  PASS — 38.776 ms ≤ 50 ms** at T=1e4, D=64, release, median-of-3
+  ([Bench 994](../../.benchmarks/994_issue1244_closure_audit_g2_budget.md),
+  amo job 2e226a91, preflight PASSED). The bar failed twice before passing,
+  both implementation waste, fixed in `8adb663a9`: gram/rhs hoisted out of
+  the λ loop (142.7 → 60.7 ms), then the per-λ held-out predictions replaced
+  by the spectral sweep (60.7 → 38.776 ms). kNN passes disclosed, no bar
+  (full 3731 ms / capped 1485 ms at the census scale). T3 phase arm
+  (seed-stability NMI clustering + FSM-agreement read) landed `741d311d9`.
 
 ## 173. karc_conditioned_readout — the conditioned-KARC correction bank (Issue 1239, 2026-11-24)
 
