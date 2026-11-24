@@ -25,7 +25,7 @@ Feature flag opt-in (e.g. `closure_audit`), report-only consumers first.
 - [ ] T1: primitive impl (ridge sweep + kNN, blocked-forward split, two-condition verdict, typed `Undecidable` on weak arms — never a green zero; zero per-tick alloc in online consumers, bounded disclosed offline budget).
 - [ ] T2: GOAT bench — G1 fixtures above; G2 **split budgets, pre-registered at filing (this line IS the pre-registration — never re-pinned after a failed run)**: ridge sweep ≤ 50 ms at T=10⁴, D=64 release (closed-form normal equations, ~10⁸–10⁹ flops per λ, fine); **kNN arms carry their own disclosed budget line** — the shared n_test×n_train×D distance pass ≈ 0.3–2 s single-threaded at T=10⁴, so either pin a kNN reference-subsample cap as part of the design or budget the full pass explicitly in the bench output; G4 alloc census. Calibration reference (provenance, never our bars; **v3** App. D + App. N): RET held-out R² 0.908/0.924/0.979/0.925 vs matched ceilings 0.716/0.574/0.786/0.705; config-variant closure 0.795–0.949.
 - [ ] T3 (follow-up, this lane): light phase-clustering arm (Lloyd's + agglomerative, pinned seeds, first-index ties) + NMI-across-≥5-pinned-seeds disclosure (`StochasticBelow(floor)` typed, never promoted on one seed) for the FSM-agreement audit consumer.
-- [ ] T4: hand consumers their first census (riir-ai `.issues/1259` sync surface; riir-refine `.issues/255` fix trajectories) once T1+T2 land.
+- [ ] T4: hand consumers their first census (riir-ai `.issues/1259` sync surface; riir-refine `.issues/256` fix trajectories) once T1+T2 land.
 
 ## Proof path (pre-registered)
 
@@ -33,4 +33,4 @@ Falsifier: if the injection and noise fixtures cannot be separated by the gap at
 
 ## Related
 
-Research 692 (the note) · riir-ai `.issues/1259` · riir-refine `.issues/255` · Research 667 (analytical twin — compose: the audit validates ObservationGate cadences 667 derives) · Plan 324 bisimulation (discrete cousin) · Plan 342 `latent_trajectory_geometry` (the diagnostic-primitive precedent).
+Research 692 (the note) · riir-ai `.issues/1259` · riir-refine `.issues/256` · Research 667 (analytical twin — compose: the audit validates ObservationGate cadences 667 derives) · Plan 324 bisimulation (discrete cousin) · Plan 342 `latent_trajectory_geometry` (the diagnostic-primitive precedent).
