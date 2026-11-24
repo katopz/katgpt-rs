@@ -1,6 +1,6 @@
 # Issue 1239 — Conditioned-KARC correction bank (rank-1 readout corrections keyed by condition)
 
-**Status:** OPEN — claimed (re-claim after the prior lease lapsed unlanded: katgpt-rs-93@amo claimed 1795365988, expired 2026-11-24T16:46Z with zero pushes; holder absent from amo's live roster; notified 01a20e5f pre-expiry). Harness in progress. Pre-registered GOAT cell below; no run scheduled. Verdict provenance: MBT (arXiv:2611.19800) research verdict package, KARC surface GAIN, reviewer AGREE final round (2026-11-22, session `42b5b2e6`) with four binding conditions folded in below.
+**Status:** OPEN — implementation LANDED `297f9412a` (2026-11-24, zed-c1eaccc4@m3): module + G1 cell + G4 canary + docs; rig gate-suite run queued (the record's PROVENANCE numbers). Pre-registered GOAT cell below. Verdict provenance: MBT (arXiv:2611.19800) research verdict package, KARC surface GAIN, reviewer AGREE final round (2026-11-22, session `42b5b2e6`) with four binding conditions folded in below.
 **Claimed:** zed-c1eaccc4@m3, 1795538793, expires 2026-11-26T16:46Z
 
 ## Pinned claim (§1.5 precondition)
@@ -75,13 +75,13 @@ A G1 pass is architecture evidence whose real consumers need the runtime wiring 
 
 ## Tasks
 
-- [x] Claim: `git fetch origin && py ../katgpt-rs/scripts/claim_lease_check.py --item 1239`; append the `**Claimed:**` line (own line, nothing after the expiry token); push BEFORE implementing (48 h expiry)
-- [ ] Land `karc_conditioned_readout` inside the `estimators` umbrella in katgpt-core (NO top-level feature — cap 296/300; no `implies karc_forecaster`)
+- [x] Claim: `git fetch origin && py ../katgpt-rs/scripts/claim_lease_check.py --item 1239`; append the `**Claimed:**` line (own line, nothing after the expiry token); push BEFORE implementing (48 h expiry) — re-claimed `a9f43eb6b` after the prior lease lapsed unlanded
+- [x] Land `karc_conditioned_readout` inside the `estimators` umbrella in katgpt-core (NO top-level feature — cap 298/300; no `implies karc_forecaster`) — `297f9412a`
 - [x] Pin the condition-signal `c` source (independent of the residual σ-gate) IN THIS FILE before any run — exogenous regime label, see PINNED block
-- [ ] Implement the correction bank (closed-form fits; `chunked_gram_into` + `ridge_solve`; ascending sequential fold order)
-- [ ] Harness: arms A1–A6 on the three corpora; run on amo/bmo (never m3 — job-lane law); quote `bench_preflight`'s PROVENANCE line
-- [ ] Record the verdict in `.benchmarks/` (next free number); demote-to-null-record on G1 failure in the same commit as the run
-- [ ] If the modelless arm wins its gate: file the promotion proposal separately (Feature Flag Discipline); never auto-promote
+- [x] Implement the correction bank (closed-form fits; `chunked_gram_into` + `ridge_solve`; ascending sequential fold order) — `crates/katgpt-core/src/karc/conditioned.rs`, 7 unit tests
+- [x] Harness: arms A1–A6 on the three corpora; run on amo/bmo (never m3 — job-lane law); quote `bench_preflight`'s PROVENANCE line — `tests/karc_conditioned_g1.rs` (+ G2 `g2_wall_interleaved` #[ignore]d); m3 dev-loop cell DONE (release: G1 PASS, G2 1.41×/1.14×, G4 2/2); amo gate-suite job `01a20e8c` queued for the record's numbers
+- [ ] Record the verdict in `.benchmarks/` (next free number); demote-to-null-record on G1 failure in the same commit as the run — G1 PASSED on the dev loop (no demote); record pending the rig numbers
+- [ ] If the modelless arm wins its gate: file the promotion proposal separately (Feature Flag Discipline); never auto-promote — A3 (fixed gate) won −3.44 pp with the A1c attribution caveat (+0.75 pp); proposal decision rides the bench record verdict
 - [ ] Follow-up row (post-G1, separate claim): riir-engine `karc_bridge` consumer wiring
 
 ## Cross-refs
