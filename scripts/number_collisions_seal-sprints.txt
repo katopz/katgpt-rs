@@ -60,7 +60,6 @@
 # (the allocator read a stale highwater — the ~5h window between the two filings carried a
 # branch-local view; the Issue-1205 bump-rides-the-allocation law held on BOTH commits, so
 # the counter never went backwards — the collision is the allocation, not the bump).
-legacy_ratchet = 5
 # The 5 row above recorded the pair while both sides stood. 119 stays not reusable below
 # the era boundary.
 # 5 re-pinned UP 2026-11-24 (zed-73ebc8c7@amo, the 1097-close lane's numbering pass): the
@@ -82,4 +81,15 @@ legacy_ratchet = 5
 # the collision_verdict legacy count stood at 5 before and after this lane's 126 filing, and
 # none of the five is a same-number double allocation). The floors row's max_hist rides at 5 -
 # one record, two media, both at 5.
-legacy_ratchet = 5
+# 6 re-measured UP 2026-11-24 (zed-193632ef@m3, the sprint!122 gate lane's numbering repair,
+# a THIRD live class the same day): .issues/126 held THREE documents — the 09:45 author-brace
+# filer (ab1c96a, keeps the number, highwater bumped to 127) + TWO stale-local-highwater
+# allocations in the same afternoon (the guard sibling-sync lane d16f398 15:53, the sprint!071
+# lozo lane de4e46a 17:37 — the 108-class grown to three: neither later allocator had fetched
+# the pushed bump). The repair: guard sibling-sync renumbered -> 130, sprint!071 lozo ->
+# 131 (both RENAME-FOLLOWED, nothing live re-spent, tracked dup 0 post-repair); the four
+# malformed claim lines the same walk found reshaped (125+130 empty-holder slots, plans 093
+# phase-1 epoch -> derived epoch, plans 095 UUID-in-epoch -> the 085 precedent claim-note).
+# The orphaned 126_guard/126_lozo deletions are the walk's 6th legacy number (--no-renames).
+# The floors row's max_hist rides at 6 — one record, two media, both at 6.
+legacy_ratchet = 6
