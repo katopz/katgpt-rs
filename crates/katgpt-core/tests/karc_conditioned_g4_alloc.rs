@@ -13,8 +13,8 @@ mod common;
 counting_allocator!();
 
 use katgpt_core::{
-    archetype_direction_into, fit_correction_into, BankFitScratch, GateConfig,
-    KarcConditionedReadout,
+    BankFitScratch, GateConfig, KarcConditionedReadout, archetype_direction_into,
+    fit_correction_into,
 };
 
 /// A deterministic LCG (the same convention the module unit tests use).

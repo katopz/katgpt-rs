@@ -48,9 +48,9 @@
 
 use katgpt_core::linalg::ridge_solve_direct_f64;
 use katgpt_core::{
-    archetype_direction_into, chunked_gram_into, feature_expand, fit_correction_into,
-    seasonal_naive_floor, BankFitScratch, ChebyshevBasis, DelayRing, GateConfig,
-    KarcConditionedReadout, KarcRegime, KarcRegimeGate, PointForecaster, SeasonalPoolForecaster,
+    BankFitScratch, ChebyshevBasis, DelayRing, GateConfig, KarcConditionedReadout, KarcRegime,
+    KarcRegimeGate, PointForecaster, SeasonalPoolForecaster, archetype_direction_into,
+    chunked_gram_into, feature_expand, fit_correction_into, seasonal_naive_floor,
 };
 
 // ── Double-scroll ODE (karc_g1_dh18720.rs parameters, verbatim) ─────────
@@ -63,9 +63,9 @@ const I_R: f64 = 2.25e-5;
 const DT: f64 = 0.25;
 const SUBSTEPS: usize = 10;
 const DRIVE: f64 = 0.08; // the C1 exogenous drive magnitude (raw dV1 units;
-                         // 0.08 is the largest bounded value — 0.1 sends the constant-drive
-                         // double-scroll into sinh runaway, scanned 2026-11-24; disclosed in the
-                         // bench record)
+// 0.08 is the largest bounded value — 0.1 sends the constant-drive
+// double-scroll into sinh runaway, scanned 2026-11-24; disclosed in the
+// bench record)
 const BLOCK: usize = 200; // condition block length (the PINNED corpus law)
 
 #[inline]
@@ -1029,6 +1029,8 @@ fn issue_1239_conditioned_bank_cell() {
         "demote-to-null: A5 wide beat A4 — the branch claim FAILED on this host"
     );
     if !g1 {
-        println!("NOTE: G1 not won on C1 — the bench record adjudicates TIE/LOSS honestly (no promotion).");
+        println!(
+            "NOTE: G1 not won on C1 — the bench record adjudicates TIE/LOSS honestly (no promotion)."
+        );
     }
 }
