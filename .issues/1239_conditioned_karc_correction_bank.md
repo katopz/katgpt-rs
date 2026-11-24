@@ -1,7 +1,7 @@
 # Issue 1239 — Conditioned-KARC correction bank (rank-1 readout corrections keyed by condition)
 
-**Status:** OPEN — claimed, harness in progress. Pre-registered GOAT cell below; no run scheduled. Verdict provenance: MBT (arXiv:2611.19800) research verdict package, KARC surface GAIN, reviewer AGREE final round (2026-11-22, session `42b5b2e6`) with four binding conditions folded in below.
-**Claimed:** katgpt-rs-93@amo, 1795365988, expires 2026-11-24T16:46Z
+**Status:** OPEN — claimed (re-claim after the prior lease lapsed unlanded: katgpt-rs-93@amo claimed 1795365988, expired 2026-11-24T16:46Z with zero pushes; holder absent from amo's live roster; notified 01a20e5f pre-expiry). Harness in progress. Pre-registered GOAT cell below; no run scheduled. Verdict provenance: MBT (arXiv:2611.19800) research verdict package, KARC surface GAIN, reviewer AGREE final round (2026-11-22, session `42b5b2e6`) with four binding conditions folded in below.
+**Claimed:** zed-c1eaccc4@m3, 1795538793, expires 2026-11-26T16:46Z
 
 ## Pinned claim (§1.5 precondition)
 
