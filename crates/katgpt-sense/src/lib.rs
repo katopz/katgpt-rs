@@ -23,9 +23,9 @@
 pub mod bake;
 #[cfg(feature = "sense_lod")]
 pub mod lod;
-pub mod octree;
 #[cfg(feature = "novelty_retention")]
 pub mod novelty_retention;
+pub mod octree;
 #[cfg(feature = "phase_belief")]
 pub mod phase_belief;
 pub mod reconstruction;

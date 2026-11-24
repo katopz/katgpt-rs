@@ -58,7 +58,7 @@
 
 #![cfg(feature = "estimators")]
 
-use katgpt_core::epiplexity_gain::{GainEstimator, MixPanel, MAX_DOMAINS, MIN_OBSERVATIONS};
+use katgpt_core::epiplexity_gain::{GainEstimator, MAX_DOMAINS, MIN_OBSERVATIONS, MixPanel};
 
 // ── pre-registered bars ────────────────────────────────────────────────
 
@@ -617,19 +617,24 @@ fn g2_misspecified_fixture() {
         }
         let (means, deltas) = paired(&costs);
         let d_lp = &deltas[2]; // ours − LP sign: delta = LP_cost − ours_cost
-                               // Non-inferiority on (LP − ours): the fitted arm must not be WORSE,
-                               // i.e. the LOWER bound of (LP − ours) must not dip below −δ.
+        // Non-inferiority on (LP − ours): the fitted arm must not be WORSE,
+        // i.e. the LOWER bound of (LP − ours) must not dip below −δ.
         let mu = mean(d_lp);
         let se = sd(d_lp, mu) / (d_lp.len() as f64).sqrt();
         let delta_bar = (0.01 * means[3]).max(2.5 * se);
         let lower = lb95(d_lp);
-        println!("G2 MISSPEC [{name}] U ours = {:.5}  U LP = {:.5}  mean(LP-ours) = {mu:.5}  lower95 = {lower:.5}  δ = {delta_bar:.5}", means[0], means[3]);
+        println!(
+            "G2 MISSPEC [{name}] U ours = {:.5}  U LP = {:.5}  mean(LP-ours) = {mu:.5}  lower95 = {lower:.5}  δ = {delta_bar:.5}",
+            means[0], means[3]
+        );
         assert!(
             lower >= -delta_bar,
             "[{name}] fitted allocator worse than LP beyond non-inferiority δ"
         );
     }
-    println!("  misspec refit wall total = {total_wall:.3}s (budget {REFIT_WALL_BUDGET_S}s, release-only bar)");
+    println!(
+        "  misspec refit wall total = {total_wall:.3}s (budget {REFIT_WALL_BUDGET_S}s, release-only bar)"
+    );
     if !cfg!(debug_assertions) {
         assert!(total_wall <= REFIT_WALL_BUDGET_S);
     }
