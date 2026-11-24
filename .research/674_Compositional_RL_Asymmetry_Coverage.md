@@ -5,7 +5,7 @@
 > **Status:** Active — **Gain** (two tracks, no cascade: training track filed as riir-train Issue 693; modelless track filed as katgpt-rs Issue 1222)
 > **Related Research:** 264 (Compositional Open-Ended Intelligence — the dependency-graph cousin), 361 (NEO/L2T — the FTCT training-data-design precedent), 444 (IMIR), 325 (latent-reasoning survey)
 > **Related Plans:** none (the actionables are issues by design — poc/recipe class)
-> **Cross-ref:** riir-train [Issue 693](../riir-train/.issues/693_composed_training_data_asymmetry_cell.md) (training half: the composed-data-design law + the 4090 cells) · katgpt-rs [Issue 1222](../.issues/1222_compounding_bound_substrate_poc.md) (modelless half: the `compounding` bound substrate POC) · riir-train Issue 679 / Plan 492 (the live DSpine lane whose stop-branch record this paper's theory explains)
+> **Cross-ref:** riir-train [Issue 693](../riir-train/.issues/693_composed_training_data_asymmetry_cell.md) (training half: the composed-data-design law + the 4090 cells) · katgpt-rs `Issue 1222` (modelless half: the `compounding` bound substrate POC) · riir-train Issue 679 / Plan 492 (the live DSpine lane whose stop-branch record this paper's theory explains)
 > **Classification:** Public
 
 ---
