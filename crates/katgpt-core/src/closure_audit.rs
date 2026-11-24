@@ -87,6 +87,8 @@
 use std::fmt;
 use std::time::Instant;
 
+use crate::linalg::{SymmetricEigScratch, symmetric_eig};
+
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -756,30 +758,43 @@ fn run_core(
         buf
     });
 
-    // ---- ridge sweep, summary side ----
+    // ---- ridge sweep, summary side (build once, spectral λ sweep) ----
+    let summary_build = {
+        let t = Instant::now();
+        let built = ridge_build(
+            &x_all[..train_windows * dim],
+            &y_all,
+            train_windows,
+            dim,
+            dim,
+        );
+        ridge_summary_ms += t.elapsed().as_secs_f64() * 1e3;
+        built
+    };
     {
-        let x_tr = &x_all[..train_windows * dim];
         let x_te = &x_all[train_windows * dim..];
-        for &lambda in &config.lambda_grid {
-            let t = Instant::now();
-            let r2 = ridge_r2(
-                x_tr,
-                x_te,
-                &y_all,
-                train_windows,
-                test_windows,
-                dim,
-                dim,
-                lambda,
-                y_sst,
-            );
-            let arm_ms = t.elapsed().as_secs_f64() * 1e3;
-            ridge_summary_ms += arm_ms;
+        let t = Instant::now();
+        let r2s = ridge_sweep_r2_spectral(
+            &summary_build.0,
+            &summary_build.1,
+            x_te,
+            &y_all,
+            train_windows,
+            test_windows,
+            dim,
+            dim,
+            &config.lambda_grid,
+            y_sst,
+        );
+        let sweep_ms = t.elapsed().as_secs_f64() * 1e3;
+        ridge_summary_ms += sweep_ms;
+        let per_arm = sweep_ms / config.lambda_grid.len().max(1) as f64;
+        for (lambda, r2) in config.lambda_grid.iter().zip(r2s) {
             arms.push(ArmRow {
                 side: AuditSide::Summary,
-                family: ArmFamily::Ridge { lambda },
+                family: ArmFamily::Ridge { lambda: *lambda },
                 r2,
-                wall_ms: arm_ms,
+                wall_ms: per_arm,
             });
             if r2 > best_summary {
                 best_summary = r2;
@@ -787,31 +802,45 @@ fn run_core(
         }
     }
 
-    // ---- ridge sweep, augmented side ----
+    // ---- ridge sweep, augmented side (build once, spectral λ sweep) ----
     if micro_dim.is_some() {
         let md = micro_dim.unwrap_or(0);
         let width = dim + md;
         let x_aug = x_aug.as_deref().unwrap_or(&[]);
-        for &lambda in &config.lambda_grid {
+        let built = {
             let t = Instant::now();
-            let r2 = ridge_r2(
+            let b = ridge_build(
                 &x_aug[..train_windows * width],
-                &x_aug[train_windows * width..],
                 &y_all,
                 train_windows,
-                test_windows,
                 width,
                 dim,
-                lambda,
-                y_sst,
             );
-            let arm_ms = t.elapsed().as_secs_f64() * 1e3;
-            ridge_augmented_ms += arm_ms;
+            ridge_augmented_ms += t.elapsed().as_secs_f64() * 1e3;
+            b
+        };
+        let t = Instant::now();
+        let r2s = ridge_sweep_r2_spectral(
+            &built.0,
+            &built.1,
+            &x_aug[train_windows * width..],
+            &y_all,
+            train_windows,
+            test_windows,
+            width,
+            dim,
+            &config.lambda_grid,
+            y_sst,
+        );
+        let sweep_ms = t.elapsed().as_secs_f64() * 1e3;
+        ridge_augmented_ms += sweep_ms;
+        let per_arm = sweep_ms / config.lambda_grid.len().max(1) as f64;
+        for (lambda, r2) in config.lambda_grid.iter().zip(r2s) {
             arms.push(ArmRow {
                 side: AuditSide::Augmented,
-                family: ArmFamily::Ridge { lambda },
+                family: ArmFamily::Ridge { lambda: *lambda },
                 r2,
-                wall_ms: arm_ms,
+                wall_ms: per_arm,
             });
             if r2 > best_augmented {
                 best_augmented = r2;
@@ -958,7 +987,7 @@ fn early_undecidable(
 // Numeric cores — sequential f64 folds in pinned order (Issue-940)
 // ---------------------------------------------------------------------------
 
-const CHOLESKY_PIVOT_FLOOR: f64 = 1e-10;
+const MAX_EIG_ITERS_PER_EIGVAL: usize = 30;
 
 /// Column means over a row-major `n × d` block — sequential f64.
 fn column_means(block: &[f64], n: usize, d: usize) -> Vec<f64> {
@@ -990,21 +1019,17 @@ fn sst_of(block: &[f64], n: usize, d: usize, means: &[f64]) -> f64 {
     sst
 }
 
-/// Fits ridge on the train block and returns the held-out pooled R².
-/// `(XᵀX + λI) W = XᵀY` via Cholesky; folds sequential f64.
-#[allow(clippy::too_many_arguments)]
-fn ridge_r2(
+/// Builds the Gram matrix `XᵀX` (symmetric, row-major) and the rhs `XᵀY`
+/// ONCE per side — the λ sweep re-solves against `gram + λI` and must not
+/// rebuild these per λ (the pre-hoist shape spent ~370M FMA rebuilding
+/// what does not depend on λ; the G2 budget bar failed on exactly that).
+fn ridge_build(
     x_tr: &[f64],
-    x_te: &[f64],
     y_all: &[f64],
     n_tr: usize,
-    n_te: usize,
     d: usize,
     dout: usize,
-    lambda: f64,
-    y_sst: f64,
-) -> f64 {
-    // Gram + rhs (row-major d×d / d×dout), built in one train pass.
+) -> (Vec<f64>, Vec<f64>) {
     let mut gram = vec![0.0f64; d * d];
     let mut rhs = vec![0.0f64; d * dout];
     for row in 0..n_tr {
@@ -1024,81 +1049,164 @@ fn ridge_r2(
         for j in 0..i {
             gram[i * d + j] = gram[j * d + i];
         }
-        gram[i * d + i] += lambda;
     }
-    // Cholesky (lower, in place) with the deterministic pivot floor.
-    for i in 0..d {
-        for j in 0..=i {
-            let mut s = gram[i * d + j];
-            for k in 0..j {
-                s -= gram[i * d + k] * gram[j * d + k];
-            }
-            let v = if i == j {
-                (s.max(CHOLESKY_PIVOT_FLOOR)).sqrt()
-            } else {
-                s / gram[j * d + j]
-            };
-            gram[i * d + j] = v;
-        }
-    }
-    // Solve L Z = rhs (forward), then Lᵀ W = Z (back). rhs doubles as Z/W.
-    for i in 0..d {
-        let lii = gram[i * d + i];
-        for k in 0..dout {
-            rhs[i * dout + k] /= lii;
-        }
-        let zi = &mut rhs[i * dout..(i + 1) * dout];
-        let zik = zi.to_vec();
-        for j in (i + 1)..d {
-            let lij = gram[j * d + i];
-            if lij != 0.0 {
-                let zj = &mut rhs[j * dout..(j + 1) * dout];
+    (gram, rhs)
+}
+
+/// The whole ridge λ-sweep for one side via the spectral form of the
+/// gram: `gram = V·diag(δ)·Vᵀ` (the crate's own UNGATED deterministic
+/// `linalg::symmetric_eig` — Householder tridiagonalization + implicit-
+/// shift QL, fixed sweep order, bit-identical per input), `W_λ =
+/// V·diag(1/(δᵢ+λ))·S` with `S = Vᵀ·(XᵀY)`, `P = X_te·V`. The held-out
+/// SSE is evaluated through the TRACE EXPANSION of `‖Y − P·D·S‖²` —
+/// `SSE(λ) = ‖Y‖² − 2·Σᵢdᵢ·Uᵢᵢ + Σᵢⱼdᵢdⱼ·Cᵢⱼ·Tᵢⱼ` with `A = PᵀY`,
+/// `C = PᵀP`, `U = SᵀA`, `T = S·Sᵀ` — so the per-λ cost is O(d²)
+/// instead of one full `n_te×d×d` prediction pass per λ. The
+/// direct-residual shape spent ~164M FMA re-predicting per λ on the G2
+/// corpus (the G2 budget bar measured 142.7 ms pre-hoist, 60.7 ms with
+/// the gram/rhs hoist alone — both over the pre-registered 50 ms);
+/// this form is the design's honest floor.
+///
+/// Arithmetic-shape note (determinism law): the trace expansion changes
+/// the ROUNDING of the R² values relative to a direct-residual
+/// evaluation — last-ulp shifts, deterministic per build (every fold
+/// sequential in a pinned order, the Issue-940 law). The G1 fixture
+/// battery pins band asserts (not bit-pins), which survive the shift;
+/// the direct path it replaced was a local instrument, never
+/// sync-crossing, so no cross-boundary order claim is weakened.
+///
+/// Returns R² per λ in grid order.
+#[allow(clippy::too_many_arguments)]
+fn ridge_sweep_r2_spectral(
+    gram_base: &[f64],
+    rhs: &[f64],
+    x_te: &[f64],
+    y_all: &[f64],
+    n_tr: usize,
+    n_te: usize,
+    d: usize,
+    dout: usize,
+    lambda_grid: &[f64],
+    y_sst: f64,
+) -> Vec<f64> {
+    // 1. Eigendecompose the shared (PSD) gram — λ rides the per-λ
+    //    diagonal scaling, never the decomposed matrix.
+    let mut eigvals = vec![0.0f64; d];
+    let mut eigvecs = vec![0.0f64; d * d];
+    let mut scratch = SymmetricEigScratch::new();
+    symmetric_eig(
+        &mut eigvals,
+        &mut eigvecs,
+        gram_base,
+        &mut scratch,
+        d,
+        MAX_EIG_ITERS_PER_EIGVAL,
+    );
+    // 2. S = Vᵀ·(XᵀY) (d×dout): S[i][k] = Σⱼ V[j][i]·rhs[j][k].
+    //    eigvecs is row-major V (columns are the eigenvectors).
+    let mut s = vec![0.0f64; d * dout];
+    for j in 0..d {
+        let r = &rhs[j * dout..(j + 1) * dout];
+        for i in 0..d {
+            let vi = eigvecs[j * d + i];
+            if vi != 0.0 {
                 for k in 0..dout {
-                    zj[k] -= lij * zik[k];
+                    s[i * dout + k] += vi * r[k];
                 }
             }
         }
     }
-    for i in (0..d).rev() {
-        let wii = gram[i * d + i];
-        for k in 0..dout {
-            rhs[i * dout + k] /= wii;
-        }
-        let wik = rhs[i * dout..(i + 1) * dout].to_vec();
-        // Push w[i] into the rows BELOW it: coefficient L[i][j] =
-        // gram[i*d + j] (j < i — the LOWER triangle; L[j][i] with j < i
-        // would read the stale pre-Cholesky upper triangle).
-        for j in 0..i {
-            let lij = gram[i * d + j];
-            if lij != 0.0 {
-                let wj = &mut rhs[j * dout..(j + 1) * dout];
-                for k in 0..dout {
-                    wj[k] -= lij * wik[k];
-                }
-            }
-        }
-    }
-    // Held-out predictions + SSE.
-    let mut sse = 0.0f64;
-    let mut pred = vec![0.0f64; dout];
+    // 3. P = X_te·V (n_te×d): P[r][i] = Σⱼ X_te[r][j]·V[j][i].
+    let mut p = vec![0.0f64; n_te * d];
     for row in 0..n_te {
         let x = &x_te[row * d..(row + 1) * d];
-        let y = &y_all[(n_tr + row) * dout..(n_tr + row + 1) * dout];
-        pred.fill(0.0);
         for j in 0..d {
             let xj = x[j];
             if xj != 0.0 {
-                for k in 0..dout {
-                    pred[k] += xj * rhs[j * dout + k];
+                for i in 0..d {
+                    p[row * d + i] += xj * eigvecs[j * d + i];
                 }
             }
         }
-        for k in 0..dout {
-            let e = y[k] - pred[k];
-            sse += e * e;
+    }
+    // 4. A = Pᵀ·Y_te (d×dout), C = Pᵀ·P (d×d) — one pass over the test
+    //    block, both products accumulated in the same row loop.
+    let mut a = vec![0.0f64; d * dout];
+    let mut c = vec![0.0f64; d * d];
+    for row in 0..n_te {
+        let pr = &p[row * d..(row + 1) * d];
+        let y = &y_all[(n_tr + row) * dout..(n_tr + row + 1) * dout];
+        for i in 0..d {
+            let pi = pr[i];
+            for (ak, yk) in a[i * dout..(i + 1) * dout].iter_mut().zip(y.iter()) {
+                *ak += pi * yk;
+            }
+            for (ck, pj) in c[i * d + i..i * d + d].iter_mut().zip(pr[i..].iter()) {
+                *ck += pi * pj;
+            }
         }
     }
-    1.0 - sse / y_sst
+    for i in 0..d {
+        for j in 0..i {
+            c[i * d + j] = c[j * d + i];
+        }
+    }
+    // 5. U = diag(Sᵀ·A), T = S·Sᵀ, ‖Y_te‖² — the per-λ-invariant blocks.
+    let mut u_diag = vec![0.0f64; d];
+    for i in 0..d {
+        let si = &s[i * dout..(i + 1) * dout];
+        let ai = &a[i * dout..(i + 1) * dout];
+        let mut acc = 0.0f64;
+        for k in 0..dout {
+            acc += si[k] * ai[k];
+        }
+        u_diag[i] = acc;
+    }
+    let mut t = vec![0.0f64; d * d];
+    for i in 0..d {
+        let si = &s[i * dout..(i + 1) * dout];
+        for j in 0..d {
+            let sj = &s[j * dout..(j + 1) * dout];
+            let mut acc = 0.0f64;
+            for k in 0..dout {
+                acc += si[k] * sj[k];
+            }
+            t[i * d + j] = acc;
+        }
+    }
+    let mut y_sq_sum = 0.0f64;
+    for row in 0..n_te {
+        let y = &y_all[(n_tr + row) * dout..(n_tr + row + 1) * dout];
+        for v in y {
+            y_sq_sum += v * v;
+        }
+    }
+    // 6. Per λ: the O(d²) trace contraction, in grid order.
+    lambda_grid
+        .iter()
+        .map(|&lambda| {
+            let d_diag: Vec<f64> = eigvals.iter().map(|&dv| 1.0 / (dv + lambda)).collect();
+            let sse = trace_sse(&d_diag, &u_diag, &c, &t, y_sq_sum, d);
+            1.0 - sse / y_sst
+        })
+        .collect()
+}
+
+/// The per-λ trace contraction of the spectral sweep, factored out so the
+/// G1 battery can pin its boundary behavior directly. Fold order fixed:
+/// cross term ascending-i, quadratic term row-major i-j.
+fn trace_sse(d_diag: &[f64], u_diag: &[f64], c: &[f64], t: &[f64], y_sq_sum: f64, d: usize) -> f64 {
+    let mut cross = 0.0f64;
+    for i in 0..d {
+        cross += d_diag[i] * u_diag[i];
+    }
+    let mut quad = 0.0f64;
+    for i in 0..d {
+        for j in 0..d {
+            quad += d_diag[i] * d_diag[j] * c[i * d + j] * t[i * d + j];
+        }
+    }
+    y_sq_sum - 2.0 * cross + quad
 }
 
 /// kNN regression R² over the (capped) training references. Distances are
@@ -1409,6 +1517,144 @@ mod tests {
             &ClosureAuditConfig::default(),
         )
         .expect("audit runs")
+    }
+
+    #[test]
+    fn spectral_sweep_matches_direct_residual_form() {
+        // The trace expansion and the direct residual evaluation are the
+        // SAME quantity — the spectral form must reproduce the direct
+        // per-λ Cholesky answer within f64 accumulation tolerance on a
+        // well-conditioned corpus (the degenerate-gram plants agree at
+        // their own wider bands in the fixtures above; this test pins the
+        // agreement itself on a random gram).
+        let (traj, micro) = fixture(FixtureKind::Injection, 512, 6, 6, 12345);
+        let flat = flatten(&traj);
+        let mflat = flatten(&micro);
+        let dim = 6usize;
+        let md = 6usize;
+        let config = ClosureAuditConfig::default();
+        let report = run(&[&flat], dim, Some((&[&mflat], md)), &config).expect("runs");
+        // Rebuild the direct per-λ answer independently: exact ridge via
+        // the normal equations with the PIVOT-FREE path (λI makes any PSD
+        // gram solvable) and direct held-out residuals.
+        let n = flat.len() / dim;
+        let train = ((n as f64 - 1.0) * config.train_fraction).floor() as usize;
+        let test = (n - 1) - train;
+        assert!(test >= config.support_floor, "fixture must clear support");
+        let mut x = vec![0.0f64; (n - 1) * dim];
+        let mut y = vec![0.0f64; (n - 1) * dim];
+        for i in 0..(n - 1) {
+            for j in 0..dim {
+                x[i * dim + j] = f64::from(flat[i * dim + j]);
+                y[i * dim + j] = f64::from(flat[(i + 1) * dim + j]);
+            }
+        }
+        // Column means of the test block for the shared SST.
+        let mut mean = vec![0.0f64; dim];
+        for row in train..(n - 1) {
+            for j in 0..dim {
+                mean[j] += y[row * dim + j];
+            }
+        }
+        for m in mean.iter_mut() {
+            *m /= test as f64;
+        }
+        let mut y_sst = 0.0f64;
+        for row in train..(n - 1) {
+            for j in 0..dim {
+                let e = y[row * dim + j] - mean[j];
+                y_sst += e * e;
+            }
+        }
+        // Gram + rhs on the train prefix.
+        let mut gram = vec![0.0f64; dim * dim];
+        let mut rhs = vec![0.0f64; dim * dim];
+        for row in 0..train {
+            let xr = &x[row * dim..(row + 1) * dim];
+            let yr = &y[row * dim..(row + 1) * dim];
+            for i in 0..dim {
+                for j in 0..dim {
+                    gram[i * dim + j] += xr[i] * xr[j];
+                }
+                for k in 0..dim {
+                    rhs[i * dim + k] += xr[i] * yr[k];
+                }
+            }
+        }
+        let spectral_by_lambda: std::collections::HashMap<u64, f64> = report
+            .arms
+            .iter()
+            .filter(|a| a.side == AuditSide::Summary)
+            .filter_map(|a| match a.family {
+                ArmFamily::Ridge { lambda } => Some((lambda.to_bits(), a.r2)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(spectral_by_lambda.len(), config.lambda_grid.len());
+        for &lambda in &config.lambda_grid {
+            // Direct solve: Cholesky with a tiny jitter fallback.
+            let mut a = gram.clone();
+            for i in 0..dim {
+                a[i * dim + i] += lambda;
+            }
+            let mut w = rhs.clone();
+            for i in 0..dim {
+                for j in 0..=i {
+                    let mut s = a[i * dim + j];
+                    for k in 0..j {
+                        s -= a[i * dim + k] * a[j * dim + k];
+                    }
+                    let v = if i == j {
+                        s.max(1e-12).sqrt()
+                    } else {
+                        s / a[j * dim + j]
+                    };
+                    a[i * dim + j] = v;
+                }
+            }
+            for i in 0..dim {
+                for k in 0..dim {
+                    w[i * dim + k] /= a[i * dim + i];
+                }
+                for j in (i + 1)..dim {
+                    let lij = a[j * dim + i];
+                    for k in 0..dim {
+                        w[j * dim + k] -= lij * w[i * dim + k];
+                    }
+                }
+            }
+            for i in (0..dim).rev() {
+                for k in 0..dim {
+                    w[i * dim + k] /= a[i * dim + i];
+                }
+                for j in 0..i {
+                    let lij = a[i * dim + j];
+                    for k in 0..dim {
+                        w[j * dim + k] -= lij * w[i * dim + k];
+                    }
+                }
+            }
+            let mut sse = 0.0f64;
+            for row in train..(n - 1) {
+                let xr = &x[row * dim..(row + 1) * dim];
+                let yr = &y[row * dim..(row + 1) * dim];
+                for j in 0..dim {
+                    let mut pred = 0.0f64;
+                    for k in 0..dim {
+                        pred += xr[k] * w[k * dim + j];
+                    }
+                    let e = yr[j] - pred;
+                    sse += e * e;
+                }
+            }
+            let r2_direct = 1.0 - sse / y_sst;
+            let r2_spectral = spectral_by_lambda[&lambda.to_bits()];
+            let diff = (r2_direct - r2_spectral).abs();
+            assert!(
+                diff < 1e-9,
+                "λ={lambda}: spectral r2 {r2_spectral} vs direct r2 {r2_direct} (diff {diff})"
+            );
+        }
     }
 
     #[test]
