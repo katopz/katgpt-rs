@@ -47,6 +47,17 @@
 # a53defb side is now 119's only history holder (verified live: historical_collisions()
 # returns exactly the 4 rows .issues 23/49/87/108 over 208 numbers walked;
 # removed_by_number carries 119 -> the a53defb stem alone; tracked duplicates on disk 0).
-# The 5 row above recorded the pair while both sides stood. 119 stays not reusable below
-# the era boundary.
-legacy_ratchet = 4
+# 5 re-pinned UP 2026-11-24 02:5xZ (zed-1664b21c@m3, the plan-074 lease-fold lane's housekeeping
+# pass): the 124 dual allocation — 618e95e (11-24 03:43+07, the plan-084 T5 lane) filed
+# 124_scripted_world_watchers… AND bumped .highwater 123->124 correctly; then e70a540 (11-24
+# 08:55+07, the sprint!024 lane-N lane, zed-65f6ad0b) filed 124_seal_render_twilight… while
+# its parent tree ALREADY held highwater=124 (verified: 7058aed:.issues/.highwater == 124) —
+# it allocated the SAME number again and bumped 124->125. Both adds are first allocations of
+# one number in one lineage; the watcher side was removed same day (976d5dc, its lane
+# complete), the twilight side is LIVE. Numbers walk: nothing reuseable; 124 stays not
+# reusable below the era boundary. The same-day stale-read cause matches the 108 pattern
+# (the allocator read a stale highwater — the ~5h window between the two filings carried a
+# branch-local view; the Issue-1205 bump-rides-the-allocation law held on BOTH commits, so
+# the counter never went backwards — the collision is the allocation, not the bump).
+legacy_ratchet = 5
+
