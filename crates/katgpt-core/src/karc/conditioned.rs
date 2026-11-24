@@ -197,6 +197,26 @@ impl KarcConditionedReadout {
         });
     }
 
+    /// Replace the FIRST correction keyed `condition` (the refit semantics):
+    /// the new `(u, v)` mount in place, the EWMA gate accumulators (`n_keyed`,
+    /// both EWMAs) carried over — the keyed residual stream is continuous
+    /// across refits, so a re-fitted correction does not restart the gate's
+    /// abstain window. Returns `false` when no correction carries the key
+    /// (caller falls back to [`Self::add_correction`]); a key never mounts
+    /// twice — the first match is the one live correction for that condition.
+    pub fn replace_correction(&mut self, condition: u8, u: Vec<f32>, v: Vec<f32>) -> bool {
+        assert_eq!(u.len(), self.d, "correction u must hold d floats");
+        assert_eq!(v.len(), self.d_h, "correction v must hold d_h floats");
+        for corr in &mut self.corrections {
+            if corr.condition == condition {
+                corr.u = u;
+                corr.v = v;
+                return true;
+            }
+        }
+        false
+    }
+
     /// Output dimension.
     #[inline]
     pub const fn d(&self) -> usize {
@@ -647,5 +667,37 @@ mod tests {
         bank.add_correction(0, vec![0.0; 3], vec![0.0; 96]);
         bank.add_correction(1, vec![0.0; 3], vec![0.0; 96]);
         assert_eq!(bank.state_f32(), 486);
+    }
+
+    #[test]
+    fn replace_correction_swaps_weights_and_keeps_the_gate_warm() {
+        // The Issue-1260 refit semantics: a re-fitted correction mounts the
+        // new (u, v) in place and the keyed-observation count carries over —
+        // the gate does NOT restart its abstain window.
+        let (mut bank, cfg) = synthetic_bank();
+        let mut scratch = [0.0f32; 2];
+        let feats = [1.0f32, 2.0, 3.0];
+        let truth = [0.0f32, 5.0];
+        for _ in 0..cfg.min_obs {
+            bank.observe(&feats, 1, &truth, &mut scratch);
+        }
+        let n_before = bank.corrections[0].n_keyed();
+        assert_eq!(n_before, cfg.min_obs);
+        // Refit: same key, new weights.
+        assert!(bank.replace_correction(1, vec![1.0, 0.0], vec![0.0, 1.0, 0.5]));
+        assert_eq!(
+            bank.corrections[0].n_keyed(),
+            n_before,
+            "gate count carries"
+        );
+        assert_eq!(bank.n_corrections(), 1, "refit never grows the bank");
+        // The new v = (0, 1, 0.5) is live: apply at scale 1 moves output 0 to
+        // base(1.0) + v·ψ = 1.0 + (0·1 + 1·2 + 0.5·3) = 4.5.
+        let mut out = [0.0f32; 2];
+        bank.apply_fixed(&feats, 1, 1.0, &mut out);
+        assert!((out[0] - 4.5).abs() < 1e-5, "out[0] = {}", out[0]);
+        // A key with no correction refuses (returns false), never appends.
+        assert!(!bank.replace_correction(7, vec![0.0, 0.0], vec![0.0; 3]));
+        assert_eq!(bank.n_corrections(), 1);
     }
 }

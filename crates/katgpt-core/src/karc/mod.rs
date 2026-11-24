@@ -2282,6 +2282,23 @@ impl<B: KarcBasis<M>, const D: usize, const M: usize, const K: usize> KarcForeca
         true
     }
 
+    /// Feature expansion ONLY: `psi_out = Ψ(delay_state)` (the same `d_h =
+    /// K·D·M` expansion [`Self::forecast_into`] computes internally), written
+    /// into the caller's buffer. No forecast, no fit requirement, zero-alloc.
+    ///
+    /// Exists for consumers that need the feature ROW as data — the
+    /// conditioned-correction runtime (Issue 1260) pools `(Ψ, residual)` rows
+    /// per keyed condition and fits the correction `v` against them with the
+    /// primitive's own closed-form lane; the expansion must be the forecaster's
+    /// own so pool rows and forecasts agree feature-for-feature.
+    #[inline]
+    pub fn expand_into(&self, delay_state: &[f32], psi_out: &mut [f32]) {
+        let d_h = Self::D_H;
+        debug_assert_eq!(delay_state.len(), K * D, "delay_state must be K·D long");
+        debug_assert!(psi_out.len() >= d_h, "psi_out must hold d_h floats");
+        feature_expand::<B, M>(&delay_state[..K * D], &self.basis, &mut psi_out[..d_h]);
+    }
+
     // ── Phase 2 methods (paper Eqs. 32 / 47) ──
 
     /// Higher-order feature count for outer-product order `R` applied to this

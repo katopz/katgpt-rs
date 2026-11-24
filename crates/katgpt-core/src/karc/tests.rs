@@ -105,6 +105,40 @@ fn forecaster_fits_and_forecasts_linear_map() {
 }
 
 #[test]
+fn expand_into_matches_the_forecast_expansion() {
+    // The Issue-1260 seam: expand_into must produce the SAME feature row the
+    // forecast path computes internally — expand + the caller's own matvec
+    // over the public `wout` equals forecast_into, feature-for-feature.
+    type F = KarcForecaster<ChebyshevBasis<2>, 1, 2, 1>;
+    let mut f: F = KarcForecaster::with_capacity(ChebyshevBasis::new(), 20);
+    for i in 0..20 {
+        let x = (i as f32) * 0.1 - 1.0;
+        f.accumulate_pair(&[x], &[2.0 * x]);
+    }
+    f.fit_ridge(1e-6).unwrap();
+    let delay = [0.5f32];
+    let mut psi = [0.0f32; F::D_H];
+    f.expand_into(&delay, &mut psi);
+    // Layout: coord 0 (x=0.5) × (T0, T1) = (1, 0.5), coord-padding — the
+    // Chebyshev T0=1 / T1=x rows, in feature_expand's order.
+    assert!(approx_eq(psi[0], 1.0, 1e-5));
+    assert!(approx_eq(psi[1], 0.5, 1e-5));
+    // Manual matvec over the public Wout (D × d_h row-major) equals the
+    // forecast bit-for-bit (both fold ascending k in f32).
+    let mut manual = [0.0f32];
+    for (o, row) in manual.iter_mut().zip(f.wout.chunks_exact(F::D_H)) {
+        let mut acc = 0.0f32;
+        for k in 0..F::D_H {
+            acc += row[k] * psi[k];
+        }
+        *o = acc;
+    }
+    let mut forecast = [0.0f32];
+    assert!(f.forecast_into(&delay, &mut forecast));
+    assert_eq!(manual[0].to_bits(), forecast[0].to_bits(), "same bits");
+}
+
+#[test]
 fn forecaster_rejects_zero_lambda() {
     type F = KarcForecaster<ChebyshevBasis<2>, 1, 2, 1>;
     let mut f: F = KarcForecaster::with_capacity(ChebyshevBasis::new(), 4);
