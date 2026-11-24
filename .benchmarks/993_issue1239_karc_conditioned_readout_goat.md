@@ -8,6 +8,7 @@
 - Rig: **amo** (Apple silicon builder), SHARED lane, release profile. ⚠ **No bench_preflight PROVENANCE line in this suite's output** (the first corrected suite printed none; disclosed rather than invented). Box-state mitigation, both directions:
   1. the G2 wall cell is the interleaved (a,b) chunk-pair median design (the sequential-A/B box-noise law, 200 pairs × 128 calls/arm) — the sanctioned defense against exactly this;
   2. the walls agree with the independent m3 dev-loop cell measured earlier the same day (corpus 1.41× vs 1.420×, HLA-ish 1.14× vs 1.139×) — two postures, same verdict, each comfortably under the 1.5× bar.
+- **Post-hoc PROVENANCE capture (same quiet window, minutes after the cell, amo idle):** `PROVENANCE: power=AC Power load=2.56 swap=3974.69M canary=skipped powermode=0(auto) ane=ok` (`../riir-reflex/scripts/bench_preflight.sh` on amo, run via ssh immediately after the job drained — the same AC/auto/idle posture the cell ran under; quoted as corroboration, never as a substitute for an in-suite line).
 - Commit: `297f9412a` (develop, clean checkout — the run's first line pins it).
 - Job: amo `56176ff0` (log `01a20e8c-c7c7-7312-ba73-861956176ff0.log`); the FIRST corrected-suite attempt failed for a mundane reason — the original suite named a test target that does not exist (cargo's available-targets dump was its whole log); no gate code ever failed.
 
