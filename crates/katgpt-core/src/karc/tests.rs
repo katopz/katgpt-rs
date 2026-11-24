@@ -126,7 +126,8 @@ fn expand_into_matches_the_forecast_expansion() {
     // Manual matvec over the public Wout (D × d_h row-major) equals the
     // forecast bit-for-bit (both fold ascending k in f32).
     let mut manual = [0.0f32];
-    for (o, row) in manual.iter_mut().zip(f.wout.chunks_exact(F::D_H)) {
+    let (rows, _) = f.wout.as_chunks::<{ F::D_H }>();
+    for (o, row) in manual.iter_mut().zip(rows) {
         let mut acc = 0.0f32;
         for k in 0..F::D_H {
             acc += row[k] * psi[k];
