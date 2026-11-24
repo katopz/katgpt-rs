@@ -1,6 +1,7 @@
 # Issue 1244 — `closure_audit`: matched-capacity self-prediction gap as a macrostate gate
 
-**Status:** Open — POC filed 2026-11-24 from `../katgpt-rs/.research/692_RET_Macrostate_Closure_Audit.md` (arXiv:2605.09294 "Representational Effective Theory"); verdict Gain (modelless track), GOAT-eligible primitive.
+**Status:** OPEN — claimed (m3). POC filed 2026-11-24 from `../katgpt-rs/.research/692_RET_Macrostate_Closure_Audit.md` (arXiv:2605.09294 "Representational Effective Theory"); verdict Gain (modelless track), GOAT-eligible primitive.
+**Claimed:** katgpt-rs-m3-zed@m3, 1795533160, expires 2026-11-26T15:12:00Z
 
 ## What
 
