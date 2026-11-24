@@ -6828,3 +6828,31 @@ frequencies, no hand-set ladder).
 GOAT gate ([Bench 989](../../.benchmarks/989_kernel_fourier_features_goat.md)): G1/G1c/G1b/G2/G4 +
 open-BC eigenfunctions PASS. G2: 5.1 ns per (N·w) at N=4096, w=32. Opt-in until a wired consumer
 (riir-ai Issue 1245).
+
+## 172. closure_audit — the matched-capacity macrostate gate (Issue 1244 / Research 692, arXiv:2605.09294, 2026-11-24)
+
+Feature `closure_audit` (member of the `diagnostics` umbrella, granted per the
+one-feature growth) in `crates/katgpt-core/src/closure_audit.rs`. The
+self-prediction gap as a macrostate gate: is a recorded latent summary `z` a
+CLOSED macrostate of its own dynamics (`z_t → z_{t+1}`), or is the un-summarized
+microstate remainder `x_t` load-bearing (`(z_t, x_t) → z_{t+1}`)?
+
+- Arms — an identical capacity menu per side: a ridge λ-sweep over closed-form
+  normal equations (Cholesky, f64 sequential folds per the Issue-940 law) +
+  kNN {1, 8, 64}. Blocked-FORWARD split (trajectory-major prefix trains, suffix
+  tests — never an iid shuffle). `gap = R²(best augmented) − R²(best summary)`.
+- Typed two-condition verdict: `Closed` iff gap ≤ ε AND R²(summary) ≥ floor;
+  `Lossy` iff gap > ε AND fit ≥ floor; `Undecidable{NoMicrostate, WeakSupport,
+  WeakSummaryFit}` — a gap ≈ 0 with weak absolute fit NEVER reads green.
+  ε 0.05 / floor 0.5 / support 128 pinned at filing; the paper's R² numbers are
+  provenance, never our bar.
+- `WindowRing` — the alloc-free online collection half (zero per-tick push once
+  sized); `run()` is an OFFLINE instrument with a disclosed per-phase budget.
+- Deterministic: bit-identical reports fixture-asserted; `(distance², index)`
+  kNN tie rule; evenly-spaced kNN ref cap landing exactly on min(cap, n_train).
+- NO GOAT claim (ungoat discipline): report-only consumers first (riir-ai
+  `.issues/1259` sync surface, riir-refine `.issues/256` fix trajectories).
+  G1 fixtures 14/14 (identity/noise/injection/degenerate plants pinning
+  closed-form theory — two earlier plant designs measured Closed, correctly,
+  and were replaced); G4 4/4; G2 floor bar (ridge sweep ≤ 50 ms at T=1e4, D=64
+  release) pending on the quiet-rig bench (`bench_1244_closure_audit_g2_goat`).
