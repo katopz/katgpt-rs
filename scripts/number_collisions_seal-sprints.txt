@@ -47,6 +47,7 @@
 # a53defb side is now 119's only history holder (verified live: historical_collisions()
 # returns exactly the 4 rows .issues 23/49/87/108 over 208 numbers walked;
 # removed_by_number carries 119 -> the a53defb stem alone; tracked duplicates on disk 0).
+
 # 5 re-pinned UP 2026-11-24 02:5xZ (zed-1664b21c@m3, the plan-074 lease-fold lane's housekeeping
 # pass): the 124 dual allocation — 618e95e (11-24 03:43+07, the plan-084 T5 lane) filed
 # 124_scripted_world_watchers… AND bumped .highwater 123->124 correctly; then e70a540 (11-24
@@ -60,4 +61,25 @@
 # branch-local view; the Issue-1205 bump-rides-the-allocation law held on BOTH commits, so
 # the counter never went backwards — the collision is the allocation, not the bump).
 legacy_ratchet = 5
-
+# The 5 row above recorded the pair while both sides stood. 119 stays not reusable below
+# the era boundary.
+# 5 re-pinned UP 2026-11-24 (zed-73ebc8c7@amo, the 1097-close lane's numbering pass): the
+# five LIVE cross-dir pairs below the era boundary — .issues/020 x .plans/020 (toon_bodies),
+# .issues/024 x .plans/024 (requirement_points), .issues/071 x .plans/071 (a_map_is_grammar x
+# backstab_removal_cut_plan), .issues/074 x .plans/074 (wp4_gravity), .issues/085 x
+# .plans/085 (window_pvp x the_pointer_says_a_warp) — each an .issues ticket + the .plans
+# doc of the sprint that resolved it (the repo's own convention, the accidental-overlap
+# class; verified working-tree-measured: the count stood at 5 before and after this lane's
+# 126 filing, and none of the five is a same-number double allocation). The floors row's
+# max_hist re-pinned 4→5 in the same commit — one record, two media, both at 5.
+# 5 re-measured UP 2026-11-24 (zed-73ebc8c7@amo, the 1097-close lane's numbering pass, a SECOND
+# live class beside the 124 history row above): the five LIVE cross-dir pairs below the era
+# boundary - .issues/020 x .plans/020 (toon_bodies), .issues/024 x .plans/024
+# (requirement_points), .issues/071 x .plans/071 (a_map_is_grammar x backstab_removal_cut_plan),
+# .issues/074 x .plans/074 (wp4_gravity), .issues/085 x .plans/085 (window_pvp x
+# the_pointer_says_a_warp) - each an .issues ticket + the .plans doc of the sprint that resolved
+# it (the repo's own convention, the accidental-overlap class; verified working-tree-measured:
+# the collision_verdict legacy count stood at 5 before and after this lane's 126 filing, and
+# none of the five is a same-number double allocation). The floors row's max_hist rides at 5 -
+# one record, two media, both at 5.
+legacy_ratchet = 5
