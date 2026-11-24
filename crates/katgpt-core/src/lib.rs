@@ -325,6 +325,13 @@ pub mod lepski_cascade;
 #[cfg(feature = "estimators")]
 pub mod epiplexity_gain;
 
+// Issue 1244: the closure-audit measurement primitive (Research 692,
+// arXiv:2605.09294 RET) — the matched-capacity self-prediction gap as a
+// macrostate gate. Member of the `diagnostics` family umbrella, granted
+// individually per the one-feature growth.
+#[cfg(feature = "closure_audit")]
+pub mod closure_audit;
+
 // Issue 1228: the reward-census instruments (I1 TD-delta + gate, I2
 // hypergeometric overlap null, I3 pruning-knee census) — one feature, one
 // module, the sparse_kl_bound shape; I4's readout lands in katgpt-pruners
