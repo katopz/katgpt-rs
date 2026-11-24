@@ -6856,3 +6856,37 @@ microstate remainder `x_t` load-bearing (`(z_t, x_t) → z_{t+1}`)?
   closed-form theory — two earlier plant designs measured Closed, correctly,
   and were replaced); G4 4/4; G2 floor bar (ridge sweep ≤ 50 ms at T=1e4, D=64
   release) pending on the quiet-rig bench (`bench_1244_closure_audit_g2_goat`).
+
+## 173. karc_conditioned_readout — the conditioned-KARC correction bank (Issue 1239, 2026-11-24)
+
+Feature `karc_conditioned_readout` (member of the `estimators` umbrella; the
+cap-297/300 law — no top-level feature) in
+`crates/katgpt-core/src/karc/conditioned.rs`. A bank of rank-1 readout
+corrections over the incumbent base ridge fit, keyed by an EXOGENOUS
+condition label `c` (a channel independent of the σ-gate — combat flag,
+time-of-day bucket; a `c` derived from the gate's own residual is the
+pre-registered design failure). The Plan-514 identity-keyed
+`npc_directions` shape class re-keyed identity → condition: one correction
+serves every entity in the same condition (crowd amortization; state bytes
+flat at `d_h + D` floats each).
+
+- `û = Wout_base·Ψ + Σ_b σ(g_b)·u_b·(v_bᵀΨ)` — `u_b` frozen (archetype =
+  normalized mean base residual of the keyed fit segment, or authored
+  fallback), `v_b` a closed-form scalar ridge over residual targets
+  (`chunked_gram_into` + `ridge_solve_direct_f64` verbatim, f64 folds).
+- `g_b` = EWMA relative-gain σ-gate on correction b's OWN keyed residual
+  (`σ(β·(gain − margin))`, β 30 / margin 0.15 / EWMA 0.05 / abstain until
+  16 keyed obs) — split-conformal in SHAPE (gates warm on a calibration
+  slice disjoint from fit and test); sigmoid, never softmax.
+- `apply_into` / `apply_fixed` / `observe` zero-alloc once constructed;
+  ascending sequential fold order (the Issue-940 law, fixture-pinned);
+  `apply_fixed` is the unlearned-fusion arm (uniform mean, Σ/√K scale).
+- G1 cell (5-seed regime-switching C1 + pure C2 + periodic C3): A4 WIN vs
+  A1 (−1.89 pp) AND A5 wide not WIN vs A4 — the branch claim survives;
+  G3 abstain exact (−0.07 pp / +0.00 pp); G4 2/2; G2 wall 1.41×/1.14× ≤
+  1.5× (armed gates, interleaved median). Honest attribution caveat: the
+  keyed-bias control (A1c) captures most of the win on C1 (A4−A1c =
+  +0.75 pp) — the promotion-bearing fixed-gate arm A3 won its own gate
+  (−3.44 pp); the bench record adjudicates the proposal.
+- Never joins `default`/`full`; no `implies karc_forecaster` (always-on
+  since Plan 635 T1 — the dep means nothing).

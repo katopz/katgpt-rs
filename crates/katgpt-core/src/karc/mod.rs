@@ -130,6 +130,14 @@ pub mod large_dh;
 #[cfg(feature = "karc_regime_gate")]
 pub mod regime_gate;
 
+/// Conditioned readout — a bank of rank-1 readout corrections over the
+/// incumbent base ridge fit, keyed by an EXOGENOUS condition label
+/// (Issue 1239). Gated on `karc_conditioned_readout` (a member of the
+/// `estimators` umbrella; no `implies karc_forecaster` — that feature is
+/// always-on since Plan 635 Tranche 1, so the dep means nothing).
+#[cfg(feature = "karc_conditioned_readout")]
+pub mod conditioned;
+
 // ── Batched MatVec (Plan 556 Phase 2) ──────────────────────────────────
 //
 // SIMD-batched forecast across N forecasters of identical (D, M, K) shape.

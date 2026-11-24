@@ -36,3 +36,4 @@ grant katgpt-core novelty_retention # Plan 639 Phase 3 — the forward the cross
 grant katgpt-core relevance_core   # Research 683/Plan 640 — label-free relevance recipe over basis_split; member of the diagnostics family umbrella, granted per the one-feature growth
 grant katgpt-core kernel_fourier_features # Issue 1234/Research 682 — kernel-derived Fourier latent embeddings (spectral/ family); granted per the one-feature growth
 grant katgpt-core closure_audit        # Issue 1244 — the closure-audit macrostate gate (Research 692, arXiv:2605.09294); member of the diagnostics family umbrella, granted per the one-feature growth
+grant katgpt-core karc_conditioned_readout  # Issue 1239 — the conditioned-KARC rank-1 correction bank; member of the estimators family umbrella (row 26), granted per the one-feature growth (cap 298/300)

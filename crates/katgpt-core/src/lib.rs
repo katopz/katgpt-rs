@@ -1332,6 +1332,12 @@ pub use karc::{
 #[cfg(feature = "karc_regime_gate")]
 pub use karc::regime_gate::{KarcRegime, KarcRegimeGate, RegimeVerdict};
 
+#[cfg(feature = "karc_conditioned_readout")]
+pub use karc::conditioned::{
+    BankFitScratch, ConditionedCorrection, GateConfig, KarcConditionedReadout,
+    archetype_direction_into, fit_correction_into,
+};
+
 pub use karc::batched::{KarcBatchForecaster, karc_batched_matvec_into};
 
 pub use karc::lod_tier::{KarcLodTier, is_identity_projection, project_wout_lod_into};
