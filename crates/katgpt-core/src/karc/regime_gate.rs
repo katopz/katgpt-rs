@@ -93,7 +93,7 @@
 //! - **Runtime integration:** `riir-ai/.plans/514_karc_mitigations_runtime.md`
 //!   Phase 1 (per-NPC regime mux wiring).
 
-#[cfg(any(test, feature = "karc_regime_gate"))]
+#[cfg(any(test, feature = "estimators"))]
 mod imp {
     // The Welford accumulator moved to the crate-root `welford` module
     // (Plan: reflex 008 / Issue 055 substrate pass, 2026-09-30) so a second
@@ -276,7 +276,7 @@ mod imp {
     }
 }
 
-#[cfg(feature = "karc_regime_gate")]
+#[cfg(feature = "estimators")]
 pub use imp::{KarcRegime, KarcRegimeGate, RegimeVerdict, WelfordVariance};
 
 #[cfg(test)]

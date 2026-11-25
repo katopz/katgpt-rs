@@ -10,7 +10,7 @@
 
 // Re-export core computation (intra-katgpt-core since Plan 404 move).
 // Gated `dirichlet_energy` to match the upstream module's feature gate.
-#[cfg(feature = "dirichlet_energy")]
+#[cfg(feature = "diagnostics")]
 pub use crate::dirichlet::{
     consecutive_adjacency, dirichlet_energy, functor_adjacency, kv_cache_dirichlet_energy,
 };
@@ -26,7 +26,7 @@ pub use crate::spectral_hierarchy::{
 // `dirichlet_energy` / `consecutive_adjacency` / etc. functions, which
 // require the upstream `dirichlet` module to be compiled.
 
-#[cfg(all(test, feature = "dirichlet_energy"))]
+#[cfg(all(test, feature = "diagnostics"))]
 mod tests {
     use super::*;
 

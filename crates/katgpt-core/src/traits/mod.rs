@@ -1218,7 +1218,7 @@ pub trait GenerativeConstraintPruner<Output>: Send + Sync {
 ///
 /// impl<G: SpeculativeGenerator + RecursionLogits> RecursionGatedGenerator<G> { ... }
 /// ```
-#[cfg(feature = "recursion_logits")]
+#[cfg(feature = "compute_control")]
 pub trait RecursionLogits {
     /// Pre-recursion logits `π̂` from the most recent generate() call.
     ///
@@ -1590,5 +1590,5 @@ mod tests_best_buddies;
 #[cfg(test)]
 mod tests_reject_confidence;
 
-#[cfg(all(test, feature = "recursion_logits"))]
+#[cfg(all(test, feature = "compute_control"))]
 mod recursion_logits_tests;

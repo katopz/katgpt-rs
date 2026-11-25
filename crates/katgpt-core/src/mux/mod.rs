@@ -10,25 +10,25 @@
 //! - `mux_height_gate`  — `HeightGate` commit-timing + `GapTrendNarrower`
 //!   (Issue 688, Coconut §4.4/Fig. 6; implies `mux_bfs`)
 
-#[cfg(feature = "mux_pruner")]
+#[cfg(feature = "decoding")]
 pub mod span_pruner;
-#[cfg(feature = "mux_pruner")]
+#[cfg(feature = "decoding")]
 pub mod top_k;
 
-#[cfg(feature = "mux_pruner")]
+#[cfg(feature = "decoding")]
 pub mod dd_tree;
 
-#[cfg(feature = "mux_pruner")]
+#[cfg(feature = "decoding")]
 pub mod bfs;
 
-#[cfg(feature = "mux_pruner")]
+#[cfg(feature = "decoding")]
 pub mod height_gate;
 
-#[cfg(feature = "mux_demux")]
+#[cfg(feature = "decoding")]
 pub mod demux;
 
-#[cfg(feature = "mux_bandit_width")]
+#[cfg(feature = "decoding")]
 pub mod bandit_width;
 
-#[cfg(feature = "mux_pruner")]
+#[cfg(feature = "decoding")]
 pub mod freeze_thaw;

@@ -588,7 +588,7 @@ impl SdeConfig {
 /// the final fused marginals: `fused[k][v] = Σ_i alpha_i * marginals_i[k][v]`.
 ///
 /// This is modelless — no training required. Alpha weights must sum to 1.0.
-#[cfg(feature = "dflare_fusion")]
+#[cfg(feature = "decoding")]
 #[derive(Debug, Clone)]
 pub struct MarginalFusionConfig {
     /// Per-conditioning-source blend weights. Must sum to 1.0.
@@ -600,7 +600,7 @@ pub struct MarginalFusionConfig {
     pub enabled: bool,
 }
 
-#[cfg(feature = "dflare_fusion")]
+#[cfg(feature = "decoding")]
 impl MarginalFusionConfig {
     /// Create a disabled config (fusion inactive).
     pub fn disabled() -> Self {
@@ -663,7 +663,7 @@ impl MarginalFusionConfig {
 /// - High confidence (> high_threshold): use conditioned KV
 /// - Low confidence (< low_threshold): use unconditioned KV
 /// - Medium: blend proportional to confidence
-#[cfg(feature = "dflare_kv_routing")]
+#[cfg(feature = "decoding")]
 #[derive(Debug, Clone, Copy)]
 pub struct KvRoutingConfig {
     /// Above this pruner relevance, use fully conditioned KV.
@@ -674,7 +674,7 @@ pub struct KvRoutingConfig {
     pub enabled: bool,
 }
 
-#[cfg(feature = "dflare_kv_routing")]
+#[cfg(feature = "decoding")]
 impl Default for KvRoutingConfig {
     fn default() -> Self {
         Self {
@@ -685,7 +685,7 @@ impl Default for KvRoutingConfig {
     }
 }
 
-#[cfg(feature = "dflare_kv_routing")]
+#[cfg(feature = "decoding")]
 impl KvRoutingConfig {
     /// Compute blend factor for conditioned vs unconditioned KV.
     ///
@@ -713,7 +713,7 @@ impl KvRoutingConfig {
 /// Biases DDTree expansion toward early positions using exponential decay:
 /// `weight(depth) = exp(-depth / gamma)`. More nodes at early depths,
 /// fewer at later depths. Total budget stays the same.
-#[cfg(feature = "dflare_progressive_budget")]
+#[cfg(feature = "decoding")]
 #[derive(Debug, Clone, Copy)]
 pub struct PositionWeightedBudget {
     /// Exponential decay rate. Higher = more front-loaded.
@@ -725,7 +725,7 @@ pub struct PositionWeightedBudget {
     pub enabled: bool,
 }
 
-#[cfg(feature = "dflare_progressive_budget")]
+#[cfg(feature = "decoding")]
 impl Default for PositionWeightedBudget {
     fn default() -> Self {
         Self {
@@ -736,7 +736,7 @@ impl Default for PositionWeightedBudget {
     }
 }
 
-#[cfg(feature = "dflare_progressive_budget")]
+#[cfg(feature = "decoding")]
 impl PositionWeightedBudget {
     /// Compute position weight for a given depth.
     ///
@@ -1961,7 +1961,7 @@ mod tests {
 
     // ── DFlare Marginal Fusion tests (Plan 174 T1e) ──
 
-    #[cfg(feature = "dflare_fusion")]
+    #[cfg(feature = "decoding")]
     mod dflare_fusion {
         use super::*;
 
@@ -1999,7 +1999,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "dflare_kv_routing")]
+    #[cfg(feature = "decoding")]
     mod dflare_kv_routing {
         use super::*;
 
@@ -2037,7 +2037,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "dflare_progressive_budget")]
+    #[cfg(feature = "decoding")]
     mod dflare_progressive_budget {
         use super::*;
 

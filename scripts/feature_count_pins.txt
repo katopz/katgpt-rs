@@ -16,7 +16,7 @@
 # Format (one per line, `#` comments):
 #   ceiling <crate> <count>
 #   grant <crate> <feature>  # <reason>
-ceiling katgpt-core 278
+ceiling katgpt-core 231
 grant katgpt-core decoding          # Plan 635 Tranche 2 family umbrella (additive, implies its round-1 members)
 grant katgpt-core planning          # Plan 635 Tranche 2 family umbrella
 grant katgpt-core attention_memory  # Plan 635 Tranche 2 family umbrella
@@ -27,11 +27,8 @@ grant katgpt-core estimators        # Plan 635 Tranche 2 family umbrella
 grant katgpt-core formats_weights   # Plan 635 Tranche 2 family umbrella (verdict rename of `artifacts`)
 grant katgpt-core grafts            # issue-988 overlay family umbrella (reads/rules/writes/switches + artifact — the Plan 025 deterministically-constructed-overlay family's fitted instance)
 grant katgpt-core emeans_poc        # issue-997 measured-negative PoC lane (mini-batch EMA k-means fit; closed negative, opt-in forever — negative_results.md)
-grant katgpt-core sparse_kl_bound   # Issue 1210 C6 — the SSD sparse lower-bounded KL extraction (arXiv:2611.12016); member of the diagnostics family umbrella, granted individually per the one-feature growth
 grant katgpt-core assignment_descent # Issue 1211 — the descent lane through the assign re-export (K chains + abstain-on-budget + the fitted-level gate; Research 670/CRAM); implies `assignment`, granted individually per the one-feature growth
-grant katgpt-core verify_cache      # Issue 1210 C7 — the SSD verify-cache posture + probability-weighted cache error extraction (arXiv:2611.12016); member of the diagnostics family umbrella, granted individually per the one-feature growth
 grant katgpt-core ternary_circuit   # Issue 1225 — the circuit→ternary compiled-lane family umbrella (Research 677 GOAT fusion; T1 npz→.cact transcode + Arm A forward + Arm B builder land under this feature); implies `kpt_archive`, granted per the one-feature growth
-grant katgpt-core reward_census    # Issue 1228 — the reward-census measurement primitives family umbrella (td_delta + td_significance + kk_budget + overlap_null + pruning_knee + behavior_readout; joins the diagnostics aggregate per the feature_cap law — count 292->293 keys); landed a93fa73ef, grant row landed by the i1219 docs repair
 grant katgpt-core novelty_retention # Plan 639 Phase 3 — the forward the cross-repo consumers (riir-ai goal_salience/desperation_dual, riir-refine ema_step) reach katgpt-sense's novelty_retention through (katgpt-core is their only katgpt-rs edge); granted per the one-feature growth
 grant katgpt-core relevance_core   # Research 683/Plan 640 — label-free relevance recipe over basis_split; member of the diagnostics family umbrella, granted per the one-feature growth
 grant katgpt-core kernel_fourier_features # Issue 1234/Research 682 — kernel-derived Fourier latent embeddings (spectral/ family); granted per the one-feature growth

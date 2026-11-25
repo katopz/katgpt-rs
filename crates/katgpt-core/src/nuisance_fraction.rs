@@ -99,7 +99,7 @@
 //! consumer docs: Schnaus et al. arXiv:2610.09411 (cross-set predictability)
 //! — the gate here is adoption engineering, not a novelty claim.
 
-// (Module gating is handled by `#[cfg(feature = "nuisance_fraction")]` on the
+// (Module gating is handled by `#[cfg(feature = "diagnostics")]` on the
 // `mod` declaration in `lib.rs`; this file must NOT duplicate it.)
 
 use crate::linalg::{SymmetricEigScratch, symmetric_eig};

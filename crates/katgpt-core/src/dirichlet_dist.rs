@@ -401,7 +401,7 @@ impl<const M: usize, const K: usize> DirichletEma<M, K> {
     }
 }
 
-#[cfg(all(test, feature = "dirichlet_dist"))]
+#[cfg(all(test, feature = "estimators"))]
 mod tests {
     use super::*;
 

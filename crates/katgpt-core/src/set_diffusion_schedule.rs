@@ -456,7 +456,7 @@ pub fn mdlm_gen_steps(l: usize) -> Vec<u32> {
 /// false under IEEE — incomparable confidences stay masked, never a
 /// false commit). The count the caller needs for NFE accounting is just
 /// the length of the returned slice.
-#[cfg(feature = "decode_order_metrics")]
+#[cfg(feature = "decoding")]
 pub fn confidence_threshold_eligible(confidence: &[f32], tau: f32) -> Vec<usize> {
     confidence
         .iter()
@@ -481,7 +481,7 @@ pub fn confidence_threshold_eligible(confidence: &[f32], tau: f32) -> Vec<usize>
 /// its passes), and the total is exactly `l` (min-1 pre-assignment +
 /// largest-remainder distribution, ties to the later pass). `steps == 0`
 /// panics; `l == 0` returns all zeros.
-#[cfg(feature = "decode_order_metrics")]
+#[cfg(feature = "decoding")]
 pub fn inverse_lambda_slot_counts(l: usize, steps: usize) -> Vec<usize> {
     assert!(steps > 0, "steps must be positive");
     let mut counts = vec![0usize; steps];
@@ -544,7 +544,7 @@ pub fn inverse_lambda_slot_counts(l: usize, steps: usize) -> Vec<usize> {
 /// L=8/V=8, trained at w=0.5, 16 seeded greedy decodes per w). The
 /// predictor inverts this table; re-calibrate by re-measuring and editing
 /// these constants IN ONE PLACE (the table is the calibration).
-#[cfg(feature = "decode_order_metrics")]
+#[cfg(feature = "decoding")]
 pub const ORDER_STATS_TO_W_TABLE: [(f32, f64, f64); 6] = [
     // (w, ALR, AGR) — measured 2026-09-20, this bench fixture.
     (0.1, 1.000, 1.000),
@@ -573,7 +573,7 @@ pub const ORDER_STATS_TO_W_TABLE: [(f32, f64, f64); 6] = [
 /// conservative/sequential side — never recommend parallelism off a tie).
 /// Inputs are clamped into [0,1]; a NaN input returns the conservative
 /// 0.1 endpoint (an unmeasurable probe must not look parallel-safe).
-#[cfg(feature = "decode_order_metrics")]
+#[cfg(feature = "decoding")]
 pub fn predict_w_from_order_stats(alr: f32, agr: f32) -> f32 {
     if !alr.is_finite() || !agr.is_finite() {
         return ORDER_STATS_TO_W_TABLE[0].0;
@@ -610,7 +610,7 @@ pub fn predict_w_from_order_stats(alr: f32, agr: f32) -> f32 {
 /// doubled for the conservative direction). Output clamped to
 /// [0.1, 1.0]; NaN measurements return `probe_w` clamped (no signal —
 /// keep the incumbent posture, never extrapolate).
-#[cfg(feature = "decode_order_metrics")]
+#[cfg(feature = "decoding")]
 pub fn predict_w_residual(alr: f32, agr: f32, probe_w: f32) -> f32 {
     const SHIFT: f32 = 2.0;
     let probe_w = probe_w.clamp(ORDER_STATS_TO_W_TABLE[0].0, 1.0);
@@ -1200,7 +1200,7 @@ mod tests {
     }
 
     /// Plan 602 T2.3 schedule-variant tests (feature-gated with the fns).
-    #[cfg(all(test, feature = "decode_order_metrics"))]
+    #[cfg(all(test, feature = "decoding"))]
     mod decode_order_variants {
         use super::*;
 

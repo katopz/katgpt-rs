@@ -263,7 +263,7 @@ fn renoise_k_draws<O: RenoiseCeProbe>(
 /// Defaults mirror the PFD anneal grid fractions: floor 0.02, cap 0.98.
 /// Invalid fractions (non-finite, `floor ≤ 0`, `cap ∉ (floor, 1]`) fall
 /// back to the defaults — the probe stays total, never NaN.
-#[cfg(feature = "horizon_weights")]
+#[cfg(feature = "estimators")]
 #[derive(Clone, Copy, Debug)]
 pub struct RenoiseCeHorizon {
     /// Lowest sampled level, as a fraction of `perturbation_level` (the
@@ -274,7 +274,7 @@ pub struct RenoiseCeHorizon {
     pub cap_frac: f32,
 }
 
-#[cfg(feature = "horizon_weights")]
+#[cfg(feature = "estimators")]
 impl RenoiseCeHorizon {
     /// PFD-grid fractions: sample over `[0.02·L, 0.98·L]`.
     pub const DEFAULT: Self = Self {
@@ -283,7 +283,7 @@ impl RenoiseCeHorizon {
     };
 }
 
-#[cfg(feature = "horizon_weights")]
+#[cfg(feature = "estimators")]
 impl Default for RenoiseCeHorizon {
     fn default() -> Self {
         Self::DEFAULT
@@ -320,7 +320,7 @@ impl Default for RenoiseCeHorizon {
 ///
 /// Same as the incumbent: one `candidate.clone()` per draw; no other heap
 /// allocation.
-#[cfg(feature = "horizon_weights")]
+#[cfg(feature = "estimators")]
 pub fn renoise_ce_score_horizon<O: RenoiseCeProbe>(
     operator: &O,
     candidate: &O::State,
@@ -1071,7 +1071,7 @@ mod tests {
 
     // ---- renoise_ce_score_horizon (Issue 875 T2, combined-gate) ----
 
-    #[cfg(feature = "horizon_weights")]
+    #[cfg(feature = "estimators")]
     mod horizon {
         use super::*;
 

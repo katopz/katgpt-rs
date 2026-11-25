@@ -127,7 +127,7 @@ pub mod large_dh;
 // right forecaster by comparing rolling Welford variance of their residuals.
 // Gated on `karc_regime_gate` (which implies `karc_forecaster`). Pure
 // modelless (Welford + sigmoid). Zero runtime cost unless constructed.
-#[cfg(feature = "karc_regime_gate")]
+#[cfg(feature = "estimators")]
 pub mod regime_gate;
 
 /// Conditioned readout — a bank of rank-1 readout corrections over the

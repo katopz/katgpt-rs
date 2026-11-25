@@ -72,7 +72,7 @@ pub use chunker::{
     FASTCDC_MIN_CHUNK_SIZE, FASTCDC_MIN_LEVEL, FASTCDC_NORMAL_LEVEL, FastCdcChunker,
     FixedSizeChunker,
 };
-#[cfg(feature = "chunked_net_fetch")]
+#[cfg(feature = "formats_weights")]
 pub use fetcher::NetChunkFetcher;
 pub use fetcher::{
     FsChunkFetcher, InMemoryChunkFetcher, TieredChunkFetcher, TieredWriteBackExt, WriteBack,

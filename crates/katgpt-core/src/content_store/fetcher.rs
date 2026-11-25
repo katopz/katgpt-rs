@@ -318,13 +318,13 @@ where
 ///
 /// The URL pattern is `<base_url>/<hex_hash>` — the deploy decides the scheme
 /// and backend. This keeps the fetcher generic over the storage technology.
-#[cfg(feature = "chunked_net_fetch")]
+#[cfg(feature = "formats_weights")]
 pub struct NetChunkFetcher {
     /// Base URL prefix (e.g. `https://cdn.example.com/chunks`).
     base_url: String,
 }
 
-#[cfg(feature = "chunked_net_fetch")]
+#[cfg(feature = "formats_weights")]
 impl NetChunkFetcher {
     /// Construct with a base URL. The chunk hash is appended as a hex path
     /// segment: `<base_url>/<hex_hash>`.
@@ -344,7 +344,7 @@ impl NetChunkFetcher {
     }
 }
 
-#[cfg(feature = "chunked_net_fetch")]
+#[cfg(feature = "formats_weights")]
 impl ChunkFetcher for NetChunkFetcher {
     fn fetch(&self, _chunk_hash: &[u8; 32]) -> Option<Vec<u8>> {
         // Stub: no HTTP client linked. Returns None — the `TieredChunkFetcher`

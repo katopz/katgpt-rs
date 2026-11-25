@@ -14,7 +14,7 @@
 //!
 //! The kernel is pure arithmetic over caller slices — no context type, no
 //! allocation, no platform code. Gated
-//! `any(feature = "probe_guidance", feature = "loop_guidance")` so a build
+//! `any(feature = "decoding", feature = "decoding")` so a build
 //! carrying neither consumer compiles it to nothing (the feature-gate
 //! discipline); each root feature forwards its core twin.
 //!

@@ -157,7 +157,7 @@ pub mod cond_geometry;
 // ── Re-exports (always-on items) ────────────────────────────────────────
 
 pub use claim::{ClaimCard, Intervention, ValidityVerdict};
-#[cfg(feature = "dirichlet_energy")]
+#[cfg(feature = "diagnostics")]
 pub use dirichlet_energy::{
     consecutive_adjacency, dirichlet_energy, functor_adjacency, kv_cache_dirichlet_energy,
 };

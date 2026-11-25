@@ -215,7 +215,7 @@ pub fn best_belief_score(successes: u32, failures: u32, epsilon: f32) -> f32 {
 /// ε-extreme handling as [`best_belief_score`] (ε ≤ 0 → `X_MIN`, ε ≥ 1 →
 /// `X_MAX`). No LUT — fractional counts never hit the integer grid. The
 /// weighted-evidence readout (`grouped_evidence`, Issue 913 T3) routes here.
-#[cfg(feature = "grouped_evidence_weighting")]
+#[cfg(feature = "estimators")]
 #[inline]
 pub(crate) fn beta_quantile(a: f32, b: f32, epsilon: f32) -> f32 {
     match epsilon {

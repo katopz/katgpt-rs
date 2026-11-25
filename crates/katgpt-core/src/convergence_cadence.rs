@@ -353,10 +353,10 @@ impl<const K: usize> Default for ConvergenceCadence<K> {
 /// Default consecutive-`Settled` windows the shape arm requires (Issue 731
 /// T6 fix-forward). See [`LoopResidualExit::with_shape_persistence`] for the
 /// measurement that set it.
-#[cfg(feature = "cadence_gate")]
+#[cfg(feature = "compute_control")]
 pub const DEFAULT_SHAPE_PERSISTENCE: u32 = 2;
 
-#[cfg(feature = "cadence_gate")]
+#[cfg(feature = "compute_control")]
 #[derive(Debug, Clone)]
 pub struct LoopResidualExit {
     tau: f32,
@@ -377,7 +377,7 @@ pub struct LoopResidualExit {
     settled_run: u32,
 }
 
-#[cfg(feature = "cadence_gate")]
+#[cfg(feature = "compute_control")]
 impl LoopResidualExit {
     /// `tau` = the absolute magnitude threshold on the 3-window mean;
     /// `d_min` = the completed-iteration floor (values < 2 clamp to 2 — the
@@ -751,7 +751,7 @@ mod tests {
 
     // ── Issue 731 T1 — LoopResidualExit ─────────────────────────────────
 
-    #[cfg(feature = "cadence_gate")]
+    #[cfg(feature = "compute_control")]
     #[test]
     fn residual_exit_floor_holds_and_magnitude_arm_fires_on_tiny_window() {
         // d_min = 4: the window is fed from the first observation, but no
@@ -769,7 +769,7 @@ mod tests {
         assert_eq!(p.fired_at_iteration(), Some(4));
     }
 
-    #[cfg(feature = "cadence_gate")]
+    #[cfg(feature = "compute_control")]
     #[test]
     fn residual_exit_shape_arm_fires_on_decaying_sequence() {
         // Research-529 solved shape: decay to ~0.30 — Settled by shape even
@@ -804,7 +804,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "cadence_gate")]
+    #[cfg(feature = "compute_control")]
     #[test]
     fn residual_exit_never_fires_on_churning_high_plateau() {
         // Failed shape: plateau HIGH — neither arm may fire (tau tiny, shape
@@ -816,7 +816,7 @@ mod tests {
         assert!(p.fired_at_iteration().is_none());
     }
 
-    #[cfg(feature = "cadence_gate")]
+    #[cfg(feature = "compute_control")]
     #[test]
     fn residual_exit_nonfinite_never_forces_an_exit() {
         let mut p = LoopResidualExit::new(1e-3, 2);
@@ -831,7 +831,7 @@ mod tests {
 
     // ── Issue 731 T5 — the floor-calibration seam (`with_cadence_config`) ──
 
-    #[cfg(feature = "cadence_gate")]
+    #[cfg(feature = "compute_control")]
     #[test]
     fn with_cadence_config_default_matches_new_bit_identical() {
         // G3-style: the seam with the DEFAULT config is the same probe as
@@ -849,7 +849,7 @@ mod tests {
         assert_eq!(a.fired_at_iteration(), b.fired_at_iteration());
     }
 
-    #[cfg(feature = "cadence_gate")]
+    #[cfg(feature = "compute_control")]
     #[test]
     fn calibrated_floors_refuse_low_scale_churning_plateau() {
         // The Bench 873 mechanism (riir-ai Issue 881): CCE ‖Δρ‖₁ jumps to
@@ -904,7 +904,7 @@ mod tests {
     /// "guarded by construction". Both directions asserted: persistence 1
     /// (pre-T6) FIRES on the dip, the shipped default REFUSES it, and the
     /// plateau that follows never fires.
-    #[cfg(feature = "cadence_gate")]
+    #[cfg(feature = "compute_control")]
     #[test]
     fn shape_persistence_refuses_a_transient_dip_inside_a_high_plateau() {
         // Default floors (settle 0.5, plateau 1.0, decay_ratio_max 0.5).
@@ -937,7 +937,7 @@ mod tests {
     /// it — only persistence (or `decay_ratio_max`) does. This is why the T5
     /// calibration rule alone was insufficient (measured on held-out fixture
     /// seed 1003: identical fires from settle_floor 0.5 down to 1e-5).
-    #[cfg(feature = "cadence_gate")]
+    #[cfg(feature = "compute_control")]
     #[test]
     fn a_dip_defeats_every_absolute_floor_calibration() {
         let dip = [2.0_f32, 2.0, 2.0, 2.0, 0.8, 0.8];
@@ -965,7 +965,7 @@ mod tests {
 
     /// `with_shape_persistence(1)` is the recorded control arm and `0` clamps
     /// to it; the default constructors ship `DEFAULT_SHAPE_PERSISTENCE`.
-    #[cfg(feature = "cadence_gate")]
+    #[cfg(feature = "compute_control")]
     #[test]
     fn shape_persistence_accessor_and_clamp() {
         assert_eq!(
@@ -994,7 +994,7 @@ mod tests {
 
     /// Persistence must not weaken the MAGNITUDE arm: an absolute L = 3
     /// window mean below τ still exits at `d_min` with no shape evidence.
-    #[cfg(feature = "cadence_gate")]
+    #[cfg(feature = "compute_control")]
     #[test]
     fn persistence_does_not_gate_the_magnitude_arm() {
         let mut p = LoopResidualExit::new(1e-3, 4);
@@ -1007,7 +1007,7 @@ mod tests {
         assert_eq!(p.fired_at_iteration(), Some(4));
     }
 
-    #[cfg(feature = "cadence_gate")]
+    #[cfg(feature = "compute_control")]
     #[test]
     fn calibrated_floors_admit_high_scale_settling() {
         // The mirror calibration class: a loop whose settled plateau sits at

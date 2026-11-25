@@ -78,7 +78,7 @@ use crate::types::Rng;
 
 // Plan 602 T2.2: the anchor view is Plan-602 instrumentation and rides that
 // feature (this module itself stays always-on — only the view is gated).
-#[cfg(feature = "decode_order_metrics")]
+#[cfg(feature = "decoding")]
 use crate::dllm::UNMASKED_NEVER;
 
 /// Sentinel marking a masked (unrevealed) coordinate in observation vectors.
@@ -962,14 +962,14 @@ pub fn bernoulli_unmask_with_grid(
 /// `< anchor_cutoff` form the anchor set A; the committed remainder is the
 /// conditional chain. [`CertifiedSpineView::init_spine`] is the canonical
 /// cutoff: the init kernel's reveals, the certified high-confidence masks.
-#[cfg(feature = "decode_order_metrics")]
+#[cfg(feature = "decoding")]
 #[derive(Debug, Clone, Copy)]
 pub struct CertifiedSpineView<'a> {
     reveal_steps: &'a [u32],
     cutoff: u32,
 }
 
-#[cfg(feature = "decode_order_metrics")]
+#[cfg(feature = "decoding")]
 impl<'a> CertifiedSpineView<'a> {
     /// Split at `anchor_cutoff`: `π[i] < cutoff` ⇒ anchor.
     pub fn new(reveal_steps: &'a [u32], anchor_cutoff: u32) -> Self {
@@ -1160,7 +1160,7 @@ mod tests {
 }
 
 /// Plan 602 T2.2 anchor-view tests (feature-gated with the view).
-#[cfg(all(test, feature = "decode_order_metrics"))]
+#[cfg(all(test, feature = "decoding"))]
 mod anchor_view_tests {
     use super::*;
     use crate::dllm::UNMASKED_NEVER;

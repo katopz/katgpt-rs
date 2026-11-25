@@ -345,7 +345,7 @@ pub fn q_sample_refine(
 /// Orthogonal to the entropy-triggered switching above: that decides WHICH
 /// steps renoise (state-indexed), this bounds WHERE the renoise level
 /// lives (iteration-indexed). Deterministic, zero-allocation.
-#[cfg(feature = "horizon_weights")]
+#[cfg(feature = "estimators")]
 pub fn annealed_renoise_range(
     anneal: &crate::horizon_weights::TimeAnnealRange,
     iter: usize,
@@ -364,7 +364,7 @@ pub fn annealed_renoise_range(
 /// skip: the q-sample re-resolve there buys ~no signal at full cost
 /// ([`crate::horizon_weights::truncated_w_mass_fraction`], Bench 883
 /// measures the plain-truncation cost on the C9 toy).
-#[cfg(feature = "horizon_weights")]
+#[cfg(feature = "estimators")]
 pub fn renoise_level_skippable(t: f32, eps: f32, t_min: f32, horizon: f32) -> bool {
     crate::horizon_weights::truncated_w_mass_fraction(t, t_min, horizon) <= eps
 }
@@ -372,7 +372,7 @@ pub fn renoise_level_skippable(t: f32, eps: f32, t_min: f32, horizon: f32) -> bo
 /// Sigmoid activation: σ(x) = 1 / (1 + exp(-x)).
 /// Used instead of softmax for independent per-token probability gating.
 /// Delegates to [`crate::simd::fast_sigmoid`] (Cephes polynomial).
-#[cfg(any(feature = "q_sample_solver", feature = "self_cond_draft"))]
+#[cfg(any(feature = "q_sample_solver", feature = "decoding"))]
 #[inline]
 fn sigmoid(x: f32) -> f32 {
     crate::simd::fast_sigmoid(x)
@@ -383,7 +383,7 @@ fn sigmoid(x: f32) -> f32 {
 ///
 /// Delegates to `simd_argmax_f32` (NEON/AVX2) for the vocab-sized scan —
 /// called once per position in `SelfCondDraft::store_pass1`'s hot loop.
-#[cfg(any(feature = "q_sample_solver", feature = "self_cond_draft"))]
+#[cfg(any(feature = "q_sample_solver", feature = "decoding"))]
 #[inline]
 pub fn argmax(values: &[f32]) -> usize {
     if values.is_empty() {
@@ -408,7 +408,7 @@ pub fn argmax(values: &[f32]) -> usize {
 ///
 /// The drafter is stateful: Pass 1 populates the self-conditioning buffer,
 /// Pass 2 uses it for refinement.
-#[cfg(feature = "self_cond_draft")]
+#[cfg(feature = "decoding")]
 pub struct SelfCondDraft {
     /// Self-conditioning buffer: stores pass-1 marginals for pass-2 input.
     /// Same shape as the model's marginal output (vocab_size per position).
@@ -427,7 +427,7 @@ pub struct SelfCondDraft {
     pass2_buf: Vec<f32>,
 }
 
-#[cfg(feature = "self_cond_draft")]
+#[cfg(feature = "decoding")]
 impl SelfCondDraft {
     /// Create a new SelfCondDraft for the given dimensions.
     pub fn new(seq_len: usize, vocab_size: usize) -> Self {
@@ -572,7 +572,7 @@ impl SelfCondDraft {
 ///
 /// Caller guarantees the new elements will be fully written before any read.
 /// Avoids the O(n) memset that `Vec::resize` performs on the new tail.
-#[cfg(feature = "self_cond_draft")]
+#[cfg(feature = "decoding")]
 #[inline]
 fn grow_no_zero(v: &mut Vec<f32>, new_len: usize) {
     if v.len() >= new_len {
@@ -593,7 +593,7 @@ fn grow_no_zero(v: &mut Vec<f32>, new_len: usize) {
 /// Minimum Bayes Risk tree selection.
 /// Extracts K best paths, scores each against all others,
 /// selects the path with minimum total risk.
-#[cfg(feature = "mbr_tree_select")]
+#[cfg(feature = "decoding")]
 pub fn mbr_select(
     paths: &[Vec<f32>], // K candidate paths (each is a sequence of token probs)
     scores: &[f32],     // quality score for each path
@@ -721,7 +721,7 @@ impl RcdConfig {
 ///
 /// Zero-cost when `enabled=false` — the runtime check in `denoise_loop_rcd_3sr` falls
 /// through to `denoise_loop_rcd` with no further work.
-#[cfg(feature = "d2f_3sr_warm_start")]
+#[cfg(feature = "decoding")]
 #[derive(Clone, Copy, Debug)]
 pub struct ThreeStateReuseConfig {
     /// γ for UnchangedVisible positions — default 1.0 (full reuse).
@@ -736,7 +736,7 @@ pub struct ThreeStateReuseConfig {
     pub enabled: bool,
 }
 
-#[cfg(feature = "d2f_3sr_warm_start")]
+#[cfg(feature = "decoding")]
 impl Default for ThreeStateReuseConfig {
     fn default() -> Self {
         Self {
@@ -749,7 +749,7 @@ impl Default for ThreeStateReuseConfig {
     }
 }
 
-#[cfg(feature = "d2f_3sr_warm_start")]
+#[cfg(feature = "decoding")]
 impl ThreeStateReuseConfig {
     /// Disabled config (zero overhead — falls back to standard RCD loop).
     pub fn disabled() -> Self {
@@ -762,7 +762,7 @@ impl ThreeStateReuseConfig {
 
 /// Per-position transition type between two consecutive D2F denoising steps.
 /// Used by 3SR warm-start (Plan 291) to choose the warm-start coefficient γ.
-#[cfg(feature = "d2f_3sr_warm_start")]
+#[cfg(feature = "decoding")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum TransitionType {
@@ -781,7 +781,7 @@ pub enum TransitionType {
 /// `out`: output slice of length `z_prev_tokens.len()` (must equal `z_t_tokens.len()`).
 ///
 /// Zero allocation — caller-provided output buffer.
-#[cfg(feature = "d2f_3sr_warm_start")]
+#[cfg(feature = "decoding")]
 #[inline]
 pub fn classify_transitions(
     z_prev_tokens: &[usize],
@@ -814,7 +814,7 @@ pub fn classify_transitions(
 /// This is one scalar per step, not per-position — it modulates all still-masked γs together.
 ///
 /// Zero allocation — caller-provided output buffer.
-#[cfg(feature = "d2f_3sr_warm_start")]
+#[cfg(feature = "decoding")]
 #[inline]
 pub fn compute_gammas(
     transitions: &[TransitionType],
@@ -845,7 +845,7 @@ pub fn compute_gammas(
 ///
 /// This is the composition primitive from CoFRe §1.2 — operates per-position on
 /// the embedding/state buffer. Zero allocation; caller-provided buffers.
-#[cfg(feature = "d2f_3sr_warm_start")]
+#[cfg(feature = "decoding")]
 #[inline]
 pub fn warm_start_lerp(
     h_star_next: &[f32],
@@ -1220,7 +1220,7 @@ mod tests {
     // SelfCondDraft tests (feature-gated)
     // -----------------------------------------------------------------------
 
-    #[cfg(feature = "self_cond_draft")]
+    #[cfg(feature = "decoding")]
     #[test]
     fn test_self_cond_draft_two_pass_refines() {
         let seq_len = 2;
@@ -1259,7 +1259,7 @@ mod tests {
         assert_eq!(call_count, 2, "expected 2 passes, got {call_count}");
     }
 
-    #[cfg(feature = "self_cond_draft")]
+    #[cfg(feature = "decoding")]
     #[test]
     fn test_self_cond_draft_store_and_blend() {
         let seq_len = 2;
@@ -1290,7 +1290,7 @@ mod tests {
         // So we can't assert exact values, but should not be zero.
     }
 
-    #[cfg(feature = "self_cond_draft")]
+    #[cfg(feature = "decoding")]
     #[test]
     fn test_self_cond_draft_reset() {
         let mut drafter = SelfCondDraft::new(3, 4);
@@ -1310,7 +1310,7 @@ mod tests {
     // MBR tests (feature-gated)
     // -----------------------------------------------------------------------
 
-    #[cfg(feature = "mbr_tree_select")]
+    #[cfg(feature = "decoding")]
     #[test]
     fn test_mbr_select() {
         let paths = vec![vec![1.0], vec![2.0], vec![3.0]];
@@ -1399,7 +1399,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "mbr_tree_select")]
+    #[cfg(feature = "decoding")]
     #[test]
     fn bench_mbr_select_5_candidates() {
         let paths: Vec<Vec<f32>> = (0..10).map(|i| vec![0.1 * i as f32; 16]).collect();
@@ -1563,7 +1563,7 @@ mod tests {
     // Compares MBR select output against BestQ (argmax) and EqR strategies.
     // -----------------------------------------------------------------------
 
-    #[cfg(feature = "mbr_tree_select")]
+    #[cfg(feature = "decoding")]
     #[test]
     fn bench_t13_mbr_vs_bestq_vs_eqr() {
         // Simulate 20 candidate paths with known score distribution
@@ -1824,7 +1824,7 @@ mod tests {
     // Three-State Reuse (3SR) tests (Plan 291, feature: d2f_3sr_warm_start)
     // -----------------------------------------------------------------------
 
-    #[cfg(feature = "d2f_3sr_warm_start")]
+    #[cfg(feature = "decoding")]
     #[test]
     fn test_3sr_config_default() {
         let cfg = super::ThreeStateReuseConfig::default();
@@ -1838,7 +1838,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "d2f_3sr_warm_start")]
+    #[cfg(feature = "decoding")]
     #[test]
     fn test_3sr_config_disabled() {
         let cfg = super::ThreeStateReuseConfig::disabled();
@@ -1848,7 +1848,7 @@ mod tests {
         assert!((cfg.gamma_masked_min - 0.75).abs() < 1e-6);
     }
 
-    #[cfg(feature = "d2f_3sr_warm_start")]
+    #[cfg(feature = "decoding")]
     #[test]
     fn test_3sr_classify_transitions() {
         let mask = 99;
@@ -1866,7 +1866,7 @@ mod tests {
         assert_eq!(out[3], super::TransitionType::NewlyRevealed);
     }
 
-    #[cfg(feature = "d2f_3sr_warm_start")]
+    #[cfg(feature = "decoding")]
     #[test]
     fn test_3sr_compute_gammas() {
         let cfg = super::ThreeStateReuseConfig::default();
@@ -1907,7 +1907,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "d2f_3sr_warm_start")]
+    #[cfg(feature = "decoding")]
     #[test]
     fn test_3sr_warm_start_lerp() {
         // 2 positions, n_embd = 2.
@@ -1943,7 +1943,7 @@ mod tests {
 
     // ---- Issue 875 T3: annealed renoise ranges (horizon_weights) ----
 
-    #[cfg(feature = "horizon_weights")]
+    #[cfg(feature = "estimators")]
     #[test]
     fn annealed_renoise_range_scales_with_schedule() {
         use crate::horizon_weights::TimeAnnealRange;
@@ -1969,7 +1969,7 @@ mod tests {
         assert_eq!(a.1.to_bits(), b.1.to_bits());
     }
 
-    #[cfg(feature = "horizon_weights")]
+    #[cfg(feature = "estimators")]
     #[test]
     fn renoise_level_skippable_wraps_the_ceiling() {
         // At eps = ((1-0.70)/(1-0.02))^2, levels at/above 0.70 are

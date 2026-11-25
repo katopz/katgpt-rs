@@ -131,10 +131,10 @@ pub mod stats;
 
 pub mod softmax_fix;
 
-#[cfg(feature = "relaxed_accept")]
+#[cfg(feature = "decoding")]
 pub mod relaxed_accept;
 
-#[cfg(any(feature = "probe_guidance", feature = "loop_guidance"))]
+#[cfg(any(feature = "decoding", feature = "decoding"))]
 pub mod contrast_combine;
 
 #[cfg(feature = "path_kernel_sim")]
@@ -142,7 +142,7 @@ pub mod path_kernel_sim;
 
 pub mod rating;
 
-#[cfg(feature = "laprop")]
+#[cfg(feature = "estimators")]
 pub mod laprop;
 
 pub mod prover_selection;
@@ -201,16 +201,16 @@ pub use tether::{
     TetherStats, control_variate_improves, fit_rho, horizon_decay, sse,
 };
 
-#[cfg(feature = "ignition_schedule")]
+#[cfg(feature = "estimators")]
 pub mod ignition;
-#[cfg(feature = "ignition_schedule")]
+#[cfg(feature = "estimators")]
 pub use ignition::{IgnitionSchedule, commit_time_star, ignition_time, order_by_ignition_into};
 
 pub mod conformal;
 #[cfg(feature = "limit_fixture")]
 pub mod limit_fixture;
 
-#[cfg(feature = "incidence_algebra")]
+#[cfg(feature = "latent_geometry")]
 pub mod incidence;
 
 #[cfg(feature = "evidence_tripwire")]
@@ -309,7 +309,7 @@ pub mod scale_invariant;
 #[cfg(feature = "logit_regime")]
 pub mod logit_regime;
 
-#[cfg(feature = "sparse_kl_bound")]
+#[cfg(feature = "diagnostics")]
 pub mod sparse_kl;
 
 // Issue 1229: the Lepski agreement cascade (adaptive_k third arm, Research 681)
@@ -342,10 +342,10 @@ pub mod closure_phase;
 // hypergeometric overlap null, I3 pruning-knee census) — one feature, one
 // module, the sparse_kl_bound shape; I4's readout lands in katgpt-pruners
 // beside the shipped constructor.
-#[cfg(feature = "reward_census")]
+#[cfg(feature = "diagnostics")]
 pub mod reward_census;
 
-#[cfg(feature = "verify_cache")]
+#[cfg(feature = "diagnostics")]
 pub mod verify_cache;
 
 pub mod simd_lut_dequant;
@@ -474,7 +474,7 @@ pub use traits::{
 };
 pub use traits::{GenerativeConstraintPruner, SpeculativeGenerator};
 
-#[cfg(feature = "recursion_logits")]
+#[cfg(feature = "compute_control")]
 pub use traits::RecursionLogits;
 
 #[cfg(feature = "qgf_oracle")]
@@ -530,9 +530,9 @@ pub use hippocampal_cache_dyn::HippocampalCacheDyn;
 
 pub mod tiered_kv;
 
-#[cfg(feature = "hga")]
+#[cfg(feature = "attention_memory")]
 pub mod hga;
-#[cfg(feature = "hga")]
+#[cfg(feature = "attention_memory")]
 pub use hga::{GroupSummaryCache, MixedRopeSummarizer};
 
 pub mod renoise_ce;
@@ -543,14 +543,14 @@ pub use renoise_ce::{
 
 pub use renoise_ce::best_of_n_freedom;
 
-#[cfg(feature = "horizon_weights")]
+#[cfg(feature = "estimators")]
 pub use renoise_ce::{RenoiseCeHorizon, renoise_ce_score_horizon};
 
 pub use renoise_ce::renoise_ce_surprise;
 
-#[cfg(feature = "horizon_weights")]
+#[cfg(feature = "estimators")]
 pub mod horizon_weights;
-#[cfg(feature = "horizon_weights")]
+#[cfg(feature = "estimators")]
 pub use horizon_weights::{
     HORIZON_WEIGHT_GRID, HorizonWeightTable, TimeAnnealRange, pfd_horizon_weight_at,
     pfd_horizon_weights, remaining_horizon_t_sample, remaining_horizon_weight,
@@ -624,9 +624,9 @@ pub use types::{HydraBudgetConfig, HydraLayerProfile};
 #[cfg(feature = "collapse_aware_thinking")]
 pub use types::ThinkingBudget;
 
-#[cfg(feature = "questbench")]
+#[cfg(feature = "diagnostics")]
 pub mod questbench;
-#[cfg(feature = "questbench")]
+#[cfg(feature = "diagnostics")]
 pub use questbench::{
     CspDomain, MemoryTier, QuestBenchDecision, SyntheticCsp, UnderspecConfig, find_sufficient_set,
     generate_synthetic_csps, tier_from_score, underspecification_score,
@@ -680,9 +680,9 @@ pub mod peira;
 #[cfg(feature = "peira_distill")]
 pub use peira::{PeiraConfig, PeiraCovariance, peira_aux_loss};
 
-#[cfg(feature = "dirichlet_energy")]
+#[cfg(feature = "diagnostics")]
 pub mod dirichlet;
-#[cfg(feature = "dirichlet_energy")]
+#[cfg(feature = "diagnostics")]
 pub use dirichlet::{
     consecutive_adjacency, dirichlet_energy, functor_adjacency, kv_cache_dirichlet_energy,
 };
@@ -725,7 +725,7 @@ pub use traits::{GameConfig, MutantConfig, MutationKind, ProblemMutator};
 
 #[cfg(feature = "modal_spec")]
 pub mod linoss;
-#[cfg(feature = "mux_pruner")]
+#[cfg(feature = "decoding")]
 pub mod mux;
 
 // Sense substrate was spun out to the `katgpt-sense` crate (Issue 007 Phase E
@@ -753,9 +753,9 @@ pub use slod::{
 #[cfg(feature = "spectral_pruner")]
 pub mod irrep_pruner;
 
-#[cfg(feature = "frozen_evidence")]
+#[cfg(feature = "compute_control")]
 pub mod frozen_evidence;
-#[cfg(feature = "frozen_evidence")]
+#[cfg(feature = "compute_control")]
 pub use frozen_evidence::{
     DEFAULT_DRIFT_CHAOS, DEFAULT_DRIFT_STUCK, FrozenEvidence, RecurrenceHealth, classify_drift,
     cosine, deliberate, gate_map_into, transition_into,
@@ -768,7 +768,7 @@ pub mod subspace_phase_gate;
 
 pub mod subspace_intervention;
 
-#[cfg(feature = "refinement_marginal")]
+#[cfg(feature = "decoding")]
 pub mod refinement_marginal;
 
 #[cfg(feature = "group_invariance_probe")]
@@ -786,7 +786,7 @@ pub mod latent_confounder_audit;
 #[cfg(feature = "leakage_probe")]
 pub mod leakage_probe;
 
-#[cfg(feature = "nuisance_fraction")]
+#[cfg(feature = "diagnostics")]
 pub mod nuisance_fraction;
 
 #[cfg(feature = "interpolation_geometry")]
@@ -873,7 +873,7 @@ pub use swe_trajectory_freeze::{
 #[cfg(feature = "latent_confounder_audit")]
 pub use latent_confounder_audit::{AuditScratch, LatentConfounderAudit, audit_confounders};
 
-#[cfg(feature = "nuisance_fraction")]
+#[cfg(feature = "diagnostics")]
 pub use nuisance_fraction::{
     RHO_CONVENTION, RhoError, RhoReport, RhoScratch, alignment_floor, rho_fraction,
 };
@@ -1046,9 +1046,9 @@ pub use position_group_action::{
 
 pub mod rotary_value_embedding;
 
-#[cfg(feature = "grape_ap_vector")]
+#[cfg(feature = "attention_memory")]
 pub mod grape_ap;
-#[cfg(feature = "grape_ap_vector")]
+#[cfg(feature = "attention_memory")]
 pub use grape_ap::{GrapeApError, GrapeApGate, RotationSchedule, log_sigmoid};
 
 pub mod grape_joint_lift;
@@ -1224,9 +1224,9 @@ pub use mop::{MopConfig, MopConfigError, MopScratch, MopSolution, MopSolver};
 pub mod hmm_control;
 pub use hmm_control::{HmmControlSolver, HmmInputError, HmmSolution};
 
-#[cfg(feature = "gw_alignment")]
+#[cfg(feature = "latent_geometry")]
 pub mod gw_alignment;
-#[cfg(feature = "gw_alignment")]
+#[cfg(feature = "latent_geometry")]
 pub use gw_alignment::{
     GW_ITERS, GW_MAX, GW_SCORE_BETA, GW_TAIL_PASSES, GwError, GwScratch, gw_coupling,
     score_from_loss,
@@ -1284,12 +1284,12 @@ pub use structural_cot_halt::{
     compose_votes, normalized_answer_hash,
 };
 
-#[cfg(feature = "cadence_gate")]
+#[cfg(feature = "compute_control")]
 pub mod convergence_cadence;
-#[cfg(feature = "cadence_gate")]
+#[cfg(feature = "compute_control")]
 pub use convergence_cadence::{CadenceConfig, CadenceVerdict, ConvergenceCadence};
 
-#[cfg(feature = "kl_depth_probe")]
+#[cfg(feature = "compute_control")]
 pub mod loop_depth_probe;
 
 pub mod loop_alignment_probe;
@@ -1335,7 +1335,7 @@ pub use karc::{
     forecast_low_rank_apply, higher_order_feature_count, low_rank_fit, low_rank_fit_warm_start,
 };
 
-#[cfg(feature = "karc_regime_gate")]
+#[cfg(feature = "estimators")]
 pub use karc::regime_gate::{KarcRegime, KarcRegimeGate, RegimeVerdict};
 
 #[cfg(feature = "karc_conditioned_readout")]
@@ -1381,9 +1381,9 @@ pub use inversion::{
     invert_sequence, invert_sequence_into,
 };
 
-#[cfg(feature = "similarity_inference")]
+#[cfg(feature = "planning")]
 pub mod similarity_inference;
-#[cfg(feature = "similarity_inference")]
+#[cfg(feature = "planning")]
 pub use similarity_inference::{
     JointActionHistory, PayoffMatrix, SimilarityError, SimilarityPosterior, canonical_pd,
     embedded_best_response, embedded_best_response_into,
@@ -1494,7 +1494,7 @@ pub use velocity_field_disagreement::{VfdScore, VfdScratch, VfdVarianceSignal, v
 pub mod welford;
 pub use welford::WelfordVariance;
 
-#[cfg(feature = "perturbation_ensemble")]
+#[cfg(feature = "estimators")]
 pub mod perturbation_ensemble;
 
 // ── Phase 10 absorption (Proposal 003, 2026-07-04): modules moved from katgpt-rs/src/.
@@ -1508,19 +1508,19 @@ pub mod trigger_gate; // Compute-tier trigger gate — always-on
 #[cfg(feature = "critical_interval_gate")]
 pub mod dllm_solver; // Discrete Critical Interval Solver Switching (Plan 222)
 
-#[cfg(feature = "decode_order_metrics")]
+#[cfg(feature = "decoding")]
 pub mod dllm;
 
 #[cfg(feature = "entropy_bounded_commit")]
 pub mod entropy_bounded_commit;
 
-#[cfg(feature = "decode_order_metrics")]
+#[cfg(feature = "decoding")]
 pub mod anchor_score;
 
-#[cfg(feature = "decode_order_metrics")]
+#[cfg(feature = "decoding")]
 pub use ugc_schedule::CertifiedSpineView;
 
-#[cfg(feature = "decode_order_metrics")]
+#[cfg(feature = "decoding")]
 pub use set_diffusion_schedule::{
     ORDER_STATS_TO_W_TABLE, confidence_threshold_eligible, inverse_lambda_slot_counts,
     predict_w_from_order_stats, predict_w_residual,
@@ -1532,16 +1532,16 @@ pub mod pipeline_pruner; // Pipeline Pruner — modality-aware inference pipelin
 pub mod breakeven;
 #[cfg(feature = "closed_unit_compaction")]
 pub mod compaction; // Closed-Unit Compaction Gate — CUCG (Plan 333)
-#[cfg(feature = "cubical_nerve")]
+#[cfg(feature = "latent_geometry")]
 pub mod cubical_nerve; // CubicalNerve CAT(0) cubical complexes (Plan 252 Phase 3)
 #[cfg(feature = "mux_latent_context")]
 pub mod mux_latent; // MUX-Latent Context Compression (Research 211, Plan 238) // Breakeven complexity cost-aware routing (Plan 250)
 // Feature-gated (mirror root feature names):
 pub mod cce;
 pub mod llmexec_guard;
-#[cfg(feature = "memory_soup_lora")]
+#[cfg(feature = "formats_weights")]
 pub mod memory_soup_lora;
-#[cfg(feature = "mux_demux")]
+#[cfg(feature = "decoding")]
 pub mod mux_demux;
 pub mod salience;
 pub use salience::{
@@ -1552,7 +1552,7 @@ pub mod channel_simd;
 
 #[cfg(feature = "bf16_simd")]
 pub mod bf16_convert;
-#[cfg(feature = "skill_opt")]
+#[cfg(feature = "planning")]
 pub mod skill_opt;
 pub mod ssd_block;
 
@@ -1738,12 +1738,12 @@ pub mod contrastive_scope;
 #[cfg(feature = "successor_density_critic")]
 pub mod successor_density_critic;
 
-#[cfg(feature = "bounded_target")]
+#[cfg(feature = "estimators")]
 pub mod bounded_target;
-#[cfg(feature = "bounded_target")]
+#[cfg(feature = "estimators")]
 pub mod realization_gap;
 
-#[cfg(feature = "anchored_reach")]
+#[cfg(feature = "estimators")]
 pub mod anchored_reach;
 #[cfg(feature = "anti_common_mode")]
 pub mod anti_common_mode;
@@ -1785,7 +1785,7 @@ pub mod bmr;
 
 pub mod slt;
 
-#[cfg(feature = "graph_stable_pool")]
+#[cfg(feature = "attention_memory")]
 pub mod graph_stable_pool;
 
 #[cfg(feature = "pool_admission")]
@@ -1835,10 +1835,10 @@ pub mod soft_read;
 #[cfg(feature = "factorized_action")]
 pub mod gmm_support;
 
-#[cfg(feature = "dirichlet_dist")]
+#[cfg(feature = "estimators")]
 pub mod dirichlet_dist;
 
-#[cfg(feature = "grouped_evidence_weighting")]
+#[cfg(feature = "estimators")]
 pub mod grouped_evidence;
 
 pub mod fitted_anchor_table;
@@ -1889,13 +1889,13 @@ pub mod decision_wire;
 #[cfg(feature = "extraction_wire")]
 pub mod extraction_wire;
 
-#[cfg(feature = "runetrace")]
+#[cfg(feature = "formats_weights")]
 pub mod runetrace;
 
 #[cfg(feature = "usage_rate_eviction")]
 pub mod kv_sink_window;
 
-#[cfg(feature = "coverage_manifest")]
+#[cfg(feature = "attention_memory")]
 pub mod coverage_manifest;
 
 #[cfg(feature = "step_noise")]
@@ -1915,10 +1915,10 @@ pub use step_noise::regime_from_stagnation_counter;
 // Plan 633 T0 / issue 987 priority-1: the adoption/retention regression
 // gate (AGCL form, Research 657 §A5) — opt-in decision machinery beside
 // rating/step_noise.
-#[cfg(feature = "adoption_gate")]
+#[cfg(feature = "compute_control")]
 pub mod adoption_gate;
 
-#[cfg(feature = "adoption_gate")]
+#[cfg(feature = "compute_control")]
 pub use adoption_gate::{
     AdoptionDecision, AdoptionGate, AdoptionVerdict, DedupRing, OutcomeDigest,
 };
@@ -1926,10 +1926,10 @@ pub use adoption_gate::{
 // selection hysteresis latch (issue 987 Temporal-MoE lead, Research 657
 // §A1) — keep the previous pick unless the challenger clears a sigmoid
 // margin; abstain ⇒ reuse. Beside adoption_gate in the 987 decision lane.
-#[cfg(feature = "pick_latch")]
+#[cfg(feature = "compute_control")]
 pub mod pick_latch;
 
-#[cfg(feature = "pick_latch")]
+#[cfg(feature = "compute_control")]
 pub use pick_latch::{LatchDecision, PickLatch};
 
 // fitted rule-circuit overlay primitive (issue 988, Research 658) —
