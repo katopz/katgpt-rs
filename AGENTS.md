@@ -873,7 +873,16 @@ the expiry breaks the parse MALFORMED (both variants measured live 2026-11-18:
 riir-refine 385/387 for the first, 310 + seal-sprints 052 for the second —
 fixes fa53897e08a/6a1adc8f736/6f018b12/d46b1b3 in their repos). Lint first:
 `py ../katgpt-rs/scripts/claim_lease_check.py --lint <file>` (malformed or
-ambiguous lines blind the check for every lane). **The check also
+ambiguous lines blind the check for every lane). **EMBEDDED-CLAIM is its own
+lint class now (2026-11-25, `d11c34972`)** — claim fields riding inside ANY
+line the grammar cannot anchor (the paren-qualified `**Claimed (T3a/T3b):** ...`
+shape, or a mid-line claimed-by) parse NONE: `--lint` fires the class at birth
+(exit 1, reshape printed), at read time the row surfaces EMBEDDED and `--item`
+refuses the unclaimed verdict (the MALFORMED treatment); the detector arms on
+the FULL shape only (claim word + 9-10-digit epoch + parsable `expires` —
+`**Lease closed:**` rows/templates/closure narrative suppressed, 13-digit
+ms-epochs out). Corpus repaired same-day: seal-sprints 141 `a87934c`,
+riir-refine 331 `63c4bcb0`, seal-remake 076 `bebc5b11`. **The check also
 freshness-checks the enclosing dir's `.highwater` (Issue 1240): a counter
 below the dir's max allocated number — or a populated dir with no counter
 — refuses `--item` (bump the counter in the same commit as your
