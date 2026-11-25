@@ -1,0 +1,94 @@
+# Research 693: Neuron Basis — Output-Contribution Readout, J-Share Census, Trigger Vote (Anthropic Fellows pair)
+
+> **Source:** Anthropic Fellows (Jasmine Shone, Lisa Dunlap), two posts, 2026-11-23:
+> Part 1 — "Returning to the Neuron Basis for Interpretability, Part 1: Answering Three Objections" — https://alignment.anthropic.com/2026/neuron-basis-theory/
+> Part 2 — "…Part 2: Using Neurons For Safety Applications" — https://alignment.anthropic.com/2026/neuron-basis-applications/
+> **Date:** 2026-11-25
+> **Status:** Active — **GAIN** (modelless track: two riir-infer issues filed this session — `.issues/1250` readout pre-screen, `.issues/1251` trigger-vote checkpoint screen; training track: observation rows only, below the ≥3 backlog bar — no Path 0.5 plan). No mechanism-novelty claim (see §4 — the raw classes are published).
+> **Related Research:** 684 (Fermion census — the interventional sibling; its §3 table already diffs `mech_attribution`), 388 (J-lens — single-layer collapse + the serving-prefilter REFUTED verdict; this note's readout is the offline per-model posture 388 did not cover), 666 (neuron-lens lane — weight-only reads, serving-demoted; offline artifacts exempt), 053 (CNA — activation-diff attribution), 491 (Steerling — calibrated steering γ=τ/peak, the dose-normalization cousin), 301 (probe bank — contrastive-pair directions; §7 carries the weight-direction construction idea), 422 + 268 (provenance/forensic — the supply-chain audit lane 1251 arms), 286 (depth-invariance — recursive-state magnitude, NOT the layer-basis claim), 180 (Rosetta kurtosis monosemanticity — the SAE-era selectivity metric this pair's J-share supersedes for neurons), 658 (circuit grafts), 678 (iWSP audit instruments), 648 (WSP parent)
+> **Cross-refs:** `riir-infer/.issues/1250_neuron_census_static_readout_prescreen.md` · `riir-infer/.issues/1251_checkpoint_trigger_vote_screen.md` · katgpt-core `surgical_read_patch::plan_fact_swaps` (§5 caveat, no code change filed)
+> **Classification:** Public
+
+---
+
+## Pinned claim (pre-§4, one sentence)
+
+Weight-only neuron-output-vector readouts (lens over down-proj columns), a verbalizability census over them, and trigger-vote ranking of finetune deltas are all PUBLISHED classes — their value here is three fusion batteries for live lanes: (1) a static weights-only readout+J-share pre-screen in front of riir-infer's interventional census (1241) that also characterizes BOTH neuron signs (the census keeps only `best_sign` today), (2) a closed-form trigger-vote supply-chain screen for third-party checkpoints, poc'd against an overlay-planted synthetic backdoor on our own machinery, and (3) validation-with-caveat for the surgical_read_patch fact-swap premise (facts readable, but multi-path: answer-writers alone leave 15/18 answers on top).
+
+## TL;DR
+
+Part 1 re-opens the neuron basis with a sign of respect: an MLP neuron is one context-gated scalar times one fixed output vector w (its down-proj column), and reading **what w adds** (via the J-lens of arXiv:2607.15495) rather than **what causes it to fire** dissolves the three classic objections — (F1) signed-direction type-3 polysemanticity (adds two unrelated concepts with ONE sign) is ≤~1% of measured signed directions (35 real neurons found across four models, first reported); the common "polysemantic" neuron is type 1 (activates broadly, adds one concept) or type 2 (two signs = two concepts, never both at once). (F2) Neurons write in an approximately fixed basis across layers: middle-layer MLPs strongly shrink almost no residual directions (Llama-3.1: 84 directions in total across all middle layers of 4096 per layer; median layer 0–1, worst single layer 10), and moving an output vector to nearly any other layer keeps its meaning (91–98% of concept-layer pairs beat random) — depth-drift is later neurons adding new FACETS (moon: word/night/crescent/space/sky), nearly orthogonal vectors per facet. (F3) Facts are recalled through several interpretable paths: answer-writer neurons (readout = the answer) plus multi-hop attribute neurons; removing the fact takes 44–273 neurons but ALL are readable (answer writers, fact-related, readable correlates); answer-writer removal alone leaves the answer on top for 15/18 facts; book/package facts are computed at the ANSWER position in late layers (17–31), not at the subject token where ROME-class edits aim — a direct caution for edit/unlearning layer targeting. After removal the model substitutes a same-kind answer (Borges for Márquez) — a plausible hallucination mechanism.
+
+Part 2 turns neurons into zero-training tools on open-weight models: zero-shot detectors (neurons picked by readout/activation-description similarity; score = cos(residual stream, signed w) — a fixed-direction probe needing no labels) beat text search on 11/16 safety sets and every SAE baseline on AxBench (0.903 vs 0.888), match 40-label probes on 7/16 sets; steering with 4–9 readout-picked neurons matches TRAINED steering vectors (21% vs 21.4% behavior rate, vs 8% fixed-rule SAE); finetune-vs-base neuron diffing shows finetuning REUSES pretraining neurons (activation change correlates with base-output-vector alignment beyond ≥98.5% of random directions — a first-order prediction of how weights will change); the blind auditing game (steer along top singular vectors of ΔW per layer, then read the base neurons aligned with them) names a hidden behavior in 75% of 174 audits vs 40% outputs-only; neuron voting (each neuron votes for the 15 tokens whose gate/up pre-activations changed most; tokens ranked by votes) puts 54% of backdoor triggers in top-50 across 74 backdoored models, beating summed-change (55/74) and embedding-shift (63/74); and 14/23 WMDP-cyber unlearning checkpoints still rank the correct answer first under cloze scoring — unlearning methods that pass the standard metric mostly implement a BACKDOOR (topic text is the trigger; noise/suppression is the behavior), with restoring a few dozen neurons' contributions recovering the lost answers.
+
+---
+
+## 1. What is genuinely new in the pair (mechanism level)
+
+1. **The type-1/2/3 taxonomy over signed output vectors** — prior work defined polysemanticity by activation contexts only; this pair tests whether one activation ADDS two unrelated concepts (type 3), with a 4-check interventional audit and a synthetic-neuron recall calibration (62–81%). Type 3 exists but is ≤~1%: the soundness premise for treating each signed direction as one concept unit.
+2. **J-share** — fraction of w explained by a ≤25-token nonnegative combination of J-lens directions, percentile-ranked against same-layer random directions; the census that 19–29% of neurons are "high verbalizability" and that LOW-J-share neurons align with later attention queries (53–76% strongly aligned, AUROC 0.69–0.77 vs kurtosis 0.34–0.64) — the first vocabulary-projection verbalizability fraction we have recorded for neurons.
+3. **The fixed-basis layer-transfer experiment** — inject w at every layer, measure the concept logit vs a same-norm random direction; 90–98% of pairs keep the meaning before the last tenth of depth. Complements (does not contradict) depth-drift work: the DRIFT is facet accretion, not basis rotation.
+4. **Facts are multi-path but readable** — the removal protocol (interpretable-neurons-only removal sets, resample ablation on made-up subjects, removal = answer no longer top-1) and the athlete/book/package localization split (name+layers 2–13 vs answer position+layers 17–31).
+5. **Neuron voting** (mechanism novel-ish, class published — see §4), the auditing-game recipe (ΔW singular steering + aligned-neuron readouts), and the unlearning-as-backdoor mechanistic account with the contribution-restoration measurement.
+
+## 2. Path 0 inventory (three-track; per-track verdicts never pooled)
+
+| Component | Coverage here | Extraction (modelless?) | Disposition |
+|---|---|---|---|
+| Lens readout of neuron output vectors (weights-only) | PARTIAL — 666 lens lane reads weights but serving-demoted; no per-neuron readout census ships | YES (offline, per-model, one-shot) | **Extracted** → riir-infer 1250 T1 |
+| Verbalizability fraction (J-share) | NONE (180's kurtosis is a distribution statistic, not a vocabulary-projection fraction) | YES (NNLS over ≤25 lens directions, deterministic) | **Extracted** → 1250 T2 |
+| Both-signs characterization | PARTIAL — census rows carry `direction_sign` (best arm only), never per-sign concepts | YES | **Extracted** → 1250 T3 |
+| Sweep-ordering prior (screen → interventional census) | NONE — 1241 orders by layer band only | YES | **Extracted** → 1250 T4 (GOAT: confirmation-per-budget vs unordered sweep) |
+| Trigger vote (Δ gate/up · e voting) | NONE (422 is constructive/cryptographic provenance, not detective) | YES (closed-form over weight pairs) | **Extracted** → 1251 T1 |
+| Synthetic-backdoor poc fixture | YES — `closed_form_write` / `weight_edit_overlay` machinery ships (980/1189) | YES | **Extracted** → 1251 T2–T3 |
+| Zero-shot probe = cos(residual, signed w) | PARTIAL — 301's bank uses contrastive-pair directions; fixed weight-direction probing with readout-selected neurons does not ship | YES (scoring is weights-only; selection needs activations/metadata) | **Fusion idea** (§7) — construction source for the 301 bank, not a new lane |
+| Steering with down-proj columns, ‖r_L‖-normalized | PARTIAL — `latent_steering` + `calibrate_alpha` (491 γ=τ/peak is the same normalization family) | YES | **Corroboration** — direction-source option for existing lanes, no new primitive |
+| Finetune-reuses-neurons audit (Δactivation vs base-output alignment) | NONE as a post-train audit step | YES (weights + forward passes, no GD) | **Fusion idea** (§7) → riir-train post-train audit candidate |
+| Unlearning audit (cloze + contribution restoration) | NONE — we ship MANCE erasure (409), no unlearning audit lane | YES | **Recorded** — no consumer lane; re-open if 409 grows an audit arm |
+| Subliminal-learning LoRA-rank hypothesis (low-rank adapters collapse toward the teacher-prompt direction) | PARTIAL — our LoRA distill lanes (141, GDSD) | NO (observation) | **Observation row** for riir-train backlog context |
+
+**Modelless track: GAIN** (1250 + 1251). **Training track: observation rows only** — the pair proposes NO training recipe; two context rows (subliminal/LoRA-rank, reuse-prediction) sit below the ≥3-row backlog rule, so no riir-train plan fires (684's Plan 505 remains the open training backlog).
+
+## 3. Coverage map — §3.6 signal-diffs (every dismissal read at source)
+
+| Shipped/published cousin | What it consumes | This pair's instrument | Verdict |
+|---|---|---|---|
+| `census_screen::screen_auroc` (katgpt-pruners 1237) | per-unit ACTIVATIONS vs labels (forward passes on every unit) | readout screen consumes ONLY W + a lens map (no forward pass for scoring) | **New cheaper tier** — a static pre-screen in front of the activation screen, not a replacement |
+| riir-infer census `CensusRow.direction_sign` | best arm's sign of the winning push | type-2 says both signs are separate concept units (mascara +w / radio −w) | **Refinement, not coverage** — 1250 T3 |
+| 666 lens lane (serving-demoted) | weight-only hand-rule reads | offline per-model readout census artifacts | **Posture-legal** — 684's line holds: the demotion binds serving claims, never offline census artifacts |
+| 388 J-lens note | single-layer collapse; serving prefilter REFUTED (latency) | offline corpus-averaged J-lens for readouts (per-model one-shot, never on a hot path) | **No conflict** — different posture than the refuted one |
+| `weight_audit` (1209) | five static weight-structure features (norm/rank/tie/alignment) | verbalizability = vocabulary-projected fraction | **Same lane shape, different quantity** |
+| 491 Steerling calibrated steering | γ = τ/peak(e_c) | dose = c·‖r_L‖·ŵ | **Same normalization family** — corroboration |
+| 301 probe bank | contrastive-pair directions (data-derived) | weights+metadata-selected neuron directions (zero activation capture for scoring) | **Complementary construction source** (§7) |
+| 422 provenance (backdoor-as-signature) | constructive cryptographic plant, specific architecture | detective statistical vote over arbitrary finetunes | **Complementary halves of one supply-chain story** — 1251 arms the detective half; 422's issue 138 untouched |
+| arXiv:2611.19304 (Khilar, 2026-11-14) | down-proj readout of finetune deltas names triggers, with an adaptive-attack evasion arm | gate/up Δ voting, 74-model corpus, + the auditing-game steering arm | **Class collision — cited, never claimed novel**; 1251 differentiates by machinery (overlay fixture) and target (our checkpoint pins) |
+| Geva et al. 2022 / Logit Prisms / Backward Lens | read down-proj columns / per-neuron logit contributions | adds interventional testing, J-share, type taxonomy, fixed-basis transfer | **Readout class established pre-2026** — novelty refused |
+| arXiv:2505.23270 (unlearning persists) + Lynch 2024 | prompt-format robustness of unlearning | cloze-scoring on 23 checkpoints + contribution-restoration + the backdoor mechanism account | **Thesis established; the mechanistic account is their contribution** — recorded, no filing |
+
+## 4. Published prior art (§4, run this session via subagent)
+
+1. **The posts themselves**: heavy 48h coverage, no third-party replication/critique/code release yet (2 days old).
+2. **Trigger-from-weights**: arXiv:2611.19304 "A Backdoor Trigger Is Legible in Fine-Tune Weights" (2026-11-14) + PEFTGuard (IEEE S&P 2025) — the class EXISTS. Neuron voting is a different statistic (gate/up deltas vs their down-proj readout) on a bigger corpus.
+3. **Neuron output-vector readouts**: Geva et al. ACL 2022 (down-proj columns as concept neurons), Logit Prisms (Nguyen 2024, per-neuron vocabulary-logit decomposition), Backward Lens (Katz 2024), logit lens (2020). J-share, the type taxonomy, and the fixed-basis claim appear new.
+4. **Zero-shot weight-direction classifiers**: PARTIAL — refusal-direction line (Arditi NeurIPS 2024) fits on labeled contrast pairs; no pre-2026 weight-only zero-shot safety detector beating trained/SAE baselines found. The pair's strongest novelty residue.
+5. **Unlearning hides-not-removes**: arXiv:2505.23270 (May 2025, 3×6×5 grid incl. cloze), Lynch 2024, LUCID (AAAI 2026). The 14/23 WMDP cloze measurement + backdoor mechanism account are new measurements of an established thesis.
+6. **Surveys**: Bereska & Gavves 2024, Ranaldi 2025 cover the Geva neuron line beside SAEs; no dedicated 2025–26 neuron-basis survey.
+
+## 5. Fusion (the two-sided priority-ladder check)
+
+**Priority #1 (self-evolve product stack):** honest answer — the rulewright's text-rule corpus has no neuron-census consumer and the decision family's gates are exact/stationary (stationary-surface law: no dynamics signal proposed). The self-evolve-adjacent residue is 301's bank gaining a weight-direction construction source (§7) — recorded, not filed. The real consumers sit at priorities #3 (inference league — census efficiency, 1250) and #5-adjacent (supply-chain audit of checkpoints we ingest — 1251).
+
+**Priority #3 (inference-perf league):** 1250 is a direct cost lever on the 1241 sweep (86,016 candidates ≈ 557 CPU-h on Bonsai-27B): a weights-only screen that ranks candidates before the interventional battery attacks exactly the candidates-per-confirmation budget. Caveat carried: the pair's STATISTICS are dense-SwiGLU (Llama/Qwen/OLMo 8–32B); transfer to our ternary GDN Bonsai is an assumption the 1250 cell must measure, not assume (the instruments transfer; the percentile bars may not).
+
+**surgical_read_patch caveat (no filing):** F3 says answer-writer removal alone leaves the answer on top for 15/18 facts — single-concept fact swaps that target only direct readout matches may under-remove, and post-edit substitution answers (Borges-for-Márquez) are the expected failure shape. `plan_fact_swaps` already carries the control arm (same artifact on the unmutated corpus); the multi-hop caveat is recorded here for its next touch, not filed as an issue — the primitive is PRE-REGISTERED NOT RUN and its consumer gate (riir-train Issue 686) owns the re-open.
+
+## 6. What we do NOT claim
+
+Mechanism novelty for: lens readouts of down-proj columns (Geva 2022), trigger legibility from weights (2611.19304), hidden-knowledge persistence under unlearning (2505.23270). No Super-GOAT: Q1 fails on both headline components (published classes); the fusion value is lane-local. No game-side filing: the two-brain/latent rules bind game AI, and this pair's objects are LLM MLPs, not per-NPC belief kernels.
+
+## 7. Fusion ideas recorded here (novelty TBD, no lanes filed)
+
+1. **Weight-direction probe bank source** — 301's indicator bank gains a construction source needing no contrastive capture: readout-selected signed output vectors, score = cos(residual, w). Proof path: reflex harness A/B vs the contrastive-pair construction on one suite.
+2. **Post-train neuron-diff audit** — after any riir-train finetune: rank neurons by Δactivation-on-trigger-text vs base-output-vector alignment; read top-k base readouts; report as a training receipt. Proof path: one local LoRA run diffed against its base.
+3. **Fixed-basis census transfer** — F2 suggests census candidates found at one layer can PRIOR neighboring layers (facet accretion, not rotation). Only worth a cell if 1241's T2 sweep survives; a candidate-ordering rider on 1250 T4, never a standalone claim.
+4. **Type-3 screen** — the pair's readout-clustering + reconstruction heuristics flag type-3 candidates cheaply; a screen bucket for 1250's artifact (why does a unit carry two unrelated topics in one sign?). Low priority.
