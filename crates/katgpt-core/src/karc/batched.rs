@@ -315,11 +315,11 @@ mod imp {
             // Zero out unfitted NPCs' outputs (caller convention: unfitted NPCs
             // produce zero output, not garbage). This is a tiny tail loop, run
             // once per call, not in the hot inner loop.
-            for i in 0..self.n {
-                if !self.fitted[i] {
+            for (i, &fitted_i) in self.fitted[..self.n].iter().enumerate() {
+                if !fitted_i {
                     let out_off = i * D;
-                    for d in 0..D {
-                        out[out_off + d] = 0.0;
+                    for slot in &mut out[out_off..out_off + D] {
+                        *slot = 0.0;
                     }
                 }
             }

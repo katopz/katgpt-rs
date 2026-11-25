@@ -405,7 +405,7 @@ pub fn spectral_differentiate_into(
             // We implement it as repeated complex multiply by (iω) to keep
             // it numerically stable (no `powf`), then special-case odd m for
             // Nyquist zeroing at the end.
-            for j in 0..n {
+            for (j, slot) in scratch.freq_buf[..n].iter_mut().enumerate() {
                 let k = signed_freq_index(j, n) as f32;
                 let omega = two_pi_over_nh * k;
                 // (iω) as a complex number: 0 + i·ω.
@@ -415,7 +415,7 @@ pub fn spectral_differentiate_into(
                 for _ in 0..m {
                     acc *= i_omega;
                 }
-                scratch.freq_buf[j] *= acc;
+                *slot *= acc;
             }
             // Nyquist zeroing for odd orders on even-length signals.
             if is_even_n && (m % 2 == 1) {

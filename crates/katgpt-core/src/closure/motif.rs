@@ -554,8 +554,8 @@ fn enumerate_chains(
         for &(op, to) in &adjacency[node] {
             // Branch-free `path.contains(&to)` over the fixed-size prefix.
             let mut on_path = false;
-            for i in 0..path_len {
-                if path.nodes[i] == to {
+            for &node_entry in &path.nodes[..path_len] {
+                if node_entry == to {
                     on_path = true;
                     break;
                 }

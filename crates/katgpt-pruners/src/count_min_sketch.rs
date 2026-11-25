@@ -98,10 +98,10 @@ impl CountMinSketch {
     /// `lambda_fixed = round(lambda * 65536)`, then `new_v = (v * lambda_fixed) >> 16`.
     pub fn decay(&mut self, lambda: f32) {
         let lambda_fixed = (lambda * 65536.0) as u32;
-        for row in 0..ROWS {
-            for col in 0..COLS {
-                let v = self.counters[row][col] as u32;
-                self.counters[row][col] = ((v * lambda_fixed) >> 16) as u16;
+        for row in &mut self.counters {
+            for counter in row.iter_mut() {
+                let v = *counter as u32;
+                *counter = ((v * lambda_fixed) >> 16) as u16;
             }
         }
     }

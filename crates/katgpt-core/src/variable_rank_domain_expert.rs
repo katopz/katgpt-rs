@@ -404,9 +404,10 @@ impl<const K: usize, const L: usize> ClusterHolder<K, L> {
         // Winning archetype = highest pi (sigmoid monotonicity).
         let mut winner = 0usize;
         let mut best = self.blend.pi[0];
-        for k in 1..K {
-            if self.blend.pi[k] > best {
-                best = self.blend.pi[k];
+        for (k, &pi_k) in self.blend.pi[1..K].iter().enumerate() {
+            let k = k + 1;
+            if pi_k > best {
+                best = pi_k;
                 winner = k;
             }
         }

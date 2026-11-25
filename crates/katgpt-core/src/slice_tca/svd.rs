@@ -195,8 +195,8 @@ pub fn covariability_shares_into(
     debug_assert_eq!(x.len(), total, "input length mismatch");
     if x.iter().all(|&v| v == 0.0) {
         scratch.norm_sq = 0.0;
-        for axis in 0..3 {
-            scratch.spec[axis].fill(0.0);
+        for spec in &mut scratch.spec {
+            spec.fill(0.0);
         }
         return [0.0; 3];
     }

@@ -295,14 +295,14 @@ impl<const SQRT_N: usize, const D_K: usize, const D_V: usize> ProductKeyMemory<S
         scratch.top_2.fill((0, f32::NEG_INFINITY));
 
         // Score codebook 1: O(SQRT_N * D_K/2).
-        for i in 0..SQRT_N {
+        for (i, slot) in scratch.scores_1.iter_mut().enumerate() {
             let key_row = self.keys_1_row(i);
-            scratch.scores_1[i] = score_half(score_fn, q1, key_row);
+            *slot = score_half(score_fn, q1, key_row);
         }
         // Score codebook 2: O(SQRT_N * D_K/2).
-        for j in 0..SQRT_N {
+        for (j, slot) in scratch.scores_2.iter_mut().enumerate() {
             let key_row = self.keys_2_row(j);
-            scratch.scores_2[j] = score_half(score_fn, q2, key_row);
+            *slot = score_half(score_fn, q2, key_row);
         }
 
         // Heapselect top-K from each codebook: O(SQRT_N * K).

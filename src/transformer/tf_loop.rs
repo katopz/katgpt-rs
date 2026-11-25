@@ -298,12 +298,16 @@ pub fn forward_training_free_loop<'a>(
             CacheStrategy::Mean => {
                 // Write the accumulated running means (the loop already
                 // produced the canonical KV) — NO window-forward here.
-                for layer_idx in window_start..=window_end {
+                for (win_idx, layer) in cache.layers[window_start..=window_end]
+                    .iter_mut()
+                    .enumerate()
+                {
+                    let layer_idx = window_start + win_idx;
                     let mean_off = layer_idx * kvd;
                     let pos_off = pos * kvd;
-                    cache.layers[layer_idx].key[pos_off..pos_off + kvd]
+                    layer.key[pos_off..pos_off + kvd]
                         .copy_from_slice(&ctx.tf_kv_mean_k[mean_off..mean_off + kvd]);
-                    cache.layers[layer_idx].value[pos_off..pos_off + kvd]
+                    layer.value[pos_off..pos_off + kvd]
                         .copy_from_slice(&ctx.tf_kv_mean_v[mean_off..mean_off + kvd]);
                 }
             }

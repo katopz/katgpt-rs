@@ -109,9 +109,10 @@ impl SortedRing {
         }
         let mut best = 0usize;
         let mut best_tick = self.ticks[0];
-        for i in 1..self.len {
-            if self.ticks[i] < best_tick {
-                best_tick = self.ticks[i];
+        for (i, &tick) in self.ticks[1..self.len].iter().enumerate() {
+            let i = i + 1;
+            if tick < best_tick {
+                best_tick = tick;
                 best = i;
             }
         }

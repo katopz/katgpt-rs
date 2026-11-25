@@ -205,14 +205,14 @@ pub trait DeviationClass<const N: usize, const A: usize> {
         rho: &OccupationMeasure<N, A>,
     ) -> OccupationMeasure<N, A> {
         let mut entries = vec![0.0; N * A];
-        for s in 0..N {
+        for (s, kernel_row) in kappa.kernel.iter().enumerate().take(N) {
             let mu_s = rho.marginal_state(s);
             if mu_s == 0.0 {
                 continue;
             }
             let base = s * A;
-            for a in 0..A {
-                entries[base + a] = mu_s * kappa.kernel[s][a];
+            for (a, &k_sa) in kernel_row.iter().enumerate() {
+                entries[base + a] = mu_s * k_sa;
             }
         }
         OccupationMeasure::from_entries_trusted(entries)
@@ -245,8 +245,8 @@ pub trait PayoffTensor<const N: usize, const A: usize> {
     /// Default impl: dot product of `κ(s)` with `cost(s, ·)`.
     fn reward_deviate(&self, state: usize, kappa: &Deviation<N, A>) -> f32 {
         let mut g = 0.0;
-        for a in 0..A {
-            g += kappa.kernel[state][a] * self.reward_follow(state, a);
+        for (a, &k_sa) in kappa.kernel[state].iter().enumerate() {
+            g += k_sa * self.reward_follow(state, a);
         }
         g
     }
@@ -332,8 +332,8 @@ pub trait HeterogeneousPayoff<const N: usize, const A: usize> {
     /// Override when an impl has a closed-form expression.
     fn reward_deviate(&self, player: usize, state: usize, kappa: &Deviation<N, A>) -> f32 {
         let mut g = 0.0;
-        for a in 0..A {
-            g += kappa.kernel[state][a] * self.reward_follow(player, state, a);
+        for (a, &k_sa) in kappa.kernel[state].iter().enumerate() {
+            g += k_sa * self.reward_follow(player, state, a);
         }
         g
     }

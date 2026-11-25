@@ -389,9 +389,9 @@ impl DecisionExplainer for PerturbationExplainer {
             }
 
             // Handle pruner_names that exceed actual scores — append zero-sensitivity entries
-            for pruner_idx in chosen.pruner_scores.len()..num_pruners {
+            for pruner_name in &self.pruner_names[chosen.pruner_scores.len()..num_pruners] {
                 attributions.push(PrunerAttribution {
-                    pruner_name: Cow::Owned(self.pruner_names[pruner_idx].clone()),
+                    pruner_name: Cow::Owned((*pruner_name).clone()),
                     score: 0.0,
                     sensitivity: 0.0,
                 });

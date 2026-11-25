@@ -262,14 +262,14 @@ impl Sudoku9x9 {
             return false;
         }
         // Row constraint
-        for c in 0..9 {
-            if self.grid[row][c] == digit {
+        for &v in &self.grid[row] {
+            if v == digit {
                 return false;
             }
         }
         // Column constraint
-        for r in 0..9 {
-            if self.grid[r][col] == digit {
+        for row_slice in &self.grid {
+            if row_slice[col] == digit {
                 return false;
             }
         }
@@ -277,8 +277,9 @@ impl Sudoku9x9 {
         let box_r = (row / 3) * 3;
         let box_c = (col / 3) * 3;
         for r in 0..3 {
-            for c in 0..3 {
-                if self.grid[box_r + r][box_c + c] == digit {
+            let box_row = &self.grid[box_r + r];
+            for &v in &box_row[box_c..box_c + 3] {
+                if v == digit {
                     return false;
                 }
             }
@@ -302,9 +303,9 @@ impl Sudoku9x9 {
 
     /// Find next empty cell, returns (row, col) or None.
     pub fn next_empty(&self) -> Option<(usize, usize)> {
-        for r in 0..9 {
-            for c in 0..9 {
-                if self.grid[r][c] == 0 {
+        for (r, row_slice) in self.grid.iter().enumerate() {
+            for (c, &v) in row_slice.iter().enumerate() {
+                if v == 0 {
                     return Some((r, c));
                 }
             }
@@ -315,15 +316,15 @@ impl Sudoku9x9 {
     /// Pretty-print the board as a string.
     pub fn display(&self) -> String {
         let mut s = String::with_capacity(256);
-        for r in 0..9 {
+        for (r, row_slice) in self.grid.iter().enumerate() {
             if r > 0 && r % 3 == 0 {
                 s.push_str("------+-------+------\n");
             }
-            for c in 0..9 {
+            for (c, &v) in row_slice.iter().enumerate() {
                 if c > 0 && c % 3 == 0 {
                     s.push_str("| ");
                 }
-                match self.grid[r][c] {
+                match v {
                     0 => s.push_str(". "),
                     d => {
                         // '1'..='9' correspond to ASCII 49..=57.
@@ -378,16 +379,14 @@ impl Sudoku9x9 {
         // 0b111111111 = all 9 digits valid.
         let mut cands = [[0u16; 9]; 9];
         // multi-array coordinated init: cands[r][c] derived from self.grid[r][c]
-        #[allow(clippy::needless_range_loop)]
-        for r in 0..9 {
-            for c in 0..9 {
-                cands[r][c] = if self.grid[r][c] == 0 { 0b111111111 } else { 0 };
+        for (cand_row, grid_row) in cands.iter_mut().zip(&self.grid) {
+            for (c, cand) in cand_row.iter_mut().enumerate() {
+                *cand = if grid_row[c] == 0 { 0b111111111 } else { 0 };
             }
         }
         // Seed candidates from the initial clues.
-        for r in 0..9 {
-            for c in 0..9 {
-                let d = self.grid[r][c];
+        for (r, row_slice) in self.grid.iter().enumerate() {
+            for (c, &d) in row_slice.iter().enumerate() {
                 if d > 0 {
                     Self::eliminate(&mut cands, r, c, d);
                 }
@@ -518,20 +517,20 @@ impl Sudoku9x9 {
 
     /// Validate a complete board satisfies all constraints.
     fn is_valid_solution(&self) -> bool {
-        for r in 0..9 {
+        for row_slice in &self.grid {
             let mut seen = [false; 10];
-            for c in 0..9 {
-                let d = self.grid[r][c] as usize;
+            for &v in row_slice {
+                let d = v as usize;
                 if d == 0 || seen[d] {
                     return false;
                 }
                 seen[d] = true;
             }
         }
-        for c in 0..9 {
+        for col in 0..9 {
             let mut seen = [false; 10];
-            for r in 0..9 {
-                let d = self.grid[r][c] as usize;
+            for row_slice in &self.grid {
+                let d = row_slice[col] as usize;
                 if d == 0 || seen[d] {
                     return false;
                 }

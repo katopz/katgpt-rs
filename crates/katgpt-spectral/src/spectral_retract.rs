@@ -135,12 +135,12 @@ pub fn matvec_psd_into(v: &[f32], psd_op: &[f32], dim: usize, scratch: &mut Powe
 
     // out[i] = Σ_j psd_op[i*dim + j] * v[j]
     // Zero the output region first.
-    for i in 0..dim {
-        scratch.mv_out[i] = 0.0;
+    for slot in &mut scratch.mv_out[..dim] {
+        *slot = 0.0;
     }
-    for i in 0..dim {
+    for (i, slot) in scratch.mv_out[..dim].iter_mut().enumerate() {
         let row = &psd_op[i * dim..(i + 1) * dim];
-        scratch.mv_out[i] = simd_dot_f32(row, v, dim);
+        *slot = simd_dot_f32(row, v, dim);
     }
 }
 

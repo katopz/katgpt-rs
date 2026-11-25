@@ -130,8 +130,8 @@ impl RoutingChannelDiscovery {
 
             // Create mask with this group disabled
             let mut mask = RoutingChannelMask::all(head_dim);
-            for d in g_start..g_end {
-                mask.channels[d] = false;
+            for slot in &mut mask.channels[g_start..g_end] {
+                *slot = false;
             }
 
             let accuracy = self.measure_accuracy(

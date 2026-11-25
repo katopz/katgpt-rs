@@ -437,9 +437,9 @@ impl FrequencyBandit {
     pub fn best_arm(&self) -> FrequencyBand {
         let mut best = 0;
         let mut best_q = f64::NEG_INFINITY;
-        for i in 0..3 {
-            if self.arm_q_values[i] > best_q {
-                best_q = self.arm_q_values[i];
+        for (i, &q) in self.arm_q_values.iter().enumerate() {
+            if q > best_q {
+                best_q = q;
                 best = i;
             }
         }

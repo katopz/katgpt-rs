@@ -157,8 +157,11 @@ impl BlockAttentionScorer {
         let mut block_counts = vec![0usize; num_blocks];
 
         let tail_start = seq_len.saturating_sub(self.config.tail_window * block_size);
-        for pos in tail_start..filled {
-            let score = sctx.ctx.scores[pos];
+        for (pos, &score) in sctx.ctx.scores[..filled]
+            .iter()
+            .enumerate()
+            .skip(tail_start)
+        {
             let block_idx = pos / block_size;
             if block_idx < num_blocks {
                 block_scores[block_idx] += score;
@@ -166,9 +169,9 @@ impl BlockAttentionScorer {
             }
         }
 
-        for i in 0..num_blocks {
-            if block_counts[i] > 0 {
-                block_scores[i] /= block_counts[i] as f32;
+        for (block_score, &count) in block_scores.iter_mut().zip(&block_counts) {
+            if count > 0 {
+                *block_score /= count as f32;
             }
         }
 

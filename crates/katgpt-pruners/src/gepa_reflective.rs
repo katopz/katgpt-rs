@@ -272,8 +272,7 @@ impl ParetoConfigFrontier {
     /// If the frontier is full and the new entry is dominated, returns `false`.
     pub fn insert(&mut self, config: ConfigVariant, reward: f32, cost: f32) -> bool {
         // Check if dominated by any existing entry.
-        for i in 0..MAX_CONFIGS {
-            let e = &self.entries[i];
+        for e in &self.entries {
             if !e.occupied {
                 continue;
             }
@@ -286,8 +285,7 @@ impl ParetoConfigFrontier {
         }
 
         // Remove entries dominated by the new one.
-        for i in 0..MAX_CONFIGS {
-            let e = &self.entries[i];
+        for (i, e) in self.entries.iter_mut().enumerate() {
             if !e.occupied {
                 continue;
             }
@@ -296,7 +294,7 @@ impl ParetoConfigFrontier {
             let new_dominates =
                 reward >= e.reward && cost <= e.cost && (reward > e.reward || cost < e.cost);
             if new_dominates {
-                self.entries[i].occupied = false;
+                e.occupied = false;
                 self.len -= 1;
                 self.free_slots.push(i);
             }
