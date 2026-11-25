@@ -63,31 +63,31 @@ pub mod graph;
 pub mod wasm;
 
 /// MILP scheduler: 4-phase layer assignment minimizing `d_model`.
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub mod scheduler;
 
 /// Analytical weight construction: graph + schedule → transformer weight tensors.
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub mod weights;
 
 /// Vanilla transformer with ReGLU FFN and CHT hull KV cache: `VanillaTransformer`, autoregressive generation.
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub mod transformer;
 
 /// First Futamura projection: specialize universal WASM interpreter for a specific program.
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub mod specialize;
 
 /// Graph evaluator with exact arithmetic for correctness verification (no transformer weights needed).
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub mod evaluator;
 
 /// Pipeline runner: compile → build → run → evaluate orchestration.
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub mod runner;
 
 /// C → WASM → dispatch table → token prefix compile pipeline.
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub mod compile;
 
 // ── Re-exports from legacy (always available) ──────────────────
@@ -126,7 +126,7 @@ pub use graph::{
 
 // ── Re-exports from scheduler (feature-gated) ──────────────────
 
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub use scheduler::{
     DepGraph, OpKey, Phase, Schedule, ScheduleError, StdLayer, build_dep_graph, interval_coloring,
     milp_schedule, min_layers,
@@ -134,7 +134,7 @@ pub use scheduler::{
 
 // ── Re-exports from weights (feature-gated) ────────────────────
 
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub use weights::{
     AttentionWeights, FfnWeights, HeadInfo, LayerWeights, TransformerWeights, build_weights,
     expr_to_vector,
@@ -142,7 +142,7 @@ pub use weights::{
 
 // ── Re-exports from transformer (feature-gated) ───────────────
 
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub use transformer::{
     GenerationResult, TransformerConfig, TransformerVocab, VanillaTransformer, decode_trace,
     encode_output_byte, parse_output_byte,
@@ -150,7 +150,7 @@ pub use transformer::{
 
 // ── Re-exports from specialize (feature-gated) ────────────────
 
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub use specialize::{
     SpecializationError, SpecializationReduction, SpecializedModel, UniversalModel,
     build_universal, specialize,
@@ -158,17 +158,17 @@ pub use specialize::{
 
 // ── Re-exports from evaluator (feature-gated) ─────────────────
 
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub use evaluator::{EvalError, GraphEvaluator};
 
 // ── Re-exports from runner (feature-gated) ─────────────────────
 
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub use runner::{BuildResult, Runner, RunnerError};
 
 // ── Re-exports from compile (feature-gated) ───────────────────
 
-#[cfg(feature = "percepta_compile")]
+#[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 pub use compile::{
     CompileError, CompiledProgram, RUNTIME_H, compile_c_to_wasm, compile_program,
     compile_rust_program, compile_rust_to_wasm, compile_wasm_to_prefix, find_clang, find_rustc,

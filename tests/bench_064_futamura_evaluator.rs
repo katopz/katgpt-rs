@@ -6,7 +6,7 @@
 //! These tests use the graph evaluator (exact arithmetic, no MILP needed) to verify
 //! both the universal and specialized models produce correct output.
 
-#![cfg(feature = "percepta_compile")]
+#![cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 
 mod tests {
     use std::collections::HashMap;

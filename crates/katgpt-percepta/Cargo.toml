@@ -14,10 +14,16 @@ publish = false  # dev/examples aggregator subtree — only katgpt-core ships to
 [dependencies]
 # ordered-float: Ord wrapper for f64 — CHT breakpoints (TG-A). Optional, gated by `percepta`.
 ordered-float = { version = "4", optional = true }
-# good_lp: MILP solver — scheduling (TG-D), highs primary + microlp fallback. Optional, gated by `percepta_compile`.
-good_lp = { version = "1", optional = true, default-features = false, features = ["highs", "microlp"] }
 # log: used by scheduler + specialize (both behind percepta_compile). Always-on, matches root crate.
 log = "0.4"
+
+# good_lp: MILP solver — scheduling (TG-D), highs primary + microlp fallback. Optional, gated by
+# `percepta_compile`. NATIVE-ONLY (Issue 1245 T2): highs-sys's cmake child cannot configure for
+# wasm32 (CMAKE_SYSTEM_NAME=unknown — no Platform module, by construction), so the row is
+# target-gated; the whole percepta_compile tier is
+# #[cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))] to match.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+good_lp = { version = "1", optional = true, default-features = false, features = ["highs", "microlp"] }
 
 [features]
 default = []
@@ -34,4 +40,6 @@ percepta_graph = ["percepta_gates"]
 # TG-E+F: + WASM decoder + lowering + interpreter — pure Rust, NOT wasmtime.
 percepta_wasm = ["percepta_graph"]
 # TG-D+G-J: + MILP + weights + transformer + Futamura + CLI.
+# Native-only: the whole tier is #[cfg(all(…, not(target_arch = "wasm32")))] and good_lp is
+# target-gated out of every wasm32 graph (Issue 1245 T2).
 percepta_compile = ["percepta_wasm", "dep:good_lp"]

@@ -2,7 +2,7 @@
 //!
 //! **Source:** Tempus et al. (2026). Tokenisation via Convex Relaxations. arXiv:2605.22821
 
-#[cfg(feature = "convex_tok")]
+#[cfg(all(feature = "convex_tok", not(target_arch = "wasm32")))]
 mod tests {
     use std::collections::HashMap;
 

@@ -5,7 +5,7 @@
 //! **H5**: Rust hello through full pipeline (Rust→WASM→transformer), output correct
 //! **H6**: Rust sudoku through full pipeline, solves correctly
 
-#![cfg(feature = "percepta_compile")]
+#![cfg(all(feature = "percepta_compile", not(target_arch = "wasm32")))]
 
 use std::collections::HashMap;
 
