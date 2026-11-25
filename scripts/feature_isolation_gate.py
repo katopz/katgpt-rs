@@ -33,7 +33,7 @@ import statistics
 import subprocess
 import sys
 import time
-import tomllib
+from toml_compat import tomllib  # Issue 1245 T1: 3.11+ stdlib, else the tomli backport
 from pathlib import Path
 
 # Same directory, so a plain import resolves. Reused rather than re-derived on

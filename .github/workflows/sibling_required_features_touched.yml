@@ -130,6 +130,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
+      # The gate imports tomllib (3.11+) through scripts/toml_compat.py (Issue
+      # 1245 T1); a macos runner image's system python3 can sit below 3.11 —
+      # pin the floor the gate needs regardless of which runs_on a caller picks.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
       - name: Resolve the diff base
         id: base
         shell: bash

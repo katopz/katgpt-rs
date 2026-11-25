@@ -52,7 +52,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import tomllib
+from toml_compat import tomllib  # Issue 1245 T1: 3.11+ stdlib, else the tomli backport
 from pathlib import Path
 from typing import NamedTuple
 

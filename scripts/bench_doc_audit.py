@@ -45,7 +45,7 @@ import sys
 import os
 from pathlib import Path
 
-import tomllib
+from toml_compat import tomllib  # Issue 1245 T1: 3.11+ stdlib, else the tomli backport
 
 # Issue 804: this instrument is documented as directly invokable, and its
 # verdict glyphs (✓ ✗ ⛔ ⚠) kill it on a non-UTF-8 console — no verdict at

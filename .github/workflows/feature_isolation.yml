@@ -67,5 +67,12 @@ jobs:
           key: feature-isolation
           cache-on-failure: true
 
+      # The gate imports tomllib (3.11+) through scripts/toml_compat.py (Issue
+      # 1245 T1); macos-latest's system python3 has drifted below 3.11, so pin
+      # the floor the gate needs instead of discovering it as an ImportError.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
       - name: Feature isolation (flags touched by this PR)
         run: python3 scripts/feature_isolation_gate.py

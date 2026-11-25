@@ -72,7 +72,7 @@ the same finding as drift and must not be reported as one.
 from __future__ import annotations
 
 import sys
-import tomllib
+from toml_compat import tomllib  # Issue 1245 T1: 3.11+ stdlib, else the tomli backport
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))

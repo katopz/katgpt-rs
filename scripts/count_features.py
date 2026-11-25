@@ -20,7 +20,7 @@ import re
 import sys
 from pathlib import Path
 
-import tomllib
+from toml_compat import tomllib  # Issue 1245 T1: 3.11+ stdlib, else the tomli backport
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from bench_doc_audit import iter_cargo_manifests

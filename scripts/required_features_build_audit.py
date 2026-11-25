@@ -60,7 +60,7 @@ import subprocess
 import shlex
 import sys
 import time
-import tomllib
+from toml_compat import tomllib  # Issue 1245 T1: 3.11+ stdlib, else the tomli backport
 from dataclasses import dataclass, field
 from pathlib import Path
 

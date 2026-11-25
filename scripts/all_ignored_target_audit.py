@@ -64,7 +64,7 @@ from __future__ import annotations
 
 import re
 import sys
-import tomllib
+from toml_compat import tomllib  # Issue 1245 T1: 3.11+ stdlib, else the tomli backport
 from dataclasses import dataclass, field
 from pathlib import Path
 

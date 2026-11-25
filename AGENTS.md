@@ -262,7 +262,13 @@ quantity ASSERTS they agree): `docs_drift_sweep.py`, `numbering_drift_sweep.py`,
 `ast.parse(feature_version=(3, 9))` (the boxes' `python3` is 3.9.6, invoked
 directly). SYNTAX and UNPARSED are separate walls at 0; floors `min_py_files`
 + `min_parsed`. A GRAMMAR check, not an interpreter pin (`tomllib` parses;
-PEP 604 annotations ride `from __future__ import annotations`).
+PEP 604 annotations ride `from __future__ import annotations`). RUNTIME tomllib
+imports go through the shared shim `scripts/toml_compat.py` — `from toml_compat
+import tomllib` resolves stdlib 3.11+ → the `tomli` backport → a loud refusal
+naming both remedies (uv interpreter or setup-python 3.11); never a bare
+`import tomllib` in a gate (Issue 1245 T1: the macOS runner image and the
+workstation both sit below 3.11, and the CI workflows invoking family gates
+with bare `python3` pin `actions/setup-python@v6` python 3.11 ahead of them).
 
 ⛔ **Before fixing a rule-in-one-instrument class, grep the whole family and
 land the repair as one shared mechanism.** ⛔ **A cross-repo repair is not
