@@ -40,6 +40,21 @@
 - [ ] T3 — after T1+T2 land on develop: re-ff main (or ride the next deliberate gate merge) so main's CI records a green; the red run's receipts stay as the false-GREEN-rate evidence.
 
 ## Notes
+- **2026-11-25 14:5xZ public-API read (katgpt-rs-dc@amo, no credential used):** on main
+  `36e83604c` the **Docs gate PASSED** in the same push — so the fast-fail is NOT an
+  exhausted Actions allowance (the owner's "free-tier limits" note does not explain it).
+  Job steps (unauthenticated `actions/runs/{id}/jobs`): wasm32 run `45594365344` fails at
+  **step 6 `wasm32 lane, both simd128 arms`** (ubuntu-latest) — whole job 31 s INCLUDING
+  toolchain install + cache restore, so the gate dies in its static pre-checks before any
+  compile; full run `45594365380` fails at **step 8 `Full gate (workspace, all targets, all
+  features, keep-going)`** (macos-latest, ~1.7 min). Ruled out by reading
+  `scripts/full_gate.sh`: the non-Darwin refusal (wrapped in the full-mode body at L229,
+  skipped under `--wasm32-only`) and the residue-sort class (`WASM_RESIDUE_EXPECTED=''`).
+  The only annotation is `Process completed with exit code 1`. The step logs need an
+  authenticated read (`gh run view --log-failed` — `gh` is not installed on amo, and
+  fetching a token is the owner's credential gate): the residual stays the owner's one
+  click, scoped to those two steps.
+
 
 - The full-gate red at `bf479a709` is the one class this issue does NOT carry (fixed `d4790394e` on develop; see that commit body for the per-site list).
 - Local evidence commands recorded in the Plan 635 line-87 row + the d4790394e commit body.
