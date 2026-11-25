@@ -44,6 +44,19 @@ or AMBIGUOUS multiple distinct leases in one file (the scanner's other blind
 class) or an unreadable path. NOT a parser weakening: the strict loud
 MALFORMED read-time verdict stays.
 
+An EMBEDDED claim (2026-11-25, the seal-sprints 141/082 findings) is claim
+shaped — session + epoch + `expires` — riding inside a line the grammar
+cannot anchor: `**Status:** OPEN — claimed by <session>, <epoch>, expires
+<ISO>`, or a paren-qualified `**Claimed (T3a/T3b):** ...` (the paren breaks
+the `Claimed:` anchor). Every reader parses NONE on such a line — `--lint`
+passes the file, `--item` reports "no claim line", and a LIVE lease reads
+UNCLAIMED fleet-wide (the 141 blind was live for two days; the 082 one was
+discovered twenty minutes after filing). `--lint` fires EMBEDDED-CLAIM at
+birth (exit 1, the reshape printed); read time surfaces an EMBEDDED row and
+`--item` refuses to report the item unclaimed. Closure narrative
+(`**Lease closed:**` rows, landed/done/discharged lines) is history, not a
+lease — skipped (measured 6-of-9 corpus suppression, 2026-11-25).
+
 A CLOSED lease is a claim line whose session is named by a
 `**Lease closed:** <session> ...` row in the same file (the lease-reshape
 rule folds the claim into that row; writers measured leaving both — four
@@ -116,6 +129,20 @@ CLOSED_LINE_RE = re.compile(
     r"^\s*\*{0,2}Lease closed:\*{0,2}\s*`?([^\s,(`*]+)")
 EPOCH_TOKEN_RE = re.compile(r"\b(\d{9,})\b")
 
+# The EMBEDDED-CLAIM class (2026-11-25, the seal-sprints 141/082 findings):
+# claim fields inside a line the claim grammar cannot anchor. The detector
+# fires only on the FULL shape — the claim word + a 9-10-digit epoch +
+# `expires <parsable ISO>` — and never on `Lease closed:` rows, template
+# placeholders, or closure narrative (landed/done/discharged/...): history
+# is not a lease (measured 6-of-9 corpus suppression on the first sweep).
+EMBEDDED_CLAIM_WORD_RE = re.compile(r"\bclaimed\b", re.IGNORECASE)
+EMBEDDED_EPOCH_RE = re.compile(r"(?<!\d)(\d{9,10})(?!\d)")
+EMBEDDED_EXPIRES_RE = re.compile(r"\bexpires\s+(\S+)", re.IGNORECASE)
+EMBEDDED_SESSION_RE = re.compile(r"([^\s,()\[\]:]+)[\s,]*\d{9,10}")
+CLOSED_NARRATIVE_RE = re.compile(
+    r"\b(closed|done|landed|resolved|completed|complete|discharged|"
+    r"retired|folded)\b", re.IGNORECASE)
+
 
 def parse_expiry(raw: str) -> datetime | None:
     """ISO-8601 UTC (`Z` or an explicit offset); naive = UTC by convention."""
@@ -150,6 +177,43 @@ def parse_claim_line(line: str) -> tuple[str, int, datetime] | None | str:
     if expiry is None:
         return "malformed"
     return (parts[0].strip("`* "), int(parts[1]), expiry)
+
+
+def embedded_claim_fields(
+        line: str) -> tuple[str | None, str, str] | None:
+    """(session-or-None, epoch-digits, expiry-token) when the line carries
+    the full claim shape OUTSIDE the line-anchored grammar — None
+    otherwise. See the EMBEDDED-CLAIM block by the regex table."""
+    if CLAIM_LINE_RE.match(line) or CLOSED_LINE_RE.match(line):
+        return None
+    if PLACEHOLDER_RE.search(line):
+        return None
+    if CLOSED_NARRATIVE_RE.search(line):
+        return None                    # closure narrative is history
+    if not (EMBEDDED_CLAIM_WORD_RE.search(line)
+            and EMBEDDED_EPOCH_RE.search(line)):
+        return None
+    em = EMBEDDED_EXPIRES_RE.search(line)
+    if em is None or parse_expiry(em.group(1)) is None:
+        return None
+    session = None
+    sm = EMBEDDED_SESSION_RE.search(line)
+    if sm:
+        cand = sm.group(1).strip("`* ")
+        if cand and cand.lower() not in ("claimed", "status", "open"):
+            session = cand
+    return (session, EMBEDDED_EPOCH_RE.search(line).group(1),
+            em.group(1))
+
+
+def embedded_reshape(fields: tuple[str | None, str, str]) -> str:
+    """The canonical reshape for an embedded claim — recover what the line
+    carries, template the rest, name the placement law."""
+    session, epoch, expiry = fields
+    return ("**Claimed:** " + (session or "<session>") + ", " + epoch
+            + ", expires " + expiry
+            + "  (its own line under the Status line; dead history folds "
+              "into **Lease closed:**)")
 
 
 def closed_sessions(lines: list[str]) -> dict[str, set[int]]:
@@ -199,6 +263,9 @@ def leases_in_file(path: Path) -> list:
     for line in lines:
         parsed = parse_claim_line(line)
         if parsed is None:
+            emb = embedded_claim_fields(line)
+            if emb is not None:
+                found.append(("embedded",) + emb)
             continue
         if parsed == "malformed":
             found.append("malformed")
@@ -275,6 +342,17 @@ def lint_file(path: Path) -> list[str] | None:
                 f"      reshape → {fold_hint(line)}")
         elif isinstance(parsed, tuple) and parsed not in leases:
             leases.append(parsed)
+        else:
+            emb = embedded_claim_fields(line)
+            if emb is not None:
+                findings.append(
+                    f"  ⛔ LINT {path}:{lineno} EMBEDDED-CLAIM — claim "
+                    f"fields ride inside a line the grammar cannot anchor "
+                    f"(every reader parses NONE; the item reads UNCLAIMED "
+                    f"fleet-wide; the seal-sprints 141/082 class, "
+                    f"2026-11-25):\n"
+                    f"      {line.strip()}\n"
+                    f"      reshape → {embedded_reshape(emb)}")
     if len(leases) > 1:
         sessions = ", ".join(s for s, _, _ in leases)
         findings.append(
@@ -310,6 +388,11 @@ def classify(repo: Path, now: datetime) -> tuple[list[dict], list[str]]:
                     rows.append({"file": rel, "state": "CLOSED",
                                  "session": session, "epoch": epoch,
                                  "expiry": expiry})
+                elif isinstance(lease, tuple) and lease[0] == "embedded":
+                    _tag, session, epoch, expiry = lease
+                    rows.append({"file": rel, "state": "EMBEDDED",
+                                 "session": session, "epoch": None,
+                                 "expiry": None})
                 else:
                     session, epoch, expiry = lease
                     state = "LIVE" if expiry > now else "EXPIRED"
@@ -474,6 +557,36 @@ def selftest() -> list[str]:
         "Claimed: a, 1794434493, expires 2099-01-01T00:00:00Z")
     if not isinstance(ten_digit, tuple):
         fails.append(f"a 10-digit epoch refused: {ten_digit!r}")
+    # The EMBEDDED-CLAIM class (2026-11-25, the seal-sprints 141/082
+    # findings): claim fields inside a line the grammar cannot anchor read
+    # as NO lease everywhere — a LIVE lease blind. Fires only on the full
+    # shape; closure narrative, Lease closed: rows, templates, prose
+    # without an epoch, and unparsable expiries stay clean.
+    emb_fire = embedded_claim_fields(
+        "**Status:** OPEN — claimed by zed-b945ffa5@m3, 1795616100, "
+        "expires 2026-11-27T04:00Z")
+    if not (isinstance(emb_fire, tuple) and emb_fire[0] == "zed-b945ffa5@m3"
+            and emb_fire[1] == "1795616100"):
+        fails.append(f"the 141 embedded shape did not fire: {emb_fire!r}")
+    paren = embedded_claim_fields(
+        "**Claimed (T3a/T3b):** t3ab@m3, 1795607351, "
+        "expires 2026-11-27T11:49:11Z")
+    if not (isinstance(paren, tuple) and paren[0] == "t3ab@m3"):
+        fails.append(f"the paren-qualified claim did not fire: {paren!r}")
+    for clean_line, why in (
+            ("**Status:** COMPLETE 2026-10-20 — **Claimed:** s, "
+             "1792658400, expires 2026-10-22T18:20+07 — discharged.",
+             "closure narrative fired"),
+            ("**Lease closed (folded):** s, 1795534816, was expires "
+             "2026-11-26T15:40:16Z", "a Lease closed row fired"),
+            ("Claimed: <session>, <epoch>, expires <UTC>",
+             "a template fired"),
+            ("claimed. Reopen condition: real-use misses",
+             "prose without a lease fired"),
+            ("**Status:** Claimed: a, 1793800175, expires someday",
+             "an unparsable expiry fired")):
+        if embedded_claim_fields(clean_line) is not None:
+            fails.append(f"{why}: {clean_line!r}")
     boundary = parse_claim_line(
         "Claimed: a, 123456789, expires 2026-10-16T00:00:00Z")
     if not (isinstance(boundary, tuple)
@@ -719,6 +832,24 @@ def prove_fires() -> list[str]:
                          "fixture")
         if lint_file(repo / ".issues" / "825_two_sessions_one_issue.md") != []:
             fails.append("the write-time lint flagged a valid lease")
+        # (4c) the EMBEDDED-CLAIM class: the scan surfaces it, --item can
+        # see it, and the write-time lint fires on birth.
+        (repo / ".issues" / "902_embedded.md").write_text(
+            "**Status:** OPEN — claimed by session-e, 1790000000, "
+            "expires 2099-01-01T00:00:00Z\n", encoding="utf-8")
+        rows3, blind3 = classify(repo, now)
+        emb_rows = [r for r in rows3 if r["state"] == "EMBEDDED"]
+        if not emb_rows or emb_rows[0]["session"] != "session-e":
+            fails.append(f"the embedded claim did not surface: {rows3}")
+        if not lint_file(repo / ".issues" / "902_embedded.md"):
+            fails.append("the write-time lint saw nothing on the embedded "
+                         "fixture")
+        emb_warn = warn_line({"file": ".issues/902_embedded.md",
+                              "state": "EMBEDDED", "session": "session-e",
+                              "epoch": None, "expiry": None}, "902", None)
+        if "EMBEDDED" not in emb_warn:
+            fails.append(f"the embedded warn line lost its verdict: "
+                         f"{emb_warn!r}")
         # (5) fetch-age on a real (tiny) git repo vs a bare dir.
         import subprocess as sp
         shared = root / "shared.git"
@@ -750,6 +881,11 @@ def warn_line(row: dict, item: str, own_epoch: int | None) -> str:
         return (f"— item {item}: lease EXPIRED "
                 f"({row['session']}, expired {row['expiry'].isoformat()}) — "
                 f"re-claiming is a normal re-read, not a ceremony")
+    if row["state"] == "EMBEDDED":
+        return (f"⛔ item {item}: an EMBEDDED claim (fields inside prose, "
+                f"no line-anchored **Claimed:** line) — the lease cannot "
+                f"be adjudicated; `--lint {row['file']}` prints the "
+                f"reshape")
     if row["state"] == "CLOSED":
         return (f"— item {item}: lease CLOSED by its holder ({row['session']}, "
                 f"epoch {row['epoch']}; the claim line was not reshaped — "
@@ -905,9 +1041,10 @@ def main() -> int:
     expired = [r for r in rows if r["state"] == "EXPIRED"]
     bad = [r for r in rows if r["state"] == "MALFORMED"]
     closed = [r for r in rows if r["state"] == "CLOSED"]
+    embedded = [r for r in rows if r["state"] == "EMBEDDED"]
     print(f"claim_lease_check {repo.name}: {len(live)} live, {len(expired)} "
-          f"expired, {len(closed)} closed-unreshaped, {len(bad)} malformed "
-          f"claim line(s)"
+          f"expired, {len(closed)} closed-unreshaped, {len(bad)} malformed, "
+          f"{len(embedded)} embedded claim line(s)"
           + (f", target item {item}" if item else ""))
     for r in expired:
         print(f"  EXPIRED  {r['file']}  {r['session']} epoch={r['epoch']} "
@@ -925,6 +1062,10 @@ def main() -> int:
         print(f"  ⛔ MALFORMED {r['file']} — a claim-shaped line that cannot "
               f"parse (want `**Claimed:** session, <epoch digits>, expires "
               f"<ISO-UTC>`); cannot adjudicate")
+    for r in embedded:
+        print(f"  ⛔ EMBEDDED  {r['file']} — claim fields inside prose (no "
+              f"line-anchored **Claimed:** line); the lease cannot be "
+              f"adjudicated (--lint prints the reshape)")
     verdict = ""
     if item is not None:
         hit = target_rows(rows, item)
@@ -932,6 +1073,8 @@ def main() -> int:
             verdict = (f"— item {item}: no claim line on any file numbered "
                        f"{item} (no lease is not a license — the "
                        "dual-allocation + fresh-mtime checks still apply)")
+        elif any(r["state"] == "EMBEDDED" for r in hit):
+            verdict = warn_line(hit[0], item, own_epoch)
         else:
             verdict = warn_line(hit[0], item, own_epoch)
         print(verdict)
@@ -953,6 +1096,11 @@ def main() -> int:
     if bad:
         print("✗ BLIND — a MALFORMED claim line cannot be adjudicated live "
               "vs expired; fix the line and re-run")
+        return 1
+    if embedded:
+        print("✗ BLIND — an EMBEDDED claim line cannot be adjudicated (the "
+              "item it names reads UNCLAIMED to every lane); --lint names "
+              "the file and the reshape")
         return 1
     return 0
 
