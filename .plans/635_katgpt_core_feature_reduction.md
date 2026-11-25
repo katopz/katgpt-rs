@@ -3,6 +3,8 @@
 **Status:** TRANCHE 1 LANDED 2026-11-10 — katgpt-core 414 → **278** features (BAKE 74 + GROUP 62), katgpt-rs `8c3349bfb`; sibling spelling rewrites pushed (riir-ai `b7431c505`, riir-train `66bad5a7`, riir-neuron-db `84c9d20`, riir-infer `63e48b98`, riir-reflex `c41aabb`, riir-dao `b2f8d88`, riir-game-sdk `9280bce`, seal-remake `9337a4b4`, seal-online-remaster `c26e2ba`, riir-instinct `1d9efff`, riir-refine `c86d8603`). Open: riir-chain/riir-dapps at the develop→main merge — MERGED 2026-11-21 (amo-idle-i635-merge: pure ff pushes, riir-chain main 669b81e1→483c14f2, riir-dapps main e1a3ad3→89f1e8d, zero main-only commits verified pre-push); Tranche 2 verdict REVISE (2026-11-11) — count ratchet LANDED, additive umbrellas next.
 **Lease closed:** katgpt-rs-85@m3, 1794304147, expires 2026-11-12T09:49:07Z — Tranche 1 landed (`8c3349bfb`); Tranche 2 unclaimed. · (b) lease closed: katgpt-rs-a3@m3, 1794371100, expires 2026-11-13T04:25:00Z — (b) landed (see the (b) row). · (merge) lease closed: amo-idle-i635-merge, 1795280464, expires 2026-11-21T19:01:04Z — closing the open develop→main merge row (merged+pushed this session).
 
+**Claimed:** amo-idle-i635-gatemerge, 1795595382, expires 2026-11-27T08:30:00Z
+
 **Date:** 2026-11-10
 **Issue:** `.issues/992_cratesio_feature_limit_blocks_katgpt_core_publish.md` (decided 2026-11-10: ROAD 2 — limit-increase email; the ROAD 1 premise was falsified by this plan's corrected census — THIS plan is the fallback map only)
 **Crate:** `crates/katgpt-core` 0.5.0 (registry refuses: 414 features > 300 cap)
