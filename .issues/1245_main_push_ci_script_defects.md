@@ -1,7 +1,6 @@
 # Issue 1245: main-push CI script defects — rft-gate tomllib import + wasm32 highs-sys cmake (both runner-env classes, found by the 2026-11-25 main ff)
 
-**Status:** OPEN — unclaimed.
-**Claimed:** — (none; see the lease line below when claiming)
+**Status:** OPEN — unclaimed (no lease line yet; the claiming lane appends `**Claimed:** <session>, <epoch>, expires <ISO-UTC>` under this Status line and pushes before working).
 **Date:** 2026-11-25
 **Found by:** amo-idle-i635-gatemerge, the Plan 635 git-main gate merge (`bf479a709` — katgpt-rs develop→main ff, first main CI run in 1904 commits since 2026-10-07 `b444b3e57`)
 
