@@ -90,6 +90,21 @@ jobs:
           components: clippy
           targets: wasm32-unknown-unknown
 
+      # Issue 1245 T3: the lane refused on CI (runs 45577172095 + 45592386879)
+      # while the same tree passed locally — the pinned 1.99.0 toolchain carries
+      # the wasm32 std locally, but the toolchain the lane USES on CI is stable
+      # (RUSTUP_TOOLCHAIN=stable above), and the gate's refuse path fires when
+      # THAT toolchain lacks wasm32-unknown-unknown (reproduced: 0.9 s
+      # "refusing to report a partial run as a pass"; with the target added,
+      # the same stable lane passes both arms). `targets:` on the action did
+      # not land it for the toolchain cargo resolves — pin it here explicitly,
+      # idempotent, for the exact toolchain the env names.
+      - name: Ensure the wasm32 target for the toolchain the lane uses
+        run: |
+          set -euo pipefail
+          rustup target add wasm32-unknown-unknown --toolchain "${RUSTUP_TOOLCHAIN:-stable}"
+          rustup target list --installed | grep -q wasm32-unknown-unknown
+
       - uses: Swatinem/rust-cache@v2
         with:
           # Own cache: the artifacts are for a different triple than the

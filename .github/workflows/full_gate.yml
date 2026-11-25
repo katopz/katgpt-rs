@@ -127,6 +127,18 @@ jobs:
           # was a structural red, not a content one.
           targets: wasm32-unknown-unknown, x86_64-apple-darwin
 
+      # Issue 1245 T3: `targets:` on the action did not land wasm32-unknown-unknown
+      # for the toolchain cargo resolves on the wasm32_gate.yml runner (its runs
+      # 45577172095 + 45592386879 refused in seconds while the same tree passed
+      # locally at the pinned toolchain). This workflow rides the same action +
+      # stable override + Layer 2b refuse, so it gets the same explicit pin:
+      # idempotent, for the exact toolchain the env names.
+      - name: Ensure the wasm32 target for the toolchain the lane uses
+        run: |
+          set -euo pipefail
+          rustup target add wasm32-unknown-unknown --toolchain "${RUSTUP_TOOLCHAIN:-stable}"
+          rustup target list --installed | grep -q wasm32-unknown-unknown
+
       # Keyed on the lockfile; falls back to any prior cache for this OS so a
       # dep bump warms from the previous build instead of starting cold.
       - uses: Swatinem/rust-cache@v2
