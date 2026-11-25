@@ -114,13 +114,13 @@ impl DelayArchConfig {
 
     /// The shared/dense stream reads the layer-entry anchor (δd = 1).
     #[inline]
-    fn anchor_shared(&self) -> bool {
+    pub fn anchor_shared(&self) -> bool {
         self.dense_delay == 1
     }
 
     /// The routed stream reads the layer-entry anchor (δd = 1 or δe > 0).
     #[inline]
-    fn anchor_routed(&self) -> bool {
+    pub fn anchor_routed(&self) -> bool {
         self.dense_delay == 1 || self.expert_delay > 0
     }
 }

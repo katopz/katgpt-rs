@@ -713,7 +713,7 @@ pub(crate) fn situ_inplace(gate: &mut [f32], up: &[f32], beta: f32, linear_beta:
 /// For larger n the `katgpt-attn::dash_attn::block_topk::argtopk_with_scratch`
 /// SIMD primitive would be preferred, but the dep isn't worth pulling for
 /// this small-n case.
-pub(crate) fn select_topk_indices(scores: &[f32], k: usize, out_idx: &mut [usize]) {
+pub fn select_topk_indices(scores: &[f32], k: usize, out_idx: &mut [usize]) {
     debug_assert!(k <= scores.len());
     debug_assert_eq!(out_idx.len(), k);
 
