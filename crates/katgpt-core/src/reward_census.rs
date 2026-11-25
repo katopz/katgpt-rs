@@ -482,20 +482,20 @@ mod tests {
         for s1 in &sets1 {
             for s2 in &sets2 {
                 let ov = s1.iter().filter(|v| s2.contains(v)).count();
-                for x in 0..=3usize {
+                for (x, count) in ge.iter_mut().enumerate() {
                     if ov >= x {
-                        ge[x] += 1;
+                        *count += 1;
                     }
                 }
                 total += 1;
             }
         }
         assert_eq!(total, sets1.len() * sets2.len());
-        for x in 0..=3usize {
+        for (x, count) in ge.iter().enumerate() {
             let (p, _) = overlap_null(n, k1, k2, x).expect("null");
-            let exact = ge[x] as f64 / total as f64;
+            let exact = *count as f64 / total as f64;
             assert!(
-                (p as f64 - exact).abs() < 1e-12,
+                (p - exact).abs() < 1e-12,
                 "x={x}: closed form {p} vs exhaustive {exact}"
             );
         }

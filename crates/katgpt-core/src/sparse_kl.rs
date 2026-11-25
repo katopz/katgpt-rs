@@ -447,8 +447,8 @@ mod tests {
         let mut student = vec![0.0f32; 64];
         teacher[0] = 10.0; // teacher head: index 0
         student[63] = 10.0; // student head: index 63 (disjoint)
-        for i in 1..63 {
-            student[i] = -1.0;
+        for v in student.iter_mut().take(63).skip(1) {
+            *v = -1.0;
         }
         let dense = {
             let t_lse = f64_logsumexp(&teacher);

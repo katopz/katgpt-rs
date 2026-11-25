@@ -785,10 +785,7 @@ mod tests {
             &[200.0, 0.0],  // Q - the runner-up region
             &[0.0, 0.0],    // A again - covered, distance 0
         ];
-        let mut d2_nearest: Vec<f64> = [0.0, 1_000_001.0, 1_000_000.0, 40_000.0, 0.0]
-            .iter()
-            .copied()
-            .collect();
+        let mut d2_nearest: Vec<f64> = vec![0.0, 1_000_001.0, 1_000_000.0, 40_000.0, 0.0];
 
         // Stale argmax = P (1_000_001), the first revival lands there.
         let (first_pick, _) = d2_nearest
@@ -809,7 +806,7 @@ mod tests {
 
         // The fix: refresh against P's centroid; P2 collapses to 1.0 and the
         // runner-up region Q wins instead.
-        refresh_d2_nearest_against(&mut d2_nearest, &patches, &patches[first_pick]);
+        refresh_d2_nearest_against(&mut d2_nearest, &patches, patches[first_pick]);
         let (fixed_second, _) = d2_nearest
             .iter()
             .enumerate()

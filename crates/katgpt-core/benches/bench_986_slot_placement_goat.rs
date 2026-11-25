@@ -213,11 +213,11 @@ fn evaluate_arm(
     let mut reads_count = 0usize;
     for rep in 0..N_REPS {
         let qr = build_query_rep(0x985_0100 + rep as u64, chains);
-        for c in 0..levels {
+        for (c, slot) in soft.iter_mut().enumerate().take(levels) {
             let gold = chains[0].hops[c];
             let q = qr.queries[c];
             let _ = read.read_into(&q, rows, &mut scratch);
-            soft[c] += read.best_gated_row_cosine(rows, &scratch, &gold) as f64;
+            *slot += f64::from(read.best_gated_row_cosine(rows, &scratch, &gold));
             // Liveness diagnostics per read.
             let qu = unit(q);
             let mut picked: Vec<usize> = Vec::with_capacity(K_SLOTS);
@@ -266,9 +266,9 @@ fn main() {
     let mut hard = [0.0f64; CHAIN_LEN];
     for rep in 0..N_REPS {
         let qr = build_query_rep(0x985_0100 + rep as u64, &chains);
-        for c in 0..levels {
+        for (c, slot) in hard.iter_mut().enumerate().take(levels) {
             let (hb, _) = hard16_scores(&qr.queries[c], &rows, &chains[0].hops[c], K_SLOTS);
-            hard[c] += hb as f64;
+            *slot += f64::from(hb);
         }
     }
     for v in hard.iter_mut() {
@@ -280,8 +280,8 @@ fn main() {
 
     println!();
     println!("G0 — hard16 reference (best-answer cosine per level; empty=0):");
-    for c in 0..levels {
-        println!("  c={}  hard {:-7.4}", c + 1, hard[c]);
+    for (c, slot) in hard.iter().enumerate().take(levels) {
+        println!("  c={:<3} hard {:-7.4}", c + 1, slot);
     }
     println!(
         "  hard collapse ({} → {}, needs ≥0.1 drop): {}",
@@ -313,11 +313,11 @@ fn main() {
     let fps_ref = evaluate_arm(SlotMode::FarthestPoint, false, &rows, &chains, levels);
 
     println!("  level     hard16     985-FPS        A          B          C");
-    for c in 0..levels {
+    for (c, slot) in hard.iter().enumerate().take(levels) {
         println!(
             "  c={:<5} {:-9.4} {:-9.4} {:-9.4} {:-9.4} {:-9.4}",
             c + 1,
-            hard[c],
+            slot,
             fps_ref.soft[c],
             results[0].1.soft[c],
             results[1].1.soft[c],

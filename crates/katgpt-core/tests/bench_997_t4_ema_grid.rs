@@ -24,19 +24,16 @@ mod t4 {
     fn sse(patches: &[&[f32]], cb: &EffectCodebook<K, D>) -> f64 {
         let mut total = 0.0f64;
         for p in patches {
-            let mut best = f32::INFINITY;
-            for kk in 0..K {
-                let c = cb.centroid(kk);
-                let mut s = 0.0f32;
-                for d in 0..D {
-                    let diff = p[d] - c[d];
-                    s += diff * diff;
-                }
-                if s < best {
-                    best = s;
-                }
-            }
-            total += best as f64;
+            let best = (0..K)
+                .map(|kk| {
+                    let c = cb.centroid(kk);
+                    p.iter()
+                        .zip(c.iter())
+                        .map(|(pd, cd)| (pd - cd) * (pd - cd))
+                        .sum::<f32>()
+                })
+                .fold(f32::INFINITY, f32::min);
+            total += f64::from(best);
         }
         total
     }
@@ -70,19 +67,18 @@ mod t4 {
         let per_center = 1024usize;
         let mut centers = Vec::new();
         for c in 0..n_centers {
-            let mut ctr = vec![0.0f32; D];
-            for d in 0..D {
-                ctr[d] = (c as f32) * 10.0 + next(&mut state) * 5.0;
-            }
+            let ctr: Vec<f32> = (0..D)
+                .map(|_| (c as f32) * 10.0 + next(&mut state) * 5.0)
+                .collect();
             centers.push(ctr);
         }
         let mut corpus = Vec::with_capacity(n_centers * per_center);
         for _ in 0..per_center {
-            for c in 0..n_centers {
-                let mut p = vec![0.0f32; D];
-                for d in 0..D {
-                    p[d] = (centers[c][d] + next(&mut state) * 3.0).round();
-                }
+            for center in &centers {
+                let p: Vec<f32> = center
+                    .iter()
+                    .map(|&cd| (cd + next(&mut state) * 3.0).round())
+                    .collect();
                 corpus.push(p);
             }
         }
@@ -174,11 +170,12 @@ mod t4 {
         let mut uneven = Vec::new();
         for (center, count, width) in blobs {
             for _ in 0..count {
-                let mut p = vec![0.0f32; D];
-                for d in 0..D {
-                    let raw = center + next(&mut state) * width;
-                    p[d] = (raw / 2.0).round() * 2.0;
-                }
+                let p: Vec<f32> = (0..D)
+                    .map(|_| {
+                        let raw = center + next(&mut state) * width;
+                        (raw / 2.0).round() * 2.0
+                    })
+                    .collect();
                 uneven.push(p);
             }
         }

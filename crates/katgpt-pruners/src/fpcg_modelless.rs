@@ -572,7 +572,10 @@ mod tests {
     #[test]
     fn planted_direction_auc_meets_the_bayes_bound() {
         // Deterministic LCG — no RNG dep (the deltanet fixture recipe).
-        let mut x = 0x1228_0098_6u64;
+        // Seed 0x122800986 (= 4_873_783_686), spelled decimal to keep the
+        // clippy::unusual_byte_groupings wall (equal-size hex groups would
+        // need a padded literal, which changes the value).
+        let mut x = 4_873_783_686u64;
         let mut next = move || {
             x = x
                 .wrapping_mul(6_364_136_223_846_793_005)
