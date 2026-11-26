@@ -1,6 +1,8 @@
 # Issue 1246: two debug-profile latency-bar suites fail on amo — bench_886 G2a axpy + bench_894 kvarn zip gates (pre-existing, proven at clean HEAD)
 
 **Status:** Open — filed 2026-11-26 (zed-riir-refine-idle@amo) during the i1245-followup lint-drain verification.
+**Claimed:** zed-9b1c8276@amo, 1795660538, expires 2026-11-28T02:35:00+00:00
+(scope: the remaining fix-shape decision + the gate membership rows — per suite pick required-features on the `[[test]]` row vs a debug-ignore posture vs release-only gate membership, the green-zero trap ruled out by construction, and land the fix + any moved `scripts/test_gate.sh` floor in one commit. Execution sequenced AFTER this lane's i697 C1 fold lands tonight; the release-posture adjudication `810552b2e` is the deciding input; the filing lane's disclosure stands as provenance.)
 **Class:** debug-profile latency bars that their own `cargo test` (debug) posture cannot hold on this box — the "profile is part of the claim" trap one layer down: the bars were calibrated (presumably release or on another box) and the suites run and FAIL at the default debug profile on amo (M5 Ultra, AC, quiet at run time).
 
 ## The two suites
