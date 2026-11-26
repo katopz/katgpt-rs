@@ -1,6 +1,7 @@
 # Issue 1247: Looped-lane copy-through cure — WSM weight-space forget mask + rotary position reset
 
 **Status:** Open — filed from `../riir-infer/.research/045_Weight_Space_Micromachines_Implants.md` §5 T5 (verdict AGREE round 1, 2026-11-26). Own-repo issue for the looped family; back-reference only in riir-infer Issue 1256.
+**Claimed:** zed-m3-wsm-followup, 1795673675, expires 2026-11-28T06:14:35Z
 
 Source: "Weight-Space Micromachines" (blog 2026-11-26, papail.io/papers/wsm). Two of their GSM8K single-call implants are candidate cures for a pathology OUR looped lanes document but never cured:
 
