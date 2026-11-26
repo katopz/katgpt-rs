@@ -7,6 +7,7 @@
 > **Related Research:** 061 (Delta Attention Residuals — Plan 097 `delta_routing`, the source-delta cousin), 447 (Kimi-K3 KDA+AttnRes+LatentMoE — the shipped AttnRes consumer), 070 (GDN2 — the trained "retrieval over history" cousin, Plan 105 default-on), 330 (Kimi-K3 modeling divergences, `attn_res` provenance)
 > **Related Plans:** 097 (`delta_routing` — speculative architecture support precedent, validated structurally before weights existed), 105 (`gdn2_attention`), riir-train 383 (xHC pretraining POC), riir-train 364 (iso-param verdict discipline — the harness that already killed one paper), riir-train 318 (4B/2B MLA-MoE build — the future pretrain where a residual-variant win cashes out), **riir-train Plan 458** (this paper → MSAR arm)
 > **Classification:** Public
+> **PASS-Redirects (synthesis):** Xiao et al. [arXiv:2611.30634 "Rewirable Circuits in Transformers with Loom Attention"] — Research 696: the head-granularity member of this taxonomy (per-head per-token vertical ports via gated linear attention over a per-token matrix memory, wiring rank 2n vs MSAR's stream-level rank ≤1); PASS, recorded only — pretraining-only mechanism, no consumer for a forward, beats MSAR's own family (1.73–2.76× compute vs DHC/mHC/AttnRes/MUDDFormer baselines) without changing Plan 458's arm economics (its dynamic-vs-static-query ablation is the one cell MSAR's gate-shape table lacks; recorded, not filed).
 
 ---
 
