@@ -105,3 +105,5 @@ Panel: No-GD advocate + model-based advocate, one spawn round 2026-11-20, coordi
 - Schmidhuber, "Driven by Compression Progress", arXiv:0812.4360 — the curiosity lineage
 - Cowsik et al., "Self-Play Pretraining with Zero Data", arXiv:2609.30063 — katgpt-rs Research 591 / riir-train Research 458 (sibling reward family)
 - Liu et al., "Self-play only evolves when self-synthetic pipeline ensures learnable information gain", arXiv:2603.02218 — the paper's own self-play-diagnosis citation
+
+> **PASS-Redirects (synthesis):** Zheng & Sharma [arXiv:2611.27962 "Model Carving: Training Transformers That Optimize Their Own Topology"] — the same power-law rate-estimator family reappears as a training-time compute-allocation price (π = v(T)·ln(1+ρφ/(1−φ)) from an online scaling-law fit); no modelless consumer here (the Bench-991 surface lesson stands — 641 lost on a surface with no power law, which points at training surfaces, not at the family), recipe adoption lives in riir-train Research 504 / Plan 517.
