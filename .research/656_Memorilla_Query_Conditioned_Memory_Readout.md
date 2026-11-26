@@ -65,6 +65,7 @@ Three ablations carry all the transferable science:
 3. **Bonsai-27B-scale memory lane ≈ 1,000 4090-h** — recorded negative; only a 50–100M-token reconstruction probe is sane, and only after R1/R2 prove the mechanism at game scale.
 4. **The TextWorld absolute effect is modest** (+0.056 avg@3, one env, 800 prompts). Plan 488's gates use paired relative-magnitude bars with tail support, never pooled wins.
 5. **Reflex corpus-cap accuracy levers measured NEGATIVE previously** (Issue 013) — corpus-summary features have a bad track record on this stack; Issue 985 is written with that prior disclosed.
+6. **Plan 488 stage-1 read bar NOT MET (2026-11-26, riir-train Bench 723)** — 800-step supervised masked-reconstruction training of the ~10.2M sighting compressor produced a read-level error 4.3× the closed-form rederive floor (20.95 vs 4.86) and a closed-loop chase arm below the modelless ring floor on both decidable classes (waypoint 0.522 < 0.770; evade 0.000 < 0.387). Store-condition signal is REAL (noise 40.9 ≫ real ≈ 4.9×) — the module encodes episode content; the gap is read quality. T1.5's four-arm GOAT (trained · untrained · shuffled-docs · matched-param LoRA) still owns the MODULE-axis verdict; T4.2 demote/promote owner-gated. Lesson carried: stage-1 reconstruction alone does not buy read competitiveness on this axis — consistent with 985/986's conditioning-first mechanism lessons.
 
 ## Provenance
 
