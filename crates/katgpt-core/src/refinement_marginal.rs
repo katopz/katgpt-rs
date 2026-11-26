@@ -550,10 +550,10 @@ mod tests {
             .min_by(|&a, &b| rec.bins[a].total_cmp(&rec.bins[b]))
             .unwrap();
         let mut tv = 0.0_f32;
-        for b in 0..SYMBOL_BINS {
-            let approx = rec.bins[b] / c;
+        for (b, &bin_b) in rec.bins[..SYMBOL_BINS].iter().enumerate() {
+            let approx = bin_b / c;
             let m_b = if b == argmin { t } else { 0.0 };
-            let exact = (rec.bins[b] + m_b) / a;
+            let exact = (bin_b + m_b) / a;
             tv += (approx - exact).abs();
         }
         tv *= 0.5;

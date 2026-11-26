@@ -706,9 +706,7 @@ fn refresh_pullbacks(weights: &[&[f32]], dims: &[usize], scratch: &mut AdjointSc
     // Terminal layer has no pullback (objective gradient is local).
     if n_layers > 0 {
         let last = dims[n_layers];
-        for k in 0..last {
-            scratch.pullback[n_layers][k] = 0.0;
-        }
+        scratch.pullback[n_layers][..last].fill(0.0);
     }
 }
 

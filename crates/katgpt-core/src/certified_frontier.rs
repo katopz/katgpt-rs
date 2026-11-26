@@ -1401,11 +1401,11 @@ impl<const MAX_CELLS: usize, const D: usize> CertifiedFrontier<MAX_CELLS, D> {
     pub fn dilation_feasibility(&self, cfg: &FrontierConfig) -> DilationFeasibility {
         let mut best = f32::NEG_INFINITY;
         let mut min_l = f32::INFINITY;
-        for i in 0..self.len {
-            if self.cells[i].certified {
-                best = best.max(self.cells[i].cb - cfg.h);
-                let li = if self.cells[i].lipschitz.is_finite() {
-                    self.cells[i].lipschitz
+        for cell in self.cells[..self.len].iter() {
+            if cell.certified {
+                best = best.max(cell.cb - cfg.h);
+                let li = if cell.lipschitz.is_finite() {
+                    cell.lipschitz
                 } else {
                     cfg.lipschitz
                 };

@@ -135,9 +135,9 @@ pub fn serialize_game_state(
     let mut buf = Vec::with_capacity(total_bytes);
 
     // Grid: 13×13 cells, each as one u32 token (row-major: y outer, x inner)
-    for y in 0..ARENA_H {
-        for x in 0..ARENA_W {
-            push_token(&mut buf, cell_to_token(&grid.cells[y][x]));
+    for grid_row in grid.cells[..ARENA_H].iter() {
+        for cell in grid_row[..ARENA_W].iter() {
+            push_token(&mut buf, cell_to_token(cell));
         }
     }
 

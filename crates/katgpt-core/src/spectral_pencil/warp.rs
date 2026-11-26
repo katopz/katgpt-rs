@@ -105,8 +105,8 @@ impl<const D: usize> MonotoneWarp<D> {
         // M = z·I − A
         let mut m = self.a;
         m.negate();
-        for i in 0..D {
-            m.data[i][i] += z;
+        for (i, row) in m.data.iter_mut().enumerate() {
+            row[i] += z;
         }
         let fm = m.to_full();
         let fb = self.b_inv_sqrt.to_full();

@@ -155,11 +155,11 @@ impl CuratorVerifier {
     #[inline(always)]
     fn query_direction_dot(&self, dir: &TernaryDir) -> f32 {
         let mut dot = 0.0f32;
-        for i in 0..8 {
+        for (i, &q_i) in self.query_vector.iter().enumerate() {
             let pos = ((dir.pos_bits >> i) & 1) as f32;
             let neg = ((dir.neg_bits >> i) & 1) as f32;
             let sign = pos - neg;
-            dot += self.query_vector[i] * sign;
+            dot += q_i * sign;
         }
         dot * dir.row_scale
     }

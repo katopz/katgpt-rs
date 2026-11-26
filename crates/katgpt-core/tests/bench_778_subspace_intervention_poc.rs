@@ -663,8 +663,8 @@ fn issue_778_subspace_intervention_poc() {
     );
 
     println!("\n── Full-rank linear accuracy per layer (the M3 affinity axis) ──");
-    for l in 0..N_LAYERS {
-        println!("  layer {l:2}: acc {:.3}", out_a.full_acc[l]);
+    for (l, &acc_l) in out_a.full_acc[..N_LAYERS].iter().enumerate() {
+        println!("  layer {l:2}: acc {acc_l:.3}");
     }
     let best_layer = out_a.best_layer;
     println!(

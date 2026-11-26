@@ -463,20 +463,24 @@ pub fn moe_forward_token(
     // if absurdly small, fall back to uniform 1/K_r.
     if sum < 1.0e-20 {
         let uniform = 1.0 / (k_r as f32);
-        for k in 0..k_r {
-            scratch.topk_weights[k] = uniform;
+        for w in scratch.topk_weights[..k_r].iter_mut() {
+            *w = uniform;
         }
     } else if config.renormalize {
         let inv = 1.0 / sum;
-        for k in 0..k_r {
-            let idx = scratch.topk_indices[k];
-            scratch.topk_weights[k] = scratch.sigmoid_scores[idx] * inv;
+        for (w, &idx) in scratch.topk_weights[..k_r]
+            .iter_mut()
+            .zip(scratch.topk_indices[..k_r].iter())
+        {
+            *w = scratch.sigmoid_scores[idx] * inv;
         }
     } else {
         // moe_renormalize=false: use raw sigmoid scores as weights.
-        for k in 0..k_r {
-            let idx = scratch.topk_indices[k];
-            scratch.topk_weights[k] = scratch.sigmoid_scores[idx];
+        for (w, &idx) in scratch.topk_weights[..k_r]
+            .iter_mut()
+            .zip(scratch.topk_indices[..k_r].iter())
+        {
+            *w = scratch.sigmoid_scores[idx];
         }
     }
 
@@ -495,8 +499,7 @@ pub fn moe_forward_token(
         config.situ_linear_beta,
     );
     // If N_s > 1, accumulate remaining shared experts (Kimi-K3-0.40B has N_s=1).
-    for s in 1..weights.shared_experts.len() {
-        let shared = &weights.shared_experts[s];
+    for shared in weights.shared_experts[1..].iter() {
         situ_expert_forward(
             shared,
             hidden_in,

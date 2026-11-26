@@ -434,22 +434,22 @@ fn g6_determinism_bit_exact_across_runs() {
     let mut rng = SplitMix64::new(0x0BEE_F42D_EADB_EEF0);
     let init_x = {
         let mut x = CochainField::zeros(0, cx.n_vertices(), d_v);
-        for k in 0..total {
-            x.data[k] = rng.next_f32();
+        for slot in x.data[..total].iter_mut() {
+            *slot = rng.next_f32();
         }
         x
     };
     let init_z = {
         let mut z = CochainField::zeros(0, cx.n_vertices(), d_v);
-        for k in 0..total {
-            z.data[k] = rng.next_f32();
+        for slot in z.data[..total].iter_mut() {
+            *slot = rng.next_f32();
         }
         z
     };
     let init_u = {
         let mut u = CochainField::zeros(0, cx.n_vertices(), d_v);
-        for k in 0..total {
-            u.data[k] = rng.next_f32() * 0.1; // small dual
+        for slot in u.data[..total].iter_mut() {
+            *slot = rng.next_f32() * 0.1; // small dual
         }
         u
     };

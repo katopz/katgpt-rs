@@ -176,8 +176,7 @@ fn ref_moe_forward_f64(
     );
     // If N_s > 1, accumulate remaining shared experts.
     let mut expert_out = vec![0.0f64; d];
-    for s in 1..weights.shared_experts.len() {
-        let shared = &weights.shared_experts[s];
+    for shared in weights.shared_experts[1..].iter() {
         ref_situ_expert_f64(
             &cast_f32_slice(&shared.gate_proj),
             &cast_f32_slice(&shared.up_proj),

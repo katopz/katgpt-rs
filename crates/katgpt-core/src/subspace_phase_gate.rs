@@ -1476,12 +1476,12 @@ mod tests {
         // Same rank.
         assert_eq!(result.rank, owned.rank);
         // Same singular values (both sorted descending).
-        for j in 0..result.len() {
+        for (j, &sv) in owned.singular_values.iter().enumerate() {
             assert!(
-                (result.singular_value(j) - owned.singular_values[j]).abs() < 1e-4,
+                (result.singular_value(j) - sv).abs() < 1e-4,
                 "sv[{j}] mismatch: SOA={} owned={}",
                 result.singular_value(j),
-                owned.singular_values[j]
+                sv
             );
         }
     }

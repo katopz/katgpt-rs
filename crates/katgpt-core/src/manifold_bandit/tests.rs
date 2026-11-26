@@ -517,11 +517,8 @@ fn test_observe_invalid_arm_panics() {
 fn test_arm_path_depth_correct() {
     let tree = build_test_tree(0.0);
     // All leaves are at depth 2 in the test tree.
-    for arm in 0..4 {
-        assert_eq!(
-            tree.arm_paths[arm].len, 2,
-            "arm {arm} path should have depth 2"
-        );
+    for (arm, path) in tree.arm_paths.iter().enumerate() {
+        assert_eq!(path.len, 2, "arm {arm} path should have depth 2");
     }
 }
 

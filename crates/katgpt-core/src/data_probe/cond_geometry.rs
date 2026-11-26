@@ -405,11 +405,10 @@ pub fn ball_counts(
         let r2_a = t2 * r2_b;
         let mut ka = 0u32;
         let mut kb = 0u32;
-        for j in 0..n {
+        for (j, &d2) in scratch.dist_row[..n].iter().enumerate() {
             if j == i {
                 continue;
             }
-            let d2 = scratch.dist_row[j];
             if d2 <= r2_a {
                 ka += 1;
             }

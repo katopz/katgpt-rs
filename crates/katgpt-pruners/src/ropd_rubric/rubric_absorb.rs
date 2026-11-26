@@ -396,10 +396,7 @@ impl<P: ScreeningPruner> AbsorbCompress for RubricGatedAbsorbCompress<P> {
         };
         // Gate: only compress when reviewer is net-positive
         let ratio = metrics.benefit_ratio();
-        if ratio < self.config.min_benefit_ratio {
-            return false;
-        }
-        true
+        ratio >= self.config.min_benefit_ratio
     }
 }
 

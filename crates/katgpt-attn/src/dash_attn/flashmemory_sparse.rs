@@ -2781,12 +2781,8 @@ mod tests {
         // Threshold 0.5: σ(0·0)=0.5 ≥ 0.5 → ALL blocks selected, every head.
         let mut idx = zero_indexer(fm_all);
         let sel = idx.select_gqa(&query, &cache, 0);
-        for h in 0..n_kv_head {
-            assert_eq!(
-                sel.blocks_per_head[h].len(),
-                2,
-                "all blocks selected at thr 0.5"
-            );
+        for head_blocks in sel.blocks_per_head[..n_kv_head].iter() {
+            assert_eq!(head_blocks.len(), 2, "all blocks selected at thr 0.5");
         }
 
         // Threshold just above 0.5: nothing selected.

@@ -522,10 +522,10 @@ impl<G: ChanceGame> ChancePuct<G> {
         let n = p.n_children as usize;
         let total: f32 = self.nodes[first..first + n].iter().map(|c| c.weight).sum();
         let mut u = rng.f32() * total;
-        for c in first..first + n {
-            u -= self.nodes[c].weight;
+        for (c_off, node) in self.nodes[first..first + n].iter().enumerate() {
+            u -= node.weight;
             if u < 0.0 {
-                return c;
+                return first + c_off;
             }
         }
         first + n - 1

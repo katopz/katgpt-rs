@@ -669,8 +669,8 @@ impl SstAnchor {
             // Sign-canonicalize (largest-|entry| positive, first wins ties).
             let mut best = 0usize;
             let mut best_abs = 0.0f32;
-            for i in 0..wide {
-                let a = scratch.wvec[i].abs();
+            for (i, &w) in scratch.wvec[..wide].iter().enumerate() {
+                let a = w.abs();
                 if a > best_abs {
                     best_abs = a;
                     best = i;
@@ -1138,8 +1138,8 @@ pub fn fit_anchor_into(
         // Sign-canonicalize the propagated column.
         let mut best = 0usize;
         let mut best_abs = 0.0f32;
-        for idx in 0..wide {
-            let a = scratch.wvec[idx].abs();
+        for (idx, &w) in scratch.wvec[..wide].iter().enumerate() {
+            let a = w.abs();
             if a > best_abs {
                 best_abs = a;
                 best = idx;

@@ -1247,15 +1247,15 @@ impl FkStepper {
             // LSE-normalize the candidate weights (multi-array index loop —
             // deliberately range-based for fixed iteration order).
             let mut mx = f64::NEG_INFINITY;
-            for i in 0..n {
-                let v = scratch.log_w_next[i] as f64;
+            for &lw32 in scratch.log_w_next[..n].iter() {
+                let v = lw32 as f64;
                 if v > mx {
                     mx = v;
                 }
             }
             let mut sum = 0.0f64;
-            for i in 0..n {
-                sum += (scratch.log_w_next[i] as f64 - mx).exp();
+            for &lw32 in scratch.log_w_next[..n].iter() {
+                sum += (lw32 as f64 - mx).exp();
             }
             let inv = 1.0 / sum;
             for i in 0..n {
@@ -1370,15 +1370,15 @@ impl FkStepper {
             *lwn = lw + delta;
         }
         let mut mx = f64::NEG_INFINITY;
-        for i in 0..n {
-            let v = scratch.log_w_next[i] as f64;
+        for &lw32 in scratch.log_w_next[..n].iter() {
+            let v = lw32 as f64;
             if v > mx {
                 mx = v;
             }
         }
         let mut sum = 0.0f64;
-        for i in 0..n {
-            sum += (scratch.log_w_next[i] as f64 - mx).exp();
+        for &lw32 in scratch.log_w_next[..n].iter() {
+            sum += (lw32 as f64 - mx).exp();
         }
         let inv = 1.0 / sum;
         let mut l1 = 0.0f64;

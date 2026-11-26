@@ -123,11 +123,12 @@ fn real_checkpoint_loads_and_produces_nonzero_residual() {
     let out = corrector.correct(&input);
 
     // G1: corrected probs sum to 1.0 per depth.
-    for di in 0..out.depth {
-        let sum: f32 = out.corrected_probs[di].iter().sum();
+    for probs_at_depth in out.corrected_probs[..out.depth].iter() {
+        let sum: f32 = probs_at_depth.iter().sum();
+        let _ = &out;
         assert!(
             (sum - 1.0).abs() < 1e-4,
-            "G1 FAIL — probs at depth {di} sum to {sum}, expected 1.0"
+            "G1 FAIL — probs at a depth sum to {sum}, expected 1.0"
         );
     }
 
@@ -151,9 +152,9 @@ fn real_checkpoint_loads_and_produces_nonzero_residual() {
     // Trained weights MUST produce non-zero residual — this is the proof that
     // the training (riir-train Plan 314 real-data run) encoded real signal.
     let mut max_abs_residual = 0.0f32;
-    for di in 0..out.depth {
-        for ki in 0..out.k {
-            let abs_r = out.weaver_residual[di][ki].abs();
+    for residual_at_depth in out.weaver_residual[..out.depth].iter() {
+        for &r in residual_at_depth[..out.k].iter() {
+            let abs_r = r.abs();
             if abs_r > max_abs_residual {
                 max_abs_residual = abs_r;
             }

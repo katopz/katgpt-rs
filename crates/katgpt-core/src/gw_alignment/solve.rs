@@ -274,25 +274,16 @@ impl SolveCore {
                 while improved {
                     improved = false;
                     for i in 0..n {
-                        let mut ki = usize::MAX;
-                        for k in 0..m {
-                            if scratch.t[i][k] > 0.0 {
-                                ki = k;
-                                break;
-                            }
-                        }
-                        if ki == usize::MAX {
+                        let ki = scratch.t[i].iter().take(m).position(|&v| v > 0.0);
+                        let Some(ki) = ki else {
                             continue;
-                        }
+                        };
                         for j in (i + 1)..n {
-                            let mut kj = usize::MAX;
-                            for k in 0..m {
-                                if scratch.t[j][k] > 0.0 {
-                                    kj = k;
-                                    break;
-                                }
-                            }
-                            if kj == usize::MAX || kj == ki {
+                            let kj = scratch.t[j].iter().take(m).position(|&v| v > 0.0);
+                            let Some(kj) = kj else {
+                                continue;
+                            };
+                            if kj == ki {
                                 continue;
                             }
                             let cur =
@@ -315,9 +306,9 @@ impl SolveCore {
                 // Entropic softmin on P: T₀ ∝ exp(−(P − min P)/τ).
                 let mut p_min = f64::INFINITY;
                 let mut p_sum = 0.0f64;
-                for i in 0..n {
-                    for k in 0..m {
-                        let v = f64::from(scratch.prod[i][k]);
+                for row in scratch.prod.iter().take(n) {
+                    for &v32 in row.iter().take(m) {
+                        let v = f64::from(v32);
                         if v < p_min {
                             p_min = v;
                         }
@@ -326,18 +317,18 @@ impl SolveCore {
                 }
                 let tau = (p_sum / ((n * m) as f64)).max(1e-12);
                 let mut s = 0.0f64;
-                for i in 0..n {
-                    for k in 0..m {
-                        let w = f64::exp(-(f64::from(scratch.prod[i][k]) - p_min) / tau);
+                for (i, row) in scratch.prod.iter().enumerate().take(n) {
+                    for (k, &v32) in row.iter().enumerate().take(m) {
+                        let w = f64::exp(-(f64::from(v32) - p_min) / tau);
                         scratch.t[i][k] = w as f32;
                         s += w;
                     }
                 }
                 if s.is_finite() && s > f64::MIN_POSITIVE {
                     let inv_s = (1.0 / s) as f32;
-                    for i in 0..n {
-                        for k in 0..m {
-                            scratch.t[i][k] *= inv_s;
+                    for row in scratch.t.iter_mut().take(n) {
+                        for cell in row.iter_mut().take(m) {
+                            *cell *= inv_s;
                         }
                     }
                 }
@@ -435,17 +426,17 @@ impl SolveCore {
 /// `froA2/n² + froB2/m² − 2·⟨T, D_A T D_B⟩` is the polytope-exact special
 /// case).
 fn loss_value(scratch: &mut GwScratch, a: &[&[f32]], b: &[&[f32]], n: usize, m: usize) -> f64 {
-    for i in 0..n {
+    for (i, t_row) in scratch.t.iter().enumerate().take(n) {
         let mut rs = 0.0f64;
-        for k in 0..m {
-            rs += f64::from(scratch.t[i][k]);
+        for &v in t_row.iter().take(m) {
+            rs += f64::from(v);
         }
         scratch.row_sum[i] = rs;
     }
     for k in 0..m {
         let mut cs = 0.0f64;
-        for i in 0..n {
-            cs += f64::from(scratch.t[i][k]);
+        for t_row in scratch.t.iter().take(n) {
+            cs += f64::from(t_row[k]);
         }
         scratch.col_sum[k] = cs;
     }
@@ -496,35 +487,35 @@ fn project_polytope(scratch: &mut GwScratch, n: usize, m: usize, passes: usize) 
     let col_target = 1.0f64 / m as f64;
     let uniform = (1.0f64 / ((n * m) as f64)) as f32;
     for _ in 0..passes {
-        for i in 0..n {
+        for t_row in scratch.t.iter_mut().take(n) {
             let mut rs = 0.0f64;
-            for k in 0..m {
-                rs += f64::from(scratch.t[i][k]);
+            for &v in t_row.iter().take(m) {
+                rs += f64::from(v);
             }
             if rs.is_finite() && rs > f64::MIN_POSITIVE {
                 let scale = (row_target / rs) as f32;
-                for k in 0..m {
-                    scratch.t[i][k] *= scale;
+                for cell in t_row.iter_mut().take(m) {
+                    *cell *= scale;
                 }
             } else {
-                for k in 0..m {
-                    scratch.t[i][k] = uniform;
+                for cell in t_row.iter_mut().take(m) {
+                    *cell = uniform;
                 }
             }
         }
         for k in 0..m {
             let mut cs = 0.0f64;
-            for i in 0..n {
-                cs += f64::from(scratch.t[i][k]);
+            for t_row in scratch.t.iter().take(n) {
+                cs += f64::from(t_row[k]);
             }
             if cs.is_finite() && cs > f64::MIN_POSITIVE {
                 let scale = (col_target / cs) as f32;
-                for i in 0..n {
-                    scratch.t[i][k] *= scale;
+                for t_row in scratch.t.iter_mut().take(n) {
+                    t_row[k] *= scale;
                 }
             } else {
-                for i in 0..n {
-                    scratch.t[i][k] = uniform;
+                for t_row in scratch.t.iter_mut().take(n) {
+                    t_row[k] = uniform;
                 }
             }
         }

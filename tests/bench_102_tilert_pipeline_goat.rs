@@ -125,57 +125,35 @@ fn proof_3_contiguous_weights_roundtrip() {
     let cw = ContiguousWeights::from_weights(&weights);
 
     // Global weights
-    for i in 0..weights.wte.len() {
-        assert!((cw.wte()[i] - weights.wte[i]).abs() < 1e-6, "wte[{i}]");
+    for (i, (&w, &cw_w)) in weights.wte.iter().zip(cw.wte().iter()).enumerate() {
+        assert!((cw_w - w).abs() < 1e-6, "wte[{i}]");
     }
-    for i in 0..weights.wpe.len() {
-        assert!((cw.wpe()[i] - weights.wpe[i]).abs() < 1e-6, "wpe[{i}]");
+    for (i, (&w, &cw_w)) in weights.wpe.iter().zip(cw.wpe().iter()).enumerate() {
+        assert!((cw_w - w).abs() < 1e-6, "wpe[{i}]");
     }
-    for i in 0..weights.lm_head.len() {
-        assert!(
-            (cw.lm_head()[i] - weights.lm_head[i]).abs() < 1e-6,
-            "lm_head[{i}]"
-        );
+    for (i, (&w, &cw_w)) in weights.lm_head.iter().zip(cw.lm_head().iter()).enumerate() {
+        assert!((cw_w - w).abs() < 1e-6, "lm_head[{i}]");
     }
 
     // Per-layer weights
-    for l in 0..config.n_layer {
-        let layer = &weights.layers[l];
-        for i in 0..layer.attn_wq.len() {
-            assert!(
-                (cw.layer_wq(l)[i] - layer.attn_wq[i]).abs() < 1e-6,
-                "wq[{l}][{i}]"
-            );
+    for (l, layer) in weights.layers.iter().take(config.n_layer).enumerate() {
+        for (i, &w) in layer.attn_wq.iter().enumerate() {
+            assert!((cw.layer_wq(l)[i] - w).abs() < 1e-6, "wq[{l}][{i}]");
         }
-        for i in 0..layer.attn_wk.len() {
-            assert!(
-                (cw.layer_wk(l)[i] - layer.attn_wk[i]).abs() < 1e-6,
-                "wk[{l}][{i}]"
-            );
+        for (i, &w) in layer.attn_wk.iter().enumerate() {
+            assert!((cw.layer_wk(l)[i] - w).abs() < 1e-6, "wk[{l}][{i}]");
         }
-        for i in 0..layer.attn_wv.len() {
-            assert!(
-                (cw.layer_wv(l)[i] - layer.attn_wv[i]).abs() < 1e-6,
-                "wv[{l}][{i}]"
-            );
+        for (i, &w) in layer.attn_wv.iter().enumerate() {
+            assert!((cw.layer_wv(l)[i] - w).abs() < 1e-6, "wv[{l}][{i}]");
         }
-        for i in 0..layer.attn_wo.len() {
-            assert!(
-                (cw.layer_wo(l)[i] - layer.attn_wo[i]).abs() < 1e-6,
-                "wo[{l}][{i}]"
-            );
+        for (i, &w) in layer.attn_wo.iter().enumerate() {
+            assert!((cw.layer_wo(l)[i] - w).abs() < 1e-6, "wo[{l}][{i}]");
         }
-        for i in 0..layer.mlp_w1.len() {
-            assert!(
-                (cw.layer_w1(l)[i] - layer.mlp_w1[i]).abs() < 1e-6,
-                "w1[{l}][{i}]"
-            );
+        for (i, &w) in layer.mlp_w1.iter().enumerate() {
+            assert!((cw.layer_w1(l)[i] - w).abs() < 1e-6, "w1[{l}][{i}]");
         }
-        for i in 0..layer.mlp_w2.len() {
-            assert!(
-                (cw.layer_w2(l)[i] - layer.mlp_w2[i]).abs() < 1e-6,
-                "w2[{l}][{i}]"
-            );
+        for (i, &w) in layer.mlp_w2.iter().enumerate() {
+            assert!((cw.layer_w2(l)[i] - w).abs() < 1e-6, "w2[{l}][{i}]");
         }
     }
 
@@ -187,10 +165,13 @@ fn proof_4_contiguous_weights_multi_layer() {
     let (_config, weights) = make_multi_layer(4);
     let cw = ContiguousWeights::from_weights(&weights);
     assert_eq!(cw.n_layers(), 4);
-    for l in 0..4 {
-        assert_eq!(cw.layer_wq(l).len(), weights.layers[l].attn_wq.len());
-        for i in 0..5.min(weights.layers[l].attn_wq.len()) {
-            assert!((cw.layer_wq(l)[i] - weights.layers[l].attn_wq[i]).abs() < 1e-6);
+    for (l, layer) in weights.layers.iter().take(4).enumerate() {
+        assert_eq!(cw.layer_wq(l).len(), layer.attn_wq.len());
+        for (i, &w) in layer.attn_wq[..5.min(layer.attn_wq.len())]
+            .iter()
+            .enumerate()
+        {
+            assert!((cw.layer_wq(l)[i] - w).abs() < 1e-6);
         }
     }
     println!("✅ Proof 4 PASSED: ContiguousWeights correct for 4-layer config");

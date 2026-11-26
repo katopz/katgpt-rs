@@ -531,9 +531,9 @@ mod tests {
         }
         // The theorem's content at this scale: the class-conditional policy
         // is a deterministic vertex choice (here: all ties → index 0).
-        for t in 0..T {
-            for c in 0..C {
-                assert_eq!(lifted.policy[t][c], 0);
+        for policy_row in lifted.policy[..T].iter() {
+            for cell in policy_row[..C].iter() {
+                assert_eq!(*cell, 0);
             }
         }
     }

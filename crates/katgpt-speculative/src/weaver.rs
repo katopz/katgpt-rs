@@ -2171,13 +2171,9 @@ mod tests {
         // is non-zero. However, all weight matrices are zero, so every matmul
         // output is zero. The final u_final is RMSNorm(post_mlp, norm_mlp=0)
         // which is zero (scale=0). So residuals are dot(0_vector, embedding) = 0.
-        for di in 0..out.depth {
-            for ki in 0..out.k {
-                assert!(
-                    out.weaver_residual[di][ki].abs() < 1e-6,
-                    "non-zero residual at di={di} ki={ki}: {}",
-                    out.weaver_residual[di][ki]
-                );
+        for (di, residual_at_depth) in out.weaver_residual[..out.depth].iter().enumerate() {
+            for (ki, &r) in residual_at_depth[..out.k].iter().enumerate() {
+                assert!(r.abs() < 1e-6, "non-zero residual at di={di} ki={ki}: {r}");
             }
         }
     }
@@ -2189,8 +2185,8 @@ mod tests {
         let input = test_input(&cfg, 16);
         let out = weaver_forward(&weights, &input);
 
-        for di in 0..out.depth {
-            let sum: f32 = out.corrected_probs[di].iter().sum();
+        for (di, probs_at_depth) in out.corrected_probs[..out.depth].iter().enumerate() {
+            let sum: f32 = probs_at_depth.iter().sum();
             assert!(
                 (sum - 1.0).abs() < 1e-5,
                 "probs at di={di} sum to {sum}, expected 1.0"

@@ -359,9 +359,8 @@ mod tests {
         // Vertex mode v and its edge image δv (normalized) — the dual
         // projects onto that image.
         let mut v_mode = CochainField::zeros(0, n, 1);
-        for j in 0..n {
-            v_mode.data[j] =
-                (std::f32::consts::PI * k_mode as f32 * (j as f32 + 0.5) / n as f32).cos();
+        for (j, slot) in v_mode.data[..n].iter_mut().enumerate() {
+            *slot = (std::f32::consts::PI * k_mode as f32 * (j as f32 + 0.5) / n as f32).cos();
         }
         let v_norm = v_mode.data.iter().map(|x| x * x).sum::<f32>().sqrt();
         for v in v_mode.data.iter_mut() {

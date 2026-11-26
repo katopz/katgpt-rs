@@ -1445,9 +1445,9 @@ fn test_sudoku9x9_solve_arto_inkala() {
     assert!(step > 0, "should take at least one step");
 
     // All cells filled
-    for r in 0..9 {
-        for c in 0..9 {
-            assert!(puzzle.grid[r][c] > 0, "cell ({r},{c}) should be filled");
+    for (r, grid_row) in puzzle.grid.iter().enumerate() {
+        for (c, &cell) in grid_row.iter().enumerate() {
+            assert!(cell > 0, "cell ({r},{c}) should be filled");
         }
     }
 }

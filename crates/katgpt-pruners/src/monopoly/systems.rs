@@ -1303,8 +1303,8 @@ mod tests {
     fn spawn_players_correct_starting_cash() {
         let world = test_world();
         let pe = world.resource::<PlayerEntities>();
-        for i in 0..4 {
-            let p = world.get::<Player>(pe.entities[i]).unwrap();
+        for entity_id in pe.entities[..4].iter() {
+            let p = world.get::<Player>(*entity_id).unwrap();
             assert_eq!(p.cash, super::super::STARTING_CASH);
             assert_eq!(p.position, 0);
             assert!(!p.in_jail);

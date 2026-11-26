@@ -755,10 +755,10 @@ impl GoHeuristic {
         let mut opp_score = 0.0f32;
         let total = size * size;
 
-        for idx in 0..total {
+        for (idx, &cell) in state.board[..total].iter().enumerate() {
             let row = idx / size;
             let col = idx % size;
-            match state.board[idx] {
+            match cell {
                 c if c == color => {
                     our_score += self.positional_value(row, col, size, phase);
                 }

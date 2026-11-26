@@ -490,10 +490,7 @@ pub fn fit_correction_into(
         1,
     );
     v_out.clear();
-    v_out.reserve(d_h);
-    for k in 0..d_h {
-        v_out.push(scratch.w_t[k] as f32);
-    }
+    v_out.extend(scratch.w_t[..d_h].iter().map(|&w| w as f32));
 }
 
 #[cfg(test)]

@@ -1545,8 +1545,8 @@ mod tests {
         let cx = CellComplex::grid_2d(256, 256);
         let mut potential = CochainField::zeros(0, cx.n_vertices(), 1);
         // Fill with sine-based function
-        for i in 0..cx.n_vertices() {
-            potential.data[i] = (i as f32 * 0.01).sin();
+        for (i, slot) in potential.data[..cx.n_vertices()].iter_mut().enumerate() {
+            *slot = (i as f32 * 0.01).sin();
         }
         let start = std::time::Instant::now();
         let _components = hodge_decompose(&cx, &potential);

@@ -392,8 +392,8 @@ fn t698_t7_gate_probe_difficulty_separation() {
     }
     for row in &rows {
         assert!(row.entropy1.is_finite() && row.margin1.is_finite());
-        for k in 0..4 {
-            assert!(row.kls[k].is_finite() && row.kls[k] >= 0.0);
+        for &kl in row.kls[..4].iter() {
+            assert!(kl.is_finite() && kl >= 0.0);
         }
     }
 

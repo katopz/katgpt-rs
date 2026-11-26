@@ -335,17 +335,16 @@ fn print_reel_weights(reels: &SlotReels) {
     println!("🎰 Reel Weights (Marginals)");
     println!("─────────────────────────────────────────────────────");
     print!("{:<10}", "Symbol");
-    for reel in 0..NUM_REELS {
+    for reel in 0..reels.weights.len() {
         print!("  Reel {reel}     ");
     }
     println!();
     println!("─────────────────────────────────────────────────────");
 
-    for symbol in 0..NUM_SYMBOLS {
-        let s = Symbol::from_usize(symbol);
+    for (symbol, s) in (0..NUM_SYMBOLS).map(|i| (i, Symbol::from_usize(i))) {
         print!("{s:<10}");
-        for reel in 0..NUM_REELS {
-            print!("  {:>6.1}%     ", reels.weights[reel][symbol] * 100.0);
+        for (reel, weight_row) in reels.weights.iter().enumerate() {
+            print!("  {:>6.1}%     ", weight_row[symbol] * 100.0);
         }
         println!();
     }

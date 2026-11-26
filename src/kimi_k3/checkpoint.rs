@@ -354,8 +354,8 @@ pub fn kimi_k3_backward_sequence_ckpt(
         }
 
         let mut layer_saved_per_token: Vec<LayerSavedActivations> = Vec::with_capacity(l);
-        for t in 0..l {
-            let lc = &ckpt.tokens[t].layers[layer_idx];
+        for token_saved in ckpt.tokens[..l].iter() {
+            let lc = &token_saved.layers[layer_idx];
             let mut saved = LayerSavedActivations {
                 prefix_sum_in: lc.prefix_sum_in.clone(),
                 has_self_attn_res: !lc.block_state_self.is_empty(),

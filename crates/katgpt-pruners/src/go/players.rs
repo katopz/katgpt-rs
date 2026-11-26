@@ -269,11 +269,7 @@ fn validate_move(state: &GoState, row: usize, col: usize) -> bool {
     // 2. Eye preservation: all existing neighbors are own stones
     let neighbors = board_neighbors(idx, size);
     let all_own = !neighbors.is_empty() && neighbors.iter().all(|&n| state.board[n] == me);
-    if all_own {
-        return false;
-    }
-
-    true
+    !all_own
 }
 
 /// Categorize a move into one of 8 bandit categories.
@@ -1222,9 +1218,7 @@ mod tests {
         let mut rng = Rng::with_seed(42);
         let mut state = new_9x9();
         // Fill entire board
-        for i in 0..81 {
-            state.board[i] = GoCell::Black;
-        }
+        state.board.fill(GoCell::Black);
         let legal = state.legal_moves();
         assert!(legal.is_empty());
         let mut player = GoRandomPlayer;
@@ -1636,9 +1630,7 @@ mod tests {
     fn mcts_player_passes_when_no_moves() {
         let mut rng = Rng::with_seed(42);
         let mut state = new_9x9();
-        for i in 0..81 {
-            state.board[i] = GoCell::Black;
-        }
+        state.board.fill(GoCell::Black);
         let legal = state.legal_moves();
         let mut player = GoMctsPlayer::new(10, 5);
         assert_eq!(player.select_move(&state, &legal, &mut rng), GoAction::Pass);
@@ -1650,9 +1642,7 @@ mod tests {
         let mut state = new_9x9();
         // Fill board with Black, leave (0,0) empty and (0,1) White
         // Playing Black at (0,0) captures White at (0,1), creating a liberty
-        for i in 0..81 {
-            state.board[i] = GoCell::Black;
-        }
+        state.board.fill(GoCell::Black);
         state.board[0] = GoCell::Empty; // (0,0) — the only legal move
         state.board[1] = GoCell::White; // (0,1) — will be captured
         state.to_play = GoCell::Black;

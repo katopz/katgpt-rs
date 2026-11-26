@@ -153,8 +153,7 @@ impl Graph {
         while head < tail {
             let v = queue[head];
             head += 1;
-            for i in self.adj_start[v]..self.adj_start[v + 1] {
-                let (u, _, _) = self.adj_flat[i];
+            for &(u, _, _) in &self.adj_flat[self.adj_start[v]..self.adj_start[v + 1]] {
                 if dist[u].is_infinite() {
                     dist[u] = dist[v] + 1.0;
                     queue[tail] = u;

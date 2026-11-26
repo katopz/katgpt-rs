@@ -236,8 +236,7 @@ fn make_npcs() -> Vec<NpcState> {
 /// shared, the top-coherence candidate in every NPC's pool tends to be the
 /// archetype-0-aligned one → all NPCs pick archetype 0 → collapse.
 fn regen_pool(npc: &mut NpcState, archetypes: &[Vec<f32>], rng: &mut Lcg) {
-    for j in 0..POOL_SIZE {
-        let pool = &mut npc.pool[j];
+    for pool in npc.pool[..POOL_SIZE].iter_mut() {
         let r = rng.next_f32();
         let source_idx = if r < 0.4 {
             // Near the global peak (archetype 0).
@@ -329,8 +328,7 @@ impl ArmA {
             MedianTopMAvailability::new(vec![], M),
             AlienConfig::coherence_only(),
         );
-        for i in 0..N_NPCS {
-            let npc = &mut self.npcs[i];
+        for (i, npc) in self.npcs.iter_mut().enumerate() {
             regen_pool(npc, archetypes, rng);
             sampler
                 .rank_into(
@@ -383,8 +381,7 @@ impl ArmB {
 
     fn step(&mut self, archetypes: &[Vec<f32>], rng: &mut Lcg) -> Vec<(usize, Vec<f32>)> {
         let mut selections: Vec<(usize, Vec<f32>)> = Vec::with_capacity(N_NPCS);
-        for i in 0..N_NPCS {
-            let npc = &mut self.npcs[i];
+        for (i, npc) in self.npcs[..N_NPCS].iter_mut().enumerate() {
             regen_pool(npc, archetypes, rng);
             // Score each pool direction by (coherence - λ · local_count).
             // Then pick the argmax (no z-scoring needed — single axis).

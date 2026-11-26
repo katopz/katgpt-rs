@@ -110,10 +110,10 @@ impl<const D: usize> SymPacked<D> {
     #[must_use]
     pub fn frobenius_norm(&self) -> f32 {
         let mut s = 0.0_f64;
-        for i in 0..D {
-            s += f64::from(self.data[i][i]) * f64::from(self.data[i][i]);
-            for j in (i + 1)..D {
-                s += f64::from(self.data[i][j]) * f64::from(self.data[i][j]);
+        for (i, row) in self.data.iter().enumerate() {
+            s += f64::from(row[i]) * f64::from(row[i]);
+            for &x in row[(i + 1)..].iter() {
+                s += f64::from(x) * f64::from(x);
             }
         }
         (s as f32).sqrt()
@@ -177,10 +177,10 @@ impl<const D: usize> SymPacked<D> {
     /// `D(D+1)/2` view (commitment bytes, SIMD dots).
     pub fn extract_param_vec_into(&self, out: &mut [f32]) {
         let mut w = 0_usize;
-        for i in 0..D {
-            for j in i..D {
+        for (i, row) in self.data.iter().enumerate() {
+            for &v in row[i..].iter() {
                 if w < out.len() {
-                    out[w] = self.data[i][j];
+                    out[w] = v;
                     w += 1;
                 }
             }

@@ -348,8 +348,10 @@ fn bfs_distances(world: &ChainWorld, seeds: &[usize], k_hop: usize, dist: &mut V
     for d in 1..=k_hop {
         next_frontier.clear();
         for &node in &frontier {
-            for e in world.offsets[node] as usize..world.offsets[node + 1] as usize {
-                let t = world.targets[e] as usize;
+            for &t in
+                world.targets[world.offsets[node] as usize..world.offsets[node + 1] as usize].iter()
+            {
+                let t = t as usize;
                 if dist[t] == u32::MAX {
                     dist[t] = d as u32;
                     next_frontier.push(t);

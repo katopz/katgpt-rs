@@ -127,8 +127,7 @@ fn run_bare_gdn2(tokens: &[TokenTriple], needles: &[Needle]) -> Vec<(usize, f32)
             // Readout with needle's key as query
             let mut needle_out = vec![0.0f32; dv];
             // o = Sᵀ q  (manual readout with needle key)
-            for ii in 0..dk {
-                let qi = needle.key[ii];
+            for (ii, &qi) in needle.key[..dk].iter().enumerate() {
                 let row_start = ii * dv;
                 for j in 0..dv {
                     needle_out[j] += s[row_start + j] * qi;
@@ -190,8 +189,7 @@ fn run_gdn2_with_cache(tokens: &[TokenTriple], needles: &[Needle]) -> Vec<(usize
         if let Some(needle) = needles.iter().find(|n| n.pos == i) {
             // GDN2 readout: o = Sᵀ q
             let mut gdn2_out = vec![0.0f32; dv];
-            for ii in 0..dk {
-                let qi = needle.key[ii];
+            for (ii, &qi) in needle.key[..dk].iter().enumerate() {
                 let row_start = ii * dv;
                 for j in 0..dv {
                     gdn2_out[j] += s[row_start + j] * qi;
@@ -321,8 +319,7 @@ fn gate_g1_quality() -> bool {
     for needle in &needles {
         // Bare GDN2 readout from end of stream
         let mut bare_out = vec![0.0f32; dv];
-        for ii in 0..dk {
-            let qi = needle.key[ii];
+        for (ii, &qi) in needle.key[..dk].iter().enumerate() {
             let row_start = ii * dv;
             for j in 0..dv {
                 bare_out[j] += s_bare[row_start + j] * qi;
@@ -332,8 +329,7 @@ fn gate_g1_quality() -> bool {
 
         // GDN2 + cache readout from end of stream
         let mut gdn2_out = vec![0.0f32; dv];
-        for ii in 0..dk {
-            let qi = needle.key[ii];
+        for (ii, &qi) in needle.key[..dk].iter().enumerate() {
             let row_start = ii * dv;
             for j in 0..dv {
                 gdn2_out[j] += s_cache[row_start + j] * qi;

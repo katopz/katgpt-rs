@@ -142,14 +142,14 @@ impl RubricVector {
         let n = self.scores.len();
         let mut gaps: Vec<(usize, f32)> = Vec::with_capacity(n);
 
-        for i in 0..n {
+        for (i, &score_i) in self.scores.iter().enumerate() {
             // Max reference score for this criterion across all references
             let max_ref_score = references
                 .iter()
                 .filter_map(|r| r.scores.get(i).copied())
                 .fold(0.0_f32, f32::max);
 
-            let gap = (max_ref_score - self.scores[i]).max(0.0);
+            let gap = (max_ref_score - score_i).max(0.0);
             gaps.push((i, gap));
         }
 

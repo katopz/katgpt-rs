@@ -92,9 +92,9 @@ pub fn jacobi_eigen<const D: usize>(
 ) -> JacobiReport {
     scratch.a = *a_full;
     if want_vectors {
-        for i in 0..D {
-            for j in 0..D {
-                scratch.v[i][j] = if i == j { 1.0 } else { 0.0 };
+        for (i, v_row) in scratch.v.iter_mut().enumerate() {
+            for (j, v_ij) in v_row.iter_mut().enumerate() {
+                *v_ij = if i == j { 1.0 } else { 0.0 };
             }
         }
     }
@@ -118,9 +118,9 @@ pub fn jacobi_eigen<const D: usize>(
     for sweep in 0..MAX_SWEEPS {
         // off-diagonal residual
         let mut off_sq = 0.0_f64;
-        for p in 0..D {
-            for q in (p + 1)..D {
-                off_sq += f64::from(scratch.a[p][q]) * f64::from(scratch.a[p][q]);
+        for (p, a_row) in scratch.a.iter().enumerate() {
+            for &apq in a_row[(p + 1)..].iter() {
+                off_sq += f64::from(apq) * f64::from(apq);
             }
         }
         let off = (off_sq as f32).sqrt();
@@ -165,11 +165,11 @@ pub fn jacobi_eigen<const D: usize>(
                     }
                 }
                 if want_vectors {
-                    for i in 0..D {
-                        let vip = scratch.v[i][p];
-                        let viq = scratch.v[i][q];
-                        scratch.v[i][p] = c * vip - s * viq;
-                        scratch.v[i][q] = s * vip + c * viq;
+                    for v_row in scratch.v.iter_mut() {
+                        let vip = v_row[p];
+                        let viq = v_row[q];
+                        v_row[p] = c * vip - s * viq;
+                        v_row[q] = s * vip + c * viq;
                     }
                 }
             }
@@ -178,8 +178,8 @@ pub fn jacobi_eigen<const D: usize>(
 
     // Sort eigenvalues ascending; permute eigenvector columns alongside.
     // Selection sort = pinned order (stable for equal keys by index).
-    for i in 0..D {
-        scratch.values[i] = scratch.a[i][i];
+    for (i, val) in scratch.values.iter_mut().enumerate() {
+        *val = scratch.a[i][i];
     }
     if want_vectors {
         for i in 0..D {
@@ -192,8 +192,8 @@ pub fn jacobi_eigen<const D: usize>(
             }
             if m != i {
                 scratch.values.swap(i, m);
-                for r in 0..D {
-                    scratch.v[r].swap(i, m);
+                for v_row in scratch.v.iter_mut() {
+                    v_row.swap(i, m);
                 }
             }
         }

@@ -478,9 +478,9 @@ pub fn joint_key_read(
         // k=1 pick flip: argmax of the perturbed row, first-index ties.
         let mut bv = scratch.pert_scores[0];
         let mut am = 0usize;
-        for j in 1..seq {
-            if scratch.pert_scores[j] > bv {
-                bv = scratch.pert_scores[j];
+        for (j, &pj) in scratch.pert_scores[..seq].iter().enumerate().skip(1) {
+            if pj > bv {
+                bv = pj;
                 am = j;
             }
         }
@@ -578,8 +578,8 @@ fn key_damage(t: &KeyTensors, cfg: &ProbeConfig, scratch: &mut ProbeScratch) -> 
             let base = i * seq;
             // Relative distortion of the perturbed score row.
             let mut num2: f64 = 0.0;
-            for j in 0..seq {
-                let delta = a * scratch.err_col[j];
+            for &ec in scratch.err_col[..seq].iter() {
+                let delta = a * ec;
                 num2 += (delta * delta) as f64;
             }
             let dist = (num2 as f32).sqrt() / (scratch.ref_devnorm[i] + 1e-12);
@@ -675,7 +675,7 @@ fn value_damage(t: &ValueTensors, scratch: &mut ProbeScratch) -> Vec<ChannelDama
 
     // Reference context norms ‖y_i‖₂, y_i[c] = Σ_j w_ij·v_j[c] — fixed
     // i → c → j ascending fold order.
-    for i in 0..n_q {
+    for (i, slot) in scratch.vals[..n_q].iter_mut().enumerate() {
         let mut ysum2: f64 = 0.0;
         for c in 0..d {
             let mut acc: f32 = 0.0;
@@ -684,7 +684,7 @@ fn value_damage(t: &ValueTensors, scratch: &mut ProbeScratch) -> Vec<ChannelDama
             }
             ysum2 += (acc * acc) as f64;
         }
-        scratch.vals[i] = (ysum2 as f32).sqrt();
+        *slot = (ysum2 as f32).sqrt();
     }
 
     let mut out: Vec<ChannelDamage> = Vec::with_capacity(d);
@@ -709,8 +709,8 @@ fn value_damage(t: &ValueTensors, scratch: &mut ProbeScratch) -> Vec<ChannelDama
         let mut rel_sum: f64 = 0.0;
         for i in 0..n_q {
             let mut g: f32 = 0.0;
-            for j in 0..seq {
-                g += w_at(i, j) * scratch.err_col[j];
+            for (j, &ec) in scratch.err_col[..seq].iter().enumerate() {
+                g += w_at(i, j) * ec;
             }
             let rel = g.abs() / (scratch.vals[i] + 1e-12);
             rel_sum += rel as f64;

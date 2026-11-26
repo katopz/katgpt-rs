@@ -841,12 +841,9 @@ mod tests {
             a.centroids, b.centroids,
             "two-dead-cluster fit must be deterministic"
         );
-        for kk in 0..6 {
-            for d in 0..2 {
-                assert!(
-                    a.centroids[kk][d].is_finite(),
-                    "centroid {kk} drifted non-finite"
-                );
+        for (kk, centroid) in a.centroids.iter().enumerate() {
+            for &v in centroid[..2].iter() {
+                assert!(v.is_finite(), "centroid {kk} drifted non-finite");
             }
         }
     }

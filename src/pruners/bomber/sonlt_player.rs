@@ -203,9 +203,9 @@ impl SonltPlayer {
     /// training-time serialization in `serialize_board`.
     fn encode_board(&self, grid: &ArenaGrid) -> Vec<usize> {
         let mut tokens = Vec::with_capacity(BOARD_CELLS);
-        for y in 0..grid.height {
-            for x in 0..grid.width {
-                let t = match grid.cells[y][x] {
+        for grid_row in grid.cells[..grid.height].iter() {
+            for cell in grid_row[..grid.width].iter() {
+                let t = match cell {
                     Cell::Floor => 0,
                     Cell::FixedWall => 1,
                     Cell::DestructibleWall => 2,

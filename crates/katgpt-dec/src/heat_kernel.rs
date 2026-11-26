@@ -919,9 +919,7 @@ mod tests {
         let n = cx.n_vertices();
         let c = 4.0f32;
         let mut h0 = zero_field(&cx, 1);
-        for i in 0..n {
-            h0.data[i] = c;
-        }
+        h0.data[..n].fill(c);
         let t = 5.0f32;
         let hk = heat_kernel_trajectory_linear(&eig, &h0, &[-10.0], 1, t);
         assert!(hk.data.iter().all(|v| v.is_finite()));

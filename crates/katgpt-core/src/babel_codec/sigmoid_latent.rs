@@ -437,11 +437,10 @@ mod tests {
         let mut codec = canonical_codec::<D, K>(4, 1.0);
         let input = [0.0f32; D];
         let compressed = codec.compress(&input);
-        for slot in 0..compressed.len() {
+        for &score in compressed.scores[..compressed.len()].iter() {
             assert!(
-                (compressed.scores[slot] - 0.5).abs() < 1e-6,
-                "zero-vector score should be σ(0)=0.5, got {}",
-                compressed.scores[slot]
+                (score - 0.5).abs() < 1e-6,
+                "zero-vector score should be σ(0)=0.5, got {score}"
             );
         }
     }
@@ -525,11 +524,10 @@ mod tests {
         let input = [0.0f32; D];
         let compressed = codec.compress(&input);
         let expected = sigmoid(5.0);
-        for slot in 0..compressed.len() {
+        for &score in compressed.scores[..compressed.len()].iter() {
             assert!(
-                (compressed.scores[slot] - expected).abs() < 1e-5,
-                "bias-shifted score should be σ(5)={expected:.5}, got {:.5}",
-                compressed.scores[slot]
+                (score - expected).abs() < 1e-5,
+                "bias-shifted score should be σ(5)={expected:.5}, got {score:.5}"
             );
         }
     }

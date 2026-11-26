@@ -250,7 +250,7 @@ fn gradient_check_all_params() {
         }
     }
     // a_log [n_h=2] — check all
-    for idx in 0..weights.a_log.len() {
+    for (idx, _) in grads.a_log.iter().enumerate() {
         check_param!("a_log", weights, grads.a_log, idx, a_log_ref, a_log_set);
     }
     // f_a_proj [dk=8, d=32]
@@ -280,7 +280,7 @@ fn gradient_check_all_params() {
         }
     }
     // dt_bias [proj=16] — check all
-    for idx in 0..weights.dt_bias.len() {
+    for (idx, _) in grads.dt_bias.iter().enumerate() {
         check_param!(
             "dt_bias",
             weights,
@@ -310,7 +310,7 @@ fn gradient_check_all_params() {
         }
     }
     // o_norm_weight [dk=8] — check all
-    for idx in 0..weights.o_norm_weight.len() {
+    for (idx, _) in grads.o_norm_weight.iter().enumerate() {
         check_param!(
             "o_norm_weight",
             weights,
@@ -706,7 +706,7 @@ fn gradient_check_multitoken_all_params() {
             );
         }
     }
-    for idx in 0..weights.a_log.len() {
+    for (idx, _) in grads.a_log.iter().enumerate() {
         check_param!("a_log", weights, grads.a_log, idx, a_log_ref, a_log_set);
     }
     for &idx in &[0, 1, 50, 100, 255] {
@@ -733,7 +733,7 @@ fn gradient_check_multitoken_all_params() {
             );
         }
     }
-    for idx in 0..weights.dt_bias.len() {
+    for (idx, _) in grads.dt_bias.iter().enumerate() {
         check_param!(
             "dt_bias",
             weights,
@@ -760,7 +760,7 @@ fn gradient_check_multitoken_all_params() {
             check_param!("g_proj", weights, grads.g_proj, idx, g_proj_ref, g_proj_set);
         }
     }
-    for idx in 0..weights.o_norm_weight.len() {
+    for (idx, _) in grads.o_norm_weight.iter().enumerate() {
         check_param!(
             "o_norm_weight",
             weights,

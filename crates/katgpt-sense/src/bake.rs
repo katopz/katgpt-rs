@@ -590,12 +590,12 @@ mod tests {
 
             // Precision should be uninformative + 5 * DEFAULT_OBS_PRECISION.
             let expected_precision = UNINFORMATIVE_PRECISION + 5.0 * DEFAULT_OBS_PRECISION;
-            for d in 0..8 {
+            for &got in result.precision.iter() {
                 assert!(
-                    (result.precision[d] - expected_precision).abs() < 1e-6,
+                    (got - expected_precision).abs() < 1e-6,
                     "expected precision {}, got {}",
                     expected_precision,
-                    result.precision[d]
+                    got
                 );
             }
 

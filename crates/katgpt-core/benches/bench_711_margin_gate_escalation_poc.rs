@@ -948,8 +948,8 @@ impl Ucb1 {
     }
     fn select(&mut self) -> usize {
         let k = self.counts.len();
-        for i in 0..k {
-            if self.counts[i] == 0 {
+        for (i, &c) in self.counts.iter().enumerate() {
+            if c == 0 {
                 return i;
             }
         }
@@ -1004,8 +1004,8 @@ impl MaskedUcb1 {
     }
     fn select(&mut self, eps: f64) -> usize {
         let k = self.inner.counts.len();
-        for i in 0..k {
-            if self.inner.counts[i] == 0 {
+        for (i, &c) in self.inner.counts.iter().enumerate() {
+            if c == 0 {
                 return i;
             }
         }

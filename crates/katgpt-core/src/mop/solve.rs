@@ -450,9 +450,9 @@ mod tests {
         // golden gate exercises the sparse fast path end-to-end. A future
         // arena change to stochastic rows would silently un-exercise it.
         let mut fast_rows = 0usize;
-        for i in 0..GRID_N {
-            for k in 0..4 {
-                if scratch.onehot[i][k] != DENSE_ROW {
+        for row in scratch.onehot[..GRID_N].iter() {
+            for &v in row[..4].iter() {
+                if v != DENSE_ROW {
                     fast_rows += 1;
                 }
             }
@@ -539,12 +539,10 @@ mod tests {
             // Analytic fixed point: deterministic ring, β term vanishes →
             // V* = α·ln 3 / (1−γ) uniformly, DEAD = 0.
             let expected = cfg.alpha * 3.0f32.ln() / (1.0 - cfg.gamma);
-            for i in 0..16 {
+            for (i, &v_star_i) in sol.v_star[..16].iter().enumerate() {
                 assert!(
-                    (sol.v_star[i] - expected).abs() / expected < 1e-5,
-                    "ring[{i}] = {} vs analytic {}",
-                    sol.v_star[i],
-                    expected
+                    (v_star_i - expected).abs() / expected < 1e-5,
+                    "ring[{i}] = {v_star_i} vs analytic {expected}"
                 );
             }
             assert_eq!(sol.v_star[RING_DEAD], 0.0);
@@ -611,8 +609,8 @@ mod tests {
         let solver_hg = MopSolver::<RING_N, RING_A>::new(cfg_hg).unwrap();
         let sol_hg = solver_hg.solve(&pd, &md, &mut scratch);
         let expected = cfg_hg.alpha * 3.0f32.ln() / (1.0 - cfg_hg.gamma);
-        for i in 0..16 {
-            let rel = (sol_hg.v_star[i] - expected).abs() / expected;
+        for (i, &v_star_i) in sol_hg.v_star[..16].iter().enumerate() {
+            let rel = (v_star_i - expected).abs() / expected;
             assert!(rel < 1e-4, "γ=0.99 ring[{i}] rel err {rel:e}");
         }
     }
@@ -858,9 +856,9 @@ mod tests {
 
         let mut fast_rows = 0usize;
         let mut dense_rows = 0usize;
-        for i in 0..N {
-            for k in 0..A {
-                if scratch.onehot[i][k] != DENSE_ROW {
+        for row in scratch.onehot[..N].iter() {
+            for &v in row[..A].iter() {
+                if v != DENSE_ROW {
                     fast_rows += 1;
                 } else {
                     dense_rows += 1;

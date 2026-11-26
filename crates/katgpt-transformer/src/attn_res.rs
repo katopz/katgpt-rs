@@ -670,13 +670,11 @@ mod tests {
         let mut scratch = AttnResScratch::new(&config, 4);
         scratch.recompute_score_weight(&weights);
 
-        for i in 0..d {
+        for (i, &sw_i) in scratch.score_weight[..d].iter().enumerate() {
             let expected = (i as f32 * 0.1) * (i as f32 * 0.2);
             assert!(
-                (scratch.score_weight[i] - expected).abs() < 1e-6,
-                "score_weight[{i}] = {} expected {}",
-                scratch.score_weight[i],
-                expected
+                (sw_i - expected).abs() < 1e-6,
+                "score_weight[{i}] = {sw_i} expected {expected}"
             );
         }
     }

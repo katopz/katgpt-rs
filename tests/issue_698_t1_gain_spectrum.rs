@@ -371,12 +371,12 @@ fn t698_t1_gain_spectrum_modelless() {
         monotone,
         "loss(r) must strictly decrease through r=15 (convergence phase)"
     );
-    for i in 14..R_STEPS {
+    for (i, &loss_i) in a.table[14..R_STEPS].iter().enumerate() {
+        let i = i + 14;
         assert!(
-            a.table[i] < NOISE_FLOOR,
-            "loss({}) = {:.3e} must sit in the noise-floor plateau (<{NOISE_FLOOR:.0e})",
-            i + 1,
-            a.table[i]
+            loss_i < NOISE_FLOOR,
+            "loss({}) = {loss_i:.3e} must sit in the noise-floor plateau (<{NOISE_FLOOR:.0e})",
+            i + 1
         );
     }
 

@@ -154,9 +154,9 @@ pub fn seeded_dense<const D: usize, const N: usize>(
     let mut a = [SymPacked::zeroed(); N];
     for mat_out in a.iter_mut() {
         let alpha = (rng.next_f32() * 2.0 - 1.0) * inv_sqrt_n;
-        for j in 0..D {
+        for (j, d_row) in mat_out.data.iter_mut().enumerate() {
             let eps = (rng.next_f32() * 2.0 - 1.0) * eps_bound;
-            mat_out.data[j][j] = alpha + eps;
+            d_row[j] = alpha + eps;
         }
     }
 

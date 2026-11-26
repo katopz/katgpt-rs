@@ -284,8 +284,8 @@ pub fn aggregate_action_latent_into<const K: usize, const D: usize, const S: usi
     // Visit only codes with non-zero weight. Since weights is fixed-size
     // MAX_PATCHES (≥ K in well-formed inputs) we iterate up to min(K, len).
     let k_max = K.min(factors.weights.len());
-    for k in 0..k_max {
-        if factors.weights[k] <= 0.0 {
+    for (k, &weight_k) in factors.weights[..k_max].iter().enumerate() {
+        if weight_k <= 0.0 {
             continue;
         }
 

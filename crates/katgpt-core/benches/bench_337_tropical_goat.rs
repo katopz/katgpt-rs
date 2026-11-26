@@ -163,8 +163,8 @@ fn run_substrate_1(rng_seed: u32) -> Substrate1Result {
     // 100.0, and its 4 grid-neighbors with value 50.0.
     let mut rng = Rng::new(rng_seed);
     let mut threat = CochainField::zeros(0, n_vertices, 1);
-    for v in 0..n_vertices {
-        threat.data[v] = rng.uniform();
+    for cell in threat.data[..n_vertices].iter_mut() {
+        *cell = rng.uniform();
     }
     let hotspot = 8 * 16 + 8;
     threat.data[hotspot] = 100.0;
@@ -305,8 +305,8 @@ fn run_substrate_3(rng_seed: u32) -> Substrate3Result {
     // Rank-1 edge cochain, dim=1, random values in [0, 10).
     let mut rng = Rng::new(rng_seed);
     let mut edge_field = CochainField::zeros(1, n_edges, 1);
-    for e in 0..n_edges {
-        edge_field.data[e] = rng.uniform() * 10.0;
+    for cell in edge_field.data[..n_edges].iter_mut() {
+        *cell = rng.uniform() * 10.0;
     }
 
     // 10 random paths, each 5-8 vertices.

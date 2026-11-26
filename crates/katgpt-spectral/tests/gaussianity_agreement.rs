@@ -89,7 +89,7 @@ fn probe_per_direction_matches_ks_d_statistic_on_reconstructed_projection() {
     let mut scratch = GaussianityScratch::new(n, d, 1234);
     let report = sketched_gaussianity(&states, &mut scratch);
 
-    for a in 0..N_DIRECTIONS {
+    for (a, &report_a) in report.per_direction[..N_DIRECTIONS].iter().enumerate() {
         let dir = scratch.direction(a);
         // Reconstruct with the SAME f64 accumulation the probe uses (the
         // core's projection is an f64 accumulator cast to f32 — matching it
@@ -108,9 +108,8 @@ fn probe_per_direction_matches_ks_d_statistic_on_reconstructed_projection() {
         let expected = ks_d_statistic(&projection, &mut sp);
         assert_eq!(
             expected.to_bits(),
-            report.per_direction[a].to_bits(),
-            "direction {a}: reconstructed ks_d_statistic {expected:.9} != probe report {:.9}",
-            report.per_direction[a]
+            report_a.to_bits(),
+            "direction {a}: reconstructed ks_d_statistic {expected:.9} != probe report {report_a:.9}"
         );
     }
 }

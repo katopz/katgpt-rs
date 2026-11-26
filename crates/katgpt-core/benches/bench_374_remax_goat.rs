@@ -169,8 +169,8 @@ impl Strategy for Ucb1 {
     fn select(&mut self, _rng: &mut Rng) -> usize {
         let k = self.counts.len();
         // Initial phase: pull each arm once.
-        for i in 0..k {
-            if self.counts[i] == 0 {
+        for (i, &c) in self.counts.iter().enumerate() {
+            if c == 0 {
                 return i;
             }
         }
@@ -262,8 +262,8 @@ impl Strategy for Greedy {
     fn select(&mut self, _rng: &mut Rng) -> usize {
         let k = self.counts.len();
         // Initial phase: pull each arm once.
-        for i in 0..k {
-            if self.counts[i] == 0 {
+        for (i, &c) in self.counts.iter().enumerate() {
+            if c == 0 {
                 return i;
             }
         }
@@ -305,8 +305,8 @@ impl Strategy for Softmax {
     fn select(&mut self, rng: &mut Rng) -> usize {
         let k = self.counts.len();
         // Initial phase: pull each arm once.
-        for i in 0..k {
-            if self.counts[i] == 0 {
+        for (i, &c) in self.counts.iter().enumerate() {
+            if c == 0 {
                 return i;
             }
         }
@@ -359,8 +359,8 @@ impl ReMaxGreedy {
 impl Strategy for ReMaxGreedy {
     fn select(&mut self, _rng: &mut Rng) -> usize {
         let k = self.counts.len();
-        for i in 0..k {
-            if self.counts[i] == 0 {
+        for (i, &c) in self.counts.iter().enumerate() {
+            if c == 0 {
                 return i;
             }
         }

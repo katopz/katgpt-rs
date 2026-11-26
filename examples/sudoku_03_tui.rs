@@ -96,9 +96,8 @@ enum Msg {
 // ── 9×9 streaming solver ───────────────────────────────────────
 
 fn run_nine_solver(initial: Sudoku9x9, tx: mpsc::Sender<Msg>, cancel: Arc<AtomicBool>) {
-    for r in 0..9 {
-        for c in 0..9 {
-            let d = initial.grid[r][c];
+    for (r, grid_row) in initial.grid.iter().enumerate() {
+        for (c, &d) in grid_row.iter().enumerate() {
             if d > 0 {
                 let _ = tx.send(Msg::Cell {
                     row: r,
@@ -203,9 +202,8 @@ impl ConstraintPruner for StaticOnlyPruner<'_> {
 
 fn run_speculative(initial: Sudoku9x9, tx: mpsc::Sender<Msg>, cancel: Arc<AtomicBool>) {
     // Send clues to grid
-    for r in 0..9 {
-        for c in 0..9 {
-            let d = initial.grid[r][c];
+    for (r, grid_row) in initial.grid.iter().enumerate() {
+        for (c, &d) in grid_row.iter().enumerate() {
             if d > 0 {
                 let _ = tx.send(Msg::Cell {
                     row: r,
@@ -641,16 +639,16 @@ fn draw_tabs(f: &mut Frame, area: Rect, app: &App) {
 fn draw_grid(f: &mut Frame, area: Rect, app: &App) {
     let sep = Style::default().fg(Color::DarkGray);
     let mut lines: Vec<Line> = Vec::with_capacity(11);
-    for r in 0..9 {
+    for (r, grid_row) in app.grid.iter().enumerate() {
         if r == 3 || r == 6 {
             lines.push(Line::from(Span::styled("──────┼───────┼──────", sep)));
         }
         let mut spans: Vec<Span> = Vec::with_capacity(20);
-        for c in 0..9 {
+        for (c, &cell) in grid_row.iter().enumerate() {
             if c == 3 || c == 6 {
                 spans.push(Span::styled("│ ", sep));
             }
-            let (sym, style) = format_cell(app.grid[r][c]);
+            let (sym, style) = format_cell(cell);
             spans.push(Span::styled(format!("{sym} "), style));
         }
         lines.push(Line::from(spans));

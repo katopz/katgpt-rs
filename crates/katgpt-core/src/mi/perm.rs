@@ -332,8 +332,8 @@ impl PermTest {
                     }
                 }
                 // Tail rows: identity.
-                for i in n_blocks * len..n {
-                    scratch.perm_idx[i] = i as u32;
+                for (i, slot) in scratch.perm_idx[n_blocks * len..n].iter_mut().enumerate() {
+                    *slot = (n_blocks * len + i) as u32;
                 }
             }
         }
@@ -717,17 +717,13 @@ mod tests {
         // Circular pairing is a rotation: perm_idx[i] = (i + off) % n.
         circ.draw_pairing(n, None, &mut s);
         let step = s.perm_idx[0] as usize;
-        for i in 1..n {
-            assert_eq!(s.perm_idx[i] as usize, (i + step) % n);
+        for (i, &pi) in s.perm_idx[1..n].iter().enumerate() {
+            assert_eq!(pi as usize, (i + 1 + step) % n);
         }
         // Block pairing preserves within-block offsets: idx[i] ≡ i (mod L).
         block.draw_pairing(n, None, &mut s);
-        for i in 0..n {
-            assert_eq!(
-                (s.perm_idx[i] as usize) % 8,
-                i % 8,
-                "block offset broken at {i}"
-            );
+        for (i, &pi) in s.perm_idx[..n].iter().enumerate() {
+            assert_eq!((pi as usize) % 8, i % 8, "block offset broken at {i}");
         }
     }
 

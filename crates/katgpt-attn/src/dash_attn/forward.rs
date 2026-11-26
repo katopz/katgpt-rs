@@ -379,9 +379,9 @@ mod tests {
         // Pre-populate some chunk summaries
         let n_chunks = 3;
         summary_cache.allocate(n_chunks);
-        for c in 0..n_chunks {
-            for h in 0..config.n_kv_head {
-                summary_cache.summaries[c][h] = vec![0.1; config.head_dim];
+        for summary_row in summary_cache.summaries[..n_chunks].iter_mut() {
+            for head_summary in summary_row[..config.n_kv_head].iter_mut() {
+                *head_summary = vec![0.1; config.head_dim];
             }
         }
 
@@ -462,8 +462,7 @@ mod tests {
         );
 
         // Chunk 0 should have been populated for all KV heads
-        for h in 0..config.n_kv_head {
-            let summary = &summary_cache.summaries[0][h];
+        for summary in summary_cache.summaries[0][..config.n_kv_head].iter() {
             assert_eq!(summary.len(), config.head_dim);
             // With zero-init head_cls → mean pooling → values should be finite
             for &v in summary {

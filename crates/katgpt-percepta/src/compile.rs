@@ -941,11 +941,11 @@ fn build_program(module: &WasmModule) -> Result<(Vec<DispatchEntry>, i32), Compi
     }
 
     // Initialize used globals
-    for gidx in 0..module.globals.len() {
+    for (gidx, g) in module.globals.iter().enumerate() {
         if !used_globals.contains(&gidx) {
             continue;
         }
-        let gval = module.globals[gidx].init as i64 & MASK32;
+        let gval = g.init as i64 & MASK32;
         let addr = GLOBAL_BASE + 4 * gidx as i64;
         for b in 0..4u32 {
             initial_memory.insert(addr as i32 + b as i32, ((gval >> (8 * b)) & 0xFF) as u8);

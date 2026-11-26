@@ -912,8 +912,8 @@ fn render_events(f: &mut Frame, game: &RecordedGame, cursor: usize, area: Rect) 
     let end = (start + vis).min(total_events);
 
     let mut lines: Vec<Line> = Vec::new();
-    for i in start..end {
-        let txt = &game.events[i];
+    for (i, txt) in game.events[start..end].iter().enumerate() {
+        let i = i + start;
         if i == cur_event_idx {
             lines.push(Line::from(vec![
                 Span::styled("▸ ", Style::default().fg(Color::Yellow).bold()),

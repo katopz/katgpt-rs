@@ -211,11 +211,11 @@ impl<const D: usize, const K: usize> SoftRead<D, K> {
         // residual s·β_k·d̂_k (the effective-conditioning arm — the head
         // moves a fixed arc along ±slot-direction regardless of ⟨q,d_k⟩).
         let scale = self.conditioning_scale;
-        for k in 0..K {
+        for (k, head) in scratch.heads[..K].iter_mut().enumerate() {
             let d = self.bank.slot(k);
             let dot: f32 = q.iter().zip(d).map(|(a, b)| a * b).sum();
             let beta = self.bank.beta(k);
-            scratch.heads[k] = match scale {
+            *head = match scale {
                 None => {
                     let mut h = q;
                     for (x, dv) in h.iter_mut().zip(d) {

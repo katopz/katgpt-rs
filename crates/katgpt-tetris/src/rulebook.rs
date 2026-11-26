@@ -603,8 +603,8 @@ impl Genome {
                         let (key, ws) = item.split_once(':')?;
                         let r = RULES.iter().find(|r| r.key == key)?;
                         let mut it = ws.split('/');
-                        for m in 0..N_MODES {
-                            g.w[r.id as usize][m] = it.next()?.parse().ok()?;
+                        for slot in g.w[r.id as usize].iter_mut() {
+                            *slot = it.next()?.parse().ok()?;
                         }
                     }
                 }

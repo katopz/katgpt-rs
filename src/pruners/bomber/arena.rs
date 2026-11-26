@@ -289,10 +289,10 @@ mod tests {
     #[test]
     fn test_border_walls() {
         let grid = ArenaGrid::generate(42);
-        for y in 0..13 {
-            for x in 0..13 {
+        for (y, grid_row) in grid.cells.iter().enumerate() {
+            for (x, cell) in grid_row.iter().enumerate() {
                 if x == 0 || x == 12 || y == 0 || y == 12 {
-                    assert_eq!(grid.cells[y][x], Cell::FixedWall, "border ({x},{y})");
+                    assert_eq!(*cell, Cell::FixedWall, "border ({x},{y})");
                 }
             }
         }
@@ -301,10 +301,12 @@ mod tests {
     #[test]
     fn test_fixed_walls_pattern() {
         let grid = ArenaGrid::generate(42);
-        for y in 2..11 {
-            for x in 2..11 {
+        for (y, grid_row) in grid.cells[2..11].iter().enumerate() {
+            for (x, cell) in grid_row[2..11].iter().enumerate() {
+                let x = x + 2;
+                let y = y + 2;
                 if x % 2 == 0 && y % 2 == 0 {
-                    assert_eq!(grid.cells[y][x], Cell::FixedWall, "pillar ({x},{y})");
+                    assert_eq!(*cell, Cell::FixedWall, "pillar ({x},{y})");
                 }
             }
         }
@@ -388,27 +390,33 @@ mod tests {
     fn test_fixed_parsing() {
         let grid = ArenaGrid::fixed(EMPTY_ARENA).expect("should parse");
         // All border cells are FixedWall
-        for y in 0..13 {
-            assert_eq!(grid.cells[y][0], Cell::FixedWall, "left border y={y}");
-            assert_eq!(grid.cells[y][12], Cell::FixedWall, "right border y={y}");
+        for (y, grid_row) in grid.cells.iter().enumerate() {
+            assert_eq!(grid_row[0], Cell::FixedWall, "left border y={y}");
+            assert_eq!(grid_row[12], Cell::FixedWall, "right border y={y}");
         }
-        for x in 0..13 {
-            assert_eq!(grid.cells[0][x], Cell::FixedWall, "top border x={x}");
-            assert_eq!(grid.cells[12][x], Cell::FixedWall, "bottom border x={x}");
+        for (x, cell) in grid.cells[0].iter().enumerate() {
+            assert_eq!(*cell, Cell::FixedWall, "top border x={x}");
+        }
+        for (x, cell) in grid.cells[12].iter().enumerate() {
+            assert_eq!(*cell, Cell::FixedWall, "bottom border x={x}");
         }
         // Pillars at even (x, y) interior positions
-        for y in (2..12).step_by(2) {
-            for x in (2..12).step_by(2) {
-                assert_eq!(grid.cells[y][x], Cell::FixedWall, "pillar ({x},{y})");
+        for (y, grid_row) in grid.cells[2..12].iter().enumerate().step_by(2) {
+            for (x, cell) in grid_row[2..12].iter().enumerate().step_by(2) {
+                let x = x + 2;
+                let y = y + 2;
+                assert_eq!(*cell, Cell::FixedWall, "pillar ({x},{y})");
             }
         }
         // Non-pillar, non-border interior cells are Floor
-        for y in 1..12 {
-            for x in 1..12 {
+        for (y, grid_row) in grid.cells[1..12].iter().enumerate() {
+            for (x, cell) in grid_row[1..12].iter().enumerate() {
+                let x = x + 1;
+                let y = y + 1;
                 if x % 2 == 0 && y % 2 == 0 {
                     continue; // pillar
                 }
-                assert_eq!(grid.cells[y][x], Cell::Floor, "floor ({x},{y})");
+                assert_eq!(*cell, Cell::Floor, "floor ({x},{y})");
             }
         }
     }

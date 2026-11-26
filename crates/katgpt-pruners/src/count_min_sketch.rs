@@ -306,21 +306,18 @@ mod tests {
         let mut cms = CountMinSketch::new();
 
         // Pre-fill with non-zero values to verify decay touches all cells.
-        for row in 0..ROWS {
-            for col in 0..COLS {
-                cms.counters[row][col] = 100;
+        for counter_row in cms.counters[..ROWS].iter_mut() {
+            for cell in counter_row[..COLS].iter_mut() {
+                *cell = 100;
             }
         }
 
         cms.decay(0.5);
 
         // Every cell should now be 50 (100 * 0.5 = 50).
-        for row in 0..ROWS {
-            for col in 0..COLS {
-                assert_eq!(
-                    cms.counters[row][col], 50,
-                    "Cell [{row}][{col}] should be 50 after decay"
-                );
+        for (row, counter_row) in cms.counters[..ROWS].iter().enumerate() {
+            for (col, &cell) in counter_row[..COLS].iter().enumerate() {
+                assert_eq!(cell, 50, "Cell [{row}][{col}] should be 50 after decay");
             }
         }
         assert_eq!(CountMinSketch::cell_count(), 1024);

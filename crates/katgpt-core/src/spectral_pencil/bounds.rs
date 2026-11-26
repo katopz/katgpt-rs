@@ -240,8 +240,8 @@ mod tests {
                 ax.add_scaled_into(m, xi);
             }
             jacobi_eigen(&ax.to_full(), false, &mut s);
-            for k in 0..D {
-                let f = s.values[k].abs();
+            for (k, &vk) in s.values.iter().enumerate() {
+                let f = vk.abs();
                 let env = norms.growth_envelope(&x);
                 assert!(
                     f <= env * (1.0 + 1e-4) + 1e-5,

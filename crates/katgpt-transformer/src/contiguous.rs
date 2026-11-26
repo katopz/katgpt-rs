@@ -720,8 +720,8 @@ mod tests {
     fn test_roundtrip_layer_wq() {
         let (config, weights) = make_weights();
         let cw = ContiguousWeights::from_weights(&weights);
-        for layer_idx in 0..config.n_layer {
-            let orig = &weights.layers[layer_idx].attn_wq;
+        for (layer_idx, layer) in weights.layers.iter().take(config.n_layer).enumerate() {
+            let orig = &layer.attn_wq;
             let packed = cw.layer_wq(layer_idx);
             assert_eq!(
                 orig.len(),
@@ -741,8 +741,7 @@ mod tests {
     fn test_roundtrip_all_layer_weights() {
         let (config, weights) = make_weights();
         let cw = ContiguousWeights::from_weights(&weights);
-        for layer_idx in 0..config.n_layer {
-            let layer = &weights.layers[layer_idx];
+        for (layer_idx, layer) in weights.layers.iter().take(config.n_layer).enumerate() {
             for (label, orig, packed) in [
                 ("wk", layer.attn_wk.as_slice(), cw.layer_wk(layer_idx)),
                 ("wv", layer.attn_wv.as_slice(), cw.layer_wv(layer_idx)),

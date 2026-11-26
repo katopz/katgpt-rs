@@ -453,8 +453,8 @@ fn g3b_fold_bit_identity() {
         let (mut got, mut want) = (vec![0.0f32; D], vec![0.0f32; D]);
         let (mut acc_got, mut acc_want) = (vec![0.0f32; D], vec![0.0f32; D]);
         let (mut diff_read, mut diff_acc, mut hit) = (0usize, 0usize, 0usize);
-        for p in 0..T {
-            let row = table.row(0, ho.toks[p]);
+        for (p, &tok_p) in ho.toks[..T].iter().enumerate() {
+            let row = table.row(0, tok_p);
             hit += usize::from(row.is_some());
             dec.dequantize_value_into(0, p, &mut got);
             dec.inner_mut().dequantize_value_into(0, p, &mut want);

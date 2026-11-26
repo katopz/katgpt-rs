@@ -423,8 +423,8 @@ fn g4_latency() -> (f64, f64, bool, bool) {
     let n2 = cx2.n_vertices();
     let mut field2 = CochainField::zeros(0, n2, DIM);
     let mut scratch2 = CochainField::zeros(0, n2, DIM);
-    for i in 0..n2 * DIM {
-        field2.data[i] = (i as f32) * 0.01;
+    for (i, slot) in field2.data[..n2 * DIM].iter_mut().enumerate() {
+        *slot = (i as f32) * 0.01;
     }
     // Warmup
     for _ in 0..10 {
@@ -445,8 +445,8 @@ fn g4_latency() -> (f64, f64, bool, bool) {
     let n3 = cx3.n_vertices();
     let mut field3 = CochainField::zeros(0, n3, DIM);
     let mut scratch3 = CochainField::zeros(0, n3, DIM);
-    for i in 0..n3 * DIM {
-        field3.data[i] = (i as f32) * 0.001;
+    for (i, slot) in field3.data[..n3 * DIM].iter_mut().enumerate() {
+        *slot = (i as f32) * 0.001;
     }
     // Warmup
     for _ in 0..10 {
@@ -471,8 +471,8 @@ fn g4_latency() -> (f64, f64, bool, bool) {
     let mut scratch_bd = CochainField::zeros(0, n3, DIM);
     let mut dropout_bd = vec![0u8; n3];
     let mut rng = SplitMix64::new(42);
-    for i in 0..n3 * DIM {
-        field_bd.data[i] = (i as f32) * 0.001;
+    for (i, slot) in field_bd.data[..n3 * DIM].iter_mut().enumerate() {
+        *slot = (i as f32) * 0.001;
     }
     // Measure bare Laplacian on the 3D grid.
     let start = Instant::now();

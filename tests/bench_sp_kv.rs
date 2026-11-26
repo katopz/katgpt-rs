@@ -1005,11 +1005,10 @@ fn test_palindrome_retention() {
             0.1 // Low utility — should be pruned
         };
 
-        for layer_idx in 0..config.n_layer {
+        for layer_cache in sp_cache.layers[..config.n_layer].iter_mut() {
             let k: Vec<f32> = (0..kvd).map(|_| rng.normal()).collect();
             let v: Vec<f32> = (0..kvd).map(|_| rng.normal()).collect();
 
-            let layer_cache = &mut sp_cache.layers[layer_idx];
             layer_cache.utilities[pos] = pos_utility;
             layer_cache.write_gated(
                 &k,
@@ -1024,9 +1023,9 @@ fn test_palindrome_retention() {
     }
 
     // Verify: palindrome anchor position is retained
-    for layer_idx in 0..config.n_layer {
+    for (layer_idx, layer_cache) in sp_cache.layers[..config.n_layer].iter().enumerate() {
         assert!(
-            sp_cache.layers[layer_idx].retained[palindrome_pos],
+            layer_cache.retained[palindrome_pos],
             "Layer {layer_idx}: palindrome anchor at pos={palindrome_pos} should be retained"
         );
     }
@@ -1034,9 +1033,9 @@ fn test_palindrome_retention() {
     // Verify: positions outside window with low utility are NOT retained
     let outside_window_low_utility = seq_len - window - 1; // A position not in window and not anchor
     if outside_window_low_utility > 0 && outside_window_low_utility != palindrome_pos {
-        for layer_idx in 0..config.n_layer {
+        for (layer_idx, layer_cache) in sp_cache.layers[..config.n_layer].iter().enumerate() {
             assert!(
-                !sp_cache.layers[layer_idx].retained[outside_window_low_utility],
+                !layer_cache.retained[outside_window_low_utility],
                 "Layer {layer_idx}: pos={outside_window_low_utility} should be pruned (outside window, low utility)"
             );
         }

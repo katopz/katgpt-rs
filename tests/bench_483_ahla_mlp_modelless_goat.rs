@@ -141,8 +141,7 @@ fn apply_mlp_lora(
     let n = config.n_embd;
     let mlp_h = config.mlp_hidden;
 
-    for layer in 0..config.n_layer {
-        let layer_ref = &mut weights.layers[layer];
+    for layer_ref in weights.layers[..config.n_layer].iter_mut() {
         apply_lora_delta(&mut layer_ref.mlp_w1, w1_a, w1_b, mlp_h, n, rank, scale);
         apply_lora_delta(&mut layer_ref.mlp_w2, w2_a, w2_b, n, mlp_h, rank, scale);
     }

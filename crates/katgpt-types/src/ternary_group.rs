@@ -278,8 +278,8 @@ impl TernaryGroupWeights {
         let mut out = Self::new(tw.rows, tw.cols);
         out.pos_bits.copy_from_slice(&tw.pos_bits);
         out.neg_bits.copy_from_slice(&tw.neg_bits);
-        for r in 0..tw.rows {
-            let scale = f16::from_f32(tw.row_scale[r]);
+        for (r, &row_scale) in tw.row_scale[..tw.rows].iter().enumerate() {
+            let scale = f16::from_f32(row_scale);
             let base = r * out.groups_per_row;
             out.group_scale[base..base + out.groups_per_row].fill(scale);
         }

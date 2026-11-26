@@ -284,11 +284,11 @@ impl BranchingDetector {
         branching_point_mask_into(&self.scratch_u, threshold, &mut self.scratch_mask);
         // Enforce exact k_select count, ties broken by lower index.
         let mut count = 0;
-        for i in 0..k {
-            if self.scratch_mask[i] {
+        for mask_i in self.scratch_mask[..k].iter_mut() {
+            if *mask_i {
                 count += 1;
                 if count > k_select {
-                    self.scratch_mask[i] = false;
+                    *mask_i = false;
                 }
             }
         }

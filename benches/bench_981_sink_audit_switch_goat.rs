@@ -151,8 +151,8 @@ fn census_pass(
     acc.resize(N_POSITIONS, 0.0);
     let mut observations = 0u64;
     for (layer, q) in layers.iter().zip(q_by_layer) {
-        for h in 0..N_HEADS {
-            let keys = &layer.keys[h];
+        for (h, keys_at_head) in layer.keys[..N_HEADS].iter().enumerate() {
+            let keys = keys_at_head;
             for qi in 0..N_POSITIONS {
                 let q_row = &q[qi * HEAD_DIM..(qi + 1) * HEAD_DIM];
                 let n_keys = qi + 1;

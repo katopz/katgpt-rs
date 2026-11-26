@@ -964,7 +964,7 @@ impl EstimateHead {
                     // μ₋ᵢ(q) for every comparable — n ≤ small_comps_max−1
                     // kNN runs on the forecaster's own scratch (zero-alloc).
                     let mut center = 0.0_f32;
-                    for i in 0..f.n {
+                    for (i, slot) in self.jk_mu[..f.n].iter_mut().enumerate() {
                         let mu = knn_weighted_mean(
                             query_features,
                             &f.scales,
@@ -981,7 +981,7 @@ impl EstimateHead {
                         // Issue-940: the aggregate fold is PINNED to ascending
                         // comparable-index order.
                         center += mu;
-                        self.jk_mu[i] = mu;
+                        *slot = mu;
                     }
                     center /= f.n as f32;
                     let n = f.n;

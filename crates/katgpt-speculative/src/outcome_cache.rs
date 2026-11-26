@@ -350,8 +350,8 @@ impl HistogramBuilder {
         let b = Self::fill(&self.log[half..], top, top_len);
         let mut num = 0.0f64;
         let mut den = 0.0f64;
-        for k in 0..K_SLOTS {
-            let w = full.counts[k].iter().fold(0u64, |s, &v| s + u64::from(v));
+        for (k, counts_row) in full.counts[..K_SLOTS].iter().enumerate() {
+            let w = counts_row.iter().fold(0u64, |s, &v| s + u64::from(v));
             if w == 0 {
                 continue;
             }

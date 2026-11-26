@@ -52,8 +52,8 @@ fn construction_normalizes_weights() {
     let sum: f32 = gmm.log_weights.iter().map(|w| w.exp()).sum();
     assert!((sum - 1.0).abs() < 1e-5, "weights sum to {sum}, not 1");
     // And the uniform case passes through.
-    for k in 0..K {
-        assert!((gmm.log_weights[k] - f32::ln(1.0 / K as f32)).abs() < 1e-6);
+    for &lw in gmm.log_weights.iter() {
+        assert!((lw - f32::ln(1.0 / K as f32)).abs() < 1e-6);
     }
 }
 

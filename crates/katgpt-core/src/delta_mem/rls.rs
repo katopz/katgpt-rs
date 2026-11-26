@@ -564,10 +564,10 @@ mod tests {
         for row in st.m.iter() {
             assert!(row.iter().all(|&x| x == 0.0));
         }
-        for i in 0..R {
-            for j in 0..R {
+        for (i, p_row) in st.p.iter().enumerate() {
+            for (j, &p_ij) in p_row.iter().enumerate() {
                 let expect = if i == j { 1.0 } else { 0.0 };
-                assert_eq!(st.p[i][j], expect);
+                assert_eq!(p_ij, expect);
             }
         }
         let q = [0.5f32; R];

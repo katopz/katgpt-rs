@@ -1275,8 +1275,7 @@ mod tests {
             kda_forward_token_with_saved(&config, &weights, &mut cache, &mut fwd_scratch, &h);
 
         let dk = config.head_dim;
-        for head in 0..config.n_heads {
-            let ha = &saved.heads[head];
+        for (head, ha) in saved.heads[..config.n_heads].iter().enumerate() {
             for i in 0..dk {
                 for j in 0..dk {
                     let reconstructed = ha.s_prime[i * dk + j] + ha.k_normed[i] * ha.delta[j];

@@ -579,8 +579,7 @@ impl SyntheticScm {
             let end = (start + seg_len).min(n);
             // Majority vote on task within the segment.
             let mut counts = vec![0_usize; self.n_tasks];
-            for t in start..end {
-                let tk = self.task_at_token[t];
+            for &tk in self.task_at_token[start..end].iter() {
                 if tk < counts.len() {
                     counts[tk] += 1;
                 }

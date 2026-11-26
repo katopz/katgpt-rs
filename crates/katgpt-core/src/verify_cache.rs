@@ -684,7 +684,7 @@ mod tests {
         let near = fresh.clone();
         let farther = {
             let mut c = fresh.clone();
-            c[0] = c[0] - 0.2; // moved away from p=1 certainty
+            c[0] -= 0.2; // moved away from p=1 certainty
             c
         };
         let r0 = verify_cache_reproduction(&near, &fresh, &fixture_config()).expect("rows");

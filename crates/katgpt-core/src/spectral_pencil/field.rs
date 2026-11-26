@@ -284,12 +284,12 @@ mod tests {
             *v *= inv;
         }
         let mut a0 = rank_one_feature::<8>(beta_t, &dir);
-        for i in 0..8 {
-            a0.data[i][i] += 0.05;
+        for (i, row) in a0.data.iter_mut().enumerate() {
+            row[i] += 0.05;
         }
         let mut a1 = rank_one_feature::<8>(beta_e, &dir);
-        for i in 0..8 {
-            a1.data[i][i] += 0.08;
+        for (i, row) in a1.data.iter_mut().enumerate() {
+            row[i] += 0.08;
         }
         DensePencil {
             a0: init.a0,

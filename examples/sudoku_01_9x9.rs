@@ -128,16 +128,15 @@ fn main() {
 /// Explain why a digit violates Sudoku constraints.
 fn violation_reason(state: &Sudoku9x9, row: usize, col: usize, digit: u8) -> &'static str {
     // Check row
-    for c in 0..9 {
-        if state.grid[row][c] == digit {
-            return "already in row";
-        }
+    if state.grid[row][..9].contains(&digit) {
+        return "already in row";
     }
     // Check column
-    for r in 0..9 {
-        if state.grid[r][col] == digit {
-            return "already in column";
-        }
+    if state.grid[..9]
+        .iter()
+        .any(|grid_row| grid_row[col] == digit)
+    {
+        return "already in column";
     }
     // Check box
     let box_r = (row / 3) * 3;

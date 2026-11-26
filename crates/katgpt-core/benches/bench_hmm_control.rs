@@ -177,13 +177,13 @@ fn rollout_variational(
 ) -> f32 {
     let mut x = (rng.next_u64() as usize) % 16;
     let mut success = 1.0f32;
-    for t in 0..G2_T {
+    for probs_t in pol.probs[..G2_T].iter() {
         success *= e0[x][0];
         let u = rng.uniform();
         let mut acc = 0.0f32;
         let mut chosen = 0usize;
-        for k in 0..RING_A {
-            acc += pol.probs[t][x][k];
+        for (k, &prob) in probs_t[x].iter().enumerate() {
+            acc += prob;
             if u < acc {
                 chosen = k;
                 break;

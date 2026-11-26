@@ -284,9 +284,9 @@ mod tests {
         assert_eq!(seq.original_token_count, 24);
 
         // First 8 entries should be Raw
-        for i in 0..8 {
+        for (i, entry) in seq.entries[..8].iter().enumerate() {
             assert!(
-                matches!(seq.entries[i], PrefillEntry::Raw { .. }),
+                matches!(entry, PrefillEntry::Raw { .. }),
                 "Entry {i} should be Raw"
             );
         }

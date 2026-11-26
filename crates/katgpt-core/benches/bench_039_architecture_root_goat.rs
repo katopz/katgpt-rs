@@ -57,11 +57,7 @@ fn g1_correctness() -> bool {
     // 3. Single-bit PTG mutation breaks verify.
     let mut tampered = [0xAA; 32];
     tampered[0] ^= 1;
-    if a.verify(&tampered, &eid, &[0xBB; 32], &[0xCC; 32], 42, 99) {
-        return false;
-    }
-
-    true
+    !a.verify(&tampered, &eid, &[0xBB; 32], &[0xCC; 32], 42, 99)
 }
 
 // ─── G1 (avalanche): Hamming distance on single-bit input mutation ─────────

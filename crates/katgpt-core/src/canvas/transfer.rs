@@ -95,8 +95,10 @@ pub fn compatible_regions_in_layout(
         let Some(t_i) = layout.regions[i].semantic_type.as_ref() else {
             continue;
         };
-        for j in (i + 1)..n {
-            let Some(t_j) = layout.regions[j].semantic_type.as_ref() else {
+        let t_j_iter = layout.regions[(i + 1)..n].iter();
+        for (j_off, region_j) in t_j_iter.enumerate() {
+            let j = i + 1 + j_off;
+            let Some(t_j) = region_j.semantic_type.as_ref() else {
                 continue;
             };
             if transfer_distance(t_i, t_j) <= max_distance {

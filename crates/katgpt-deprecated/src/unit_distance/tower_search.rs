@@ -248,8 +248,8 @@ impl TowerBandit {
     /// After warm-up, UCB1 formula balances exploration vs exploitation.
     pub fn select(&mut self) -> usize {
         // Warm-up: pull each arm once
-        for i in 0..self.arms.len() {
-            if self.pulls[i] == 0 {
+        for (i, &pulls_i) in self.pulls[..self.arms.len()].iter().enumerate() {
+            if pulls_i == 0 {
                 return i;
             }
         }

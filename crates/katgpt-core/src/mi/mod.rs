@@ -820,8 +820,8 @@ mod tests {
         let x: Vec<f32> = (0..n * d).map(|v| v as f32).collect();
         let y: Vec<f32> = (0..n * d).map(|v| (v * 7 % 13) as f32).collect();
         let mut s = MiScratch::new(n, d, 3);
-        for i in 0..n {
-            s.perm_idx[i] = ((i + 1) % n) as u32;
+        for (i, slot) in s.perm_idx[..n].iter_mut().enumerate() {
+            *slot = ((i + 1) % n) as u32;
         }
         s.score_perm(Critic::Dot, &x, &y, n, d, PermSource::Current);
         for i in 0..n {

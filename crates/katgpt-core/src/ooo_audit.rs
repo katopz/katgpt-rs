@@ -774,12 +774,8 @@ mod tests {
             dropped_sorted.sort_unstable();
             assert_eq!(dropped_sorted, vec![6, 7], "seed {seed}: noise dropped");
             // True units are interpretable under the paper's 0.8 bar.
-            for unit in 0..4 {
-                assert!(
-                    audit.ooo[unit] >= 0.8,
-                    "seed {seed}: true unit {unit} OOO = {}",
-                    audit.ooo[unit]
-                );
+            for (unit, &ooo) in audit.ooo[..4].iter().enumerate() {
+                assert!(ooo >= 0.8, "seed {seed}: true unit {unit} OOO = {ooo}");
             }
         }
     }

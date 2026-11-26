@@ -461,10 +461,10 @@ impl RrqWeights {
             return;
         }
         let mut stage_dequant = vec![0.0_f32; n];
-        for k in 0..t_eff {
-            self.residuals[k].dequant_into(&mut stage_dequant);
-            for i in 0..n {
-                out[i] += stage_dequant[i];
+        for residual in self.residuals[..t_eff].iter() {
+            residual.dequant_into(&mut stage_dequant);
+            for (o, &s) in out.iter_mut().zip(stage_dequant.iter()) {
+                *o += s;
             }
         }
     }

@@ -55,8 +55,8 @@ fn test_prefill_then_decode_integration() {
 
     // Chunk 0 should be populated
     assert!(summary_cache.n_chunks() > 0, "should have cached chunks");
-    for h in 0..config.n_kv_head {
-        for &v in &summary_cache.summaries[0][h] {
+    for head_summary in &summary_cache.summaries[0][..config.n_kv_head] {
+        for &v in head_summary {
             assert!(v.is_finite(), "chunk summary should be finite, got {v}");
         }
     }
@@ -341,11 +341,10 @@ fn test_chunk_summary_cache_lifecycle() {
 
     // Summarize and store
     let keys = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0];
-    for c in 0..3 {
-        for h in 0..n_kv {
+    for summary_row in cache.summaries[..3].iter_mut() {
+        for (h, head_cell) in summary_row[..n_kv].iter_mut().enumerate() {
             let offset = h * hd;
-            let summary = summarize_chunk(&query, &keys[offset..offset + hd], 1, h, hd);
-            cache.summaries[c][h] = summary;
+            *head_cell = summarize_chunk(&query, &keys[offset..offset + hd], 1, h, hd);
         }
     }
 

@@ -641,9 +641,9 @@ pub fn tiled_attention_parallax_forward_retaining(
         output[row_off..row_off + d].fill(0.0);
 
         // Compute scores for row i: scores[j] = q_i · k_j * scale
-        for j in 0..n {
+        for (j, score) in scratch.scores[..n].iter_mut().enumerate() {
             let k_off = j * d;
-            scratch.scores[j] = simd::simd_dot_f32(q_row, &k[k_off..k_off + d], d) * scale;
+            *score = simd::simd_dot_f32(q_row, &k[k_off..k_off + d], d) * scale;
         }
 
         // Scale-invariant per-key affine schedule (Plan 622 Phase 2).
@@ -684,8 +684,7 @@ pub fn tiled_attention_parallax_forward_retaining(
         // Hoist the mutable output-row borrow out of the `j` loop — one
         // bounds-check + reborrow per query row instead of per (i, j) pair.
         let out_row = &mut output[row_off..row_off + d];
-        for j in 0..n {
-            let p = scratch.scores[j];
+        for (j, &p) in scratch.scores[..n].iter().enumerate() {
             let v_off = j * d;
             simd::simd_fused_scale_acc(out_row, &v[v_off..v_off + d], p, d);
         }

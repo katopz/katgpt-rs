@@ -537,9 +537,9 @@ impl<C: katgpt_core::types::QuantizedKVCache> SpKvQuantCache<C> {
         flat_keys: &mut [f32],
     ) {
         let meta = &self.meta[layer];
-        for t in 0..=pos {
+        for (t, &retained_t) in meta.retained[..=pos].iter().enumerate() {
             let off = t * kv_dim;
-            if meta.retained[t] {
+            if retained_t {
                 self.quant
                     .dequantize_key_into(layer, t, &mut flat_keys[off..off + kv_dim]);
             } else {
@@ -559,9 +559,9 @@ impl<C: katgpt_core::types::QuantizedKVCache> SpKvQuantCache<C> {
         flat_values: &mut [f32],
     ) {
         let meta = &self.meta[layer];
-        for t in 0..=pos {
+        for (t, &retained_t) in meta.retained[..=pos].iter().enumerate() {
             let off = t * kv_dim;
-            if meta.retained[t] {
+            if retained_t {
                 self.quant
                     .dequantize_value_into(layer, t, &mut flat_values[off..off + kv_dim]);
             } else {

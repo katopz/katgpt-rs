@@ -353,9 +353,7 @@ pub fn build_transformer_model_spec(weights: &TransformerWeights, config: &Confi
     ));
 
     // ── Per-layer transformer blocks ──
-    for i in 0..n_layer {
-        let lw = &weights.layers[i];
-
+    for (i, lw) in weights.layers.iter().take(n_layer).enumerate() {
         // RMSNorm (pre-attention): approximate with Scale layer using gamma weights.
         // Full RMSNorm would be: x / sqrt(mean(x^2) + eps) * gamma.
         // We store just gamma as the scale factor (identity approximation).

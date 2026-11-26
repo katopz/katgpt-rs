@@ -1462,10 +1462,10 @@ mod tests {
                     }
                 }
             }
-            for j in 0..4 {
+            for (j, &g_row) in moe_g.router_weight.iter().enumerate().take(4) {
                 fd_check!(
                     &mut moe_w_mut(&mut weights_mut.layers[li].ffn).router_weight[j],
-                    moe_g.router_weight[j],
+                    g_row,
                     format!("L{li}_router[{j}]")
                 );
             }

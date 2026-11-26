@@ -1040,8 +1040,8 @@ impl GainEstimator {
             }
         } else {
             let mut total_raw = 0.0_f64;
-            for d in 0..self.domains {
-                total_raw += self.counts_now[d];
+            for &cnt in self.counts_now[..self.domains].iter() {
+                total_raw += cnt;
             }
             for (d, slot) in cells.iter_mut().enumerate().take(self.domains) {
                 *slot = match self.uni[d] {

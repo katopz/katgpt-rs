@@ -26,9 +26,9 @@ impl SudokuPruner {
     /// Automatically discovers empty cells in row-major order.
     pub fn new(board: Sudoku9x9) -> Self {
         let mut positions = Vec::with_capacity(9);
-        for r in 0..9 {
-            for c in 0..9 {
-                if board.grid[r][c] == 0 {
+        for (r, grid_row) in board.grid.iter().enumerate() {
+            for (c, &cell) in grid_row.iter().enumerate() {
+                if cell == 0 {
                     positions.push((r, c));
                 }
             }

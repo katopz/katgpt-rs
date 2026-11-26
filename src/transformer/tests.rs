@@ -363,13 +363,13 @@ fn test_paged_cache_linear_matches_flat() {
     }
 
     // Read back and compare
-    for layer_idx in 0..config.n_layer {
+    for (layer_idx, layer_cache) in flat_cache.layers[..config.n_layer].iter().enumerate() {
         let mut k_out = vec![0.0f32; kvd];
         let mut v_out = vec![0.0f32; kvd];
         paged.read_kv(layer_idx, 0, 0, &mut k_out, &mut v_out);
 
-        let flat_k = &flat_cache.layers[layer_idx].key[..kvd];
-        let flat_v = &flat_cache.layers[layer_idx].value[..kvd];
+        let flat_k = &layer_cache.key[..kvd];
+        let flat_v = &layer_cache.value[..kvd];
         assert_eq!(k_out, flat_k, "layer {layer_idx} K mismatch: paged vs flat");
         assert_eq!(v_out, flat_v, "layer {layer_idx} V mismatch: paged vs flat");
     }
@@ -1542,11 +1542,11 @@ fn test_forward_prefill_multilayer_cache_populated() {
         None,
     );
     // Both layers should have K/V populated
-    for layer in 0..2 {
+    for (layer, layer_cache) in cache.layers[..2].iter().enumerate() {
         for p in 0..4 {
             let off = p * kvd;
-            let key_sum: f32 = cache.layers[layer].key[off..off + kvd].iter().sum();
-            let val_sum: f32 = cache.layers[layer].value[off..off + kvd].iter().sum();
+            let key_sum: f32 = layer_cache.key[off..off + kvd].iter().sum();
+            let val_sum: f32 = layer_cache.value[off..off + kvd].iter().sum();
             assert!(
                 key_sum != 0.0,
                 "layer {layer} K cache at pos {p} should be populated"

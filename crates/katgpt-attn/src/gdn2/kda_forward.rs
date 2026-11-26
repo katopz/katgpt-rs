@@ -507,8 +507,8 @@ pub fn kda_forward_token<'s>(
             .o_h
             .copy_from_slice(&scratch.z_q_conv[off..off + dk]);
         l2_normalize_eps_kda(&mut scratch.o_h);
-        for i in 0..dk {
-            scratch.o_h[i] *= scale;
+        for v in scratch.o_h[..dk].iter_mut() {
+            *v *= scale;
         }
         let q_h = &scratch.o_h;
 
@@ -530,11 +530,11 @@ pub fn kda_forward_token<'s>(
         // the decay in a DIFFERENT buffer. Use erase_b_h as the decay buffer
         // (it's filled with sigmoid(beta) below before the gdn2 call).
         let alpha_head = weights.a_log[head].exp();
-        for i in 0..dk {
+        for (i, slot) in scratch.erase_b_h[..dk].iter_mut().enumerate() {
             let g_plus_bias = scratch.g_raw[off + i] + weights.dt_bias[off + i];
             let gk = -alpha_head * softplus(g_plus_bias);
             let a = gk.exp();
-            scratch.erase_b_h[i] = if a < config.alpha_eps {
+            *slot = if a < config.alpha_eps {
                 config.alpha_eps
             } else {
                 a
@@ -558,8 +558,8 @@ pub fn kda_forward_token<'s>(
 
         // Fill erase_b_h with sigmoid(β) broadcast.
         let beta_h = scratch.beta[head];
-        for i in 0..dk {
-            scratch.erase_b_h[i] = beta_h;
+        for slot in scratch.erase_b_h[..dk].iter_mut() {
+            *slot = beta_h;
         }
 
         // Call gdn2_recurrent_step.

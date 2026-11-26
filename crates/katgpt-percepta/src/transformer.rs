@@ -474,8 +474,8 @@ impl VanillaTransformer {
         let mut best_id = 0;
         let mut best_score = f64::NEG_INFINITY;
 
-        for tok_id in 0..vocab_size {
-            let score = dot_product(&self.weights.unembedding[tok_id], residual);
+        for (tok_id, row) in self.weights.unembedding[..vocab_size].iter().enumerate() {
+            let score = dot_product(row, residual);
             if score > best_score {
                 best_score = score;
                 best_id = tok_id;

@@ -559,8 +559,8 @@ impl StrategicGame {
 
         for (j, &bpos) in self.boxes.iter().enumerate() {
             if bpos == pos && (state.boxes_opened & (1 << j)) == 0 && state.keys_held != 0 {
-                for k in 0..self.keys.len() {
-                    if (state.keys_held & (1 << k)) != 0 && self.key_mapping[k] == j {
+                for (k, &key_mapping_k) in self.key_mapping.iter().enumerate() {
+                    if (state.keys_held & (1 << k)) != 0 && key_mapping_k == j {
                         state.boxes_opened |= 1 << j;
                         state.keys_held &= !(1 << k);
                         state.keys_used |= 1 << k;

@@ -1256,13 +1256,13 @@ mod sliding_bounded_tests {
             layer.value.fill(-1.0);
         }
         cache.restore(&snapshot, &config);
-        for l in 0..config.n_layer {
+        for (l, layer) in cache.layers[..config.n_layer].iter().enumerate() {
             for i in 0..window {
                 // Ring slot i holds the most recent position ≡ i (mod window),
                 // i.e. the unique p in [pos-window, pos) with p % window == i.
                 let expected_pos = 20 - window + ((i + window - ((20 - window) % window)) % window);
                 assert_eq!(
-                    cache.layers[l].key[i * kvd],
+                    layer.key[i * kvd],
                     expected_pos as f32,
                     "layer {l} ring slot {i} after restore"
                 );

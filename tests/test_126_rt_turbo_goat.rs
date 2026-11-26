@@ -425,8 +425,7 @@ fn test_goat_4_decode_routing_efficiency() {
     // ── Peaked key_pre_rope: spikes every 1024 positions for retrieval heads ──
     let total_dim = n_heads * head_dim;
     let mut key_pre_rope = vec![vec![0.01f32; total_dim]; seq_len];
-    for r in 0..calibration.n_retrieval() {
-        let global_head = calibration.retrieval_set[r];
+    for &global_head in calibration.retrieval_set[..calibration.n_retrieval()].iter() {
         let offset = global_head * head_dim;
         // Create 16 spike positions (every 1024 steps)
         for spike_idx in 0..16 {

@@ -82,8 +82,8 @@ fn find_best_match<const D: usize, const K: usize>(
             // argmax_i <q, dir_i.direction> — forecast-independent topic match.
             let mut best_i = 0usize;
             let mut best_dot = f32::NEG_INFINITY;
-            for i in 0..K {
-                let d = simd_dot_f32(q, &c_prime.slots[i].dir.direction, D);
+            for (i, slot) in c_prime.slots.iter().enumerate() {
+                let d = simd_dot_f32(q, &slot.dir.direction, D);
                 if d > best_dot {
                     best_dot = d;
                     best_i = i;
@@ -99,8 +99,8 @@ fn find_best_match<const D: usize, const K: usize>(
             // instead of a scalar accumulate loop.
             let mut best_i = 0usize;
             let mut best_dist = f32::INFINITY;
-            for i in 0..K {
-                let dist_sq = simd_dist_sq(q, &c_prime.slots[i].precomputed, D);
+            for (i, slot) in c_prime.slots.iter().enumerate() {
+                let dist_sq = simd_dist_sq(q, &slot.precomputed, D);
                 if dist_sq < best_dist {
                     best_dist = dist_sq;
                     best_i = i;

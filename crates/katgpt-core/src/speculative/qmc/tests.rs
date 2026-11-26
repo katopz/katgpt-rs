@@ -162,9 +162,9 @@ fn test_sobol_unscrambled_dim0_matches_van_der_corput() {
     // the public API, so we verify the property indirectly: the
     // direction numbers for dim 0 are powers of 2.
     let qmc = SobolQmc::new(1);
-    for j in 0..SOBOL_BITS {
+    for (j, &dn) in qmc.direction_numbers[0][..SOBOL_BITS].iter().enumerate() {
         assert_eq!(
-            qmc.direction_numbers[0][j],
+            dn,
             1u32 << (SOBOL_BITS - 1 - j),
             "dim 0 direction number {j} must be 1 << (BITS-1-j)"
         );

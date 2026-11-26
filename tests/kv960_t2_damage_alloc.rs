@@ -385,8 +385,9 @@ fn corpus_joint_read(
     let mut distort_sum = 0.0f64;
     let mut flip_sum = 0.0f64;
     let mut reads = 0.0f64;
-    for prompt in N_CAL..(N_CAL + N_EVAL) {
-        for (layer_heads, layer_tables) in run.heads[prompt].iter().zip(tables.iter()) {
+    for (prompt, heads_at_prompt) in run.heads[N_CAL..(N_CAL + N_EVAL)].iter().enumerate() {
+        let prompt = prompt + N_CAL;
+        for (layer_heads, layer_tables) in heads_at_prompt.iter().zip(tables.iter()) {
             for (head, table) in layer_heads.iter().zip(layer_tables.iter()) {
                 let read = joint_key_read(
                     KeyTensors {

@@ -297,11 +297,8 @@ fn proof_g6_plasma_skips_verify() {
     );
 
     // For consensus Plasma positions, the accepted token is the consensus token
-    for i in 0..8 {
-        assert_eq!(
-            result.accepted_tokens[i], 42,
-            "plasma position {i} should accept consensus token"
-        );
+    for (i, &tok) in result.accepted_tokens[..8].iter().enumerate() {
+        assert_eq!(tok, 42, "plasma position {i} should accept consensus token");
     }
 
     println!("G6 PASS: Plasma path skips AR verification (all 8 positions = Plasma)");
@@ -475,9 +472,9 @@ fn bench_t9_plasma_hit_rate() {
             &ternary, &h_conf, &v_conf, &h_tokens, &v_tokens, &config, len,
         );
 
-        for i in 0..len {
+        for &path in result.thermal_paths[..len].iter() {
             total_positions += 1;
-            match result.thermal_paths[i] {
+            match path {
                 ThermalPath::Plasma => plasma_hits += 1,
                 ThermalPath::Hot => hot_hits += 1,
                 ThermalPath::Warm => warm_hits += 1,

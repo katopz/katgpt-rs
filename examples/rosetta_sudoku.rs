@@ -28,10 +28,8 @@ impl ConstraintPruner for RowPruner {
             return false;
         }
         let digit = token_idx as u8;
-        for col in 0..9 {
-            if self.grid[self.cell_row][col] == digit {
-                return false;
-            }
+        if self.grid[self.cell_row].contains(&digit) {
+            return false;
         }
         true
     }
@@ -49,10 +47,12 @@ impl ConstraintPruner for ColPruner {
             return false;
         }
         let digit = token_idx as u8;
-        for row in 0..9 {
-            if self.grid[row][self.cell_col] == digit {
-                return false;
-            }
+        if self
+            .grid
+            .iter()
+            .any(|grid_row| grid_row[self.cell_col] == digit)
+        {
+            return false;
         }
         true
     }

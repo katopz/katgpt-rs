@@ -256,8 +256,8 @@ fn one_admm_step_runs_without_panic() {
     let mut primal_x = CochainField::zeros(0, cx.n_vertices(), d_v);
     let mut consensus_z = CochainField::zeros(0, cx.n_vertices(), d_v);
     let mut dual_u = CochainField::zeros(0, cx.n_vertices(), d_v);
-    for k in 0..total {
-        primal_x.data[k] = 0.1 * (k as f32);
+    for (k, slot) in primal_x.data[..total].iter_mut().enumerate() {
+        *slot = 0.1 * (k as f32);
     }
     let objective = LocalObjective::DiagonalQuadratic {
         diag_q: vec![1.0; total],
@@ -754,8 +754,8 @@ fn soft_constraint_gamma_zero_matches_hard() {
 
     // Identical initial state for both paths.
     let init = |x: &mut CochainField| {
-        for k in 0..total {
-            x.data[k] = (0.1 * (k as f32)).sin();
+        for (k, slot) in x.data[..total].iter_mut().enumerate() {
+            *slot = (0.1 * (k as f32)).sin();
         }
     };
     let mut x_hard = CochainField::zeros(0, cx.n_vertices(), d_v);

@@ -1011,13 +1011,12 @@ mod tests {
         let loadings = [identity_loadings::<4, 4>()];
         let field =
             RegionSubspaceField::<4, 1, 4>::new_unchecked(centroids, loadings, [0f32], [1f32; 4]);
-        for r in 0..4 {
-            for d in 0..4 {
+        for (r, proj_row) in field.projectors[0].iter().enumerate() {
+            for (d, &p_rd) in proj_row.iter().enumerate() {
                 let expected = if r == d { 0.5 } else { 0.0 };
                 assert!(
-                    (field.projectors[0][r][d] - expected).abs() < 1e-5,
-                    "projector[0][{r}][{d}]={} expected {expected}",
-                    field.projectors[0][r][d]
+                    (p_rd - expected).abs() < 1e-5,
+                    "projector[0][{r}][{d}]={p_rd} expected {expected}"
                 );
             }
         }

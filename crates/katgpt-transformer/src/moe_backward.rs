@@ -242,19 +242,23 @@ pub fn moe_forward_token_with_saved(
     }
     if topk_sum < 1.0e-20 {
         let uniform = 1.0 / (k_r as f32);
-        for k in 0..k_r {
-            scratch.topk_weights[k] = uniform;
+        for w in scratch.topk_weights[..k_r].iter_mut() {
+            *w = uniform;
         }
     } else if config.renormalize {
         let inv = 1.0 / topk_sum;
-        for k in 0..k_r {
-            let idx = scratch.topk_indices[k];
-            scratch.topk_weights[k] = scratch.sigmoid_scores[idx] * inv;
+        for (w, &idx) in scratch.topk_weights[..k_r]
+            .iter_mut()
+            .zip(scratch.topk_indices[..k_r].iter())
+        {
+            *w = scratch.sigmoid_scores[idx] * inv;
         }
     } else {
-        for k in 0..k_r {
-            let idx = scratch.topk_indices[k];
-            scratch.topk_weights[k] = scratch.sigmoid_scores[idx];
+        for (w, &idx) in scratch.topk_weights[..k_r]
+            .iter_mut()
+            .zip(scratch.topk_indices[..k_r].iter())
+        {
+            *w = scratch.sigmoid_scores[idx];
         }
     }
 
@@ -298,8 +302,7 @@ pub fn moe_forward_token_with_saved(
     let mut hidden_out: Vec<f32> = shared_output.clone();
 
     // Accumulate remaining shared experts (Kimi-K3-0.40B has N_s=1, but handle general case)
-    for s in 1..weights.shared_experts.len() {
-        let shared_s = &weights.shared_experts[s];
+    for shared_s in weights.shared_experts[1..].iter() {
         // We don't capture intermediates for s>0 (rare; Kimi-K3 has N_s=1).
         // Re-run forward for this expert without snapshotting.
         let gate_buf = &mut scratch.expert_intermediate[..d_ffn_shared];
@@ -602,19 +605,23 @@ pub fn moe_forward_token_split(
     }
     if topk_sum < 1.0e-20 {
         let uniform = 1.0 / (k_r as f32);
-        for k in 0..k_r {
-            scratch.topk_weights[k] = uniform;
+        for w in scratch.topk_weights[..k_r].iter_mut() {
+            *w = uniform;
         }
     } else if config.renormalize {
         let inv = 1.0 / topk_sum;
-        for k in 0..k_r {
-            let idx = scratch.topk_indices[k];
-            scratch.topk_weights[k] = scratch.sigmoid_scores[idx] * inv;
+        for (w, &idx) in scratch.topk_weights[..k_r]
+            .iter_mut()
+            .zip(scratch.topk_indices[..k_r].iter())
+        {
+            *w = scratch.sigmoid_scores[idx] * inv;
         }
     } else {
-        for k in 0..k_r {
-            let idx = scratch.topk_indices[k];
-            scratch.topk_weights[k] = scratch.sigmoid_scores[idx];
+        for (w, &idx) in scratch.topk_weights[..k_r]
+            .iter_mut()
+            .zip(scratch.topk_indices[..k_r].iter())
+        {
+            *w = scratch.sigmoid_scores[idx];
         }
     }
 

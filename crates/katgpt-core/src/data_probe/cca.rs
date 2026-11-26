@@ -646,15 +646,14 @@ mod tests {
             "denoise must retain exactly the shared block"
         );
         assert_eq!(rep.ky, k_true);
-        for j in 0..k_true {
+        for (j, &rho_j) in rep.rho[..k_true].iter().enumerate() {
             assert!(
-                (rep.rho[j] - r).abs() < 0.1,
-                "rho[{j}] = {} should recover r = {r}",
-                rep.rho[j]
+                (rho_j - r).abs() < 0.1,
+                "rho[{j}] = {rho_j} should recover r = {r}"
             );
         }
-        for j in k_true..MAX_K {
-            assert_eq!(rep.rho[j], 0.0, "tail must be zero past min(kx, ky)");
+        for &rho_tail in rep.rho[k_true..MAX_K].iter() {
+            assert_eq!(rho_tail, 0.0, "tail must be zero past min(kx, ky)");
         }
         assert!(
             (rep.mean_rho - r).abs() < 0.1,

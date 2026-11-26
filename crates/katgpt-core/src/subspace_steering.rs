@@ -837,8 +837,8 @@ mod tests {
             }
         }
         // Each row must be unit-norm (renormalization post-pass).
-        for k in 0..K {
-            let n = row_norm(&field.block[k]);
+        for (k, block_row) in field.block.iter().enumerate() {
+            let n = row_norm(block_row);
             assert!(
                 (n - 1.0).abs() < 1e-4,
                 "block[{k}] norm {n} must be ~1.0 (renormalized)"
