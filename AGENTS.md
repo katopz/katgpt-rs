@@ -893,7 +893,13 @@ below the dir's max allocated number — or a populated dir with no counter
 allocation; `--allow-stale-highwater` is the read-only foreign-repo
 escape hatch) and warns under `--lint`/plain scan. **Closing a lease FOLDS the
 claim line into the `**Lease closed:**` row** (delete `**Claimed:**`, carry
-session/epoch/expiry); `--lint` reds leftovers as STALE-CLAIM.
+session/epoch/expiry); `--lint` reds leftovers as STALE-CLAIM. **A lane-branch
+worktree's `.issues`/`.plans` copy can lag the LIVE lease by days** (measured
+2026-11-26, riir-train 693: the i707-t2 worktree carried an expired line while
+d `develop` held a live lease + the landed work — one erroneous double-claim
+filed and folded same-day): the checker reads the file it is GIVEN; any sweep
+claiming an expired line found on a lane branch must read the file at
+`origin/<default>` first and claim on the branch the live lane actually uses.
 
 ⛔ **Before recording a negative result, `git fetch` and check whether a
 sibling session shipped the same primitive; if so, cross-run the fixtures
