@@ -33,6 +33,10 @@ no gradient descent. The only weight mutations allowed at runtime:
 3. **Latent-space updates** — direction-vector projections, sigmoid gates,
    routing tables; latent state, NOT base weights.
 
+- **External evidence for freeze/thaw (WSM §3.4, riir-infer Research 045):**
+  gradient-training a program-like module's own weights destroys its exactness
+  at the first update, at every learning rate; a frozen core with only the
+  boundary (wiring) trained stays safe and matches hand wiring.
 - **Mandatory: exhaust modelless paths before deferring to riir-train** (research
 skill §3.5). A systematic, characterizable, named bias is a modelless-correctable
 candidate — try a deterministic reader-LoRA or freeze-state correction before
