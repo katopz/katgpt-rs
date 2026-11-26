@@ -14,6 +14,15 @@
 2. **bench_894's 4x key-arm regressions deserve a real look regardless of profile** — "new" arms at 0.25x on the key side is either a genuine regression landed unnoticed in debug-shaded timing, or an arm-measures-the-box artifact (the sequential-A/B audit class). Interleaved A/B + release re-run decides.
 3. Neither suite blocks this filing session's landing; both were disclosed in `13c62d2d3`'s commit body.
 
+## ADJUDICATED 2026-11-26 (same day, release posture on amo — asks 1+2 answered empirically)
+
+`cargo test --release` on amo (M5 Ultra, AC, quiet):
+
+- **bench_886: ALL GATES PASS** — G2a axpy **0.0228 µs/call** (bar 1.0 µs, ~44× under), G2b 1.0038 (bar ≤ 1.02), G4 zero allocs. The bar is RELEASE-calibrated; the plain-debug `cargo test` sweep simply cannot hold it (debug runs ~100× slower on this micro-kernel class). Fix shape: gate the debug run of the suite — but note the AGENTS.md green-zero trap (a cfg-gated whole-file harness compiles to an empty binary that reports `ok. 0 passed`); the owning lane should pick between `required-features` on the `[[test]]` row, a debug-`ignore` with the count treated accordingly, or leaving the suite release-only in the gates.
+- **bench_894: ALL GATES PASS** — G3 bitwise 12/12 (0 differing elements across all bits/hadamard/kv_dim combos), G4 0 allocs, and ALL six G2 gates green at release: value 4-bit **2.28× faster** (0.4377, bar ≤ 0.90 — the "no faster" debug reading was pure debug-shading), value 2-bit 1.53×, value 8-bit 1.27×, key 4-bit 1.35×, key 8-bit 1.42×, key 2-bit +1.3% (within the 1.05 no-regression bar), A/A control 0.9992. **The debug "4× regressions" were the sequential-debug-A/B-measures-the-box artifact in full** — the shipped dequant zip is a real win, no regression exists at the calibrated posture.
+
+Remaining work: only the fix-shape decision in the first bullet (a scoped lane that owns test_gate.sh membership/floors); the measurement questions are closed.
+
 ## Provenance
 
 - Found 2026-11-26 during the i1245-followup workspace test sweep (`zed-riir-refine-idle@amo`).
