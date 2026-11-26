@@ -3,7 +3,7 @@
 > **Source:** "Sparks of Weight-Space Programming: LLMs can natively read & write neural network weights" — Rikiya Takehi, Jayden Teoh, Alex Zhang, Omar Khattab (MIT CSAIL), blog post 2026-11-02. https://rikiyat.github.io/blog/weight-space-programming/ — **blog-only, no arXiv/peer-reviewed version as of 2026-11-03** (verified: arXiv API, OpenReview, author profile all 0 hits). Complete experiment logs: github.com/RikiyaT/lm_understand-logs
 > **Date:** 2026-11-03
 > **Status:** Active
-> **Related Research:** 080 RandOpt (the closest cousin — same harness, random proposals)
+> **Related Research:** 080 RandOpt (the closest cousin — same harness, random proposals); riir-infer Research 045 (Weight-Space Micromachines — the runtime side-module/RL descendant of this lane, 2026-11-26)
 > **Related Plans:** 121 RandOpt weight-space perturbation (katgpt-rs); riir-train Plan 413 (civ re-open test); riir-ai Plan 596 (npc_brain freeze wire)
 > **Files created this session:** `.issues/980_weight_edit_overlay_lane.md` (katgpt-rs, the modelless half); `riir-train/.issues/665_wsp_weight_production_lane.md` (the weight-production half)
 > **Classification:** Public
