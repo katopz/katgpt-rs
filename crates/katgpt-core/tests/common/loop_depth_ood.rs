@@ -1,17 +1,24 @@
-//! `loop_depth_ood` — the Issue-1248 constructed fixture (T1).
+//! `loop_depth_ood` — the Issue-1248 constructed fixture (T1) + its G0 span
+//! census + fault-signature/R2/R3 instruments (T1–T3).
 //!
-//! A two-layer looped forward whose passes 1..d converge (rank-1-dominant
-//! direction contraction under rmsnorm) with ONE pass-indexed gate module
-//! between the layers: healthy for the seen pass band `φ ∈ (0, 1]`, collapsed
-//! at `φ > 1` — the Inkling fault class (a seen direction whose influence
-//! flips) reproduced at a LOCALIZED site (layer 2, the OOD-consuming layer).
+//! A two-layer looped forward whose passes 1..d converge (direction
+//! contraction under rmsnorm, alignment axis e₁) with ONE pass-indexed gate
+//! module between the layers: healthy for the seen pass band `φ = k/d`
+//! (ramp; sinusoid fallback spelling), collapsed at `φ > 1` — the Inkling
+//! fault class (a seen direction whose influence flips) reproduced at a
+//! LOCALIZED site (layer 2, the OOD-consuming layer). The gate write is the
+//! pass's payload; its collapse reverses the loop's steady shift direction —
+//! the source's `v₁` sign-flip trajectory.
+//
+// Shared by several test binaries (g0, r2_r3, and T4–T6 arms later): each
+// binary sees the whole surface, so unused-for-that-binary items are
+// expected — the scoped allow is the include shape, not a lint escape.
+#![allow(dead_code)]
 //!
 //! The design is pre-registered in `.issues/1248_closed_form_loop_depth_extension.md`
-//! §"T1 fixture design" (written before code, per T1): encoding = continuous
-//! scalar ramp `φ = k/d` (sinusoid fallback, same κ), geometry = rank-1-dominant
-//! contraction so the keep span is effectively 1-D and the gate-collapse
-//! deficit (−0.58·b) leaves it by a real margin — the G0 overlap lands strictly
-//! between the two rigged poles.
+//! §"T1 fixture design" (revised at implementation — revision note there).
+//! All bars measured green 2026-11-27; the measured numbers live in the
+//! issue. std-only: no model, no GPU, no lib-internal access.
 //!
 //! Pure constructed math — std-only, no model, no GPU. State math in f32;
 //! census/eigen math in f64 with sequential folds (Issue-940 hygiene; a local
@@ -730,6 +737,236 @@ pub fn fault_signature(fixture: &LoopDepthOod) -> FaultSignature {
         gate_means,
         fault_shift_norm: shift_norms[D_TRAIN - 1],
         shift_norms,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// R2 — the fault-localizer census (readout-screen class: offline, never a
+// serving path). Per layer: the pass-shift matrix's leading left-singular
+// direction v₁, the per-pass projections, and the typed fault verdict. On a
+// real looped checkpoint this is the pre-flight gate for "is this checkpoint
+// even a depth-extension candidate".
+// ---------------------------------------------------------------------------
+
+/// R2's per-layer census row.
+pub struct LayerR2 {
+    /// 0-based layer index (0 = the fault-free layer, 1 = the constructed
+    /// fault site's consumer).
+    pub layer: usize,
+    /// ⟨s_k, v₁⟩ per transition, batch-meaned shifts; v₁ oriented at the
+    /// largest-|projection| transition.
+    pub v1_projections: Vec<f64>,
+    /// The transition index the verdict names (index 0 = transition 1→2).
+    /// `None` = the ladder reads healthy at this layer.
+    pub faulted_at: Option<usize>,
+}
+
+/// R2's report: one row per layer, plus the site verdict.
+pub struct R2Report {
+    pub layers: Vec<LayerR2>,
+    /// The fault SITE: the earliest (transition, then layer) faulted verdict.
+    /// On a real checkpoint this is the pre-flight gate's answer — `None` =
+    /// the ladder reads healthy everywhere.
+    pub first_fault: Option<(usize, usize)>,
+}
+
+/// Batch-mean per-pass states of one signal (the ladder's layer states).
+fn batch_mean_states(fixture: &LoopDepthOod, layer: usize) -> Vec<Vec<f64>> {
+    let mut states = vec![vec![0.0f64; D]; K_LADDER];
+    for i in 0..BATCH {
+        let x0 = fixture.warm_start(i);
+        let mut x = x0.clone();
+        for (k, acc_state) in states.iter_mut().enumerate() {
+            let h1 = fixture.layer1(&x);
+            let phi = LoopDepthOod::pass_indicator_ramp(k + 1);
+            let (_g, h1g) = fixture.gate_apply(&h1, phi);
+            let s = if layer == 0 {
+                h1.clone()
+            } else {
+                fixture.layer2(&h1g)
+            };
+            for (acc, v) in acc_state.iter_mut().zip(&s) {
+                *acc += (*v as f64) / BATCH as f64;
+            }
+            x = fixture.layer2(&h1g);
+        }
+    }
+    states
+}
+
+/// The shift-SVD census for ONE signal: batch-mean pass-shifts, v₁ as the
+/// leading left-singular direction of S Sᵀ (Jacobi, f64, oriented at the
+/// largest-|projection| transition), the per-pass projections.
+pub fn r2_shift_census(states: &[Vec<f64>]) -> Vec<f64> {
+    let n_trans = states.len() - 1;
+    let mut shifts = vec![vec![0.0f64; D]; n_trans];
+    for t in 0..n_trans {
+        for j in 0..D {
+            shifts[t][j] = states[t + 1][j] - states[t][j];
+        }
+    }
+    // S Sᵀ (D×D, sequential f64 folds).
+    let mut sst = vec![0.0f64; D * D];
+    for i in 0..D {
+        for j in 0..D {
+            let acc: f64 = shifts.iter().map(|s| s[i] * s[j]).sum();
+            sst[i * D + j] = acc;
+        }
+    }
+    let mut v = vec![0.0f64; D * D];
+    let mut m = sst;
+    let eigs = jacobi_symmetric(&mut m, &mut v, D);
+    let lead_col = eigs
+        .iter()
+        .enumerate()
+        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    let mut v1 = vec![0.0f64; D];
+    for r in 0..D {
+        v1[r] = v[r * D + lead_col];
+    }
+    let v1n: f64 = v1.iter().map(|x| x * x).sum::<f64>().sqrt();
+    for x in &mut v1 {
+        *x /= v1n;
+    }
+    let mut projs: Vec<f64> = shifts
+        .iter()
+        .map(|s| s.iter().zip(&v1).map(|(a, b)| a * b).sum())
+        .collect();
+    // Orient v₁ at the largest-|projection| transition (the eigenvector's
+    // global sign is conventional; the invariant is the trajectory shape).
+    let lead_t = (0..n_trans)
+        .max_by(|a, b| projs[*a].abs().partial_cmp(&projs[*b].abs()).unwrap())
+        .unwrap_or(0);
+    if projs[lead_t] < 0.0 {
+        for p in &mut projs {
+            *p = -*p;
+        }
+    }
+    projs
+}
+
+/// The R2 verdict rule: a layer is FAULTED at its EARLIEST transition t
+/// whose |proj_t| clears `R2_DOMINANCE` × the median |projection| of the
+/// remaining transitions (the fault transition dominates the ladder's own
+/// shift trajectory; a healthy layer's transitions are homogeneous). Later
+/// dominant transitions at the same layer are downstream contamination (the
+/// wave), not the site — the report's `first_fault` names the earliest.
+const R2_DOMINANCE: f64 = 10.0;
+
+pub fn r2_fault_localizer(fixture: &LoopDepthOod) -> R2Report {
+    let mut layers = Vec::with_capacity(2);
+    for layer in 0..2usize {
+        let states = batch_mean_states(fixture, layer);
+        let projs = r2_shift_census(&states);
+        let n_trans = projs.len();
+        // Earliest dominant transition (not merely the largest — later
+        // spikes are the propagation wave).
+        let mut faulted_at = None;
+        for t in 0..n_trans {
+            let mut others: Vec<f64> = projs
+                .iter()
+                .enumerate()
+                .filter(|(u, _)| *u != t)
+                .map(|(_, p)| p.abs())
+                .collect();
+            others.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let med = others[others.len() / 2];
+            if projs[t].abs() >= R2_DOMINANCE * med {
+                faulted_at = Some(t);
+                break;
+            }
+        }
+        layers.push(LayerR2 {
+            layer,
+            v1_projections: projs,
+            faulted_at,
+        });
+    }
+    // The site: earliest (transition, layer) among the faulted verdicts.
+    let first_fault = layers
+        .iter()
+        .filter_map(|l| l.faulted_at.map(|t| (t, l.layer)))
+        .min()
+        .map(|(t, l)| (l, t));
+    R2Report {
+        layers,
+        first_fault,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// R3 — the gate-saturation alarm + graceful early exit. The in-loop OOD
+// guard: read the gate BEFORE committing a pass; on a collapse below the
+// floor, stop and return the passes computed so far — "override depth and
+// gracefully stay shallow", never worse than refusing the depth.
+// ---------------------------------------------------------------------------
+
+/// The gate floor: a pass whose batch-mean gate output falls below this is
+/// refused (the healthy in-band ladder sits at ≈ 0.6-0.7; the fault pass
+/// reads ≈ 0.0002).
+pub const GATE_FLOOR: f32 = 0.35;
+
+/// The alarm's report.
+pub struct GateAlarmReport {
+    /// The 0-based pass index where the alarm fired (`None` = the whole
+    /// ladder ran clean).
+    pub fired_at: Option<usize>,
+    /// Passes completed before the exit (the graceful exit keeps these).
+    pub passes_completed: usize,
+    /// The per-pass batch-mean gate telemetry the alarm read.
+    pub gate_means: Vec<f32>,
+    /// Per-row outputs for the COMPLETED passes (row-major: `outputs[r][k]`).
+    pub outputs: Vec<Vec<Vec<f32>>>,
+}
+
+/// Run the ladder with the alarm armed: per pass, read the BATCH-MEAN gate
+/// BEFORE committing the pass (phase 1 computes every row's gate; phase 2
+/// commits the pass only if the mean clears the floor); on a collapse, stop
+/// and return the completed passes. With `armed = false` the telemetry is
+/// recorded but the alarm never fires (identical pass math, the disarm only
+/// removes the refusal branch).
+pub fn run_with_gate_alarm(fixture: &LoopDepthOod, armed: bool) -> GateAlarmReport {
+    let mut states: Vec<Vec<f32>> = (0..BATCH).map(|i| fixture.warm_start(i)).collect();
+    let mut outputs: Vec<Vec<Vec<f32>>> = Vec::new();
+    let mut gate_means = Vec::new();
+    let mut fired_at = None;
+    for k in 1..=K_LADDER {
+        let phi = LoopDepthOod::pass_indicator_ramp(k);
+        // Phase 1 — read the telemetry (the gate is computed from the pass's
+        // layer-1 input, before the pass's output exists to consume).
+        let mut pass_gates = [0.0f32; BATCH];
+        let mut h1s = Vec::with_capacity(BATCH);
+        for (r, x) in states.iter().enumerate() {
+            let h1 = fixture.layer1(x);
+            let z = fixture.gate_preact(&h1, phi);
+            pass_gates[r] = 1.0 / (1.0 + (-z as f64).exp()) as f32;
+            h1s.push(h1);
+        }
+        let mean = pass_gates.iter().sum::<f32>() / BATCH as f32;
+        if armed && mean < GATE_FLOOR {
+            fired_at = Some(k - 1);
+            gate_means.push(mean);
+            break;
+        }
+        gate_means.push(mean);
+        // Phase 2 — commit the pass.
+        let mut pass_outs = Vec::with_capacity(BATCH);
+        for h1 in &h1s {
+            let (_g, h1g) = fixture.gate_apply(h1, phi);
+            pass_outs.push(fixture.layer2(&h1g));
+        }
+        for (x, y) in states.iter_mut().zip(&pass_outs) {
+            *x = y.clone();
+        }
+        outputs.push(pass_outs);
+    }
+    GateAlarmReport {
+        fired_at,
+        passes_completed: outputs.len(),
+        gate_means,
+        outputs,
     }
 }
 

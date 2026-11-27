@@ -1,6 +1,6 @@
 # Issue 1248: Closed-form loop-depth extension for looped forwards (FP-Solve class)
 
-**Status:** OPEN — GAIN filing; T1 LANDED (fixture + G0 + fault-signature self-check, 2026-11-27); T2–T7 open; real-model cell CONSUMER-GATED (no converged looped checkpoint on disk — Plan 324 postmortem ask / Plan 447 base rows) + hermetic-G1-first.
+**Status:** OPEN — GAIN filing; T1–T3 LANDED (fixture + G0 + fault-signature; R2 localizer; R3 alarm + graceful exit — 2026-11-27); T4–T7 open; real-model cell CONSUMER-GATED (no converged looped checkpoint on disk — Plan 324 postmortem ask / Plan 447 base rows) + hermetic-G1-first.
 **Claimed:** zed-i1248-t1@m3, 1795756939, expires 2026-11-29T05:22Z
 
 > **Source:** katgpt-rs/.research/697_Recursive_Self_Improving_Loopers_FP_Solve.md — rse_looper @ `765453d13878804c49876a656f39b57a4384dca4` (pin recorded; clone removed at filing).
@@ -68,8 +68,8 @@ Bars: (a) stabilization parity arm 4 vs arms 2/3 on state norm + readout consist
 ## Tasks
 
 - [x] **T1** — `loop_depth_ood` fixture (constructed pass-indexed gate with the PINNED continuous pass-indicator encoding — scalar ramp t/d, sinusoid fallback — written here BEFORE code; n_layer ≥ 2, contractive to depth d) + G0 span census (overlap number REPORTED with every result) + fault-signature self-check (arm-1 baseline reproduces the Inkling shape) — LANDED 2026-11-27 (`tests/common/loop_depth_ood.rs` + `tests/loop_depth_ood_g0.rs`; all bars green, measured numbers in the design section above; geometry revised at implementation — revision note there)
-- [ ] **T2** — R2 fault-signature instrument (offline rank-1 SVD of the pass-shift + per-pass projection census; readout-screen class, never a serving path)
-- [ ] **T3** — R3 gate-saturation alarm + graceful early exit (never worse than refusing the depth)
+- [x] **T2** — R2 fault-signature instrument (offline rank-1 SVD of the pass-shift + per-pass projection census; readout-screen class, never a serving path) — LANDED 2026-11-27 (`r2_shift_census` + `r2_fault_localizer` in the fixture module, typed `R2Report` with the `first_fault` site verdict; measured: site = (layer 1, transition d→d+1), the fault-free layer's own verdict = the downstream contamination wave one pass later — F3's containment story made visible)
+- [x] **T3** — R3 gate-saturation alarm + graceful early exit (never worse than refusing the depth) — LANDED 2026-11-27 (`run_with_gate_alarm` + `GATE_FLOOR` 0.35, two-phase per pass: batch-mean telemetry read BEFORE commit; measured: fires exactly at pass d+1 (telemetry 0.66/0.68/0.70 → 0.00045), never at 1..d; the kept passes are the unarmed ladder's outputs bit-identically)
 - [ ] **T4** — R4 spectral governor (`h' = h − γ·(v₁ᵀh)v₁`, one frozen vector per fault site, γ from gate telemetry)
 - [ ] **T5** — the edit arm (protected-ridge solve → rank-r `QuantErrorLora` overlay pair; capture on the serving posture; Issue-940 folds; envelope digest binds base + capture posture)
 - [ ] **T6** — the GOAT ladder A/B (arms 1–4, one frozen read) + bars (a)–(f); demote the loser in the same landing
