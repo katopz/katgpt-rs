@@ -1056,6 +1056,304 @@ pub fn governor_run(fixture: &LoopDepthOod, v1: &[f64]) -> GovernorRun {
     }
 }
 
+// ---------------------------------------------------------------------------
+// T5 — the FP-Solve edit arm: the loop-as-label protected-ridge solve, a
+// rank-r overlay pair on the OoD-consuming layer's control matrix, an
+// envelope-pinned mount (empty overlay demotes byte-identically).
+// Serving posture = the fixture's own f32 forward; the solve runs f64
+// (conditioning) and the artifact is rounded to f32 at apply (Issue-940:
+// the capture posture and the apply posture are the same build).
+// ---------------------------------------------------------------------------
+
+/// The edit's pinned configuration (the pre-registered constants; `ridge_frac`
+/// pins the 0.06 spelling — the source's own call sites drift 0.06..0.08,
+/// Research 697 row 7).
+pub struct EditConfig {
+    /// λ_keep — the pass-domain keep weight (mean-Gram scale, both Grams
+    /// normalized by their own row counts).
+    pub keep_weight: f64,
+    /// ridge_frac — λ₂ = ridge_frac · tr(G_edit)/D_in.
+    pub ridge_frac: f64,
+    /// The overlay's rank cap (thin-SVD truncation of the solved ΔW).
+    pub rank_r: usize,
+}
+
+impl Default for EditConfig {
+    fn default() -> Self {
+        Self {
+            keep_weight: 1.0,
+            ridge_frac: 0.06,
+            rank_r: 8,
+        }
+    }
+}
+
+/// The capture on the serving posture: layer-2 inputs and outputs per row —
+/// keep rows from passes 1..d, edit rows + per-row dY labels from pass d+1
+/// (the loop's OWN pass-d output is the label — the loop-as-label law; the
+/// input to the solve is the POST-norm vector the matrix actually
+/// multiplies).
+pub struct EditCapture {
+    /// Keep input rows (post-rmsnorm), B·d rows × D.
+    pub x_keep: Vec<f32>,
+    /// Edit input rows (post-rmsnorm) at pass d+1, B rows × D.
+    pub x_edit: Vec<f32>,
+    /// Per-row output labels: y_d − y_{d+1}, B rows × D (f64, sequential
+    /// folds of the f32 captures).
+    pub dy: Vec<f64>,
+    /// BLAKE3 of the capture bytes (inputs + labels, row-major, little-endian
+    /// f32/f64 bits) — the envelope binds this.
+    pub capture_digest: blake3::Hash,
+}
+
+/// Capture the edit's rows on the fixture's serving posture.
+pub fn capture_edit(fixture: &LoopDepthOod) -> EditCapture {
+    let mut x_keep = Vec::with_capacity(BATCH * D_TRAIN * D);
+    let mut x_edit = Vec::with_capacity(BATCH * D);
+    let mut dy = Vec::with_capacity(BATCH * D);
+    for i in 0..BATCH {
+        let mut x = fixture.warm_start(i);
+        let mut y_prev: Option<Vec<f32>> = None;
+        for k in 1..=K_LADDER {
+            let h1 = fixture.layer1(&x);
+            let phi = LoopDepthOod::pass_indicator_ramp(k);
+            let (_g, h1g) = fixture.gate_apply(&h1, phi);
+            let nv = LoopDepthOod::rmsnorm(&h1g);
+            let y = fixture.layer2(&h1g);
+            if k <= D_TRAIN {
+                x_keep.extend_from_slice(&nv);
+            }
+            if k == D_TRAIN + 1 {
+                x_edit.extend_from_slice(&nv);
+                let y_d = y_prev.expect("pass d output must precede d+1");
+                for (a, b) in y_d.iter().zip(&y) {
+                    dy.push((*a as f64) - (*b as f64));
+                }
+            }
+            y_prev = Some(y.clone());
+            x = y;
+        }
+    }
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(&bytemuck_bytes(&x_keep));
+    hasher.update(&bytemuck_bytes(&x_edit));
+    hasher.update(&f64_bytes(&dy));
+    EditCapture {
+        x_keep,
+        x_edit,
+        dy,
+        capture_digest: hasher.finalize(),
+    }
+}
+
+/// f32 slice → little-endian bytes (std `to_ne_bytes` is fine on one box;
+/// the digest is a local pin, never a wire format — pinned as LE for
+/// cross-box reproducibility anyway).
+fn bytemuck_bytes(v: &[f32]) -> Vec<u8> {
+    let mut b = Vec::with_capacity(v.len() * 4);
+    for f in v {
+        b.extend_from_slice(&f.to_le_bytes());
+    }
+    b
+}
+
+fn f64_bytes(v: &[f64]) -> Vec<u8> {
+    let mut b = Vec::with_capacity(v.len() * 8);
+    for f in v {
+        b.extend_from_slice(&f.to_le_bytes());
+    }
+    b
+}
+
+/// The solved edit + its rank-r overlay artifact.
+pub struct EditArtifact {
+    /// The full solved ΔW (f64, D×D row-major) — the pre-truncation form.
+    pub dw_full: Vec<f64>,
+    /// The rank-r overlay: U·Vᵀ (U: r×D, V: r×D, row-major), the THIN-SVD
+    /// truncation of `dw_full` (the factor_tail discipline; dropped energy
+    /// reported).
+    pub u: Vec<f64>,
+    pub v: Vec<f64>,
+    /// Σ of the KEPT singular values and of the DROPPED tail (the disclosed
+    /// truncation energy).
+    pub kept_energy: f64,
+    pub dropped_energy: f64,
+    /// The apply-side (f32-rounded) overlay rows: U, V cast to f32.
+    pub u32: Vec<f32>,
+    pub v32: Vec<f32>,
+    /// BLAKE3 over (capture digest ‖ config ‖ the f32 overlay bytes) — the
+    /// envelope pin.
+    pub envelope_digest: blake3::Hash,
+}
+
+/// The protected-ridge solve: dWᵀ = (G_edit + λ_keep·G_keep + λ₂·I)⁻¹ ·
+/// (X_editᵀ·dY / N_e), G_* the mean Grams (each normalized by its own row
+/// count), λ₂ = ridge_frac · tr(G_edit)/D_in. Solves f64; returns the
+/// rank-r artifact with the f32 apply-side rows.
+pub fn fp_solve_edit(capture: &EditCapture, cfg: &EditConfig) -> EditArtifact {
+    let n_keep = capture.x_keep.len() / D;
+    let n_edit = capture.x_edit.len() / D;
+    // Mean Grams (f64, sequential folds over rows).
+    let mut g_edit = vec![0.0f64; D * D];
+    for r in 0..n_edit {
+        let row = &capture.x_edit[r * D..(r + 1) * D];
+        gram_into(&mut g_edit, row);
+    }
+    for c in &mut g_edit {
+        *c /= n_edit as f64;
+    }
+    let mut g_keep = vec![0.0f64; D * D];
+    for r in 0..n_keep {
+        let row = &capture.x_keep[r * D..(r + 1) * D];
+        gram_into(&mut g_keep, row);
+    }
+    for c in &mut g_keep {
+        *c /= n_keep as f64;
+    }
+    let tr: f64 = (0..D).map(|i| g_edit[i * D + i]).sum();
+    let ridge = cfg.ridge_frac * tr / D as f64;
+    // The protected M-matrix, then the RHS: X_editᵀ·dY / N_e.
+    let mut m = vec![0.0f64; D * D];
+    for i in 0..D {
+        for j in 0..D {
+            m[i * D + j] = g_edit[i * D + j]
+                + cfg.keep_weight * g_keep[i * D + j]
+                + if i == j { ridge } else { 0.0 };
+        }
+    }
+    let mut rhs = vec![0.0f64; D * D];
+    for r in 0..n_edit {
+        let row = &capture.x_edit[r * D..(r + 1) * D];
+        let dyr = &capture.dy[r * D..(r + 1) * D];
+        // rhs += outer(row, dY_r) / N_e
+        for i in 0..D {
+            for j in 0..D {
+                rhs[i * D + j] += (row[i] as f64) * dyr[j] / n_edit as f64;
+            }
+        }
+    }
+    // dWᵀ = M⁻¹ · rhs, one SPD solve per output column j. The APPLY needs
+    // Δ = (dWᵀ)ᵀ = dYᵀ·X·M⁻¹ (Δ·x uses Δ[i,j]·x[j]; M symmetric) — the
+    // transpose is taken BEFORE the rank-r fit so the overlay applies
+    // U·Vᵀ ≈ Δ directly.
+    let mut dw_t = vec![0.0f64; D * D];
+    for j in 0..D {
+        let col: Vec<f64> = (0..D).map(|i| rhs[i * D + j]).collect();
+        let sol = solve_spd(&m, &col, D);
+        for i in 0..D {
+            dw_t[i * D + j] = sol[i];
+        }
+    }
+    let mut dw_full = vec![0.0f64; D * D]; // Δ (the apply convention)
+    for i in 0..D {
+        for j in 0..D {
+            dw_full[i * D + j] = dw_t[j * D + i];
+        }
+    }
+    // Thin-SVD truncation via the eigendecomposition of dWᵀ's Gram —
+    // dWᵀ = UΣVᵀ: the eigvecs of dWᵀdW give V, Σ; U = dWᵀ·V/Σ.
+    let mut gram = vec![0.0f64; D * D];
+    for i in 0..D {
+        for j in 0..D {
+            let acc: f64 = (0..D)
+                .map(|t| dw_full[t * D + i] * dw_full[t * D + j])
+                .sum();
+            gram[i * D + j] = acc;
+        }
+    }
+    let mut vecs = vec![0.0f64; D * D];
+    let eigs = jacobi_symmetric(&mut gram, &mut vecs, D);
+    let mut pairs: Vec<(f64, usize)> = eigs.iter().copied().zip(0..D).collect();
+    pairs.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap()); // descending
+    let r = cfg.rank_r.min(D);
+    let mut u = vec![0.0f64; r * D];
+    let mut v = vec![0.0f64; r * D];
+    let mut kept_energy = 0.0f64;
+    let mut dropped_energy = 0.0f64;
+    for (rank, &(eig, col)) in pairs.iter().enumerate() {
+        let sv = eig.max(0.0).sqrt();
+        if rank < r {
+            kept_energy += sv * sv;
+            for d0 in 0..D {
+                // V row = the eigenvector (column `col`); U row = Δ·v/σ —
+                // (Δ·v)[d0] = Σ_t Δ[d0, t]·v[t]: both indices read the
+                // APPLY-convention Δ (dw_full), never its transpose.
+                v[rank * D + d0] = vecs[d0 * D + col];
+                let u_acc: f64 = (0..D)
+                    .map(|t| dw_full[d0 * D + t] * vecs[t * D + col])
+                    .sum();
+                u[rank * D + d0] = if sv > 1e-12 { u_acc / sv } else { 0.0 };
+            }
+        } else {
+            dropped_energy += sv * sv;
+        }
+    }
+    // f32 apply-side rows + the envelope digest (binds capture + config +
+    // the artifact bytes).
+    let u32: Vec<f32> = u.iter().map(|&c| c as f32).collect();
+    let v32: Vec<f32> = v.iter().map(|&c| c as f32).collect();
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(capture.capture_digest.as_bytes());
+    hasher.update(&cfg.keep_weight.to_le_bytes());
+    hasher.update(&cfg.ridge_frac.to_le_bytes());
+    hasher.update(&(cfg.rank_r as u64).to_le_bytes());
+    hasher.update(&f32_le_bytes(&u32));
+    hasher.update(&f32_le_bytes(&v32));
+    EditArtifact {
+        dw_full,
+        u,
+        v,
+        kept_energy,
+        dropped_energy,
+        u32,
+        v32,
+        envelope_digest: hasher.finalize(),
+    }
+}
+
+fn gram_into(g: &mut [f64], row: &[f32]) {
+    for i in 0..D {
+        for j in 0..D {
+            g[i * D + j] += (row[i] as f64) * (row[j] as f64);
+        }
+    }
+}
+
+fn f32_le_bytes(v: &[f32]) -> Vec<u8> {
+    let mut b = Vec::with_capacity(v.len() * 4);
+    for f in v {
+        b.extend_from_slice(&f.to_le_bytes());
+    }
+    b
+}
+
+/// The overlay-applied layer-2 forward: `y = (A2 + ΔW)·rmsnorm(h1g)` with
+/// ΔW = U·Vᵀ reconstructed from the f32 rows (rank-r, never materialized
+/// dense — the UNMERGED serving posture's cost, T7's census). The unarmed
+/// `layer2` path is untouched — the empty-overlay demote is structural.
+pub fn layer2_overlay(fixture: &LoopDepthOod, h1g: &[f32], u32: &[f32], v32: &[f32]) -> Vec<f32> {
+    let nv = LoopDepthOod::rmsnorm(h1g);
+    // The overlay's contribution: y_ow = U·(Vᵀ·nv).
+    let r = u32.len() / D;
+    let mut dots = vec![0.0f32; r];
+    for (ri, vrow) in v32.chunks(D).enumerate() {
+        dots[ri] = nv.iter().zip(vrow).map(|(a, b)| a * b).sum::<f32>();
+    }
+    let mut delta = vec![0.0f32; D];
+    for (ri, urow) in u32.chunks(D).enumerate() {
+        let c = dots[ri];
+        for (d0, &uval) in urow.iter().enumerate() {
+            delta[d0] += c * uval;
+        }
+    }
+    // The base pass through the fixture's own layer-2, plus the delta.
+    let mut y = fixture.layer2(h1g);
+    for (yv, dv) in y.iter_mut().zip(&delta) {
+        *yv += *dv;
+    }
+    y
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
