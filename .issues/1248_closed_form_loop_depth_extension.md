@@ -1,6 +1,6 @@
 # Issue 1248: Closed-form loop-depth extension for looped forwards (FP-Solve class)
 
-**Status:** OPEN — GAIN filing; PoC not run; real-model cell CONSUMER-GATED (no converged looped checkpoint on disk — Plan 324 postmortem ask / Plan 447 base rows) + hermetic-G1-first.
+**Status:** OPEN — GAIN filing; T1 LANDED (fixture + G0 + fault-signature self-check, 2026-11-27); T2–T7 open; real-model cell CONSUMER-GATED (no converged looped checkpoint on disk — Plan 324 postmortem ask / Plan 447 base rows) + hermetic-G1-first.
 **Claimed:** zed-i1248-t1@m3, 1795756939, expires 2026-11-29T05:22Z
 
 > **Source:** katgpt-rs/.research/697_Recursive_Self_Improving_Loopers_FP_Solve.md — rse_looper @ `765453d13878804c49876a656f39b57a4384dca4` (pin recorded; clone removed at filing).
@@ -32,6 +32,26 @@ An `lt2_looped` micro-class config with **n_layer ≥ 2** whose pass map is a **
 
 **G0 sanity bar (runs before any arm):** span census — assert `X_edit` NOT inside span(G_keep) (min-eigenvalue of the edit-keep joint Gram + span-overlap metric reported), and assert the edit arm's dW clears a norm floor. A rigged ladder fails here, in either direction.
 
+## T1 fixture design (pre-registered parameters — REVISED at implementation, 2026-11-27)
+
+**Revision note (honest):** the design below was "written before code" per T1 in an earlier shape (a rank-1-dominant two-axis geometry, `u`/`b`). Implementation + measurement showed that geometry cannot satisfy its own G0 bar and the sign-flip bar at the same time: in a converged loop the fixed point always carries the write directions, so the keep span swallows the collapse deficit (overlap ≈ 0.95-0.99 — solve-dead, the round-1 kill reproduced), and per-row warm residuals fatten the span further. The revision follows the SOURCE's own telemetry shape: the healthy loop's shifts and the fault shift live on ONE axis — the fault REVERSES a steady drift (their `v₁` per-pass projections `[−137.2, −121.2, +114.6, …]`) — which both separates the signs structurally and keeps the keep span thin. The parameters below are AS-BUILT (committed with the fixture; the fixture constants carry the same values); all bars held unchanged.
+
+**Encoding (verdict round-2 pin 1):** continuous pass indicator `φ_k = k/d` — the scalar ramp, PRIMARY; sinusoid fallback `φ̃_k = sin(π·k/(d+1))` compiled with the SAME κ (band-derived hinge, no re-tuning), not the GOAT arm's encoding. Never one-hot (G0 would pass trivially; bar (b) would fail for the wrong reason). The G0 overlap number ships beside every result.
+
+**Geometry (as-built):** `D = 64`; gate input `[h1; φ] ∈ R^65`; `d = 3`; ladder `K = 6 = d+3`; batch `B = 12` seeded starts (the prompt-batch analog). Seeded orthonormal axes `e₁, e₂, e₃` (SplitMix64 master seed 1248 → Gram–Schmidt).
+
+- **rmsnorm direction-contraction:** every layer applies `rmsnorm` BEFORE its linear map and the pass carry feeds the readout back — the state converges in DIRECTION at stable magnitude; no affine anchor needed.
+- **Layer 1 (fault-free):** `h1 = A1·rmsnorm(x)`; `A1 = 0.85·e₁e₁ᵀ + 0.008·(I − e₁e₁ᵀ)` — the alignment mode pulls the state's direction toward e₁ and the near-zero off-mode kills off-content (0.03 was measured insufficient: y's 80%-off share × 0.03 still left ~25% off in the fault mix).
+- **Gate (the constructed fault site, after layer 1):** `z = w_hᵀh1 + 0.3·φ + c − κ·relu(φ − 1)`; `g = σ(z)`; `h1g = h1 + g·W_AMP·ŵ`. In-band mild upward drift (the source's 0.566→0.638 shape); `W_AMP = 40`, `κ = 26`: in-band `g ≈ 0.70`, at `φ = 4/3` the hinge `26/3 = 8.67` drops `g ≈ 0.0002` — a ~3500× collapse. The RATIO (not the amplitude) is the discriminator: with `W_AMP = 40` the fault's residual write must LOSE to the state content or the fault mix stays write-flavored (measured: κ = 14 left the fault write ≈ the state norm and cos(y₃,y₄) = 0.98).
+- **Write direction `ŵ = normalize(0.30·e₁ + 0.55·e₂ + 0.77·e₃)`** — positive on all three axes: the `+0.30` e₁-weight puts `⟨e₁, A2ŵ⟩ > 0`, which is the sign-flip's sign convention; the e₂/e₃ dominance is what the collapse swings.
+- **Layer 2 (the OOD-consuming layer — the edit target, mirroring the source's 168 control matrices, never the gate itself):** `y = A2·rmsnorm(h1g)`; `A2` diagonal in the seeded basis with modes `(0.3, 0.9, 0.9, 0.1…)` on `(e₁, e₂, e₃, rest)`. The small e₁-mode is load-bearing: at the fault the write dies, layer 1's off-kill leaves the layer-2 input e₁-pure, and the fault output collapses onto the (weak) e₁ channel — measured `cos(y₃,y₄) = 0.14-0.44-class` — while the healthy output rides the write through the strong e₂/e₃ channels.
+- **Warm start (the serving analog):** the loop run to its fixed point from a canonical seed (row-independent), then a SHARED `+0.15·e₁` displacement (excess) plus per-row noise `0.005`. The shared displacement gives the healthy ladder its pull-back shifts — decaying, ONE sign (−e₁-ward), every row — OPPOSITE the fault's +e₁-ward collapse shift; that is the source's `[−, −, +]` sign trajectory, structurally, not seed luck. The tiny noise keeps rows distinct without fattening the keep span (the G0 margin lives in the thin span).
+- **Why the edit must target layer 2, not the gate (structural, G0-checked):** the gate's fault input differs from seen inputs only by the φ excess (in-span — `e_φ` is loaded by every seen row) plus a tiny contraction tail, so a gate-weight solve comes out near zero (the round-1 kill, reproduced honestly); the fault the solve CAN express is the corrupted layer-2 input. R2's localization mirrors this in the edit magnitudes (`‖dW_layer1‖ ≈ 0 << ‖dW_layer2‖`).
+- **F8 disclosure:** this fixture is contractive by construction — it has NO productive limit cycle; the F8 census instrument ships and reports the healthy ladder's monotone ‖dY‖ decay (the repair must not flatten it), and the dedicated limit-cycle variant stays out of scope.
+- **Seeding:** one master seed (1248); SplitMix64; orthonormal `e₁, e₂, e₃, Q2` via seeded Gram–Schmidt on normal draws; f64 census/solve math, f32 state (Issue-940 hygiene — local instrument, sequential folds).
+
+**Fault-signature self-check (arm-1 baseline, standing; MEASURED 2026-11-27, all green):** healthy transitions `1→2, 2→3`: pass-cos ≥ 0.95 (measured ≈ 1.0 — deeply converged); fault transition `d→d+1`: pass-cos ≤ 0.45; gate means: `g ∈ [0.5, 0.75]` for passes `1..d`, `g_{d+1} ≤ 0.15`; shift-SVD: `|proj(s_fault, v₁)| ≥ 10×` median healthy projection (measured ≈ 400×: `[−0.0157, −0.0036, +6.275, +0.698, +0.0197]` — the flip AND the post-fault parking in the fault basin, both source-shaped) AND `sign(proj_healthy) = −sign(proj_fault)`; layer-1 pass-cosines ≥ 0.95 at ALL transitions (localization); ‖dY‖ strictly decreasing across healthy passes. **G0 measured: overlap mean 0.678 / min 0.636** (per-row rows printed beside the census), joint-Gram min-nz-eig 0.62 — the honest middle regime, both rigged poles excluded.
+
 ## Proof path (pre-registered)
 
 Arms on ONE frozen read:
@@ -47,7 +67,7 @@ Bars: (a) stabilization parity arm 4 vs arms 2/3 on state norm + readout consist
 
 ## Tasks
 
-- [ ] **T1** — `loop_depth_ood` fixture (constructed pass-indexed gate with the PINNED continuous pass-indicator encoding — scalar ramp t/d, sinusoid fallback — written here BEFORE code; n_layer ≥ 2, contractive to depth d) + G0 span census (overlap number REPORTED with every result) + fault-signature self-check (arm-1 baseline reproduces the Inkling shape)
+- [x] **T1** — `loop_depth_ood` fixture (constructed pass-indexed gate with the PINNED continuous pass-indicator encoding — scalar ramp t/d, sinusoid fallback — written here BEFORE code; n_layer ≥ 2, contractive to depth d) + G0 span census (overlap number REPORTED with every result) + fault-signature self-check (arm-1 baseline reproduces the Inkling shape) — LANDED 2026-11-27 (`tests/common/loop_depth_ood.rs` + `tests/loop_depth_ood_g0.rs`; all bars green, measured numbers in the design section above; geometry revised at implementation — revision note there)
 - [ ] **T2** — R2 fault-signature instrument (offline rank-1 SVD of the pass-shift + per-pass projection census; readout-screen class, never a serving path)
 - [ ] **T3** — R3 gate-saturation alarm + graceful early exit (never worse than refusing the depth)
 - [ ] **T4** — R4 spectral governor (`h' = h − γ·(v₁ᵀh)v₁`, one frozen vector per fault site, γ from gate telemetry)
