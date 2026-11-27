@@ -78,8 +78,8 @@ pub use g_zero_player::{
 // Tournament
 pub use tournament::{
     AutoGoProxyPlayer, GameOutcome, GameResult, GoPlayerType, GoTournamentConfig,
-    GoTournamentResult, ParsedResult, TournamentDef, parse_go_result, print_batch_table,
-    run_tournament, run_tournament_batch,
+    GoTournamentResult, ParsedResult, TournamentDef, api_state_to_go_state, parse_go_result,
+    print_batch_table, run_tournament, run_tournament_batch,
 };
 
 // AutoResearch

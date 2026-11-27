@@ -87,18 +87,23 @@ cmd_start() {
         docker rm -f "${CONTAINER_NAME}" 2>/dev/null || true
     fi
 
-    # Build image
+    # Build image — the slim SERVER image (self-contained: alpha_go package
+    # + built alpha_go_cpp + gnugo; the devcontainer Dockerfile is a DEV
+    # image whose workspace is bind-mounted and whose install runs in
+    # postCreateCommand, so it cannot serve from a plain docker run).
+    # The Dockerfile is COMMITTED here (scripts/autogo_server.Dockerfile);
+    # the four research-local patches it needs in the AutoGo tree are
+    # listed in scripts/autogo_server_patches.md.
     info "Building ${IMAGE_NAME} image..."
-    cd "${AUTOGO_DIR}"
-    docker build -f .devcontainer/Dockerfile -t "${IMAGE_NAME}" . 2>&1 | tail -5
+    docker build -f "${PROJECT_ROOT}/scripts/autogo_server.Dockerfile" -t "${IMAGE_NAME}" "${AUTOGO_DIR}" 2>&1 | tail -5
 
-    # Run container
+    # Run container (the image's CMD already starts the server; no
+    # override — the image has no uv).
     info "Starting AutoGo server on port ${HOST_PORT}..."
     docker run -d \
         --name "${CONTAINER_NAME}" \
         -p "${HOST_PORT}:8000" \
-        "${IMAGE_NAME}" \
-        bash -c "uv run -m alpha_go.play --host 0.0.0.0 --port 8000"
+        "${IMAGE_NAME}"
 
     # Wait for server to be ready
     info "Waiting for server to start..."

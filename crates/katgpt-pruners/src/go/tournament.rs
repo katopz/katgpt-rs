@@ -262,14 +262,16 @@ pub fn parse_go_result(result: &str) -> Option<ParsedResult> {
     Some(ParsedResult { winner, margin })
 }
 
-// ── API State Bridge ───────────────────────────────────────────
-
 /// Convert an AutoGo API game state to our `GoState` for player consumption.
 ///
 /// Note: `ko_point` is not available from the API, so it's set to `None`.
 /// This is acceptable because our players don't rely on `ko_point` for move selection
 /// (they only use `legal_moves` which the API provides).
-fn api_state_to_go_state(api_state: &AutoGoGameState) -> GoState {
+///
+/// Public since Plan 518 T3: the arena's API-hosted pairings build the
+/// seat-facing `GoState` from server responses through this one bridge
+/// (single-homed here — no private copy in the consumer lane).
+pub fn api_state_to_go_state(api_state: &AutoGoGameState) -> GoState {
     let mut state = GoState::new(api_state.size);
 
     // Convert 2D board to flat array
