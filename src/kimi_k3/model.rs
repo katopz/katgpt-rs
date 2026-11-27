@@ -6,7 +6,7 @@
 //! hidden = embed_tokens(input_ids)
 //! block_state = AttnResBlockState::new()
 //! for layer in 0..8:
-//!     kimi_decoder_layer_forward(layer, ..., hidden, block_state)
+//!     kimi_decoder_layer_forward_loom(layer, ..., hidden, block_state)
 //! hidden = apply_attn_res(hidden, block_state, output_attn_res)  // output mixing
 //! hidden = rmsnorm(hidden, final_norm_weight)
 //! logits = lm_head(hidden)
@@ -26,7 +26,7 @@ use katgpt_transformer::moe::{MoeConfig, MoeForwardScratch};
 
 use super::decoder_layer::{
     KimiAttentionConfig, KimiAttentionScratch, KimiAttentionState, KimiDecoderLayerConfig,
-    KimiFfnConfig, KimiFfnScratch, kimi_decoder_layer_forward,
+    KimiFfnConfig, KimiFfnScratch, LoomLayerHook, kimi_decoder_layer_forward_loom,
 };
 
 // ─── Config ────────────────────────────────────────────────────────────────
@@ -351,7 +351,7 @@ pub fn kimi_k3_forward_token<'a>(
     // across tokens → apply_attn_res scores buffer overflows on token #3+.
     runtime.block_state.clear();
 
-    // ── Step 1: Embedding lookup ──────────────────────────────────────────
+    // ── Step 1: Embedding lookup ──────────────────────────────────────
     let embed_start = (token_id as usize) * d;
     let embed_end = embed_start + d;
     runtime
@@ -359,7 +359,33 @@ pub fn kimi_k3_forward_token<'a>(
         .copy_from_slice(&weights.embed_weight[embed_start..embed_end]);
 
     // ── Steps 2-5: Decoder core (shared with forward_token_hidden) ────────
-    forward_decoder_to_logits(config, weights, runtime)
+    forward_decoder_to_logits(config, weights, runtime, None)
+}
+
+/// Issue 712: the loom side-module forward — [`kimi_k3_forward_token`] with
+/// the loom hook threaded to the decoder layers. `loom` may be `None`
+/// (byte-identical to [`kimi_k3_forward_token`]) or a per-layer closure over
+/// the frozen backbone's residual stream (the hook contract lives on
+/// [`kimi_decoder_layer_forward_loom`]). The M state and side modules are
+/// CALLER-OWNED — this fn is stateless beyond the runtime, so serving a
+/// frozen loom overlay is freeze/thaw-shaped (the raw/lora hot-swap class),
+/// never a runtime weight mutation.
+#[allow(clippy::must_use_candidate)]
+pub fn kimi_k3_forward_token_loom<'a>(
+    config: &KimiK3ModelConfig,
+    weights: &super::loader::KimiK3ModelWeights,
+    runtime: &'a mut KimiK3Runtime,
+    token_id: u32,
+    loom: Option<&mut LoomLayerHook>,
+) -> &'a [f32] {
+    let d = config.hidden_size;
+    runtime.block_state.clear();
+    let embed_start = (token_id as usize) * d;
+    let embed_end = embed_start + d;
+    runtime
+        .hidden
+        .copy_from_slice(&weights.embed_weight[embed_start..embed_end]);
+    forward_decoder_to_logits(config, weights, runtime, loom)
 }
 
 /// Forward pass starting from an arbitrary hidden state (Issue 407 T2).
@@ -383,9 +409,9 @@ pub fn kimi_k3_forward_token_hidden<'a>(
 ) -> &'a [f32] {
     // Step 0: same block_state reset as forward_token.
     runtime.block_state.clear();
-    // Step 1 is skipped — runtime.hidden is whatever the caller set.
+    // ── Step 1 is skipped — runtime.hidden is whatever the caller set.
     // Steps 2-5:
-    forward_decoder_to_logits(config, weights, runtime)
+    forward_decoder_to_logits(config, weights, runtime, None)
 }
 
 /// Issue 969: copy the armed plan row for `layer_idx` into the layer's MoE
@@ -423,10 +449,11 @@ fn forward_decoder_to_logits<'a>(
     config: &KimiK3ModelConfig,
     weights: &super::loader::KimiK3ModelWeights,
     runtime: &'a mut KimiK3Runtime,
+    mut loom: Option<&mut LoomLayerHook>,
 ) -> &'a [f32] {
     let d = config.hidden_size;
 
-    // ── Step 2: Decoder layers ────────────────────────────────────────────
+    // ── Step 2: Decoder layers ────────────────────────────────────────
     for (layer_idx, layer_w) in weights.layers.iter().enumerate() {
         let layer_cfg = config.layer_config(layer_idx);
 
@@ -434,7 +461,7 @@ fn forward_decoder_to_logits<'a>(
 
         let layer_rt = &mut runtime.layers[layer_idx];
 
-        kimi_decoder_layer_forward(
+        kimi_decoder_layer_forward_loom(
             layer_idx,
             &layer_cfg,
             layer_w,
@@ -447,6 +474,7 @@ fn forward_decoder_to_logits<'a>(
             Some(&mut runtime.rope_freqs),
             &mut runtime.hidden,
             &mut runtime.scratch_hidden,
+            loom.as_deref_mut(),
         );
     }
 
@@ -703,7 +731,7 @@ pub fn kimi_k3_forward_token_traced<'a>(
 
         let layer_rt = &mut runtime.layers[layer_idx];
 
-        kimi_decoder_layer_forward(
+        kimi_decoder_layer_forward_loom(
             layer_idx,
             &layer_cfg,
             layer_w,
@@ -716,6 +744,7 @@ pub fn kimi_k3_forward_token_traced<'a>(
             Some(&mut runtime.rope_freqs),
             &mut runtime.hidden,
             &mut runtime.scratch_hidden,
+            None,
         );
         traj_out.push(runtime.hidden.clone());
     }
@@ -822,7 +851,7 @@ pub fn kimi_k3_forward_token_timed<'a>(
         let layer_cfg = config.layer_config(layer_idx);
         let layer_rt = &mut runtime.layers[layer_idx];
 
-        kimi_decoder_layer_forward(
+        kimi_decoder_layer_forward_loom(
             layer_idx,
             &layer_cfg,
             layer_w,
@@ -835,6 +864,7 @@ pub fn kimi_k3_forward_token_timed<'a>(
             Some(&mut runtime.rope_freqs),
             &mut runtime.hidden,
             &mut runtime.scratch_hidden,
+            None,
         );
     }
     timing.layers_us += t.elapsed().as_micros();

@@ -52,16 +52,17 @@ pub mod model;
 pub mod delay;
 
 pub use decoder_layer::{
-    KimiAttentionConfig, KimiAttentionScratch, KimiAttentionState, KimiAttentionWeights,
-    KimiDecoderLayerConfig, KimiDecoderLayerWeights, KimiFfnConfig, KimiFfnScratch, KimiFfnWeights,
-    kimi_decoder_layer_forward,
+    KimiAttentionConfig, KimiAttentionScratch, KimiAttentionState, KimiDecoderLayerConfig,
+    KimiDecoderLayerWeights, KimiFfnConfig, KimiFfnScratch, KimiFfnWeights, LOOM_SITE_ATTN,
+    LOOM_SITE_FFN, LoomLayerHook, kimi_decoder_layer_forward, kimi_decoder_layer_forward_loom,
 };
 
 #[cfg(feature = "kimi_k3_loader")]
 pub use model::{
     ForwardTiming, KimiK3ModelConfig, KimiK3Runtime, PauseConfig, PauseStrategy,
-    kimi_k3_forward_token, kimi_k3_forward_token_hidden, kimi_k3_forward_token_timed,
-    kimi_k3_forward_token_traced, kimi_k3_inject_pause, kimi_k3_pause_step,
+    kimi_k3_forward_token, kimi_k3_forward_token_hidden, kimi_k3_forward_token_loom,
+    kimi_k3_forward_token_timed, kimi_k3_forward_token_traced, kimi_k3_inject_pause,
+    kimi_k3_pause_step,
 };
 
 /// Stale-residual speculative layer-execution simulator (Issue 691 /

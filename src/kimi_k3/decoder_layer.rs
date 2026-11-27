@@ -239,6 +239,60 @@ pub fn kimi_decoder_layer_forward(
     prefix_sum: &mut [f32],
     scratch_hidden: &mut [f32],
 ) {
+    kimi_decoder_layer_forward_loom(
+        layer_idx,
+        config,
+        weights,
+        attn_state,
+        attn_scratch,
+        ffn_scratch,
+        attn_res_self_scratch,
+        attn_res_mlp_scratch,
+        block_state,
+        rope_freqs,
+        prefix_sum,
+        scratch_hidden,
+        None,
+    )
+}
+
+/// The loom side-module hook (Issue 712, riir-train's additive-form retrofit
+/// over the frozen Kimi-K3 backbone): called TWICE per layer —
+///
+/// - `site = LOOM_SITE_ATTN` right after the attention output accumulates into
+///   `prefix_sum` (step 4): `value` = the attention output, `h` = the
+///   post-`input_layernorm` attention input (the same normalized signal the
+///   attention projections consumed);
+/// - `site = LOOM_SITE_FFN` right after the FFN output accumulates (step 7):
+///   `value` = the FFN output, `h` = the post-`post_attention_layernorm` FFN
+///   input.
+///
+/// The closure owns the side modules + their M state; it may add a read term
+/// into `prefix_sum` (the residual stream) and accumulate writes. A `None`
+/// hook is byte-identical to the pre-hook forward (the call never fires); a
+/// present hook whose injections are zero-init stays output-identical by the
+/// G0 law — the closure itself must skip exact-zero terms so `-0.0 + 0.0`
+/// never flips a bit (the riir-train `LoomForwardCtx` does).
+pub type LoomLayerHook = dyn FnMut(usize, u8, &[f32], &[f32], &mut [f32]);
+pub const LOOM_SITE_ATTN: u8 = 0;
+pub const LOOM_SITE_FFN: u8 = 1;
+
+#[allow(clippy::too_many_arguments)]
+pub fn kimi_decoder_layer_forward_loom(
+    layer_idx: usize,
+    config: &KimiDecoderLayerConfig,
+    weights: &KimiDecoderLayerWeights,
+    attn_state: &mut KimiAttentionState,
+    attn_scratch: &mut KimiAttentionScratch,
+    ffn_scratch: &mut KimiFfnScratch,
+    attn_res_self_scratch: &mut AttnResScratch,
+    attn_res_mlp_scratch: &mut AttnResScratch,
+    block_state: &mut AttnResBlockState,
+    rope_freqs: Option<&mut RopeFreqs>,
+    prefix_sum: &mut [f32],
+    scratch_hidden: &mut [f32],
+    mut loom: Option<&mut LoomLayerHook>,
+) {
     let d = config.attn_res.d();
     debug_assert_eq!(prefix_sum.len(), d);
     debug_assert_eq!(scratch_hidden.len(), d);
@@ -313,6 +367,18 @@ pub fn kimi_decoder_layer_forward(
     // old panic-on-short-operand behaviour.
     katgpt_core::simd::simd_add_inplace(&mut prefix_sum[..d], &attn_out[..d]);
 
+    // ── Step 4b: loom hook (attention site) ─────────────────────────────
+    // Never fires on None (byte-identical to the pre-hook forward).
+    if let Some(hook) = loom.as_mut() {
+        hook(
+            layer_idx,
+            LOOM_SITE_ATTN,
+            scratch_hidden,
+            &attn_out[..d],
+            &mut prefix_sum[..d],
+        );
+    }
+
     // ── Step 5: apply_attn_res (MLP) — mix prefix_sum with blocks ─────────
     let mixed = apply_attn_res(
         &config.attn_res,
@@ -362,6 +428,17 @@ pub fn kimi_decoder_layer_forward(
     // ── Step 7: Accumulate FFN output into prefix_sum ─────────────────────
     // Elementwise SIMD add — see Step 4 for the bit-identity argument.
     katgpt_core::simd::simd_add_inplace(&mut prefix_sum[..d], &ffn_out[..d]);
+
+    // ── Step 7b: loom hook (FFN site) ────────────────────────────────────
+    if let Some(hook) = loom.as_mut() {
+        hook(
+            layer_idx,
+            LOOM_SITE_FFN,
+            scratch_hidden,
+            &ffn_out[..d],
+            &mut prefix_sum[..d],
+        );
+    }
 }
 
 /// Dense SiTU FFN forward (layer 0 only).
