@@ -51,6 +51,7 @@ use katgpt_transformer::moe_backward::{
 use super::decoder_layer::{
     KimiAttentionConfig, KimiAttentionScratch, KimiAttentionState, KimiAttentionWeights,
     KimiDecoderLayerConfig, KimiDecoderLayerWeights, KimiFfnConfig, KimiFfnScratch, KimiFfnWeights,
+    LOOM_SITE_ATTN, LOOM_SITE_FFN, LoomLayerHook,
 };
 use super::loader::KimiK3ModelWeights;
 use super::model::{KimiK3ModelConfig, KimiK3Runtime};
@@ -278,6 +279,41 @@ pub fn kimi_k3_forward_token_saved(
     pos: usize,
     saved: &mut TokenSavedActivations,
 ) {
+    forward_token_saved_core(config, weights, runtime, token_id, pos, saved, None);
+}
+
+/// Issue 712 G1: [`kimi_k3_forward_token_saved`] with the loom hook threaded
+/// to the decoder layers (the trainer's forward). `loom` may be `None`
+/// (byte-identical to [`kimi_k3_forward_token_saved`]) — the hook placement
+/// mirrors the inference variant (`kimi_k3_forward_token_loom`) exactly: the
+/// attention-site hook fires after the `attn_out` accumulation and BEFORE the
+/// `prefix_sum_after_attn` save; the FFN-site hook fires after the `ffn_out`
+/// accumulation (the layer's last op), so every saved activation is the
+/// loom-modified value the loom backward replays.
+#[allow(clippy::too_many_arguments)]
+pub fn kimi_k3_forward_token_saved_loom(
+    config: &KimiK3ModelConfig,
+    weights: &KimiK3ModelWeights,
+    runtime: &mut KimiK3Runtime,
+    token_id: u32,
+    pos: usize,
+    saved: &mut TokenSavedActivations,
+    loom: Option<&mut LoomLayerHook<'_>>,
+) {
+    forward_token_saved_core(config, weights, runtime, token_id, pos, saved, loom);
+}
+
+/// Shared body of [`kimi_k3_forward_token_saved`] / [`_loom`](kimi_k3_forward_token_saved_loom).
+#[allow(clippy::too_many_arguments)]
+fn forward_token_saved_core(
+    config: &KimiK3ModelConfig,
+    weights: &KimiK3ModelWeights,
+    runtime: &mut KimiK3Runtime,
+    token_id: u32,
+    pos: usize,
+    saved: &mut TokenSavedActivations,
+    mut loom: Option<&mut LoomLayerHook<'_>>,
+) {
     let d = config.hidden_size;
 
     runtime.block_state.clear();
@@ -330,6 +366,7 @@ pub fn kimi_k3_forward_token_saved(
             &mut runtime.hidden,
             &mut runtime.scratch_hidden,
             &mut layer_saved,
+            loom.as_deref_mut(),
         );
 
         saved.layers.push(layer_saved);
@@ -470,6 +507,7 @@ pub fn kimi_k3_forward_token_hidden_saved(
             &mut runtime.hidden,
             &mut runtime.scratch_hidden,
             &mut layer_saved,
+            None,
         );
 
         saved.layers.push(layer_saved);
@@ -531,6 +569,7 @@ fn forward_layer_saved(
     prefix_sum: &mut [f32],
     scratch_hidden: &mut [f32],
     saved: &mut LayerSavedActivations,
+    mut loom: Option<&mut LoomLayerHook<'_>>,
 ) {
     let d = config.attn_res.d();
     let eps = config.rms_eps;
@@ -606,6 +645,21 @@ fn forward_layer_saved(
     // reassociation and the gradients that later consume `prefix_sum` are
     // bit-identical. `[..d]` keeps the old panic-on-short-operand behaviour.
     katgpt_core::simd::simd_add_inplace(&mut prefix_sum[..d], &saved.attn_out[..d]);
+
+    // Step 4b: loom hook (attention site) — same placement as the inference
+    // variant (`kimi_decoder_layer_forward_loom` step 4b). Fires BEFORE the
+    // `prefix_sum_after_attn` save below, so the saved value is the
+    // loom-modified residual (the backward-on-saved-modified-activations law).
+    // None ⇒ never fires (byte-identical to the pre-hook forward).
+    if let Some(hook) = loom.as_mut() {
+        hook(
+            layer_idx,
+            LOOM_SITE_ATTN,
+            scratch_hidden,
+            &saved.attn_out[..d],
+            &mut prefix_sum[..d],
+        );
+    }
     saved.prefix_sum_after_attn = prefix_sum.to_vec();
 
     // Step 5: MLP attn-res
@@ -663,6 +717,19 @@ fn forward_layer_saved(
 
     // Step 7: prefix_sum += ffn_out — elementwise SIMD add, see Step 4.
     katgpt_core::simd::simd_add_inplace(&mut prefix_sum[..d], &saved.ffn_out[..d]);
+
+    // Step 7b: loom hook (FFN site) — same placement as the inference variant
+    // step 7b. The modified prefix_sum flows out as this layer's ps_out (the
+    // caller saves it as the next layer's `prefix_sum_in` / `prefix_sum_final`).
+    if let Some(hook) = loom.as_mut() {
+        hook(
+            layer_idx,
+            LOOM_SITE_FFN,
+            scratch_hidden,
+            &saved.ffn_out[..d],
+            &mut prefix_sum[..d],
+        );
+    }
 }
 
 pub(crate) fn dense_situ_ffn_forward_saved(
@@ -1448,6 +1515,552 @@ fn situ_backward(
 
             d_gate[i] = da * d_act_dg;
             d_up[i] = da * d_act_du;
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Issue 712 G1 — the loom site backward (riir-train's additive-form loom
+// retrofit trained on the frozen backbone)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// The loom site-backward contract (implemented riir-train-side — katgpt-rs
+/// cannot depend on the loom math, dep direction).
+///
+/// The gradient math: each site injects `Δ = g_read · W_injᵀ · r_u` into the
+/// residual stream (read path) and writes `ΔM += g_write · k_m ⊗ v̂` (write
+/// path), where the M state accumulates CAUSALLY across tokens within a layer.
+/// The write-path gradients therefore need `dL/dM` accumulated in REVERSE
+/// token order — which is why [`kimi_k3_backward_sequence_loom`] runs its
+/// step-2 token loop reversed and calls this hook per site per token.
+///
+/// The hook implementor owns: the loom parameter-gradient accumulators, the
+/// per-layer M-reconstruction carrier (rebuilt backward from the layer's final
+/// M by subtracting the recomputed bit-identical write contributions), and the
+/// M-gradient accumulator carried across the reverse scan.
+pub trait LoomBackwardHook {
+    /// Called once per layer BEFORE its (reversed) token loop. The implementor
+    /// resets its per-layer M carrier to the layer's FINAL M state
+    /// (post-sequence) and zeroes its per-layer gradient accumulator.
+    fn begin_layer(&mut self, layer_idx: usize);
+
+    /// One site backward at one token position. Contract:
+    /// - called in REVERSE token order; within token `t`: `LOOM_SITE_FFN`
+    ///   first, then `LOOM_SITE_ATTN` (the reverse of the forward's
+    ///   attn-then-ffn order);
+    /// - `g` = dL/d(the site's injected residual): FFN → dL/d(ps_out) FINAL;
+    ///   ATTN → dL/d(ps_after_attn) FINAL (pre-`d_value` add);
+    /// - `h` = the normed site input (the caller's bit-identical recompute of
+    ///   the forward's — rmsnorm of the saved mixed input);
+    /// - `value` = `attn_out` (ATTN) / `ffn_out` (FFN) as saved;
+    /// - the implementor accumulates its own parameter gradients and writes
+    ///   dL/d(value) into `d_value` and dL/d(h) into `d_h` (both zeroed by the
+    ///   caller). The caller adds `d_value` into the site output grad (FFN →
+    ///   `d_prefix[t]` before `ffn_backward`; ATTN → `d_attn_out[t]` before
+    ///   the attention backward) and `d_h` into the normed-input grad (FFN →
+    ///   `d_normed_mlp` before the layernorm backward; ATTN → `d_normed_self`
+    ///   after the attention backward).
+    #[allow(clippy::too_many_arguments)]
+    fn site_backward(
+        &mut self,
+        layer_idx: usize,
+        site: u8,
+        t: usize,
+        g: &[f32],
+        h: &[f32],
+        value: &[f32],
+        d_value: &mut [f32],
+        d_h: &mut [f32],
+    );
+}
+
+/// Full-model backward for a sequence, WITH the loom site backward wired at
+/// the two hook sites per layer (Issue 712 G1 — the loom arm's trainer
+/// backward).
+///
+/// Mirrors [`kimi_k3_backward_sequence`] exactly (same gradient math for the
+/// frozen backbone; the backbone weight gradients are computed and simply
+/// discarded by the frozen-backbone caller) with TWO differences:
+///
+/// 1. The step-2 per-layer token loop runs in REVERSE order. Every per-token
+///    computation in that loop is independent (ffn_backward, the RMSNorm
+///    backwards, attn_res_backward all read per-token saved activations and
+///    write per-token outputs), so the reversal is semantics-neutral for the
+///    backbone chain — but it is LOAD-BEARING for the loom: the FFN-site
+///    write-path gradient at token t needs `dL/dM_pre(t+1)`, which needs the
+///    ATTN-site read gradients of all LATER tokens, which need their finalized
+///    `d_attn_out` — only available once the loop has passed them (reverse
+///    order). There is NO same-token cycle: the FFN-site write-path gradient
+///    depends on `dL/dM_pre(t+1)` (carried), never on the same token's attn
+///    read (that contributes to `dL/dM_pre(t)`, one step downstream of the
+///    write).
+///
+/// 2. The loom hook fires per site per token: FFN site before `ffn_backward`
+///    (its `d_value` joins `d_prefix[t]` so the FFN backward sees the exact
+///    `dL/d(ffn_out)`; its `d_h` joins `d_normed_mlp` before the layernorm
+///    backward), ATTN site after `d_attn_out[t]` finalizes (its `d_value`
+///    joins `d_attn_out[t]` before the attention backward; its `d_h` joins
+///    `d_normed_self` after the attention backward). Every loom→backbone
+///    feedback edge is thus included EXACTLY — no first-order approximation.
+///
+/// The forward counterpart is [`kimi_k3_forward_token_saved_loom`] (the saved
+/// activations it produces are the loom-modified values this backward
+/// consumes). No `d_input_hidden` variant — the loom trainer never needs it.
+#[allow(clippy::too_many_arguments)]
+pub fn kimi_k3_backward_sequence_loom(
+    config: &KimiK3ModelConfig,
+    weights: &KimiK3ModelWeights,
+    runtime: &KimiK3Runtime,
+    saved_tokens: &[TokenSavedActivations],
+    d_logits: &[Vec<f32>],
+    grads: &mut KimiK3ModelGradients,
+    loom_bwd: &mut dyn LoomBackwardHook,
+) {
+    let d = config.hidden_size;
+    let v = config.vocab_size;
+    let l = saved_tokens.len();
+    debug_assert_eq!(d_logits.len(), l);
+    if l == 0 {
+        return;
+    }
+
+    // ── Step 1: per-token output backward — IDENTICAL to the plain backward
+    // (no loom at the output; produces d_prefix_final[t]).
+    let mut d_prefix: Vec<Vec<f32>> = (0..l).map(|_| vec![0.0f32; d]).collect();
+    let mut block_grads: Vec<Vec<Vec<f32>>> = Vec::with_capacity(l);
+
+    for t in 0..l {
+        let saved = &saved_tokens[t];
+        let mut d_fh = vec![0.0f32; d];
+        simd_transpose_matvec_into(&mut d_fh, &weights.lm_head_weight, &d_logits[t], v, d);
+        simd_outer_product_acc(
+            &mut grads.lm_head_weight,
+            &d_logits[t],
+            &saved.final_hidden,
+            v,
+            d,
+        );
+        let d_pre_fn = mla_rmsnorm_backward(
+            &d_fh,
+            &saved.pre_final_norm,
+            &weights.final_norm_weight,
+            saved.final_norm_inv_rms,
+            &mut grads.final_norm_weight,
+            config.rms_eps,
+        );
+        let num_blocks = saved.block_state_final.len();
+        let mut bg: Vec<Vec<f32>> = (0..num_blocks).map(|_| vec![0.0f32; d]).collect();
+        if saved.has_output_attn_res {
+            attn_res_backward(
+                &config.attn_res_config,
+                &weights.output_attn_res,
+                &saved.block_state_final,
+                &saved.prefix_sum_final,
+                &d_pre_fn,
+                &mut bg,
+                &mut d_prefix[t],
+                &mut grads.output_attn_res_norm,
+                &mut grads.output_attn_res_proj,
+            );
+        } else {
+            d_prefix[t].copy_from_slice(&d_pre_fn);
+        }
+        block_grads.push(bg);
+    }
+
+    let mut d_attn_out: Vec<Vec<f32>> = (0..l).map(|_| vec![0.0f32; d]).collect();
+    let mut d_ps_after_attn_all: Vec<Vec<f32>> = (0..l).map(|_| vec![0.0f32; d]).collect();
+    // The loom ATTN-site dL/d(normed_self) contributions, buffered per token
+    // and joined after the attention backward (which fills d_normed_self).
+    let mut d_h_attn: Vec<Vec<f32>> = (0..l).map(|_| vec![0.0f32; d]).collect();
+    // d-sized scratch reused across the whole pass.
+    let mut h_scratch = vec![0.0f32; d];
+    let mut d_value_scratch = vec![0.0f32; d];
+    let mut d_h_scratch = vec![0.0f32; d];
+
+    // ── Step 2: layer-by-layer backward (reverse) — token loop REVERSED for
+    // the loom M-chain (see the fn doc for why this is semantics-neutral for
+    // the backbone and load-bearing for the loom).
+    for layer_idx in (0..config.num_layers).rev() {
+        let layer_cfg = config.layer_config(layer_idx);
+        let layer_w = &weights.layers[layer_idx];
+        let layer_grads = &mut grads.layers[layer_idx];
+        let is_mla = config.is_mla_layer(layer_idx);
+        let is_boundary = layer_idx.is_multiple_of(config.attn_res_config.block_size);
+
+        loom_bwd.begin_layer(layer_idx);
+
+        for t in (0..l).rev() {
+            let saved = &saved_tokens[t].layers[layer_idx];
+
+            // ── Loom FFN site — BEFORE the FFN backward ──
+            // h_ffn = rmsnorm(mixed_mlp) — the bit-identical recompute of the
+            // forward's step 6 (same fn, same saved inputs).
+            h_scratch.copy_from_slice(&saved.mixed_mlp[..d]);
+            rmsnorm_with_gamma_eps(
+                &mut h_scratch,
+                &layer_w.post_attention_layernorm_weight,
+                config.rms_eps as f64,
+            );
+            d_value_scratch.fill(0.0);
+            d_h_scratch.fill(0.0);
+            loom_bwd.site_backward(
+                layer_idx,
+                LOOM_SITE_FFN,
+                t,
+                &d_prefix[t][..d],
+                &h_scratch[..d],
+                &saved.ffn_out[..d],
+                &mut d_value_scratch,
+                &mut d_h_scratch,
+            );
+            // dL/d(ffn_out) = d_prefix[t] + loom write-path share.
+            katgpt_core::simd::simd_add_inplace(&mut d_prefix[t][..d], &d_value_scratch[..d]);
+
+            // FFN backward → dL/d(normed_mlp) + FFN weight grads (discarded by
+            // the frozen-backbone caller).
+            let mut d_normed_mlp = ffn_backward(
+                &layer_cfg.ffn,
+                &layer_w.ffn,
+                saved,
+                &d_prefix[t],
+                layer_grads,
+            );
+            // Loom FFN-site read+write paths through the normed FFN input.
+            katgpt_core::simd::simd_add_inplace(&mut d_normed_mlp[..d], &d_h_scratch[..d]);
+
+            // Post-attn RMSNorm backward → dL/d(mixed_mlp)
+            let d_mixed_mlp = mla_rmsnorm_backward(
+                &d_normed_mlp,
+                &saved.mixed_mlp,
+                &layer_w.post_attention_layernorm_weight,
+                saved.mlp_inv_rms,
+                &mut layer_grads.post_attention_layernorm_weight,
+                config.rms_eps,
+            );
+
+            // MLP attn-res backward → distributes to ps_after_attn + block grads
+            let num_mlp_blocks = saved.block_state_mlp.len();
+            while block_grads[t].len() < num_mlp_blocks {
+                block_grads[t].push(vec![0.0f32; d]);
+            }
+            let mut d_mlp_blocks: Vec<Vec<f32>> =
+                (0..num_mlp_blocks).map(|_| vec![0.0f32; d]).collect();
+            d_attn_out[t].copy_from_slice(&d_prefix[t]); // dL/d(ps_after_attn)_from_ffn
+
+            attn_res_backward(
+                &config.attn_res_config,
+                &layer_w.mlp_attn_res,
+                &saved.block_state_mlp,
+                &saved.prefix_sum_after_attn,
+                &d_mixed_mlp,
+                &mut d_mlp_blocks,
+                &mut d_attn_out[t],
+                &mut layer_grads.mlp_attn_res_norm,
+                &mut layer_grads.mlp_attn_res_proj,
+            );
+
+            for (bg_row, d_row) in block_grads[t].iter_mut().zip(d_mlp_blocks.iter()) {
+                let bg = &mut bg_row[..d];
+                let dr = &d_row[..d];
+                for j in 0..d {
+                    bg[j] += dr[j];
+                }
+            }
+
+            // ── Loom ATTN site — d_attn_out[t] is FINAL here ──
+            // h_attn = rmsnorm(mixed_self) — the bit-identical recompute of the
+            // forward's step 3.
+            h_scratch.copy_from_slice(&saved.mixed_self[..d]);
+            rmsnorm_with_gamma_eps(
+                &mut h_scratch,
+                &layer_w.input_layernorm_weight,
+                config.rms_eps as f64,
+            );
+            d_value_scratch.fill(0.0);
+            d_h_scratch.fill(0.0);
+            loom_bwd.site_backward(
+                layer_idx,
+                LOOM_SITE_ATTN,
+                t,
+                &d_attn_out[t][..d],
+                &h_scratch[..d],
+                &saved.attn_out[..d],
+                &mut d_value_scratch,
+                &mut d_h_scratch,
+            );
+            // dL/d(attn_out) = d_attn_out[t] + loom write-path share (the
+            // attention backward below must see the exact value).
+            katgpt_core::simd::simd_add_inplace(&mut d_attn_out[t][..d], &d_value_scratch[..d]);
+            d_h_attn[t].copy_from_slice(&d_h_scratch[..d]);
+
+            // Mirror AFTER the loom dv add (the attention backward consumes the
+            // exact dL/d(ps_after_attn)).
+            d_ps_after_attn_all[t].copy_from_slice(&d_attn_out[t]);
+        }
+
+        // ── Step 2b: Attention backward — IDENTICAL to the plain backward ──
+        let mut d_normed_self: Vec<Vec<f32>> = (0..l).map(|_| vec![0.0f32; d]).collect();
+
+        if is_mla {
+            let KimiAttentionWeights::Mla(mla_w) = &layer_w.attention else {
+                panic!("MLA layer but non-MLA weights");
+            };
+            let KimiAttentionState::Mla(cache) = &runtime.layers[layer_idx].attn_state else {
+                panic!("MLA layer but non-MLA cache");
+            };
+            let all_saved: Vec<MlaSavedActivations> = (0..l)
+                .map(|t| saved_tokens[t].layers[layer_idx].mla_saved.clone().unwrap())
+                .collect();
+            let mut all_dh: Vec<Vec<f32>> = (0..l).map(|_| vec![0.0f32; d]).collect();
+            let mla_grads = layer_grads.mla_grads.as_mut().unwrap();
+            let mut rf = RopeFreqs::new_with_theta(
+                config.mla_config.qk_rope_head_dim,
+                config.mla_config.rope_theta,
+            );
+            for t in 0..l {
+                mla_backward_token(
+                    &config.mla_config,
+                    mla_w,
+                    cache,
+                    &all_saved[t],
+                    &all_saved,
+                    &mut rf,
+                    &d_attn_out[t],
+                    &mut all_dh,
+                    mla_grads,
+                );
+            }
+            d_normed_self = all_dh;
+        } else {
+            let KimiAttentionWeights::Kda(kda_w) = &layer_w.attention else {
+                panic!("KDA layer but non-KDA weights");
+            };
+            let all_saved_kda: Vec<KdaSavedActivations> = (0..l)
+                .map(|t| saved_tokens[t].layers[layer_idx].kda_saved.clone().unwrap())
+                .collect();
+            let kda_grads = layer_grads.kda_grads.as_mut().unwrap();
+            kda_backward_sequence(
+                &config.kda_config,
+                kda_w,
+                &all_saved_kda,
+                &d_attn_out,
+                &mut d_normed_self,
+                kda_grads,
+            );
+        }
+
+        // Loom ATTN-site read+write paths through the normed attention input.
+        for t in 0..l {
+            katgpt_core::simd::simd_add_inplace(&mut d_normed_self[t][..d], &d_h_attn[t][..d]);
+        }
+
+        // ── Step 2c: Self-attn block backward — IDENTICAL to the plain backward ──
+        for t in 0..l {
+            let saved = &saved_tokens[t].layers[layer_idx];
+            let d_mixed_self = mla_rmsnorm_backward(
+                &d_normed_self[t],
+                &saved.mixed_self,
+                &layer_w.input_layernorm_weight,
+                saved.self_inv_rms,
+                &mut layer_grads.input_layernorm_weight,
+                config.rms_eps,
+            );
+            let mut d_ps_in = if is_boundary {
+                block_grads[t].pop().unwrap_or_else(|| vec![0.0f32; d])
+            } else {
+                vec![0.0f32; d]
+            };
+            if !is_boundary {
+                katgpt_core::simd::simd_add_inplace(
+                    &mut d_ps_in[..d],
+                    &d_ps_after_attn_all[t][..d],
+                );
+            }
+            if saved.has_self_attn_res {
+                let num_self_blocks = saved.block_state_self.len();
+                let mut d_self_blocks: Vec<Vec<f32>> =
+                    (0..num_self_blocks).map(|_| vec![0.0f32; d]).collect();
+                let mut d_ps_from_attnres = vec![0.0f32; d];
+                attn_res_backward(
+                    &config.attn_res_config,
+                    &layer_w.self_attn_res,
+                    &saved.block_state_self,
+                    &saved.prefix_sum_in,
+                    &d_mixed_self,
+                    &mut d_self_blocks,
+                    &mut d_ps_from_attnres,
+                    &mut layer_grads.self_attn_res_norm,
+                    &mut layer_grads.self_attn_res_proj,
+                );
+                for (bg_row, d_row) in block_grads[t].iter_mut().zip(d_self_blocks.iter()) {
+                    katgpt_core::simd::simd_add_inplace(&mut bg_row[..d], &d_row[..d]);
+                }
+                katgpt_core::simd::simd_add_inplace(&mut d_ps_in[..d], &d_ps_from_attnres[..d]);
+            } else {
+                katgpt_core::simd::simd_add_inplace(&mut d_ps_in[..d], &d_mixed_self[..d]);
+            }
+            d_prefix[t] = d_ps_in;
+        }
+    }
+
+    // ── Step 3: Embedding backward — IDENTICAL to the plain backward.
+    for t in 0..l {
+        if saved_tokens[t].is_latent {
+            continue;
+        }
+        let token_id = saved_tokens[t].token_id as usize;
+        let base = token_id * d;
+        katgpt_core::simd::simd_add_inplace(
+            &mut grads.embed_weight[base..base + d],
+            &d_prefix[t][..d],
+        );
+    }
+}
+
+#[cfg(test)]
+mod loom_saved_forward_tests {
+    use super::*;
+    use crate::kimi_k3::loader::KimiK3ModelWeights;
+
+    /// G0 identity through the SAVED path: a loom hook that adds nothing must
+    /// leave every saved activation AND the logits bit-identical to the
+    /// hook-free saved forward (the backward consumes these saves — the
+    /// identity must hold on the whole record, not just the logits).
+    #[test]
+    fn g1_saved_loom_zero_hook_identity() {
+        let config = KimiK3ModelConfig::kimi_k3_0_40b();
+        let weights = KimiK3ModelWeights::random_train_init(&config, 0x1712_BEEF);
+        let tokens: [u32; 4] = [1000, 1977, 2954, 3931];
+
+        // Hook-free saved forward — snapshot the whole record per token (the
+        // saved struct is overwritten each call).
+        let mut saved_plain = TokenSavedActivations::new();
+        let mut rt_plain = KimiK3Runtime::new(&config, tokens.len());
+        let mut plain_logits: Vec<Vec<f32>> = Vec::new();
+        let mut plain_records: Vec<TokenRecord> = Vec::new();
+        for (i, &tok) in tokens.iter().enumerate() {
+            kimi_k3_forward_token_saved(&config, &weights, &mut rt_plain, tok, i, &mut saved_plain);
+            plain_logits.push(saved_plain.logits.clone());
+            plain_records.push(TokenRecord::snapshot(&saved_plain));
+        }
+
+        // Saved-loom forward with a NO-OP hook (present, adds nothing).
+        let mut saved_loom = TokenSavedActivations::new();
+        let mut rt_loom = KimiK3Runtime::new(&config, tokens.len());
+        for (i, &tok) in tokens.iter().enumerate() {
+            let mut hook = |_idx: usize, _site: u8, _h: &[f32], _v: &[f32], _p: &mut [f32]| {};
+            kimi_k3_forward_token_saved_loom(
+                &config,
+                &weights,
+                &mut rt_loom,
+                tok,
+                i,
+                &mut saved_loom,
+                Some(&mut hook),
+            );
+            assert_eq!(
+                saved_loom.logits, plain_logits[i],
+                "token {i} logits diverged"
+            );
+            let rec = TokenRecord::snapshot(&saved_loom);
+            let want = &plain_records[i];
+            assert_eq!(rec.final_hidden, want.final_hidden, "tok {i} final_hidden");
+            assert_eq!(rec.layers.len(), want.layers.len());
+            for (li, (a, b)) in rec.layers.iter().zip(want.layers.iter()).enumerate() {
+                assert_eq!(a.prefix_sum_in, b.prefix_sum_in, "layer {li} tok {i} ps_in");
+                assert_eq!(a.attn_out, b.attn_out, "layer {li} tok {i} attn_out");
+                assert_eq!(
+                    a.prefix_sum_after_attn, b.prefix_sum_after_attn,
+                    "layer {li} tok {i} ps_after_attn"
+                );
+                assert_eq!(a.mixed_mlp, b.mixed_mlp, "layer {li} tok {i} mixed_mlp");
+                assert_eq!(a.ffn_out, b.ffn_out, "layer {li} tok {i} ffn_out");
+                assert_eq!(a.mixed_self, b.mixed_self, "layer {li} tok {i} mixed_self");
+            }
+        }
+    }
+
+    /// The hook contract probe: fires exactly twice per layer per token, ATTN
+    /// before FFN, with `h` = the normed site input (recomputable from the
+    /// saved mixed input) and `value` = the site output as saved.
+    #[test]
+    fn g1_saved_loom_hook_contract_probe() {
+        let config = KimiK3ModelConfig::kimi_k3_0_40b();
+        let weights = KimiK3ModelWeights::random_train_init(&config, 0x1712_CAFE);
+        let tokens: [u32; 2] = [500, 1477];
+        let mut saved = TokenSavedActivations::new();
+        let mut rt = KimiK3Runtime::new(&config, tokens.len());
+
+        let mut calls: Vec<(usize, u8)> = Vec::new();
+        let mut seen = Vec::new();
+        for (i, &tok) in tokens.iter().enumerate() {
+            calls.clear();
+            let mut hook = |idx: usize, site: u8, h: &[f32], v: &[f32], _p: &mut [f32]| {
+                calls.push((idx, site));
+                seen.push((i, idx, site, h.to_vec(), v.to_vec()));
+            };
+            kimi_k3_forward_token_saved_loom(
+                &config,
+                &weights,
+                &mut rt,
+                tok,
+                i,
+                &mut saved,
+                Some(&mut hook),
+            );
+            // Order + arity: ATTN then FFN, every layer.
+            let want: Vec<(usize, u8)> = (0..config.num_layers)
+                .flat_map(|l| [(l, LOOM_SITE_ATTN), (l, LOOM_SITE_FFN)])
+                .collect();
+            assert_eq!(calls, want, "token {i} hook order");
+            // `value` matches the saved site output.
+            for (tok_i, l_idx, site, _h, v) in &seen {
+                let ls = &saved.layers[*l_idx];
+                let want_v = if *site == LOOM_SITE_ATTN {
+                    &ls.attn_out
+                } else {
+                    &ls.ffn_out
+                };
+                assert_eq!(v, want_v, "tok {tok_i} layer {l_idx} site {site} value");
+            }
+            seen.clear();
+        }
+    }
+
+    // Snapshot helpers — `saved` is overwritten per token, so the hook-free
+    // record is snapshotted as the loop advances.
+    struct LayerSnapshot {
+        prefix_sum_in: Vec<f32>,
+        attn_out: Vec<f32>,
+        prefix_sum_after_attn: Vec<f32>,
+        mixed_mlp: Vec<f32>,
+        ffn_out: Vec<f32>,
+        mixed_self: Vec<f32>,
+    }
+
+    struct TokenRecord {
+        layers: Vec<LayerSnapshot>,
+        final_hidden: Vec<f32>,
+    }
+
+    impl TokenRecord {
+        fn snapshot(s: &TokenSavedActivations) -> Self {
+            Self {
+                layers: s
+                    .layers
+                    .iter()
+                    .map(|l| LayerSnapshot {
+                        prefix_sum_in: l.prefix_sum_in.clone(),
+                        attn_out: l.attn_out.clone(),
+                        prefix_sum_after_attn: l.prefix_sum_after_attn.clone(),
+                        mixed_mlp: l.mixed_mlp.clone(),
+                        ffn_out: l.ffn_out.clone(),
+                        mixed_self: l.mixed_self.clone(),
+                    })
+                    .collect(),
+                final_hidden: s.final_hidden.clone(),
+            }
         }
     }
 }
