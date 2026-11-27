@@ -273,7 +273,7 @@ pub fn kimi_decoder_layer_forward(
 /// present hook whose injections are zero-init stays output-identical by the
 /// G0 law — the closure itself must skip exact-zero terms so `-0.0 + 0.0`
 /// never flips a bit (the riir-train `LoomForwardCtx` does).
-pub type LoomLayerHook = dyn FnMut(usize, u8, &[f32], &[f32], &mut [f32]);
+pub type LoomLayerHook<'a> = dyn FnMut(usize, u8, &[f32], &[f32], &mut [f32]) + 'a;
 pub const LOOM_SITE_ATTN: u8 = 0;
 pub const LOOM_SITE_FFN: u8 = 1;
 
@@ -291,7 +291,7 @@ pub fn kimi_decoder_layer_forward_loom(
     rope_freqs: Option<&mut RopeFreqs>,
     prefix_sum: &mut [f32],
     scratch_hidden: &mut [f32],
-    mut loom: Option<&mut LoomLayerHook>,
+    mut loom: Option<&mut LoomLayerHook<'_>>,
 ) {
     let d = config.attn_res.d();
     debug_assert_eq!(prefix_sum.len(), d);

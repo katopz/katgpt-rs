@@ -449,7 +449,7 @@ fn forward_decoder_to_logits<'a>(
     config: &KimiK3ModelConfig,
     weights: &super::loader::KimiK3ModelWeights,
     runtime: &'a mut KimiK3Runtime,
-    mut loom: Option<&mut LoomLayerHook>,
+    mut loom: Option<&mut LoomLayerHook<'_>>,
 ) -> &'a [f32] {
     let d = config.hidden_size;
 
