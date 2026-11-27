@@ -1,6 +1,7 @@
 # Issue 1248: Closed-form loop-depth extension for looped forwards (FP-Solve class)
 
 **Status:** OPEN — GAIN filing; PoC not run; real-model cell CONSUMER-GATED (no converged looped checkpoint on disk — Plan 324 postmortem ask / Plan 447 base rows) + hermetic-G1-first.
+**Claimed:** zed-i1248-t1@m3, 1795756939, expires 2026-11-29T05:22Z
 
 > **Source:** katgpt-rs/.research/697_Recursive_Self_Improving_Loopers_FP_Solve.md — rse_looper @ `765453d13878804c49876a656f39b57a4384dca4` (pin recorded; clone removed at filing).
 
