@@ -94,6 +94,8 @@ Round-1 panel sessions: no-GD advocate `9e63ec1a-8dbb-4fb0-9dd0-59b1b15e71bd` (f
 
 ## 6. Files
 
-- `katgpt-rs/.issues/1248_closed_form_loop_depth_extension.md` — the modelless primitive + riders R1–R4 + the pre-registered GOAT cell on the NEW `loop_depth_ood` fixture (round-1 verdict fix; Bench 699 stays as the damping incumbent's control) + the G0 span bar + the F10 extrapolation bar.
+## 6. Files
+
+- `katgpt-rs/.issues/1248_closed_form_loop_depth_extension.md` — the modelless primitive + riders R1–R4 + the pre-registered GOAT cell on the NEW `loop_depth_ood` fixture (round-1 verdict fix; Bench 699 stays as the damping incumbent's control) + the G0 span bar + the F10 extrapolation bar. **HERMETIC PoC LANDED 2026-11-27 (T1–T7, commits `f73041393`…`7840516b0`)**: all bars green, the F10 extrapolation bar SURVIVED (the one overlay fit at d+1 holds at d+2/d+3, 0.9989), and the ladder verdict is THE EDIT WINS (0.9988/0.9989/0.9989 vs baseline 0.4031/0.1230/0.1146; the governor DEMOTED to demote-not-poison — it cannot repair a pass-indexed fault). Promotion still gated on T8 (the real-model cell, consumer-gated on a converged looped checkpoint landing).
 - `riir-train/.issues/713_rse_looper_gspo_control_tensor_recipe.md` — the GSPO/control-tensor recipe routing (contingent; consumer-gated per Plan 447's own status line).
 - Research 608: one-line amendment (the conditional escape hatch).
