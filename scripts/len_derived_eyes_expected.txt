@@ -88,3 +88,12 @@ riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs fwht_rotate_for
 riir-train crates/riir-train-gpu/src/lm_head_lora_gpu.rs ce_grad_f32 grad 1
 riir-train crates/riir-train-gpu/src/lm_head_lora_gpu.rs ce_grad_f32 loss_out 1
 riir-train crates/riir-train-gpu/src/lm_head_lora_gpu.rs ce_grad_f32 probs 1
+#
+# 2026-11-28 — riir-infer sampling_cubecl.rs argmax_f32_last (Plan 626 T3a's
+# last-index twin, katgpt-rs Issue 1249): the input handle is the `logits`
+# field of the resident lane (ternary_deltanet_gpu_forward.rs, created
+# `vec![0.0f32; vocab]` at :3883 -> create_from_slice) and the launch declares
+# `self.config.vocab_size` explicitly, so the kernel body's `input.len()`
+# reads the explicit declared size — exact by construction today. Persistent
+# struct field, so eyed.
+riir-infer crates/riir-infer-gpu/src/sampling_cubecl.rs argmax_f32_last input 1

@@ -47,6 +47,21 @@
 # copy_f32_grid2d idiom; no kernel-side .len()), the new oversized-binding
 # sentinel test proves the explicit bound, and both rows stopped flipping
 # (the sweep demanded the drop, both directions pinned). This block is the
-# retirement record; the file holds ZERO rows until the next adjudicated flip.
+# retirement record; the file held ZERO rows until the next adjudicated flip.
+#
+# Found 2026-11-28 (katgpt-rs Issue 1249): riir-train's late_state_loop_gpu
+# lanes (backward.rs:563/564, mod.rs:655) are the ONLY PERSISTENT-UPSTREAM
+# callers of these guard-only elementwise/gemv wrappers — every other caller
+# site is UNRESOLVED or EXACT-UPSTREAM, so dropping riir-train leaves a
+# caller set that is not provably clean and the pairs fall UNRESOLVED.
+# Direction conservative (GUARD-ONLY -> UNRESOLVED). Root fix (the
+# sigmoid/silu retirement precedent, riir-infer 02e7a65): the kernels take
+# the element count via the explicit params idiom instead of a kernel-body
+# .len(); each row retires when that lands. Deferred while riir-infer's GPU
+# tree is hot (the i1245/i1256 lanes).
+riir-infer crates/riir-infer-gpu/src/elementwise_cubecl.rs add_bias_row_f32 x_handle riir-train:GUARD-ONLY->UNRESOLVED
+riir-infer crates/riir-infer-gpu/src/elementwise_cubecl.rs add_bias_row_f32 bias_handle riir-train:GUARD-ONLY->UNRESOLVED
+riir-infer crates/riir-infer-gpu/src/elementwise_cubecl.rs relu_f32 x_handle riir-train:GUARD-ONLY->UNRESOLVED
+riir-infer crates/riir-infer-gpu/src/gemv_cubecl.rs add_f32 b_handle riir-train:GUARD-ONLY->UNRESOLVED
 #
 #                      repo        file                                    kernel       handle        spec
