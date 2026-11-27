@@ -49,8 +49,9 @@
 # activation buffers, the exact class this list eyes.
 #
 # <repo>  <file>                                            <kernel>                         <handle>                 <n>
-riir-infer crates/riir-infer-gpu/src/gemv_geglu_f16_cubecl.rs gemv_geglu_plane_f16 weight_gate_handle 1
-riir-infer crates/riir-infer-gpu/src/gemv_geglu_f16_cubecl.rs gemv_geglu_plane_f16 weight_up_handle 1
+# (the 2 gemv_geglu_plane_f16 rows REMOVED 2026-11-27: riir-infer `09d41700`
+# moved the kernel's dims to the params buffer — the Bench-1256 root-cause
+# fix's residue half; the binds no longer derive shape from len())
 riir-infer crates/riir-infer-gpu/src/gemv_ternary_residual_cubecl.rs gemv_ternary_residual_rowtiled8 input_handle 1
 riir-infer crates/riir-infer-gpu/src/gemv_ternary_residual_cubecl.rs gemv_ternary_residual_rowtiled8 residual_output_handle 1
 riir-infer crates/riir-infer-gpu/src/deltanet_rotation_cubecl.rs fwht_forward_copy_f32 dst_handle 1
