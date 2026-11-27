@@ -970,6 +970,92 @@ pub fn run_with_gate_alarm(fixture: &LoopDepthOod, armed: bool) -> GateAlarmRepo
     }
 }
 
+// ---------------------------------------------------------------------------
+// R4 — the spectral single-direction governor (the ladder's middle rung:
+// damping modulates, the governor removes ONE direction, the edit re-writes
+// weights). `x ← x − γ·(v₁ᵀx)·v₁` at the fault site, one frozen vector from
+// R2's census, γ driven by gate telemetry: ≈ 0 while the gate reads healthy
+// (byte-identical healthy passes), ramping as the gate collapses.
+// ---------------------------------------------------------------------------
+
+/// The governor's telemetry curve: γ_k = clamp(1 − g_{k−1}/GATE_FLOOR, 0, 1)
+/// — the PREVIOUS pass's batch-mean gate (the telemetry-lag form; a healthy
+/// pass 1..d reads γ = 0, a collapsed pass reads γ = 1, the first fault pass
+/// reads γ from pass d's healthy telemetry — the governor cannot see the
+/// fault before the loop produces it).
+pub fn governor_gamma(prev_gate_mean: Option<f32>) -> f32 {
+    match prev_gate_mean {
+        None => 0.0,
+        Some(g) => (1.0 - g / GATE_FLOOR).clamp(0.0, 1.0),
+    }
+}
+
+/// The governor's report: the arm's outputs + per-pass telemetry.
+pub struct GovernorRun {
+    /// Per-pass batch-mean gate values (length K_LADDER).
+    pub gate_means: Vec<f32>,
+    /// The γ actually applied per pass (0 for pass 1 and every healthy pass).
+    pub gammas: Vec<f32>,
+    /// Per-row outputs (row-major: `outputs[r][k]`, all K_LADDER passes).
+    pub outputs: Vec<Vec<Vec<f32>>>,
+}
+
+/// Run the full ladder with the governor armed past the trained depth: at
+/// pass k > d the carried state is projected (γ from the lagged telemetry)
+/// BEFORE the pass runs; passes 1..d are byte-identical to the unarmed
+/// ladder (γ = 0 there by construction). `v1` is R2's frozen census vector
+/// at the fault site, normalized (the caller passes `r2_shift_census`'s
+/// output; the direction is unit by construction).
+pub fn governor_run(fixture: &LoopDepthOod, v1: &[f64]) -> GovernorRun {
+    assert_eq!(v1.len(), D, "v₁ must be a D-sized census vector");
+    let nrm: f64 = v1.iter().map(|c| c * c).sum::<f64>().sqrt();
+    assert!((nrm - 1.0).abs() < 1e-6, "v₁ not normalized: ‖·‖ = {nrm}");
+    let v1f: Vec<f32> = v1.iter().map(|&c| c as f32).collect();
+    let mut states: Vec<Vec<f32>> = (0..BATCH).map(|i| fixture.warm_start(i)).collect();
+    let mut outputs = Vec::new();
+    let mut gate_means = Vec::new();
+    let mut gammas = Vec::new();
+    let mut prev_mean: Option<f32> = None;
+    for k in 1..=K_LADDER {
+        let phi = LoopDepthOod::pass_indicator_ramp(k);
+        let gamma = if k > D_TRAIN {
+            governor_gamma(prev_mean)
+        } else {
+            0.0
+        };
+        gammas.push(gamma);
+        let mut pass_gates = Vec::with_capacity(BATCH);
+        let mut pass_outs = Vec::with_capacity(BATCH);
+        for x in states.iter_mut() {
+            // The intervention: project the divergent component out of the
+            // carried message before the pass consumes it.
+            if gamma > 0.0 {
+                let proj: f32 = x.iter().zip(&v1f).map(|(a, b)| a * b).sum();
+                for (xc, vc) in x.iter_mut().zip(&v1f) {
+                    *xc -= gamma * proj * vc;
+                }
+            }
+            let h1 = fixture.layer1(x);
+            let z = fixture.gate_preact(&h1, phi);
+            pass_gates.push(1.0 / (1.0 + (-z as f64).exp()) as f32);
+            let (_g, h1g) = fixture.gate_apply(&h1, phi);
+            pass_outs.push(fixture.layer2(&h1g));
+        }
+        let mean = pass_gates.iter().sum::<f32>() / BATCH as f32;
+        gate_means.push(mean);
+        prev_mean = Some(mean);
+        for (x, y) in states.iter_mut().zip(&pass_outs) {
+            *x = y.clone();
+        }
+        outputs.push(pass_outs);
+    }
+    GovernorRun {
+        gate_means,
+        gammas,
+        outputs,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
