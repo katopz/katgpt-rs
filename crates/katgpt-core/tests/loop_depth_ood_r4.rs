@@ -131,7 +131,11 @@ fn r4_governor_arm_bars() {
 
     // The measured effect, REPORTED (T6 adjudicates): per-pass output
     // cosine vs the HEALTHY depth-d reference (pass d's output), and the
-    // state-norm bounds.
+    // state-norm bounds. INDEXING: the run's outputs are PASS-major
+    // (outputs[pass][row]) — the first landing of this test read them
+    // row-major and printed pass-1 outputs (cos 1.0000) where the truth
+    // was the unrepaired fault trajectory (cos ≈ 0.40/0.12/0.12); the
+    // ladder (T6) is the adjudication of record and DEMOTED the governor.
     let mut ref_acc = vec![0.0f32; D];
     let mut x = fx.warm_start(0);
     for k in 1..=D_TRAIN {
@@ -145,7 +149,7 @@ fn r4_governor_arm_bars() {
         *a = c / rn;
     }
     for k in D_TRAIN..K_LADDER {
-        let y = &run.outputs[0][k];
+        let y = &run.outputs[k][0]; // PASS-major: pass k, row 0
         let c = cosine(&ref_acc, y);
         let n: f32 = y.iter().map(|v| v * v).sum::<f32>().sqrt();
         println!(
@@ -158,6 +162,20 @@ fn r4_governor_arm_bars() {
             n.is_finite() && n > 0.1,
             "state norm collapsed at pass {}",
             k + 1
+        );
+    }
+    // The honest recovery floor: the governor must NOT read worse than the
+    // baseline on any post-trained pass (it modulates; it must not poison).
+    let unarmed = run_with_gate_alarm(&fx, false);
+    for k in D_TRAIN..K_LADDER {
+        let c_gov = cosine(&ref_acc, &run.outputs[k][0]);
+        let c_base = cosine(&ref_acc, &unarmed.outputs[k][0]);
+        assert!(
+            c_gov >= c_base - 0.05,
+            "the governor POISONED pass {}: {} < {}",
+            k + 1,
+            c_gov,
+            c_base
         );
     }
 }

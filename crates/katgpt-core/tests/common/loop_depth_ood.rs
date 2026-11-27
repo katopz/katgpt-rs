@@ -917,7 +917,8 @@ pub struct GateAlarmReport {
     pub passes_completed: usize,
     /// The per-pass batch-mean gate telemetry the alarm read.
     pub gate_means: Vec<f32>,
-    /// Per-row outputs for the COMPLETED passes (row-major: `outputs[r][k]`).
+    /// Per-row outputs for the COMPLETED passes, PASS-major:
+    /// `outputs[pass][row]`.
     pub outputs: Vec<Vec<Vec<f32>>>,
 }
 
@@ -996,7 +997,7 @@ pub struct GovernorRun {
     pub gate_means: Vec<f32>,
     /// The γ actually applied per pass (0 for pass 1 and every healthy pass).
     pub gammas: Vec<f32>,
-    /// Per-row outputs (row-major: `outputs[r][k]`, all K_LADDER passes).
+    /// Per-row outputs, PASS-major: `outputs[pass][row]` (index 0 = pass 1).
     pub outputs: Vec<Vec<Vec<f32>>>,
 }
 
@@ -1047,6 +1048,50 @@ pub fn governor_run(fixture: &LoopDepthOod, v1: &[f64]) -> GovernorRun {
         for (x, y) in states.iter_mut().zip(&pass_outs) {
             *x = y.clone();
         }
+        outputs.push(pass_outs);
+    }
+    GovernorRun {
+        gate_means,
+        gammas,
+        outputs,
+    }
+}
+
+/// The damping incumbent's arm (the Bench-699 `lt2_deep_stability` lineage
+/// control, its consecutive-pass blend `h ← (1−α)·h_carry + α·h_prev`
+/// applied past the trained depth, α pinned 0.5): the honest control the
+/// edit must ALSO beat per the winner rule. It modulates magnitudes; the
+/// fixture's fault is a pass-INDEXED direction collapse — measured to lose.
+pub fn damping_run(fixture: &LoopDepthOod, alpha: f32) -> GovernorRun {
+    let mut states: Vec<Vec<f32>> = (0..BATCH).map(|i| fixture.warm_start(i)).collect();
+    let mut outputs = Vec::new();
+    let mut gate_means = Vec::new();
+    let gammas = vec![0.0f32; K_LADDER]; // the damping knob is α, not γ
+    for k in 1..=K_LADDER {
+        let phi = LoopDepthOod::pass_indicator_ramp(k);
+        let mut pass_gates = Vec::with_capacity(BATCH);
+        let mut pass_outs = Vec::with_capacity(BATCH);
+        let arm = k > D_TRAIN + 1; // the rescue posture: past the fault pass
+        for x in states.iter_mut() {
+            let prev = x.clone();
+            let h1 = fixture.layer1(x);
+            let z = fixture.gate_preact(&h1, phi);
+            pass_gates.push(1.0 / (1.0 + (-z as f64).exp()) as f32);
+            let (_g, h1g) = fixture.gate_apply(&h1, phi);
+            let y = fixture.layer2(&h1g);
+            if arm {
+                let mut blended = y.clone();
+                for (bv, pv) in blended.iter_mut().zip(&prev) {
+                    *bv = (1.0 - alpha) * *bv + alpha * *pv;
+                }
+                *x = blended.clone();
+                pass_outs.push(blended);
+            } else {
+                *x = y.clone();
+                pass_outs.push(y);
+            }
+        }
+        gate_means.push(pass_gates.iter().sum::<f32>() / BATCH as f32);
         outputs.push(pass_outs);
     }
     GovernorRun {
