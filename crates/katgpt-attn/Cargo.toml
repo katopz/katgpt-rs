@@ -99,6 +99,15 @@ msa_adaptive_k_lepski = ["msa_adaptive_k", "katgpt-core/estimators"]
 # dash_attn (consumes argtopk_with_scratch from block_topk) — the
 # vortex_flow sub-feature pattern.
 pyramid_topk = ["dash_attn"]
+# Issue 1250 arm A (Research 698, YASA distill) — the tied indexer: the
+# main attention's OWN query-head group scores candidate blocks through
+# their mean-pooled keys (ReLU-mean, zero indexer weights — contrast
+# trained_indexer). Zero-alloc scoring + selection; opt-in until the
+# i1250 T4 pre-registered bars on the Bench-612 real-tensor contract
+# (paired recall vs single-level exact-LSE >= -0.01 at <= its scoring
+# cost). Implies dash_attn (consumes argtopk_with_scratch + katgpt-core's
+# re-exported simd dot).
+tied_indexer = ["dash_attn"]
 # Chiaroscuro attention — per-token DCT spectral entropy operator routing.
 chiaroscuro = ["dep:rustfft"]
 # RAT+ Recurrence Bridge — modelless dilated inference via GDN2 state.
@@ -413,6 +422,16 @@ required-features = ["mla_absorbed", "flashmemory_sparse"]
 [[test]]
 name = "issue_925_procrustes_probe"
 required-features = ["pyramid_topk", "hga"]
+
+# Issue 1250 Arm A — the tied-indexer recall cell over the pyramid_612
+# committed capture. Needs BOTH features: the harness protocol + fixtures
+# ride `pyramid_topk`, the scorer lives behind `tied_indexer` — either
+# alone compiles this target to nothing (the Issue-713 green-zero rule;
+# the whole-file `#[cfg(all(...))]` protects the count, this row protects
+# the reader — the Issue-926 two-feature row shape).
+[[test]]
+name = "issue_1250_tied_indexer_cell"
+required-features = ["pyramid_topk", "tied_indexer"]
 
 # Issue 961 T1 — margin-to-max selection semantics through the public GQA
 # selector (offset invariance, threshold-path parity, edges).

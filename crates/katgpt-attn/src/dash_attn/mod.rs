@@ -76,7 +76,11 @@ pub mod msa_distill;
 // `dash_attn` itself, not the VortexFlow/MSA cluster.
 #[cfg(feature = "pyramid_topk")]
 pub mod pyramid_topk;
+// YASA tied-indexer block scorer (Issue 1250 Arm A, Research 698) — the
+// zero-parameter indexer, opt-in falsifier-first; implies only `dash_attn`.
 pub mod sat_analysis;
+#[cfg(feature = "tied_indexer")]
+pub mod tied_indexer;
 pub mod value_energy;
 pub mod vortex_flow;
 
