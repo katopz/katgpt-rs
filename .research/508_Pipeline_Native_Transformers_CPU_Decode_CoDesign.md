@@ -4,7 +4,7 @@
 > **Date:** 2026-08-26
 > **Status:** DISTILLED — §6.3 Approach A+B **MEASURED NEGATIVE** ([Bench 683](../.benchmarks/683_stale_residual_poc.md), Issue 691 closed 2026-08-26: residual-dominance fails on Bonsai-27B AND Gemma-2-2B AND K3-0.40B — ratio ≈ k/√L, k≈1.5–3 → the 0.05 bar needs ≥~1000 layers); extractions #1–#3 landed in `katgpt-core/stale_residual`; riir-train Issue 482 (delay-arch screening) unaffected and still queued
 > **Related Research:** 110 (Ciot ternary CPU — our Plasma tier), 066 (TileRT persistent pipeline), 161 (dMoE block routing), 059 (MoE spec-decode co-design), 447 (Kimi K3 latent MoE), 456 (Gigatoken cache hierarchy); riir-ai 328 (deepseek v3 noaux_tc router — the exact router family in `moe.rs`)
-> **Related Issues:** katgpt-rs 691 (§6.3 Approach A/B POC — closed 2026-08-26, file removed; record = Bench 683 + git history), [riir-train 482](../../riir-train/.issues/482_delay_architecture_screening_dense_delay_expert_delay.md) (delay-arch screening)
+> **Related Issues:** katgpt-rs 691 (§6.3 Approach A/B POC — closed 2026-08-26, file removed; record = Bench 683 + git history), riir-train 482 (../../riir-train/.issues/482_delay_architecture_screening_dense_delay_expert_delay.md) (delay-arch screening)
 > **Classification:** Public (katgpt-rs — transformer-stack inference mechanics)
 
 ---
@@ -106,7 +106,7 @@ Our CPU path is **ternary, not Q4**. At 1.58 bits/weight the arithmetic intensit
 
 ### 2.4 Training-plan candidates (riir-train; model-based track)
 
-Recorded in [riir-train Issue 482](../../riir-train/.issues/482_delay_architecture_screening_dense_delay_expert_delay.md) with GPU-h estimates: (a) K3-class MoE pre-dense + δe screening (~6 GPU-h) → optional 0.4B distill re-run (300–600 GPU-h); (b) Bonsai-27B δd re-distill (1.5–2K GPU-h — **owner call, not filed as a plan**); (c) arch5 weight-share for the 0.4B edge class (<100 GPU-h rider).
+Recorded in riir-train Issue 482 (../../riir-train/.issues/482_delay_architecture_screening_dense_delay_expert_delay.md) with GPU-h estimates: (a) K3-class MoE pre-dense + δe screening (~6 GPU-h) → optional 0.4B distill re-run (300–600 GPU-h); (b) Bonsai-27B δd re-distill (1.5–2K GPU-h — **owner call, not filed as a plan**); (c) arch5 weight-share for the 0.4B edge class (<100 GPU-h rider).
 
 ---
 
