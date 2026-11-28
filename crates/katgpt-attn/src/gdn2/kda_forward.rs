@@ -437,12 +437,61 @@ impl KdaForwardScratch {
 ///
 /// # Returns
 /// A mutable slice into `scratch.output[..hidden_size]`.
+/// The forget-gate form. The incumbent (kimi-k3) computes the log-decay as
+/// `-alpha · softplus(g + dt_bias)`; GLM-5.3-Flash (Plan 627 T4a; the
+/// transformers `linear_lower_bound` / `safe_gate_lower_bound` branch) computes
+/// `bound · sigmoid(alpha · g)` with `bound = -5.0` — a log-decay bounded in
+/// `[bound, 0]`, so the decay factor stays in `[exp(bound), 1]` and never
+/// reaches the `alpha_eps` floor.
+#[derive(Clone, Copy, Debug)]
+enum KdaGate {
+    Softplus,
+    SigmoidLowerBound(f32),
+}
+
 pub fn kda_forward_token<'s>(
     config: &KdaConfig,
     weights: &KdaWeights,
     cache: &mut KdaLayerCache,
     scratch: &'s mut KdaForwardScratch,
     h: &[f32],
+) -> &'s mut [f32] {
+    kda_forward_token_inner(config, weights, cache, scratch, h, KdaGate::Softplus)
+}
+
+/// GLM-5.3-Flash's safe lower-bound forget gate (Plan 627 T4a; the
+/// transformers `Glm5NextTextForgetGate` branch taken when
+/// `linear_lower_bound` is set): `gk = bound · sigmoid(exp(A_log) · (f_b(f_a(h))
+/// + dt_bias))` — identical projections and recurrence to
+/// [`kda_forward_token`], only the log-decay formula differs. `bound` comes
+/// from the model config (`linear_lower_bound`, measured -5.0); the caller
+/// passes it because [`KdaConfig`] deliberately stays gate-form-free (its
+/// struct literals are pinned across two repos).
+pub fn kda_forward_token_lower_bound_gate<'s>(
+    config: &KdaConfig,
+    weights: &KdaWeights,
+    cache: &mut KdaLayerCache,
+    scratch: &'s mut KdaForwardScratch,
+    h: &[f32],
+    bound: f32,
+) -> &'s mut [f32] {
+    kda_forward_token_inner(
+        config,
+        weights,
+        cache,
+        scratch,
+        h,
+        KdaGate::SigmoidLowerBound(bound),
+    )
+}
+
+fn kda_forward_token_inner<'s>(
+    config: &KdaConfig,
+    weights: &KdaWeights,
+    cache: &mut KdaLayerCache,
+    scratch: &'s mut KdaForwardScratch,
+    h: &[f32],
+    gate: KdaGate,
 ) -> &'s mut [f32] {
     let d = config.hidden_size;
     let dk = config.head_dim;
@@ -532,7 +581,10 @@ pub fn kda_forward_token<'s>(
         let alpha_head = weights.a_log[head].exp();
         for (i, slot) in scratch.erase_b_h[..dk].iter_mut().enumerate() {
             let g_plus_bias = scratch.g_raw[off + i] + weights.dt_bias[off + i];
-            let gk = -alpha_head * softplus(g_plus_bias);
+            let gk = match gate {
+                KdaGate::Softplus => -alpha_head * softplus(g_plus_bias),
+                KdaGate::SigmoidLowerBound(bound) => bound * sigmoid(alpha_head * g_plus_bias),
+            };
             let a = gk.exp();
             *slot = if a < config.alpha_eps {
                 config.alpha_eps
@@ -714,6 +766,58 @@ mod tests {
             alpha_eps: 1e-5,
             rms_eps: 1e-5,
         }
+    }
+
+    // ── Plan 627 T4a: the GLM sigmoid lower-bound gate form ────────────
+
+    #[test]
+    fn lower_bound_gate_diverges_from_softplus_and_stays_deterministic() {
+        // Same weights + tokens through both gate forms: the outputs differ
+        // (different log-decay formulas), and each form is deterministic
+        // across resets. The softplus arm's numeric correctness is pinned by
+        // tests/kda_g1_spec_match.rs (the fla reference); this test pins the
+        // BRANCH DIVERGENCE + the lower-bound form's own determinism.
+        let config = small_config();
+        let weights = KdaWeights::random(&config, 777);
+        let tokens: Vec<Vec<f32>> = (0..4)
+            .map(|i| {
+                (0..config.hidden_size)
+                    .map(|k| ((i * 7 + k * 3) % 9) as f32 * 0.15 - 0.6)
+                    .collect()
+            })
+            .collect();
+
+        let run = |bound: Option<f32>| -> Vec<Vec<f32>> {
+            let mut cache = KdaLayerCache::new(&config);
+            let mut scratch = KdaForwardScratch::new(&config);
+            tokens
+                .iter()
+                .map(|h| {
+                    let out = match bound {
+                        None => kda_forward_token(&config, &weights, &mut cache, &mut scratch, h),
+                        Some(b) => kda_forward_token_lower_bound_gate(
+                            &config,
+                            &weights,
+                            &mut cache,
+                            &mut scratch,
+                            h,
+                            b,
+                        ),
+                    };
+                    out.to_vec()
+                })
+                .collect()
+        };
+
+        let softplus = run(None);
+        let lower_bound = run(Some(-5.0));
+        let any_diff = softplus
+            .iter()
+            .zip(lower_bound.iter())
+            .any(|(a, b)| a.iter().zip(b.iter()).any(|(x, y)| (x - y).abs() > 1e-6));
+        assert!(any_diff, "the two gate forms produced identical outputs");
+        // Determinism: a second lower-bound run reproduces the first.
+        assert_eq!(run(Some(-5.0)), lower_bound);
     }
 
     #[test]
