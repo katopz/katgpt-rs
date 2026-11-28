@@ -1175,7 +1175,13 @@ pub fn kimi_k3_backward_sequence_with_input_grad(
 }
 
 /// FFN backward (MoE or Dense). Returns dL/d(normed_mlp) and accumulates weight grads.
-pub(crate) fn ffn_backward(
+/// One layer's FFN backward (per token): dispatches Dense (situ) vs MoE and
+/// accumulates the weight gradients into `layer_grads`; returns
+/// `dL/d(normed_ffn_input)`. Pub for the GPU loom lane (riir-train-gpu's
+/// `loom_gpu_backward` runs the per-token interleaved loom loop where the
+/// per-token CPU FFN backward is the correct shape — the MoE experts are
+/// tiny, so CPU per-token beats any batched-GPU dispatch overhead).
+pub fn ffn_backward(
     ffn_config: &KimiFfnConfig,
     ffn_weights: &KimiFfnWeights,
     saved: &LayerSavedActivations,
