@@ -214,6 +214,10 @@ pub enum ProcrustesError {
     /// `‖M‖_F` was zero (both anchor sets are all-zero). No meaningful
     /// rotation exists.
     DegenerateAnchors,
+    /// `d` is odd — the RoPE-commuting subgroup is per-frequency 2×2
+    /// block-diagonal, which needs an even head dimension
+    /// ([`rope_commuting_procrustes`] only).
+    OddDim { d: usize },
 }
 
 impl std::fmt::Display for ProcrustesError {
@@ -235,6 +239,12 @@ impl std::fmt::Display for ProcrustesError {
             ProcrustesError::ZeroDim => write!(f, "d must be >= 1, got 0"),
             ProcrustesError::DegenerateAnchors => {
                 write!(f, "Frobenius norm of M is zero (anchors are degenerate)")
+            }
+            ProcrustesError::OddDim { d } => {
+                write!(
+                    f,
+                    "rope-commuting Procrustes needs an even d (per-frequency 2x2 blocks), got {d}"
+                )
             }
         }
     }
@@ -574,6 +584,7 @@ pub fn orthogonal_procrustes(
     }
 
     // ── 9. Build report ─────────────────────────────────────────────
+    // ── 9. Build report ─────────────────────────────────
     Ok(ProcrustesReport {
         n,
         d,
@@ -581,6 +592,303 @@ pub fn orthogonal_procrustes(
         residual,
         det,
         flipped,
+    })
+}
+
+/// Constrained orthogonal Procrustes restricted to the **RoPE-commuting
+/// subgroup**: `R = block_diag(rot(θ_0), …, rot(θ_{d/2−1}))` — one planar
+/// 2×2 rotation per frequency pair.
+///
+/// Issue 1251. Triggered by Issue 1250 arm B T6 (the KV-sharing init recipe
+/// needs a key-space rotation that commutes with RoPE; see the issue +
+/// Research 698 §5 for the applicability condition).
+///
+/// # Why this constraint
+///
+/// RoPE rotates coordinate pair `i` by `p·θ_i` at position `p` — a DIFFERENT
+/// angle per frequency. A free orthogonal `R` therefore does not commute
+/// with RoPE, so rotating keys pre-RoPE is not equivalent to rotating them
+/// post-RoPE. Planar rotations inside one 2D plane DO commute (rot(a)·rot(b)
+/// = rot(a+b) = rot(b)·rot(a)), so a per-frequency block-diagonal `R`
+/// satisfies `R·RoPE_p(z) = RoPE_p·R(z)` exactly, at every position, for
+/// every frequency set. That is the invariant the KV-sharing init needs.
+///
+/// # Closed form
+///
+/// The Frobenius objective `‖B − A Rᵀ‖²_F = const − 2·Σᵢ trace(M_i R_iᵀ)`
+/// decouples per pair. For pair `i`, `M_i[r][c] = Σ_t b[t,2i+r]·a[t,2i+c]`
+/// (the 2×2 block of `M = BᵀA` on columns `(2i, 2i+1)`), and the optimal
+/// planar angle is the classical Kabsch angle
+///
+/// ```text
+///   θ_i = atan2(m₁₀ − m₀₁, m₀₀ + m₁₁)
+/// ```
+///
+/// maximizing `(m₀₀+m₁₁)·cosθ + (m₁₀−m₀₁)·sinθ`. Total cost `O(n·d)` —
+/// cheaper than the unconstrained solve. `det(R) = +1` always (planar dets
+/// are +1, and the product of dets is the det of the block-diagonal `R`).
+///
+/// # Determinism
+///
+/// Issue-940 discipline, same as [`orthogonal_procrustes`]: the per-pair
+/// cross-covariance cells and `m_norm` fold in ascending anchor order
+/// through the single-rounding FMA kernels; centering applies the same
+/// rank-1 correction per pair; `sqrt`/`atan2`/`sin`/`cos` are IEEE-exact
+/// libm operations with no convergence loop. Same anchors → same bits.
+///
+/// # Arguments / Returns
+///
+/// Identical contract to [`orthogonal_procrustes`]: anchors `(n, d)`
+/// row-major, caller-owned `out_rotation` `(d, d)` row-major (block
+/// diagonal — every off-block entry is written as exactly `0.0`),
+/// caller-owned scratch, [`ProcrustesConfig`]. Returns [`ProcrustesReport`]
+/// where `m_norm` is the Frobenius norm of the block-diagonal stack
+/// `sqrt(Σᵢ ‖M_i‖²_F)`, `det` is `+1.0` when `compute_det` is set, and
+/// `flipped` is always `false` (no correction exists — planar blocks are
+/// already special-orthogonal). Errors: [`ProcrustesError::OddDim`] on odd
+/// `d`, otherwise the same refusal set.
+///
+/// # Example
+///
+/// ```
+/// # use katgpt_spectral::procrustes::*;
+/// // 4-dim anchors (two frequency pairs), pair 0 rotated +90°, pair 1 identity.
+/// let a: [f32; 8] = [1.0, 0.0,  5.0, 0.0,
+///                    0.0, 1.0,  0.0, 5.0,
+///                   -1.0, 0.0, -5.0, 0.0,
+///                    0.0,-1.0,  0.0,-5.0];
+/// // pair 0: (x,y) → (-y, x); pair 1 unchanged.
+/// let b: [f32; 8] = [0.0, 1.0,  5.0, 0.0,
+///                   -1.0, 0.0,  0.0, 5.0,
+///                    0.0,-1.0, -5.0, 0.0,
+///                    1.0, 0.0,  0.0,-5.0];
+/// let mut r = [0.0_f32; 16];
+/// let mut scratch = ProcrustesScratch::new(4, 4);
+/// let report = rope_commuting_procrustes(&a, &b, 4, 4, &mut r,
+///                                        &mut scratch, &ProcrustesConfig::default()).unwrap();
+/// // Block 0 ≈ 90° rotation; block 1 ≈ identity; off-blocks exactly zero.
+/// assert!((r[1] + 1.0).abs() < 1e-4 && (r[4] - 1.0).abs() < 1e-4);
+/// assert!((r[10] - 1.0).abs() < 1e-4 && (r[15] - 1.0).abs() < 1e-4);
+/// assert_eq!(r[2], 0.0);
+/// assert_eq!(r[8], 0.0);
+/// assert!(report.residual < 1e-4);
+/// ```
+pub fn rope_commuting_procrustes(
+    a: &[f32],
+    b: &[f32],
+    n: usize,
+    d: usize,
+    out_rotation: &mut [f32],
+    scratch: &mut ProcrustesScratch,
+    config: &ProcrustesConfig,
+) -> Result<ProcrustesReport, ProcrustesError> {
+    // ── 1. Validate shapes (mirrors the unconstrained gate) ────────
+    if d == 0 {
+        return Err(ProcrustesError::ZeroDim);
+    }
+    if !d.is_multiple_of(2) {
+        return Err(ProcrustesError::OddDim { d });
+    }
+    let expected = n.checked_mul(d).ok_or(ProcrustesError::ShapeMismatch {
+        expected: 0,
+        got: a.len(),
+    })?;
+    if a.len() != expected {
+        return Err(ProcrustesError::ShapeMismatch {
+            expected,
+            got: a.len(),
+        });
+    }
+    if b.len() != expected {
+        return Err(ProcrustesError::ShapeMismatch {
+            expected,
+            got: b.len(),
+        });
+    }
+    let dd = d * d;
+    if out_rotation.len() != dd {
+        return Err(ProcrustesError::OutputSizeMismatch {
+            expected: dd,
+            got: out_rotation.len(),
+        });
+    }
+    let min_anchors = if config.min_anchors == 0 {
+        2 * d
+    } else {
+        config.min_anchors
+    };
+    if n < min_anchors {
+        return Err(ProcrustesError::Underdetermined { n, min_anchors, d });
+    }
+
+    scratch.ensure_capacity(n, d);
+
+    // ── 2. Column means (only if centering) — identical fold to the
+    // unconstrained gate, ascending row order.
+    if config.center {
+        for v in scratch.mean_a[..d].iter_mut() {
+            *v = 0.0;
+        }
+        for v in scratch.mean_b[..d].iter_mut() {
+            *v = 0.0;
+        }
+        for i in 0..n {
+            let a_row = &a[i * d..(i + 1) * d];
+            let b_row = &b[i * d..(i + 1) * d];
+            for c in 0..d {
+                scratch.mean_a[c] += a_row[c];
+                scratch.mean_b[c] += b_row[c];
+            }
+        }
+        let inv_n = 1.0 / (n as f32);
+        for c in 0..d {
+            scratch.mean_a[c] *= inv_n;
+            scratch.mean_b[c] *= inv_n;
+        }
+    }
+
+    // ── 3. Per-pair 2×2 cross-covariances M_i = Bᵢᵀ Aᵢ + centering ─
+    //
+    // M_i[r][c] = Σ_t b̃[t, 2i+r]·ã[t, 2i+c]. Same centering identity as
+    // the unconstrained path: with μ = column means, the centered sum is
+    // Σ b·a − n·μ_b[r]·μ_a[c] (per pair cell). Raw accumulation first (one
+    // pass over the anchors, four ordered cell updates per pair), then the
+    // rank-1 correction — the unconstrained order.
+    //
+    // Cell storage layout in scratch.m (d×d row-major): for pair p, the
+    // four cells ride the SAME (r, c) positions a full block-diagonal M
+    // would occupy — m[(2p+r)*d + (2p+c)]. Off-block cells stay 0.0, so the
+    // m_norm fold over the whole buffer equals sqrt(Σᵢ ‖M_i‖²_F) with no
+    // extra pass.
+    for v in scratch.m[..dd].iter_mut() {
+        *v = 0.0;
+    }
+    let pairs = d / 2;
+    if config.center {
+        for t in 0..n {
+            let a_row = &a[t * d..(t + 1) * d];
+            let b_row = &b[t * d..(t + 1) * d];
+            for p in 0..pairs {
+                let r0 = 2 * p;
+                let c0 = 2 * p;
+                for r in 0..2 {
+                    let b_t = b_row[r0 + r];
+                    let m_row = &mut scratch.m[(r0 + r) * d..(r0 + r) * d + d];
+                    for c in 0..2 {
+                        m_row[c0 + c] += a_row[c0 + c] * b_t;
+                    }
+                }
+            }
+        }
+        for p in 0..pairs {
+            let r0 = 2 * p;
+            let c0 = 2 * p;
+            for r in 0..2 {
+                let mb = scratch.mean_b[r0 + r] * (n as f32);
+                for c in 0..2 {
+                    scratch.m[(r0 + r) * d + (c0 + c)] -= mb * scratch.mean_a[c0 + c];
+                }
+            }
+        }
+    } else {
+        for t in 0..n {
+            let a_row = &a[t * d..(t + 1) * d];
+            let b_row = &b[t * d..(t + 1) * d];
+            for p in 0..pairs {
+                let r0 = 2 * p;
+                let c0 = 2 * p;
+                for r in 0..2 {
+                    let b_t = b_row[r0 + r];
+                    let m_row = &mut scratch.m[(r0 + r) * d..(r0 + r) * d + d];
+                    for c in 0..2 {
+                        m_row[c0 + c] += a_row[c0 + c] * b_t;
+                    }
+                }
+            }
+        }
+    }
+
+    // ── 4. ‖M‖_F over the block-diagonal stack (ordered fold, Issue 940).
+    let m_norm = dot_f32_ordered(&scratch.m[..dd], &scratch.m[..dd]).sqrt();
+    if !m_norm.is_finite() || m_norm == 0.0 {
+        return Err(ProcrustesError::DegenerateAnchors);
+    }
+
+    // ── 5. Closed-form planar angle per pair + write the block-diagonal R.
+    //
+    // θ_i = atan2(m₁₀ − m₀₁, m₀₀ + m₁₁). IEEE-exact ops; no iteration; the
+    // angle depends only on the four folded cells, so the result is
+    // bit-deterministic across platforms. Identity init first (diagonal
+    // 1.0, everything else EXACT 0.0), then every block-diagonal cell is
+    // overwritten with the planar cos/sin — off-block entries stay exactly
+    // zero by construction.
+    for (cell, v) in out_rotation[..dd].iter_mut().enumerate() {
+        *v = if cell % (d + 1) == 0 { 1.0 } else { 0.0 };
+    }
+    for p in 0..pairs {
+        let r0 = 2 * p;
+        let c0 = 2 * p;
+        let m00 = scratch.m[r0 * d + c0];
+        let m01 = scratch.m[r0 * d + (c0 + 1)];
+        let m10 = scratch.m[(r0 + 1) * d + c0];
+        let m11 = scratch.m[(r0 + 1) * d + (c0 + 1)];
+        let theta = (m10 - m01).atan2(m00 + m11);
+        let (s, c) = theta.sin_cos();
+        out_rotation[r0 * d + c0] = c;
+        out_rotation[r0 * d + c0 + 1] = -s;
+        out_rotation[(r0 + 1) * d + c0] = s;
+        out_rotation[(r0 + 1) * d + (c0 + 1)] = c;
+    }
+    // Det of a block-diagonal matrix = product of block dets = (+1)^pairs.
+    // Report it only when asked (mirrors the unconstrained flag).
+    let det = if config.compute_det { 1.0 } else { f32::NAN };
+
+    // ── 6. Residual ‖B − A Rᵀ‖_F / ‖B‖_F (same fold, same flags) ───
+    let mut residual = f32::NAN;
+    if config.compute_residual {
+        let mut residual_sq = 0.0_f32;
+        let mut b_norm_sq = 0.0_f32;
+        for i in 0..n {
+            let a_row = &a[i * d..(i + 1) * d];
+            let b_row = &b[i * d..(i + 1) * d];
+            let predicted = &mut scratch.predicted_row[..d];
+            for cprime in 0..d {
+                let r_row = &out_rotation[cprime * d..(cprime + 1) * d];
+                if config.center {
+                    let mut acc = 0.0_f32;
+                    for c in 0..d {
+                        acc += r_row[c] * (a_row[c] - scratch.mean_a[c]);
+                    }
+                    predicted[cprime] = acc;
+                } else {
+                    predicted[cprime] = dot_f32_ordered(r_row, a_row);
+                }
+            }
+            for c in 0..d {
+                let b_centered = if config.center {
+                    b_row[c] - scratch.mean_b[c]
+                } else {
+                    b_row[c]
+                };
+                let diff = b_centered - predicted[c];
+                residual_sq += diff * diff;
+                b_norm_sq += b_centered * b_centered;
+            }
+        }
+        residual = if b_norm_sq > 0.0 {
+            (residual_sq / b_norm_sq).sqrt()
+        } else {
+            f32::NAN
+        };
+    }
+
+    Ok(ProcrustesReport {
+        n,
+        d,
+        m_norm,
+        residual,
+        det,
+        flipped: false,
     })
 }
 
@@ -1455,5 +1763,363 @@ mod tests {
             ordered_sq.sqrt().to_bits(),
             "m_norm is not the ordered fold (simd_sum_sq regression?)"
         );
+    }
+
+    // ── Issue 1251: rope_commuting_procrustes gates ─────────────────
+
+    /// Deterministic pseudo-random f32 in [-1, 1] from a SplitMix64-style
+    /// state (no RNG dep, stable across platforms).
+    fn prf(state: &mut u64) -> f32 {
+        *state = state.wrapping_add(0x9E3779B97F4A7C15);
+        let mut z = *state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
+        z ^= z >> 31;
+        ((z >> 40) as f32 / (1u32 << 24) as f32) * 2.0 - 1.0
+    }
+
+    /// Build a per-frequency block-diagonal rotation over `pairs` planes
+    /// from per-pair angles.
+    fn block_rot(angles: &[f32], d: usize) -> Vec<f32> {
+        assert_eq!(angles.len() * 2, d);
+        let mut r = vec![0.0_f32; d * d];
+        for (p, &theta) in angles.iter().enumerate() {
+            let r0 = 2 * p;
+            let m = rot2(theta);
+            r[r0 * d + r0] = m[0];
+            r[r0 * d + r0 + 1] = m[1];
+            r[(r0 + 1) * d + r0] = m[2];
+            r[(r0 + 1) * d + r0 + 1] = m[3];
+        }
+        r
+    }
+
+    /// Apply an (d, d) row-major matrix to an (n, d) row-major anchor set.
+    fn apply_mat(r: &[f32], a: &[f32], n: usize, d: usize) -> Vec<f32> {
+        let mut out = vec![0.0_f32; n * d];
+        for i in 0..n {
+            for cp in 0..d {
+                let mut acc = 0.0_f32;
+                for c in 0..d {
+                    acc += r[cp * d + c] * a[i * d + c];
+                }
+                out[i * d + cp] = acc;
+            }
+        }
+        out
+    }
+
+    /// G1 — planted per-pair rotations are recovered; off-block entries
+    /// exactly zero.
+    #[test]
+    fn rope_planted_pair_rotation_recovered_and_off_blocks_exact_zero() {
+        let d = 8;
+        let n = 64;
+        let angles = [0.3_f32, -1.1, 2.4, 0.05];
+        let r_true = block_rot(&angles, d);
+        let mut state = 0x1251u64;
+        let a: Vec<f32> = (0..n * d).map(|_| prf(&mut state)).collect();
+        let b = apply_mat(&r_true, &a, n, d);
+        let mut r = vec![0.0_f32; d * d];
+        let mut scratch = ProcrustesScratch::new(n, d);
+        let report = rope_commuting_procrustes(
+            &a,
+            &b,
+            n,
+            d,
+            &mut r,
+            &mut scratch,
+            &ProcrustesConfig {
+                center: false,
+                ..Default::default()
+            },
+        )
+        .expect("planted block rotation must solve");
+        assert!(
+            report.residual < 1e-4,
+            "exact block rotation should have ~0 residual, got {}",
+            report.residual
+        );
+        // Structure: off-block entries EXACTLY zero (==, not approx). An
+        // entry is on-block iff its row pair == its col pair.
+        for row in 0..d {
+            for col in 0..d {
+                let row_pair = row / 2;
+                let col_pair = col / 2;
+                if row_pair != col_pair {
+                    assert_eq!(
+                        r[row * d + col],
+                        0.0,
+                        "off-block entry ({row},{col}) must be exactly zero"
+                    );
+                }
+            }
+        }
+        // Angles recovered within tolerance (compare the block cells).
+        for (p, &theta) in angles.iter().enumerate() {
+            let r0 = 2 * p;
+            let m = rot2(theta);
+            assert!(approx_eq(r[r0 * d + r0], m[0], TOL));
+            assert!(approx_eq(r[r0 * d + r0 + 1], m[1], TOL));
+            assert!(approx_eq(r[(r0 + 1) * d + r0], m[2], TOL));
+            assert!(approx_eq(r[(r0 + 1) * d + r0 + 1], m[3], TOL));
+        }
+    }
+
+    /// G2 — the load-bearing invariant: the recovered R commutes with RoPE
+    /// at arbitrary positions (per-frequency 2×2 blocks are planar, and
+    /// planar rotations commute).
+    #[test]
+    fn rope_recovers_a_rotation_that_commutes_with_rope_bit_exact() {
+        let d = 6;
+        let n = 32;
+        let angles = [0.7_f32, -0.2, 1.9];
+        let freqs = [0.11_f32, 0.05, 0.23]; // arbitrary per-pair rope frequencies
+        let r_true = block_rot(&angles, d);
+        let mut state = 0x1252u64;
+        let a: Vec<f32> = (0..n * d).map(|_| prf(&mut state)).collect();
+        let b = apply_mat(&r_true, &a, n, d);
+        let mut r = vec![0.0_f32; d * d];
+        let mut scratch = ProcrustesScratch::new(n, d);
+        rope_commuting_procrustes(
+            &a,
+            &b,
+            n,
+            d,
+            &mut r,
+            &mut scratch,
+            &ProcrustesConfig {
+                center: false,
+                ..Default::default()
+            },
+        )
+        .expect("solve");
+        // For each pair and several positions: R·rot(p·θ) == rot(p·θ)·R.
+        for (p, &freq) in freqs.iter().enumerate() {
+            let r0 = 2 * p;
+            for pos in [1.0_f32, 7.0, 1234.0] {
+                let m = rot2(pos * freq);
+                // product via the 2×2 blocks of R and m (both live on the
+                // same plane, so the 2×2 algebra is exact).
+                let rb = [
+                    r[r0 * d + r0],
+                    r[r0 * d + r0 + 1],
+                    r[(r0 + 1) * d + r0],
+                    r[(r0 + 1) * d + r0 + 1],
+                ];
+                let mul = |x: &[f32; 4], y: &[f32; 4]| -> [f32; 4] {
+                    [
+                        x[0] * y[0] + x[1] * y[2],
+                        x[0] * y[1] + x[1] * y[3],
+                        x[2] * y[0] + x[3] * y[2],
+                        x[2] * y[1] + x[3] * y[3],
+                    ]
+                };
+                let left = mul(&rb, &m); // R·RoPE
+                let right = mul(&m, &rb); // RoPE·R
+                assert_eq!(left[0].to_bits(), right[0].to_bits());
+                assert_eq!(left[1].to_bits(), right[1].to_bits());
+                assert_eq!(left[2].to_bits(), right[2].to_bits());
+                assert_eq!(left[3].to_bits(), right[3].to_bits());
+            }
+        }
+    }
+
+    /// G3 — when the truth is block-diagonal, the constrained solve is at
+    /// least as good as the unconstrained one (both should recover it).
+    #[test]
+    fn rope_constrained_matches_unconstrained_on_block_diagonal_truth() {
+        let d = 8;
+        let n = 128;
+        let angles = [-0.4_f32, 1.2, 0.9, -2.2];
+        let r_true = block_rot(&angles, d);
+        let mut state = 0x1253u64;
+        let a: Vec<f32> = (0..n * d).map(|_| prf(&mut state)).collect();
+        let b = apply_mat(&r_true, &a, n, d);
+        let mut scratch = ProcrustesScratch::new(n, d);
+        let mut r_c = vec![0.0_f32; d * d];
+        let rep_c = rope_commuting_procrustes(
+            &a,
+            &b,
+            n,
+            d,
+            &mut r_c,
+            &mut scratch,
+            &ProcrustesConfig {
+                center: false,
+                ..Default::default()
+            },
+        )
+        .expect("constrained solve");
+        let mut r_u = vec![0.0_f32; d * d];
+        let rep_u = orthogonal_procrustes(
+            &a,
+            &b,
+            n,
+            d,
+            &mut r_u,
+            &mut scratch,
+            &ProcrustesConfig {
+                center: false,
+                ..Default::default()
+            },
+        )
+        .expect("unconstrained solve");
+        assert!(
+            rep_c.residual <= rep_u.residual + 1e-4,
+            "constrained ({}) must not lose to unconstrained ({}) on block-diagonal truth",
+            rep_c.residual,
+            rep_u.residual
+        );
+    }
+
+    /// G4 — refusals: odd d, degenerate anchors, shape mismatches.
+    #[test]
+    fn rope_refusals_odd_dim_degenerate_shapes() {
+        let mut scratch = ProcrustesScratch::new(16, 8);
+        let a = [1.0_f32; 3 * 3];
+        let b = [1.0_f32; 3 * 3];
+        let mut r = vec![0.0_f32; 9];
+        assert!(matches!(
+            rope_commuting_procrustes(
+                &a,
+                &b,
+                3,
+                3,
+                &mut r,
+                &mut scratch,
+                &ProcrustesConfig {
+                    min_anchors: 2,
+                    ..Default::default()
+                }
+            ),
+            Err(ProcrustesError::OddDim { d: 3 })
+        ));
+        // Degenerate: all-zero anchors.
+        let az = [0.0_f32; 16 * 4];
+        let mut r4 = vec![0.0_f32; 16];
+        assert!(matches!(
+            rope_commuting_procrustes(
+                &az,
+                &az,
+                16,
+                4,
+                &mut r4,
+                &mut scratch,
+                &ProcrustesConfig::default()
+            ),
+            Err(ProcrustesError::DegenerateAnchors)
+        ));
+        // Shape mismatch.
+        let a4 = vec![1.0_f32; 8 * 4];
+        assert!(matches!(
+            rope_commuting_procrustes(
+                &a4[..31],
+                &a4,
+                8,
+                4,
+                &mut r4,
+                &mut scratch,
+                &ProcrustesConfig::default()
+            ),
+            Err(ProcrustesError::ShapeMismatch { .. })
+        ));
+        // Output size mismatch.
+        let mut r_bad = vec![0.0_f32; 15];
+        assert!(matches!(
+            rope_commuting_procrustes(
+                &a4,
+                &a4,
+                8,
+                4,
+                &mut r_bad,
+                &mut scratch,
+                &ProcrustesConfig::default()
+            ),
+            Err(ProcrustesError::OutputSizeMismatch { .. })
+        ));
+    }
+
+    /// G5 — determinism: identical inputs produce identical output bits.
+    #[test]
+    fn rope_replay_is_bit_identical() {
+        let d = 8;
+        let n = 96;
+        let mut state = 0x1254u64;
+        let a: Vec<f32> = (0..n * d).map(|_| prf(&mut state)).collect();
+        let b: Vec<f32> = (0..n * d).map(|_| prf(&mut state)).collect();
+        let mut scratch = ProcrustesScratch::new(n, d);
+        let mut r1 = vec![0.0_f32; d * d];
+        let mut r2 = vec![0.0_f32; d * d];
+        let rep1 = rope_commuting_procrustes(
+            &a,
+            &b,
+            n,
+            d,
+            &mut r1,
+            &mut scratch,
+            &ProcrustesConfig::default(),
+        )
+        .expect("run 1");
+        let rep2 = rope_commuting_procrustes(
+            &a,
+            &b,
+            n,
+            d,
+            &mut r2,
+            &mut scratch,
+            &ProcrustesConfig::default(),
+        )
+        .expect("run 2");
+        for (x, y) in r1.iter().zip(&r2) {
+            assert_eq!(x.to_bits(), y.to_bits());
+        }
+        assert_eq!(rep1.m_norm.to_bits(), rep2.m_norm.to_bits());
+        assert_eq!(rep1.residual.to_bits(), rep2.residual.to_bits());
+    }
+
+    /// G6 — centered anchors recover a planted rotation (the rank-1
+    /// correction path).
+    #[test]
+    fn rope_centered_anchors_recover_planted_rotation() {
+        let d = 4;
+        let n = 64;
+        let angles = [0.9_f32, -0.6];
+        let r_true = block_rot(&angles, d);
+        let mut state = 0x1255u64;
+        let mut a: Vec<f32> = (0..n * d).map(|_| prf(&mut state)).collect();
+        // Give the anchors a shared nonzero mean so centering matters.
+        for row in 0..n {
+            for c in 0..d {
+                a[row * d + c] += 3.0 + 0.5 * (c as f32);
+            }
+        }
+        let b = apply_mat(&r_true, &a, n, d);
+        let mut r = vec![0.0_f32; d * d];
+        let mut scratch = ProcrustesScratch::new(n, d);
+        let report = rope_commuting_procrustes(
+            &a,
+            &b,
+            n,
+            d,
+            &mut r,
+            &mut scratch,
+            &ProcrustesConfig {
+                center: true,
+                ..Default::default()
+            },
+        )
+        .expect("centered solve");
+        assert!(
+            report.residual < 1e-4,
+            "centered exact rotation residual {}, want <1e-4",
+            report.residual
+        );
+        for (p, &theta) in angles.iter().enumerate() {
+            let r0 = 2 * p;
+            let m = rot2(theta);
+            assert!(approx_eq(r[r0 * d + r0], m[0], TOL));
+            assert!(approx_eq(r[(r0 + 1) * d + r0 + 1], m[3], TOL));
+        }
     }
 }
