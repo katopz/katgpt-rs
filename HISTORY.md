@@ -1272,7 +1272,9 @@ hw 1 — the docs book's numbered folders are a sort scheme); non-md FILE holder
 artifacts: riir-ai `932_10k10_sb.sh`, riir-refine `234_*.jsonl`); the duplicate classifier stays .md-only
 (`040_doc.md` + `040_datadir/` is not a COLLISION). Known-legitimate above-counter holders pin in
 `scripts/numbering_above_expected.txt` (membership + reason, BOTH directions — unpinned walls, STALE pins wall);
-reflex `.benchmarks/617_openthai_exl3_4090` pins as the raw-home shape its own landing `3cad008` documents. Fleet:
+reflex `.benchmarks/617_openthai_exl3_4090` pins as the raw-home shape its own landing `3cad008` documents.
+Follow-up `f08b5971f`: claim_lease_check's Issue-1240 highwater freshness walk had the same blindness — the dir
+class added there too (non-md files stay out, selftest arms added). Fleet:
 28 repos PASS, 6 empty-walk refusals pre-existing (exit 2 old and new), reflex 0 with the pin, the pre-change
 baseline (git archive HEAD) reproduces the same standing sweep reds — zero new findings. The incident replays as the
 selftest's positive arm. En-route incident, self-caused and repaired in-session: a `git stash pop` after a FAILED
