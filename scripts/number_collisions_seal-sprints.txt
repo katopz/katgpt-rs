@@ -92,4 +92,13 @@
 # phase-1 epoch -> derived epoch, plans 095 UUID-in-epoch -> the 085 precedent claim-note).
 # The orphaned 126_guard/126_lozo deletions are the walk's 6th legacy number (--no-renames).
 # The floors row's max_hist rides at 6 — one record, two media, both at 6.
-legacy_ratchet = 6
+# 2026-11-28 (zed-8e4e6f39@m3 numbering-gate pass, measured at origin post-fetch): 6 -> 7 —
+# the 7th legacy number is .issues/250: 250_run_vessel_game_settings_entry_never_read
+# (allocated 3b5db10 01:53Z by the plan-114 lane, landed+removed 37b53e0 05:52Z — the
+# game_settings viewer-stage fix, seal-remake b4c370ddd) ×
+# 250_sprint250_demo_town_wall_red_on_tip_animal_shop_override_unpinned (allocated 3b864df
+# 19:56Z by the 13723fca lane — the number was live-held until 05:52Z then removed; the
+# 19:56Z re-allocation is the re-spend class, not first-allocation). Sole LIVE holder on
+# disk (the wall issue), the settings holder gone with its landing — nothing to renumber;
+# citation_weight reads 0 ambiguous Issue-250 sites (this pass). Ratchet at measured.
+legacy_ratchet = 7
