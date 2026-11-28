@@ -35,6 +35,8 @@ fn grad_check_config() -> MoeConfig {
         rms_norm_eps: 1e-5,
         situ_beta: 4.0,
         situ_linear_beta: Some(25.0),
+        routed_scaling_factor: None,
+        swiglu_limit: None,
     }
 }
 
@@ -296,6 +298,8 @@ fn gradient_check_nonlatent_path() {
         rms_norm_eps: 1e-5,
         situ_beta: 4.0,
         situ_linear_beta: Some(25.0),
+        routed_scaling_factor: None,
+        swiglu_limit: None,
     };
     let d = config.d();
     let epsilon = 5e-3f32;

@@ -804,6 +804,7 @@ pub fn moe_backward_token(
     dh_out: &mut [f32],
     grads: &mut MoeGradients,
 ) {
+    refuse_swiglu_backward(config);
     let d = config.d();
     let use_latent_moe = config.routed_expert_hidden_size.is_some();
 
@@ -927,6 +928,20 @@ fn shared_experts_backward(
 /// (`shared + (down_proj+router)`); `(s+d)+r` vs `s+(d+r)` legitimately
 /// differ by the last ULP. Pinned by tolerance in the test, with the exact
 /// bound recorded there.
+/// The analytic backward models the SiTU activation ONLY. The clamped-SwiGLU
+/// posture (`swiglu_limit: Some`, plan 627 T5 — GLM-5.3 experts) has a
+/// different activation derivative; a silent SiTU backward under it would
+/// return confident wrong gradients. Refuse loud instead.
+fn refuse_swiglu_backward(config: &MoeConfig) {
+    if config.swiglu_limit.is_some() {
+        panic!(
+            "moe backward: no analytic backward for the clamped-SwiGLU posture \
+             (config.swiglu_limit = Some) — the backward models SiTU only; \
+             extend moe_backward before training a swiglu-limit config"
+        );
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn moe_backward_token_split(
     config: &MoeConfig,
@@ -938,6 +953,7 @@ pub fn moe_backward_token_split(
     dh_routed_out: &mut [f32],
     grads: &mut MoeGradients,
 ) {
+    refuse_swiglu_backward(config);
     let d = config.d();
 
     debug_assert_eq!(d_shared.len(), d);
@@ -968,6 +984,7 @@ pub fn moe_backward_shared_stream(
     dh_shared_out: &mut [f32],
     grads: &mut MoeGradients,
 ) {
+    refuse_swiglu_backward(config);
     shared_experts_backward(config, weights, saved, d_shared, dh_shared_out, grads);
 }
 
@@ -989,6 +1006,7 @@ pub fn moe_backward_routed_stream(
     dh_routed_out: &mut [f32],
     grads: &mut MoeGradients,
 ) {
+    refuse_swiglu_backward(config);
     if config.routed_expert_hidden_size.is_some() {
         moe_backward_latent(config, weights, saved, d_routed, dh_routed_out, grads);
     } else {
@@ -1502,6 +1520,8 @@ mod split_tests {
             rms_norm_eps: 1e-5,
             situ_beta: 4.0,
             situ_linear_beta: Some(25.0),
+            routed_scaling_factor: None,
+            swiglu_limit: None,
         }
     }
 

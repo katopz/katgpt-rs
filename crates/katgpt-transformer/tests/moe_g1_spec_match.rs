@@ -302,6 +302,8 @@ fn tiny_config() -> MoeConfig {
         rms_norm_eps: 1e-5,
         situ_beta: 4.0,
         situ_linear_beta: Some(25.0),
+        routed_scaling_factor: None,
+        swiglu_limit: None,
     }
 }
 

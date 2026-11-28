@@ -103,6 +103,18 @@ pub struct MoeConfig {
     /// SiTU activation linear_beta (`activation_situ_linear_beta`). Actual
     /// `config.json`: **25.0**.
     pub situ_linear_beta: Option<f32>,
+    /// Post-renorm routed scaling (`routed_scaling_factor`). DeepSeek-V3 /
+    /// GLM-5.3: **2.5** — multiplied onto the selected weights AFTER the
+    /// raw-score renormalization (the V3 router's final line). `None` keeps
+    /// the incumbent Kimi posture (no scaling) — byte-identical when unset.
+    /// Kimi G1 spec-match pins hold.
+    pub routed_scaling_factor: Option<f32>,
+    /// Clamped-SwiGLU expert activation limit (GLM-5.3 / Qwen-MoE class:
+    /// `gate.clamp(max=limit)`, `up.clamp(±limit)`, `silu(gate)·up`). When
+    /// `Some`, BOTH routed and shared experts run this activation instead of
+    /// SiTU (GLM's shared expert is the same clamped-MLP class). `None` keeps
+    /// the incumbent SiTU path byte-identically.
+    pub swiglu_limit: Option<f32>,
 }
 
 impl MoeConfig {
@@ -127,6 +139,8 @@ impl MoeConfig {
             rms_norm_eps: 1e-5,
             situ_beta: 4.0,
             situ_linear_beta: Some(25.0),
+            routed_scaling_factor: None,
+            swiglu_limit: None,
         }
     }
 
@@ -484,10 +498,20 @@ pub fn moe_forward_token(
         }
     }
 
+    // ── 5.5. Post-renorm routed scaling (DeepSeek-V3 router final line;
+    //    GLM-5.3: 2.5) — applied to WHATEVER weights the branch above left,
+    //    renormalized or raw. Byte-identical no-op when None.
+    if let Some(sf) = config.routed_scaling_factor {
+        for w in scratch.topk_weights[..k_r].iter_mut() {
+            *w *= sf;
+        }
+    }
+
     // ── 6. Shared expert (always on, operating on full hidden dim) ───────
     //    Writes directly into hidden_out; routed experts axpy on top.
     let shared = &weights.shared_experts[0];
-    situ_expert_forward(
+    expert_forward_dispatch(
+        config,
         shared,
         hidden_in,
         &mut scratch.expert_intermediate,
@@ -495,12 +519,11 @@ pub fn moe_forward_token(
         hidden_out,
         d,
         d_ffn_shared,
-        config.situ_beta,
-        config.situ_linear_beta,
     );
     // If N_s > 1, accumulate remaining shared experts (Kimi-K3-0.40B has N_s=1).
     for shared in weights.shared_experts[1..].iter() {
-        situ_expert_forward(
+        expert_forward_dispatch(
+            config,
             shared,
             hidden_in,
             &mut scratch.expert_intermediate,
@@ -508,8 +531,6 @@ pub fn moe_forward_token(
             &mut scratch.expert_output,
             d,
             d_ffn_shared,
-            config.situ_beta,
-            config.situ_linear_beta,
         );
         // hidden_out += expert_output
         for (ho, eo) in hidden_out
@@ -539,7 +560,8 @@ pub fn moe_forward_token(
             let idx = scratch.topk_indices[k];
             let w = scratch.topk_weights[k];
             let expert = &weights.experts[idx];
-            situ_expert_forward(
+            expert_forward_dispatch(
+                config,
                 expert,
                 &scratch.latent_hidden,
                 &mut scratch.expert_intermediate,
@@ -547,8 +569,6 @@ pub fn moe_forward_token(
                 &mut scratch.expert_output,
                 d_moe,
                 d_ffn,
-                config.situ_beta,
-                config.situ_linear_beta,
             );
             // latent_output += w * expert_output
             for (lo, eo) in scratch
@@ -593,7 +613,8 @@ pub fn moe_forward_token(
             let idx = scratch.topk_indices[k];
             let w = scratch.topk_weights[k];
             let expert = &weights.experts[idx];
-            situ_expert_forward(
+            expert_forward_dispatch(
+                config,
                 expert,
                 hidden_in,
                 &mut scratch.expert_intermediate,
@@ -601,8 +622,6 @@ pub fn moe_forward_token(
                 &mut scratch.expert_output,
                 d,
                 d_ffn,
-                config.situ_beta,
-                config.situ_linear_beta,
             );
             // hidden_out += w * expert_output
             for (ho, eo) in hidden_out
@@ -703,7 +722,96 @@ pub(crate) fn situ_inplace(gate: &mut [f32], up: &[f32], beta: f32, linear_beta:
     }
 }
 
-// ─── Top-K selection ────────────────────────────────────────────────────────
+/// Per-expert CLAMPED-SWIGLU FFN forward — the GLM-5.3 / Qwen-MoE class
+/// (`Glm5NextTextExperts._apply_gate` + `Glm5NextTextMLP.forward`, the
+/// transformers source of record fetched 2026-11-28, plan 627 T5):
+/// ```text
+/// gate = clamp(gate_proj · h, max = limit)
+/// up   = clamp(up_proj · h, -limit, limit)
+/// out  = down_proj · (silu(gate) · up)
+/// ```
+/// Same buffer contract as [`situ_expert_forward`] (projection targets are
+/// caller-allocated scratch; activation overwrites `intermediate` in-place).
+/// Allocation-free.
+#[inline]
+#[allow(clippy::too_many_arguments)]
+fn clamped_swiglu_expert_forward(
+    expert: &SwiGluExpertWeights,
+    hidden_in: &[f32],
+    intermediate: &mut [f32],
+    up_buf: &mut [f32],
+    out: &mut [f32],
+    d_in: usize,
+    d_ffn: usize,
+    limit: f32,
+) {
+    debug_assert_eq!(expert.gate_proj.len(), d_ffn * d_in);
+    debug_assert_eq!(expert.up_proj.len(), d_ffn * d_in);
+    debug_assert_eq!(expert.down_proj.len(), d_in * d_ffn);
+    debug_assert!(intermediate.len() >= d_ffn);
+    debug_assert!(up_buf.len() >= d_ffn);
+    debug_assert!(out.len() >= d_in);
+
+    let intermediate = &mut intermediate[..d_ffn];
+    let up_buf = &mut up_buf[..d_ffn];
+    let out = &mut out[..d_in];
+
+    simd_matmul_rows(intermediate, &expert.gate_proj, hidden_in, d_ffn, d_in);
+    simd_matmul_rows(up_buf, &expert.up_proj, hidden_in, d_ffn, d_in);
+
+    for (g_slot, u_slot) in intermediate.iter_mut().zip(up_buf.iter_mut()) {
+        // torch clamp semantics: gate max-only, up both sides.
+        *g_slot = g_slot.min(limit);
+        *u_slot = u_slot.max(-limit).min(limit);
+        let s = 1.0 / (1.0 + (-*g_slot).exp());
+        *g_slot *= s * *u_slot;
+    }
+
+    simd_matmul_rows(out, &expert.down_proj, intermediate, d_in, d_ffn);
+}
+
+/// The activation dispatch for [`moe_forward_token`]: `swiglu_limit: Some`
+/// runs the GLM-class clamped SwiGLU, `None` the incumbent Kimi SiTU —
+/// byte-identical to the pre-extension path when `None`.
+#[inline]
+#[allow(clippy::too_many_arguments)]
+fn expert_forward_dispatch(
+    config: &MoeConfig,
+    expert: &SwiGluExpertWeights,
+    hidden_in: &[f32],
+    intermediate: &mut [f32],
+    up_buf: &mut [f32],
+    out: &mut [f32],
+    d_in: usize,
+    d_ffn: usize,
+) {
+    if let Some(limit) = config.swiglu_limit {
+        clamped_swiglu_expert_forward(
+            expert,
+            hidden_in,
+            intermediate,
+            up_buf,
+            out,
+            d_in,
+            d_ffn,
+            limit,
+        );
+    } else {
+        situ_expert_forward(
+            expert,
+            hidden_in,
+            intermediate,
+            up_buf,
+            out,
+            d_in,
+            d_ffn,
+            config.situ_beta,
+            config.situ_linear_beta,
+        );
+    }
+}
+
+// ─── Top-K selection ────────────────────────────────────────────────────────────────
 
 /// Partial-selection top-K: picks the indices of the K largest values in
 /// `scores`, in DESCENDING order of score.
@@ -815,6 +923,8 @@ mod tests {
             rms_norm_eps: 1e-5,
             situ_beta: 4.0,
             situ_linear_beta: Some(25.0),
+            routed_scaling_factor: None,
+            swiglu_limit: None,
         }
     }
 
@@ -860,6 +970,143 @@ mod tests {
         let mut hidden_out = vec![0.0; config.d()];
         moe_forward_token(&weights, &config, &hidden_in, &mut hidden_out, &mut scratch);
         assert!(hidden_out.iter().all(|v| v.is_finite()));
+    }
+
+    /// Post-renorm routed scaling (plan 627 T5 — the V3 router's final line):
+    /// with renormalize=true + scaling S, the selected weights sum to S (not 1).
+    #[test]
+    fn test_routed_scaling_factor_scales_after_renorm() {
+        let mut config = tiny_config();
+        config.routed_expert_hidden_size = None; // direct experts (GLM shape)
+        config.routed_scaling_factor = Some(2.5);
+        let weights = MoeWeights::random(&config, 11);
+        let mut scratch = MoeForwardScratch::new(&config);
+        let hidden_in = vec![0.1; config.d()];
+        let mut hidden_out = vec![0.0; config.d()];
+        moe_forward_token(&weights, &config, &hidden_in, &mut hidden_out, &mut scratch);
+        let sum: f32 = scratch.topk_weights.iter().sum();
+        assert!((sum - 2.5).abs() < 1e-4, "scaled weight sum {sum} != 2.5");
+        // None posture: sum stays 1.
+        let mut config_none = config.clone();
+        config_none.routed_scaling_factor = None;
+        let mut scratch2 = MoeForwardScratch::new(&config_none);
+        let mut hidden_out2 = vec![0.0; config_none.d()];
+        moe_forward_token(
+            &weights,
+            &config_none,
+            &hidden_in,
+            &mut hidden_out2,
+            &mut scratch2,
+        );
+        let sum2: f32 = scratch2.topk_weights.iter().sum();
+        assert!(
+            (sum2 - 1.0).abs() < 1e-4,
+            "unscaled weight sum {sum2} != 1.0"
+        );
+    }
+
+    /// The clamped-SwiGLU expert activation vs an independent transcription,
+    /// INCLUDING the clamps (gate max-only, up both sides) — the GLM-5.3
+    /// `Glm5NextTextExperts._apply_gate` formula.
+    #[test]
+    fn test_clamped_swiglu_expert_matches_transcription() {
+        let mut config = tiny_config();
+        config.routed_expert_hidden_size = None; // direct experts (GLM shape)
+        let d = config.d();
+        let d_ffn = config.d_ffn();
+        let weights = MoeWeights::random(&config, 21);
+        let expert = &weights.experts[0];
+        let hidden_in: Vec<f32> = (0..d).map(|i| (i as f32 * 0.3).cos()).collect();
+        let limit = 0.25f32; // small so the clamps actually bite
+        let mut inter = vec![0.0f32; d_ffn];
+        let mut up_buf = vec![0.0f32; d_ffn];
+        let mut out = vec![0.0f32; d];
+        clamped_swiglu_expert_forward(
+            expert,
+            &hidden_in,
+            &mut inter,
+            &mut up_buf,
+            &mut out,
+            d,
+            d_ffn,
+            limit,
+        );
+        // naive transcription
+        let mut naive = vec![0.0f32; d];
+        for (j, slot) in inter.iter_mut().enumerate().take(d_ffn) {
+            let mut g: f32 = (0..d)
+                .map(|i| expert.gate_proj[j * d + i] * hidden_in[i])
+                .sum();
+            let mut u: f32 = (0..d)
+                .map(|i| expert.up_proj[j * d + i] * hidden_in[i])
+                .sum();
+            g = g.min(limit);
+            u = u.max(-limit).min(limit);
+            let silu = g / (1.0 + (-g).exp());
+            *slot = silu * u;
+        }
+        for (i, slot) in naive.iter_mut().enumerate() {
+            let row = &expert.down_proj[i * d_ffn..(i + 1) * d_ffn];
+            let acc: f32 = row.iter().zip(inter.iter()).map(|(w, v)| w * v).sum();
+            *slot = acc;
+        }
+        for (a, b) in out.iter().zip(naive.iter()) {
+            assert!((a - b).abs() < 1e-5, "{a} vs {b}");
+        }
+        // The clamps must have fired (limit small vs the raw projections of
+        // random weights on 8 dims — assert at least one saturated lane).
+        let raw_gate: Vec<f32> = (0..d_ffn)
+            .map(|j| {
+                (0..d)
+                    .map(|i| expert.gate_proj[j * d + i] * hidden_in[i])
+                    .sum::<f32>()
+            })
+            .collect();
+        assert!(
+            raw_gate.iter().any(|g| *g > limit),
+            "fixture too mild — clamps never fire"
+        );
+    }
+
+    /// The swiglu posture + the shared expert: the shared expert runs the
+    /// SAME clamped activation (GLM's shared is the same MLP class).
+    #[test]
+    fn test_swiglu_posture_reaches_shared_expert_too() {
+        let mut config = tiny_config();
+        config.routed_expert_hidden_size = None;
+        config.swiglu_limit = Some(1.0);
+        let mut weights = MoeWeights::random(&config, 33);
+        // Route everything to expert 0 with a huge bias; zero the routed
+        // experts so the output is the SHARED expert alone — then compare
+        // against a direct clamped_swiglu call on the shared weights.
+        weights.e_score_correction_bias[0] = 100.0;
+        for e in &mut weights.experts {
+            e.gate_proj.fill(0.0);
+            e.up_proj.fill(0.0);
+            e.down_proj.fill(0.0);
+        }
+        let hidden_in = vec![0.2; config.d()];
+        let mut scratch = MoeForwardScratch::new(&config);
+        let mut hidden_out = vec![0.0; config.d()];
+        moe_forward_token(&weights, &config, &hidden_in, &mut hidden_out, &mut scratch);
+        let shared = &weights.shared_experts[0];
+        let d_ffn_shared = config.d_ffn_shared();
+        let mut inter = vec![0.0f32; d_ffn_shared];
+        let mut up_buf = vec![0.0f32; d_ffn_shared];
+        let mut expected = vec![0.0f32; config.d()];
+        clamped_swiglu_expert_forward(
+            shared,
+            &hidden_in,
+            &mut inter,
+            &mut up_buf,
+            &mut expected,
+            config.d(),
+            d_ffn_shared,
+            1.0,
+        );
+        for (a, b) in hidden_out.iter().zip(expected.iter()) {
+            assert!((a - b).abs() < 1e-5, "{a} vs {b}");
+        }
     }
 
     #[test]
