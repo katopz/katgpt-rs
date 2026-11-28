@@ -1,6 +1,7 @@
 # Issue 1250: YASA distill PoC arms — tied-indexer scorer + KV-sharing init loss-delta
 
-**Status:** Open — unclaimed (claimable; claim-lease per katgpt-rs Issue 943: append `**Claimed:** <session>, <epoch>, expires <ISO-UTC>` on its OWN line before implementing)
+**Status:** Open — claimed (arm A in flight)
+**Claimed:** zed-2e856b94@amo, 1795828774, expires 2026-11-30T12:00:00+00:00
 **Date:** 2026-11-28
 **Source:** [Research 698](../.research/698_YASA_Tied_Sparse_Attention_KV_Sharing.md) — YASA (Kolibri 1.1, Aleph Alpha blog 2026-11-25)
 **Lane:** modelless inference (katgpt-attn / katgpt-spectral); league-serving consumer is riir-infer's (cite-only — its sparse-prefill lane is closed+promoted; challenger rides slot discipline)
