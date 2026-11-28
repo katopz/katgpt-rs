@@ -96,7 +96,7 @@ Opponent-ecosystem movement, detection-only: llama.cpp landed **Kolibri-1 suppor
 
 ## 7. Filed outputs
 
-- **katgpt-rs `.issues/1250`** — two PoC arms (tied-indexer scorer recall vs exact-LSE on the Bench-612 harness; KV-sharing init loss-delta on a league checkpoint), both with pre-registered gates + falsifiers. Unclaimed.
+- **katgpt-rs `.issues/1250`** — two PoC arms (tied-indexer scorer recall vs exact-LSE on the Bench-612 harness; KV-sharing init loss-delta on a league checkpoint), both with pre-registered gates + falsifiers. **CLOSED 2026-11-28** — arm A NEGATIVE (Bench 996), arm B NULL (Bench 997); closure commits `03aeb91c5` (arm B close) + `bad49d8b0` (T3 tick); issue file removed (re-open preconditions recorded above in the arm rows).
 - **Redirects:** riir-train (CPT recipe — budget), NVFP4-QAT (posture), reindexer axis (Research 539), prefill-exit (architecture-level).
 - **PASS-Redirects** below for the cousins this note absorbs.
 
