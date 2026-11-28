@@ -2385,12 +2385,12 @@ A family of features for modelless sparse task vector operations — OPD-grounde
 |---|---|---|---|---|
 | `sparse_task_vector` | 264 Phase 1 | opt-in | Sparse Off-Principal Task Vector storage — OPD-grounded sparse delta format (GOAT G1–G2 PASS, 2.9×) |
 | `off_principal_retrieval` | 264 Phase 2 | opt-in | Off-Principal Task Vector Retrieval — projection + index + score (GOAT G3–G4 PASS, ≥9×) |
-| `orthogonal_procrustes` | Issue 001 | opt-in | Orthogonal Procrustes — cross-frame embedding alignment via polar decomposition (GOAT 4/4 PASS, 365µs) |
+| `orthogonal_procrustes` | Issue 001 | opt-in | Orthogonal Procrustes — cross-frame embedding alignment via polar decomposition (GOAT 4/4 PASS, 365µs); RoPE-commuting variants `rope_commuting_procrustes` + `_paired` (Issue 1251): per-frequency-plane constrained solve, closed-form Kabsch angles, commutes with rotary embeddings exactly (adjacent pairs + explicit rotate-half pair list) |
 | `dynamic_rank` | 232 | opt-in | Dynamic Rank Pruner — GATv2-inspired static ranking detection & correction |
 
 ### Architecture
 
-`sparse_task_vector` stores task-specific weight deltas in a sparse OPD-grounded format. `off_principal_retrieval` provides projection + indexing + scoring for retrieving relevant task vectors. `orthogonal_procrustes` aligns embeddings across frames via polar decomposition. `dynamic_rank` detects and corrects static ranking issues (GATv2-inspired).
+`sparse_task_vector` stores task-specific weight deltas in a sparse OPD-grounded format. `off_principal_retrieval` provides projection + indexing + scoring for retrieving relevant task vectors. `orthogonal_procrustes` aligns embeddings across frames via polar decomposition; the rope-commuting variants (Issue 1251) constrain the rotation to the RoPE frequency planes so it commutes with rotary embeddings exactly. `dynamic_rank` detects and corrects static ranking issues (GATv2-inspired).
 
 🔧 Feature flags: all opt-in. `sparse_task_vector` in `katgpt-sparse`; `off_principal_retrieval` + `orthogonal_procrustes` in `katgpt-spectral`; `dynamic_rank` in `katgpt-pruners`.
 
