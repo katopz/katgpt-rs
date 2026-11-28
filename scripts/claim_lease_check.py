@@ -441,23 +441,26 @@ def highwater_check(d: Path) -> dict:
     """Issue 1240 — the highwater-freshness verdict for one numbered dir:
     `clean` (silent), `stale` (counter < max — the pre-collision state),
     `missing` (numbered files but no counter), `unparsable`, `blind`. Max
-    is the leading number across the dir's `*.md` files — the cheap walk
-    numbering_gate already does."""
+    is the leading number across the dir's `*.md` files PLUS its numbered
+    DIRECT children that are directories (Issue 1252 — the reflex bench-208
+    class: a numbered dir landed un-bumped was invisible to the .md-only
+    walk). Numbered non-md FILES stay out — plan-tagged working artifacts,
+    the same boundary numbering_gate drew (its DIR_CENSUS_EXCLUDED / non-md
+    reasoning)."""
     out: dict = {"dir": str(d), "verdict": "clean", "hw": None, "top": None}
     try:
-        names = os.listdir(d)
+        entries = list(d.iterdir())
     except OSError as exc:
         out["verdict"] = "blind"
         out["why"] = str(exc)
         return out
     top = None
-    for name in names:
-        if name.endswith(".md"):
-            m = NUM_RE.match(name)
-            if m:
-                n = int(m.group(1))
-                if top is None or n > top:
-                    top = n
+    for e in entries:
+        m = NUM_RE.match(e.name)
+        if m and (e.name.endswith(".md") or e.is_dir()):
+            n = int(m.group(1))
+            if top is None or n > top:
+                top = n
     if top is None:
         return out                   # no numbered files — nothing to compare
     out["top"] = top
@@ -719,6 +722,17 @@ def selftest() -> list[str]:
                 fails.append("an unnumbered file changed the max walk: "
                              f"{highwater_check(d)}")
             (d / ".highwater").write_text("107\n", encoding="utf-8")
+            # Issue 1252: a numbered DIRECTORY above the counter is the
+            # reflex bench-208 class — the freshness walk must see it.
+            (d / "999_evidence").mkdir()
+            row_d = highwater_check(d)
+            if row_d["verdict"] != "stale" or row_d["top"] != 999:
+                fails.append(f"dir-class allocation missed by the walk: {row_d}")
+            (d / "999_evidence").rmdir()
+            # and a numbered non-md FILE stays OUT (plan-tagged artifacts)
+            (d / "998_lane.sh").write_text("x\n", encoding="utf-8")
+            if highwater_check(d)["top"] == 998:
+                fails.append("non-md file leaked into the freshness walk")
             script = str(Path(__file__).resolve())
             # Issue 1242: PYTHONIOENCODING pins the nested child's stdout to
             # UTF-8 regardless of the console locale (the Thai-locale Windows
