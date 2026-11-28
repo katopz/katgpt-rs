@@ -276,6 +276,21 @@ fn bufs() -> Bufs {
 type PassFn = fn(&RefCell<KVarNKVCache>, &[f32], usize, &mut Bufs) -> f32;
 
 fn g2_kernel() {
+    // Issue 1246: the new/old latency ratios are RELEASE-calibrated — the
+    // gates are sequential-debug-timed arms at heart (old vs new measured in
+    // separate loop nests), and at debug the arm-pair tax reads 0.25–0.38×
+    // on the key arms while release reads 1.27–1.42×: a debug run measures
+    // the box, not the kernel (the sequential-AB audit class). Debug keeps
+    // G3 bit-identity + G4 allocs and skips G2 LOUD; release holds the
+    // full gate set.
+    if cfg!(debug_assertions) {
+        println!(
+            "G2 SKIPPED (debug profile): the new/old latency ratios are release-calibrated \
+             (katgpt-rs Issue 1246) — run --release --features kvarn; \
+             G3 bit-identity + G4 allocs still ran"
+        );
+        return;
+    }
     println!("\nG2 — plain decode pass (dequant + axpy), T={T}, kv_dim={D}; ratio = new / old");
     let w: Vec<f32> = (0..T).map(|p| 1.0 / (1.0 + (p % 97) as f32)).collect();
     let (mut ka, mut kb) = (0.0f32, 0.0f32);

@@ -80,77 +80,94 @@ fn row(seed: u32, d: usize) -> Vec<f32> {
 
 fn main() {
     let mut queries: Vec<Vec<f32>> = (0..Q).map(|i| row((i * 31 + 1) as u32, D)).collect();
-    let queries_snapshot = queries.clone();
     let cands: Vec<Vec<f32>> = (0..C).map(|i| row((i * 7 + 1000) as u32, D)).collect();
     let qrefs: Vec<&[f32]> = queries.iter().map(|q| q.as_slice()).collect();
     let crefs: Vec<&[f32]> = cands.iter().map(|c| c.as_slice()).collect();
     let anchor = AnchorBuilder::fit(AnchorSource::MeanQuery, &qrefs, &crefs);
     let lam = 0.55_f32;
-
-    // ── G2a: the standalone axpy ≤ 1 µs at d=512 ──────────────────────
-    // (`best_of_us` returns µs over a BATCH of 64 corrections — a single
-    // 512-wide axpy is below timer resolution in release; result AND
-    // arguments black_box'd so LTO cannot delete the work.)
-    let mut scratch = vec![0.0f32; D];
-    const BATCH: usize = 64;
-    let axpy_us = best_of_us(20, 100, || {
-        let t = std::time::Instant::now();
-        for b in 0..BATCH {
-            let q = &queries[b % Q];
-            correct_query_into(q, &anchor, lam, &mut scratch);
-            black_box(&mut scratch);
-        }
-        black_box(&queries[0]);
-        black_box(&anchor);
-        t.elapsed()
-    }) / BATCH as f64;
-    println!("G2a axpy @ d={D}: {axpy_us:.4} µs/call (bar 1.0 µs)");
-    assert!(axpy_us <= 1.0, "G2a FAILED: axpy {axpy_us:.4} µs > 1.0 µs");
-
-    // ── G2b: corrected vs plain full scoring pass ≤ 1.02× ─────────────
-    // Arm A: plain pass (query · every candidate). Arm B: one correction
-    // per query + every candidate. Both black_box'd; the ratio's arms are
-    // the SAME work plus the O(d) axpy — the overhead being gated.
-    let mut scores_a = vec![0.0f32; C];
-    let mut scores_b = vec![0.0f32; C];
     let mut qh = vec![0.0f32; D];
-    let ratio = ab_median_ratio(
-        30,
-        3,
-        10,
-        |_it| {
-            for q in &queries_snapshot {
-                for (c, d) in cands.iter().enumerate() {
-                    scores_a[c] = black_box(q)
-                        .iter()
-                        .zip(black_box(d))
-                        .map(|(x, y)| x * y)
-                        .sum();
-                }
-                black_box(&mut scores_a);
+    let mut scores_b = vec![0.0f32; C];
+
+    // ── G2a/G2b (Issue 1246): the latency bars are RELEASE-calibrated — a
+    // single 512-wide axpy is below timer resolution in release, and the
+    // same bars read ~100× slower at debug (2.38–2.61 µs measured on amo),
+    // so a debug run fails them spuriously and proves nothing (a perf GOAT
+    // in debug measures the wrong binary — the x86_64 matrix's own note).
+    // Debug keeps the G4 alloc gates + the substrate readout and skips G2
+    // LOUD; release holds the full gate set.
+    let (axpy_us, g2b_r) = if cfg!(debug_assertions) {
+        println!(
+            "G2 SKIPPED (debug profile): the axpy + corrected/plain latency bars are \
+             release-calibrated (katgpt-rs Issue 1246) — run with --release; \
+             the G4 alloc gates still run below"
+        );
+        (f64::NAN, f64::NAN)
+    } else {
+        // ── G2a: the standalone axpy ≤ 1 µs at d=512 ──────────────────────
+        // (`best_of_us` returns µs over a BATCH of 64 corrections — a single
+        // 512-wide axpy is below timer resolution in release; result AND
+        // arguments black_box'd so LTO cannot delete the work.)
+        let queries_snapshot = queries.clone();
+        let mut scratch = vec![0.0f32; D];
+        const BATCH: usize = 64;
+        let axpy_us = best_of_us(20, 100, || {
+            let t = std::time::Instant::now();
+            for b in 0..BATCH {
+                let q = &queries[b % Q];
+                correct_query_into(q, &anchor, lam, &mut scratch);
+                black_box(&mut scratch);
             }
-        },
-        |_it| {
-            for q in &queries_snapshot {
-                correct_query_into(q, &anchor, lam, &mut qh);
-                for (c, d) in cands.iter().enumerate() {
-                    scores_b[c] = black_box(&qh)
-                        .iter()
-                        .zip(black_box(d))
-                        .map(|(x, y)| x * y)
-                        .sum();
+            black_box(&queries[0]);
+            black_box(&anchor);
+            t.elapsed()
+        }) / BATCH as f64;
+        println!("G2a axpy @ d={D}: {axpy_us:.4} µs/call (bar 1.0 µs)");
+        assert!(axpy_us <= 1.0, "G2a FAILED: axpy {axpy_us:.4} µs > 1.0 µs");
+
+        // ── G2b: corrected vs plain full scoring pass ≤ 1.02× ─────────────
+        // Arm A: plain pass (query · every candidate). Arm B: one correction
+        // per query + every candidate. Both black_box'd; the ratio's arms are
+        // the SAME work plus the O(d) axpy — the overhead being gated.
+        let mut scores_a = vec![0.0f32; C];
+        let ratio = ab_median_ratio(
+            30,
+            3,
+            10,
+            |_it| {
+                for q in &queries_snapshot {
+                    for (c, d) in cands.iter().enumerate() {
+                        scores_a[c] = black_box(q)
+                            .iter()
+                            .zip(black_box(d))
+                            .map(|(x, y)| x * y)
+                            .sum();
+                    }
+                    black_box(&mut scores_a);
                 }
-                black_box(&mut scores_b);
-            }
-        },
-    );
-    let r = ratio.median;
-    println!(
-        "G2b corrected/plain full pass: median {r:.4} (bar 1.02; min {:.4} max {:.4})",
-        ratio.min(),
-        ratio.max()
-    );
-    assert!(r <= 1.02, "G2b FAILED: corrected/plain {r:.4} > 1.02");
+            },
+            |_it| {
+                for q in &queries_snapshot {
+                    correct_query_into(q, &anchor, lam, &mut qh);
+                    for (c, d) in cands.iter().enumerate() {
+                        scores_b[c] = black_box(&qh)
+                            .iter()
+                            .zip(black_box(d))
+                            .map(|(x, y)| x * y)
+                            .sum();
+                    }
+                    black_box(&mut scores_b);
+                }
+            },
+        );
+        let r = ratio.median;
+        println!(
+            "G2b corrected/plain full pass: median {r:.4} (bar 1.02; min {:.4} max {:.4})",
+            ratio.min(),
+            ratio.max()
+        );
+        assert!(r <= 1.02, "G2b FAILED: corrected/plain {r:.4} > 1.02");
+        (axpy_us, r)
+    };
 
     // ── G4: 0 steady-state allocs ─────────────────────────────────────
     // (a) the corrected scoring pass with caller scratch;
@@ -200,5 +217,13 @@ fn main() {
         "G4c FAILED: in-place allocs {inplace_allocs}"
     );
 
-    println!("bench_886: ALL GATES PASSED (G2a axpy {axpy_us:.3}µs, G2b {r:.4}, G4 0 allocs)");
+    if cfg!(debug_assertions) {
+        println!(
+            "bench_886: G4 GATES PASSED (0 allocs); G2 latency bars SKIPPED at debug (Issue 1246) — the release run holds them"
+        );
+    } else {
+        println!(
+            "bench_886: ALL GATES PASSED (G2a axpy {axpy_us:.3}µs, G2b {g2b_r:.4}, G4 0 allocs)"
+        );
+    }
 }
