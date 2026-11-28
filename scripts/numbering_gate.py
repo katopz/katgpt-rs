@@ -41,6 +41,20 @@ import repo_alias  # noqa: E402  (Issue 1206: the foreign-target row lookup is k
 # gate permanently green (the workspace rule). The scope is pinned; only the
 # population is derived.
 NUMBERED = re.compile(r"^(\d+)_.+\.md$")
+
+# Directory-class allocations (Issue 1252): a numbered DIRECT child that is a
+# directory allocates the number for the staleness census even though it is
+# never a duplicate-classified holder (a legitimate `040_doc.md` +
+# `040_datadir/` pair is not a COLLISION, so dirs never join `by_num`).
+# Measured false-positive that scopes the census: riir-instinct `.docs` carries
+# `05_resources/` against a `.docs/.highwater` of 1 — the docs book's numbered
+# folders are a SORT SCHEME, not allocations, in every repo that has the book.
+# The non-md FILE class (`932_10k10_sb.sh`, `234_x.jsonl` — plan-tagged working
+# artifacts, measured riir-ai + riir-refine) is deliberately NOT counted: its
+# numbers ride an owning plan, not a local allocation (Issue 1252 §3).
+NUMBERED_DIR = re.compile(r"^(\d+)_.+$")
+DIR_CENSUS_EXCLUDED = {".docs"}
+
 HIGHWATER = ".highwater"
 
 # ── duplicate-group classification (the on-disk discriminator) ─────────────
@@ -271,13 +285,27 @@ def parse_highwater(raw: str | None) -> tuple[int | None, str | None]:
 
 
 def scan(repo: Path, dirname: str, tracked: set[str]):
-    """-> (numbers -> [(name, is_tracked)], highwater, n_files, malformed_raw)."""
+    """-> (numbers -> [(name, is_tracked)], highwater, n_files, malformed_raw,
+    dir_holders).
+
+    `dir_holders` (Issue 1252) maps number -> directory NAME for every numbered
+    DIRECT child that `is_dir()` — the directory-class allocation census. Empty
+    for dirs where the class is excluded (`.docs`: the numbered-folder sort
+    scheme, measured) — the census is skipped there entirely, never a finding.
+    """
     d = repo / dirname
     if not d.is_dir():
-        return {}, None, 0, None
+        return {}, None, 0, None, {}
     by_num, n = group_numbered((e.name for e in d.iterdir()), dirname, tracked)
+    dir_holders: dict[int, str] = {}
+    if dirname not in DIR_CENSUS_EXCLUDED:
+        for e in d.iterdir():
+            if e.is_dir():
+                m = NUMBERED_DIR.match(e.name)
+                if m:
+                    dir_holders.setdefault(int(m.group(1)), e.name)
     hw, hw_bad = read_highwater(d)
-    return by_num, hw, n, hw_bad
+    return by_num, hw, n, hw_bad, dir_holders
 
 
 def claim_lint_findings(repo: Path):
@@ -514,7 +542,7 @@ def selftest() -> list[str]:
         for nm in ("001_a.md", "001_b.md", "002_c.md"):
             (repo / ".plans" / nm).write_text("x", encoding="utf-8")
         (repo / ".plans" / HIGHWATER).write_text("2", encoding="utf-8")
-        by_num, hw, n, hw_bad = scan(repo, ".plans", {".plans/001_a.md", ".plans/002_c.md"})
+        by_num, hw, n, hw_bad, dir_holders = scan(repo, ".plans", {".plans/001_a.md", ".plans/002_c.md"})
         if hw_bad is not None:
             fails.append(f"clean highwater misread as malformed: {hw_bad!r}")
         if n != 3:
@@ -523,15 +551,44 @@ def selftest() -> list[str]:
             fails.append(f"scan read highwater {hw}, expected 2")
         if sorted(by_num) != [1, 2]:
             fails.append(f"scan grouped {sorted(by_num)}, expected [1, 2]")
+        if dir_holders:
+            fails.append(f"scan invented dir holders: {dir_holders}")
         flags = dict((nm, tr) for nm, tr in by_num.get(1, []))
         if flags != {"001_a.md": True, "001_b.md": False}:
             fails.append(f"tracked split wrong: {flags}")
 
         # 5. above-highwater must be DETECTED, not just tolerated
         (repo / ".plans" / "009_over.md").write_text("x", encoding="utf-8")
-        by2, hw2, _, _ = scan(repo, ".plans", set())
+        by2, hw2, _, _, dh2 = scan(repo, ".plans", set())
         if max(by2) <= (hw2 or 0):
             fails.append("above-highwater case did not construct")
+        if dh2:
+            fails.append(f"dir census invented holders for files only: {dh2}")
+
+        # 5b. the DIRECTORY class (Issue 1252): a numbered dir above the
+        # counter is the reflex bench-208 incident — it must DETECT; at/below
+        # the counter it is silent; `.docs` dirs are never a finding; a
+        # numbered non-md FILE is never a finding (plan-tagged artifacts).
+        (repo / ".plans" / "007_cell").mkdir()
+        _, _, _, _, dh3 = scan(repo, ".plans", set())
+        if dh3.get(7) != "007_cell":
+            fails.append(f"dir census missed the numbered dir: {dh3}")
+        b7, hw7, _, _, _ = scan(repo, ".plans", set())
+        if hw7 is not None and max(max(b7), max(dh3)) <= hw7:
+            fails.append("dir-above-highwater case did not construct")
+        (repo / ".plans" / HIGHWATER).write_text("9", encoding="utf-8")
+        _, hw8, _, _, dh8 = scan(repo, ".plans", set())
+        if hw8 != 9 or not dh8:
+            fails.append("dir census lost holders after the highwater rewrite")
+        (repo / ".docs").mkdir()
+        (repo / ".docs" / "05_resources").mkdir()
+        _dh_docs = scan(repo, ".docs", set())[4]
+        if _dh_docs:
+            fails.append(f".docs dir census must stay empty, got {_dh_docs}")
+        (repo / ".plans" / "932_lane.sh").write_text("x", encoding="utf-8")
+        _dh_sh = scan(repo, ".plans", set())[4]
+        if 932 in _dh_sh:
+            fails.append("non-md file leaked into the dir census")
 
     # 6. ABSENT vs MALFORMED must not collapse. Both read as `hw is None`, so
     #    without this pin a corrupted allocator is indistinguishable from a
@@ -598,9 +655,47 @@ def selftest() -> list[str]:
     # it — nine collision_verdict decisions read SURVIVED with the arms
     # already written and passing).
     fails += collision_arms()
+    fails += above_pin_arms()
     fails += foreign_arms()
     fails += legacy_arms()
 
+    return fails
+
+
+def above_pin_arms() -> list[str]:
+    """The Issue 1252 pin machinery's OWN arithmetic: row parsing (reasonless
+    refused, repo scoping), the match rule, and the both-directions verdict
+    (pinned clean / unpinned walls / stale pin walls).
+    """
+    fails: list[str] = []
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        (base / "numbering_above_expected.txt").write_text(
+            "# a comment\n"
+            "riir-reflex .benchmarks 617_openthai_exl3_4090 raw home, plan 617\n"
+            "katgpt-rs .plans 999_x\n", encoding="utf-8")
+        try:
+            parse_above_pins(base / "numbering_above_expected.txt")
+            fails.append("above-pin parse: reasonless row was NOT refused")
+        except ValueError:
+            pass
+        (base / "numbering_above_expected.txt").write_text(
+            "riir-reflex .benchmarks 617_openthai_exl3_4090 raw home per 3cad008\n"
+            "other-repo .plans 500_x some other repo\n", encoding="utf-8")
+        pins = above_pins_for(Path("/tmp/riir-reflex"), pins_dir=base)
+        if len(pins) != 1:
+            fails.append(f"above-pin scoping wrong (foreign rows must drop): {pins}")
+        # the match rule: the pinned row text must match the finding text shape
+        finding = ".benchmarks: max 617 (617_openthai_exl3_4090) > .highwater 208 — `value + 1` is already taken"
+        hit = [k for k in pins if finding.startswith(f"{k[0][1]}: max {k[2]} ({k[1]}) ")]
+        if len(hit) != 1:
+            fails.append(f"above-pin match rule missed the finding: {hit}")
+        # a renamed holder must NOT match (the name is load-bearing)
+        finding2 = ".benchmarks: max 617 (617_renamed) > .highwater 208 — x"
+        hit2 = [k for k in pins if finding2.startswith(f"{k[0][1]}: max {k[2]} ({k[1]}) ")]
+        if hit2:
+            fails.append("above-pin match rule matched a renamed holder")
     return fails
 
 
@@ -722,6 +817,54 @@ def legacy_arms() -> list[str]:
             fails.append(f"    collision_pins_for raised on the fixture: {e}")
 
     return fails
+
+
+def parse_above_pins(path: Path) -> dict[tuple[tuple[str, str], str, int], str]:
+    """-> {((repo, dir), holder-name, number): reason} from numbering_above_expected.txt.
+
+    Issue 1252 — the pin home for directory-class holders that sit ABOVE their
+    directory's highwater LEGITIMATELY: raw result homes named for an owning
+    plan (reflex `.benchmarks/617_openthai_exl3_4090`, whose own landing commit
+    `3cad008` says "results dirs are raw homes named for the owning plan, not
+    allocations"). Same discipline as every pin file: a reasonless row is
+    REFUSED (the Issue 789 idiom — a pin is adjudicated from its reasons), and
+    the verdict runs BOTH directions (an unpinned finding walls; a pin whose
+    row no longer fires is a stale pin and walls too).
+
+    Keyed by holder NAME (not just number) so a directory RENAMED after its pin
+    is a stale pin — the rename is exactly when the reason must be re-read.
+    """
+    rows: dict[tuple[tuple[str, str], str, int], str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        # row shape:  <repo>  <dirname>  <NNN_holder>  <reason...>
+        parts = line.split(None, 3)
+        if len(parts) < 4 or not parts[3].strip():
+            raise ValueError(f"above-pin row without a reason: {raw.strip()!r}")
+        repo_name, dname, name, reason = parts
+        m = re.fullmatch(r"(\d+)_.+", name.strip())
+        if not repo_name.strip() or not dname.strip() or not m:
+            raise ValueError(
+                f"above-pin row must be <repo> <dir> <NNN_name> <reason>: {raw.strip()!r}")
+        rows[((repo_name.strip(), dname.strip()), name.strip(), int(m.group(1)))] = reason.strip()
+    return rows
+
+
+def above_pins_for(repo: Path, pins_dir: Path | None = None) -> dict[tuple[tuple[str, str], str, int], str]:
+    """The above-highwater pins ASSEMBLED FOR `repo` — shared-file rows keyed
+    `<repo>/<dir>`; rows naming another repo are DROPPED (the collision pins'
+    Issue 1205 rule: a pin whose dir the walk cannot witness reds both ways
+    otherwise). Absent file = no rows, never an error (most repos have none).
+    """
+    base = pins_dir if pins_dir is not None else Path(__file__).resolve().parent
+    path = base / "numbering_above_expected.txt"
+    if not path.is_file():
+        return {}
+    rows = parse_above_pins(path)
+    target = repo.resolve().name
+    return {k: v for k, v in rows.items() if k[0][0] == target}
 
 
 def parse_collision_pins(path: Path) -> tuple[dict, dict[tuple[str, int], str]]:
@@ -1513,7 +1656,7 @@ def main() -> int:
     bench_tracked = 0  # Issue 1206: ... and the row's min_bench adjudicates THIS
 
     for dirname in dirs:
-        by_num, hw, n, hw_bad = scan(repo, dirname, tracked)
+        by_num, hw, n, hw_bad, dir_holders = scan(repo, dirname, tracked)
         total += n
         if dirname in fam_dirs:
             fam_groups.append((dirname, classify_groups(by_num)))
@@ -1543,8 +1686,16 @@ def main() -> int:
                     dup_tracked.append(row)
             else:
                 dup_untracked.append(row + f"  [{n_tracked} tracked]")
-        if hw is not None and by_num and max(by_num) > hw:
-            above.append(f"{dirname}: max {max(by_num)} > .highwater {hw} — `value + 1` is already taken")
+        if hw is not None and (by_num or dir_holders):
+            md_max = max(by_num) if by_num else 0
+            dir_max = max(dir_holders) if dir_holders else 0
+            alloc_max = max(md_max, dir_max)
+            if alloc_max > hw:
+                holder = dir_holders.get(alloc_max) or next(
+                    nm for nm, _ in by_num[alloc_max])
+                above.append(
+                    f"{dirname}: max {alloc_max} ({holder}) > .highwater {hw} — "
+                    f"`value + 1` is already taken")
 
     # ── the claim-line lint arm (Issue 1226) ─────────────────────────
     # The lease checker's two read-time BLIND classes, enforced at the one
@@ -1569,6 +1720,40 @@ def main() -> int:
         return 2
     crows, cwalked = historical_collisions(repo, serial_dirs)
     cfails, cnotes = collision_verdict(crows, cscalars, cpins)
+
+    # ── above-highwater pins (Issue 1252) ──────────────────────────
+    # Directory-class holders above the counter LEGITIMATELY (raw result homes
+    # named for an owning plan) pin in numbering_above_expected.txt; the
+    # verdict runs BOTH directions: an unpinned finding stays in `above` and
+    # walls, a pin whose (dir, holder, number) no longer fires is a STALE PIN
+    # and walls too — a pin is adjudicated from its reasons, never a
+    # green-laundering memo.
+    try:
+        apins = above_pins_for(repo)
+    except ValueError as e:
+        print(f"✗ above pins file is malformed: {e}")
+        return 2
+    above_unpinned: list[str] = []
+    pinned_clean: list[str] = []
+    for r in above:
+        matched = False
+        for ((repo_name, dname), holder, num) in apins:
+            # row text shape: "<dirname>: max N (<holder>) > .highwater H …"
+            if r.startswith(f"{dname}: max {num} ({holder}) "):
+                matched = True
+                pinned_clean.append(f"{r}  [pinned: {apins[((repo_name, dname), holder, num)]}]")
+                break
+        if not matched:
+            above_unpinned.append(r)
+    stale_apins = [
+        (k, reason) for k, reason in apins.items()
+        if not any(r.startswith(f"{k[0][1]}: max {k[2]} ({k[1]}) ") for r in above)
+    ]
+    above = above_unpinned
+    if pinned_clean:
+        print(f"· {len(pinned_clean)} above-highwater holder(s) PINNED clean:")
+        for r in pinned_clean:
+            print(f"    {r}")
     if len(dirs) < cscalars["min_dirs"]:
         cfails.append(f"scope FLOOR: {len(dirs)} dir(s) < {cscalars['min_dirs']} "
                       f"— the collision walk went blind")
@@ -1638,6 +1823,12 @@ def main() -> int:
         print(f"✗ {len(above)} .highwater below its directory max (pinned ≤ {max_above}):")
         for r in above:
             print(f"    {r}")
+    if stale_apins:
+        bad = True
+        print(f"✗ {len(stale_apins)} STALE above-pin row(s) — a pin whose row no "
+              f"longer fires must be removed in the commit that dissolves it:")
+        for k, reason in stale_apins:
+            print(f"    {k[0][0]}/{k[0][1]} {k[1]} (number {k[2]}): {reason}")
     if len(malformed) > max_malformed:
         bad = True
         print(f"✗ {len(malformed)} malformed .highwater file(s) (pinned ≤ {max_malformed}):")

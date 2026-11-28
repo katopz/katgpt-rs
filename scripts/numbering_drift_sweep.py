@@ -286,14 +286,29 @@ def audit(repo: Path) -> dict:
     n_family = 0
     n_bench = 0
     grouped: list[tuple[str, dict]] = []
+    wt_dirs: dict[str, dict[int, str]] = {}
     for dirname in ALL_DIRS:
-        by_num, hw, n, hw_bad = ng.scan(repo, dirname, tracked)
+        by_num, hw, n, hw_bad, dh = ng.scan(repo, dirname, tracked)
+        wt_dirs[dirname] = dh
         grouped.append((dirname, by_num))
         if hw_bad is not None:
             malformed.append(f"{dirname}/.highwater = {hw_bad!r}")
         if dirname in (".benchmarks", ".docs"):
             n_bench += sum(1 for files in by_num.values()
                            for _nm, tr in files if tr)
+        # Issue 1252: the allocator-staleness census runs for EVERY scanned dir
+        # (hoisted above the serial continue — the gate's scope; the two
+        # instruments must see the same class or the pins diverge). The raw-dup
+        # ratchet below stays serial-scoped; this class is not that ratchet.
+        if hw is not None and (by_num or wt_dirs.get(dirname)):
+            md_max = max(by_num) if by_num else 0
+            dmax = max(wt_dirs.get(dirname, {}).keys(), default=0)
+            alloc_max = max(md_max, dmax)
+            if alloc_max > hw:
+                holder = wt_dirs.get(dirname, {}).get(alloc_max)
+                if holder is None and by_num and alloc_max in by_num:
+                    holder = by_num[alloc_max][0][0]
+                above.append(f"{dirname}: max {alloc_max} ({holder}) > .highwater {hw}")
         if dirname not in SERIAL_DIRS:
             continue                       # raw dup stays serial-scoped
         n_serial += n
@@ -302,8 +317,7 @@ def audit(repo: Path) -> dict:
                 continue                   # untracked = a colleague's WIP
             names = " · ".join(nm for nm, _ in files)
             dup.append(f"{dirname}/{num:03d} ×{len(files)}: {names}")
-        if hw is not None and by_num and max(by_num) > hw:
-            above.append(f"{dirname}: max {max(by_num)} > .highwater {hw}")
+    above, above_stale_pins = adjudicate_above_pins(above, repo)
     # ── the classified classes (every dir, tracked holders only). The raw
     # `dup` above keeps its serial-only ratchet semantics and its existing
     # pins; these are the decidability upgrade — see the docstring's scope
@@ -366,7 +380,32 @@ def audit(repo: Path) -> dict:
             "resets": resets, "unbumped": unbumped, "hist": hist,
             "collision": collision, "rename_residue": rename_res,
             "hand_read": hand_read, "n_family": n_family,
+            "above_stale_pins": above_stale_pins,
             "n_files": n_serial, "n_numbers": n_numbers, "n_bench": n_bench}
+
+
+def adjudicate_above_pins(above: list[str], repo: Path) -> tuple[list[str], list[str]]:
+    """-> (unpinned rows, stale-pin rows) — the sweep's half of the Issue 1252
+    pin discipline, importing the GATE's loader (one record, two instruments;
+    the classified_pin_sync rule). A pinned row leaves the ceiling count; a
+    pin whose row no longer fires is STALE and walls the sweep like the gate.
+    """
+    try:
+        apins = ng.above_pins_for(repo)
+    except ValueError as e:
+        # a malformed pin file is instrument-untrustworthy, not drift — the
+        # caller surfaces it as its exit-2 class through the stale rows return
+        return list(above), [f"above pins file malformed: {e}"]
+    keep: list[str] = []
+    stale: list[str] = []
+    for r in above:
+        matched = any(r.startswith(f"{k[0][1]}: max {k[2]} ({k[1]}) ") for k in apins)
+        if not matched:
+            keep.append(r)
+    for k, reason in apins.items():
+        if not any(r.startswith(f"{k[0][1]}: max {k[2]} ({k[1]}) ") for r in above):
+            stale.append(f"{k[0][0]}/{k[0][1]} {k[1]} (number {k[2]}): {reason}")
+    return keep, stale
 
 
 def head_listing(repo: Path) -> dict[str, list[str]] | None:
@@ -399,14 +438,22 @@ def head_listing(repo: Path) -> dict[str, list[str]] | None:
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         return None
     names: dict[str, set[str]] = {d: set() for d in ALL_DIRS}
+    dir_names: dict[str, set[str]] = {d: set() for d in ALL_DIRS}
     for rel in out.split("\0"):
         rel = rel.strip()
         if not rel:
             continue
         dirname, _, rest = rel.partition("/")
         if dirname in names and rest:
-            names[dirname].add(rest.split("/", 1)[0])
-    return {d: sorted(v) for d, v in names.items()}
+            first, _, tail = rest.partition("/")
+            names[dirname].add(first)
+            # Issue 1252: a first component that carries a deeper path is a
+            # DIRECTORY at HEAD — the dir-class allocation census. A file's
+            # path has no tail, so files never land here.
+            if tail:
+                dir_names[dirname].add(first)
+    return {d: sorted(v) for d, v in names.items()}, {
+        d: sorted(v) for d, v in dir_names.items()}
 
 
 def head_audit(repo: Path) -> dict | None:
@@ -439,6 +486,7 @@ def head_audit(repo: Path) -> dict | None:
     listing = head_listing(repo)
     if listing is None:
         return None
+    listing, head_dirs = listing
     tracked = {f"{d}/{n}" for d, ns in listing.items() for n in ns}
     dup, above, malformed = [], [], []
     collision, rename_res, hand_read = [], [], []
@@ -455,16 +503,37 @@ def head_audit(repo: Path) -> dict | None:
         if dirname in (".benchmarks", ".docs"):
             n_bench += sum(1 for files in by_num.values()
                            for _nm, tr in files if tr)
+        # Issue 1252: the allocator-staleness census hoisted above the serial
+        # continue (the gate's scope — one record, two instruments). The HEAD
+        # side has no is_dir(); the dir-class names come from the projection,
+        # and `.docs` is excluded by NAME (the numbered-folder sort scheme).
+        if hw is not None and (by_num or head_dirs.get(dirname)):
+            md_max = max(by_num) if by_num else 0
+            if dirname in ng.DIR_CENSUS_EXCLUDED:
+                dmax = 0
+            else:
+                dmax = max((int(m.group(1))
+                            for m in (ng.NUMBERED_DIR.match(x)
+                                      for x in head_dirs.get(dirname, ()))
+                            if m is not None), default=0)
+            alloc_max = max(md_max, dmax)
+            if alloc_max > hw:
+                holder = None
+                if dmax == alloc_max and dmax > 0:
+                    holder = next((x for x in head_dirs.get(dirname, ())
+                                   if (m := ng.NUMBERED_DIR.match(x)) is not None
+                                   and int(m.group(1)) == alloc_max), None)
+                if holder is None and by_num and alloc_max in by_num:
+                    holder = by_num[alloc_max][0][0]
+                above.append(f"{dirname}: max {alloc_max} ({holder}) > .highwater {hw}")
         if dirname not in SERIAL_DIRS:
             continue
         n_serial += n
         for num, files in sorted(by_num.items()):
             if sum(1 for _, tr in files if tr) < 2:
                 continue
-            names = " · ".join(nm for nm, _ in files)
+            names = " · ".join(nm for nm, _tr in files)
             dup.append(f"{dirname}/{num:03d} ×{len(files)}: {names}")
-        if hw is not None and by_num and max(by_num) > hw:
-            above.append(f"{dirname}: max {max(by_num)} > .highwater {hw}")
     for dirname, by_num in grouped:
         for num, files in sorted(by_num.items()):
             held = [(nm, tr) for nm, tr in files if tr]
@@ -482,9 +551,11 @@ def head_audit(repo: Path) -> dict | None:
                 hand_read.append(row)
             else:
                 n_family += 1
+    above, above_stale_pins = adjudicate_above_pins(above, repo)
     return {"dup": dup, "above": above, "malformed": malformed,
             "collision": collision, "rename_residue": rename_res,
             "hand_read": hand_read, "n_family": n_family,
+            "above_stale_pins": above_stale_pins,
             "n_files": n_serial, "n_bench": n_bench}
 
 
@@ -557,6 +628,12 @@ def pin_flags(got: dict, row: dict[str, int]) -> list[str]:
             f"renumber the loser by the issue-556 protocol (first allocation "
             f"keeps, every citing site moves in the same commit): "
             + " | ".join(got["collision"]))
+    if got.get("above_stale_pins"):
+        flags.append(
+            f"STALE above-pins: {len(got['above_stale_pins'])} row(s) whose "
+            f"(dir, holder, number) no longer fires — remove the row in the "
+            f"commit that dissolves it (Issue 1252): "
+            + " | ".join(got["above_stale_pins"]))
     if len(got["rename_residue"]) > row["max_rename"]:
         flags.append(
             f"rename residues {len(got['rename_residue'])} > pinned "
@@ -1016,9 +1093,12 @@ def adjudicate_cases() -> list[str]:
         git(repo, "add", "-A")
         git(repo, "-c", "commit.gpgsign=false", "commit", "-qm", "nested")
         listing = head_listing(repo)
-        if listing is None or listing[".benchmarks"] != ["806_x"]:
+        if listing is None or listing[0][".benchmarks"] != ["806_x"]:
             fails.append(f"head_listing: a nested path must contribute its "
                          f"DIRECTORY entry and not its leaf: {listing}")
+        if listing is not None and listing[1][".benchmarks"] != ["806_x"]:
+            fails.append(f"head_listing: the dir-class projection missed the "
+                         f"directory entry: {listing[1]}")
 
     # g. Not a repository -> every row COMMITTED, never a fabricated empty
     #    HEAD, which would report the whole repo as UNCOMMITTED and silence
@@ -1391,11 +1471,14 @@ def main() -> int:
     # "undecidable convention" excuse retired when the stem classifier landed
     # (2026-10-29) — owner identity IS decidable from the filenames.
     family = "/".join(d for d in ALL_DIRS if d not in SERIAL_DIRS)
-    print(f"  scope: the RAW duplicate + stale checks cover {'/'.join(SERIAL_DIRS)} "
-          f"only; the classified classes (COLLISION wall, rename-residue, "
-          f"hand-read) cover ALL numbered dirs incl. {family} — a `coll=0` "
-          f"above is a wall over every directory, a `dup=0` is NOT a claim "
-          f"about {family}. See {PINS.name} for the measured pins.")
+    print(f"  scope: the RAW duplicate check covers {'/'.join(SERIAL_DIRS)} "
+          f"only; the stale-allocator census (Issue 1252) covers ALL numbered "
+          f"dirs incl. {family} — the dir class is invisible to the .md-only "
+          f"holder walk, and the gate runs it there too (one record, two "
+          f"instruments); the classified classes (COLLISION wall, "
+          f"rename-residue, hand-read) also cover ALL numbered dirs — a "
+          f"`coll=0` above is a wall over every directory, a `dup=0` is NOT a "
+          f"claim about {family}. See {PINS.name} for the measured pins.")
     if bad:
         print("✗ numbering sweep FAILED — see the ✗ rows above")
         for _d in deferred:

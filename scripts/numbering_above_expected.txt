@@ -1,0 +1,10 @@
+# Committed expectations for directory-class holders sitting ABOVE their
+# directory's highwater (numbering_gate.py, Issue 1252) — a holder here is a
+# KNOWN-LEGITIMATE above-counter artifact, never an un-bumped allocation.
+#
+# Membership + reason per row, BOTH directions enforced: an unpinned finding
+# walls the gate, and a pin whose (dir, holder, number) no longer fires is a
+# STALE PIN and walls too — remove the row in the commit that dissolves it.
+#
+# Row shape:  <repo>  <dirname>  <NNN_holder_name>  <reason...>
+riir-reflex .benchmarks 617_openthai_exl3_4090  raw results home named for the OWNING plan (riir-infer Plan 617 A5), never a reflex allocation — self-documented in its own landing commit 3cad008 ("results dirs are raw homes named for the owning plan, not allocations"); landed in the 2026-10-08 era, today's counter 208 is the md-era allocator
