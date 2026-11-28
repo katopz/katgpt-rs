@@ -11,7 +11,10 @@
 #![cfg(feature = "mla_backward")]
 
 use katgpt_attn::mla::{MlaConfig, MlaForwardScratch, MlaKVCache, MlaWeights, mla_forward_token};
-use katgpt_attn::mla_backward::{MlaGradients, mla_backward_token, mla_forward_token_with_saved};
+use katgpt_attn::mla_backward::{
+    MlaGradients, MlaSavedActivations, mla_backward_token, mla_backward_token_with_cache_grads,
+    mla_forward_token_with_saved,
+};
 use katgpt_kv::shard_kv::rope::RopeFreqs;
 
 // ─── Config + helpers ───────────────────────────────────────────────────────
@@ -441,4 +444,318 @@ fn backward_smoke_kimi_k3() {
         }
     }
     println!("MLA backward smoke test PASSED (kimi_k3_0_40b, d={d}, L={l}).");
+}
+
+// ─── Issue 1253: cache-grad export gates ────────────────────────────
+// The riir-train toy MLA dims (Issue 618 T0 gates: kv 8 / q 8 / nope 4 /
+// rope 4 / 2 heads), so the numbers here transfer to the consumer's arm.
+
+fn cache_grad_export_config() -> MlaConfig {
+    MlaConfig {
+        kv_lora_rank: 8,
+        q_lora_rank: 8,
+        qk_nope_head_dim: 4,
+        qk_rope_head_dim: 4,
+        v_head_dim: 4,
+        n_heads: 2,
+        hidden_size: 16,
+        use_output_gate: true,
+        use_nope: true, // Kimi-K3 default (no RoPE)
+        rope_theta: 10_000.0,
+        rms_norm_eps: 1e-5,
+    }
+}
+
+/// Forward a token sequence position by position with saved activations;
+/// returns (per-token outputs, per-token saved activations, the final cache).
+fn forward_with_saved_all(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    h_seq: &[Vec<f32>],
+) -> (Vec<Vec<f32>>, Vec<MlaSavedActivations>, MlaKVCache) {
+    let l = h_seq.len();
+    let mut cache = MlaKVCache::new(config, l);
+    let mut scratch = MlaForwardScratch::new(config, l);
+    let mut rope = RopeFreqs::new_with_theta(config.qk_rope_head_dim, config.rope_theta);
+    let mut all_saved = Vec::with_capacity(l);
+    let mut outputs = Vec::with_capacity(l);
+    for h in h_seq {
+        let (out, saved) =
+            mla_forward_token_with_saved(config, weights, &mut cache, &mut scratch, &mut rope, h);
+        outputs.push(out.to_vec());
+        all_saved.push(saved);
+    }
+    (outputs, all_saved, cache)
+}
+
+/// Tail loss Σ_{t > j} Σ_i out_t[i]² — the part of the sum-of-squares loss
+/// that depends on cache entry `j` (only later tokens read it as context).
+/// `inject` perturbs exactly ONE element of the entry after token `j` is
+/// written (None = unperturbed baseline tail).
+fn tail_loss_with_injection(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    h_seq: &[Vec<f32>],
+    j: usize,
+    inject: Option<(bool, usize, f32)>, // (is_latent, element, eps)
+) -> f32 {
+    let l = h_seq.len();
+    let mut cache = MlaKVCache::new(config, l);
+    let mut scratch = MlaForwardScratch::new(config, l);
+    let mut rope = RopeFreqs::new_with_theta(config.qk_rope_head_dim, config.rope_theta);
+    let mut loss = 0.0f32;
+    for (t, h) in h_seq.iter().enumerate() {
+        let out = mla_forward_token(config, weights, &mut cache, &mut scratch, &mut rope, h);
+        if t == j
+            && let Some((is_latent, elem, eps)) = inject
+        {
+            if is_latent {
+                cache.latent_kv[j * config.kv_lora_rank + elem] += eps;
+            } else {
+                cache.rope_key[j * config.qk_rope_head_dim + elem] += eps;
+            }
+        }
+        if t > j {
+            loss += out.iter().map(|&v| v * v).sum::<f32>();
+        }
+    }
+    loss
+}
+
+/// Gate 1 — the armed export reads nonzero, correctly-shaped slot gradients
+/// (Issue 1253 acceptance 1). Every position's latent and rope slot row has
+/// a nonzero L2 norm: position j receives its own call's self-read plus
+/// every later call's context reads, all nonzero for generic weights.
+#[test]
+fn cache_grad_export_slots_nonzero_and_shaped() {
+    let config = cache_grad_export_config();
+    let d_c = config.kv_lora_rank;
+    let d_r = config.qk_rope_head_dim;
+    let d = config.hidden_size;
+    let l = 4usize;
+
+    let weights = MlaWeights::random(&config, 42);
+    let h_seq: Vec<Vec<f32>> = (0..l)
+        .map(|t| (0..d).map(|i| ((i + t * 5) as f32).sin() * 0.3).collect())
+        .collect();
+
+    let (all_outputs, all_saved, cache) = forward_with_saved_all(&config, &weights, &h_seq);
+
+    let mut grads = MlaGradients::zeros_like(&weights);
+    let mut all_dh = vec![vec![0.0f32; d]; l];
+    let mut d_cache_latent = vec![0.0f32; l * d_c];
+    let mut d_cache_rope = vec![0.0f32; l * d_r];
+    let mut rope = RopeFreqs::new_with_theta(config.qk_rope_head_dim, config.rope_theta);
+
+    for t in 0..l {
+        let d_output: Vec<f32> = all_outputs[t].iter().map(|&v| 2.0 * v).collect();
+        mla_backward_token_with_cache_grads(
+            &config,
+            &weights,
+            &cache,
+            &all_saved[t],
+            &all_saved,
+            &mut rope,
+            &d_output,
+            &mut all_dh,
+            &mut grads,
+            Some(&mut d_cache_latent),
+            Some(&mut d_cache_rope),
+        );
+    }
+
+    // The buffers were passed at exactly [l][dim] sizing — the export's
+    // assert accepted them and only rows 0..seq were touched.
+    assert_eq!(d_cache_latent.len(), l * d_c);
+    assert_eq!(d_cache_rope.len(), l * d_r);
+    for j in 0..l {
+        let lat_norm: f32 = d_cache_latent[j * d_c..(j + 1) * d_c]
+            .iter()
+            .map(|&v| v * v)
+            .sum::<f32>()
+            .sqrt();
+        let rope_norm: f32 = d_cache_rope[j * d_r..(j + 1) * d_r]
+            .iter()
+            .map(|&v| v * v)
+            .sum::<f32>()
+            .sqrt();
+        assert!(
+            lat_norm > 0.0,
+            "latent slot row {j} is all-zero (norm 0) — export collapsed"
+        );
+        assert!(
+            rope_norm > 0.0,
+            "rope slot row {j} is all-zero (norm 0) — export collapsed"
+        );
+    }
+}
+
+/// Gate 2 — the `None` posture is bit-identical to the incumbent delegate:
+/// same weight grads, same `all_dh`, same export buffers left untouched.
+#[test]
+fn cache_grad_export_none_posture_bit_identical() {
+    let config = cache_grad_export_config();
+    let d = config.hidden_size;
+    let l = 4usize;
+
+    let weights = MlaWeights::random(&config, 7);
+    let h_seq: Vec<Vec<f32>> = (0..l)
+        .map(|t| (0..d).map(|i| ((i + t * 3) as f32).cos() * 0.25).collect())
+        .collect();
+
+    let (all_outputs, all_saved, cache) = forward_with_saved_all(&config, &weights, &h_seq);
+
+    // Incumbent path.
+    let mut grads_a = MlaGradients::zeros_like(&weights);
+    let mut all_dh_a = vec![vec![0.0f32; d]; l];
+    let mut rope_a = RopeFreqs::new_with_theta(config.qk_rope_head_dim, config.rope_theta);
+    for t in 0..l {
+        let d_output: Vec<f32> = all_outputs[t].iter().map(|&v| 2.0 * v).collect();
+        mla_backward_token(
+            &config,
+            &weights,
+            &cache,
+            &all_saved[t],
+            &all_saved,
+            &mut rope_a,
+            &d_output,
+            &mut all_dh_a,
+            &mut grads_a,
+        );
+    }
+
+    // Sibling path with None slots.
+    let mut grads_b = MlaGradients::zeros_like(&weights);
+    let mut all_dh_b = vec![vec![0.0f32; d]; l];
+    let mut rope_b = RopeFreqs::new_with_theta(config.qk_rope_head_dim, config.rope_theta);
+    for t in 0..l {
+        let d_output: Vec<f32> = all_outputs[t].iter().map(|&v| 2.0 * v).collect();
+        mla_backward_token_with_cache_grads(
+            &config,
+            &weights,
+            &cache,
+            &all_saved[t],
+            &all_saved,
+            &mut rope_b,
+            &d_output,
+            &mut all_dh_b,
+            &mut grads_b,
+            None,
+            None,
+        );
+    }
+
+    // Bit-identical: exact f32 equality across every gradient and row.
+    for (a, b) in all_dh_a.iter().zip(all_dh_b.iter()) {
+        assert_eq!(a, b, "all_dh diverged between incumbent and None posture");
+    }
+    assert_eq!(grads_a.w_dkv, grads_b.w_dkv);
+    assert_eq!(grads_a.w_dq, grads_b.w_dq);
+    assert_eq!(grads_a.w_uq, grads_b.w_uq);
+    assert_eq!(grads_a.w_qr, grads_b.w_qr);
+    assert_eq!(grads_a.w_uk, grads_b.w_uk);
+    assert_eq!(grads_a.w_uv, grads_b.w_uv);
+    assert_eq!(grads_a.w_kr, grads_b.w_kr);
+    assert_eq!(grads_a.w_o, grads_b.w_o);
+    assert_eq!(grads_a.q_a_norm_weight, grads_b.q_a_norm_weight);
+    assert_eq!(grads_a.kv_a_norm_weight, grads_b.kv_a_norm_weight);
+    assert_eq!(grads_a.w_g, grads_b.w_g);
+}
+
+/// Gate 3 — the exported slot IS dL/d(cache entry): central differences on
+/// the cache buffer itself. The perturbation is injected into
+/// `cache.latent_kv[j]` / `cache.rope_key[j]` right after token j is written
+/// and before any later token reads it, so the FD isolates the CONTEXT reads
+/// (calls t > j) — exactly the exported slot row j summed over those calls
+/// (self-reads happen before the injection and are excluded analytically).
+#[test]
+fn cache_grad_export_matches_finite_difference() {
+    let config = cache_grad_export_config();
+    let d_c = config.kv_lora_rank;
+    let d_r = config.qk_rope_head_dim;
+    let d = config.hidden_size;
+    let l = 4usize;
+    let j = 1usize; // the export slot under test (context-read by tokens 2, 3)
+    let epsilon = 1e-2f32;
+    let tol = 3e-2f32;
+
+    let weights = MlaWeights::random(&config, 42);
+    let h_seq: Vec<Vec<f32>> = (0..l)
+        .map(|t| (0..d).map(|i| ((i + t * 7) as f32).sin() * 0.3).collect())
+        .collect();
+
+    // Baseline forward with saved activations (analytic side) + outputs.
+    let (all_outputs, all_saved, cache) = forward_with_saved_all(&config, &weights, &h_seq);
+
+    // Analytic: sum slot row j over the calls that read it as context (t > j).
+    // Calls are independent w.r.t. the export, so one shared buffer receives
+    // exactly the wanted contributions when only calls t > j run.
+    let mut grads = MlaGradients::zeros_like(&weights);
+    let mut all_dh = vec![vec![0.0f32; d]; l];
+    let mut d_cache_latent = vec![0.0f32; l * d_c];
+    let mut d_cache_rope = vec![0.0f32; l * d_r];
+    let mut rope = RopeFreqs::new_with_theta(config.qk_rope_head_dim, config.rope_theta);
+    for t in (j + 1)..l {
+        let d_output: Vec<f32> = all_outputs[t].iter().map(|&v| 2.0 * v).collect();
+        mla_backward_token_with_cache_grads(
+            &config,
+            &weights,
+            &cache,
+            &all_saved[t],
+            &all_saved,
+            &mut rope,
+            &d_output,
+            &mut all_dh,
+            &mut grads,
+            Some(&mut d_cache_latent),
+            Some(&mut d_cache_rope),
+        );
+    }
+    let analytic_latent = &d_cache_latent[j * d_c..(j + 1) * d_c];
+    let analytic_rope = &d_cache_rope[j * d_r..(j + 1) * d_r];
+
+    // Detach-collapse counter-proof shape: the context-read gradient must be
+    // nonzero (something flows back into the cache entry).
+    assert!(
+        analytic_latent.iter().any(|&v| v != 0.0),
+        "latent slot j analytic context gradient is all-zero"
+    );
+    assert!(
+        analytic_rope.iter().any(|&v| v != 0.0),
+        "rope slot j analytic context gradient is all-zero"
+    );
+
+    // FD: central differences with a single-element injection into cache
+    // entry j right after token j is written; the tail loss changes only
+    // through the later tokens' context reads.
+    let mut max_rel = 0.0f32;
+    let mut worst = String::new();
+    let mut check = |name: &str, i: usize, a: f32, is_latent: bool, epsilon: f32| {
+        if a.abs() < 1e-3 {
+            return; // near-zero analytic — FD noise floor (see the file header)
+        }
+        let plus =
+            tail_loss_with_injection(&config, &weights, &h_seq, j, Some((is_latent, i, epsilon)));
+        let minus =
+            tail_loss_with_injection(&config, &weights, &h_seq, j, Some((is_latent, i, -epsilon)));
+        let n = (plus - minus) / (2.0 * epsilon);
+        let denom = a.abs().max(n.abs()).max(1e-4);
+        let re = (a - n).abs() / denom;
+        assert!(
+            re < tol,
+            "{name}[{i}]: rel_err {re:.4} >= tol {tol} (analytic={a:.6e}, numeric={n:.6e})"
+        );
+        if re > max_rel {
+            max_rel = re;
+            worst = format!("{name}[{i}]: rel_err {re:.4} (analytic={a:.6e}, numeric={n:.6e})");
+        }
+    };
+
+    for (i, &a) in analytic_latent.iter().enumerate() {
+        check("latent", i, a, true, epsilon);
+    }
+    for (i, &a) in analytic_rope.iter().enumerate() {
+        check("rope", i, a, false, epsilon);
+    }
+    eprintln!("cache-grad export FD worst: {worst}");
 }

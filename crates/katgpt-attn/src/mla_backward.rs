@@ -341,6 +341,9 @@ pub fn mla_forward_token_with_saved(
 
 /// MLA analytic backward pass.
 ///
+/// Delegate over [`mla_backward_token_with_cache_grads`] with the export
+/// slots absent (`None`/`None`) — bit-identical incumbent.
+///
 /// Given `dL_t/d(output_t)`, computes:
 /// - Gradients w.r.t. all trainable parameters (`grads`) — accumulated across
 ///   all attention positions (shared weights).
@@ -378,6 +381,46 @@ pub fn mla_backward_token(
     d_output: &[f32],
     all_dh: &mut [Vec<f32>],
     grads: &mut MlaGradients,
+) {
+    mla_backward_token_with_cache_grads(
+        config, weights, cache, saved, all_saved, rope_freqs, d_output, all_dh, grads, None, None,
+    );
+}
+
+/// [`mla_backward_token`] with the per-position KV-cache-entry gradient
+/// export (Issue 1253 — riir-train Issue 618 T0.b looped-training consumer).
+/// Identical body; when the export slots are armed, the PRE-consumption
+/// accumulator values are additionally folded into the caller's buffers
+/// (`+=`):
+///
+/// - `d_cache_latent[j*d_c..(j+1)*d_c] += dL/d(c_kv_normed_j)` for all
+///   `j ∈ 0..seq`. The cache stores the POST-rmsnorm latent, so this is
+///   exactly `dL/d(cache.latent_kv[j])`, taken BEFORE the `rmsnorm_backward`
+///   pass below folds it into each position's W_DKV/`all_dh` chain.
+/// - `d_cache_rope[j*d_r..(j+1)*d_r] += dL/d(k_r_j)`. The cache stores the
+///   POST-RoPE key, so this is exactly `dL/d(cache.rope_key[j])`, taken
+///   BEFORE the inverse-RoPE pass below folds it into W_KR/`all_dh`.
+///
+/// Accumulation (`+=`) makes repeated calls over the same cache rows
+/// compose: a cache entry is read by many backward calls, and each call adds
+/// its own reads. Slot buffers are caller-owned, `[max_seq][kv_lora_rank]` /
+/// `[max_seq][qk_rope_head_dim]`-shaped (only rows `0..seq` are touched —
+/// the asserts name the sizing). The `None` posture is bit-identical to the
+/// incumbent delegate.
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::needless_range_loop)]
+pub fn mla_backward_token_with_cache_grads(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    cache: &MlaKVCache,
+    saved: &MlaSavedActivations,
+    all_saved: &[MlaSavedActivations],
+    rope_freqs: &mut RopeFreqs,
+    d_output: &[f32],
+    all_dh: &mut [Vec<f32>],
+    grads: &mut MlaGradients,
+    d_cache_latent: Option<&mut [f32]>,
+    d_cache_rope: Option<&mut [f32]>,
 ) {
     let d = config.hidden_size;
     let d_c = config.kv_lora_rank;
@@ -602,6 +645,46 @@ pub fn mla_backward_token(
         d_q_c[head * d_h..(head + 1) * d_h].copy_from_slice(&d_q_c_h);
         d_q_r[head * d_r..(head + 1) * d_r].copy_from_slice(&d_q_r_h);
         let _ = q_r_h;
+    }
+
+    // ── Issue 1253 export: per-position cache-entry gradients ──
+    // Taken AFTER the head loop (both accumulators are complete) and BEFORE
+    // the consumption passes below (rmsnorm → W_DKV/all_dh for the latent,
+    // inverse-RoPE → W_KR/all_dh for the rope key). The cache stores exactly
+    // these values — post-rmsnorm latent, post-RoPE key — so the exported
+    // slot IS dL/d(cache entry). Includes j == pos: for the current token,
+    // the saved copy equals the cache entry (the debug-asserted identity),
+    // so its slot value is the self-read gradient of the entry this very
+    // call wrote.
+    if let Some(d_cache_latent) = d_cache_latent {
+        assert!(
+            d_cache_latent.len() >= seq * d_c,
+            "d_cache_latent must be [max_seq][kv_lora_rank]-shaped (len {}, need seq*kv_lora_rank = {})",
+            d_cache_latent.len(),
+            seq * d_c
+        );
+        for j in 0..seq {
+            let src = &d_c_kv_normed_all[j];
+            let dst = &mut d_cache_latent[j * d_c..(j + 1) * d_c];
+            for (d, s) in dst.iter_mut().zip(src.iter()) {
+                *d += *s;
+            }
+        }
+    }
+    if let Some(d_cache_rope) = d_cache_rope {
+        assert!(
+            d_cache_rope.len() >= seq * d_r,
+            "d_cache_rope must be [max_seq][qk_rope_head_dim]-shaped (len {}, need seq*qk_rope_head_dim = {})",
+            d_cache_rope.len(),
+            seq * d_r
+        );
+        for j in 0..seq {
+            let src = &d_k_r_all[j * d_r..(j + 1) * d_r];
+            let dst = &mut d_cache_rope[j * d_r..(j + 1) * d_r];
+            for (d, s) in dst.iter_mut().zip(src.iter()) {
+                *d += *s;
+            }
+        }
     }
 
     // ── Step 5 backward: q_r post-RoPE → q_r_raw ──

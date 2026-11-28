@@ -32,8 +32,8 @@ use katgpt_attn::gdn2::kda_backward::{
     KdaGradients, KdaSavedActivations, kda_backward_sequence, kda_forward_token_with_saved,
 };
 use katgpt_attn::mla_backward::{
-    MlaGradients, MlaSavedActivations, mla_backward_token, mla_forward_token_with_saved,
-    rmsnorm_backward as mla_rmsnorm_backward,
+    MlaGradients, MlaSavedActivations, mla_backward_token, mla_backward_token_with_cache_grads,
+    mla_forward_token_with_saved, rmsnorm_backward as mla_rmsnorm_backward,
 };
 use katgpt_core::simd::{
     simd_dot_f32, simd_matmul_rows, simd_outer_product_acc, simd_sum_sq, simd_transpose_matvec_into,
@@ -851,7 +851,68 @@ pub fn kimi_k3_backward_sequence_with_input_grad(
     saved_tokens: &[TokenSavedActivations],
     d_logits: &[Vec<f32>],
     grads: &mut KimiK3ModelGradients,
+    d_input_hidden: Option<&mut [Vec<f32>]>,
+) {
+    kimi_k3_backward_sequence_with_cache_grads(
+        config,
+        weights,
+        runtime,
+        saved_tokens,
+        d_logits,
+        grads,
+        d_input_hidden,
+        None,
+    );
+}
+
+/// Per-MLA-layer KV-cache-gradient export slot (Issue 1253 — the riir-train
+/// Issue 618 T0.b looped-training consumer's transport).
+///
+/// Buffers are caller-allocated, pre-zeroed, `[l][dim]`-shaped (`l` =
+/// `saved_tokens.len()`; `dim` = the MLA config's `kv_lora_rank` /
+/// `qk_rope_head_dim`); the backward ACCUMULATES (`+=`) into them, one slot
+/// per MLA layer in FORWARD layer order:
+///
+/// - `latent` / `rope` — ALL reader contributions per cache position (each
+///   backward call adds the reads of every position it attends, including
+///   its own position's self-read).
+/// - `diag_latent` / `diag_rope` — SELF-read contributions only (call `t`
+///   adds row `t`: the value that call itself wrote and re-read).
+///
+/// Subtracting the diagonal from the full buffer isolates the CONTEXT
+/// contributions — reads of values written by other calls. In the looped
+/// forward every surviving cache entry is the LAST iteration's write, so the
+/// context contributions are exactly the edge a cross-iteration writer
+/// routing needs (the consumer routes them into the writer iteration's
+/// input-gradient row via W_DKV^T·rmsnorm_backward / W_KR^T·inverse-RoPE).
+pub struct MlaCacheGradsExport {
+    pub latent: Vec<f32>,
+    pub diag_latent: Vec<f32>,
+    pub rope: Vec<f32>,
+    pub diag_rope: Vec<f32>,
+}
+
+/// The four mutable export slices borrowed from one [`MlaCacheGradsExport`]
+/// slot during the backward's fold loop: full-latent, diagonal-latent,
+/// full-rope, diagonal-rope.
+type CacheGradSlotSlices<'a> = (&'a mut [f32], &'a mut [f32], &'a mut [f32], &'a mut [f32]);
+
+/// [`kimi_k3_backward_sequence_with_input_grad`] with the per-MLA-layer
+/// KV-cache-entry gradient export (Issue 1253). Identical body and
+/// bit-identical results when `d_mla_cache_out` is `None`; when armed, each
+/// MLA layer's backward calls additionally fold their cache-entry gradients
+/// into the caller's [`MlaCacheGradsExport`] slots (full = all readers,
+/// diagonal = self-reads only — see the struct docs).
+#[allow(clippy::too_many_arguments)]
+pub fn kimi_k3_backward_sequence_with_cache_grads(
+    config: &KimiK3ModelConfig,
+    weights: &KimiK3ModelWeights,
+    runtime: &KimiK3Runtime,
+    saved_tokens: &[TokenSavedActivations],
+    d_logits: &[Vec<f32>],
+    grads: &mut KimiK3ModelGradients,
     mut d_input_hidden: Option<&mut [Vec<f32>]>,
+    mut d_mla_cache_out: Option<&mut [MlaCacheGradsExport]>,
 ) {
     let d = config.hidden_size;
     let v = config.vocab_size;
@@ -1036,8 +1097,75 @@ pub fn kimi_k3_backward_sequence_with_input_grad(
                 config.mla_config.rope_theta,
             );
 
+            // ── Issue 1253 cache-grad export pass-through ──
+            // Slots are indexed by FORWARD MLA-layer ordinal (the consumer
+            // names layers in forward order), so the reverse layer walk
+            // re-derives the ordinal per MLA layer. Armed posture: each call
+            // exports into the reusable scratch (cleared per call), then the
+            // scratch folds into the layer's slots — full buffer (all
+            // readers) plus the diagonal row t (that call's self-read).
+            // Unarmed: no scratch, no fold, `None`/`None` straight through —
+            // bit-identical incumbent.
+            let export_armed = d_mla_cache_out.is_some();
+            let d_c = config.mla_config.kv_lora_rank;
+            let d_r = config.mla_config.qk_rope_head_dim;
+            let mut exp_latent = if export_armed {
+                vec![0.0f32; l * d_c]
+            } else {
+                Vec::new()
+            };
+            let mut exp_rope = if export_armed {
+                vec![0.0f32; l * d_r]
+            } else {
+                Vec::new()
+            };
+            let mut slot_borrow: Option<CacheGradSlotSlices> = match &mut d_mla_cache_out {
+                Some(slots) => {
+                    let mla_ord = (0..layer_idx).filter(|&i| config.is_mla_layer(i)).count();
+                    let s = &mut slots[mla_ord];
+                    debug_assert_eq!(
+                        s.latent.len(),
+                        l * d_c,
+                        "MlaCacheGradsExport.latent must be [l][kv_lora_rank] (len {}, need {})",
+                        s.latent.len(),
+                        l * d_c
+                    );
+                    debug_assert_eq!(
+                        s.diag_latent.len(),
+                        l * d_c,
+                        "MlaCacheGradsExport.diag_latent must be [l][kv_lora_rank]"
+                    );
+                    debug_assert_eq!(
+                        s.rope.len(),
+                        l * d_r,
+                        "MlaCacheGradsExport.rope must be [l][qk_rope_head_dim] (len {}, need {})",
+                        s.rope.len(),
+                        l * d_r
+                    );
+                    debug_assert_eq!(
+                        s.diag_rope.len(),
+                        l * d_r,
+                        "MlaCacheGradsExport.diag_rope must be [l][qk_rope_head_dim]"
+                    );
+                    Some((
+                        &mut s.latent,
+                        &mut s.diag_latent,
+                        &mut s.rope,
+                        &mut s.diag_rope,
+                    ))
+                }
+                None => None,
+            };
+
             for t in 0..l {
-                mla_backward_token(
+                let (dcl, dcr): (Option<&mut [f32]>, Option<&mut [f32]>) = if export_armed {
+                    exp_latent.fill(0.0);
+                    exp_rope.fill(0.0);
+                    (Some(&mut exp_latent[..]), Some(&mut exp_rope[..]))
+                } else {
+                    (None, None)
+                };
+                mla_backward_token_with_cache_grads(
                     &config.mla_config,
                     mla_w,
                     cache,
@@ -1047,7 +1175,21 @@ pub fn kimi_k3_backward_sequence_with_input_grad(
                     &d_attn_out[t],
                     &mut all_dh,
                     mla_grads,
+                    dcl,
+                    dcr,
                 );
+                if let Some((slot_l, slot_dl, slot_r, slot_dr)) = &mut slot_borrow {
+                    katgpt_core::simd::simd_add_inplace(slot_l, &exp_latent);
+                    katgpt_core::simd::simd_add_inplace(slot_r, &exp_rope);
+                    katgpt_core::simd::simd_add_inplace(
+                        &mut slot_dl[t * d_c..(t + 1) * d_c],
+                        &exp_latent[t * d_c..(t + 1) * d_c],
+                    );
+                    katgpt_core::simd::simd_add_inplace(
+                        &mut slot_dr[t * d_r..(t + 1) * d_r],
+                        &exp_rope[t * d_r..(t + 1) * d_r],
+                    );
+                }
             }
             d_normed_self = all_dh;
         } else {
