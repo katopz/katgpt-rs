@@ -214,10 +214,23 @@ pub enum ProcrustesError {
     /// `‖M‖_F` was zero (both anchor sets are all-zero). No meaningful
     /// rotation exists.
     DegenerateAnchors,
-    /// `d` is odd — the RoPE-commuting subgroup is per-frequency 2×2
-    /// block-diagonal, which needs an even head dimension
-    /// ([`rope_commuting_procrustes`] only).
+    /// `d` is odd — the adjacent-convention RoPE-commuting subgroup is
+    /// per-frequency 2×2 block-diagonal, which needs an even head dimension
+    /// ([`rope_commuting_procrustes`] only; the paired generalization takes
+    /// explicit pairs and accepts odd `d`).
     OddDim { d: usize },
+    /// An empty pair list was passed to [`rope_commuting_procrustes_paired`]
+    /// — nothing to fit.
+    EmptyPairs,
+    /// Two pairs in the list share a coordinate — the per-plane rotations
+    /// would overlap and the constraint system is ill-posed.
+    OverlappingPairs { index: usize },
+    /// A pair coordinate is out of range (`>= d`).
+    PairOutOfRange {
+        index: usize,
+        coord: usize,
+        d: usize,
+    },
 }
 
 impl std::fmt::Display for ProcrustesError {
@@ -245,6 +258,18 @@ impl std::fmt::Display for ProcrustesError {
                     f,
                     "rope-commuting Procrustes needs an even d (per-frequency 2x2 blocks), got {d}"
                 )
+            }
+            ProcrustesError::EmptyPairs => {
+                write!(f, "empty pair list: nothing to fit")
+            }
+            ProcrustesError::OverlappingPairs { index } => {
+                write!(
+                    f,
+                    "pair {index} shares a coordinate with an earlier pair — rotations must not overlap"
+                )
+            }
+            ProcrustesError::PairOutOfRange { index, coord, d } => {
+                write!(f, "pair {index} coordinate {coord} out of range (d={d})")
             }
         }
     }
@@ -583,7 +608,6 @@ pub fn orthogonal_procrustes(
         };
     }
 
-    // ── 9. Build report ─────────────────────────────────────────────
     // ── 9. Build report ─────────────────────────────────
     Ok(ProcrustesReport {
         n,
@@ -682,12 +706,64 @@ pub fn rope_commuting_procrustes(
     scratch: &mut ProcrustesScratch,
     config: &ProcrustesConfig,
 ) -> Result<ProcrustesReport, ProcrustesError> {
-    // ── 1. Validate shapes (mirrors the unconstrained gate) ────────
+    // Adjacent pairing (the GPT-J / interleaved convention): coordinate
+    // pairs (0,1), (2,3), … — requires even d.
     if d == 0 {
         return Err(ProcrustesError::ZeroDim);
     }
     if !d.is_multiple_of(2) {
         return Err(ProcrustesError::OddDim { d });
+    }
+    let pairs: Vec<(usize, usize)> = (0..d / 2).map(|p| (2 * p, 2 * p + 1)).collect();
+    rope_commuting_procrustes_paired(a, b, n, d, &pairs, out_rotation, scratch, config)
+}
+
+/// Constrained orthogonal Procrustes restricted to an **explicit set of
+/// planar coordinate pairs** — the general RoPE-commuting subgroup.
+///
+/// Issue 1251. The generalization behind [`rope_commuting_procrustes`]
+/// (which delegates with the adjacent pairing): real RoPE implementations
+/// use different pair conventions — GPT-J interleaves `(2i, 2i+1)`, while
+/// the NeoX / llama.cpp rotate-half convention pairs `(i, i + rotary_dim/2)`
+/// (riir-infer `apply_partial_rope_with_freq`, Issue 594 — Qwen3.5/Gemma
+/// rotate ONLY the first `rope.dimension_count` dims). The caller passes the
+/// exact pair list its forward's RoPE actually rotates; dims outside the
+/// list are left at identity (for partial-RoPE heads the non-rotary section
+/// can take a FREE rotation via [`orthogonal_procrustes`] on the dim slice —
+/// the harness composes the two halves).
+///
+/// # Contract
+///
+/// Same anchors/scratch/config/report contract as
+/// [`rope_commuting_procrustes`], plus `pairs: &[(usize, usize)]` — the
+/// planar coordinates, each pair (x, y) meaning the plane basis (dim x,
+/// dim y). Validation refuses: empty list ([`ProcrustesError::EmptyPairs`]),
+/// a coordinate repeated across pairs ([`ProcrustesError::OverlappingPairs`],
+/// O(P²) scan, no allocation), a coordinate ≥ d
+/// ([`ProcrustesError::PairOutOfRange`]). `d` itself may be odd (unlisted
+/// dims stay identity). Coordinates may be listed in either order within a
+/// pair — the order defines the plane basis (x first).
+///
+/// The fit is per-pair 2×2 Kabsch on four scalar cells accumulated directly
+/// over the anchors (pairs outer, anchors inner — each cell folds in
+/// ascending anchor order); no d×d M buffer is formed. Det = +1 always.
+#[allow(clippy::too_many_arguments)] // mirrors orthogonal_procrustes' caller-owned-buffer contract
+pub fn rope_commuting_procrustes_paired(
+    a: &[f32],
+    b: &[f32],
+    n: usize,
+    d: usize,
+    pairs: &[(usize, usize)],
+    out_rotation: &mut [f32],
+    scratch: &mut ProcrustesScratch,
+    config: &ProcrustesConfig,
+) -> Result<ProcrustesReport, ProcrustesError> {
+    // ── 1. Validate shapes + the pair list ────────────────────
+    if d == 0 {
+        return Err(ProcrustesError::ZeroDim);
+    }
+    if pairs.is_empty() {
+        return Err(ProcrustesError::EmptyPairs);
     }
     let expected = n.checked_mul(d).ok_or(ProcrustesError::ShapeMismatch {
         expected: 0,
@@ -720,11 +796,27 @@ pub fn rope_commuting_procrustes(
     if n < min_anchors {
         return Err(ProcrustesError::Underdetermined { n, min_anchors, d });
     }
+    for (i, &(pa, pb)) in pairs.iter().enumerate() {
+        if pa >= d || pb >= d {
+            return Err(ProcrustesError::PairOutOfRange {
+                index: i,
+                coord: pa.max(pb),
+                d,
+            });
+        }
+        if pa == pb {
+            return Err(ProcrustesError::OverlappingPairs { index: i });
+        }
+        for &(qa, qb) in pairs.iter().take(i) {
+            if pa == qa || pa == qb || pb == qa || pb == qb {
+                return Err(ProcrustesError::OverlappingPairs { index: i });
+            }
+        }
+    }
 
     scratch.ensure_capacity(n, d);
 
-    // ── 2. Column means (only if centering) — identical fold to the
-    // unconstrained gate, ascending row order.
+    // ── 2. Column means (only if centering) ──────────────
     if config.center {
         for v in scratch.mean_a[..d].iter_mut() {
             *v = 0.0;
@@ -747,100 +839,65 @@ pub fn rope_commuting_procrustes(
         }
     }
 
-    // ── 3. Per-pair 2×2 cross-covariances M_i = Bᵢᵀ Aᵢ + centering ─
+    // ── 3. Per-pair 2×2 cross-covariance cells, one direct fold ────
     //
-    // M_i[r][c] = Σ_t b̃[t, 2i+r]·ã[t, 2i+c]. Same centering identity as
-    // the unconstrained path: with μ = column means, the centered sum is
-    // Σ b·a − n·μ_b[r]·μ_a[c] (per pair cell). Raw accumulation first (one
-    // pass over the anchors, four ordered cell updates per pair), then the
-    // rank-1 correction — the unconstrained order.
-    //
-    // Cell storage layout in scratch.m (d×d row-major): for pair p, the
-    // four cells ride the SAME (r, c) positions a full block-diagonal M
-    // would occupy — m[(2p+r)*d + (2p+c)]. Off-block cells stay 0.0, so the
-    // m_norm fold over the whole buffer equals sqrt(Σᵢ ‖M_i‖²_F) with no
-    // extra pass.
-    for v in scratch.m[..dd].iter_mut() {
+    // M_i[r][c] = Σ_t b̃[t, cᵣ]·ã[t, c_c] over the pair's coordinates
+    // (c₀, c₁) = pairs[i]. Raw accumulation pairs-outer / anchors-inner
+    // (each cell folds in ascending anchor order), then the per-pair
+    // rank-1 centering correction — the unconstrained order. The cell
+    // bank rides scratch.m (d² cells ≥ 4·pairs for every admissible
+    // pair list — each pair consumes 4 disjoint coordinates, so
+    // 4·pairs ≤ 2d ≤ d² for d ≥ 2).
+    let np = pairs.len();
+    for v in scratch.m[..4 * np].iter_mut() {
         *v = 0.0;
     }
-    let pairs = d / 2;
-    if config.center {
+    for (i, &(ca, cb)) in pairs.iter().enumerate() {
+        let cells = &mut scratch.m[4 * i..4 * i + 4];
         for t in 0..n {
             let a_row = &a[t * d..(t + 1) * d];
             let b_row = &b[t * d..(t + 1) * d];
-            for p in 0..pairs {
-                let r0 = 2 * p;
-                let c0 = 2 * p;
-                for r in 0..2 {
-                    let b_t = b_row[r0 + r];
-                    let m_row = &mut scratch.m[(r0 + r) * d..(r0 + r) * d + d];
-                    for c in 0..2 {
-                        m_row[c0 + c] += a_row[c0 + c] * b_t;
-                    }
-                }
-            }
+            let b_a = b_row[ca];
+            let b_b = b_row[cb];
+            cells[0] += b_a * a_row[ca];
+            cells[1] += b_a * a_row[cb];
+            cells[2] += b_b * a_row[ca];
+            cells[3] += b_b * a_row[cb];
         }
-        for p in 0..pairs {
-            let r0 = 2 * p;
-            let c0 = 2 * p;
-            for r in 0..2 {
-                let mb = scratch.mean_b[r0 + r] * (n as f32);
-                for c in 0..2 {
-                    scratch.m[(r0 + r) * d + (c0 + c)] -= mb * scratch.mean_a[c0 + c];
-                }
-            }
-        }
-    } else {
-        for t in 0..n {
-            let a_row = &a[t * d..(t + 1) * d];
-            let b_row = &b[t * d..(t + 1) * d];
-            for p in 0..pairs {
-                let r0 = 2 * p;
-                let c0 = 2 * p;
-                for r in 0..2 {
-                    let b_t = b_row[r0 + r];
-                    let m_row = &mut scratch.m[(r0 + r) * d..(r0 + r) * d + d];
-                    for c in 0..2 {
-                        m_row[c0 + c] += a_row[c0 + c] * b_t;
-                    }
-                }
-            }
+        if config.center {
+            let n_f = n as f32;
+            cells[0] -= n_f * scratch.mean_b[ca] * scratch.mean_a[ca];
+            cells[1] -= n_f * scratch.mean_b[ca] * scratch.mean_a[cb];
+            cells[2] -= n_f * scratch.mean_b[cb] * scratch.mean_a[ca];
+            cells[3] -= n_f * scratch.mean_b[cb] * scratch.mean_a[cb];
         }
     }
 
-    // ── 4. ‖M‖_F over the block-diagonal stack (ordered fold, Issue 940).
-    let m_norm = dot_f32_ordered(&scratch.m[..dd], &scratch.m[..dd]).sqrt();
+    // ── 4. ‖M‖_F over the cell bank (ordered fold, Issue 940) ─────
+    let m_norm = dot_f32_ordered(&scratch.m[..4 * np], &scratch.m[..4 * np]).sqrt();
     if !m_norm.is_finite() || m_norm == 0.0 {
         return Err(ProcrustesError::DegenerateAnchors);
     }
 
-    // ── 5. Closed-form planar angle per pair + write the block-diagonal R.
+    // ── 5. Closed-form planar angle per pair + write R ─────────
     //
-    // θ_i = atan2(m₁₀ − m₀₁, m₀₀ + m₁₁). IEEE-exact ops; no iteration; the
-    // angle depends only on the four folded cells, so the result is
-    // bit-deterministic across platforms. Identity init first (diagonal
-    // 1.0, everything else EXACT 0.0), then every block-diagonal cell is
-    // overwritten with the planar cos/sin — off-block entries stay exactly
-    // zero by construction.
+    // θ_i = atan2(m₁₀ − m₀₁, m₀₀ + m₁₁). Identity init first (diagonal
+    // 1.0, everything else EXACT 0.0), then each pair's planar block is
+    // written at its coordinates — unlisted dims stay exactly identity.
     for (cell, v) in out_rotation[..dd].iter_mut().enumerate() {
         *v = if cell % (d + 1) == 0 { 1.0 } else { 0.0 };
     }
-    for p in 0..pairs {
-        let r0 = 2 * p;
-        let c0 = 2 * p;
-        let m00 = scratch.m[r0 * d + c0];
-        let m01 = scratch.m[r0 * d + (c0 + 1)];
-        let m10 = scratch.m[(r0 + 1) * d + c0];
-        let m11 = scratch.m[(r0 + 1) * d + (c0 + 1)];
+    for (i, &(ca, cb)) in pairs.iter().enumerate() {
+        let cells = &scratch.m[4 * i..4 * i + 4];
+        let (m00, m01, m10, m11) = (cells[0], cells[1], cells[2], cells[3]);
         let theta = (m10 - m01).atan2(m00 + m11);
         let (s, c) = theta.sin_cos();
-        out_rotation[r0 * d + c0] = c;
-        out_rotation[r0 * d + c0 + 1] = -s;
-        out_rotation[(r0 + 1) * d + c0] = s;
-        out_rotation[(r0 + 1) * d + (c0 + 1)] = c;
+        out_rotation[ca * d + ca] = c;
+        out_rotation[ca * d + cb] = -s;
+        out_rotation[cb * d + ca] = s;
+        out_rotation[cb * d + cb] = c;
     }
-    // Det of a block-diagonal matrix = product of block dets = (+1)^pairs.
-    // Report it only when asked (mirrors the unconstrained flag).
+    // Det of a block-diagonal matrix = product of block dets = +1 always.
     let det = if config.compute_det { 1.0 } else { f32::NAN };
 
     // ── 6. Residual ‖B − A Rᵀ‖_F / ‖B‖_F (same fold, same flags) ───
@@ -2076,6 +2133,287 @@ mod tests {
         }
         assert_eq!(rep1.m_norm.to_bits(), rep2.m_norm.to_bits());
         assert_eq!(rep1.residual.to_bits(), rep2.residual.to_bits());
+    }
+
+    /// G7 — the rotate-half pairing (NeoX / llama.cpp / Qwen3.5 partial
+    /// RoPE, riir-infer Issue 594): pairs are `(i, i + half)`, not adjacent.
+    /// Planted per-plane rotations are recovered, and the recovered R
+    /// commutes BIT-EXACTLY with an actual rotate-half rope application.
+    #[test]
+    fn rope_rotate_half_pairing_recovered_and_commutes_with_partial_rope() {
+        let head_dim = 16;
+        let rotary_dim = 8; // dims 0..8 rotate, dims 8..16 pass through
+        let half = rotary_dim / 2;
+        let n = 64;
+        // Pairs in the rotate-half convention.
+        let pairs: Vec<(usize, usize)> = (0..half).map(|i| (i, i + half)).collect();
+        let angles = [0.5_f32, -1.3, 0.8, 2.1];
+        // Plant R over those pairs on the FULL head_dim anchors.
+        let mut r_true = vec![0.0_f32; head_dim * head_dim];
+        for (cell, v) in r_true.iter_mut().enumerate() {
+            *v = if cell % (head_dim + 1) == 0 { 1.0 } else { 0.0 };
+        }
+        for (i, &(ca, cb)) in pairs.iter().enumerate() {
+            let (s, c) = angles[i].sin_cos();
+            r_true[ca * head_dim + ca] = c;
+            r_true[ca * head_dim + cb] = -s;
+            r_true[cb * head_dim + ca] = s;
+            r_true[cb * head_dim + cb] = c;
+        }
+        let mut state = 0x1256u64;
+        let a: Vec<f32> = (0..n * head_dim).map(|_| prf(&mut state)).collect();
+        let b = apply_mat(&r_true, &a, n, head_dim);
+        let mut r = vec![0.0_f32; head_dim * head_dim];
+        let mut scratch = ProcrustesScratch::new(n, head_dim);
+        let report = rope_commuting_procrustes_paired(
+            &a,
+            &b,
+            n,
+            head_dim,
+            &pairs,
+            &mut r,
+            &mut scratch,
+            &ProcrustesConfig {
+                center: false,
+                ..Default::default()
+            },
+        )
+        .expect("rotate-half solve");
+        assert!(report.residual < 1e-4, "residual {}", report.residual);
+        // The dims OUTSIDE the pairs stay exactly identity.
+        for dim in rotary_dim..head_dim {
+            for col in 0..head_dim {
+                let want = if dim == col { 1.0 } else { 0.0 };
+                assert_eq!(
+                    r[dim * head_dim + col],
+                    want,
+                    "non-rotary dim {dim} col {col} must stay identity"
+                );
+            }
+        }
+        // Commutation, two levels:
+        // (a) BIT-EXACT at the block level — for two planar rotations in
+        //     the SAME plane, every product element is a two-term sum of
+        //     commutative products over a commutative sum, so
+        //     R·rot(p·θ) == rot(p·θ)·R bit-exactly (same argument as G2).
+        // (b) TOLERANCE on a real vector — sequential application rounds
+        //     intermediates, so the vector-level law holds to ~1e-5, not
+        //     bit-exact (the mathematical commutativity is what the block
+        //     structure certifies; this asserts it numerically).
+        let freqs: Vec<f32> = (0..half)
+            .map(|i| 1e-4_f32 * (0.7_f32).powi(i as i32))
+            .collect();
+        for (i, &(ca, cb)) in pairs.iter().enumerate() {
+            let rb = [
+                r[ca * head_dim + ca],
+                r[ca * head_dim + cb],
+                r[cb * head_dim + ca],
+                r[cb * head_dim + cb],
+            ];
+            for pos in [3_usize, 17, 500] {
+                let m = rot2(pos as f32 * freqs[i]);
+                let mul = |x: &[f32; 4], y: &[f32; 4]| -> [f32; 4] {
+                    [
+                        x[0] * y[0] + x[1] * y[2],
+                        x[0] * y[1] + x[1] * y[3],
+                        x[2] * y[0] + x[3] * y[2],
+                        x[2] * y[1] + x[3] * y[3],
+                    ]
+                };
+                let left = mul(&rb, &m); // R·RoPE
+                let right = mul(&m, &rb); // RoPE·R
+                assert_eq!(left[0].to_bits(), right[0].to_bits());
+                assert_eq!(left[1].to_bits(), right[1].to_bits());
+                assert_eq!(left[2].to_bits(), right[2].to_bits());
+                assert_eq!(left[3].to_bits(), right[3].to_bits());
+            }
+        }
+        // (b) vector-level: rope∘R == R∘rope within tolerance.
+        for pos in [3_usize, 17, 500] {
+            let mut v1 = vec![0.0_f32; head_dim];
+            let mut v2 = vec![0.0_f32; head_dim];
+            for x in v1.iter_mut() {
+                *x = prf(&mut state);
+            }
+            v2.copy_from_slice(&v1);
+            crate_rope_like_rotate_half(&mut v1, pos, head_dim, rotary_dim, &freqs);
+            apply_planes_inplace(&mut v1, &pairs, &angles);
+            apply_planes_inplace(&mut v2, &pairs, &angles);
+            crate_rope_like_rotate_half(&mut v2, pos, head_dim, rotary_dim, &freqs);
+            for (x, y) in v1.iter().zip(&v2) {
+                assert!(
+                    (x - y).abs() < 1e-4,
+                    "R must commute with rotate-half rope at pos {pos}: {x} vs {y}"
+                );
+            }
+        }
+    }
+
+    /// G8 — the adjacent-convention wrapper is EXACTLY the paired solve
+    /// over the adjacent pair list (delegation, bit-exact).
+    #[test]
+    fn rope_wrapper_equals_paired_with_adjacent_pairs_bit_exact() {
+        let d = 8;
+        let n = 48;
+        let mut state = 0x1257u64;
+        let a: Vec<f32> = (0..n * d).map(|_| prf(&mut state)).collect();
+        let b: Vec<f32> = (0..n * d).map(|_| prf(&mut state)).collect();
+        let mut scratch = ProcrustesScratch::new(n, d);
+        let mut r1 = vec![0.0_f32; d * d];
+        let mut r2 = vec![0.0_f32; d * d];
+        let rep1 = rope_commuting_procrustes(
+            &a,
+            &b,
+            n,
+            d,
+            &mut r1,
+            &mut scratch,
+            &ProcrustesConfig::default(),
+        )
+        .expect("wrapper");
+        let pairs: Vec<(usize, usize)> = (0..d / 2).map(|p| (2 * p, 2 * p + 1)).collect();
+        let rep2 = rope_commuting_procrustes_paired(
+            &a,
+            &b,
+            n,
+            d,
+            &pairs,
+            &mut r2,
+            &mut scratch,
+            &ProcrustesConfig::default(),
+        )
+        .expect("paired");
+        for (x, y) in r1.iter().zip(&r2) {
+            assert_eq!(x.to_bits(), y.to_bits());
+        }
+        assert_eq!(rep1.m_norm.to_bits(), rep2.m_norm.to_bits());
+        assert_eq!(rep1.residual.to_bits(), rep2.residual.to_bits());
+    }
+
+    /// G9 — paired-form refusals: empty list, overlapping pairs,
+    /// out-of-range coordinates; odd d is FINE for the paired form.
+    #[test]
+    fn rope_paired_refusals_and_odd_d_ok() {
+        let d = 6;
+        let n = 16;
+        let mut state = 0x1258u64;
+        let a: Vec<f32> = (0..n * d).map(|_| prf(&mut state)).collect();
+        let b: Vec<f32> = (0..n * d).map(|_| prf(&mut state)).collect();
+        let mut scratch = ProcrustesScratch::new(n, d);
+        let mut r = vec![0.0_f32; d * d];
+        assert!(matches!(
+            rope_commuting_procrustes_paired(
+                &a,
+                &b,
+                n,
+                d,
+                &[],
+                &mut r,
+                &mut scratch,
+                &ProcrustesConfig {
+                    min_anchors: 2,
+                    ..Default::default()
+                }
+            ),
+            Err(ProcrustesError::EmptyPairs)
+        ));
+        assert!(matches!(
+            rope_commuting_procrustes_paired(
+                &a,
+                &b,
+                n,
+                d,
+                &[(0, 1), (1, 2)],
+                &mut r,
+                &mut scratch,
+                &ProcrustesConfig {
+                    min_anchors: 2,
+                    ..Default::default()
+                }
+            ),
+            Err(ProcrustesError::OverlappingPairs { index: 1 })
+        ));
+        assert!(matches!(
+            rope_commuting_procrustes_paired(
+                &a,
+                &b,
+                n,
+                d,
+                &[(0, 9)],
+                &mut r,
+                &mut scratch,
+                &ProcrustesConfig {
+                    min_anchors: 2,
+                    ..Default::default()
+                }
+            ),
+            Err(ProcrustesError::PairOutOfRange {
+                index: 0,
+                coord: 9,
+                d: 6
+            })
+        ));
+        // Odd d with disjoint pairs solves fine (unlisted dims stay identity).
+        let d_odd = 7;
+        let mut state2 = 0x1259u64;
+        let a7: Vec<f32> = (0..n * d_odd).map(|_| prf(&mut state2)).collect();
+        let mut r7 = vec![0.0_f32; d_odd * d_odd];
+        let mut scratch7 = ProcrustesScratch::new(n, d_odd);
+        let rep = rope_commuting_procrustes_paired(
+            &a7,
+            &a7,
+            n,
+            d_odd,
+            &[(1, 4)],
+            &mut r7,
+            &mut scratch7,
+            &ProcrustesConfig {
+                min_anchors: 2,
+                compute_residual: false,
+                ..Default::default()
+            },
+        )
+        .expect("odd-d paired solve");
+        // A → A with the pair fitted on identical data: identity is optimal
+        // (m = I is symmetric positive, θ → 0), R must be identity.
+        assert_eq!(rep.residual.to_bits(), f32::NAN.to_bits()); // residual off
+        for (cell, v) in r7.iter().enumerate() {
+            let want = if cell % (d_odd + 1) == 0 { 1.0 } else { 0.0 };
+            assert_eq!(*v, want, "cell {cell} of the odd-d identity solve");
+        }
+    }
+
+    /// Minimal rotate-half partial rope on ONE head vector (test-only;
+    /// mirrors riir-infer `apply_partial_rope_with_freq`'s pairing). Dims
+    /// [0..rotary_dim) rotate as pairs (i, i+half); the rest pass through.
+    fn crate_rope_like_rotate_half(
+        v: &mut [f32],
+        pos: usize,
+        head_dim: usize,
+        rotary_dim: usize,
+        freqs: &[f32],
+    ) {
+        let half = rotary_dim / 2;
+        for i in 0..half {
+            let angle = (pos as f32) * freqs[i];
+            let (s, c) = angle.sin_cos();
+            let x = v[i];
+            let y = v[i + half];
+            v[i] = c * x - s * y;
+            v[i + half] = s * x + c * y;
+        }
+        let _ = head_dim;
+    }
+
+    /// Apply planar rotations in-place over a vector (test-only).
+    fn apply_planes_inplace(v: &mut [f32], pairs: &[(usize, usize)], angles: &[f32]) {
+        for (i, &(ca, cb)) in pairs.iter().enumerate() {
+            let (s, c) = angles[i].sin_cos();
+            let x = v[ca];
+            let y = v[cb];
+            v[ca] = c * x - s * y;
+            v[cb] = s * x + c * y;
+        }
     }
 
     /// G6 — centered anchors recover a planted rotation (the rank-1

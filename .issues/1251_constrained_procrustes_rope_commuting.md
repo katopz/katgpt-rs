@@ -50,20 +50,43 @@ caller-owned `out_rotation` `(d, d)` + `ProcrustesScratch`, `ProcrustesConfig`,
 
 ## Gates (fixture battery, mirror the module's test style)
 
-- [ ] G1 planted-recovery: plant per-pair rotations `A → B = R·A`; recovered
+- [x] G1 planted-recovery: plant per-pair rotations `A → B = R·A`; recovered
       angles within 1e-4; off-block entries EXACTLY zero.
-- [ ] G2 RoPE-commuting pin: for the planted `R`,
+- [x] G2 RoPE-commuting pin: for the planted `R`,
       `R·rot(p·θ_i) == rot(p·θ_i)·R` per pair, bit-exact, at several
       positions/frequencies — the load-bearing invariant.
-- [ ] G3 coheres with the unconstrained solve: when the truth IS
+- [x] G3 coheres with the unconstrained solve: when the truth IS
       block-diagonal, the constrained residual ≤ the unconstrained residual
       + 1e-4 (both should recover it).
-- [ ] G4 refusals: odd `d` → new `ProcrustesError::OddDim`; degenerate
+- [x] G4 refusals: odd `d` → new `ProcrustesError::OddDim`; degenerate
       (zero-norm) anchors → `DegenerateAnchors`; shape mismatches.
-- [ ] G5 determinism: same inputs → identical output bits (replay pin).
-- [ ] G6 centered anchors recover a planted rotation.
-- [ ] Clippy `-D warnings` at the crate postures; bare `rustfmt` on the
-      touched file.
+- [x] G5 determinism: same inputs → identical output bits (replay pin).
+- [x] G6 centered anchors recover a planted rotation.
+- [x] G7 **rotate-half pairing** (LANDED same session, the geometry catch):
+      the first real consumer checkpoint (Ternary-Bonsai-2.5-27B, `qwen35`
+      arch) rotates only the first `rope.dimension_count = 64` of 256 head
+      dims, paired `(i, i + 32)` — the NeoX / llama.cpp rotate-half
+      convention (riir-infer `apply_partial_rope_with_freq`, Issue 594), NOT
+      adjacent pairs. The adjacent-only form could not express it, so the
+      substrate grew the generalization: `rope_commuting_procrustes_paired`
+      takes an EXPLICIT pair list (empty → `EmptyPairs`; overlapping
+      coordinates → `OverlappingPairs`; out-of-range → `PairOutOfRange`;
+      odd `d` legal — unlisted dims stay exactly identity), accumulating
+      four scalar cells per pair directly (no d×d M buffer);
+      `rope_commuting_procrustes` delegates with the adjacent list (G8 pins
+      the delegation bit-exact). The pair list covers partial-RoPE heads:
+      the harness composes the paired solve on the rotary dims with
+      `orthogonal_procrustes` on the non-rotary dim slice (the issue-text
+      "non-RoPE part of a partial-rotary head" form). Commutation is pinned
+      BIT-EXACT at the 2×2 block level (two-term sums of commutative
+      products — the strongest floating-point form) and to 1e-4 on real
+      vectors (sequential application rounds intermediates; bit-exact
+      vector commutativity is not a property of f32, the structure test is
+      the carrier).
+- [x] G9 paired-form refusals + odd-d legality (unlisted dims identity).
+- [x] Clippy `-D warnings` at the crate postures (gated + default +
+      no-default); bare `rustfmt` on the touched file. 113/113 at the
+      `orthogonal_procrustes` posture.
 
 ## Non-goals
 
