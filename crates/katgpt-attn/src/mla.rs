@@ -948,6 +948,189 @@ pub fn mla_forward_token_dispatched<'s>(
     mla_forward_token(config, weights, cache, scratch, rope_freqs, h)
 }
 
+/// Batched causal PREFILL — the chunk form of [`mla_forward_token`]
+/// (the reconstruct reference; Plan 627 Phase 1 T2, GLM-5.3-Flash lane).
+///
+/// Processes `hs.len()` tokens starting at `cache.seq_len` and returns the
+/// per-row layer outputs as one flat row-major `[n × hidden_size]` buffer.
+///
+/// # Bit-exactness contract
+///
+/// Every per-row arithmetic element is produced by the IDENTICAL helper call
+/// on IDENTICAL inputs as the sequential decode loop ([`mla_forward_token`]
+/// per token, same visit order). The only restructures — neither can move an
+/// output bit — are:
+///
+/// 1. the K/V up-projections are hoisted out of the row loop (once per
+///    `(head, position)` instead of once per `(row, head, position)`;
+///    identical inputs through the identical helper, so identical bits), and
+/// 2. the reference's dead stores between its Step 3 and the attention loop
+///    (`scratch.k_c`/`scratch.v_c`, each overwritten before any read) are
+///    skipped.
+///
+/// The score scan (running max, ascending j), the max-subtracted softmax,
+/// and the weighted value fold keep the decode's exact j-ascending order and
+/// expressions, so chunk ≡ decode-loop EXACTLY — pinned by the in-module
+/// test on the rope-carrying and nope configs, fresh and after a decode
+/// prefix. (The absorbed-form chunk is future work; this is the reconstruct
+/// reference's chunk shape, named parallel to [`mla_forward_token`].)
+///
+/// # Stages (bits identical to the decode loop)
+///
+/// 1. Per row: the shared prologue (down/up projections + latent RMSNorms +
+///    per-row RoPE at the row's ABSOLUTE position) into chunk stores, then
+///    the shared midfix (rope key + cache append). Stage ordering stays
+///    exact: a row's attention only reads cached entries `j ≤ pos`, all of
+///    which are final by stage 2.
+/// 2. Per head: the window K/V up-projection store over `0..window`
+///    (`window = cache.seq_len` after stage 1), then per row the decode's
+///    attention folds into that row's attn slice.
+/// 3. Per row: the shared epilogue (optional Kimi gate, then `W_O`), the
+///    output row written directly into the result buffer.
+///
+/// # Posture
+///
+/// Reference: allocates the chunk stores per call (the decode hot path stays
+/// alloc-free; an absorbed / GPU prefill lane owns throughput). Panics on
+/// cache overflow (via [`MlaKVCache::append`]) — callers bound the chunk
+/// exactly like the decode seat bounds a token. An empty `hs` is a no-op
+/// returning an empty buffer.
+pub fn mla_forward_chunk(
+    config: &MlaConfig,
+    weights: &MlaWeights,
+    cache: &mut MlaKVCache,
+    scratch: &mut MlaForwardScratch,
+    rope_freqs: &mut RopeFreqs,
+    hs: &[&[f32]],
+) -> Vec<f32> {
+    let n = hs.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let d = config.hidden_size;
+    let d_c = config.kv_lora_rank;
+    let d_qc = config.q_lora_rank;
+    let d_h = config.d_h();
+    let d_r = config.d_r();
+    let v_h = config.v_head_dim;
+    let n_h = config.n_heads;
+    let p = cache.seq_len;
+
+    // ── Stage 1: per-row prologue + midfix (bits identical to decode) ──
+    let mut q_store = vec![0.0f32; n * d_h * n_h];
+    let mut qr_store = vec![0.0f32; n * d_r * n_h];
+    for (i, h) in hs.iter().enumerate() {
+        let pos = p + i;
+        debug_assert_eq!(h.len(), d, "hidden state dim mismatch");
+        // Steps 1–2 (shared prologue, verbatim math — chunk-store outputs).
+        simd_matmul_rows(&mut scratch.c_kv, &weights.w_dkv, h, d_c, d);
+        simd_matmul_rows(&mut scratch.c_q, &weights.w_dq, h, d_qc, d);
+        rmsnorm_inplace(
+            &mut scratch.c_q,
+            &weights.q_a_norm_weight,
+            config.rms_norm_eps,
+        );
+        rmsnorm_inplace(
+            &mut scratch.c_kv,
+            &weights.kv_a_norm_weight,
+            config.rms_norm_eps,
+        );
+        let q_row = &mut q_store[i * d_h * n_h..(i + 1) * d_h * n_h];
+        simd_matmul_rows(q_row, &weights.w_uq, &scratch.c_q, d_h * n_h, d_qc);
+        let qr_row = &mut qr_store[i * d_r * n_h..(i + 1) * d_r * n_h];
+        simd_matmul_rows(qr_row, &weights.w_qr, &scratch.c_q, d_r * n_h, d_qc);
+        if !config.use_nope {
+            apply_decoupled_rope(rope_freqs, qr_row, d_r, n_h, pos);
+        }
+        // Steps 4–5 (shared midfix, verbatim): rope key + cache append.
+        simd_matmul_rows(&mut scratch.k_r, &weights.w_kr, h, d_r, d);
+        if !config.use_nope {
+            apply_decoupled_rope(rope_freqs, &mut scratch.k_r, d_r, 1, pos);
+        }
+        cache.append(&scratch.c_kv, &scratch.k_r);
+    }
+
+    // ── Stage 2: per-head window K/V + per-row attention folds ────────
+    let window = cache.seq_len;
+    let scale = config.attn_scale();
+    let mut attn_store = vec![0.0f32; n * v_h * n_h];
+    let mut k_win = vec![0.0f32; window * d_h];
+    let mut v_win = vec![0.0f32; window * v_h];
+    for head in 0..n_h {
+        let uk = &weights.w_uk[head * d_h * d_c..(head + 1) * d_h * d_c];
+        let uv = &weights.w_uv[head * v_h * d_c..(head + 1) * v_h * d_c];
+        // The hoist: k_c_j / v_c_j computed ONCE per (head, position) —
+        // the decode loop recomputes the identical call per (row, head,
+        // position); identical inputs → identical bits, O(n) fewer passes.
+        for j in 0..window {
+            let c_kv_j = cache.latent_kv_at(j);
+            simd_matmul_rows(&mut k_win[j * d_h..(j + 1) * d_h], uk, c_kv_j, d_h, d_c);
+            simd_matmul_rows(&mut v_win[j * v_h..(j + 1) * v_h], uv, c_kv_j, v_h, d_c);
+        }
+        for i in 0..n {
+            let seq_i = p + i + 1;
+            let q_c_h = &q_store[i * d_h * n_h + head * d_h..i * d_h * n_h + (head + 1) * d_h];
+            let q_r_h = &qr_store[i * d_r * n_h + head * d_r..i * d_r * n_h + (head + 1) * d_r];
+            // Score scan — running max, ascending j (decode's exact shape).
+            let scores = &mut scratch.scores[..seq_i];
+            let mut max_score = f32::NEG_INFINITY;
+            for (j, score_slot) in scores.iter_mut().enumerate().take(seq_i) {
+                let content_dot = simd_dot_f32(q_c_h, &k_win[j * d_h..(j + 1) * d_h], d_h);
+                let rope_dot = simd_dot_f32(q_r_h, cache.rope_key_at(j), d_r);
+                let score = (content_dot + rope_dot) * scale;
+                *score_slot = score;
+                if score > max_score {
+                    max_score = score;
+                }
+            }
+            // Max-subtracted softmax (ascending j), then the weighted value
+            // fold (ascending j) — the decode's exact expressions.
+            let mut sum_exp = 0.0f32;
+            for s in scores.iter_mut().take(seq_i) {
+                *s = (*s - max_score).exp();
+                sum_exp += *s;
+            }
+            let inv_sum = 1.0 / sum_exp;
+            let o_base = i * v_h * n_h + head * v_h;
+            let o_h = &mut attn_store[o_base..o_base + v_h];
+            o_h[..v_h].fill(0.0);
+            for (j, &weight_unnorm) in scores.iter().enumerate().take(seq_i) {
+                let weight = weight_unnorm * inv_sum;
+                for (o, &vc) in o_h.iter_mut().zip(v_win[j * v_h..(j + 1) * v_h].iter()) {
+                    *o += weight * vc;
+                }
+            }
+        }
+    }
+
+    // ── Stage 3: per-row epilogue (optional gate + W_O), straight into out ──
+    let mut out = vec![0.0f32; n * d];
+    for (i, h) in hs.iter().enumerate() {
+        let attn_row = &mut attn_store[i * v_h * n_h..(i + 1) * v_h * n_h];
+        if config.use_output_gate
+            && let Some(ref w_g) = weights.w_g
+        {
+            let proj_size = v_h * n_h;
+            simd_matmul_rows(&mut scratch.gate_buf, w_g, h, proj_size, d);
+            for (o, &gb) in attn_row[..proj_size]
+                .iter_mut()
+                .zip(scratch.gate_buf[..proj_size].iter())
+            {
+                let g = 1.0 / (1.0 + (-gb).exp());
+                *o *= g;
+            }
+        }
+        simd_matmul_rows(
+            &mut out[i * d..(i + 1) * d],
+            &weights.w_o,
+            attn_row,
+            d,
+            v_h * n_h,
+        );
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1064,6 +1247,179 @@ mod tests {
             .zip(out_ungated.iter())
             .any(|(a, b)| (a - b).abs() > 1e-6);
         assert!(any_diff, "output gate had no effect");
+    }
+
+    // ── Plan 627 Phase 1 T2: the chunk prefill (mla_forward_chunk) ──────
+
+    /// Decode-loop reference returning EVERY row's output (fresh state).
+    fn run_decode_rows(
+        config: &MlaConfig,
+        weights: &MlaWeights,
+        tokens: &[Vec<f32>],
+    ) -> Vec<Vec<f32>> {
+        let max_seq = tokens.len();
+        let mut cache = MlaKVCache::new(config, max_seq);
+        let mut scratch = MlaForwardScratch::new(config, max_seq);
+        let mut rope = RopeFreqs::new_with_theta(config.qk_rope_head_dim, config.rope_theta);
+        tokens
+            .iter()
+            .map(|h| {
+                mla_forward_token(config, weights, &mut cache, &mut scratch, &mut rope, h).to_vec()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn chunk_is_bit_identical_to_the_decode_loop() {
+        // Rope-carrying + output-gated config: the exactness contract is
+        // BIT-identical, not tolerance-based.
+        let config = small_config();
+        let weights = MlaWeights::random(&config, 1234);
+        let tokens: Vec<Vec<f32>> = (0..5)
+            .map(|i| {
+                (0..config.hidden_size)
+                    .map(|k| ((i * 31 + k * 7) % 13) as f32 * 0.1 - 0.6)
+                    .collect()
+            })
+            .collect();
+        let refs: Vec<&[f32]> = tokens.iter().map(|t| t.as_slice()).collect();
+
+        let expected = run_decode_rows(&config, &weights, &tokens);
+        let mut cache = MlaKVCache::new(&config, tokens.len());
+        let mut scratch = MlaForwardScratch::new(&config, tokens.len());
+        let mut rope = RopeFreqs::new_with_theta(config.qk_rope_head_dim, config.rope_theta);
+        let got = mla_forward_chunk(
+            &config,
+            &weights,
+            &mut cache,
+            &mut scratch,
+            &mut rope,
+            &refs,
+        );
+        assert_eq!(got.len(), tokens.len() * config.hidden_size);
+        for (i, (row, exp)) in got
+            .chunks(config.hidden_size)
+            .zip(expected.iter())
+            .enumerate()
+        {
+            assert_eq!(row, exp.as_slice(), "row {i} diverged from the decode loop");
+        }
+    }
+
+    #[test]
+    fn chunk_nope_config_is_bit_identical_to_the_decode_loop() {
+        // The glm5 shape class: nope mode (concat without rotation), no
+        // output gate. The rope TENSORS still project and contribute dots —
+        // only the rotation is skipped — and the chunk must mirror that.
+        let mut config = small_config();
+        config.use_nope = true;
+        config.use_output_gate = false;
+        let weights = MlaWeights::random(&config, 77);
+        let tokens: Vec<Vec<f32>> = (0..4)
+            .map(|i| {
+                (0..config.hidden_size)
+                    .map(|k| ((i * 17 + k * 5) % 11) as f32 * 0.08 - 0.4)
+                    .collect()
+            })
+            .collect();
+        let refs: Vec<&[f32]> = tokens.iter().map(|t| t.as_slice()).collect();
+
+        let expected = run_decode_rows(&config, &weights, &tokens);
+        let mut cache = MlaKVCache::new(&config, tokens.len());
+        let mut scratch = MlaForwardScratch::new(&config, tokens.len());
+        let mut rope = RopeFreqs::new_with_theta(config.qk_rope_head_dim, config.rope_theta);
+        let got = mla_forward_chunk(
+            &config,
+            &weights,
+            &mut cache,
+            &mut scratch,
+            &mut rope,
+            &refs,
+        );
+        for (i, (row, exp)) in got
+            .chunks(config.hidden_size)
+            .zip(expected.iter())
+            .enumerate()
+        {
+            assert_eq!(
+                row,
+                exp.as_slice(),
+                "nope row {i} diverged from the decode loop"
+            );
+        }
+    }
+
+    #[test]
+    fn chunk_after_a_decode_prefix_is_bit_identical_to_all_decode() {
+        // Mixed posture: decode the prefix, then chunk the rest — every row
+        // (prefix AND chunk) must match the all-decode loop bit-exactly.
+        let config = small_config();
+        let weights = MlaWeights::random(&config, 99);
+        let tokens: Vec<Vec<f32>> = (0..5)
+            .map(|i| {
+                (0..config.hidden_size)
+                    .map(|k| ((i * 23 + k * 3) % 9) as f32 * 0.12 - 0.5)
+                    .collect()
+            })
+            .collect();
+        let expected = run_decode_rows(&config, &weights, &tokens);
+
+        let mut cache = MlaKVCache::new(&config, tokens.len());
+        let mut scratch = MlaForwardScratch::new(&config, tokens.len());
+        let mut rope = RopeFreqs::new_with_theta(config.qk_rope_head_dim, config.rope_theta);
+        for t in tokens.iter().take(2) {
+            mla_forward_token(&config, &weights, &mut cache, &mut scratch, &mut rope, t);
+        }
+        let rest: Vec<&[f32]> = tokens[2..].iter().map(|t| t.as_slice()).collect();
+        let got = mla_forward_chunk(
+            &config,
+            &weights,
+            &mut cache,
+            &mut scratch,
+            &mut rope,
+            &rest,
+        );
+        assert_eq!(got.len(), 3 * config.hidden_size);
+        for (i, row) in got.chunks(config.hidden_size).enumerate() {
+            assert_eq!(
+                row,
+                expected[2 + i].as_slice(),
+                "chunked row {} diverged",
+                2 + i
+            );
+        }
+    }
+
+    #[test]
+    fn chunk_empty_is_a_no_op() {
+        let config = small_config();
+        let weights = MlaWeights::random(&config, 5);
+        let mut cache = MlaKVCache::new(&config, 8);
+        let mut scratch = MlaForwardScratch::new(&config, 8);
+        let mut rope = RopeFreqs::new_with_theta(config.qk_rope_head_dim, config.rope_theta);
+        let got = mla_forward_chunk(&config, &weights, &mut cache, &mut scratch, &mut rope, &[]);
+        assert!(got.is_empty());
+        assert_eq!(cache.seq_len, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "MLA KV cache full")]
+    fn chunk_overflow_panics_via_the_cache_bound() {
+        let config = small_config();
+        let weights = MlaWeights::random(&config, 6);
+        let tokens: Vec<Vec<f32>> = (0..4).map(|_| vec![0.1f32; config.hidden_size]).collect();
+        let refs: Vec<&[f32]> = tokens.iter().map(|t| t.as_slice()).collect();
+        let mut cache = MlaKVCache::new(&config, 2); // capacity 2 < 4 tokens
+        let mut scratch = MlaForwardScratch::new(&config, 2);
+        let mut rope = RopeFreqs::new_with_theta(config.qk_rope_head_dim, config.rope_theta);
+        let _ = mla_forward_chunk(
+            &config,
+            &weights,
+            &mut cache,
+            &mut scratch,
+            &mut rope,
+            &refs,
+        );
     }
 
     fn small_config() -> MlaConfig {
