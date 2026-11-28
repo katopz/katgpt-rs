@@ -239,6 +239,12 @@ flashmemory_margin_select = ["flashmemory_sparse"]
 # (riir-train D1 top-rho, Bonsai-2 32K): at matched retention it beats the
 # absolute rule, Quest bounds, window and sink+window at every rho and layer.
 flashmemory_budget_select = ["flashmemory_sparse"]
+# Manifold-Constrained Hyper-Connections (mHC, Xie et al. 2026) — the
+# N-wide sinkhorn-normalized residual-stream mixer behind GLM-5.3-Flash's
+# `Glm5NextTextHyperConnection` (riir-infer plan 627 T4b). Pure f32 math,
+# zero deps; the weight/config vocabulary is the caller's. Opt-in per the
+# feature-flag discipline (the glm5 seat is the first consumer).
+mhc = []
 
 # ── Issue 713 T2: `required-features` on `#![cfg]`-gated GOAT gates ─────────
 #
