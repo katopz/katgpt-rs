@@ -401,6 +401,8 @@ New rows append ONE compact line each (hashes + one phrase — never narratives;
 ## TL;DR
 
 Diff git history against the last `docs:` commit. For each landed plan/issue,
+| 2026-11-28 | delta unit, ZERO book writes (4090, zed-9e37b43c@4090 — the boundary-708 pairing row; the train-693 lane's overflow-continuation thread's housekeeping pass): zero book surface owed — the delta since the 707th pairing is self-recording everywhere: riir-infer 629620a/56a0308 carry their own BOUNDARY.md allowlist rows + AGENTS lane rows in-landing, riir-train 3622d1da5 (i712) records in-issue + data/i712_g1/MANIFEST.md, my lane's 6158993a7 lease extension self-records in .issues/693; the pass's acts are reads + instruments (the ×19 claim_lease_check sweep, the 14-edge scoped boundary run exit 0 fresh post-manifest-landing, the rethink-066 holder route mail 01a22052) — zero numbered files moved, zero allocations; numbering gates not owed (skill rows only); 60KB trip CHECKED post-append (58.6KB boundary + 58.9KB here, both under) | numbering gate not owed (skill rows only) | katgpt-rs (this row, this commit) |
+
 write the matching README/docs entry using the repo's existing shape and the
 verdict from its benchmark file. Commit with `docs:` prefix on the working
 branch. Never upgrade a verdict without proof; never delete a negative result.
